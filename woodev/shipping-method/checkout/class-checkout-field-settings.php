@@ -28,7 +28,7 @@
  * system (Task 6's `Checkout_Field_Policy` calls it for all five ids): the stored
  * value clamped to what is currently allowed (design §7 — clamp on READ, never
  * rewrite), mirroring
- * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode()}.
+ * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode_region()}.
  *
  * @since 2.0.2
  */
@@ -130,7 +130,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 * option itself is left untouched, so a condition change (e.g. the merchant
 		 * adding a second shipping country, or switching checkout experience) restores
 		 * the merchant's original choice the moment it becomes valid again — same shape
-		 * as {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode()}.
+		 * as {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode_region()}.
 		 *
 		 * Clamping rules:
 		 *  - `field_order_preset` — never disabled, returned as stored (cast to bool).

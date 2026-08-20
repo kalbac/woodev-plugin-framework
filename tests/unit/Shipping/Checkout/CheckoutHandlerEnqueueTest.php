@@ -82,7 +82,11 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 		return null;
 	}
 
-	public function get_field_mode(): string {
+	public function get_field_mode_region(): string {
+		return \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_TYPEAHEAD;
+	}
+
+	public function get_field_mode_settlement(): string {
 		return \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_TYPEAHEAD;
 	}
 

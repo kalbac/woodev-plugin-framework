@@ -831,7 +831,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$provider = new Default_Test_Fake_Provider( 'no-locate', static fn() => [] );
 
 			// The store setting is stuck at 'geoip' from a PREVIOUS provider that
-			// did support it — clamps to 'off' now, exactly like get_field_mode()
+			// did support it — clamps to 'off' now, exactly like get_field_mode_region()
 			// clamps a stale 'related-list' value.
 			$this->stub_default_locality_options( 'no-locate', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
 			$registry = $this->activate( [ $provider ] );

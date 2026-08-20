@@ -939,9 +939,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * D15-adjacent chain ({@see Location_Service::provider_for_list()})
 		 * declaring `list` at all, is a 404 — mirroring `/select`'s
 		 * inactive-layer 404 ({@see self::handle_select_request()}), not
-		 * `/suggest`'s 200+empty. This is deliberate: `related-list`/
-		 * `ajax-select2` modes are only ever OFFERED to the store setting when
-		 * the active provider already declares `list`
+		 * `/suggest`'s 200+empty. This is deliberate: `related-list` mode
+		 * (this route's own consumer — issue #380 correction: `ajax-select2`
+		 * queries `/suggest`, never this route, see
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_AJAX_SELECT2}'s
+		 * own docblock) is only ever OFFERED to either axis's store setting
+		 * when the active provider already declares `list`
 		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_offered_field_modes()}),
 		 * so a client legitimately reaching this route at all already believes
 		 * the capability exists — a 404 here is a genuine "this stopped being

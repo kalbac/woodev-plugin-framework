@@ -58,7 +58,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'endpoints' => [ 'suggest' => string, 'select' => string, 'list' => string ], // 'list' added Task 13
 	 *     'nonce'     => string, // same wp_rest nonce as the top-level 'nonce' above
 	 *     'countries' => string[],
-	 *     'mode'      => string, // 'typeahead' | 'related-list' | 'ajax-select2' (Task 13; spec D7)
+	 *     // Two independent axes since issue #380 (each carries the same three
+	 *     // values — 'typeahead' | 'related-list' | 'ajax-select2', spec D7):
+	 *     'mode'      => [ 'region' => string, 'settlement' => string ],
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'owners'    => [ country_code => [ 'region' => string, 'settlement' => string, 'address' => string ] ], // issue #352: provider id or '' — see build_location_block()'s own docblock
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
@@ -241,7 +243,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         endpoints: array{suggest: string, select: string},
 		 *         nonce: string,
 		 *         countries: string[],
-		 *         mode: string,
+		 *         mode: array{region: string, settlement: string},
 		 *         levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *         owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *         current: array{key: string, level: string}|null,
@@ -491,12 +493,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *   not just what the ACTIVE provider alone lists. A country the store does
 		 *   not even sell to is not useful information for the client-side D2
 		 *   arbitration this list feeds, hence the intersection with the WC list.
-		 * - `mode` — the store's field-presentation setting (spec D7; Task 13),
-		 *   read from {@see \Woodev\Framework\Shipping\Location\Location_Service::get_field_mode()}
-		 *   — one of `typeahead` / `related-list` / `ajax-select2`, already
-		 *   clamped against the active provider's own capabilities (a mode the
-		 *   provider cannot serve is never returned, regardless of what the
-		 *   store option literally holds).
+		 * - `mode` — the store's TWO field-presentation axes (issue #380 split
+		 *   the single legacy setting: "each axis carries the same three
+		 *   values"), `{ region, settlement }`, read from
+		 *   {@see \Woodev\Framework\Shipping\Location\Location_Service::get_field_mode_region()}
+		 *   and {@see \Woodev\Framework\Shipping\Location\Location_Service::get_field_mode_settlement()}
+		 *   — each one of `typeahead` / `related-list` / `ajax-select2`,
+		 *   already clamped against the active provider's own capabilities (a
+		 *   mode the provider cannot serve is never returned, regardless of
+		 *   what the store option literally holds) — `region` is ALSO clamped
+		 *   to `typeahead` once `region_field` is removed (issue #369
+		 *   closure; see `get_field_mode_region()`'s own docblock).
 		 * - `levels` — a MAP, `{ [country]: { region, settlement, address } }`, one
 		 *   entry per country in `countries` above (D15 amendment follow-up:
 		 *   per-country suggest levels — DaData genuinely serves `address` in
@@ -606,8 +613,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *
 		 * **`related-list` region seam (Task 13; client-facing contract for the
 		 * next agent — CORRECTED after the s71 rig measurement AND the PR #304
-		 * review, see below):** when `mode === 'related-list'`, the region
-		 * `<select>` WooCommerce renders is populated by
+		 * review, see below):** when `mode.region === 'related-list'` (issue
+		 * #380 — the REGION axis specifically, independent of `mode.settlement`),
+		 * the region `<select>` WooCommerce renders is populated by
 		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::inject_related_list_states()}
 		 * with `wc_strtoupper( label ) => label` pairs — the `<option>` VALUE is
 		 * the record's own {@see \Woodev\Framework\Shipping\Location\Location_Record::label()}
@@ -688,6 +696,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              can refuse to post a foreign-provider record into the
 		 *              server-side chain, via
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_level_owners_for_country()}.
+		 * @since 2.0.2 `mode` is now `{ region, settlement }` — TWO independent
+		 *              axes, issue #380 — instead of one shared mode string.
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
@@ -695,7 +705,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     endpoints: array{suggest: string, select: string, list: string},
 		 *     nonce: string,
 		 *     countries: string[],
-		 *     mode: string,
+		 *     mode: array{region: string, settlement: string},
 		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *     owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *     current: array{key: string, level: string}|null,
@@ -849,7 +859,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				],
 				'nonce'          => $this->nonce,
 				'countries'      => array_values( $countries ),
-				'mode'           => $service->get_field_mode(),
+				// Issue #380: two independent axes — see build_location_block()'s own
+				// docblock — instead of one shared mode string.
+				'mode'           => [
+					'region'     => $service->get_field_mode_region(),
+					'settlement' => $service->get_field_mode_settlement(),
+				],
 				'levels'         => $levels,
 				'owners'         => $owners,
 				'current'        => $current,

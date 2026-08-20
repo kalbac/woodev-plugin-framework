@@ -27,6 +27,7 @@ use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -258,6 +259,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		 * WordPress function, so unit tests can call it directly.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 «Поля»'s id list is now HAND-INTERLEAVED (issue #380):
+		 *              «Тип поля Регион»/«Тип поля НП» and «Подсказки для
+		 *              адреса» moved here from «Локация», OWNED by
+		 *              `Location_Provider_Registry`/`Location_Settings`
+		 *              still (option names stay `woodev_location_*`,
+		 *              ADR-005 — only the SECTION they display in moved).
+		 *              Those three ids are spliced in only when a location
+		 *              handler actually exists — the same guard «Локация»'s
+		 *              own section uses — so «Поля» never lists an id no
+		 *              child handler registered when the location layer is
+		 *              inactive.
 		 *
 		 * @return Settings_Section[]
 		 */
@@ -276,10 +288,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				);
 			}
 
+			// «Поля» interleaves the checkout-field ids (Checkout_Field_Settings) with
+			// the location field-mode axes + address suggestions (Location_Settings) —
+			// issue #380's operator-specified order: field type controls sit directly
+			// next to the field they describe. The location-owned ids only exist when
+			// a location handler was actually handed over (see set_location_section()).
+			$field_ids = [ 'field_order_preset', 'country_field', 'region_field' ];
+
+			if ( null !== $this->location_handler ) {
+				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_REGION;
+				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT;
+			}
+
+			$field_ids[] = 'address_field';
+
+			if ( null !== $this->location_handler ) {
+				$field_ids[] = Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS;
+			}
+
+			$field_ids[] = 'postcode_field';
+
 			$sections[] = Settings_Section::create(
 				'fields',
 				__( 'Поля', 'woodev-plugin-framework' ),
-				$this->get_field_settings()->get_owned_setting_ids(),
+				$field_ids,
 				$this->get_field_settings()->get_section_note()
 			);
 

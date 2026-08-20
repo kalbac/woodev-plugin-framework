@@ -102,11 +102,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const SETTING_ACTIVE_PROVIDER = 'active_provider';
 
 		/**
-		 * The store setting id holding the field-presentation mode (Task 13;
-		 * spec D7). See {@see self::get_offered_field_modes()} for how the
-		 * OFFERED options are gated by the active provider's capabilities, and
-		 * {@see self::get_field_mode()} for the read-side clamp that keeps a
-		 * previously-saved value honest across a provider switch.
+		 * The LEGACY store option id that held a single field-presentation
+		 * mode for BOTH the region and settlement levels at once, before
+		 * issue #380 split it into {@see self::SETTING_FIELD_MODE_REGION} and
+		 * {@see self::SETTING_FIELD_MODE_SETTLEMENT} — the operator found a
+		 * case neither one shared value could express (НП = `ajax-select2`
+		 * while region stays `typeahead`, or the reverse).
+		 *
+		 * No control is registered under this id any more; kept only so
+		 * {@see self::migrate_legacy_field_mode()} has a single named literal
+		 * for the legacy DB option it reads once, on the migration path.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -114,11 +119,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const SETTING_FIELD_MODE = 'field_mode';
 
 		/**
+		 * The store setting id holding the REGION level's field-presentation
+		 * mode (issue #380 — split from the legacy {@see self::SETTING_FIELD_MODE}).
+		 * See {@see self::get_offered_field_modes()} for how the OFFERED
+		 * options are gated by the active provider's capabilities, and
+		 * {@see self::get_field_mode_region()} for the read-side clamp —
+		 * which ALSO forces {@see self::MODE_TYPEAHEAD} once `region_field`
+		 * is removed (issue #369 closure), on top of the provider-capability
+		 * clamp every axis shares.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_FIELD_MODE_REGION = 'field_mode_region';
+
+		/**
+		 * The store setting id holding the SETTLEMENT (НП) level's
+		 * field-presentation mode (issue #380 — split from the legacy
+		 * {@see self::SETTING_FIELD_MODE}). Gated the same way as
+		 * {@see self::SETTING_FIELD_MODE_REGION} — see
+		 * {@see self::get_field_mode_settlement()} — but carries no
+		 * `region_field` clamp of its own: the settlement level has nothing
+		 * analogous to remove it.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const SETTING_FIELD_MODE_SETTLEMENT = 'field_mode_settlement';
+
+		/**
 		 * The store setting id holding the `address_suggestions` switch (Task 10;
 		 * issue #362; design S3/§3.1/§3.2/§4.2/§7): whether the location layer
 		 * serves the `address` suggest level AT ALL. Registered right after
-		 * {@see self::SETTING_FIELD_MODE} — design S3 puts it directly under the
-		 * provider block on the settings surface.
+		 * the two field-mode axes above — design S3 puts it directly under
+		 * the provider block on the settings surface.
 		 *
 		 * See {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_for_level()}
 		 * for the gate this setting drives, {@see self::get_address_suggestions_raw()}
@@ -127,7 +161,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * {@see self::is_address_suggestions_available()} for the read-side clamp
 		 * that keeps a stored `true` honest once nobody can serve `address` any
 		 * more — the same "OFFERED / read-side clamp" discipline
-		 * {@see self::get_field_mode()} already applies to its own setting.
+		 * {@see self::get_field_mode_region()}/{@see self::get_field_mode_settlement()}
+		 * already apply to their own settings.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -361,6 +396,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @var array<string, array<string, string>>
 		 */
 		private array $related_list_states_countries = [];
+
+
+		/**
+		 * Notice ids already claimed via {@see self::claim_not_configured_notice()}
+		 * THIS request — the fleet-wide "one plugin renders it, every other
+		 * participating plugin stands down" dedup for the shared "active
+		 * location provider is not configured" notice. Reset for free on every
+		 * new request (a fresh PHP process) and on {@see self::reset_for_tests()}
+		 * (which discards the whole singleton instance).
+		 *
+		 * @since 2.0.2
+		 * @var array<string, true>
+		 */
+		private array $claimed_notice_ids = [];
 
 		/**
 		 * Use {@see self::instance()}.
@@ -767,6 +816,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return isset( $this->providers[ $id ] );
 		}
 
+
+		/**
+		 * Claims `$notice_id` for the FIRST caller this request — the fleet-wide
+		 * dedup for the shared "active location provider is not configured"
+		 * notice ({@see \Woodev\Framework\Shipping\Shipping_Plugin::add_location_provider_not_configured_notice()}).
+		 * Every participating plugin's own handler computes the SAME notice id
+		 * for the SAME unconfigured provider (that method's own docblock), so
+		 * without this gate every plugin in the fleet would render its own copy
+		 * of the identical notice on the same screen. The registry — the one
+		 * fleet-wide singleton every participating plugin already shares — is
+		 * what can answer "has anyone already claimed this id THIS request",
+		 * which no single plugin's own (per-plugin)
+		 * {@see \Woodev_Admin_Notice_Handler} can.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $notice_id the notice id a caller is about to register.
+		 *
+		 * @return bool `true` the first time `$notice_id` is claimed this
+		 *              request (the caller should proceed and register its
+		 *              notice); `false` on every subsequent claim of the SAME
+		 *              id (the caller must stand down).
+		 */
+		public function claim_not_configured_notice( string $notice_id ): bool {
+			if ( isset( $this->claimed_notice_ids[ $notice_id ] ) ) {
+				return false;
+			}
+
+			$this->claimed_notice_ids[ $notice_id ] = true;
+
+			return true;
+		}
+
 		/**
 		 * Gets the settings handler this registry built, or null before the gate
 		 * opens (or before `init` has collected). Task 6's `Location_Service` and
@@ -822,69 +904,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Gets the field-presentation modes the STORE SETTING is allowed to offer
-		 * right now (Task 13; spec D7), gated by the ACTIVE provider's OWN
-		 * capabilities — never the whole D15 chain: `related-list`/`ajax-select2`
-		 * feed `list_localities()`, which is not a D15 fallback-chained capability
-		 * the way `suggest()` is (spec D15 is about per-LEVEL suggest support; a
-		 * provider either can or cannot enumerate at all).
+		 * Gets the field-presentation modes EITHER AXIS ({@see self::SETTING_FIELD_MODE_REGION}
+		 * or {@see self::SETTING_FIELD_MODE_SETTLEMENT}) is allowed to offer
+		 * right now (Task 13; spec D7; both axes share one gate — issue #380:
+		 * "each axis carries the same three values"), gated by the ACTIVE
+		 * provider's OWN capabilities — never the whole D15 chain:
+		 * `related-list` alone feeds `list_localities()`, which is not a D15
+		 * fallback-chained capability the way `suggest()` is (spec D15 is
+		 * about per-LEVEL suggest support; a provider either can or cannot
+		 * enumerate at all).
 		 *
-		 * `typeahead` is unconditional — every provider implements `suggest()`
-		 * (spec D7 baseline: it is REQUIRED, not a capability). The other two are
-		 * offered together, both gated on the SAME {@see Location_Provider::CAPABILITY_LIST}
-		 * flag — a provider that can enumerate a scope can always also be asked
-		 * for it via the existing `/suggest` seam, so nothing further
-		 * distinguishes them for gating purposes; they differ only in which
-		 * client renderer consumes the data (spec D7: "three renderers over one
-		 * data source").
+		 * `typeahead` and `ajax-select2` are BOTH unconditional — every
+		 * provider implements `suggest()` (spec D7 baseline: it is REQUIRED,
+		 * not a capability), and `ajax-select2`'s client renderer queries
+		 * that exact same seam, never `list_localities()` (issue #380
+		 * correction — see {@see self::MODE_AJAX_SELECT2}'s own docblock).
+		 * Only `related-list` is gated on {@see Location_Provider::CAPABILITY_LIST}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 `ajax-select2` is no longer gated on `CAPABILITY_LIST`
+		 *              (issue #380) — only `related-list` still needs it.
 		 *
 		 * @return string[] Subset of {@see self::FIELD_MODES}, always containing
-		 *                  {@see self::MODE_TYPEAHEAD}.
+		 *                  {@see self::MODE_TYPEAHEAD} and {@see self::MODE_AJAX_SELECT2}.
 		 */
 		public function get_offered_field_modes(): array {
 			return self::offered_field_modes_for( $this->get_active_provider() );
 		}
 
-		/**
-		 * The actual gate {@see self::get_offered_field_modes()} answers from —
-		 * factored out as a static, provider-in/modes-out pure function so
-		 * {@see self::register_settings()} can compute the SAME answer for the
-		 * `field_mode` select's options at construction time, when
-		 * {@see self::$settings_handler} does not exist yet and
-		 * {@see self::get_active_provider()} would therefore short-circuit to
-		 * `null` regardless of which provider is actually about to become active
-		 * (that method's own early return: "no settings handler exists to read a
-		 * value from"). `register_settings()` instead passes the `$active_provider`
-		 * it already resolved via {@see self::resolve_stored_active_provider_id()}
-		 * moments earlier, sidestepping the chicken-and-egg order entirely rather
-		 * than duplicating this gate's logic a second time.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param Location_Provider|null $provider The provider to gate against, or
-		 *                                          `null` (no provider active).
-		 *
-		 * @return string[] Subset of {@see self::FIELD_MODES}, always containing
-		 *                  {@see self::MODE_TYPEAHEAD}.
-		 */
 		private static function offered_field_modes_for( ?Location_Provider $provider ): array {
 			$modes = [ self::MODE_TYPEAHEAD ];
 
 			if ( null !== $provider && in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true ) ) {
 				$modes[] = self::MODE_RELATED_LIST;
-				$modes[] = self::MODE_AJAX_SELECT2;
 			}
+
+			// Unconditional (issue #380) — see self::MODE_AJAX_SELECT2's own docblock
+			// for why this value no longer needs CAPABILITY_LIST.
+			$modes[] = self::MODE_AJAX_SELECT2;
 
 			return $modes;
 		}
 
 		/**
 		 * User-facing labels for every mode in {@see self::FIELD_MODES} — the
-		 * single place both the OFFERED-options builder below and (if a future
-		 * task needs it) any other mode-labeling call site reads from, so the
-		 * Russian copy exists exactly once.
+		 * single place both the OFFERED-options builder below (shared by
+		 * BOTH axes, issue #380) and (if a future task needs it) any other
+		 * mode-labeling call site reads from, so the Russian copy exists
+		 * exactly once. Wording matches the three canonical value names the
+		 * operator settled on for the axis split (issue #380).
 		 *
 		 * @since 2.0.2
 		 *
@@ -892,15 +960,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		private static function field_mode_labels(): array {
 			return [
-				self::MODE_TYPEAHEAD    => __( 'Текстовый поиск с подсказками', 'woodev-plugin-framework' ),
-				self::MODE_RELATED_LIST => __( 'Список (нативный выпадающий список)', 'woodev-plugin-framework' ),
-				self::MODE_AJAX_SELECT2 => __( 'Список с поиском (выпадающий список с запросом)', 'woodev-plugin-framework' ),
+				self::MODE_TYPEAHEAD    => __( 'Текст с подсказками', 'woodev-plugin-framework' ),
+				self::MODE_RELATED_LIST => __( 'Предустановленный список', 'woodev-plugin-framework' ),
+				self::MODE_AJAX_SELECT2 => __( 'Список с поиском', 'woodev-plugin-framework' ),
 			];
 		}
 
 		/**
-		 * Builds the `field_mode` select's `id => label` options map, gated
-		 * against `$provider` via {@see self::offered_field_modes_for()}.
+		 * Builds the SHARED `id => label` options map both the
+		 * `field_mode_region` and `field_mode_settlement` selects use (issue
+		 * #380 — both axes offer the same three values), gated against
+		 * `$provider` via {@see self::offered_field_modes_for()}.
 		 *
 		 * @since 2.0.2
 		 *
@@ -921,33 +991,100 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Gets the store's field-presentation mode (Task 13; spec D7), clamped
-		 * against {@see self::get_offered_field_modes()} so a previously-saved
-		 * value that the CURRENT active provider no longer supports (e.g. the
-		 * store switched from a `list`-capable provider back to DaData) never
+		 * Gets the store's REGION-level field-presentation mode (issue #380 —
+		 * split from the legacy single `field_mode`), clamped against
+		 * {@see self::get_offered_field_modes()} so a previously-saved value
+		 * that the CURRENT active provider no longer supports (e.g. the store
+		 * switched from a `list`-capable provider back to DaData) never
 		 * silently serves a mode the provider cannot back — falls back to
 		 * {@see self::MODE_TYPEAHEAD}, the one mode every provider can always
-		 * serve, exactly like {@see self::get_active_provider()} falls back to
-		 * {@see self::DEFAULT_PROVIDER_ID} for the analogous "stored value now
-		 * names something unavailable" case.
+		 * serve, exactly like {@see self::get_active_provider()} falls back
+		 * to {@see self::DEFAULT_PROVIDER_ID} for the analogous "stored value
+		 * now names something unavailable" case.
 		 *
-		 * Returns {@see self::MODE_TYPEAHEAD} outright while the gate is closed —
-		 * mirrors {@see self::get_active_provider()}'s own "nothing to read from
-		 * yet" early return.
+		 * ALSO clamps to {@see self::MODE_TYPEAHEAD} once `region_field` is
+		 * removed (issue #369 closure — design §7's "clamp on read" pattern,
+		 * copied from {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::effective()}):
+		 * with no region field left on the checkout at all, the derived
+		 * "предустановленный список" overlay this axis drives for the
+		 * settlement level (see {@see self::inject_related_list_states()}'s
+		 * own gate) can never engage, so `region_field=remove` combined with
+		 * a list-mode region — today's silent НП breakage — becomes
+		 * unconstructible. Deliberately NOT enforced via a cross-handler
+		 * `show_if` alone: `region_field` belongs to
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings},
+		 * this axis belongs to this registry, and `Composite_Settings_Handler::
+		 * filter_visible_values()` splits a submission by owning child BEFORE
+		 * evaluating conditions — a cross-handler `show_if` only hides the
+		 * ADMIN control, it is not a correctness mechanism (design §7).
+		 *
+		 * Returns {@see self::MODE_TYPEAHEAD} outright while the gate is
+		 * closed — mirrors {@see self::get_active_provider()}'s own "nothing
+		 * to read from yet" early return.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_field_mode(): string {
+		public function get_field_mode_region(): string {
 			if ( null === $this->settings_handler ) {
 				return self::MODE_TYPEAHEAD;
 			}
 
-			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE );
+			if ( 'remove' === $this->region_field_effective_value() ) {
+				return self::MODE_TYPEAHEAD;
+			}
+
+			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_REGION );
 			$offered = $this->get_offered_field_modes();
 
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
+		}
+
+		/**
+		 * Gets the store's SETTLEMENT (НП) level field-presentation mode
+		 * (issue #380 — split from the legacy single `field_mode`), clamped
+		 * against {@see self::get_offered_field_modes()} exactly like
+		 * {@see self::get_field_mode_region()} — but WITHOUT that method's
+		 * `region_field` clamp: the settlement level has no analogous "field
+		 * removed" state of its own.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_field_mode_settlement(): string {
+			if ( null === $this->settings_handler ) {
+				return self::MODE_TYPEAHEAD;
+			}
+
+			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
+			$offered = $this->get_offered_field_modes();
+
+			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
+		}
+
+		/**
+		 * The stored `region_field` checkout-fields setting's EFFECTIVE value
+		 * (`Checkout_Field_Settings::effective( 'region_field' )` —
+		 * `'show'`/`'remove'`), the cross-handler read
+		 * {@see self::get_field_mode_region()}'s own `region_field=remove`
+		 * clamp needs (issue #369 closure). Reached via
+		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::get_field_settings()}
+		 * — the SAME lazily-built, store-level singleton
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::register()}
+		 * and this registry's own {@see self::register_settings()} (via
+		 * `set_location_section()`) already both depend on — never a second,
+		 * separately-constructed `Checkout_Field_Settings` instance.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private function region_field_effective_value(): string {
+			return (string) \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()
+				->get_field_settings()
+				->effective( 'region_field' );
 		}
 
 
@@ -969,11 +1106,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * exactly what `provider_for_level()`'s own chain walk is about to
 		 * determine on its own.
 		 *
-		 * Mirrors {@see self::get_field_mode()}'s "no settings handler yet"
+		 * Mirrors {@see self::get_field_mode_region()}'s "no settings handler yet"
 		 * shape: returns `true` (this setting's own default) rather than
 		 * `false` when `$this->settings_handler` is still null, so a caller
 		 * reached before `init` priority 20 has collected sees the SAME
-		 * "nothing is gated off yet" answer `get_field_mode()` gives for its
+		 * "nothing is gated off yet" answer `get_field_mode_region()` gives for its
 		 * own setting — an ungated `address` level, exactly like an unclamped
 		 * `typeahead` field mode, is the safe default while there is
 		 * genuinely nothing to read from.
@@ -1067,7 +1204,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		/**
 		 * The EFFECTIVE `address_suggestions` value (Task 10; issue #362;
 		 * design S3/§4.2/§7): `stored && available`, clamped on read exactly
-		 * like {@see self::get_field_mode()} clamps a stored mode the active
+		 * like {@see self::get_field_mode_region()} clamps a stored mode the active
 		 * provider no longer backs. A merchant's saved `true` never overrides
 		 * reality: once nobody can serve `address` any more, this answers
 		 * `false` regardless of what is literally stored — WITHOUT ever
@@ -1089,7 +1226,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 		// -----------------------------------------------------------------
 		// Default-locality policy (Task 14; spec D11) — same offered/clamp
-		// shape as get_offered_field_modes()/get_field_mode() above, gated
+		// shape as get_offered_field_modes()/get_field_mode_region() above, gated
 		// by the CAPABILITY_LOCATE capability instead of CAPABILITY_LIST.
 		// -----------------------------------------------------------------
 
@@ -1183,10 +1320,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * backs (e.g. the store switched away from a `locate`-capable provider)
 		 * never silently keeps resolving through a capability that is no longer
 		 * there — falls back to {@see self::DEFAULT_LOCALITY_POLICY_OFF}, exactly
-		 * like {@see self::get_field_mode()} falls back to {@see self::MODE_TYPEAHEAD}.
+		 * like {@see self::get_field_mode_region()} falls back to {@see self::MODE_TYPEAHEAD}.
 		 *
 		 * Returns {@see self::DEFAULT_LOCALITY_POLICY_OFF} outright while the gate
-		 * is closed — mirrors {@see self::get_field_mode()}'s own early return.
+		 * is closed — mirrors {@see self::get_field_mode_region()}'s own early return.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1463,7 +1600,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			// KNOWN LATENT CONSTRAINT (PR #304 review finding 7, not fixed — see
 			// that review's own "not in scope" note): this method is hooked at
-			// `plugins_loaded` ({@see self::add_hooks()}), but {@see self::get_field_mode()}
+			// `plugins_loaded` ({@see self::add_hooks()}), but {@see self::get_field_mode_region()}
 			// answers `self::MODE_TYPEAHEAD` until `$this->settings_handler` exists,
 			// which {@see self::register_settings()} only builds at `init` priority
 			// 20 ({@see self::collect()}). So ANY `woocommerce_states` read that
@@ -1475,7 +1612,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			// WooCommerce-core caller was found running that early (WC's own
 			// checkout/order code all runs well after `init`), so this is latent,
 			// not observed — left as a comment rather than restructured.
-			if ( self::MODE_RELATED_LIST !== $this->get_field_mode() ) {
+			//
+			// Gated on the REGION axis alone (issue #380) — this injector governs
+			// ONLY the region `<select>`'s options; whatever the settlement axis
+			// carries is irrelevant here.
+			if ( self::MODE_RELATED_LIST !== $this->get_field_mode_region() ) {
 				return $states;
 			}
 
@@ -1578,10 +1719,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              registered provider's declared fields, each carrying a
 		 *              `show_if` condition, rather than only the active
 		 *              provider's (#375/#377: "dynamic, without saving").
+		 * @since 2.0.2 Runs {@see self::migrate_legacy_field_mode()} first —
+		 *              issue #380 split the single `field_mode` option into
+		 *              two axes; an untagged vendored snapshot may already
+		 *              hold the legacy value.
 		 *
 		 * @return void
 		 */
 		private function register_settings(): void {
+			// Issue #380: read the LEGACY single `field_mode` option once, if it is
+			// still present, and decompose it onto the two new axes — BEFORE the two
+			// new settings are registered below, since Woodev_Abstract_Settings::
+			// register_setting() reads its own stored option value synchronously, at
+			// registration time (see self::migrate_legacy_field_mode()'s own docblock).
+			$this->migrate_legacy_field_mode();
+
 			$active_id        = $this->resolve_stored_active_provider_id();
 			$active_provider  = $this->resolve_active_provider_for_id( $active_id );
 			$provider_fields  = $this->collect_all_provider_fields();
@@ -1617,6 +1769,60 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$this->settings_handler,
 				$this->settings_handler->get_owned_setting_ids()
 			);
+		}
+
+
+		/**
+		 * One-time migration (issue #380): the single `field_mode` option
+		 * this layer used to store became two — {@see self::SETTING_FIELD_MODE_REGION}
+		 * and {@see self::SETTING_FIELD_MODE_SETTLEMENT}. Git tags prove only
+		 * that no TAGGED release ever carried `woodev_location_field_mode` —
+		 * this framework ships VENDORED inside every plugin, so an UNTAGGED
+		 * snapshot may already be installed on a real site with that option
+		 * set. Cheap insurance: read it once, decompose it losslessly onto
+		 * both new axes (the exact table issue #380 verified: `typeahead` ->
+		 * both typeahead, `related-list` -> both related-list, `ajax-select2`
+		 * -> both ajax-select2), then delete the legacy option so this never
+		 * runs twice.
+		 *
+		 * Deliberately NOT threaded through a per-plugin
+		 * {@see Woodev_Lifecycle::upgrade_to_X_Y_Z()} routine: that mechanism
+		 * is keyed to EACH PLUGIN's own `$upgrade_versions` list and version
+		 * numbering, populated separately by every plugin's own Lifecycle
+		 * subclass (e.g. `WC_Edostavka_Lifecycle`) — but `woodev_location_*`
+		 * is a STORE-LEVEL option shared by the whole fleet (Location_Provider_Registry
+		 * is a store-wide singleton, spec §4.1), with no single plugin version
+		 * it is tied to. A per-plugin routine cannot reliably run exactly
+		 * once for a value no plugin-specific version names. Gating on the
+		 * legacy option's own PRESENCE instead — read here, on every
+		 * `register_settings()` call, but a no-op the instant it is gone —
+		 * is version-independent and self-throttling: after the first
+		 * successful migration the legacy `get_option()` read below always
+		 * returns `null` immediately.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function migrate_legacy_field_mode(): void {
+			$prefix      = 'woodev_' . self::SETTINGS_SERVICE_ID;
+			$legacy_name = $prefix . '_' . self::SETTING_FIELD_MODE;
+
+			$legacy_value = get_option( $legacy_name, null );
+
+			if ( null === $legacy_value || '' === $legacy_value ) {
+				return; // nothing to migrate — a fresh install, or already migrated and deleted.
+			}
+
+			// Losslessly decompose (issue #380's own verified table): a legacy value
+			// this layer no longer recognizes clamps to the always-safe typeahead,
+			// exactly like every other read-side clamp in this class does.
+			$decomposed = in_array( $legacy_value, self::FIELD_MODES, true ) ? $legacy_value : self::MODE_TYPEAHEAD;
+
+			update_option( $prefix . '_' . self::SETTING_FIELD_MODE_REGION, $decomposed );
+			update_option( $prefix . '_' . self::SETTING_FIELD_MODE_SETTLEMENT, $decomposed );
+
+			delete_option( $legacy_name );
 		}
 
 		/**
@@ -1706,8 +1912,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * The provider id list {@see self::collect_all_provider_fields()} uses
 		 * as the WIDE `show_if` condition's `in` value for
 		 * {@see self::DEFAULT_PROVIDER_ID}'s own fields: that provider's own id,
-		 * plus every OTHER registered provider that does NOT serve the
-		 * `address` level FOR THE STORE'S OWN COUNTRY.
+		 * plus every OTHER registered provider that either is NOT configured or
+		 * does NOT serve the `address` level FOR THE STORE'S OWN COUNTRY.
 		 *
 		 * Country-scoped, deliberately — NOT a country-blind union over
 		 * {@see Location_Provider::get_suggest_levels()} with no `$country`
@@ -1725,7 +1931,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * Reuses {@see Location_Service::provider_serves_level()} — never a
 		 * hand-rolled `in_array( ..., $provider->get_suggest_levels( $country ) )`
 		 * — because that predicate ALSO gates on {@see Location_Provider::get_countries()}
-		 * coverage, which `get_suggest_levels()` alone does not encode.
+		 * coverage, which `get_suggest_levels()` alone does not encode. Together
+		 * with {@see Location_Provider::is_configured()}, this is the same public
+		 * predicate pair {@see Location_Service::resolve_provider_for_level()}
+		 * uses before it stops the fallback chain — an address-capable carrier
+		 * that is not YET configured must not be treated as covering address
+		 * here either, or DaData's own keys would be hidden behind a provider
+		 * the runtime fallback chain has already stopped trusting for that
+		 * exact reason.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1742,7 +1955,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					continue;
 				}
 
-				if ( ! $service->provider_serves_level( $provider, Location_Record::LEVEL_ADDRESS, $store_country ) ) {
+				if ( ! $provider->is_configured() || ! $service->provider_serves_level( $provider, Location_Record::LEVEL_ADDRESS, $store_country ) ) {
 					$ids[] = $id;
 				}
 			}

@@ -110,8 +110,9 @@ Two rules govern every option on this tab:
   → `Field_Schema` → the React field. Where only one VALUE is unavailable, the option list is
   narrowed instead and the reason appended to the description.
 - **A stored value that is no longer allowed clamps on READ, and is never rewritten**
-  (`Checkout_Field_Settings::effective()`, `Location_Provider_Registry::get_field_mode()`), so the
-  merchant's original choice comes back the moment it becomes valid again.
+  (`Checkout_Field_Settings::effective()`, `Location_Provider_Registry::get_field_mode_region()`/
+  `get_field_mode_settlement()`), so the merchant's original choice comes back the moment it
+  becomes valid again.
 
 ### The two-instrument rule
 

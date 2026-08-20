@@ -136,6 +136,48 @@ class Notice_Opted_In_Shipping_Plugin_Fixture extends Notice_Bare_Shipping_Plugi
 }
 
 /**
+ * Records the notice registrations made by one plugin's own handler.
+ */
+class Notice_Recording_Admin_Notice_Handler {
+
+	/** @var array<int, array{message: string, id: string, params: array<string, string>}> */
+	public array $notices = [];
+
+	/**
+	 * @param array<string, string> $params Notice registration parameters.
+	 */
+	public function add_admin_notice( string $message, string $id, array $params = [] ): void {
+		$this->notices[] = [
+			'message' => $message,
+			'id'      => $id,
+			'params'  => $params,
+		];
+	}
+}
+
+/**
+ * Exposes the protected registration path and supplies a distinct handler for
+ * each plugin, reproducing the fleet-wide duplication that the real plugins
+ * otherwise produce.
+ */
+class Notice_Deduplication_Shipping_Plugin_Fixture extends Notice_Opted_In_Shipping_Plugin_Fixture {
+
+	private ?Notice_Recording_Admin_Notice_Handler $notice_handler = null;
+
+	public function set_notice_handler( Notice_Recording_Admin_Notice_Handler $notice_handler ): void {
+		$this->notice_handler = $notice_handler;
+	}
+
+	public function publish_location_provider_not_configured_notice(): void {
+		$this->add_location_provider_not_configured_notice();
+	}
+
+	public function get_admin_notice_handler() {
+		return $this->notice_handler;
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Shipping_Plugin::location_provider_not_configured_notice
  */
 final class ShippingPluginLocationProviderNoticeTest extends TestCase {
@@ -244,5 +286,34 @@ final class ShippingPluginLocationProviderNoticeTest extends TestCase {
 		$this->assertNotNull( $notice );
 		$this->assertStringContainsString( 'СДЭК тестовый', $notice['message'], 'the provider\'s own name is interpolated' );
 		$this->assertSame( 'location-provider-unconfigured-fixture-not-configured', $notice['notice_id'] );
+	}
+
+	public function test_only_one_plugin_registers_the_fleet_wide_unconfigured_provider_notice(): void {
+		$provider = new Notice_Fake_Location_Provider( 'notice-dedup-fixture', 'СДЭК тестовый', false );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) {
+				return 'woodev_location_active_provider' === $name ? 'notice-dedup-fixture' : $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$first_handler  = new Notice_Recording_Admin_Notice_Handler();
+		$second_handler = new Notice_Recording_Admin_Notice_Handler();
+		$first_plugin   = ( new \ReflectionClass( Notice_Deduplication_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$second_plugin  = ( new \ReflectionClass( Notice_Deduplication_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
+		$first_plugin->set_notice_handler( $first_handler );
+		$second_plugin->set_notice_handler( $second_handler );
+
+		$first_plugin->publish_location_provider_not_configured_notice();
+		$second_plugin->publish_location_provider_not_configured_notice();
+
+		$this->assertCount( 1, $first_handler->notices );
+		$this->assertCount( 0, $second_handler->notices );
 	}
 }

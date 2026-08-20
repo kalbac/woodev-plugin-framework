@@ -702,16 +702,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				'message'   => $message,
 				// Keyed by PROVIDER id, not by plugin/method id: the Location
 				// Provider layer is shared by the whole fleet (one active
-				// provider per store), so every participating plugin computes
-				// the SAME notice id for the SAME unconfigured provider — this
-				// does not by itself deduplicate the notice across multiple
-				// plugins (each plugin's Woodev_Admin_Notice_Handler is its
-				// own, per {@see \Woodev_Admin_Notice_Handler}'s own class
-				// docblock — dismissal is per plugin, per user, matching every
-				// other notice this handler renders), but it does mean a
-				// merchant who dismisses it on one plugin's screen and later
-				// visits another participating plugin's screen sees a notice
-				// with the SAME id, not a confusingly different one.
+				// provider per store). The registry claims this id once per
+				// request before a plugin-specific handler registers it.
 				'notice_id' => 'location-provider-' . $provider->get_id() . '-not-configured',
 			];
 		}
@@ -743,6 +735,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$notice = $this->location_provider_not_configured_notice();
 
 			if ( null === $notice ) {
+				return;
+			}
+
+			if ( ! Location\Location_Provider_Registry::instance()->claim_not_configured_notice( $notice['notice_id'] ) ) {
 				return;
 			}
 

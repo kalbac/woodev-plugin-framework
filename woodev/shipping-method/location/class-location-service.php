@@ -1778,18 +1778,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Gets the store's field-presentation mode (Task 13; spec D7) — thin
-		 * pass-through to {@see Location_Provider_Registry::get_field_mode()},
-		 * clamped against {@see self::get_offered_field_modes()} so a stale
-		 * saved value can never name a mode the current active provider does
-		 * not back.
+		 * Gets the store's REGION-level field-presentation mode (issue #380 —
+		 * split from the legacy single mode) — thin pass-through to
+		 * {@see Location_Provider_Registry::get_field_mode_region()}, clamped
+		 * against {@see self::get_offered_field_modes()} (and, on TOP of
+		 * that, against `region_field` being removed — issue #369 closure)
+		 * so a stale saved value can never name a mode the current active
+		 * provider does not back.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_field_mode(): string {
-			return $this->registry->get_field_mode();
+		public function get_field_mode_region(): string {
+			return $this->registry->get_field_mode_region();
+		}
+
+		/**
+		 * Gets the store's SETTLEMENT (НП) level field-presentation mode
+		 * (issue #380 — split from the legacy single mode) — thin
+		 * pass-through to {@see Location_Provider_Registry::get_field_mode_settlement()},
+		 * clamped against {@see self::get_offered_field_modes()} exactly like
+		 * {@see self::get_field_mode_region()} — but without that method's
+		 * `region_field` clamp.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_field_mode_settlement(): string {
+			return $this->registry->get_field_mode_settlement();
 		}
 
 		/**
