@@ -253,8 +253,11 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 - Full policy: `docs-internal/adr/005-platform-v2-clean-break-policy.md`; operating rules: `docs-internal/platform-v2-execution-protocol.md`.
 - Legacy namespace: `Woodev_*` classes; new code: `Woodev\Framework\*` PSR-4 (include-based, not Composer autoload at runtime).
 
-**Serena MCP (PHP navigation):**
+**Serena MCP (PHP navigation) — binds agents that HAVE Serena:**
 - Always use Serena tools for PHP source reading — never raw `Read` on `.php` files
+- **Serena is a Claude Code MCP.** An agent without access to it — Codex, for one — is not expected
+  to follow this rule and should say so once and proceed with git/shell inspection. Reporting the
+  absence is right; stalling on it is not (s83)
 - Serena is pre-indexed, faster and more accurate than file reads
 - **Mandatory (operator decision, s60):** verify Serena is connected at session start; if it is
   missing, report to the operator before any PHP work — do not silently fall back to `Read`.
