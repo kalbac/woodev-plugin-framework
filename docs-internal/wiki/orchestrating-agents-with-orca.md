@@ -72,6 +72,13 @@ The procedure, which is the orchestrator's job and not the workers':
 A worker cannot know what another worker is editing. Dispatching them into the same tree and
 hoping is the orchestrator's bug, every time.
 
+**The worktree isolates the checkout, not the filesystem.** A worker can still `cd` into the main
+tree, and — the trap that actually fired in s83 — a brief that repeats `CLAUDE.md`'s Serena rule
+verbatim points `activate_project` at `D:/Projects/woodev_framework`, so every Serena edit lands in
+the main tree while the worker's git work stays in its worktree. Two of three workers hit it. Every
+brief must carry **the worker's own worktree path** plus an instruction to verify activation took
+(gotcha `serena-activate-path-must-be-the-worker-s-worktree`).
+
 ## Consequences of where Orca puts a worktree
 
 `worker-start --worktree new-top-level` creates the checkout **outside the repository**, at

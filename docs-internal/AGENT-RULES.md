@@ -66,6 +66,11 @@ measured effect is fewer mistakes and fewer tokens. Three hard requirements:
    this way: Serena silently disappeared from sessions and agents fell back without telling anyone.)
 2. **Propagate into subagent briefs:** every brief for a task that touches PHP source MUST repeat
    this rule. A brief without it is a defective brief — the orchestrator is responsible.
+   **Substitute the worker's OWN worktree path when you do.** Copying `D:/Projects/woodev_framework`
+   into a brief for a worker running elsewhere sends its Serena edits into the main tree while its
+   git work stays in its worktree — silently, with no error (s83, gotcha
+   `serena-activate-path-must-be-the-worker-s-worktree`). Require the worker to verify activation
+   by checking that a `find_symbol` result reports a path under its own worktree.
 3. **Fallback is an exception, not a routine:** if Serena errors on a specific call, note it in the
    session log and only then use built-in tools for that call.
 

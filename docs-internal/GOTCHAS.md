@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 170 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 171 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -262,6 +262,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/parallel-agents] **A worker's Serena `activate_project` path must be its OWN worktree — the repo-root path from CLAUDE.md silently splits its work across two checkouts.** → [serena-activate-path-must-be-the-worker-s-worktree](gotchas/serena-activate-path-must-be-the-worker-s-worktree.md) (s83)
 - [tooling/parallel-agents] **Two agents editing one file is the ORCHESTRATOR's bug — one `git checkout` erased another agent's finished, uncommitted work.** → [two-agents-one-file-is-the-orchestrator-s-bug](gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) (s82)
 - [tooling/codex-shell-sandbox-broken-windows] **Codex's shell WORKS — launch it in an Orca terminal; only `codex exec -s read-only` hits the broken windows sandbox. Same binary, trusted project, no sandbox.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72, **solved s82**)
 - [tooling/windows] **Git Bash mangles Cyrillic in curl arguments — the API answers 400/500 and it reads as the API's fault.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76)
