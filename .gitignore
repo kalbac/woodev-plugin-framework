@@ -28,6 +28,14 @@ opencode.json
 /.claude/settings.local.json
 /.claude/worktrees/
 
+# Orca-managed agent worktrees. Kept inside the project on purpose (operator
+# preference, s83) and ignored here so git, and Serena via
+# ignore_all_files_in_gitignore, both skip them. Every quality gate is already
+# path-scoped (phpcs -> ./woodev, phpstan -> woodev, phpunit -> ./tests), so
+# nothing else needs excluding — but keep running jest with
+# --roots "<rootDir>/tests/js", never bare npx jest.
+/orca/worktrees/
+
 # Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
 /.autodev/runtime/
 /.autodev/conductor.log

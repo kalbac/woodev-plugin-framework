@@ -98,19 +98,52 @@ the main tree while the worker's git work stays in its worktree. Two of three wo
 brief must carry **the worker's own worktree path** plus an instruction to verify activation took
 (gotcha `serena-activate-path-must-be-the-worker-s-worktree`).
 
-## Consequences of where Orca puts a worktree
+## Worktree layout — configured, not accidental
 
-`worker-start --worktree new-top-level` creates the checkout **outside the repository**, at
-`C:/Users/maksi/orca/workspaces/woodev_framework/<name>`. Two things follow:
+Agent worktrees live at **`orca/worktrees/`, inside the project** (operator preference, s83), on the
+same volume as the repo. Set per-repo, because there is no settings CLI:
 
-- The gotcha `jest-scans-agent-worktrees-inside-the-repo` does **not** apply to Orca worktrees.
-  It was about `.claude/worktrees/` living inside the repo tree. The `--roots` discipline still
-  stands for every other reason (`npx-jest-bypasses-wp-scripts-jsdom`).
-- **The repo has no Orca setup hook** (`orca repo show` → `hookSettings.scripts.setup` is empty,
-  and `worker-start` reports `hookFound: false`). A fresh worktree therefore has no `vendor/` and
-  no `node_modules/`, so it cannot run a single gate until the worker bootstraps it with
-  `composer install` and `npm ci`. Until that hook is configured, **say so in the brief** — a
-  worker that discovers it alone wastes a lap.
+```bash
+orca project setup-update --setup <repoId> \
+  --worktree-base-path D:/Projects/woodev_framework/orca/worktrees --json
+```
+
+The global default (`workspaceDir`, Settings → General) still points at `C:/Users/maksi/orca/workspaces`
+and applies only to repos without their own base path.
+
+**Why same-volume matters:** shared directories are materialised as symlinks on Windows, and
+directory symlinks across volumes need Developer Mode or elevation.
+
+**Why inside the repo is safe here — measured, not assumed.** Every gate is path-scoped, so none of
+them sees a worktree: phpcs reads `./woodev`, phpstan `paths: woodev`, phpunit `./tests/unit`. With
+a worktree in place the main tree still reports phpcs clean, phpstan clean and 2475 unit tests —
+not one test double-counted. `/orca/worktrees/` is gitignored, and Serena honours that through
+`ignore_all_files_in_gitignore: true`, so it does not index them either. The one real cost:
+`.wp-env.json` maps the whole repo root (`"woodev-framework": "."`), so worktrees do land inside the
+rig container. WordPress will not load them as plugins — those come from explicit mappings — but
+each worktree's 76 MB `vendor` copy sits inside the project directory.
+
+**Still run jest as `npm run test:js -- --roots "<rootDir>/tests/js"`.** A bare `npx jest` would
+scan worktrees wherever they live, and it loses the wp-scripts jsdom environment regardless
+(gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`).
+
+## A fresh worktree is gate-capable immediately
+
+Two checked-in files make a new worktree runnable the moment it exists, with **no install step**:
+
+- **`orca.yaml`** → `worktree.sharedDirectories: [node_modules]` — symlinked, so the 658 MB tree is
+  never copied. Entries must exist in the primary checkout **and** be gitignored, or Orca skips them
+  silently.
+- **`.worktreeinclude`** → `vendor`, `.mcp.json`, `.wp-env.override.json`,
+  `.claude/settings.local.json` — **copied**, so each worktree owns them.
+
+`vendor` must be copied and never shared: Composer bakes `$baseDir = dirname(dirname(__DIR__))` into
+its autoloader and PHP resolves a symlink to its real path, so a shared `vendor` makes the classmap
+load the primary checkout's sources while the bootstrap loads the worktree's — every class declared
+twice (gotcha `sharing-vendor-breaks-composer-autoload-in-a-worktree`).
+
+Measured on a throwaway worktree: **2475 unit / 6112 assertions, 1260 jest, phpstan clean, zero
+installs** — against **411 seconds** for a `composer install` there.
 
 ## What we deliberately did not adopt
 
