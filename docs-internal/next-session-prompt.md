@@ -7,7 +7,7 @@
 | | |
 |---|---|
 | Тесты | **2448 unit / 6067 ассертов / 1232 jest / 112 интеграционных** |
-| Готчи | **170** · Открытых PR нет, но есть незамерженная ветка |
+| Готчи | **169** · Открытых PR нет, но есть незамерженная ветка |
 | Риг | дерево на **`feat/shipping-tab-admin-polish`** — НЕ переключать, пока оператор не посмотрел; провайдер `test-cdek`; pickup-метод из mu-плагина — не удалять |
 
 # ⛔ Первое, что нужно сделать
@@ -118,7 +118,7 @@ orca terminal create --worktree active --title codex --command "codex" --json
 composer test:unit                                   # 2448
 npm run test:js -- --roots "<rootDir>/tests/js"      # 1232 — ИЗ BASH
 composer phpcs && composer phpstan
-npm run lint:docs                                    # 170 готчей
+npm run lint:docs                                    # 169 готчей
 php bin/generate-class-map.php && npm run build      # если трогал src/
 ```
 

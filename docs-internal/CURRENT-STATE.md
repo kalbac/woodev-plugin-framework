@@ -11,7 +11,7 @@
 merged**: this is UI/UX work and stops at the operator's own review. All six «Доставка» polish cards
 are done (#375, #377, #380 closing #369, #376 closing #370, #373, #378), plus four defects of the
 settings surface nobody had filed and one found by the rig pass. Tests: **2448 unit / 6067
-assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **170**.
+assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **169**.
 
 **Codex works on this machine.** Measured in s82: in an Orca terminal it has a real shell and reads
 files byte-exact; only `codex exec -s read-only` from Bash hits the broken sandbox. The gotcha that
