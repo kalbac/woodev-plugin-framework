@@ -2465,55 +2465,486 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Task 14 — get_default_locality_needs_repick() / set_default_locality_needs_repick():
-	// the informational "stale foreign-namespace default" flag.
+	// Issue #406 — Location_Settings::validate_values(): a FIXED
+	// default-locality record from a provider OTHER than the one this SAME
+	// submission resolves to must block Save, and the block must LIFT ITSELF
+	// once the configuration stops being contradictory — the operator's own
+	// two required cases (provider switched back; policy switched off).
 	// -------------------------------------------------------------------------
 
-	public function test_default_locality_needs_repick_defaults_to_false(): void {
+	/**
+	 * Builds a well-formed, JSON-encoded Location_Record for `$provider_id`,
+	 * the same wire shape `Location_Record::to_array()` round-trips and
+	 * `LocationPickerField` writes on the client.
+	 *
+	 * @param string $provider_id Provider namespace the record's own `key`
+	 *                             and `provider_id` both carry.
+	 * @return string JSON-encoded record.
+	 */
+	private function encode_record_for( string $provider_id ): string {
+		$record = Location_Record::from_array(
+			[
+				'key'         => $provider_id . ':city-1',
+				'provider_id' => $provider_id,
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Тестовый город',
+			]
+		);
+
+		return (string) json_encode( $record->to_array() );
+	}
+
+	public function test_validate_values_blocks_a_foreign_provider_record(): void {
 		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_active_provider_option( 'prov-a' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-b' ),
+			]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_unblocks_once_the_provider_switches_back_in_the_same_save(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		// The STORE currently has prov-b active — a record picked under
+		// prov-a would be foreign to it...
+		$this->stub_active_provider_option( 'prov-b' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// ...but THIS submission ALSO switches active_provider back to
+		// prov-a in the SAME save — the two ids agree again and nothing
+		// blocks. This is the operator's own "switched to look, switched
+		// back" case: the block must lift without anything being cleared.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_falls_back_to_the_stored_active_provider_when_it_is_not_resubmitted(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ new Fake_Location_Provider( 'prov-a', 'Provider A' ) ] );
+		$this->stub_active_provider_option( 'prov-a' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// active_provider is NOT part of this submission (an ordinary save
+		// that never touched the select) — the effective id must fall back
+		// to the STORED value, never treat an absent controller as an empty
+		// (and therefore mismatched) id.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_does_not_block_when_the_policy_switches_off_in_the_same_save(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_active_provider_option( 'prov-a' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// A foreign-provider record is STILL present in the submitted map
+		// (the merchant never touched the picker) but the policy switches to
+		// `off` in this SAME save. Runs through filter_visible_values()
+		// FIRST, exactly like every real caller (class-rest-api-settings-page.php)
+		// does before ever calling validate_values() — this is the operator's
+		// own second self-healing case, and the point of this test: proving
+		// the mechanism, not just asserting it.
+		$submitted = [
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $this->encode_record_for( 'prov-b' ),
+		];
+
+		$visible = $handler->filter_visible_values( $submitted );
+		$this->assertArrayNotHasKey(
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+			$visible,
+			'sanity: the record must actually be hidden by show_if once the policy switches off — otherwise this test would pass for the wrong reason'
+		);
+
+		$errors = $handler->validate_values( $visible );
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	/**
+	 * Stubs `get_option` so `active_provider`, `default_locality_policy`, and
+	 * `default_locality_record` resolve to the given STORED values, and every
+	 * other option name falls through to its own caller-supplied default —
+	 * used by the codex-critic-review follow-up tests below, which need a
+	 * pre-existing STORED state a PARTIAL submission does not itself carry.
+	 *
+	 * @param string $active_provider_id stored `active_provider` option value.
+	 * @param string $policy             stored `default_locality_policy` option value.
+	 * @param string $record_json        stored `default_locality_record` option value (JSON, or '').
+	 * @return void
+	 */
+	private function stub_stored_location_state( string $active_provider_id, string $policy, string $record_json ): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = false ) use ( $active_provider_id, $policy, $record_json ) {
+				switch ( $name ) {
+					case 'woodev_location_active_provider':
+						return $active_provider_id;
+					case 'woodev_location_default_locality_policy':
+						return $policy;
+					case 'woodev_location_default_locality_record':
+						return $record_json;
+					default:
+						return $default;
+				}
+			}
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Codex critic review follow-up (post-#406-merge): a PARTIAL REST save —
+	// the settings-page endpoint's own documented contract — must be checked
+	// against STORED state for whatever side of the (provider, record) pair
+	// it does NOT itself resubmit, on both sides of the self-healing property.
+	// -------------------------------------------------------------------------
+
+	public function test_validate_values_blocks_a_partial_save_that_only_changes_the_provider_against_a_stored_record(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_stored_location_state(
+			'prov-a',
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			$this->encode_record_for( 'prov-a' )
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// Defect 1: a partial save that changes ONLY active_provider — never
+		// resubmitting the record at all — must still be checked against the
+		// record already ON FILE. The settings-page REST endpoint accepts and
+		// persists exactly this kind of partial `values` map
+		// (class-rest-api-settings-page.php); skipping the check whenever the
+		// record key happens to be absent would let it silently strand the
+		// unchanged, now-foreign stored record.
+		$errors = $handler->validate_values(
+			[ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'prov-b' ]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_does_not_block_a_partial_save_that_only_switches_the_policy_off_against_a_stored_foreign_record(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		// The record already on file is FOREIGN to the stored active provider
+		// — exactly the state a lock-in bug would trap a merchant behind.
+		$this->stub_stored_location_state(
+			'prov-a',
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			$this->encode_record_for( 'prov-b' )
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// The critic's own explicit "must not lock a merchant in" requirement,
+		// the OTHER partial-save direction: a save that switches ONLY the
+		// policy to `off` — the record is never even PART of this submission,
+		// unlike the sibling test above which resubmits it and relies on
+		// filter_visible_values() to strip it — must still escape a
+		// pre-existing stored mismatch. Proves the effective-policy
+		// short-circuit alone is sufficient, with no record read at all.
+		$errors = $handler->validate_values(
+			[ Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF ]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_never_blocks_a_save_touching_none_of_the_three_settings_even_with_a_stored_mismatch(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_stored_location_state(
+			'prov-a',
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			$this->encode_record_for( 'prov-b' )
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// Proof against lock-in: a save that never touches active_provider,
+		// default_locality_policy, or default_locality_record at all — e.g.
+		// the merchant only edited an unrelated field-mode axis — must NEVER
+		// be blocked by a pre-existing mismatch it neither created nor can
+		// see. Without this, considering STORED state (the fix above) could
+		// brick every future save on the whole tab over drift unrelated to
+		// what is actually being saved right now.
+		$errors = $handler->validate_values(
+			[ Location_Provider_Registry::SETTING_FIELD_MODE_REGION => Location_Provider_Registry::MODE_TYPEAHEAD ]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_blocks_when_the_stored_active_provider_is_no_longer_registered(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		// prov-a is NOT among the registered candidates — only the real
+		// bundled DaData provider (DEFAULT_PROVIDER_ID) auto-registers,
+		// simulating the provider-deactivated-outside-the-form scenario the
+		// operator's own brief names.
 		$this->stub_providers_filter( [] );
+
+		$stored_record = $this->encode_record_for( 'prov-a' );
+		$this->stub_stored_location_state(
+			'prov-a', // still says prov-a — the option was never touched.
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			$stored_record
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// Defect 2: the RAW stored active_provider ('prov-a') still textually
+		// equals the record's own provider_id — a naive string comparison
+		// would see no mismatch. But prov-a is no longer REGISTERED (its
+		// plugin was deactivated), so runtime actually resolves to the
+		// bundled DEFAULT_PROVIDER_ID ('dadata') instead — the SAME
+		// divergence Location_Provider_Registry::resolve_active_provider_for_id()
+		// already produces for every OTHER runtime caller. A save that
+		// resubmits the (unchanged) record but omits active_provider
+		// entirely must still be blocked.
+		$errors = $handler->validate_values(
+			[ Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD => $stored_record ]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_blocks_a_submitted_provider_the_active_provider_filter_swaps_to_a_different_instance(): void {
+		$prov_a = new Fake_Location_Provider( 'prov-a', 'Provider A' );
+		$prov_b = new Fake_Location_Provider( 'prov-b', 'Provider B' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		// Mirrors test_active_provider_filter_can_swap_the_resolved_instance()'s
+		// own fixture exactly: FILTER_ACTIVE_PROVIDER unconditionally swaps
+		// EVERY resolution to prov-b, regardless of which id was resolved.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $prov_a, $prov_b ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $prov_a, $prov_b ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $prov_b;
+				}
+
+				return $default;
+			}
+		);
 		Functions\when( 'get_option' )->justReturn( null );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// Codex critic review, second pass: a SUBMITTED active_provider must
+		// resolve through the SAME FILTER_ACTIVE_PROVIDER filter
+		// get_active_provider() applies, not a raw string compare.
+		// test_active_provider_filter_can_swap_the_resolved_instance() already
+		// proves a site filter may swap in a DIFFERENT provider instance; here
+		// that swap is UNCONDITIONAL, so a submission naming prov-a — matching
+		// the record's own provider_id under a raw compare — must still be
+		// blocked: runtime will never actually resolve prov-a for it, only
+		// prov-b, exactly the state #406 exists to prevent.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
 
-	public function test_default_locality_needs_repick_round_trips(): void {
+	public function test_validate_values_does_not_block_when_the_record_matches_what_the_active_provider_filter_actually_resolves_to(): void {
+		$prov_a = new Fake_Location_Provider( 'prov-a', 'Provider A' );
+		$prov_b = new Fake_Location_Provider( 'prov-b', 'Provider B' );
+
 		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [] );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $prov_a, $prov_b ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $prov_a, $prov_b ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $prov_b;
+				}
+
+				return $default;
+			}
+		);
 		Functions\when( 'get_option' )->justReturn( null );
-		Functions\when( 'update_option' )->justReturn( true );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
-		$registry->set_default_locality_needs_repick( true );
-		$this->assertTrue( $registry->get_default_locality_needs_repick() );
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
 
-		$registry->set_default_locality_needs_repick( false );
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		// The other direction, proving the fix does not OVER-block: the
+		// submission names prov-a, but the filter unconditionally resolves
+		// EVERY id to prov-b — exactly what runtime will actually use. A
+		// record whose own provider_id is prov-b (matching the FILTERED
+		// outcome, not the raw submitted id) must be accepted, not flagged as
+		// a mismatch just because it disagrees with the raw string.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-b' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
 
-	public function test_default_locality_needs_repick_is_false_while_the_gate_is_closed(): void {
+	public function test_set_default_locality_record_refuses_a_record_foreign_to_the_active_provider(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter(
+			[
+				new Fake_Location_Provider( 'prov-a', 'Provider A' ),
+				new Fake_Location_Provider( 'prov-b', 'Provider B' ),
+			]
+		);
+		$this->stub_active_provider_option( 'prov-a' );
+
 		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
 
-		// Must not throw/fatal — there is no settings handler to write through.
-		$registry->set_default_locality_needs_repick( true );
+		$record = Location_Record::from_array(
+			[
+				'key'         => 'prov-b:city-1',
+				'provider_id' => 'prov-b',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+			]
+		);
 
-		$this->assertFalse( $registry->get_default_locality_needs_repick() );
+		// Defect 3: the ONE public writer that used to bypass
+		// Location_Settings::validate_values() entirely must now refuse a
+		// record foreign to the CURRENT active provider, same as the REST path.
+		$registry->set_default_locality_record( $record );
+
+		$this->assertNull( $registry->get_default_locality_record() );
 	}
+
+	// -------------------------------------------------------------------------
+	// Issue #406: Task 14's get_default_locality_needs_repick() / set_default_locality_needs_repick()
+	// typed wrapper pair is REMOVED — dead code (zero production callers; its
+	// one historical write site was deliberately excised by review finding
+	// F2, never rebuilt) that even wired up would have been inert, since
+	// apply_default_locality_status_note() already surfaces the same
+	// "stranded" condition live, unconditionally. See
+	// class-location-provider-registry.php's own removal note at the deleted
+	// methods' former location for the full rationale.
+	// -------------------------------------------------------------------------
 
 	// -------------------------------------------------------------------------
 	// Issue #376 (closing #370, review finding F4): `default_locality_record`
 	// now gets a REAL `location-picker` control, gated `show_if` on the sibling
 	// `default_locality_policy` field being `fixed`; `default_locality_needs_repick`
-	// stays registered (the internal read/write machinery still works) but is
-	// registered WITHOUT a control — never an editable widget on the settings
-	// page, at any policy.
+	// stays registered (still writable through the generic settings-handler
+	// accessors) but is registered WITHOUT a control — never an editable
+	// widget on the settings page, at any policy.
 	// -------------------------------------------------------------------------
 
 	public function test_default_locality_record_gets_a_location_picker_control_gated_on_the_fixed_policy(): void {

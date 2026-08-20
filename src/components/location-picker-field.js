@@ -148,6 +148,59 @@ export function parseStoredRecord( raw ) {
 }
 
 /**
+ * Client-side PREVIEW of the server's authoritative save-blocking check
+ * ({@see Location_Settings::validate_values()}, issue #406) — same message,
+ * an APPROXIMATION of the same comparison (`parseStoredRecord().providerId`
+ * vs the effective `active_provider` value for this save — NOT an exact
+ * mirror, see "KNOWN GAP" below), reused by `ControlField` (live,
+ * blur-gated inline error) and `app.js` (blocks the Save click, mirroring
+ * how every other field's client-caught error already blocks it). The
+ * server remains the actual gate; this only saves the merchant a round trip
+ * for a mismatch the client can already see.
+ *
+ * KNOWN GAP, left deliberately unfixed here (codex critic review, both
+ * passes): `providerId` is compared RAW, never resolved the way the
+ * server's own `Location_Provider_Registry::resolve_active_provider_for_id()`
+ * resolves it — through the registered-instance lookup AND the public
+ * `woodev_location_active_provider` filter. Two cases this misses:
+ * (1) a provider id the store no longer registers (e.g. its plugin was
+ * deactivated OUTSIDE the form) still falls back to a DIFFERENT provider at
+ * runtime; (2) a site's own filter callback can swap in an entirely
+ * different provider instance than the id names, unconditionally or by
+ * branching on the id — {@see LocationProviderRegistryTest::test_active_provider_filter_can_swap_the_resolved_instance()}
+ * proves this is real, supported behavior, not a theoretical edge. The
+ * SERVER now resolves through that full path for both a submitted and a
+ * stored id; this client preview still does not, for either case. Fixing
+ * it client-side would need the active_provider field's own registered
+ * `options` (still insufficient for case 2 — a filter can return an
+ * instance no `options` map ever named) threaded down through
+ * `ControlField`/`app.js` (neither has it today), AND — since `app.js`'s
+ * pre-flight check and `ControlField`'s live inline error call this SAME
+ * function independently — fixing only one call site would let a click get
+ * blocked with no visible per-field reason (a worse UX than the gap
+ * itself). The server closes the actual hole regardless of what this
+ * preview shows; both cases can only arise from a change OUTSIDE the form
+ * to begin with, which the client has no live signal for anyway (matches
+ * this file's own "STALE-RECORD WARNING" section above, which is subject
+ * to the identical limitation) — the merchant still reaches the server's
+ * own rejection on Save (one extra round trip), and `policy=off` remains
+ * an in-form escape either way, so this is not a lock-in.
+ *
+ * @param {*}      raw        the record field's raw stored/edited value.
+ * @param {string} providerId the effective `active_provider` value for this same save.
+ * @return {string|null} error message, or null when there is nothing to block.
+ */
+export function getProviderMismatchError( raw, providerId ) {
+	const stored = parseStoredRecord( raw );
+
+	if ( 'ok' !== stored.state || ! stored.providerId || ! providerId || stored.providerId === providerId ) {
+		return null;
+	}
+
+	return __( 'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.', 'woodev-plugin-framework' );
+}
+
+/**
  * @param {Object}   props            component props.
  * @param {string}   [props.value]    current stored value — `''` or a `Location_Record` JSON string.
  * @param {string}   [props.country]  ISO-3166 alpha-2 country to scope suggest requests to (`schema.country`).
