@@ -1476,9 +1476,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`:
 		 * writing the option directly would leave this SAME request's cached
 		 * {@see \Woodev_Setting::$value} stale). A no-op while the gate is closed
-		 * — there is no settings handler to write through.
+		 * — there is no settings handler to write through — and ALSO a no-op
+		 * (issue #406 defect 3) when `$record` is foreign to the CURRENT active
+		 * provider, mirroring {@see \Woodev\Framework\Shipping\Location\Location_Settings::validate_values()}'s
+		 * REST-path rule so every writer, not only the form, is bound by the
+		 * same invariant.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Refuses (no-op) a record foreign to the current active
+		 *              provider (issue #406 defect 3) — previously wrote
+		 *              unconditionally, the only writer that bypassed the
+		 *              new `Location_Settings::validate_values()` check.
 		 *
 		 * @param Location_Record $record The record to store.
 		 *
@@ -1486,6 +1494,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		public function set_default_locality_record( Location_Record $record ): void {
 			if ( null === $this->settings_handler ) {
+				return;
+			}
+
+			// Issue #406 defect 3: this is the ONE public writer that bypasses
+			// Location_Settings::validate_values() entirely — update_value()
+			// only runs the record's own per-field string validation, never the
+			// map-level cross-field check the REST save path is now gated by.
+			// No in-repo caller exists today, but leaving this writer able to
+			// persist a foreign record would silently overstate "the server is
+			// authoritative for every writer" the moment one is added. Refusing
+			// here — rather than throwing — matches this SAME method's existing
+			// no-op-on-unmet-precondition style for the closed-gate case above.
+			$active = $this->get_active_provider();
+
+			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
 				return;
 			}
 
@@ -1811,6 +1834,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              separately from the region axis's own (issue #404),
 		 *              narrowed by the region axis's raw effective value via
 		 *              {@see self::resolve_stored_field_mode_region()}.
+		 * @since 2.0.2 Also hands `Location_Settings` the RUNTIME-resolved
+		 *              active provider's own id (issue #406 follow-up) — its
+		 *              `validate_values()` cross-field check needs the SAME
+		 *              answer {@see self::get_active_provider()} would give,
+		 *              never the raw stored option string.
 		 *
 		 * @return void
 		 */
@@ -1847,7 +1875,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$provider_fields,
 				$field_mode_region_options,
 				$field_mode_settlement_options,
-				$default_locality_policy_options
+				$default_locality_policy_options,
+				null !== $active_provider ? $active_provider->get_id() : ''
 			);
 
 			$this->apply_default_locality_status_note();

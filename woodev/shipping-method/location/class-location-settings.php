@@ -120,6 +120,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $default_locality_policy_options;
 
 		/**
+		 * The RUNTIME-resolved active provider's own id, or `''` when none
+		 * resolves — the SAME answer {@see Location_Provider_Registry::get_active_provider()}
+		 * would give this request, computed once by the caller
+		 * ({@see Location_Provider_Registry::register_settings()}) exactly
+		 * like {@see self::$provider_options} is, and used as
+		 * {@see self::validate_values()}'s fallback when a submission omits
+		 * `active_provider` (issue #406 follow-up). Deliberately NOT the raw
+		 * stored option string: {@see Location_Provider_Registry::resolve_active_provider_for_id()}
+		 * falls back to {@see Location_Provider_Registry::DEFAULT_PROVIDER_ID}
+		 * (or `null`) when the stored id names a provider nothing registers
+		 * any more — comparing against the raw string instead would let a
+		 * de-registered provider's own stale id keep "matching" a record
+		 * runtime can no longer actually resolve.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private string $effective_active_provider_id;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -129,6 +149,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * @since 2.0.2 `$field_mode_options` split into `$field_mode_region_options`
 		 *              and `$field_mode_settlement_options` (issue #404) — the two
 		 *              axes no longer always offer the same values.
+		 * @since 2.0.2 Added the `$effective_active_provider_id` parameter
+		 *              (issue #406 follow-up).
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
@@ -150,6 +172,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *                                                                               select options (`id => label`),
 		 *                                                                               already gated by the active
 		 *                                                                               provider's `locate` capability.
+		 * @param string                              $effective_active_provider_id    the RUNTIME-resolved active
+		 *                                                                              provider's own id, or `''` —
+		 *                                                                              see {@see self::$effective_active_provider_id}.
 		 */
 		public function __construct(
 			string $id,
@@ -157,13 +182,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			array $provider_fields = [],
 			array $field_mode_region_options = [],
 			array $field_mode_settlement_options = [],
-			array $default_locality_policy_options = []
+			array $default_locality_policy_options = [],
+			string $effective_active_provider_id = ''
 		) {
 			$this->provider_options                = $provider_options;
 			$this->provider_fields                 = $provider_fields;
 			$this->field_mode_region_options       = $field_mode_region_options;
 			$this->field_mode_settlement_options   = $field_mode_settlement_options;
 			$this->default_locality_policy_options = $default_locality_policy_options;
+			$this->effective_active_provider_id    = $effective_active_provider_id;
 
 			parent::__construct( $id );
 		}
@@ -454,11 +481,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * Adds one cross-field check on top of {@see \Woodev_Abstract_Settings::validate_values()}'s
 		 * own per-field pass (issue #406): the FIXED default-locality record's
 		 * own baked-in `provider_id` (set at pick time by the admin picker,
-		 * never merchant-typed) must match the ACTIVE provider this SAME
-		 * submission resolves to — otherwise saving would silently keep a
-		 * record {@see Location_Service::resolve_default()} can never
-		 * resolve through the new provider, and the `fixed` policy would
-		 * stop working with no signal at all. The operator explicitly
+		 * never merchant-typed) must match the ACTIVE provider — otherwise
+		 * saving would silently keep a record {@see Location_Service::resolve_default()}
+		 * can never resolve through the new provider, and the `fixed` policy
+		 * would stop working with no signal at all. The operator explicitly
 		 * REJECTED both "clear the field on select change" and "clear
 		 * server-side + set needs_repick on save" as data loss on a
 		 * reversible action; blocking the save instead achieves the same
@@ -466,29 +492,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * destroying anything.
 		 *
 		 * `$values` is this handler's OWN chunk of the tab-wide submission —
-		 * both `active_provider` and `default_locality_record` are
-		 * registered on THIS handler ({@see self::register_settings()}), so
-		 * a provider switch staged in the SAME save is visible in the SAME
-		 * map this check reads, never a stale one:
+		 * SUBMITTED-OR-STORED for every one of the three settings the check
+		 * reads (`active_provider`, `default_locality_policy`,
+		 * `default_locality_record`), never submitted-only. A REST endpoint
+		 * MAY legitimately accept a PARTIAL `values` map that changes only
+		 * ONE of the three ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::register_settings()}
+		 * registers all three on THIS handler, but a merchant can stage an
+		 * edit to just one field) — checking only what was RESUBMITTED would
+		 * let a save that changes just `active_provider` silently strand an
+		 * unchanged, now-foreign STORED record (review finding, post-merge):
+		 * the effective value of each of the three is therefore submitted
+		 * value if present, else {@see self::get_value()}'s CURRENT stored
+		 * one — except the active-provider fallback, which is
+		 * {@see self::$effective_active_provider_id} (the RUNTIME-resolved
+		 * provider, not the raw option string — a de-registered provider's
+		 * stale id must not keep "matching" a record runtime can no longer
+		 * resolve either).
+		 *
+		 * Both required self-healing cases fall out of reading EFFECTIVE
+		 * values rather than a special case:
 		 *
 		 * - switch the provider back to the one the record was picked under
-		 *   -> the two ids match again -> no error -> save unblocked;
-		 * - switch `default_locality_policy` to `off` in the same save ->
-		 *   `default_locality_record` is hidden by its own `show_if` ->
+		 *   -> the two effective ids match again -> no error -> save unblocked;
+		 * - switch `default_locality_policy` to `off` (submitted OR already
+		 *   stored) -> the effective policy is not `fixed` -> nothing to
+		 *   check, full stop — this ALSO covers `default_locality_record`
+		 *   being hidden by its own `show_if` and stripped by
 		 *   {@see \Woodev_Abstract_Settings::filter_visible_values()} (run by
-		 *   every caller BEFORE `validate_values()`) already strips it from
-		 *   `$values` -> the key is simply absent here -> nothing to block.
+		 *   every caller BEFORE `validate_values()`) before this method ever
+		 *   sees it.
 		 *
-		 * Both cases need no special-casing in this method — the rule lifts
-		 * itself as a consequence of reading the SAME live map the ordinary
-		 * per-field pass already does, not a snapshot taken at page load.
+		 * A save touching NONE of the three settings returns immediately,
+		 * before any STORED value is even read — this is what keeps a
+		 * pre-existing (or externally-introduced) mismatch from blocking an
+		 * unrelated field's save forever: the merchant remains able to reach
+		 * either fix through THIS SAME handler at any time, so nothing
+		 * becomes unrecoverable through the form.
 		 *
 		 * A malformed/undecodable record degrades to "nothing to check"
 		 * rather than a NEW validation error — the same never-throws-on-a-
 		 * corrupt-blob discipline {@see Location_Provider_Registry::get_default_locality_record()}
 		 * already applies; an empty record likewise has nothing to compare.
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @param array<string,mixed> $values submitted setting_id => value (this handler's own chunk).
 		 *
@@ -496,14 +542,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 */
 		public function validate_values( array $values ): array {
 
-			$errors    = parent::validate_values( $values );
-			$record_id = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD;
+			$errors      = parent::validate_values( $values );
+			$policy_id   = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY;
+			$record_id   = Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD;
+			$provider_id = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
 
-			if ( ! array_key_exists( $record_id, $values ) || isset( $errors[ $record_id ] ) ) {
+			// A save that touches NONE of the three settings this rule depends on
+			// must never be blocked by drift it did not create and cannot see —
+			// e.g. a lone `field_mode_region` edit, or a provider's own API-key
+			// field. Without this guard, considering STORED state (below) would
+			// let a mismatch from BEFORE this fix shipped, or introduced entirely
+			// outside the form, brick every future save on this whole tab; WITH
+			// it, the merchant can always still reach a fix through this SAME
+			// handler (switch the provider back, or switch the policy off) — see
+			// this method's own tests for both partial-save directions.
+			if ( ! array_key_exists( $policy_id, $values )
+				&& ! array_key_exists( $provider_id, $values )
+				&& ! array_key_exists( $record_id, $values )
+			) {
 				return $errors;
 			}
 
-			$raw = $values[ $record_id ];
+			if ( isset( $errors[ $record_id ] ) ) {
+				return $errors;
+			}
+
+			// Effective policy: submitted wins, else the CURRENTLY STORED value —
+			// mirrors filter_visible_values()'s own show_if resolution, so a
+			// partial save that leaves `fixed` untouched is treated exactly like
+			// one that resubmits it.
+			$effective_policy = array_key_exists( $policy_id, $values )
+				? (string) $values[ $policy_id ]
+				: (string) $this->get_value( $policy_id );
+
+			if ( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED !== $effective_policy ) {
+				return $errors;
+			}
+
+			// Effective record: submitted wins, else whatever is CURRENTLY STORED
+			// (issue #406 defect 1) — a save that changes only `active_provider`
+			// must be checked against the record already on file, not skipped
+			// just because THIS request never re-sent it.
+			$raw = array_key_exists( $record_id, $values )
+				? $values[ $record_id ]
+				: $this->get_value( $record_id, false );
 
 			if ( ! is_string( $raw ) || '' === $raw ) {
 				return $errors;
@@ -521,10 +603,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				return $errors;
 			}
 
-			$provider_setting_id = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
-			$active_provider_id  = array_key_exists( $provider_setting_id, $values )
-				? (string) $values[ $provider_setting_id ]
-				: (string) $this->get_value( $provider_setting_id );
+			// Effective active provider: the id THIS submission moves to when
+			// submitted; otherwise the RUNTIME-resolved current provider (issue
+			// #406 defect 2) — never the raw stored option string, which can
+			// still name a provider nothing registers any more.
+			$active_provider_id = array_key_exists( $provider_id, $values )
+				? (string) $values[ $provider_id ]
+				: $this->effective_active_provider_id;
 
 			if ( $record->provider_id() !== $active_provider_id ) {
 				$errors[ $record_id ] = __( 'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.', 'woodev-plugin-framework' );

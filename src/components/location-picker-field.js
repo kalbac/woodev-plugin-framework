@@ -157,6 +157,23 @@ export function parseStoredRecord( raw ) {
  * server remains the actual gate; this only saves the merchant a round trip
  * for a mismatch the client can already see.
  *
+ * KNOWN GAP, left deliberately unfixed here (codex critic review defect 2):
+ * `providerId` is compared RAW, never resolved the way the server's own
+ * `Location_Provider_Registry::resolve_active_provider_for_id()` resolves it
+ * — a provider id the store no longer registers (e.g. its plugin was
+ * deactivated OUTSIDE the form) would still "match" here even though the
+ * SERVER now falls back to the runtime-resolved provider instead and blocks
+ * the save. Fixing this client-side would need the active_provider field's
+ * own registered `options` threaded down through `ControlField`/`app.js`
+ * (neither has it today), AND — since `app.js`'s pre-flight check and
+ * `ControlField`'s live inline error call this SAME function independently —
+ * fixing only one call site would let a click get blocked with no visible
+ * per-field reason (a worse UX than the gap itself). The server closes the
+ * actual hole regardless of what this preview shows; this scenario can only
+ * arise from a change OUTSIDE the form to begin with, which the client has
+ * no live signal for anyway (matches this file's own "STALE-RECORD WARNING"
+ * section above, which is subject to the identical limitation).
+ *
  * @param {*}      raw        the record field's raw stored/edited value.
  * @param {string} providerId the effective `active_provider` value for this same save.
  * @return {string|null} error message, or null when there is nothing to block.
