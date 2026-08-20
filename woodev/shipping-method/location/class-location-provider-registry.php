@@ -1834,11 +1834,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              separately from the region axis's own (issue #404),
 		 *              narrowed by the region axis's raw effective value via
 		 *              {@see self::resolve_stored_field_mode_region()}.
-		 * @since 2.0.2 Also hands `Location_Settings` the RUNTIME-resolved
-		 *              active provider's own id (issue #406 follow-up) — its
-		 *              `validate_values()` cross-field check needs the SAME
-		 *              answer {@see self::get_active_provider()} would give,
-		 *              never the raw stored option string.
+		 * @since 2.0.2 Also hands `Location_Settings` a resolver CALLABLE
+		 *              wrapping {@see self::resolve_active_provider_for_id()}
+		 *              (issue #406 follow-up) — its `validate_values()`
+		 *              cross-field check needs the SAME runtime resolution
+		 *              {@see self::get_active_provider()} applies (including
+		 *              {@see self::FILTER_ACTIVE_PROVIDER}) for BOTH a
+		 *              submitted id and a stored one, never a raw string
+		 *              compare against either.
 		 *
 		 * @return void
 		 */
@@ -1876,7 +1879,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$field_mode_region_options,
 				$field_mode_settlement_options,
 				$default_locality_policy_options,
-				null !== $active_provider ? $active_provider->get_id() : ''
+				// Issue #406 follow-up (second pass): a CALLABLE, not a
+				// pre-computed id — resolve_active_provider_for_id() must
+				// run per SUBMITTED id too (not only as a stored-value
+				// fallback), including the FILTER_ACTIVE_PROVIDER filter,
+				// exactly like self::get_active_provider() itself resolves.
+				// A pre-computed snapshot could only ever answer for ONE id
+				// (this request's stored one); validate_values() needs the
+				// SAME answer for whatever id a submission moves to.
+				function ( string $id ): string {
+					$provider = $this->resolve_active_provider_for_id( $id );
+
+					return null !== $provider ? $provider->get_id() : '';
+				}
 			);
 
 			$this->apply_default_locality_status_note();

@@ -120,24 +120,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $default_locality_policy_options;
 
 		/**
-		 * The RUNTIME-resolved active provider's own id, or `''` when none
-		 * resolves — the SAME answer {@see Location_Provider_Registry::get_active_provider()}
-		 * would give this request, computed once by the caller
-		 * ({@see Location_Provider_Registry::register_settings()}) exactly
-		 * like {@see self::$provider_options} is, and used as
-		 * {@see self::validate_values()}'s fallback when a submission omits
-		 * `active_provider` (issue #406 follow-up). Deliberately NOT the raw
-		 * stored option string: {@see Location_Provider_Registry::resolve_active_provider_for_id()}
-		 * falls back to {@see Location_Provider_Registry::DEFAULT_PROVIDER_ID}
-		 * (or `null`) when the stored id names a provider nothing registers
-		 * any more — comparing against the raw string instead would let a
-		 * de-registered provider's own stale id keep "matching" a record
-		 * runtime can no longer actually resolve.
+		 * Resolves a raw `active_provider` id (submitted OR stored) to the
+		 * RUNTIME-effective provider id THROUGH THE SAME PATH
+		 * {@see Location_Provider_Registry::get_active_provider()} uses —
+		 * `id => registered instance (falling back to DEFAULT_PROVIDER_ID) =>
+		 * the public `woodev_location_active_provider` filter => that
+		 * instance's own id, or `''` when nothing resolves. Handed in by the
+		 * caller ({@see Location_Provider_Registry::register_settings()})
+		 * exactly like {@see self::$provider_options} is — this handler stays
+		 * data-only, it does not know HOW resolution works, only that calling
+		 * this closure gives the SAME answer runtime would.
+		 *
+		 * MUST be called for the submitted id too, not only a stored
+		 * fallback (issue #406 follow-up, second pass): a raw string
+		 * comparison alone missed that the filter can swap in a DIFFERENT
+		 * provider instance than the one named by the submitted/stored id —
+		 * `resolve_active_provider_for_id()`'s own `apply_filters()` call is
+		 * the ONLY place that knows about registered {@see Location_Provider}
+		 * instances at all, which {@see self::$provider_options} (id => name
+		 * strings only) cannot stand in for.
 		 *
 		 * @since 2.0.2
-		 * @var string
+		 * @var \Closure(string): string
 		 */
-		private string $effective_active_provider_id;
+		private \Closure $resolve_active_provider_id;
 
 		/**
 		 * Constructor.
@@ -149,8 +155,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * @since 2.0.2 `$field_mode_options` split into `$field_mode_region_options`
 		 *              and `$field_mode_settlement_options` (issue #404) — the two
 		 *              axes no longer always offer the same values.
-		 * @since 2.0.2 Added the `$effective_active_provider_id` parameter
-		 *              (issue #406 follow-up).
+		 * @since 2.0.2 Added the `$resolve_active_provider_id` parameter
+		 *              (issue #406 follow-up, second pass) — a resolver
+		 *              CALLABLE rather than a pre-computed id, so a
+		 *              SUBMITTED id resolves through the SAME runtime path
+		 *              (including the {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER}
+		 *              filter) a stored one already did, not a raw string
+		 *              compare.
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
@@ -172,9 +183,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *                                                                               select options (`id => label`),
 		 *                                                                               already gated by the active
 		 *                                                                               provider's `locate` capability.
-		 * @param string                              $effective_active_provider_id    the RUNTIME-resolved active
-		 *                                                                              provider's own id, or `''` —
-		 *                                                                              see {@see self::$effective_active_provider_id}.
+		 * @param \Closure(string): string|null       $resolve_active_provider_id      resolves a raw id to the
+		 *                                                                              RUNTIME-effective one — see
+		 *                                                                              {@see self::$resolve_active_provider_id}.
+		 *                                                                              `null` (the default) is the
+		 *                                                                              identity function — returns
+		 *                                                                              the raw id unchanged.
 		 */
 		public function __construct(
 			string $id,
@@ -183,14 +197,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			array $field_mode_region_options = [],
 			array $field_mode_settlement_options = [],
 			array $default_locality_policy_options = [],
-			string $effective_active_provider_id = ''
+			?\Closure $resolve_active_provider_id = null
 		) {
 			$this->provider_options                = $provider_options;
 			$this->provider_fields                 = $provider_fields;
 			$this->field_mode_region_options       = $field_mode_region_options;
 			$this->field_mode_settlement_options   = $field_mode_settlement_options;
 			$this->default_locality_policy_options = $default_locality_policy_options;
-			$this->effective_active_provider_id    = $effective_active_provider_id;
+			$this->resolve_active_provider_id      = $resolve_active_provider_id ?? static fn( string $id ): string => $id;
 
 			parent::__construct( $id );
 		}
@@ -503,11 +517,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * unchanged, now-foreign STORED record (review finding, post-merge):
 		 * the effective value of each of the three is therefore submitted
 		 * value if present, else {@see self::get_value()}'s CURRENT stored
-		 * one — except the active-provider fallback, which is
-		 * {@see self::$effective_active_provider_id} (the RUNTIME-resolved
-		 * provider, not the raw option string — a de-registered provider's
-		 * stale id must not keep "matching" a record runtime can no longer
-		 * resolve either).
+		 * one — except `active_provider`, whose RAW id (submitted OR stored,
+		 * resolved the SAME way either time) is additionally passed through
+		 * {@see self::$resolve_active_provider_id} — the SAME runtime path
+		 * {@see Location_Provider_Registry::get_active_provider()} uses,
+		 * filter included — before comparison. Neither a de-registered
+		 * provider's stale id, nor an id the public
+		 * {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER} filter
+		 * swaps for a DIFFERENT instance, may keep "matching" a record
+		 * runtime will not actually resolve it with.
 		 *
 		 * Both required self-healing cases fall out of reading EFFECTIVE
 		 * values rather than a special case:
@@ -603,13 +621,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				return $errors;
 			}
 
-			// Effective active provider: the id THIS submission moves to when
-			// submitted; otherwise the RUNTIME-resolved current provider (issue
-			// #406 defect 2) — never the raw stored option string, which can
-			// still name a provider nothing registers any more.
-			$active_provider_id = array_key_exists( $provider_id, $values )
+			// Effective active provider: the RAW id THIS submission moves to
+			// when submitted, else whatever is CURRENTLY STORED — resolved
+			// through self::$resolve_active_provider_id() EITHER WAY (issue
+			// #406 follow-up, second pass), never compared as a raw string.
+			// A raw compare alone would miss the SUBMITTED id being swapped
+			// by the public FILTER_ACTIVE_PROVIDER filter to a DIFFERENT
+			// provider instance than the one it names — persisting a record
+			// that "matches" the submitted id while runtime actually resolves
+			// a different provider for it.
+			$raw_provider_id = array_key_exists( $provider_id, $values )
 				? (string) $values[ $provider_id ]
-				: $this->effective_active_provider_id;
+				: (string) $this->get_value( $provider_id );
+
+			$active_provider_id = ( $this->resolve_active_provider_id )( $raw_provider_id );
 
 			if ( $record->provider_id() !== $active_provider_id ) {
 				$errors[ $record_id ] = __( 'Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера.', 'woodev-plugin-framework' );

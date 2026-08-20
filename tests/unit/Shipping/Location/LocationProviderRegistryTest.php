@@ -2804,6 +2804,98 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
 	}
 
+	public function test_validate_values_blocks_a_submitted_provider_the_active_provider_filter_swaps_to_a_different_instance(): void {
+		$prov_a = new Fake_Location_Provider( 'prov-a', 'Provider A' );
+		$prov_b = new Fake_Location_Provider( 'prov-b', 'Provider B' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		// Mirrors test_active_provider_filter_can_swap_the_resolved_instance()'s
+		// own fixture exactly: FILTER_ACTIVE_PROVIDER unconditionally swaps
+		// EVERY resolution to prov-b, regardless of which id was resolved.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $prov_a, $prov_b ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $prov_a, $prov_b ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $prov_b;
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// Codex critic review, second pass: a SUBMITTED active_provider must
+		// resolve through the SAME FILTER_ACTIVE_PROVIDER filter
+		// get_active_provider() applies, not a raw string compare.
+		// test_active_provider_filter_can_swap_the_resolved_instance() already
+		// proves a site filter may swap in a DIFFERENT provider instance; here
+		// that swap is UNCONDITIONAL, so a submission naming prov-a — matching
+		// the record's own provider_id under a raw compare — must still be
+		// blocked: runtime will never actually resolve prov-a for it, only
+		// prov-b, exactly the state #406 exists to prevent.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-a' ),
+			]
+		);
+
+		$this->assertArrayHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
+	public function test_validate_values_does_not_block_when_the_record_matches_what_the_active_provider_filter_actually_resolves_to(): void {
+		$prov_a = new Fake_Location_Provider( 'prov-a', 'Provider A' );
+		$prov_b = new Fake_Location_Provider( 'prov-b', 'Provider B' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $prov_a, $prov_b ) {
+				if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
+					return [ $prov_a, $prov_b ];
+				}
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return $prov_b;
+				}
+
+				return $default;
+			}
+		);
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
+
+		// The other direction, proving the fix does not OVER-block: the
+		// submission names prov-a, but the filter unconditionally resolves
+		// EVERY id to prov-b — exactly what runtime will actually use. A
+		// record whose own provider_id is prov-b (matching the FILTERED
+		// outcome, not the raw submitted id) must be accepted, not flagged as
+		// a mismatch just because it disagrees with the raw string.
+		$errors = $handler->validate_values(
+			[
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER          => 'prov-a',
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY  => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD  => $this->encode_record_for( 'prov-b' ),
+			]
+		);
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD, $errors );
+	}
+
 	public function test_set_default_locality_record_refuses_a_record_foreign_to_the_active_provider(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter(
