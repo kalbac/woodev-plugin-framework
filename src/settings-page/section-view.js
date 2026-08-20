@@ -42,6 +42,7 @@ export default function SectionView( { providerId, section, values, conditionVal
 						key={ settingId }
 						schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 						value={ values[ settingId ] ?? section.fields[ settingId ].value }
+						conditionValues={ conditionValues || values }
 						onChange={ ( next ) => onFieldChange( settingId, next ) }
 						hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
 						onRevert={ () => onFieldRevert( settingId ) }

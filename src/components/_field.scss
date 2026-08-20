@@ -25,6 +25,14 @@
 		font-weight: 600;
 		color: wd.$ink;
 		margin-bottom: 6px;
+
+		// Pin the tooltip to the RIGHT edge of the label column, so the icons form a
+		// straight line instead of trailing each label's own text length. Scoped to
+		// this label deliberately: the checkbox/toggle label keeps its tip inline
+		// beside the text, where the control itself sits far to the right.
+		.woodev-field__tip {
+			margin-left: auto;
+		}
 	}
 
 	&__req {
@@ -84,6 +92,9 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		// Never let the flex parent squash the circle into an oval: a long label
+		// shrinks every flexible sibling, and a 17x17 circle became a 12x17 ellipse.
+		flex: 0 0 auto;
 		width: 17px;
 		height: 17px;
 		border-radius: 50%;

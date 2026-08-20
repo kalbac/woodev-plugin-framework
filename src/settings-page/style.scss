@@ -10,6 +10,7 @@
 @use '../components/wp-recolor';
 @use '../components/field';
 @use '../components/tabs';
+@use '../components/location-picker';
 
 .woodev-settings {
 	// Full-width (zam.1) — no fixed max-width; the Card frames the content.

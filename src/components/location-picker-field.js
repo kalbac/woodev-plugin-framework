@@ -48,12 +48,34 @@
  *   of quietly rendering as an empty/placeholder trigger, which would read as
  *   "nothing chosen yet" when something IS stored, just unreadably.
  *
+ * PROVIDER FOLLOWS THE SELECT LIVE (issue #380, closes the #375 gap this
+ * picker itself used to have): `props.provider` is the `active_provider`
+ * select's CURRENT, UNSAVED form value (threaded from `app.js`'s own
+ * `conditionValues` map via `ControlField` — the same channel `show_if`
+ * visibility already uses), sent as the admin-only `provider` query param on
+ * every suggest request ({@see Location_Controller::handle_admin_suggest_request()}).
+ * Switching the provider select therefore changes what THIS request asks for
+ * immediately, without waiting for Save — before this, `perform_suggest()`
+ * resolved the provider from the STORED option, so the picker kept
+ * suggesting from whichever provider was active before the merchant's most
+ * recent (unsaved) change, which read as broken.
+ *
+ * STALE-RECORD WARNING: a record picked under one provider may not mean
+ * anything to a DIFFERENT one (same concern
+ * `Location_Provider_Registry::apply_default_locality_status_note()` already
+ * surfaces, load-time only, as the field's own description). This component
+ * adds the LIVE equivalent: whenever a well-formed stored record's own
+ * `provider_id` differs from the currently selected `provider`, a warning
+ * renders under the trigger — computed from props alone, no extra request —
+ * so switching the select surfaces the mismatch immediately rather than only
+ * after Save re-fetches the schema.
+ *
  * Authored in JSX (automatic runtime — WP 6.6+).
  *
  * @package woodev-plugin-framework
  */
 
-import { useState, useEffect, useMemo, useRef } from '@wordpress/element';
+import { useState, useEffect, useMemo, useRef, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { Dropdown, SearchControl, Spinner } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
@@ -92,7 +114,7 @@ export function namespaceRoot( restRoot ) {
  * from a format this client no longer understands, or corruption), and `ok`.
  *
  * @param {*} raw the raw stored value (a JSON string, or '').
- * @return {{state: string, label?: string, key?: string}} parsed state.
+ * @return {{state: string, label?: string, key?: string, providerId?: string}} parsed state.
  */
 export function parseStoredRecord( raw ) {
 	const s = 'string' === typeof raw ? raw : '';
@@ -112,18 +134,34 @@ export function parseStoredRecord( raw ) {
 		return { state: 'broken' };
 	}
 
-	return { state: 'ok', label: parsed.label, key: 'string' === typeof parsed.key ? parsed.key : '' };
+	return {
+		state: 'ok',
+		label: parsed.label,
+		key: 'string' === typeof parsed.key ? parsed.key : '',
+
+		// `Location_Record::to_array()`'s own `provider_id` — round-tripped
+		// verbatim, same as `key`/`label` above (issue #380: this is what the
+		// live mismatch warning below compares against the currently
+		// selected provider).
+		providerId: 'string' === typeof parsed.provider_id ? parsed.provider_id : '',
+	};
 }
 
 /**
  * @param {Object}   props            component props.
  * @param {string}   [props.value]    current stored value — `''` or a `Location_Record` JSON string.
  * @param {string}   [props.country]  ISO-3166 alpha-2 country to scope suggest requests to (`schema.country`).
+ * @param {string}   [props.provider] the `active_provider` select's LIVE, unsaved value (issue
+ *                                    #380) — sent as the admin suggest route's `provider` override
+ *                                    so the picker follows the select immediately, never the
+ *                                    stored option. `''` (e.g. no sibling field wired it through)
+ *                                    falls back to the server's own D15 chain resolution, matching
+ *                                    this control's pre-#380 behaviour exactly.
  * @param {boolean}  [props.disabled] whether the control is disabled (D11).
  * @param {Function} props.onChange   change handler — called with the serialized record, or `''`.
  * @return {JSX.Element} the picker.
  */
-export default function LocationPickerField( { value, country, disabled = false, onChange } ) {
+export default function LocationPickerField( { value, country, provider = '', disabled = false, onChange } ) {
 	const [ search, setSearch ] = useState( '' );
 	const [ status, setStatus ] = useState( 'idle' ); // idle | loading | error
 	const [ results, setResults ] = useState( [] );
@@ -158,6 +196,12 @@ export default function LocationPickerField( { value, country, disabled = false,
 				q: query,
 				level: LEVEL,
 				country: country || '',
+
+				// Admin-only override (issue #380) — the PUBLIC `/suggest` route
+				// is never called from this file, so this param has no effect
+				// there; see the file docblock's own "PROVIDER FOLLOWS THE
+				// SELECT LIVE" section.
+				...( provider ? { provider } : {} ),
 			} );
 
 			apiFetch( {
@@ -184,7 +228,12 @@ export default function LocationPickerField( { value, country, disabled = false,
 		}, DEBOUNCE_MS );
 
 		return () => clearTimeout( timer );
-	}, [ search, country ] );
+
+		// `provider` in the deps (issue #380): switching the provider select
+		// must re-issue the CURRENT search against the newly selected provider
+		// immediately, the same way a `country` change already does — not wait
+		// for the next keystroke.
+	}, [ search, country, provider ] );
 
 	const choose = ( entry, close ) => {
 		onChange( JSON.stringify( entry.record ) );
@@ -205,101 +254,120 @@ export default function LocationPickerField( { value, country, disabled = false,
 	const isPlaceholder = 'empty' === stored.state;
 	const isBroken = 'broken' === stored.state;
 
+	/*
+	 * Live provider-mismatch warning (issue #380) — see the file docblock's
+	 * own "STALE-RECORD WARNING" section. Deliberately requires ALL THREE:
+	 * a well-formed stored record (`broken`/`empty` already have their own,
+	 * more specific state), a KNOWN `providerId` on that record, and a
+	 * currently selected `provider` to compare it against — an empty
+	 * `provider` (no sibling field wired it through this render) must never
+	 * be treated as "mismatched", only as "nothing to compare against".
+	 */
+	const providerMismatch =
+		'ok' === stored.state && !! stored.providerId && !! provider && stored.providerId !== provider;
+
 	return (
-		<Dropdown
-			className="woodev-select woodev-location-picker"
-			contentClassName="woodev-select__popover"
-			popoverProps={ { placement: 'bottom-start', offset: 4 } }
-			onToggle={ ( open ) => {
-				if ( ! open ) {
-					setSearch( '' );
-					setResults( [] );
-					setStatus( 'idle' );
-					setSearched( false );
-				}
-			} }
-			renderToggle={ ( { isOpen, onToggle } ) => (
-				<button
-					type="button"
-					ref={ triggerRef }
-					className={
-						'woodev-select__trigger'
-						+ ( isOpen ? ' is-open' : '' )
-						+ ( disabled ? ' is-disabled' : '' )
-						+ ( isBroken ? ' is-broken' : '' )
+		<Fragment>
+			<Dropdown
+				className="woodev-select woodev-location-picker"
+				contentClassName="woodev-select__popover"
+				popoverProps={ { placement: 'bottom-start', offset: 4 } }
+				onToggle={ ( open ) => {
+					if ( ! open ) {
+						setSearch( '' );
+						setResults( [] );
+						setStatus( 'idle' );
+						setSearched( false );
 					}
-					onClick={ onToggle }
-					disabled={ disabled }
-					aria-expanded={ isOpen }
-					aria-haspopup="listbox"
-				>
-					<span
+				} }
+				renderToggle={ ( { isOpen, onToggle } ) => (
+					<button
+						type="button"
+						ref={ triggerRef }
 						className={
-							'woodev-select__value'
-							+ ( isPlaceholder ? ' is-placeholder' : '' )
+							'woodev-select__trigger'
+							+ ( isOpen ? ' is-open' : '' )
+							+ ( disabled ? ' is-disabled' : '' )
 							+ ( isBroken ? ' is-broken' : '' )
 						}
+						onClick={ onToggle }
+						disabled={ disabled }
+						aria-expanded={ isOpen }
+						aria-haspopup="listbox"
 					>
-						{ triggerLabel }
-					</span>
-					<span className="woodev-select__chevron"><ChevronIcon /></span>
-				</button>
-			) }
-			renderContent={ ( { onClose } ) => (
-				<div
-					className="woodev-select__menu"
-					style={ { minWidth: triggerRef.current ? triggerRef.current.offsetWidth + 'px' : undefined } }
-				>
-					<SearchControl
-						__nextHasNoMarginBottom
-						__next40pxDefaultSize
-						value={ search }
-						onChange={ setSearch }
-						placeholder={ __( 'Начните вводить название…', 'woodev-plugin-framework' ) }
-					/>
-					<div className="woodev-select__list woodev-location-picker__list" role="listbox">
-						{ search.trim().length < MIN_QUERY_LENGTH && (
-							<div className="woodev-select__empty">
-								{ __( 'Введите минимум 2 символа для поиска', 'woodev-plugin-framework' ) }
-							</div>
-						) }
-						{ search.trim().length >= MIN_QUERY_LENGTH && 'loading' === status && (
-							<div className="woodev-location-picker__status">
-								<Spinner />
-								<span>{ __( 'Поиск…', 'woodev-plugin-framework' ) }</span>
-							</div>
-						) }
-						{ 'error' === status && (
-							<div className="woodev-select__empty woodev-location-picker__status--error">
-								{ __( 'Не удалось загрузить подсказки. Попробуйте ещё раз.', 'woodev-plugin-framework' ) }
-							</div>
-						) }
-						{ 'idle' === status && searched && 0 === results.length && (
-							<div className="woodev-select__empty">
-								{ __( 'Ничего не найдено', 'woodev-plugin-framework' ) }
-							</div>
-						) }
-						{ 'idle' === status && results.map( ( entry ) => (
-							<button
-								key={ entry.key }
-								type="button"
-								role="option"
-								aria-selected={ 'ok' === stored.state && stored.key === entry.key }
-								className={
-									'woodev-select__option'
-									+ ( 'ok' === stored.state && stored.key === entry.key ? ' is-selected' : '' )
-								}
-								onClick={ () => choose( entry, onClose ) }
-							>
-								<span className="woodev-select__check">
-									{ 'ok' === stored.state && stored.key === entry.key && <CheckFilledIcon /> }
-								</span>
-								<span className="woodev-select__option-label">{ entry.label }</span>
-							</button>
-						) ) }
+						<span
+							className={
+								'woodev-select__value'
+								+ ( isPlaceholder ? ' is-placeholder' : '' )
+								+ ( isBroken ? ' is-broken' : '' )
+							}
+						>
+							{ triggerLabel }
+						</span>
+						<span className="woodev-select__chevron"><ChevronIcon /></span>
+					</button>
+				) }
+				renderContent={ ( { onClose } ) => (
+					<div
+						className="woodev-select__menu"
+						style={ { minWidth: triggerRef.current ? triggerRef.current.offsetWidth + 'px' : undefined } }
+					>
+						<SearchControl
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+							value={ search }
+							onChange={ setSearch }
+							placeholder={ __( 'Начните вводить название…', 'woodev-plugin-framework' ) }
+						/>
+						<div className="woodev-select__list woodev-location-picker__list" role="listbox">
+							{ search.trim().length < MIN_QUERY_LENGTH && (
+								<div className="woodev-select__empty">
+									{ __( 'Введите минимум 2 символа для поиска', 'woodev-plugin-framework' ) }
+								</div>
+							) }
+							{ search.trim().length >= MIN_QUERY_LENGTH && 'loading' === status && (
+								<div className="woodev-location-picker__status">
+									<Spinner />
+									<span>{ __( 'Поиск…', 'woodev-plugin-framework' ) }</span>
+								</div>
+							) }
+							{ 'error' === status && (
+								<div className="woodev-select__empty woodev-location-picker__status--error">
+									{ __( 'Не удалось загрузить подсказки. Попробуйте ещё раз.', 'woodev-plugin-framework' ) }
+								</div>
+							) }
+							{ 'idle' === status && searched && 0 === results.length && (
+								<div className="woodev-select__empty">
+									{ __( 'Ничего не найдено', 'woodev-plugin-framework' ) }
+								</div>
+							) }
+							{ 'idle' === status && results.map( ( entry ) => (
+								<button
+									key={ entry.key }
+									type="button"
+									role="option"
+									aria-selected={ 'ok' === stored.state && stored.key === entry.key }
+									className={
+										'woodev-select__option'
+										+ ( 'ok' === stored.state && stored.key === entry.key ? ' is-selected' : '' )
+									}
+									onClick={ () => choose( entry, onClose ) }
+								>
+									<span className="woodev-select__check">
+										{ 'ok' === stored.state && stored.key === entry.key && <CheckFilledIcon /> }
+									</span>
+									<span className="woodev-select__option-label">{ entry.label }</span>
+								</button>
+							) ) }
+						</div>
 					</div>
+				) }
+			/>
+			{ providerMismatch && (
+				<div className="woodev-location-picker__mismatch" role="status">
+					{ __( 'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.', 'woodev-plugin-framework' ) }
 				</div>
 			) }
-		/>
+		</Fragment>
 	);
 }

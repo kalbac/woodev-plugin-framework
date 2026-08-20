@@ -1,0 +1,28 @@
+/**
+ * Woodev UI-kit — admin default-locality picker, extra states beyond the
+ * shared `.woodev-select` shell (see `_field.scss`'s own `.woodev-location-picker`
+ * block for the "broken stored value" trigger state and the popover status rows).
+ *
+ * Live provider-mismatch note (issue #380): unlike every other state here,
+ * this one is computed CLIENT-SIDE, on every render, against the live
+ * (unsaved) `active_provider` form value — see `location-picker-field.js`'s
+ * own docblock. It intentionally echoes
+ * `Location_Provider_Registry::apply_default_locality_status_note()`'s
+ * wording (the server-side, load-time equivalent shown via the field's own
+ * description) rather than inventing new copy, so a merchant sees the SAME
+ * warning whether it is still page-load-stale or freshly live.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use './tokens' as wd;
+
+.woodev-location-picker__mismatch {
+	display: flex;
+	align-items: flex-start;
+	gap: wd.$gap-xs;
+	margin-top: wd.$gap-xs;
+	color: wd.$warn;
+	font-size: 13px;
+	line-height: 1.4;
+}

@@ -65,7 +65,15 @@ describe( 'parseStoredRecord', () => {
 	test( 'a well-formed record parses as ok, carrying its label and key', () => {
 		expect(
 			parseStoredRecord( JSON.stringify( { key: 'dadata:city-1', label: 'Москва' } ) )
-		).toEqual( { state: 'ok', label: 'Москва', key: 'dadata:city-1' } );
+		).toEqual( { state: 'ok', label: 'Москва', key: 'dadata:city-1', providerId: '' } );
+	} );
+
+	test( 'a well-formed record also carries its provider_id, as providerId (issue #380)', () => {
+		expect(
+			parseStoredRecord(
+				JSON.stringify( { key: 'dadata:city-1', label: 'Москва', provider_id: 'dadata' } )
+			)
+		).toEqual( { state: 'ok', label: 'Москва', key: 'dadata:city-1', providerId: 'dadata' } );
 	} );
 } );
 
@@ -225,6 +233,125 @@ describe( 'LocationPickerField', () => {
 		fireEvent.click( trigger );
 		expect( screen.queryByPlaceholderText( 'Начните вводить название…' ) ).not.toBeInTheDocument();
 	} );
+
+	test( 'a selected provider is sent as the admin-only `provider` query param (issue #380)', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( LocationPickerField, {
+				value: '',
+				country: 'RU',
+				provider: 'dadata',
+				onChange: () => {},
+			} )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Мос' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.get( 'provider' ) ).toBe( 'dadata' );
+	} );
+
+	test( 'no provider prop omits the `provider` query param entirely, not just empty', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( LocationPickerField, { value: '', country: 'RU', onChange: () => {} } )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Мос' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.has( 'provider' ) ).toBe( false );
+	} );
+
+	test( 'switching the provider prop re-issues the current search against the new provider', async () => {
+		apiFetch.mockResolvedValue( { suggestions: [] } );
+
+		const { rerender } = render(
+			createElement( LocationPickerField, {
+				value: '',
+				country: 'RU',
+				provider: 'sdek',
+				onChange: () => {},
+			} )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Мос' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		expect( new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams.get( 'provider' ) ).toBe( 'sdek' );
+
+		rerender(
+			createElement( LocationPickerField, {
+				value: '',
+				country: 'RU',
+				provider: 'dadata',
+				onChange: () => {},
+			} )
+		);
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+		expect( new URL( apiFetch.mock.calls[ 1 ][ 0 ].url ).searchParams.get( 'provider' ) ).toBe( 'dadata' );
+	} );
+
+	test( 'a stored record from a DIFFERENT provider than the one currently selected shows a live mismatch warning', () => {
+		render(
+			createElement( LocationPickerField, {
+				value: JSON.stringify( { key: 'sdek:city-1', label: 'Москва', provider_id: 'sdek' } ),
+				country: 'RU',
+				provider: 'dadata',
+				onChange: () => {},
+			} )
+		);
+
+		expect(
+			screen.getByText(
+				'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.'
+			)
+		).toBeInTheDocument();
+	} );
+
+	test( 'a stored record from the SAME provider currently selected shows no mismatch warning', () => {
+		render(
+			createElement( LocationPickerField, {
+				value: JSON.stringify( { key: 'dadata:city-1', label: 'Москва', provider_id: 'dadata' } ),
+				country: 'RU',
+				provider: 'dadata',
+				onChange: () => {},
+			} )
+		);
+
+		expect(
+			screen.queryByText(
+				'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.'
+			)
+		).not.toBeInTheDocument();
+	} );
+
+	test( 'no live provider (e.g. not wired through) never shows the mismatch warning, even against a provider_id-carrying record', () => {
+		render(
+			createElement( LocationPickerField, {
+				value: JSON.stringify( { key: 'sdek:city-1', label: 'Москва', provider_id: 'sdek' } ),
+				country: 'RU',
+				onChange: () => {},
+			} )
+		);
+
+		expect(
+			screen.queryByText(
+				'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.'
+			)
+		).not.toBeInTheDocument();
+	} );
 } );
 
 describe( 'ControlField dispatch (#376)', () => {
@@ -252,5 +379,58 @@ describe( 'ControlField dispatch (#376)', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
 		expect( params.get( 'country' ) ).toBe( 'KZ' );
+	} );
+
+	test( 'reuses conditionValues.active_provider (the same map show_if visibility uses) as the LIVE provider (issue #380)', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( ControlField, {
+				schema: {
+					type: 'string',
+					controlType: 'location-picker',
+					name: 'Зафиксированная локация',
+					country: 'RU',
+				},
+				value: '',
+				onChange: () => {},
+				showErrors: false,
+				conditionValues: { active_provider: 'dadata' },
+			} )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Ал' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.get( 'provider' ) ).toBe( 'dadata' );
+	} );
+
+	test( 'no conditionValues (e.g. the wizard, which has no per-field edit model) omits `provider` entirely', async () => {
+		apiFetch.mockResolvedValueOnce( { suggestions: [] } );
+
+		render(
+			createElement( ControlField, {
+				schema: {
+					type: 'string',
+					controlType: 'location-picker',
+					name: 'Зафиксированная локация',
+					country: 'RU',
+				},
+				value: '',
+				onChange: () => {},
+				showErrors: false,
+			} )
+		);
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Выберите локацию…' } ) );
+		const search = await screen.findByPlaceholderText( 'Начните вводить название…' );
+		fireEvent.change( search, { target: { value: 'Ал' } } );
+
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+		const params = new URL( apiFetch.mock.calls[ 0 ][ 0 ].url ).searchParams;
+		expect( params.has( 'provider' ) ).toBe( false );
 	} );
 } );

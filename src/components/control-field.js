@@ -27,6 +27,17 @@ import LocationPickerField from './location-picker-field';
 import WizardRichText from './richtext';
 
 /**
+ * Setting id of the Location provider select — mirrors
+ * `Location_Provider_Registry::SETTING_ACTIVE_PROVIDER` (PHP) exactly. The
+ * `location-picker` control reads this key out of `conditionValues` (issue
+ * #380) to send the CURRENTLY SELECTED provider with its suggest requests,
+ * rather than whatever the store has persisted.
+ *
+ * @type {string}
+ */
+const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
+
+/**
  * Password input with a show/hide eye toggle.
  *
  * When `isSet` is true and the user has not typed anything, the input stays
@@ -249,10 +260,16 @@ function withAnatomy( schema, control, error ) {
  * @param {boolean}  props.showErrors   when true, reveal errors without waiting for blur.
  * @param {boolean}  [props.hasEdit]    whether an explicit edit is staged (sensitive clear).
  * @param {Function} [props.onRevert]   drops a staged edit (enables the sensitive clear affordance).
+ * @param {Object}   [props.conditionValues] tab-wide effective values (settingId => value),
+ *                                            the same map `show_if` visibility is computed
+ *                                            from (App's own `conditionValues`) — reused here
+ *                                            (issue #380) so a control can react to a SIBLING
+ *                                            field's live, unsaved value; currently only the
+ *                                            `location-picker` control reads it.
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -362,11 +379,18 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 			// Admin default-locality picker (#376): debounced async search over
 			// the active Location_Provider, never the plain text/select fallback
 			// resolveControl() would otherwise infer for a bare `string` setting.
+			// `provider` (#380) is the LIVE, unsaved `active_provider` select
+			// value (via `conditionValues` — the same tab-wide map `show_if`
+			// visibility already reuses), not the persisted one `schema.country`
+			// itself is resolved from — see LocationPickerField's own docblock
+			// for why the picker must follow the select immediately rather than
+			// only after Save.
 			return withAnatomy(
 				schema,
 				createElement( LocationPickerField, {
 					value: value ?? schema.value ?? '',
 					country: schema.country || '',
+					provider: ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '',
 					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),
