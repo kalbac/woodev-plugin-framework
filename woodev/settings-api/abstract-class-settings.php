@@ -200,6 +200,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					$control->set_placeholder( (string) $args['placeholder'] );
 				}
 
+				if ( isset( $args['country'] ) ) {
+					$control->set_country( (string) $args['country'] );
+				}
+
 				if ( ! empty( $args['disabled'] ) ) {
 					$control->set_disabled( true, (string) ( $args['disabled_reason'] ?? '' ) );
 				}
@@ -630,6 +634,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_TOGGLE,
 				Woodev_Control::TYPE_RICHTEXT,
 				Woodev_Control::TYPE_MULTISELECT,
+				Woodev_Control::TYPE_LOCATION_PICKER,
 			];
 
 			/**

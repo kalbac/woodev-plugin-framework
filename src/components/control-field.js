@@ -23,6 +23,7 @@ import {
 import FieldRow from './field-row';
 import FieldTip from './field-tip';
 import SelectField from './select-field';
+import LocationPickerField from './location-picker-field';
 import WizardRichText from './richtext';
 
 /**
@@ -342,6 +343,21 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
+					disabled,
+					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
+				} ),
+				error
+			);
+
+		case 'location-picker':
+			// Admin default-locality picker (#376): debounced async search over
+			// the active Location_Provider, never the plain text/select fallback
+			// resolveControl() would otherwise infer for a bare `string` setting.
+			return withAnatomy(
+				schema,
+				createElement( LocationPickerField, {
+					value: value ?? schema.value ?? '',
+					country: schema.country || '',
 					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),

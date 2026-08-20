@@ -50,6 +50,45 @@ class ControlTest extends TestCase {
 		$this->assertSame( 'multiselect', \Woodev_Control::TYPE_MULTISELECT );
 	}
 
+	/**
+	 * TYPE_LOCATION_PICKER constant must equal the string 'location-picker'
+	 * (issue #376) — this exact string is also what `resolveControl()` /
+	 * `control-field.js`'s dispatch switch matches on the JS side.
+	 *
+	 * @return void
+	 */
+	public function test_type_location_picker_constant_value(): void {
+		$this->assertSame( 'location-picker', \Woodev_Control::TYPE_LOCATION_PICKER );
+	}
+
+	// ---------------------------------------------------------------
+	// country (issue #376)
+	// ---------------------------------------------------------------
+
+	/**
+	 * get_country() returns an empty string when no value has been set —
+	 * every control type OTHER than `TYPE_LOCATION_PICKER` never sets it,
+	 * and `Field_Schema::from_handler()` relies on this default to omit the
+	 * `country` schema key entirely for them.
+	 *
+	 * @return void
+	 */
+	public function test_get_country_returns_empty_string_when_unset(): void {
+		$control = new \Woodev_Control();
+		$this->assertSame( '', $control->get_country() );
+	}
+
+	/**
+	 * set_country() stores a string and get_country() returns it.
+	 *
+	 * @return void
+	 */
+	public function test_set_country_and_get_country_roundtrip(): void {
+		$control = new \Woodev_Control();
+		$control->set_country( 'KZ' );
+		$this->assertSame( 'KZ', $control->get_country() );
+	}
+
 	// ---------------------------------------------------------------
 	// min / max / step
 	// ---------------------------------------------------------------

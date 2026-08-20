@@ -581,3 +581,30 @@
 	border-radius: wd.$radius-sm;
 	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
 }
+
+// Admin default-locality picker (#376) — a fork of .woodev-select whose list is
+// fetched, not static: a distinct "broken stored value" trigger state (a value
+// is present but failed to parse — never rendered as if nothing were chosen),
+// and a loading/error row inside the popover.
+.woodev-location-picker {
+	.woodev-select__value.is-broken {
+		color: wd.$warn;
+	}
+
+	&__status {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: 10px;
+		color: wd.$muted;
+		font-size: 13px;
+
+		&--error {
+			color: wd.$error;
+		}
+	}
+}
+
+.woodev-select__trigger.is-broken {
+	border-color: wd.$warn;
+}

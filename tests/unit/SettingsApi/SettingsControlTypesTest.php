@@ -116,6 +116,16 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertContains( 'url', $this->settings->get_control_types() );
 	}
 
+	/**
+	 * get_control_types() must include the location-picker type (issue #376)
+	 * — register_control() throws otherwise, per its own guard.
+	 *
+	 * @return void
+	 */
+	public function test_get_control_types_includes_location_picker(): void {
+		$this->assertContains( 'location-picker', $this->settings->get_control_types() );
+	}
+
 	// ---------------------------------------------------------------
 	// register_control() with min/max/step/tooltip args
 	// ---------------------------------------------------------------
@@ -179,6 +189,41 @@ class SettingsControlTypesTest extends TestCase {
 		$control = $this->settings->get_setting( 'city' )->get_control();
 
 		$this->assertSame( 'enter value', $control->get_placeholder() );
+	}
+
+	/**
+	 * register_control() forwards the country arg to the control object
+	 * (issue #376 — `TYPE_LOCATION_PICKER`'s suggest-scoping country).
+	 *
+	 * @return void
+	 */
+	public function test_register_control_forwards_country(): void {
+		$this->settings->register_setting( 'default_locality_record', 'string' );
+		$this->settings->register_control(
+			'default_locality_record',
+			'location-picker',
+			[ 'country' => 'RU' ]
+		);
+
+		$control = $this->settings->get_setting( 'default_locality_record' )->get_control();
+
+		$this->assertSame( 'RU', $control->get_country() );
+	}
+
+	/**
+	 * Omitting the country arg leaves the control's country at its default
+	 * empty string — the same "unset by default" contract every other
+	 * optional register_control() arg follows.
+	 *
+	 * @return void
+	 */
+	public function test_register_control_without_country_leaves_default(): void {
+		$this->settings->register_setting( 'plain', 'string' );
+		$this->settings->register_control( 'plain', 'text' );
+
+		$control = $this->settings->get_setting( 'plain' )->get_control();
+
+		$this->assertSame( '', $control->get_country() );
 	}
 
 	/**

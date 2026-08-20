@@ -161,8 +161,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * concern `Composite_Settings_Handler` already resolves independently
 		 * of which child handler owns a setting id.
 		 *
+		 * `default_locality_needs_repick` is ALSO deliberately excluded now
+		 * (issue #376, closing #370 variant 2): it is code-owned bookkeeping,
+		 * never a merchant decision, and stays registered/writable — it just
+		 * never renders. Its live equivalent already surfaces through the
+		 * `default_locality_policy` field's own description, see
+		 * {@see Location_Provider_Registry::apply_default_locality_status_note()}.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the three `default_locality_*` settings (Task 14; spec D11).
+		 * @since 2.0.2 `default_locality_needs_repick` removed from this list
+		 *              (issue #376/#370) — it never had a control and a
+		 *              merchant has nothing to see or do with it here.
 		 * @since 2.0.2 Added `address_suggestions`, right after `field_mode`
 		 *              (Task 10; issue #362; design S3/§3.1).
 		 * @since 2.0.2 Field-mode axes and `address_suggestions` moved out of
@@ -177,7 +187,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
-					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
 				],
 				array_keys( $this->provider_fields )
 			);
@@ -197,6 +206,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *              `Composite_Settings_Handler` (this hides the control
 		 *              only; the actual issue #369 clamp is a READ-side
 		 *              concern, see `Location_Provider_Registry::get_field_mode_region()`).
+		 * @since 2.0.2 `default_locality_record` now carries a real
+		 *              `TYPE_LOCATION_PICKER` control (`show_if` on the
+		 *              SIBLING `default_locality_policy` field, same handler
+		 *              so it is fully server-enforced) instead of being left
+		 *              uncontrolled; `default_locality_needs_repick` moved out
+		 *              of {@see self::get_owned_setting_ids()} entirely
+		 *              (issue #376, closing #370 variant 2).
 		 */
 		protected function register_settings() {
 
@@ -289,20 +305,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			/*
 			 * Serialized Location_Record JSON (Task 14), written through
 			 * Location_Provider_Registry::set_default_locality_record() — the
-			 * FUTURE admin picker's own selection (its own, later card; no picker
-			 * UI ships in this task), never free text the merchant types here.
+			 * admin picker's own selection, never free text the merchant types
+			 * by hand.
 			 *
-			 * Deliberately registered WITHOUT a control (review finding F4): no
-			 * picker exists yet in this PR, so the only UI a control would offer
-			 * today is a bare textarea holding raw JSON — directly contradicting
-			 * this field's own "never typed free-hand" contract above. Keeping
-			 * the setting itself registered (just uncontrolled) preserves the
-			 * write path this class's own docblock documents for the picker to
-			 * use once built (a plain settings-API field written through
-			 * Woodev_Abstract_Settings::update_value(), the same as every other
-			 * store-level Location setting) — only the generic settings-page
-			 * React surface's editable rendering is what this withholds, by
-			 * never giving Field_Schema::from_handler() a controlType for it.
+			 * Issue #376 (closing #370): a real `TYPE_LOCATION_PICKER` control
+			 * now backs this setting (review finding F4's original "no control"
+			 * withholding is gone — a picker exists now, see
+			 * `location-picker-field.js`) and is shown ONLY while the sibling
+			 * `default_locality_policy` field is `fixed` (`show_if`, ADR-008;
+			 * same handler, so this condition gets full server-side enforcement
+			 * via `filter_visible_values()`, unlike the CROSS-handler conditions
+			 * documented on `field_mode_region` above). The control's `country`
+			 * arg is resolved ONCE here, at registration time, through
+			 * {@see Location_Service::resolve_default_country()} — steps 2+3 of
+			 * the store-country cascade (step 1, a live checkout field, does not
+			 * exist on an admin screen) — never a second, hand-rolled fallback
+			 * on the client.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
@@ -310,17 +328,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				[
 					'name'    => __( 'Зафиксированная локация', 'woodev-plugin-framework' ),
 					'default' => '',
+					'show_if' => [
+						'setting' => Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+						'value'   => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+					],
+				]
+			);
+			$this->register_control(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+				\Woodev_Control::TYPE_LOCATION_PICKER,
+				[
+					'country' => ( new Location_Service() )->resolve_default_country(),
 				]
 			);
 
 			/*
 			 * Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
-			 * Also registered WITHOUT a control (review finding F4): this flag is
+			 * Registered WITHOUT a control (review finding F4): this flag is
 			 * CODE-OWNED bookkeeping, never a merchant decision — an editable
 			 * toggle let a merchant silently switch it off and mask a genuinely
-			 * stranded default. The settings page instead surfaces the live
-			 * equivalent of this flag through the `default_locality_policy`
-			 * field's own description — see
+			 * stranded default. Issue #376/#370 (variant 2) additionally drops
+			 * it from {@see self::get_owned_setting_ids()} entirely — it stays
+			 * registered and writable (the picker's own write path uses it
+			 * indirectly through the registry), it simply never renders, at any
+			 * policy. The settings page instead surfaces the live equivalent of
+			 * this flag through the `default_locality_policy` field's own
+			 * description — see
 			 * Location_Provider_Registry::apply_default_locality_status_note().
 			 */
 			$this->register_setting(

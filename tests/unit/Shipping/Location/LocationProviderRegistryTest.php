@@ -2269,16 +2269,19 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Review finding F4: `default_locality_record` / `default_locality_needs_repick`
-	// stay registered (the internal read/write machinery still works) but are
+	// Issue #376 (closing #370, review finding F4): `default_locality_record`
+	// now gets a REAL `location-picker` control, gated `show_if` on the sibling
+	// `default_locality_policy` field being `fixed`; `default_locality_needs_repick`
+	// stays registered (the internal read/write machinery still works) but is
 	// registered WITHOUT a control — never an editable widget on the settings
-	// page.
+	// page, at any policy.
 	// -------------------------------------------------------------------------
 
-	public function test_default_locality_record_and_needs_repick_have_no_control(): void {
+	public function test_default_locality_record_gets_a_location_picker_control_gated_on_the_fixed_policy(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -2289,7 +2292,55 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$record_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD );
 		$this->assertNotNull( $record_setting, 'the setting itself must stay registered — internal read/write still needs it' );
-		$this->assertNull( $record_setting->get_control(), 'mutant: registering a control here re-exposes the raw-JSON textarea on the settings page' );
+
+		$control = $record_setting->get_control();
+		$this->assertNotNull( $control, 'mutant: #376 gave this field a real picker control — a null control re-exposes the raw-JSON text input' );
+		$this->assertSame( \Woodev_Control::TYPE_LOCATION_PICKER, $control->get_type() );
+		$this->assertSame( 'RU', $control->get_country(), 'the control must carry the resolved store country (Location_Service::resolve_default_country())' );
+
+		$this->assertSame(
+			[
+				'setting' => Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				'value'   => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			],
+			$record_setting->get_show_if_conditions(),
+			'mutant: the picker must only show while the policy is `fixed`'
+		);
+	}
+
+	/**
+	 * The control's `country` arg reuses `Location_Service::resolve_default_country()`
+	 * verbatim (never a second, hand-rolled cascade) — a non-default store base
+	 * location must be reflected.
+	 */
+	public function test_default_locality_record_control_country_follows_the_store_base_location(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$control = $registry->get_settings_handler()
+			->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD )
+			->get_control();
+
+		$this->assertSame( 'KZ', $control->get_country() );
+	}
+
+	public function test_default_locality_needs_repick_has_no_control(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
 
 		$repick_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
 		$this->assertNotNull( $repick_setting );
@@ -2459,6 +2510,11 @@ final class LocationProviderRegistryTest extends TestCase {
 	 * «Поля» now (see `Shipping_Settings_Tab::build_sections()`), not
 	 * «Локация». `get_owned_setting_ids()` is only the «Локация» section's
 	 * own display list.
+	 *
+	 * Issue #376/#370 (variant 2): `default_locality_needs_repick` moved OUT
+	 * of this list too — it stays registered and writable, it simply never
+	 * renders, at any policy (its live equivalent surfaces through the
+	 * `default_locality_policy` field's own description instead).
 	 */
 	public function test_owned_setting_ids_no_longer_include_field_mode_axes_or_address_suggestions(): void {
 		Functions\when( 'add_action' )->justReturn( true );
@@ -2479,13 +2535,17 @@ final class LocationProviderRegistryTest extends TestCase {
 				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
-				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
 			],
-			array_slice( $ids, 0, 4 )
+			array_slice( $ids, 0, 3 )
 		);
 		$this->assertNotContains( Location_Provider_Registry::SETTING_FIELD_MODE_REGION, $ids );
 		$this->assertNotContains( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, $ids );
 		$this->assertNotContains( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, $ids );
+		$this->assertNotContains(
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
+			$ids,
+			'mutant: #376/#370 removed this id from get_owned_setting_ids() entirely'
+		);
 	}
 
 	public function test_field_mode_axes_are_labelled_region_and_settlement(): void {

@@ -60,6 +60,14 @@ final class Field_Schema {
 				'required'    => $setting->is_required(),
 			];
 
+			// Only `TYPE_LOCATION_PICKER` controls carry a resolved store country
+			// (issue #376) — every other control's `Woodev_Control::$country`
+			// stays '', so this key is omitted rather than shipping a meaningless
+			// empty string on every other field's schema entry.
+			if ( $control && '' !== $control->get_country() ) {
+				$entry['country'] = $control->get_country();
+			}
+
 			// Any secret (declared sensitive OR constant-backed) is masked in the UI
 			// via the password control; a defined constant additionally renders the
 			// read-only wp-config note (ControlField checks constant_managed first).
