@@ -95,11 +95,16 @@ hoping is the orchestrator's bug, every time.
 | `orca linear` | The backlog is GitHub Issues + board №6. Two trackers is worse than one. |
 | `orca emulator` (iOS/Android) | No mobile surface in this project. |
 
-The built-in browser (`orca goto` / `snapshot` / `console` / `network`) is an open candidate for
-rig verification, not yet adopted. It returns an accessibility tree rather than screenshots,
-which would be cheaper than the current chrome-devtools MCP path, and the operator can watch it
-live inside Orca. It has not been measured against the rig yet — do not switch on the strength of
-that argument alone.
+The built-in browser (`orca goto` / `snapshot` / `console` / `network`) was **tried once against
+the rig and not adopted.** The argument for it is real — it returns an accessibility tree rather
+than screenshots, which is cheaper than the chrome-devtools MCP path, and the operator can watch
+it live inside Orca. But the first `snapshot` of a WordPress admin page returned
+`runtime_unavailable` ("the Orca runtime closed the connection before responding"). The runtime
+recovered on its own and the two live workers were unaffected, so this is one data point, not a
+verdict on the feature — it was not investigated further, because debugging the browser while the
+same runtime carries running workers is the wrong trade. **Rig verification stays on
+chrome-devtools MCP against `:8973`.** Anyone who wants to revisit this should do it with no
+workers in flight.
 
 ## Traps
 
