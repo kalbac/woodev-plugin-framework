@@ -9,9 +9,12 @@
  * 1. `active_provider` — a select whose options are every registered provider's
  *    id => name, defaulting to {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_PROVIDER_ID}.
  * 2. `field_mode_region` / `field_mode_settlement` (Task 13; spec D7; split into
- *    two independent axes by issue #380 — each carries the SAME three values:
- *    typeahead always; related-list/ajax-select2 offered on the SAME OPTIONS
- *    gate, computed by
+ *    two independent axes by issue #380 — typeahead always offered on both;
+ *    related-list/ajax-select2 offered on a provider-capability gate BOTH axes
+ *    share, with the settlement axis additionally requiring the region axis to
+ *    itself be `related-list` before offering it too (issue #404 — a bulk list
+ *    of every settlement in a country does not exist, only a per-region one),
+ *    computed by
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}; this
  *    handler only ever renders whatever option set it was handed, exactly like
  *    `active_provider`'s own options) — and `address_suggestions` (Task 10;
@@ -71,15 +74,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private array $provider_options;
 
 		/**
-		 * Offered `field_mode` select options, `id => label` (Task 13; spec D7),
-		 * already gated by the active provider's capabilities — resolved by the
-		 * caller ({@see Location_Provider_Registry::offered_field_mode_options()}),
+		 * Offered `field_mode_region` select options, `id => label` (Task 13;
+		 * spec D7), already gated by the active provider's capabilities —
+		 * resolved by the caller
+		 * ({@see Location_Provider_Registry::offered_field_mode_options()}),
 		 * exactly like {@see self::$provider_options} is.
 		 *
 		 * @since 2.0.2
 		 * @var array<string, string>
 		 */
-		private array $field_mode_options;
+		private array $field_mode_region_options;
+
+		/**
+		 * Offered `field_mode_settlement` select options, `id => label` (Task
+		 * 13; spec D7) — a SEPARATE map from {@see self::$field_mode_region_options}
+		 * since issue #404: the settlement axis's `related-list` option is
+		 * additionally gated on the region axis's own effective mode, so the
+		 * two axes no longer always offer the same values.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, string>
+		 */
+		private array $field_mode_settlement_options;
 
 		/**
 		 * The active provider's declared settings fields (Location_Provider::get_settings_fields()
@@ -96,7 +112,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * spec D11), already gated by the active provider's `locate` capability —
 		 * resolved by the caller
 		 * ({@see Location_Provider_Registry::offered_default_locality_policy_options_for()}),
-		 * exactly like {@see self::$field_mode_options} is.
+		 * exactly like {@see self::$field_mode_region_options} is.
 		 *
 		 * @since 2.0.2
 		 * @var array<string, string>
@@ -110,6 +126,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * @since 2.0.2 Added the `$field_mode_options` parameter (Task 13; spec D7).
 		 * @since 2.0.2 Added the `$default_locality_policy_options` parameter
 		 *              (Task 14; spec D11).
+		 * @since 2.0.2 `$field_mode_options` split into `$field_mode_region_options`
+		 *              and `$field_mode_settlement_options` (issue #404) — the two
+		 *              axes no longer always offer the same values.
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
@@ -117,9 +136,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *                                                                               settings fields, each already carrying
 		 *                                                                               a `show_if` condition (#375/#377),
 		 *                                                                               resolved by the caller.
-		 * @param array<string, string>               $field_mode_options              offered `field_mode` select options
-		 *                                                                               (`id => label`), already gated by the
-		 *                                                                               active provider's capabilities.
+		 * @param array<string, string>               $field_mode_region_options       offered `field_mode_region` select
+		 *                                                                               options (`id => label`), already
+		 *                                                                               gated by the active provider's
+		 *                                                                               capabilities.
+		 * @param array<string, string>               $field_mode_settlement_options   offered `field_mode_settlement`
+		 *                                                                               select options (`id => label`),
+		 *                                                                               already gated by the active
+		 *                                                                               provider's capabilities AND the
+		 *                                                                               region axis's own effective mode
+		 *                                                                               (issue #404).
 		 * @param array<string, string>               $default_locality_policy_options offered `default_locality_policy`
 		 *                                                                               select options (`id => label`),
 		 *                                                                               already gated by the active
@@ -129,12 +155,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			string $id,
 			array $provider_options,
 			array $provider_fields = [],
-			array $field_mode_options = [],
+			array $field_mode_region_options = [],
+			array $field_mode_settlement_options = [],
 			array $default_locality_policy_options = []
 		) {
 			$this->provider_options                = $provider_options;
 			$this->provider_fields                 = $provider_fields;
-			$this->field_mode_options               = $field_mode_options;
+			$this->field_mode_region_options       = $field_mode_region_options;
+			$this->field_mode_settlement_options   = $field_mode_settlement_options;
 			$this->default_locality_policy_options = $default_locality_policy_options;
 
 			parent::__construct( $id );
@@ -214,8 +242,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			// Issue #380: the single `field_mode` setting became two axes — the
 			// НП/Регион field's INPUT TYPE is independent per level (the operator
 			// found a case one shared value could not express: НП = `ajax-select2`
-			// while region stays `typeahead`, or the reverse). Both axes offer the
-			// SAME three values, from the SAME `$this->field_mode_options` map.
+			// while region stays `typeahead`, or the reverse).
+			//
+			// Issue #404: the two axes no longer always offer the SAME values —
+			// `$this->field_mode_region_options` and
+			// `$this->field_mode_settlement_options` are two SEPARATE maps, the
+			// caller has already narrowed the settlement one to drop
+			// `related-list` when the region axis is not itself `related-list`
+			// (a bulk list of every settlement in a country does not exist).
 			//
 			// `field_mode_region` alone carries a `show_if` on `region_field`
 			// (owned by the sibling `Checkout_Field_Settings` handler — resolved
@@ -227,13 +261,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			// control; `Composite_Settings_Handler::filter_visible_values()`
 			// splits a submission by owning child BEFORE evaluating conditions,
 			// so a cross-handler condition has no server-side enforcement power
-			// of its own).
+			// of its own). The settlement axis's issue #404 condition is
+			// enforced the SAME way — narrowed OFFERED options plus a read-side
+			// clamp in `Location_Provider_Registry::get_field_mode_settlement()`
+			// — even though both axes live in THIS handler and a same-handler
+			// `show_if` would carry real server-side enforcement here; one
+			// mechanism per concern beats two that must agree.
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
 				\Woodev_Setting::TYPE_STRING,
 				[
 					'name'    => __( 'Тип поля Регион', 'woodev-plugin-framework' ),
-					'options' => $this->field_mode_options,
+					'options' => $this->field_mode_region_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 					'show_if' => [
 						'setting' => 'region_field',
@@ -258,7 +297,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				\Woodev_Setting::TYPE_STRING,
 				[
 					'name'    => __( 'Тип поля НП', 'woodev-plugin-framework' ),
-					'options' => $this->field_mode_options,
+					'options' => $this->field_mode_settlement_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 				]
 			);
@@ -266,7 +305,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
 				\Woodev_Control::TYPE_SELECT,
 				[
-					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). Если для региона выбран «Предустановленный список», это поле дополнительно блокируется, пока покупатель не выберет регион, и дальше предлагает пункты только внутри него.', 'woodev-plugin-framework' ),
+					// Issue #404: «Предустановленный список» is offered here only when
+					// the region axis is ALSO «Предустановленный список» — a bulk list
+					// of every settlement in a country does not exist, only a
+					// per-region one. Issue #407: no BLOCKING mechanism exists or is
+					// planned — the field stays usable throughout, it just narrows to
+					// the chosen region once one is picked.
+					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). «Предустановленный список» доступен здесь, только если для «Региона» тоже выбран «Предустановленный список» — единого списка населённых пунктов по всей стране не существует, только по региону. Пока регион не выбран, список показывает пункты по всей стране; после выбора региона сужается до него — поле при этом остаётся доступным, блокировки нет.', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -279,7 +324,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			 * Location_Provider_Registry::register_settings() once this handler
 			 * exists (the same "resolved by the caller, this handler only
 			 * renders it" discipline this class's own docblock already
-			 * describes for `provider_options`/`field_mode_options`).
+			 * describes for `provider_options`/`field_mode_region_options`).
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,

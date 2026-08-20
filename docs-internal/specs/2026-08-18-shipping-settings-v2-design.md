@@ -27,6 +27,18 @@
 > existing `typeahead` (a text input WITH suggestions), so the settlement-level record every other
 > part of the layer depends on is still produced.
 >
+> **Correction (20.08.2026, cards #404/#407).** "Wait for a region, then scope to it" overstated what
+> ships — there is no blocking state. `related-list` НП preloads a nationwide list when no region is
+> chosen yet and a region-scoped one once it is, never a disabled control. Card #407 decided the
+> PROSE was wrong, not the code: fixed the settlement tooltip and this note instead of building a
+> block nothing measured as necessary — a preloaded nationwide list is functional on its own. Card
+> #404 (the operator's own correction to S2/#380) closed the other missing half of "region gates
+> settlement": `related-list` is now only OFFERED to the settlement axis when the region axis is
+> ITSELF `related-list` — a provider without `CAPABILITY_LIST` has no bulk list to scope, and a bulk
+> list of every settlement in a country does not exist either way, list-capable provider or not.
+> Enforced as a read-side clamp (`Location_Provider_Registry::get_field_mode_settlement()`), never
+> rewriting the stored value — it returns on its own once the region axis is `related-list` again.
+>
 > Input document (BUILT / DECIDED / OPEN markup, measurements, traps):
 > `docs-internal/specs/2026-08-18-location-and-field-settings-brainstorm-input.md`. Everything marked
 > DECIDED there (D1–D11) stays in force and is not restated unless this design depends on it.
