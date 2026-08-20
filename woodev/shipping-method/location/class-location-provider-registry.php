@@ -1573,13 +1573,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @since 2.0.2 Also builds the `default_locality_policy` select's OFFERED
 		 *              options (Task 14; spec D11), gated exactly like
 		 *              `field_mode` is above.
+		 * @since 2.0.2 `$provider_fields` now comes from
+		 *              {@see self::collect_all_provider_fields()} — EVERY
+		 *              registered provider's declared fields, each carrying a
+		 *              `show_if` condition, rather than only the active
+		 *              provider's (#375/#377: "dynamic, without saving").
 		 *
 		 * @return void
 		 */
 		private function register_settings(): void {
-			$active_id       = $this->resolve_stored_active_provider_id();
-			$active_provider = $this->resolve_active_provider_for_id( $active_id );
-			$provider_fields = null !== $active_provider ? $active_provider->get_settings_fields() : [];
+			$active_id        = $this->resolve_stored_active_provider_id();
+			$active_provider  = $this->resolve_active_provider_for_id( $active_id );
+			$provider_fields  = $this->collect_all_provider_fields();
 
 			$provider_options = [];
 			foreach ( $this->providers as $id => $provider ) {
@@ -1612,6 +1617,137 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$this->settings_handler,
 				$this->settings_handler->get_owned_setting_ids()
 			);
+		}
+
+		/**
+		 * Collects EVERY registered provider's declared settings fields
+		 * (#375/#377), each tagged with a `show_if` condition (ADR-008) on
+		 * {@see self::SETTING_ACTIVE_PROVIDER} so the client shows/hides the
+		 * right fields the instant the select changes — no save round-trip.
+		 *
+		 * Two shapes of condition:
+		 *
+		 * - A field belonging to any OTHER provider gets the plain equality
+		 *   condition `{ setting: active_provider, value: <that provider's id> }`
+		 *   — visible only while that exact provider is active.
+		 * - A field belonging to {@see self::DEFAULT_PROVIDER_ID} (the
+		 *   framework's OWN bundled provider — today DaData's `token` and
+		 *   `clean_secret`) gets the WIDER `in` condition built by
+		 *   {@see self::non_address_provider_ids()}: visible when the bundled
+		 *   provider is itself active, OR when the active provider cannot
+		 *   serve the `address` level at all — because then the bundled
+		 *   provider is the only thing the D15 fallback chain
+		 *   ({@see Location_Service::resolve_provider_for_level()}) can still
+		 *   use for addresses, and its keys need to be reachable to enter.
+		 *   Operator's variant 2 for #377, not variant 1 ("always show DaData's
+		 *   keys") or variant 3 ("only when the `address_suggestions` switch is
+		 *   on") — see that issue's own comment thread.
+		 *
+		 * Field-id COLLISIONS are now possible: the option namespace
+		 * (`woodev_location_*`) is shared by every provider, so two unrelated
+		 * providers declaring the same field id would otherwise silently
+		 * overwrite one field's definition with the other's. First-registered
+		 * wins and the conflict is reported via `_doing_it_wrong()` — the exact
+		 * same discipline {@see self::inject_related_list_states()} already
+		 * applies to a duplicate region LABEL, and {@see self::register_provider()}
+		 * applies to a duplicate provider ID.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>> field id => field descriptor
+		 *                                              (settings-API `register_setting()`
+		 *                                              args shape), each carrying a
+		 *                                              `show_if` key.
+		 */
+		private function collect_all_provider_fields(): array {
+			$service            = new Location_Service( $this );
+			$store_country      = $service->resolve_default_country();
+			$wide_condition_ids = $this->non_address_provider_ids( $service, $store_country );
+
+			$fields = [];
+
+			foreach ( $this->providers as $provider_id => $provider ) {
+				foreach ( $provider->get_settings_fields() as $field_id => $field ) {
+					$field_id = (string) $field_id;
+
+					if ( isset( $fields[ $field_id ] ) ) {
+						_doing_it_wrong(
+							__METHOD__,
+							sprintf(
+								'Two location providers declare a settings field under the same id "%s"; the first registration wins.',
+								$field_id
+							),
+							'2.0.2'
+						);
+
+						continue;
+					}
+
+					$field           = (array) $field;
+					$field['show_if'] = self::DEFAULT_PROVIDER_ID === $provider_id
+						? [
+							'operator' => 'in',
+							'setting'  => self::SETTING_ACTIVE_PROVIDER,
+							'value'    => $wide_condition_ids,
+						]
+						: [
+							'setting' => self::SETTING_ACTIVE_PROVIDER,
+							'value'   => $provider_id,
+						];
+
+					$fields[ $field_id ] = $field;
+				}
+			}
+
+			return $fields;
+		}
+
+		/**
+		 * The provider id list {@see self::collect_all_provider_fields()} uses
+		 * as the WIDE `show_if` condition's `in` value for
+		 * {@see self::DEFAULT_PROVIDER_ID}'s own fields: that provider's own id,
+		 * plus every OTHER registered provider that does NOT serve the
+		 * `address` level FOR THE STORE'S OWN COUNTRY.
+		 *
+		 * Country-scoped, deliberately — NOT a country-blind union over
+		 * {@see Location_Provider::get_suggest_levels()} with no `$country`
+		 * argument. "Serves address" genuinely varies by country for a real
+		 * provider (the bundled DaData provider itself serves `address` in
+		 * RU/BY/KZ/UZ but not in AM/AZ/KG/TJ/TM — {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider}'s
+		 * own docblock), so a country-blind answer would ask a different
+		 * question than the one the merchant is actually configuring for: THIS
+		 * store, which has exactly one base country. `$store_country` is
+		 * resolved by the caller via {@see Location_Service::resolve_default_country()}
+		 * — the SAME checkout-field -> WooCommerce-store-setting -> `RU` chain
+		 * every other country-scoped decision in this layer already goes
+		 * through, never a second hand-rolled cascade.
+		 *
+		 * Reuses {@see Location_Service::provider_serves_level()} — never a
+		 * hand-rolled `in_array( ..., $provider->get_suggest_levels( $country ) )`
+		 * — because that predicate ALSO gates on {@see Location_Provider::get_countries()}
+		 * coverage, which `get_suggest_levels()` alone does not encode.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Service $service       Façade to reuse {@see Location_Service::provider_serves_level()} from.
+		 * @param string           $store_country  ISO-3166 alpha-2 store country.
+		 *
+		 * @return string[] Provider ids, {@see self::DEFAULT_PROVIDER_ID} first.
+		 */
+		private function non_address_provider_ids( Location_Service $service, string $store_country ): array {
+			$ids = [ self::DEFAULT_PROVIDER_ID ];
+
+			foreach ( $this->providers as $id => $provider ) {
+				if ( self::DEFAULT_PROVIDER_ID === $id ) {
+					continue;
+				}
+
+				if ( ! $service->provider_serves_level( $provider, Location_Record::LEVEL_ADDRESS, $store_country ) ) {
+					$ids[] = $id;
+				}
+			}
+
+			return $ids;
 		}
 
 		/**

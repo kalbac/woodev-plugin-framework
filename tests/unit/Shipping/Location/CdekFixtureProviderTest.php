@@ -85,6 +85,20 @@ class CdekFixtureProviderTest extends TestCase {
 	}
 
 	/**
+	 * ZERO declared settings fields (issue #375) — the reworked contract: CDEK's
+	 * Client ID/Secret authenticate every CDEK API call, not only the location
+	 * dictionary, so they live in the carrier's own settings
+	 * ({@see \Woodev_Test_Cdek_Integration}), not here. This is the property the
+	 * operator's #375 target table depends on: with zero fields declared, NOTHING
+	 * from this provider is merged onto the shared "Локация" settings surface.
+	 */
+	public function test_it_declares_zero_settings_fields(): void {
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->assertSame( [], $provider->get_settings_fields() );
+	}
+
+	/**
 	 * A three-part `full_name`: settlement, region, country.
 	 */
 	public function test_it_splits_a_settlement_with_a_region(): void {

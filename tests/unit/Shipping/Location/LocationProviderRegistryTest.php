@@ -206,6 +206,65 @@ class Fake_Locate_Location_Provider extends Abstract_Location_Provider {
 }
 
 /**
+ * A fake provider that serves `address` ONLY for one specific country — exists
+ * to prove the DaData-fields wide `show_if` condition (#375/#377) is evaluated
+ * for the STORE'S OWN country via {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()},
+ * never a country-blind union: "serves address" genuinely varies by country
+ * for a real provider (the bundled DaData provider itself is the reference
+ * case — RU/BY/KZ/UZ but not AM/AZ/KG/TJ/TM), so a country-blind computation
+ * would answer a different question than the one the merchant is actually
+ * configuring for (coordinator correction, s82).
+ */
+class Fake_Country_Scoped_Location_Provider extends Abstract_Location_Provider {
+
+	private string $id;
+	private string $name;
+
+	/** @var string[] */
+	private array $countries;
+
+	private string $address_country;
+
+	/**
+	 * @param string[] $countries Countries this provider covers at all.
+	 */
+	public function __construct( string $id, string $name, array $countries, string $address_country ) {
+		$this->id              = $id;
+		$this->name            = $name;
+		$this->countries       = $countries;
+		$this->address_country = strtoupper( $address_country );
+	}
+
+	public function get_id(): string {
+		return $this->id;
+	}
+
+	public function get_name(): string {
+		return $this->name;
+	}
+
+	public function get_countries(): array {
+		return $this->countries;
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_ADDRESS ];
+	}
+
+	protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
+		if ( strtoupper( trim( $country ) ) === $this->address_country ) {
+			return $levels;
+		}
+
+		return array_values( array_diff( $levels, [ Location_Record::LEVEL_ADDRESS ] ) );
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
  * @covers \Woodev\Framework\Shipping\Location\Location_Settings
  */
@@ -225,6 +284,12 @@ final class LocationProviderRegistryTest extends TestCase {
 				return array_merge( (array) $defaults, (array) $args );
 			}
 		);
+		// #375/#377: register_settings() now builds a `show_if` condition for the
+		// bundled default provider's own fields via Location_Service::resolve_default_country(),
+		// which reads wc_get_base_location() — a harmless 'RU' default every test in
+		// this file gets unless it re-stubs this itself (matching the same blanket-
+		// default convention LocationServiceTest/LocationServiceDefaultTest already use).
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
@@ -681,9 +746,21 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Provider-declared settings seam: merged for the ACTIVE provider only
+	// Provider-declared settings seam: EVERY provider's fields, show_if-gated
+	// (#375/#377 — no longer merged for the active provider only)
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Every registered provider's fields are now ALWAYS registered on the
+	 * handler (#375/#377), each carrying its OWN `show_if` condition on
+	 * `active_provider` — the active provider's field is visible right now
+	 * (its condition matches the CURRENT stored value), the inactive
+	 * provider's field is registered too but its condition does not match.
+	 * Field ids deliberately avoid `token`/`clean_secret` — those collide
+	 * with the REAL bundled Dadata_Provider, which registers unconditionally
+	 * in every test in this file, and that collision is covered by its own
+	 * dedicated test below.
+	 */
 	public function test_active_providers_declared_settings_are_rendered_on_the_surface(): void {
 		// A distinct id (not DEFAULT_PROVIDER_ID — that belongs to the now-real
 		// bundled Dadata_Provider, Task 7) made active via an explicit stored
@@ -692,8 +769,8 @@ final class LocationProviderRegistryTest extends TestCase {
 			'active-fixture',
 			'Active',
 			[
-				'token' => [
-					'name'      => 'Token',
+				'active_fixture_key' => [
+					'name'      => 'Active fixture key',
 					'type'      => \Woodev_Setting::TYPE_STRING,
 					'sensitive' => true,
 					'default'   => '',
@@ -722,8 +799,27 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$handler = $registry->get_settings_handler();
 		$this->assertNotNull( $handler );
-		$this->assertNotNull( $handler->get_setting( 'token' ), 'the ACTIVE provider field must be rendered' );
-		$this->assertNull( $handler->get_setting( 'inactive_secret' ), 'a NON-active provider field must not be rendered' );
+
+		$active_setting = $handler->get_setting( 'active_fixture_key' );
+		$this->assertNotNull( $active_setting, 'the active provider field must be REGISTERED' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'active-fixture' ],
+			$active_setting->get_show_if_conditions(),
+			'gated by a plain equality show_if on its own provider id'
+		);
+
+		$inactive_setting = $handler->get_setting( 'inactive_secret' );
+		$this->assertNotNull( $inactive_setting, 'a NON-active provider field must STILL be registered (#375/#377 — dynamic without saving)' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'inactive' ],
+			$inactive_setting->get_show_if_conditions()
+		);
+
+		// The whole point: evaluated against the CURRENT active_provider value,
+		// the active fixture's field is visible and the inactive one is not.
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'active-fixture' ];
+		$this->assertTrue( \Woodev_Setting::evaluate_conditions( $active_setting->get_show_if_conditions(), $submitted ) );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $inactive_setting->get_show_if_conditions(), $submitted ) );
 	}
 
 	public function test_provider_field_marked_sensitive_gets_a_password_control(): void {
@@ -731,8 +827,8 @@ final class LocationProviderRegistryTest extends TestCase {
 			'active-fixture',
 			'Active',
 			[
-				'token' => [
-					'name'      => 'Token',
+				'active_fixture_key' => [
+					'name'      => 'Active fixture key',
 					'type'      => \Woodev_Setting::TYPE_STRING,
 					'sensitive' => true,
 					'default'   => '',
@@ -748,7 +844,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$setting = $registry->get_settings_handler()->get_setting( 'token' );
+		$setting = $registry->get_settings_handler()->get_setting( 'active_fixture_key' );
 
 		$this->assertTrue( $setting->is_sensitive() );
 		$this->assertSame( \Woodev_Control::TYPE_PASSWORD, $setting->get_control()->get_type() );
@@ -805,6 +901,279 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->collect();
 
 		$this->assertTrue( $registry->get_settings_handler()->get_setting( 'secret' )->is_sensitive() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Field-id collisions across two DIFFERENT providers (#375/#377)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The shared option namespace (`woodev_location_*`) means two UNRELATED
+	 * providers can now declare the same field id — first-registered wins and
+	 * the conflict is reported, mirroring {@see Location_Provider_Registry::inject_related_list_states()}'s
+	 * own duplicate-LABEL discipline and {@see Location_Provider_Registry::register_provider()}'s
+	 * own duplicate-ID discipline.
+	 */
+	public function test_duplicate_field_id_across_two_providers_the_first_registration_wins_and_warns(): void {
+		$first = new Fake_Location_Provider(
+			'first',
+			'First',
+			[ 'shared_key' => [ 'name' => 'From first', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => 'from-first' ] ]
+		);
+		$second = new Fake_Location_Provider(
+			'second',
+			'Second',
+			[ 'shared_key' => [ 'name' => 'From second', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => 'from-second' ] ]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $first, $second ] );
+		$this->stub_active_provider_option( 'first' );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( 'shared_key' );
+
+		$this->assertNotNull( $setting );
+		$this->assertSame( 'from-first', $setting->get_default(), 'the FIRST registration wins the collision' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'first' ],
+			$setting->get_show_if_conditions(),
+			'the winning field keeps ITS OWN provider\'s show_if, not the loser\'s'
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// is_configured() === false must NOT remove a provider from the select
+	// -------------------------------------------------------------------------
+
+	public function test_an_unconfigured_provider_is_not_removed_from_the_active_provider_select(): void {
+		$unconfigured = new Fake_Location_Provider(
+			'unconfigured',
+			'Unconfigured',
+			[
+				'required_key' => [
+					'name'     => 'Required key',
+					'type'     => \Woodev_Setting::TYPE_STRING,
+					'required' => true,
+					'default'  => '',
+				],
+			]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $unconfigured ] );
+		$this->stub_active_provider_option( 'unconfigured' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $unconfigured->is_configured(), 'sanity: the fixture really is unconfigured (a required field with no value)' );
+
+		$provider_select = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER );
+		$this->assertArrayHasKey(
+			'unconfigured',
+			$provider_select->get_options(),
+			'is_configured() === false must NOT remove a provider from the select (#375)'
+		);
+		$this->assertInstanceOf( Fake_Location_Provider::class, $registry->get_active_provider(), 'an unconfigured provider can still be resolved as ACTIVE' );
+	}
+
+	// -------------------------------------------------------------------------
+	// Saving must not wipe an inactive provider's stored keys (#375/#377)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `filter_visible_values()` strips a hidden field from the SUBMITTED map
+	 * only — it never calls `update_option()`/`delete_option()` itself, so an
+	 * inactive provider's ALREADY-STORED value is never touched by a save that
+	 * merely doesn't include it. This is the entire safety of the "register
+	 * every provider's fields" approach (#375/#377).
+	 */
+	public function test_hidden_provider_field_is_stripped_from_the_submitted_map_only(): void {
+		$active = new Fake_Location_Provider(
+			'active-fixture',
+			'Active',
+			[ 'active_fixture_key' => [ 'name' => 'Active key', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => '' ] ]
+		);
+		$inactive = new Fake_Location_Provider(
+			'inactive',
+			'Inactive',
+			[ 'inactive_secret' => [ 'name' => 'Inactive secret', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => '' ] ]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $active, $inactive ] );
+		$this->stub_active_provider_option( 'active-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$submitted = [
+			Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'active-fixture',
+			'active_fixture_key' => 'new-active-value',
+			// A crafted/stale submission still carrying the HIDDEN field — this
+			// is exactly what a naive "merge and save whatever was posted"
+			// implementation would wipe.
+			'inactive_secret'    => 'attempted-overwrite',
+		];
+
+		$filtered = $registry->get_settings_handler()->filter_visible_values( $submitted );
+
+		$this->assertArrayHasKey( 'active_fixture_key', $filtered, 'a VISIBLE field survives the filter' );
+		$this->assertArrayNotHasKey( 'inactive_secret', $filtered, 'a HIDDEN field is stripped from what gets persisted' );
+	}
+
+	// -------------------------------------------------------------------------
+	// The bundled default provider's own fields (#377) — the WIDE `in`
+	// condition, evaluated for the STORE's own country
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The real bundled Dadata_Provider registers under `DEFAULT_PROVIDER_ID`
+	 * ('dadata') in every test in this file (autoloaded, `class_exists()`
+	 * always true) — so `token`/`clean_secret` always exist on the handler,
+	 * and their `show_if` is always the WIDE `in` condition, never the plain
+	 * equality one every other provider's field gets.
+	 */
+	public function test_dadata_own_fields_get_the_wide_in_show_if_condition(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$token = $registry->get_settings_handler()->get_setting( 'token' );
+		$this->assertNotNull( $token );
+
+		$conditions = $token->get_show_if_conditions();
+		$this->assertSame( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, $conditions['setting'] );
+		$this->assertSame( 'in', $conditions['operator'] );
+		$this->assertContains( 'dadata', $conditions['value'], 'DaData is unconditionally in its own wide list' );
+	}
+
+	/**
+	 * A carrier that DOES serve `address` FOR THE STORE'S OWN COUNTRY must NOT
+	 * appear in DaData's wide `in` list — DaData's keys stay hidden while such
+	 * a carrier is active, because its OWN address suggestions already work
+	 * and DaData is not needed as a fallback (operator's #377 reasoning, its
+	 * converse).
+	 */
+	public function test_dadata_fields_hide_a_carrier_that_serves_address_for_the_store_country(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+		$kz_carrier = new Fake_Country_Scoped_Location_Provider( 'kz-carrier', 'KZ Carrier', [ 'KZ' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $kz_carrier ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertNotContains(
+			'kz-carrier',
+			$conditions['value'],
+			'kz-carrier serves address for the store\'s own country (KZ) — DaData keys must stay hidden while it is active'
+		);
+	}
+
+	/**
+	 * THE COUNTRY-SENSITIVITY PROOF (coordinator correction, s82): the SAME
+	 * provider that serves `address` for KZ does NOT serve it for RU — so
+	 * whether its id lands in DaData's wide list depends on the STORE's own
+	 * country, never a country-blind "does this provider EVER serve address"
+	 * union. Same fixture as the test above, opposite store country.
+	 */
+	public function test_dadata_fields_show_the_same_carrier_for_a_different_store_country_it_does_not_serve_address_in(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+
+		$kz_carrier = new Fake_Country_Scoped_Location_Provider( 'kz-carrier', 'KZ Carrier', [ 'KZ', 'RU' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $kz_carrier ] );
+		$this->stub_active_provider_option( 'kz-carrier' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertContains(
+			'kz-carrier',
+			$conditions['value'],
+			'the same carrier does NOT serve address for the store\'s own country (RU) — DaData keys must be reachable as the fallback'
+		);
+
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'kz-carrier' ];
+		$this->assertTrue(
+			\Woodev_Setting::evaluate_conditions( $conditions, $submitted ),
+			'the DaData key fields must actually SHOW while kz-carrier is active, for this store country'
+		);
+	}
+
+	/**
+	 * A carrier NOT even covering the store's country (no `get_countries()`
+	 * overlap) trivially cannot serve address there either — it lands in
+	 * DaData's wide list too, via the SAME {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_serves_level()}
+	 * predicate (its own country-coverage gate), not a second hand-rolled check.
+	 */
+	public function test_dadata_fields_show_a_carrier_that_does_not_cover_the_store_country_at_all(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+
+		$uncovering_carrier = new Fake_Country_Scoped_Location_Provider( 'elsewhere-carrier', 'Elsewhere', [ 'KZ' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $uncovering_carrier ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertContains( 'elsewhere-carrier', $conditions['value'] );
+	}
+
+	/**
+	 * THE "test-list" SCENARIO (coordinator correction, s82): a list-only
+	 * carrier that NEVER serves address, for ANY country — {@see Fake_Location_Provider}
+	 * itself, matching the rig's own `test-list` fixture shape exactly. The
+	 * #375 target table's "test-list shows nothing" is about test-list's OWN
+	 * fields and its OWN notice — NOT about DaData's fallback keys, which
+	 * correctly stay reachable here (the converse of the operator's #377
+	 * reasoning: this carrier brings no addresses, so DaData is the only
+	 * thing that can, and its keys must be enterable).
+	 */
+	public function test_dadata_fields_show_while_a_test_list_shaped_provider_is_active(): void {
+		$list_only = new Fake_Location_Provider( 'test-list-like', 'List-only', [] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_only ] );
+		$this->stub_active_provider_option( 'test-list-like' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+		$this->assertContains( 'test-list-like', $conditions['value'] );
+
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'test-list-like' ];
+		$this->assertTrue(
+			\Woodev_Setting::evaluate_conditions( $conditions, $submitted ),
+			'DaData key fields must actually SHOW while a test-list-shaped (list-only, never-address) provider is active'
+		);
 	}
 
 	// -------------------------------------------------------------------------

@@ -1,7 +1,10 @@
 <?php
 /**
- * Woodev_Test_Credential_Seeder — bridges the rig's own wp-config constants into the
- * DaData provider's store-level settings options.
+ * Woodev_Test_Credential_Seeder — bridges the rig's own wp-config constants into
+ * store-level settings options: the DaData provider's flat `woodev_location_*`
+ * options via {@see self::maybe_seed()}, and (issue #375) the CDEK Integration's
+ * array-shaped `woocommerce_{plugin_id}_settings` option via
+ * {@see self::maybe_seed_into_array_option()}.
  *
  * Location Provider layer, block PR-C rig-visibility pull-forward: without a token in
  * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider}'s own store option,
@@ -74,6 +77,44 @@ if ( ! class_exists( 'Woodev_Test_Credential_Seeder' ) ) {
 
 			if ( self::should_seed( $constant_value, $existing_value ) ) {
 				update_option( $option_name, $constant_value );
+			}
+		}
+
+		/**
+		 * Seeds ONE field of an ARRAY-shaped option from a single rig wp-config
+		 * constant, applying {@see self::should_seed()}'s SAME rule (issue #375).
+		 *
+		 * WHY THIS EXISTS. {@see self::maybe_seed()} reads/writes a FLAT option —
+		 * exactly the shape `Location_Settings`/the location-provider fields use
+		 * (`woodev_location_{field_id}`). Once #375 moved the CDEK credentials out of
+		 * the location-provider surface and into {@see Woodev_Test_Cdek_Integration}
+		 * (a `WC_Integration`), their storage became ONE array-shaped option
+		 * (`woocommerce_{plugin_id}_settings`, `WC_Settings_API::get_option_key()`'s
+		 * own construction) holding EVERY field of that integration keyed by field
+		 * id — a flat `get_option()`/`update_option()` pair on the field id alone
+		 * would silently miss/clobber every sibling field. This method reads the
+		 * whole array, applies {@see self::should_seed()} to just the one field
+		 * key, and writes the array back — the array-option counterpart of
+		 * {@see self::maybe_seed()}, reusing its exact pure decision rather than
+		 * duplicating it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $option_name   the array-shaped store option to (maybe) update.
+		 * @param string $field_key     the key WITHIN that array to (maybe) seed.
+		 * @param string $constant_name the rig wp-config constant to read from.
+		 *
+		 * @return void
+		 */
+		public static function maybe_seed_into_array_option( string $option_name, string $field_key, string $constant_name ): void {
+			$constant_value = defined( $constant_name ) ? (string) constant( $constant_name ) : '';
+			$settings       = get_option( $option_name, [] );
+			$settings       = is_array( $settings ) ? $settings : [];
+			$existing_value = isset( $settings[ $field_key ] ) ? (string) $settings[ $field_key ] : '';
+
+			if ( self::should_seed( $constant_value, $existing_value ) ) {
+				$settings[ $field_key ] = $constant_value;
+				update_option( $option_name, $settings );
 			}
 		}
 	}

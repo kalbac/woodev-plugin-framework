@@ -176,15 +176,49 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * provider (not gated behind {@see self::get_capabilities()}) but is not
 		 * abstract in {@see Abstract_Location_Provider} either — it defaults to an
 		 * empty array there, exactly like {@see \Woodev\Framework\Shipping\Map\Embedded_Map_Provider}
-		 * returns `[]` for a provider that needs no credential. Unlike Map_Provider's
-		 * seam — where the OWNING PLUGIN is responsible for merging the result into
-		 * its own settings registration — the framework itself merges the ACTIVE
-		 * provider's fields into the shared `Location_Provider_Registry` store-level
-		 * settings surface (D4: tokens are store settings held server-side); a
-		 * provider that is registered but not currently ACTIVE never has its fields
-		 * rendered.
+		 * returns `[]` for a provider that needs no credential.
+		 *
+		 * `Location_Provider_Registry` merges EVERY registered provider's fields
+		 * (not only the active one's) into the shared `Location_Provider_Registry`
+		 * store-level settings surface (D4: tokens are store settings held
+		 * server-side), each gated behind a `show_if` condition (ADR-008) on the
+		 * `active_provider` setting so the client shows/hides them without a save
+		 * round-trip (#375/#377).
+		 *
+		 * **THE CONTRACT FORK — pick ONE model per provider (#375):**
+		 *
+		 * 1. **"I need my own key(s)."** Declare them here, keyed by a field id
+		 *    UNIQUE across every OTHER registered provider — the option namespace
+		 *    (`woodev_location_*`) is SHARED by the whole fleet, so a collision
+		 *    with another provider's field id is a real bug, not a private
+		 *    concern; `Location_Provider_Registry` detects one and keeps the
+		 *    first registration, reporting the rest via `_doing_it_wrong()`.
+		 *    Read the value back through the SAME "raw option, never the
+		 *    settings handler" discipline {@see self::is_configured()} documents
+		 *    below — a provider whose fields are always registered can safely
+		 *    use `Location_Settings::get_value()` too, but a provider that might
+		 *    later drop to zero fields (model 2) cannot, so the raw-option read
+		 *    is the one discipline that is correct under BOTH models and never
+		 *    needs to change if a provider migrates between them.
+		 * 2. **"My credentials belong to something bigger than a location
+		 *    lookup."** This is the CARRIER case (#375's own example: CDEK's
+		 *    Client ID/Secret authenticate every CDEK API call, not only its
+		 *    location dictionary) — return `[]` here (the {@see Abstract_Location_Provider}
+		 *    default; no override needed) and read the credentials from
+		 *    wherever the plugin's OWN carrier-wide settings actually live
+		 *    (typically a {@see \Woodev\Framework\Shipping\Shipping_Integration}
+		 *    subclass — see {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_integration_option()}
+		 *    for the accessor, which already falls back to a raw option read
+		 *    when no integration handler exists yet). Declaring zero fields
+		 *    here means {@see self::is_configured()}'s default (derived from
+		 *    `get_settings_fields()`) would dishonestly report `true` — model 2
+		 *    MUST override {@see self::is_configured()} to check the real
+		 *    external location. {@see \Woodev_Test_Cdek_Location_Provider} (the
+		 *    rig's fixture) is the reference implementation of this model.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Documented the two-model contract fork and the
+		 *              now-shared field-id namespace (#375/#377).
 		 *
 		 * @return array<string, array<string, mixed>> Settings field definitions keyed by field id.
 		 */
@@ -207,9 +241,36 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 *      provider with a REQUIRED field (e.g. Task 7's DaData token)
 		 *      MUST override this to check the actual stored value; the
 		 *      default can only see the field's SHAPE, never whether a value
-		 *      was actually saved.
+		 *      was actually saved. A provider following model 2 of
+		 *      {@see self::get_settings_fields()}'s own contract-fork docblock
+		 *      (zero declared fields, credentials live elsewhere) MUST ALSO
+		 *      override this — the default would otherwise see zero required
+		 *      fields and dishonestly report `true`.
+		 *
+		 * **RAW-OPTION DISCIPLINE (#375/#377).** This method is called on a
+		 * provider even while it is NOT the active one — the D15 fallback
+		 * chain ({@see Location_Service::resolve_provider_for_level()}) checks
+		 * `is_configured()` on the bundled default provider regardless of what
+		 * is currently active, and {@see Location_Provider_Registry::register_settings()}
+		 * now computes a `show_if` visibility list from EVERY registered
+		 * provider's answer too. A provider must therefore NEVER resolve its
+		 * own credentials by reading through `Location_Settings::get_value()`
+		 * (or the equivalent for wherever a model-2 provider's credentials
+		 * live) — a settings handler only has a stored VALUE for a field that
+		 * IS registered on it right now, and `get_value()` throws
+		 * `Setting … does not exist` the instant that is not the case. Read
+		 * the RAW stored option (`get_option()` for model 1;
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_integration_option()}'s
+		 * raw-option fallback for model 2) instead — see
+		 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::token()}'s
+		 * own docblock for the canonical model-1 example and
+		 * {@see \Woodev_Test_Cdek_Location_Provider::is_configured()} for model 2.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Documented the raw-option discipline (#375/#377) — this
+		 *              method is now ALSO consulted for every registered (not
+		 *              only the active) provider when building the settings
+		 *              surface's `show_if` conditions.
 		 *
 		 * @return bool
 		 */

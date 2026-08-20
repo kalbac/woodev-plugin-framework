@@ -20,11 +20,18 @@
  *    capability the same way `field_mode` is gated by `list`), the merchant-picked
  *    FIXED record (JSON, written by {@see Location_Provider_Registry::set_default_locality_record()},
  *    never typed free-hand), and the informational "needs re-picking" flag.
- * 4. Whatever the currently ACTIVE provider declares via
+ * 4. EVERY registered provider's own fields, declared via
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()} —
- *    merged in verbatim, keyed by the provider's own field ids. A registered but
- *    NOT-active provider's fields are never merged in (spec §4.1: rendered on the
- *    shared surface, but only for the chosen provider).
+ *    merged in verbatim, keyed by the provider's own field ids, each already
+ *    carrying a `show_if` condition (ADR-008) computed by the caller
+ *    ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect_all_provider_fields()}).
+ *    This CHANGED (#375/#377, "dynamic, without saving"): previously only the
+ *    ACTIVE provider's fields were merged in at all, so switching the
+ *    `active_provider` select only changed the visible key fields after a
+ *    save. Now every provider's fields are always registered and the CLIENT
+ *    shows/hides them per `show_if` — this handler itself does not know or
+ *    care which provider is "active"; it only renders whatever fields (and
+ *    conditions) it was handed.
  *
  * This handler is deliberately data-only: it does not know how to collect
  * providers or resolve which one is active — {@see Location_Provider_Registry}
@@ -101,9 +108,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
-		 * @param array<string, array<string, mixed>> $provider_fields                 the active provider's declared
-		 *                                                                               settings fields, already resolved
-		 *                                                                               by the caller.
+		 * @param array<string, array<string, mixed>> $provider_fields                 EVERY registered provider's declared
+		 *                                                                               settings fields, each already carrying
+		 *                                                                               a `show_if` condition (#375/#377),
+		 *                                                                               resolved by the caller.
 		 * @param array<string, string>               $field_mode_options              offered `field_mode` select options
 		 *                                                                               (`id => label`), already gated by the
 		 *                                                                               active provider's capabilities.
@@ -131,9 +139,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * Gets the settings ids this handler owns, in registration order — the
 		 * active-provider select, the field-mode select, the address-suggestions
 		 * checkbox (Task 10), the three default-locality settings (Task 14), then
-		 * the active provider's own fields. Used by {@see Location_Provider_Registry}
-		 * to build the `Settings_Section` without duplicating this handler's own
-		 * field list.
+		 * EVERY registered provider's own fields (#375/#377 — not only the
+		 * active one's, see this class's own docblock), in provider-registration
+		 * order. Used by {@see Location_Provider_Registry} to build the
+		 * `Settings_Section` without duplicating this handler's own field list.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the three `default_locality_*` settings (Task 14; spec D11).

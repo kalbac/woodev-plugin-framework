@@ -1658,7 +1658,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * country-blind (unnarrowed) level set decides — identical to this
 		 * class's behavior before the `$country` parameter existed.
 		 *
+		 * PUBLIC (widened from `private`, #375/#377): {@see Location_Provider_Registry::register_settings()}
+		 * reuses this EXACT predicate — never a hand-rolled one — to decide,
+		 * for every registered (not just the active) provider, whether it
+		 * serves `address` for the STORE's own country, when building the
+		 * bundled default provider's `show_if` condition. Calling this
+		 * instead of inlining `in_array( $level, $provider->get_suggest_levels( $country ), true )`
+		 * matters: the country-coverage gate above (`get_countries()`) is
+		 * NOT part of `get_suggest_levels()` itself, and a caller skipping
+		 * it would silently disagree with every other D15 chain-walk call
+		 * site in this class.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Widened from `private` to `public` (#375/#377) so
+		 *              {@see Location_Provider_Registry} can reuse it for a
+		 *              non-active, arbitrary provider.
 		 *
 		 * @param Location_Provider $provider Candidate provider.
 		 * @param string            $level    One of {@see Location_Record::LEVELS}.
@@ -1666,7 +1680,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * @return bool
 		 */
-		private function provider_serves_level( Location_Provider $provider, string $level, ?string $country ): bool {
+		public function provider_serves_level( Location_Provider $provider, string $level, ?string $country ): bool {
 			if ( null === $country ) {
 				return in_array( $level, $provider->get_suggest_levels(), true );
 			}

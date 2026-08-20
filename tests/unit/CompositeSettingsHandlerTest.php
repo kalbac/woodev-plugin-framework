@@ -115,6 +115,94 @@ class CompositeSettingsHandlerTest extends TestCase {
 		new Composite_Settings_Handler( 'shipping', [ $a, $b ] );
 	}
 
+	public function test_filters_cross_handler_conditions_against_submitted_or_stored_controller_values(): void {
+		$checkout_fields = $this->make_handler(
+			'checkout_fields',
+			function ( $h ) {
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region field',
+					'default' => 'remove',
+				] );
+			}
+		);
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region mode',
+					'default' => 'typeahead',
+					'show_if' => [ 'setting' => 'region_field', 'operator' => '!=', 'value' => 'remove' ],
+				] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $checkout_fields, $location ] );
+
+		$this->assertSame(
+			[ 'region_field' => 'remove' ],
+			$composite->filter_visible_values( [ 'region_field' => 'remove', 'field_mode_region' => 'list' ] )
+		);
+		$this->assertSame(
+			[],
+			$composite->filter_visible_values( [ 'field_mode_region' => 'list' ] )
+		);
+		$this->assertSame(
+			[ 'region_field' => 'show', 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values( [ 'region_field' => 'show', 'field_mode_region' => 'list' ] )
+		);
+	}
+
+	public function test_filters_cross_handler_conditions_order_independently_and_degrades_unknown_controller_to_empty(): void {
+		$checkout_fields = $this->make_handler(
+			'checkout_fields',
+			function ( $h ) {
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region field',
+					'default' => 'show',
+					'show_if' => [ 'setting' => 'mode', 'value' => 'live' ],
+				] );
+			}
+		);
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region mode',
+					'default' => 'typeahead',
+					'show_if' => [ 'setting' => 'region_field', 'value' => 'show' ],
+				] );
+				$h->register_setting( 'unknown_controller', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Unknown controller',
+					'default' => 'x',
+					'show_if' => [ 'setting' => 'missing', 'value' => 'present' ],
+				] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $checkout_fields, $location ] );
+
+		$this->assertSame(
+			[ 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values(
+				[
+					'field_mode_region' => 'list',
+					'unknown_controller' => 'value',
+					'region_field'       => 'show',
+					'mode'               => 'test',
+				]
+			)
+		);
+		$this->assertSame(
+			[ 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values(
+				[
+					'field_mode_region' => 'list',
+					'mode'              => 'test',
+					'region_field'      => 'show',
+					'unknown_controller' => 'value',
+				]
+			)
+		);
+	}
+
 	/**
 	 * Decision (deviates from the plan's skeleton, which returned null/false): get_value() and
 	 * update_value() on an unknown id THROW \Woodev_Plugin_Exception, mirroring

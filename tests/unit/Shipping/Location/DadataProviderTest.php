@@ -328,6 +328,13 @@ final class DadataProviderTest extends TestCase {
 
 		Functions\when( 'get_option' )->justReturn( '' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		// #375/#377: Location_Provider_Registry::register_settings() now builds a
+		// `show_if` condition for the bundled default provider's own fields via
+		// Location_Service::resolve_default_country(), which reads
+		// wc_get_base_location() — only reached by this file's own registry-
+		// integration test below, but stubbed here so that test does not have to
+		// know about a WooCommerce function it is not about.
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 		Functions\when( 'wp_json_encode' )->alias(
 			static function ( $data ) {
 				return json_encode( $data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
