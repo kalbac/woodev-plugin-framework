@@ -25,11 +25,37 @@ a Windows-specific cause: the tool that reports success is not the tool that had
 
 ## Root cause
 
-Files in this repo are CRLF in the working tree (`.gitattributes` normalises to LF on commit —
-hence the routine `warning: CRLF will be replaced by LF` on every `git diff`). A multi-line
-`perl` pattern written with `\n` therefore matches nothing, and a non-matching `s///` is not an
-error. `git diff --stat` afterwards still shows the file as modified — from the REAL edits made
-earlier — so even the diff looks plausible.
+A multi-line `perl` pattern written with `\n` matches nothing in a file whose terminators are
+`\r\n`, and a non-matching `s///` is not an error. `git diff --stat` afterwards still shows the
+file as modified — from the REAL edits made earlier — so even the diff looks plausible.
+
+### ⚠️ Corrected s82 — the repo is NOT a CRLF tree
+
+The original text of this section claimed "files in this repo are CRLF in the working tree" and
+that `.gitattributes` only normalises on commit. **Both halves are wrong**, and the claim then
+propagated into session handoffs and subagent briefs as a standing "the tree is CRLF" instruction.
+
+Measured on this box:
+
+```bash
+$ git ls-files --eol woodev/class-lifecycle.php
+i/lf    w/lf    attr/text eol=lf        woodev/class-lifecycle.php
+```
+
+`.gitattributes` sets `*.php text eol=lf` (and the same for `*.js`), which overrides
+`core.autocrlf=true` in BOTH directions — index and working tree. Tracked PHP/JS files are LF on
+disk.
+
+So a file only becomes CRLF here after a **tool flips it**, and there is a known one:
+[[serena-replace-content-eol-flip]] rewrites an entire file as CRLF on every
+`replace_content` / `replace_symbol_body`. That is also where the `warning: CRLF will be replaced
+by LF` lines come from — they are not routine, they are a **symptom that Serena touched the file**,
+and they name exactly which files have been flipped.
+
+The failure this gotcha describes is real; only its cause was misattributed. The chain is:
+Serena edits a file → the file becomes CRLF → a later `perl` mutation with `\n` silently misses it.
+The remedy below is unchanged, and is correct regardless of which file happens to be flipped —
+never trust a mutation you did not confirm applied.
 
 ## Fix
 

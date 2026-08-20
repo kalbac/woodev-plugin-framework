@@ -488,6 +488,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// add notices about gateways not being configured
 			$this->add_not_configured_notices();
+
+			// add a notice when the active Location Provider is not configured
+			// (#375/#377)
+			$this->add_location_provider_not_configured_notice();
 		}
 
 		/**
@@ -630,6 +634,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 					);
 				}
 			}
+		}
+
+		/**
+		 * Computes the "location provider not configured" notice — message text
+		 * and a stable notice id — or `null` when nothing should be shown right
+		 * now (#375/#377).
+		 *
+		 * Factored out as a PURE decision (touches no `Woodev_Admin_Notice_Handler`,
+		 * no hook) from {@see self::add_location_provider_not_configured_notice()}
+		 * so it is directly unit-testable via
+		 * `( new ReflectionClass( $fixture ) )->newInstanceWithoutConstructor()`
+		 * — the same split {@see \Woodev_Test_Credential_Seeder::should_seed()}'s
+		 * own docblock documents for its own decision, and the same
+		 * `newInstanceWithoutConstructor()` technique
+		 * `ShippingPluginNeedsLocationProviderTest` already uses for this class.
+		 * PUBLIC (not `protected`) specifically so that test can call it
+		 * directly rather than through `ReflectionMethod::invoke()` — the
+		 * accessibility half of that would need `ReflectionMethod::setAccessible()`,
+		 * deprecated (and a no-op) since PHP 8.1, which this repo's own PHPUnit
+		 * config (`failOnRisky="true"`) turns into a hard failure the instant it
+		 * prints its deprecation notice.
+		 *
+		 * Fires only when THIS plugin opted into the Location Provider layer
+		 * ({@see self::needs_location_provider()}) AND an active provider is
+		 * resolved AND that provider's own {@see \Woodev\Framework\Shipping\Location\Location_Provider::is_configured()}
+		 * answers `false` — precedent {@see self::add_not_configured_notices()}
+		 * (`"%1$s не настроен..."`). A provider with ZERO declared fields that
+		 * honestly reports `is_configured() === true` (the plan's `test-list`
+		 * case) never reaches this far — see
+		 * {@see \Woodev\Framework\Shipping\Location\Abstract_Location_Provider::is_configured()}'s
+		 * own docblock for why zero declared fields defaults to `true`.
+		 *
+		 * Deliberately does NOT check {@see self::get_active_method_instances()}
+		 * or `is_enabled()` the way {@see self::add_not_configured_notices()}
+		 * does for a shipping METHOD — the Location Provider layer is a single,
+		 * fleet-wide, STORE-level concern (one active provider per store, per
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}'s
+		 * own class docblock), not a per-method one, so there is no per-instance
+		 * enabled/disabled state to gate on here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{message: string, notice_id: string}|null
+		 */
+		public function location_provider_not_configured_notice(): ?array {
+
+			if ( ! $this->needs_location_provider() ) {
+				return null;
+			}
+
+			$provider = Location\Location_Provider_Registry::instance()->get_active_provider();
+
+			if ( null === $provider || $provider->is_configured() ) {
+				return null;
+			}
+
+			$message = sprintf(
+				/* translators: %1$s - location provider name, %2$s - opening <a> tag, %3$s - closing </a> tag */
+				__( 'Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут.', 'woodev-plugin-framework' ),
+				$provider->get_name(),
+				'<a href="' . esc_url( $this->get_settings_url() ) . '">',
+				' &raquo;</a>'
+			);
+
+			return [
+				'message'   => $message,
+				// Keyed by PROVIDER id, not by plugin/method id: the Location
+				// Provider layer is shared by the whole fleet (one active
+				// provider per store). The registry claims this id once per
+				// request before a plugin-specific handler registers it.
+				'notice_id' => 'location-provider-' . $provider->get_id() . '-not-configured',
+			];
+		}
+
+		/**
+		 * Adds an admin notice when the active Location Provider is not
+		 * configured (#375/#377) — the Location Provider layer's counterpart to
+		 * {@see self::add_not_configured_notices()}'s per-shipping-method notice.
+		 *
+		 * Dismissible (matching {@see self::add_not_configured_notices()}'s own
+		 * default): an operator who has SEEN the warning and is deliberately
+		 * postponing configuration should not be renagged on every admin page
+		 * load — {@see \Woodev_Admin_Notice_Handler::should_display_notice()}
+		 * still forces it back on THIS plugin's own settings page regardless
+		 * (`always_show_on_settings`, the handler's own default), which is
+		 * exactly where the merchant would go to actually fix it. Shown on
+		 * every wp-admin screen the handler itself already renders on
+		 * (`admin_notices`, `manage_woocommerce`-gated) — no narrower scope:
+		 * an unconfigured location provider affects checkout everywhere, not
+		 * one settings screen, so hiding it outside that one screen would
+		 * under-warn.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function add_location_provider_not_configured_notice(): void {
+
+			$notice = $this->location_provider_not_configured_notice();
+
+			if ( null === $notice ) {
+				return;
+			}
+
+			if ( ! Location\Location_Provider_Registry::instance()->claim_not_configured_notice( $notice['notice_id'] ) ) {
+				return;
+			}
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				$notice['message'],
+				$notice['notice_id'],
+				[
+					'notice_class' => 'notice-warning',
+				]
+			);
 		}
 
 		/**

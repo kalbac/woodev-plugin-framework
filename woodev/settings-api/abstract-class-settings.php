@@ -52,6 +52,13 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		/**
 		 * Registers a setting.
 		 *
+		 * ⚠️ `description` is rendered as RAW HTML on the React settings surface, so that the
+		 * `<a href="…">` links this field exists for actually work (issue #373). It must
+		 * therefore always be a developer-authored `__()` string. NEVER interpolate anything
+		 * that originates at runtime into it — a stored option value, an API response, a
+		 * provider's error text — or you have handed that source an XSS. State a runtime
+		 * condition through the control's `disabled_reason` instead, which stays escaped.
+		 *
 		 * @param string $id unique setting ID
 		 * @param string $type setting type
 		 * @param array  $args setting arguments
@@ -198,6 +205,10 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 				if ( isset( $args['placeholder'] ) ) {
 					$control->set_placeholder( (string) $args['placeholder'] );
+				}
+
+				if ( isset( $args['country'] ) ) {
+					$control->set_country( (string) $args['country'] );
 				}
 
 				if ( ! empty( $args['disabled'] ) ) {
@@ -630,6 +641,7 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				Woodev_Control::TYPE_TOGGLE,
 				Woodev_Control::TYPE_RICHTEXT,
 				Woodev_Control::TYPE_MULTISELECT,
+				Woodev_Control::TYPE_LOCATION_PICKER,
 			];
 
 			/**

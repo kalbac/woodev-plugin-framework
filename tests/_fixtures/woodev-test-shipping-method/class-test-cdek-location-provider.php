@@ -51,8 +51,12 @@
  * `TEST_CLIENT_SECRET`), and orders placed with them are never processed — but this repository
  * is public and the rule does not bend for a credential that happens to be public elsewhere
  * (gotcha `public-repo-third-party-credentials`). They are read from the rig's own wp-config
- * constants and bridged into the store options by {@see \Woodev_Test_Credential_Seeder}, the
- * same idiom `WOODEV_TEST_DADATA_TOKEN` already uses.
+ * constants and bridged into the store option by {@see \Woodev_Test_Credential_Seeder} —
+ * since issue #375, into {@see Woodev_Test_Cdek_Integration}'s OWN array-shaped
+ * `woocommerce_{plugin_id}_settings` option (via {@see \Woodev_Test_Credential_Seeder::maybe_seed_into_array_option()}),
+ * not the flat `woodev_location_*` option `WOODEV_TEST_DADATA_TOKEN` still uses — the
+ * credentials moved from the location-provider settings surface to the carrier's own
+ * Integration settings, and the seeding had to move with them.
  *
  * Required/declared inside the plugin's own init callback, never at file top level — gotcha
  * `fixture-classes-must-live-inside-plugin-init`.
@@ -81,19 +85,11 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 */
 		public const PROVIDER_ID = 'test-cdek';
 
-		/**
-		 * Settings field id: OAuth client id.
-		 *
-		 * @var string
-		 */
-		public const FIELD_CLIENT_ID = 'cdek_client_id';
-
-		/**
-		 * Settings field id: OAuth client secret.
-		 *
-		 * @var string
-		 */
-		public const FIELD_CLIENT_SECRET = 'cdek_client_secret';
+		// FIELD_CLIENT_ID / FIELD_CLIENT_SECRET moved to {@see Woodev_Test_Cdek_Integration}
+		// (issue #375) — the OAuth client id/secret authenticate every CDEK API call, not
+		// only the location dictionary, so they belong to the carrier's OWN settings, not
+		// to this location provider. See {@see self::get_settings_fields()} and
+		// {@see self::is_configured()} below for the reworked contract.
 
 		/**
 		 * CDEK's TEST contour. Production (`https://api.cdek.ru/v2`) is deliberately not
@@ -189,39 +185,35 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		/**
 		 * {@inheritDoc}
 		 *
-		 * Both credentials, both sensitive. `required` on both: unlike DaData's optional
-		 * Clean secret, CDEK issues no token at all without the pair.
+		 * ZERO declared fields — issue #375's model 2
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()}'s
+		 * own contract-fork docblock): CDEK's Client ID/Secret authenticate every CDEK API
+		 * call, not only the location dictionary, so they live in
+		 * {@see Woodev_Test_Cdek_Integration} (the carrier's own settings, WooCommerce >
+		 * Settings > Integrations) instead of being declared here. This is a DELIBERATE
+		 * override (not merely inheriting {@see \Woodev\Framework\Shipping\Location\Abstract_Location_Provider}'s
+		 * own `[]` default) so a reader of this reference fixture sees the choice made
+		 * explicitly, with the reasoning attached, rather than an absence that looks like
+		 * an oversight.
 		 */
 		public function get_settings_fields(): array {
-			return [
-				self::FIELD_CLIENT_ID     => [
-					'name'        => __( 'Client ID СДЭК', 'woodev-plugin-framework' ),
-					'type'        => \Woodev_Setting::TYPE_STRING,
-					'description' => __( 'Идентификатор приложения для Integration API 2.0 (тестовый контур api.edu.cdek.ru).', 'woodev-plugin-framework' ),
-					'default'     => '',
-					'required'    => true,
-					'sensitive'   => true,
-				],
-				self::FIELD_CLIENT_SECRET => [
-					'name'        => __( 'Client Secret СДЭК', 'woodev-plugin-framework' ),
-					'type'        => \Woodev_Setting::TYPE_STRING,
-					'description' => __( 'Секрет приложения для Integration API 2.0 (тестовый контур api.edu.cdek.ru).', 'woodev-plugin-framework' ),
-					'default'     => '',
-					'required'    => true,
-					'sensitive'   => true,
-				],
-			];
+			return [];
 		}
 
 		/**
 		 * {@inheritDoc}
 		 *
-		 * The provider's own honest answer, as the contract requires: BOTH halves of the
-		 * credential pair must actually be stored. The abstract default can only see that
-		 * the fields were declared, never that a value was saved.
+		 * MUST override — {@see \Woodev\Framework\Shipping\Location\Abstract_Location_Provider::is_configured()}'s
+		 * default derives its answer from {@see self::get_settings_fields()}, which is now
+		 * `[]`, and would otherwise dishonestly report `true` ("nothing declared, nothing
+		 * to configure") regardless of whether real CDEK credentials exist anywhere. The
+		 * honest answer reads BOTH halves of the credential pair from the carrier's own
+		 * settings via {@see self::credential()} — see that method's own docblock for the
+		 * raw-option discipline this read follows.
 		 */
 		public function is_configured(): bool {
-			return '' !== $this->credential( self::FIELD_CLIENT_ID ) && '' !== $this->credential( self::FIELD_CLIENT_SECRET );
+			return '' !== $this->credential( Woodev_Test_Cdek_Integration::FIELD_CLIENT_ID )
+				&& '' !== $this->credential( Woodev_Test_Cdek_Integration::FIELD_CLIENT_SECRET );
 		}
 
 		/**
@@ -708,8 +700,8 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 					'headers' => [ 'Content-Type' => 'application/x-www-form-urlencoded' ],
 					'body'    => [
 						'grant_type'    => 'client_credentials',
-						'client_id'     => $this->credential( self::FIELD_CLIENT_ID ),
-						'client_secret' => $this->credential( self::FIELD_CLIENT_SECRET ),
+						'client_id'     => $this->credential( Woodev_Test_Cdek_Integration::FIELD_CLIENT_ID ),
+						'client_secret' => $this->credential( Woodev_Test_Cdek_Integration::FIELD_CLIENT_SECRET ),
 					],
 				]
 			);
@@ -735,17 +727,29 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		}
 
 		/**
-		 * Reads one stored credential.
+		 * Reads one stored credential from the CARRIER's own settings (issue #375;
+		 * {@see Woodev_Test_Cdek_Integration}) — NEVER through
+		 * `Location_Settings::get_value()` (this provider declares zero fields there
+		 * now, so that handler has nothing registered under `$field_id` to read at
+		 * all) and never through the Integration handler's OWN `get_option()` either
+		 * (that instance may not have been constructed yet on every code path this
+		 * method is reached from). {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_integration_option()}
+		 * already implements exactly this raw-option-with-a-handler-when-available
+		 * discipline — the same one
+		 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::token()}'s
+		 * own docblock documents for model 1 providers, applied here to model 2.
 		 *
-		 * `woodev_location_{field_id}` — the option naming the bundled DaData provider uses
-		 * for its own fields, from the registry's `location` settings service id.
+		 * @since 2.0.2 Reads through `Woodev_Test_Shipping_Method_Plugin::get_integration_option()`
+		 *              instead of `get_option( 'woodev_location_' . $field_id )` —
+		 *              the credentials moved from the location-provider settings
+		 *              surface to the carrier's own Integration settings (#375).
 		 *
-		 * @param string $field_id One of the FIELD_* constants.
+		 * @param string $field_id One of {@see Woodev_Test_Cdek_Integration}'s FIELD_* constants.
 		 *
 		 * @return string
 		 */
 		private function credential( string $field_id ): string {
-			return trim( (string) get_option( 'woodev_location_' . $field_id, '' ) );
+			return trim( (string) Woodev_Test_Shipping_Method_Plugin::instance()->get_integration_option( $field_id, '' ) );
 		}
 
 		/**

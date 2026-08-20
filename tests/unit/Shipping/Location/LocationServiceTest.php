@@ -483,7 +483,17 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+			// Narrower than a blanket justReturn( 'svc-fixture' ) — issue #380
+			// fallout, same reasoning as activate_owning_provider()'s own comment:
+			// a blanket stub also answers 'svc-fixture' for the legacy
+			// `woodev_location_field_mode` option, which migrate_legacy_field_mode()
+			// then treats as a genuine (if unrecognized) legacy value to migrate,
+			// calling update_option()/delete_option() — neither stubbed here.
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'svc-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -499,7 +509,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'svc-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -1260,7 +1274,17 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		private function activate_as_active_provider( Location_Service_Fake_Provider $provider ): void {
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( $provider->get_id() );
+			// Narrower than a blanket justReturn( $provider->get_id() ) — issue
+			// #380 fallout, same reasoning as activate_owning_provider()'s own
+			// comment: a blanket stub also answers the fixture id for the legacy
+			// `woodev_location_field_mode` option, which migrate_legacy_field_mode()
+			// then treats as a genuine (if unrecognized) value to migrate, calling
+			// update_option()/delete_option() — neither stubbed here.
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) use ( $provider ) {
+					return 'woodev_location_active_provider' === $name ? $provider->get_id() : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -1561,7 +1585,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $chosen ] );
-			Functions\when( 'get_option' )->justReturn( 'city-dict' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'city-dict' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -1631,7 +1661,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$swapped = new Location_Service_Fake_Provider( 'swapped', [ Location_Record::LEVEL_REGION ], true );
 
 			Functions\when( 'add_action' )->justReturn( true );
-			Functions\when( 'get_option' )->justReturn( 'svc-fixture' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'svc-fixture' : $default;
+				}
+			);
 			Functions\when( 'apply_filters' )->alias(
 				static function ( string $tag, $default = null ) use ( $chosen, $swapped ) {
 					if ( Location_Provider_Registry::FILTER_PROVIDERS === $tag ) {
@@ -2090,8 +2126,12 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNull( $service->provider_for_level( Location_Record::LEVEL_REGION ) );
 			$this->assertNull( $service->resolve_for( $plugin ) );
 			$this->assertNull( $service->provider_for_list() );
-			$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $service->get_offered_field_modes() );
-			$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $service->get_field_mode() );
+			$this->assertSame(
+				[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
+				$service->get_offered_field_modes()
+			);
+			$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $service->get_field_mode_region() );
+			$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $service->get_field_mode_settlement() );
 			$this->assertFalse( $service->owns_region_states( 'RU', [] ) );
 		}
 
@@ -2106,7 +2146,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'list-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -2122,7 +2168,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'list-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -2160,7 +2212,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'list-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -2183,7 +2241,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'add_action' )->justReturn( true );
 			$this->stub_providers_filter( [ $provider ] );
-			Functions\when( 'get_option' )->justReturn( 'list-fixture' );
+			// Narrower than a blanket justReturn — issue #380 fallout (see
+			// activate_owning_provider()'s own comment for the full reasoning).
+			Functions\when( 'get_option' )->alias(
+				static function ( $name, $default = null ) {
+					return 'woodev_location_active_provider' === $name ? 'list-fixture' : $default;
+				}
+			);
 
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
@@ -2200,7 +2264,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry = Location_Provider_Registry::instance();
 			$service  = new Location_Service( $registry );
 
-			$this->assertSame( $registry->get_field_mode(), $service->get_field_mode() );
+			$this->assertSame( $registry->get_field_mode_region(), $service->get_field_mode_region() );
+			$this->assertSame( $registry->get_field_mode_settlement(), $service->get_field_mode_settlement() );
 		}
 
 		public function test_owns_region_states_delegates_to_the_registry(): void {

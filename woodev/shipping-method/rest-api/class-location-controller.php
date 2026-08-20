@@ -348,12 +348,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 							],
 
 							/*
-							 * There is deliberately NO `provider` arg. Which provider
-							 * answers a suggest call is a STORE decision resolved
-							 * server-side through the D15 fallback chain
-							 * (Location_Service::provider_for_level()) — a request may
-							 * not name one, so the schema does not even give a client
-							 * somewhere to put a value that would only ever be ignored.
+							 * There is deliberately NO `provider` arg on this PUBLIC route.
+							 * Which provider answers a suggest call is a STORE decision
+							 * resolved server-side through the D15 fallback chain
+							 * (Location_Service::provider_for_level()) — a shopper must
+							 * NEVER get to choose which provider serves them, so the
+							 * schema does not even give a client somewhere to put a value
+							 * that would only ever be ignored (D4). The ADMIN counterpart
+							 * below (`/location/default-locality/suggest`) DOES accept an
+							 * optional `provider` override — see that route's own args
+							 * block — because the administrator, gated by
+							 * check_admin_permission(), is precisely the person CHOOSING
+							 * which provider the default-locality picker previews (issue
+							 * #380); see self::perform_suggest()'s own docblock for the
+							 * full reasoning behind the split.
 							 */
 						],
 					],
@@ -492,11 +500,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 								'validate_callback' => 'rest_validate_request_arg',
 							],
 
-							// No `provider` arg either — same reasoning as `/suggest`'s own
-							// args block above: Location_Service::provider_for_level() (the
-							// SAME D15 resolution the runtime uses) decides server-side, so a
-							// record the merchant picks here is guaranteed to be resolvable
-							// the same way at runtime.
+							/*
+							 * Optional ADMIN-ONLY override (issue #380) — unlike the
+							 * public `/suggest` route above, THIS route DOES accept
+							 * `provider`: the administrator picking the record IS the
+							 * person choosing which provider serves it, and this route
+							 * is already gated by check_admin_permission() above, so
+							 * there is no shopper here to protect from steering their
+							 * own provider (the reasoning that keeps the public route's
+							 * schema from ever exposing this arg — see that route's own
+							 * comment). self::perform_suggest() validates this against
+							 * the registry's own registered ids — an unknown id is a
+							 * 400, never a silent fallback to the stored provider — and,
+							 * when eligible, resolves that EXACT named provider instead
+							 * of walking Location_Service::provider_for_level()'s D15
+							 * chosen -> fallback chain; see that method's own docblock.
+							 */
+							'provider' => [
+								'type'              => 'string',
+								'validate_callback' => 'rest_validate_request_arg',
+							],
 						],
 					],
 				]
@@ -710,23 +733,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * Handles an ADMIN suggest request for the `fixed` default-locality
 		 * policy's picker (Task 14; spec D11/§4.6) — otherwise identical to
 		 * {@see self::handle_suggest_request()} (same hardening, same D15
-		 * provider resolution via {@see Location_Service::provider_for_level()},
-		 * so a record the merchant picks here is guaranteed resolvable the same
-		 * way at runtime), gated by {@see self::check_admin_permission()}
-		 * instead of the public routes' `__return_true`, and rate-limited under
-		 * its OWN counter so an admin session browsing the picker can never
-		 * exhaust the public customer-facing budget (or vice versa).
+		 * provider resolution via {@see Location_Service::provider_for_level()}
+		 * whenever no override is given, so a record the merchant picks here is
+		 * guaranteed resolvable the same way at runtime), gated by
+		 * {@see self::check_admin_permission()} instead of the public routes'
+		 * `__return_true`, and rate-limited under its OWN counter so an admin
+		 * session browsing the picker can never exhaust the public
+		 * customer-facing budget (or vice versa).
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reads the request's own `provider` param and threads it
+		 *              into {@see self::perform_suggest()} as an explicit
+		 *              override (issue #380) — the ONE difference from
+		 *              {@see self::handle_suggest_request()}, which never reads
+		 *              that param at all. An absent/empty `provider` keeps the
+		 *              original D15-chain behaviour unchanged.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
 		 */
 		public function handle_admin_suggest_request( $request ) {
-			return $this->perform_suggest( $request, 'woodev_location_admin_sug_rl_' );
+			$provider_override = $this->normalize_param( $request->get_param( 'provider' ) );
+
+			return $this->perform_suggest(
+				$request,
+				'woodev_location_admin_sug_rl_',
+				'' === $provider_override ? null : $provider_override
+			);
 		}
 
 		/**
@@ -750,13 +786,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              from "cross-country" from "wrong level" instead of the
 		 *              single `within_applied` boolean collapsing all three
 		 *              (and "never requested") into the same `false`.
+		 * @since 2.0.2 Gained the optional `$provider_override` parameter
+		 *              (issue #380): {@see self::handle_admin_suggest_request()}
+		 *              threads its request's own `provider` param through here;
+		 *              {@see self::handle_suggest_request()} (the public route)
+		 *              keeps passing `null` — it never even reads that param —
+		 *              so the public route's D4 refusal is structural, not a
+		 *              runtime check that could be bypassed. A non-`null`
+		 *              override is validated against the registry's own
+		 *              registered ids (400 for an unknown one) and, when
+		 *              eligible, resolves to that EXACT provider instead of
+		 *              {@see Location_Service::provider_for_level()}'s D15
+		 *              chosen -> fallback chain.
 		 *
-		 * @param \WP_REST_Request $request        request object.
-		 * @param string           $rate_limit_key Per-route rate-limit bucket prefix.
+		 * @param \WP_REST_Request $request           request object.
+		 * @param string           $rate_limit_key     Per-route rate-limit bucket prefix.
+		 * @param string|null      $provider_override  Admin-only explicit provider id
+		 *                                              override, or `null` for the
+		 *                                              ordinary D15 chain resolution.
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool, within_status: string}
 		 */
-		private function perform_suggest( $request, string $rate_limit_key ) {
+		private function perform_suggest( $request, string $rate_limit_key, ?string $provider_override = null ) {
 
 			if ( $this->is_rate_limited( $rate_limit_key, self::SUGGEST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -789,9 +840,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				);
 			}
 
-			// Deliberately never reads `$request->get_param( 'provider' )` — see the
-			// class docblock and register_routes()'s own comment on this route.
-			$provider = $this->service->provider_for_level( $level );
+			/*
+			 * `$provider_override` is the ONLY path by which `perform_suggest()`
+			 * ever honours a caller-named provider — see this method's own
+			 * `@since` note above. `self::handle_suggest_request()` (the public
+			 * route) always passes `null` here and never even reads the
+			 * request's own `provider` param, so a shopper can never reach the
+			 * branch below (D4) — see the class docblock and register_routes()'s
+			 * own comment on the public `/suggest` route.
+			 */
+			if ( null !== $provider_override ) {
+				if ( ! $this->service->has_provider( $provider_override ) ) {
+					return new \WP_Error(
+						'woodev_location_unknown_provider',
+						__( 'Неизвестный провайдер.', 'woodev-plugin-framework' ),
+						[ 'status' => 400 ]
+					);
+				}
+
+				// Level-blind eligibility check (country-blind too, `null`) — mirrors
+				// Location_Service::provider_for_level()'s own first pass, just
+				// anchored to the ONE named id instead of walking chosen -> fallback.
+				// provider_by_id() itself applies is_configured() and the
+				// level-eligibility check (Location_Service::provider_serves_level());
+				// a registered-but-INELIGIBLE override (unconfigured, or configured
+				// but not serving this level at all) degrades EXACTLY like "no
+				// provider for this level" below — see this method's own `@since`
+				// note: the registry membership check above is what turns an
+				// UNKNOWN id into a 400; a KNOWN-but-ineligible one is never an
+				// error, only the ordinary empty-suggestions degradation.
+				$provider = $this->service->provider_by_id( $provider_override, $level );
+			} else {
+				$provider = $this->service->provider_for_level( $level );
+			}
 
 			if ( null === $provider ) {
 				// No scope is ever built on this branch — nothing was looked up,
@@ -901,8 +982,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * for this level above — wrongly suppressing a country only the
 			 * FALLBACK covers, or wrongly admitting one the fallback does NOT
 			 * cover when the active provider merely happens to list it.
+			 *
+			 * With a `$provider_override` (issue #380), `is_country_supported()`
+			 * is bypassed entirely — that method re-resolves the D15 chain
+			 * (chosen -> fallback) itself, which would silently ignore the
+			 * override and check the WRONG provider's country list. The check
+			 * instead runs directly against `$provider` (already resolved to
+			 * the override above) via the SAME {@see Location_Service::provider_serves_level()}
+			 * predicate the chain itself uses.
 			 */
-			if ( ! $this->service->is_country_supported( $country, $level ) ) {
+			$country_supported = ( null !== $provider_override )
+				? $this->service->provider_serves_level( $provider, $level, $country )
+				: $this->service->is_country_supported( $country, $level );
+
+			if ( ! $country_supported ) {
 				return rest_ensure_response(
 					[
 						'suggestions'    => [],
@@ -939,9 +1032,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * D15-adjacent chain ({@see Location_Service::provider_for_list()})
 		 * declaring `list` at all, is a 404 — mirroring `/select`'s
 		 * inactive-layer 404 ({@see self::handle_select_request()}), not
-		 * `/suggest`'s 200+empty. This is deliberate: `related-list`/
-		 * `ajax-select2` modes are only ever OFFERED to the store setting when
-		 * the active provider already declares `list`
+		 * `/suggest`'s 200+empty. This is deliberate: `related-list` mode
+		 * (this route's own consumer — issue #380 correction: `ajax-select2`
+		 * queries `/suggest`, never this route, see
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_AJAX_SELECT2}'s
+		 * own docblock) is only ever OFFERED to either axis's store setting
+		 * when the active provider already declares `list`
 		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_offered_field_modes()}),
 		 * so a client legitimately reaching this route at all already believes
 		 * the capability exists — a 404 here is a genuine "this stopped being

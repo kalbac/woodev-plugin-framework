@@ -51,19 +51,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		 */
 		private array $supports = [];
 
-		/**
-		 * Initializes the integration.
-		 *
-		 * @param  Shipping_Plugin|null $plugin  the parent plugin class
-		 *
-		 * @since 1.4.0
-		 */
 		public function __construct( ?Shipping_Plugin $plugin = null ) {
 
+			// Read every field below off `$this->plugin`, NEVER off `$plugin`: the
+			// argument is optional, and WooCommerce itself takes the null path —
+			// `WC_Integrations::__construct()` instantiates every registered
+			// integration with NO arguments. Dereferencing the parameter therefore
+			// fataled with "Call to a member function get_id_underscored() on null"
+			// for any integration WooCommerce constructed itself, which is every
+			// integration that reaches the «Интеграции» tab.
 			$this->plugin = $plugin ?? $this->init_plugin();
 
-			$this->id                 = $plugin->get_id_underscored();
-			$this->method_title       = sprintf( '%s (v%s)', $plugin->get_plugin_name(), $plugin->get_version() );
+			$this->id                 = $this->plugin->get_id_underscored();
+			$this->method_title       = sprintf( '%s (v%s)', $this->plugin->get_plugin_name(), $this->plugin->get_version() );
 			$this->method_description = $this->get_method_description();
 
 			$this->init_form_fields();

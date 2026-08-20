@@ -25,11 +25,13 @@ defined( 'ABSPATH' ) || exit;
  * class-rest-api-settings-page.php's try/catch around `update_value()`, and its
  * try/catch(\Woodev_Plugin_Exception) around `get_value()`).
  *
- * `filter_visible_values()` intentionally diverges from the base class: an id no child owns is
- * DROPPED here, whereas `Woodev_Abstract_Settings::filter_visible_values()` passes an unknown id
- * through unchanged. Harmless in practice — the REST controller already scopes the submitted
- * values to the tab's declared setting ids via `array_intersect_key()` before calling this —
- * but worth knowing if this class is ever reused somewhere without that pre-filtering.
+ * `filter_visible_values()` resolves `show_if` conditions across the whole tab, so a field may
+ * depend on a controller owned by a sibling handler. It intentionally diverges from the base
+ * class for an id no child owns: that id is DROPPED here, whereas
+ * `Woodev_Abstract_Settings::filter_visible_values()` passes it through unchanged. Harmless in
+ * practice — the REST controller already scopes the submitted values to the tab's declared
+ * setting ids via `array_intersect_key()` before calling this — but worth knowing if this class
+ * is ever reused somewhere without that pre-filtering.
  *
  * @since 2.0.2
  */
@@ -75,17 +77,45 @@ final class Composite_Settings_Handler {
 
 	/**
 	 * @since 2.0.2
-	 * @param string[] $ids optional filter.
-	 * @return \Woodev_Setting[] keyed by id, children in order.
+	 * @since 2.0.2 When `$ids` is given, the result follows THAT order rather than child
+	 *              order — a `Settings_Section` interleaving fields from two handlers gets
+	 *              the order it declared.
+	 * @param string[] $ids optional filter, in the desired display order.
+	 * @return \Woodev_Setting[] keyed by id, in `$ids` order when given, else child order.
 	 */
 	public function get_settings( array $ids = [] ): array {
-		$out = [];
+		$collected = [];
+
 		foreach ( $this->children as $child ) {
 			foreach ( $child->get_settings( $ids ) as $sid => $setting ) {
-				$out[ $sid ] = $setting;
+				$collected[ $sid ] = $setting;
 			}
 		}
-		return $out;
+
+		if ( empty( $ids ) ) {
+			return $collected;
+		}
+
+		/*
+		 * Child-major order is wrong for a section that interleaves handlers. The
+		 * «Поля» section lists `region_field` (checkout handler) and the region field-type
+		 * axis (location handler) next to each other on purpose — each axis belongs beside
+		 * the field it governs — and collecting child by child pulled every location-owned
+		 * setting above every checkout-owned one, so the axes rendered detached from their
+		 * fields. Reorder to the caller's list; ids no child owns simply never appear,
+		 * which is this class's documented divergence.
+		 */
+		$ordered = [];
+
+		foreach ( $ids as $id ) {
+			$id = (string) $id;
+
+			if ( isset( $collected[ $id ] ) ) {
+				$ordered[ $id ] = $collected[ $id ];
+			}
+		}
+
+		return $ordered;
 	}
 
 	/**
@@ -143,11 +173,66 @@ final class Composite_Settings_Handler {
 	 * @return array<string,mixed>
 	 */
 	public function filter_visible_values( array $values ): array {
-		$out = [];
-		foreach ( $this->split_by_owner( $values ) as $i => $chunk ) {
-			$out += $this->children[ $i ]->filter_visible_values( $chunk );
+		// Resolve every field against the ORIGINAL tab-level submitted map before
+		// stripping. A condition may name a setting owned by a sibling handler;
+		// splitting first would make that controller look unregistered and turn it
+		// into the empty string.
+		$hidden = [];
+
+		foreach ( array_keys( $values ) as $setting_id ) {
+			$setting = $this->get_setting( (string) $setting_id );
+
+			if ( null === $setting ) {
+				$hidden[] = $setting_id;
+				continue;
+			}
+
+			$conditions = $setting->get_show_if_conditions();
+
+			if ( empty( $conditions ) ) {
+				continue;
+			}
+
+			if ( ! \Woodev_Setting::evaluate_conditions( $conditions, $this->effective_condition_values( $conditions, $values ) ) ) {
+				$hidden[] = $setting_id;
+			}
 		}
-		return $out;
+
+		foreach ( $hidden as $setting_id ) {
+			unset( $values[ $setting_id ] );
+		}
+
+		return $values;
+	}
+
+	/**
+	 * Builds the tab-wide controlling-value map a condition group needs.
+	 *
+	 * A submitted controller wins. Otherwise, a controller registered by any
+	 * child resolves through the owning child; an id no child owns is the empty
+	 * string, matching Woodev_Abstract_Settings::effective_condition_values().
+	 *
+	 * @since 2.0.2
+	 * @param array<string,mixed> $conditions show_if condition group.
+	 * @param array<string,mixed> $submitted  submitted setting id => value.
+	 * @return array<string,mixed> controlling setting id => effective value.
+	 */
+	private function effective_condition_values( array $conditions, array $submitted ): array {
+		$group  = isset( $conditions['setting'] ) ? [ $conditions ] : $conditions;
+		$result = [];
+
+		foreach ( $group as $condition ) {
+			if ( ! is_array( $condition ) || ! isset( $condition['setting'] ) ) {
+				continue;
+			}
+
+			$id            = (string) $condition['setting'];
+			$result[ $id ] = array_key_exists( $id, $submitted )
+				? $submitted[ $id ]
+				: ( null !== $this->get_setting( $id ) ? $this->get_value( $id ) : '' );
+		}
+
+		return $result;
 	}
 
 	/**

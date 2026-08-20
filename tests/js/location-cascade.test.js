@@ -154,9 +154,17 @@ function locationField( level, section = 'billing' ) {
  * `Checkout_Config::build()`'s shape including the `location` block
  * (`Checkout_Config::build_location_block()`).
  *
+ * `opts.mode` (issue #380 — two independent axes, `location.mode = { region,
+ * settlement }`, replacing the single shared mode string): a plain STRING
+ * applies uniformly to BOTH axes (the pre-#380 shape every existing caller in
+ * this file still passes — least-diff backward compatibility), an OBJECT
+ * `{ region, settlement }` sets each axis independently (only a test
+ * exercising the two axes' independence needs this form).
+ *
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
  *          levels?: Object, owners?: Object, countries?: string[], current?: Object|null,
- *          chain?: Object, implicit?: boolean, defaultCountry?: string}} opts
+ *          chain?: Object, implicit?: boolean, defaultCountry?: string,
+ *          mode?: string|{region?: string, settlement?: string}}} opts
  * @returns {Object}
  */
 function buildConfig( opts ) {
@@ -174,6 +182,11 @@ function buildConfig( opts ) {
 		fields[ fieldIdFor( 'address', section ) ] = locationField( 'address', section );
 	}
 
+	const modeOpt = o.mode !== undefined ? o.mode : 'typeahead';
+	const modeAxes = ( modeOpt && 'object' === typeof modeOpt )
+		? { region: modeOpt.region || 'typeahead', settlement: modeOpt.settlement || 'typeahead' }
+		: { region: modeOpt, settlement: modeOpt };
+
 	return {
 		fields,
 		endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
@@ -183,8 +196,9 @@ function buildConfig( opts ) {
 			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
-			// Task 13 (spec D7): 'typeahead' | 'related-list' | 'ajax-select2'.
-			mode: o.mode || 'typeahead',
+			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
+			// 'ajax-select2' — instead of one shared mode string (spec D7).
+			mode: modeAxes,
 			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
@@ -1995,6 +2009,62 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 			// NOT the region exception), so attachOne() — and therefore the registered
 			// renderer — is never even reached.
 			expect( settlementRenderer ).not.toHaveBeenCalled();
+		} );
+	} );
+
+	// -------------------------------------------------------------------
+	// Issue #380 — the two axes resolve INDEPENDENTLY (resolveModeRenderer()
+	// keys the region node off the region axis, every other node off the
+	// settlement axis) — the exact combination the legacy single `field_mode`
+	// could never express.
+	// -------------------------------------------------------------------
+
+	describe( 'issue #380 — region and settlement axes resolve independently', () => {
+		it( 'attaches the related-list region renderer while settlement stays the baseline typeahead', () => {
+			const regionRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			window.WoodevLocationRenderers = {
+				'related-list:region': regionRenderer,
+				// A settlement renderer registered under 'related-list' must NEVER be
+				// consulted here — the settlement axis is 'typeahead', not 'related-list'.
+				'related-list:settlement': jest.fn( () => ( { detach: jest.fn() } ) ),
+			};
+
+			boot( {
+				region: true,
+				settlement: true,
+				mode: { region: 'related-list', settlement: 'typeahead' },
+				levels: { RU: { region: false, settlement: true, address: true } },
+			} );
+
+			expect( regionRenderer ).toHaveBeenCalledTimes( 1 );
+			expect( window.WoodevLocationRenderers[ 'related-list:settlement' ] ).not.toHaveBeenCalled();
+			// The settlement node falls through to the baseline typeahead — no
+			// renderer registered for 'typeahead:settlement' or bare 'typeahead'.
+			expect( callFor( 'billing_city' ) ).toBeDefined();
+		} );
+
+		it( 'attaches a settlement-axis renderer while region stays native/typeahead', () => {
+			const settlementRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			window.WoodevLocationRenderers = {
+				'ajax-select2': settlementRenderer,
+			};
+
+			boot( {
+				region: true,
+				settlement: true,
+				mode: { region: 'typeahead', settlement: 'ajax-select2' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+			} );
+
+			// The settlement node resolves the bare 'ajax-select2' registry entry —
+			// the SAME lookup key the old shared-mode 'ajax-select2' used.
+			expect( settlementRenderer ).toHaveBeenCalledTimes( 1 );
+			// The region node's own axis is 'typeahead' — the region-only related-list
+			// exception (isRelatedListRegionNode) never engages, and no 'ajax-select2'
+			// call is made FOR the region node (only ever settlement, above).
+			expect( callFor( 'billing_state' ) ).toBeDefined();
 		} );
 	} );
 } );

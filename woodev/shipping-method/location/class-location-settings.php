@@ -8,23 +8,35 @@
  *
  * 1. `active_provider` — a select whose options are every registered provider's
  *    id => name, defaulting to {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_PROVIDER_ID}.
- * 2. `field_mode` (Task 13; spec D7) — a select whose OPTIONS are gated by the
- *    active provider's capabilities (typeahead always; related-list/ajax-select2
- *    only when it declares `list`) — computed by
- *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}, this
+ * 2. `field_mode_region` / `field_mode_settlement` (Task 13; spec D7; split into
+ *    two independent axes by issue #380 — each carries the SAME three values:
+ *    typeahead always; related-list/ajax-select2 offered on the SAME OPTIONS
+ *    gate, computed by
+ *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry}; this
  *    handler only ever renders whatever option set it was handed, exactly like
- *    `active_provider`'s own options.
+ *    `active_provider`'s own options) — and `address_suggestions` (Task 10;
+ *    issue #362), a plain boolean. All three DISPLAY on the «Поля» section
+ *    since issue #380 ({@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}),
+ *    though this handler still registers and owns them (ADR-005: the option
+ *    namespace, `woodev_location_*`, does not move with the section).
  * 3. `default_locality_policy` / `default_locality_record` / `default_locality_needs_repick`
  *    (Task 14; spec D11) — the store-level default-locality policy (`off` |
  *    `fixed` | `geoip`, `geoip` OPTIONS-gated by the active provider's `locate`
- *    capability the same way `field_mode` is gated by `list`), the merchant-picked
- *    FIXED record (JSON, written by {@see Location_Provider_Registry::set_default_locality_record()},
+ *    capability the same way the field-mode axes are gated by `list`), the
+ *    merchant-picked FIXED record (JSON, written by {@see Location_Provider_Registry::set_default_locality_record()},
  *    never typed free-hand), and the informational "needs re-picking" flag.
- * 4. Whatever the currently ACTIVE provider declares via
+ * 4. EVERY registered provider's own fields, declared via
  *    {@see \Woodev\Framework\Shipping\Location\Location_Provider::get_settings_fields()} —
- *    merged in verbatim, keyed by the provider's own field ids. A registered but
- *    NOT-active provider's fields are never merged in (spec §4.1: rendered on the
- *    shared surface, but only for the chosen provider).
+ *    merged in verbatim, keyed by the provider's own field ids, each already
+ *    carrying a `show_if` condition (ADR-008) computed by the caller
+ *    ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect_all_provider_fields()}).
+ *    This CHANGED (#375/#377, "dynamic, without saving"): previously only the
+ *    ACTIVE provider's fields were merged in at all, so switching the
+ *    `active_provider` select only changed the visible key fields after a
+ *    save. Now every provider's fields are always registered and the CLIENT
+ *    shows/hides them per `show_if` — this handler itself does not know or
+ *    care which provider is "active"; it only renders whatever fields (and
+ *    conditions) it was handed.
  *
  * This handler is deliberately data-only: it does not know how to collect
  * providers or resolve which one is active — {@see Location_Provider_Registry}
@@ -101,9 +113,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
-		 * @param array<string, array<string, mixed>> $provider_fields                 the active provider's declared
-		 *                                                                               settings fields, already resolved
-		 *                                                                               by the caller.
+		 * @param array<string, array<string, mixed>> $provider_fields                 EVERY registered provider's declared
+		 *                                                                               settings fields, each already carrying
+		 *                                                                               a `show_if` condition (#375/#377),
+		 *                                                                               resolved by the caller.
 		 * @param array<string, string>               $field_mode_options              offered `field_mode` select options
 		 *                                                                               (`id => label`), already gated by the
 		 *                                                                               active provider's capabilities.
@@ -128,17 +141,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		}
 
 		/**
-		 * Gets the settings ids this handler owns, in registration order — the
-		 * active-provider select, the field-mode select, the address-suggestions
-		 * checkbox (Task 10), the three default-locality settings (Task 14), then
-		 * the active provider's own fields. Used by {@see Location_Provider_Registry}
-		 * to build the `Settings_Section` without duplicating this handler's own
+		 * Gets the settings ids this handler owns THAT STILL LIVE ON THE
+		 * «Локация» SECTION, in registration order — the active-provider
+		 * select, the three default-locality settings (Task 14), then EVERY
+		 * registered provider's own fields (#375/#377 — not only the active
+		 * one's, see this class's own docblock), in provider-registration
+		 * order. Used by {@see Location_Provider_Registry} to build the
+		 * «Локация» `Settings_Section` without duplicating this handler's own
 		 * field list.
+		 *
+		 * The two field-mode axes and `address_suggentions` are DELIBERATELY
+		 * excluded (issue #380): the operator moved «Тип поля Регион», «Тип
+		 * поля НП» and «Подсказки для адреса» to the «Поля» section — this
+		 * handler still REGISTERS and OWNS those settings (option name
+		 * namespace stays `woodev_location_*`, ADR-005), it just no longer
+		 * reports them here. `Shipping_Settings_Tab::build_sections()` lists
+		 * them explicitly, interleaved with the `Checkout_Field_Settings`-owned
+		 * ids they sit next to, since section membership is a display
+		 * concern `Composite_Settings_Handler` already resolves independently
+		 * of which child handler owns a setting id.
+		 *
+		 * `default_locality_needs_repick` is ALSO deliberately excluded now
+		 * (issue #376, closing #370 variant 2): it is code-owned bookkeeping,
+		 * never a merchant decision, and stays registered/writable — it just
+		 * never renders. Its live equivalent already surfaces through the
+		 * `default_locality_policy` field's own description, see
+		 * {@see Location_Provider_Registry::apply_default_locality_status_note()}.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the three `default_locality_*` settings (Task 14; spec D11).
+		 * @since 2.0.2 `default_locality_needs_repick` removed from this list
+		 *              (issue #376/#370) — it never had a control and a
+		 *              merchant has nothing to see or do with it here.
 		 * @since 2.0.2 Added `address_suggestions`, right after `field_mode`
 		 *              (Task 10; issue #362; design S3/§3.1).
+		 * @since 2.0.2 Field-mode axes and `address_suggestions` moved out of
+		 *              this list — they now display in «Поля», not «Локация»
+		 *              (issue #380).
 		 *
 		 * @return string[]
 		 */
@@ -146,21 +185,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			return array_merge(
 				[
 					Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
-					Location_Provider_Registry::SETTING_FIELD_MODE,
-					Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
-					Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
 				],
 				array_keys( $this->provider_fields )
 			);
 		}
 
-		/**
-		 * {@inheritDoc}
-		 *
-		 * @since 2.0.2
-		 */
 		protected function register_settings() {
 
 			$this->register_setting(
@@ -172,31 +203,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => Location_Provider_Registry::DEFAULT_PROVIDER_ID,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'От выбранного провайдера зависит, откуда на чекауте берутся подсказки городов и адресов, и какие типы полей ниже вообще доступны — не каждый провайдер умеет отдавать готовый список для локального выбора.', 'woodev-plugin-framework' ),
+				]
+			);
 
+			// Issue #380: the single `field_mode` setting became two axes — the
+			// НП/Регион field's INPUT TYPE is independent per level (the operator
+			// found a case one shared value could not express: НП = `ajax-select2`
+			// while region stays `typeahead`, or the reverse). Both axes offer the
+			// SAME three values, from the SAME `$this->field_mode_options` map.
+			//
+			// `field_mode_region` alone carries a `show_if` on `region_field`
+			// (owned by the sibling `Checkout_Field_Settings` handler — resolved
+			// across handlers by `Composite_Settings_Handler`): once the region
+			// field is removed, this axis has nothing left to control and the
+			// control is hidden. The actual issue #369 enforcement is a
+			// read-side clamp in `Location_Provider_Registry::get_field_mode_region()`,
+			// never this `show_if` alone (design §7 — `show_if` only hides the
+			// control; `Composite_Settings_Handler::filter_visible_values()`
+			// splits a submission by owning child BEFORE evaluating conditions,
+			// so a cross-handler condition has no server-side enforcement power
+			// of its own).
 			$this->register_setting(
-				Location_Provider_Registry::SETTING_FIELD_MODE,
+				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
 				\Woodev_Setting::TYPE_STRING,
 				[
-					// Relabelled from «Режим отображения полей локации» (design S2 —
-					// s79 brainstorm): «field_mode» is the SAME setting the CDEK
-					// plugin's own "Выпадающий список городов" vocabulary maps onto
-					// (spec §4.1), so the shared surface names it after what it
-					// actually controls (the НП/Регион field's INPUT TYPE), not the
-					// old, vaguer "display mode" wording.
-					'name'    => __( 'Тип поля НП/Регион', 'woodev-plugin-framework' ),
+					'name'    => __( 'Тип поля Регион', 'woodev-plugin-framework' ),
+					'options' => $this->field_mode_options,
+					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
+					'show_if' => [
+						'setting' => 'region_field',
+						'value'   => 'show',
+					],
+				]
+			);
+			$this->register_control(
+				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					// Issue #373: a select's tooltip must explain the DIFFERENCE between
+					// values, not restate the label — "предустановленный список" and
+					// "список с поиском" look similar but one never talks to the server
+					// after the initial load and the other queries it on every keystroke.
+					'tooltip' => __( 'Как покупатель выбирает регион. «Текст с подсказками» — обычное поле, варианты появляются по мере ввода. «Предустановленный список» — весь список регионов загружается один раз, дальнейший поиск идёт в браузере без обращений к серверу. «Список с поиском» — раскрывающийся список, который запрашивает варианты у провайдера на каждый введённый символ.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Тип поля НП', 'woodev-plugin-framework' ),
 					'options' => $this->field_mode_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_FIELD_MODE, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). Если для региона выбран «Предустановленный список», это поле дополнительно блокируется, пока покупатель не выберет регион, и дальше предлагает пункты только внутри него.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			/*
 			 * `address_suggestions` (Task 10; issue #362; design S3/§3.1/§3.2):
 			 * whether the location layer serves the `address` suggest level at
-			 * all. Registered right after `field_mode` — design S3 puts it
-			 * directly under the provider block. No OPTIONS-gating like
-			 * `field_mode`/`default_locality_policy` above: this is a plain
+			 * all. No OPTIONS-gating like the two axes above: this is a plain
 			 * boolean, and its AVAILABILITY (rather than its offered values) is
 			 * what varies — that is expressed as a DISABLED control, applied by
 			 * Location_Provider_Registry::register_settings() once this handler
@@ -212,8 +289,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => true,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, \Woodev_Control::TYPE_CHECKBOX );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Показывать подсказки при вводе улицы и дома на чекауте. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним.', 'woodev-plugin-framework' ),
+				]
+			);
 
+			/*
+			 * `default_locality_policy`'s own `description` is left EMPTY here on
+			 * purpose (issue #373 does not add one) — {@see Location_Provider_Registry::apply_default_locality_status_note()}
+			 * writes a LIVE status note directly into this same `Woodev_Setting`'s
+			 * description AFTER `register_settings()` finishes, and that write only
+			 * has any visible effect while the CONTROL's own snapshot of the
+			 * description (taken by `register_control()` below, at THIS point in
+			 * time) is itself empty — {@see \Woodev\Framework\Settings\Field_Schema::from_handler()}
+			 * prefers a non-empty `$control->get_description()` over the setting's,
+			 * so a static description registered here would permanently shadow the
+			 * dynamic status note. The value-difference copy therefore lives in the
+			 * TOOLTIP instead, which nothing overwrites later.
+			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 				\Woodev_Setting::TYPE_STRING,
@@ -223,25 +319,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 					'default' => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF,
 				]
 			);
-			$this->register_control( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY, \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Что подставляется в поля региона и города до того, как покупатель начал сам вводить адрес. «Отключено» — ничего не подставляется. «Фиксированная локация» — всегда один и тот же город, выбранный вами ниже. «По IP-адресу покупателя» — город определяется по IP каждого покупателя; доступно только пока провайдер умеет геолоцировать.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			/*
 			 * Serialized Location_Record JSON (Task 14), written through
 			 * Location_Provider_Registry::set_default_locality_record() — the
-			 * FUTURE admin picker's own selection (its own, later card; no picker
-			 * UI ships in this task), never free text the merchant types here.
+			 * admin picker's own selection, never free text the merchant types
+			 * by hand.
 			 *
-			 * Deliberately registered WITHOUT a control (review finding F4): no
-			 * picker exists yet in this PR, so the only UI a control would offer
-			 * today is a bare textarea holding raw JSON — directly contradicting
-			 * this field's own "never typed free-hand" contract above. Keeping
-			 * the setting itself registered (just uncontrolled) preserves the
-			 * write path this class's own docblock documents for the picker to
-			 * use once built (a plain settings-API field written through
-			 * Woodev_Abstract_Settings::update_value(), the same as every other
-			 * store-level Location setting) — only the generic settings-page
-			 * React surface's editable rendering is what this withholds, by
-			 * never giving Field_Schema::from_handler() a controlType for it.
+			 * Issue #376 (closing #370): a real `TYPE_LOCATION_PICKER` control
+			 * now backs this setting (review finding F4's original "no control"
+			 * withholding is gone — a picker exists now, see
+			 * `location-picker-field.js`) and is shown ONLY while the sibling
+			 * `default_locality_policy` field is `fixed` (`show_if`, ADR-008;
+			 * same handler, so this condition gets full server-side enforcement
+			 * via `filter_visible_values()`, unlike the CROSS-handler conditions
+			 * documented on `field_mode_region` above). The control's `country`
+			 * arg is resolved ONCE here, at registration time, through
+			 * {@see Location_Service::resolve_default_country()} — steps 2+3 of
+			 * the store-country cascade (step 1, a live checkout field, does not
+			 * exist on an admin screen) — never a second, hand-rolled fallback
+			 * on the client.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
@@ -249,18 +353,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				[
 					'name'    => __( 'Зафиксированная локация', 'woodev-plugin-framework' ),
 					'default' => '',
+					'show_if' => [
+						'setting' => Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+						'value'   => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+					],
+				]
+			);
+			$this->register_control(
+				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
+				\Woodev_Control::TYPE_LOCATION_PICKER,
+				[
+					'country' => ( new Location_Service() )->resolve_default_country(),
+					'tooltip' => __( 'Город, который подставляется покупателю по умолчанию при политике «Фиксированная локация». Выбирается через поиск и сохраняется как готовая запись — вписывать его вручную не нужно.', 'woodev-plugin-framework' ),
 				]
 			);
 
 			/*
 			 * Informational flag — see Location_Provider_Registry::get_default_locality_needs_repick().
-			 * Also registered WITHOUT a control (review finding F4): this flag is
+			 * Registered WITHOUT a control (review finding F4): this flag is
 			 * CODE-OWNED bookkeeping, never a merchant decision — an editable
 			 * toggle let a merchant silently switch it off and mask a genuinely
-			 * stranded default. The settings page instead surfaces the live
-			 * equivalent of this flag through the `default_locality_policy`
-			 * field's own description — see
+			 * stranded default. Issue #376/#370 (variant 2) additionally drops
+			 * it from {@see self::get_owned_setting_ids()} entirely — it stays
+			 * registered and writable (the picker's own write path uses it
+			 * indirectly through the registry), it simply never renders, at any
+			 * policy. The settings page instead surfaces the live equivalent of
+			 * this flag through the `default_locality_policy` field's own
+			 * description — see
 			 * Location_Provider_Registry::apply_default_locality_status_note().
+			 *
+			 * No control means no tooltip either (issue #373's own rule: a
+			 * tooltip can only live on a control) — nothing to fill in here.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
@@ -276,32 +399,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			}
 		}
 
-		/**
-		 * Registers one field declared by the active provider's
-		 * {@see Location_Provider::get_settings_fields()}.
-		 *
-		 * `type` is consumed positionally by {@see Woodev_Abstract_Settings::register_setting()},
-		 * so it is extracted from the field array rather than passed through inside
-		 * `$args` (matching how {@see \Woodev\Framework\Shipping\Map\Map_Provider::get_settings_fields()}
-		 * is itself consumed). The provider's shape says nothing about which admin
-		 * CONTROL to render — that vocabulary belongs to
-		 * {@see Woodev_Abstract_Settings::register_control()}, one layer up from
-		 * what a provider (which never touches the settings-PAGE surface, only the
-		 * settings-API shape) can declare — so the control type is inferred here
-		 * from what the field itself already says: `options` present -> a select;
-		 * `sensitive` -> a password field (matching the `secret`/`conn_password`
-		 * precedent in the test fixture's own settings); otherwise plain text.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string               $field_id field id.
-		 * @param array<string, mixed> $field    field descriptor (settings-API `register_setting()` args shape + `type`).
-		 *
-		 * @return void
-		 */
 		private function register_provider_field( string $field_id, array $field ): void {
 			$type = $field['type'] ?? \Woodev_Setting::TYPE_STRING;
 			unset( $field['type'] );
+
+			// Issue #373: a provider declares its OWN field copy (name/description/
+			// tooltip) right alongside the field itself — that is where a plugin
+			// author would naturally put it. `tooltip` is pulled out here because it
+			// is a CONTROL arg (`register_control()`), not a setting arg
+			// (`register_setting()` below has no use for it and would silently
+			// ignore it if left in `$field`).
+			$tooltip = (string) ( $field['tooltip'] ?? '' );
+			unset( $field['tooltip'] );
 
 			$this->register_setting( $field_id, $type, $field );
 
@@ -313,7 +422,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				$control_type = \Woodev_Control::TYPE_TEXT;
 			}
 
-			$this->register_control( $field_id, $control_type );
+			$control_args = [];
+			if ( '' !== $tooltip ) {
+				$control_args['tooltip'] = $tooltip;
+			}
+
+			$this->register_control( $field_id, $control_type, $control_args );
 		}
 	}
 

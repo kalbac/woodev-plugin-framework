@@ -206,6 +206,71 @@ class Fake_Locate_Location_Provider extends Abstract_Location_Provider {
 }
 
 /**
+ * A fake provider that serves `address` ONLY for one specific country — exists
+ * to prove the DaData-fields wide `show_if` condition (#375/#377) is evaluated
+ * for the STORE'S OWN country via {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()},
+ * never a country-blind union: "serves address" genuinely varies by country
+ * for a real provider (the bundled DaData provider itself is the reference
+ * case — RU/BY/KZ/UZ but not AM/AZ/KG/TJ/TM), so a country-blind computation
+ * would answer a different question than the one the merchant is actually
+ * configuring for (coordinator correction, s82).
+ */
+class Fake_Country_Scoped_Location_Provider extends Abstract_Location_Provider {
+
+	private string $id;
+	private string $name;
+
+	/** @var string[] */
+	private array $countries;
+
+	private string $address_country;
+	private bool $configured;
+
+	/**
+	 * @param string[] $countries Countries this provider covers at all.
+	 */
+	public function __construct( string $id, string $name, array $countries, string $address_country, bool $configured = true ) {
+		$this->id              = $id;
+		$this->name            = $name;
+		$this->countries       = $countries;
+		$this->address_country = strtoupper( $address_country );
+		$this->configured      = $configured;
+	}
+
+	public function get_id(): string {
+		return $this->id;
+	}
+
+	public function get_name(): string {
+		return $this->name;
+	}
+
+	public function get_countries(): array {
+		return $this->countries;
+	}
+
+	public function is_configured(): bool {
+		return $this->configured;
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_ADDRESS ];
+	}
+
+	protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
+		if ( strtoupper( trim( $country ) ) === $this->address_country ) {
+			return $levels;
+		}
+
+		return array_values( array_diff( $levels, [ Location_Record::LEVEL_ADDRESS ] ) );
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+}
+
+/**
  * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
  * @covers \Woodev\Framework\Shipping\Location\Location_Settings
  */
@@ -225,6 +290,12 @@ final class LocationProviderRegistryTest extends TestCase {
 				return array_merge( (array) $defaults, (array) $args );
 			}
 		);
+		// #375/#377: register_settings() now builds a `show_if` condition for the
+		// bundled default provider's own fields via Location_Service::resolve_default_country(),
+		// which reads wc_get_base_location() — a harmless 'RU' default every test in
+		// this file gets unless it re-stubs this itself (matching the same blanket-
+		// default convention LocationServiceTest/LocationServiceDefaultTest already use).
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		Location_Provider_Registry::instance()->reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
@@ -575,7 +646,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $acme, $other ] );
-		Functions\when( 'get_option' )->justReturn( 'other' );
+		$this->stub_active_provider_option( 'other' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -607,7 +678,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ $acme ] );
 		// Stored value names a provider nothing is (or was ever) registered under.
-		Functions\when( 'get_option' )->justReturn( 'ghost-id' );
+		$this->stub_active_provider_option( 'ghost-id' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -681,9 +752,21 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Provider-declared settings seam: merged for the ACTIVE provider only
+	// Provider-declared settings seam: EVERY provider's fields, show_if-gated
+	// (#375/#377 — no longer merged for the active provider only)
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Every registered provider's fields are now ALWAYS registered on the
+	 * handler (#375/#377), each carrying its OWN `show_if` condition on
+	 * `active_provider` — the active provider's field is visible right now
+	 * (its condition matches the CURRENT stored value), the inactive
+	 * provider's field is registered too but its condition does not match.
+	 * Field ids deliberately avoid `token`/`clean_secret` — those collide
+	 * with the REAL bundled Dadata_Provider, which registers unconditionally
+	 * in every test in this file, and that collision is covered by its own
+	 * dedicated test below.
+	 */
 	public function test_active_providers_declared_settings_are_rendered_on_the_surface(): void {
 		// A distinct id (not DEFAULT_PROVIDER_ID — that belongs to the now-real
 		// bundled Dadata_Provider, Task 7) made active via an explicit stored
@@ -692,8 +775,8 @@ final class LocationProviderRegistryTest extends TestCase {
 			'active-fixture',
 			'Active',
 			[
-				'token' => [
-					'name'      => 'Token',
+				'active_fixture_key' => [
+					'name'      => 'Active fixture key',
 					'type'      => \Woodev_Setting::TYPE_STRING,
 					'sensitive' => true,
 					'default'   => '',
@@ -722,8 +805,27 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$handler = $registry->get_settings_handler();
 		$this->assertNotNull( $handler );
-		$this->assertNotNull( $handler->get_setting( 'token' ), 'the ACTIVE provider field must be rendered' );
-		$this->assertNull( $handler->get_setting( 'inactive_secret' ), 'a NON-active provider field must not be rendered' );
+
+		$active_setting = $handler->get_setting( 'active_fixture_key' );
+		$this->assertNotNull( $active_setting, 'the active provider field must be REGISTERED' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'active-fixture' ],
+			$active_setting->get_show_if_conditions(),
+			'gated by a plain equality show_if on its own provider id'
+		);
+
+		$inactive_setting = $handler->get_setting( 'inactive_secret' );
+		$this->assertNotNull( $inactive_setting, 'a NON-active provider field must STILL be registered (#375/#377 — dynamic without saving)' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'inactive' ],
+			$inactive_setting->get_show_if_conditions()
+		);
+
+		// The whole point: evaluated against the CURRENT active_provider value,
+		// the active fixture's field is visible and the inactive one is not.
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'active-fixture' ];
+		$this->assertTrue( \Woodev_Setting::evaluate_conditions( $active_setting->get_show_if_conditions(), $submitted ) );
+		$this->assertFalse( \Woodev_Setting::evaluate_conditions( $inactive_setting->get_show_if_conditions(), $submitted ) );
 	}
 
 	public function test_provider_field_marked_sensitive_gets_a_password_control(): void {
@@ -731,8 +833,8 @@ final class LocationProviderRegistryTest extends TestCase {
 			'active-fixture',
 			'Active',
 			[
-				'token' => [
-					'name'      => 'Token',
+				'active_fixture_key' => [
+					'name'      => 'Active fixture key',
 					'type'      => \Woodev_Setting::TYPE_STRING,
 					'sensitive' => true,
 					'default'   => '',
@@ -748,7 +850,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$setting = $registry->get_settings_handler()->get_setting( 'token' );
+		$setting = $registry->get_settings_handler()->get_setting( 'active_fixture_key' );
 
 		$this->assertTrue( $setting->is_sensitive() );
 		$this->assertSame( \Woodev_Control::TYPE_PASSWORD, $setting->get_control()->get_type() );
@@ -808,6 +910,311 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Field-id collisions across two DIFFERENT providers (#375/#377)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The shared option namespace (`woodev_location_*`) means two UNRELATED
+	 * providers can now declare the same field id — first-registered wins and
+	 * the conflict is reported, mirroring {@see Location_Provider_Registry::inject_related_list_states()}'s
+	 * own duplicate-LABEL discipline and {@see Location_Provider_Registry::register_provider()}'s
+	 * own duplicate-ID discipline.
+	 */
+	public function test_duplicate_field_id_across_two_providers_the_first_registration_wins_and_warns(): void {
+		$first = new Fake_Location_Provider(
+			'first',
+			'First',
+			[ 'shared_key' => [ 'name' => 'From first', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => 'from-first' ] ]
+		);
+		$second = new Fake_Location_Provider(
+			'second',
+			'Second',
+			[ 'shared_key' => [ 'name' => 'From second', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => 'from-second' ] ]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $first, $second ] );
+		$this->stub_active_provider_option( 'first' );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( 'shared_key' );
+
+		$this->assertNotNull( $setting );
+		$this->assertSame( 'from-first', $setting->get_default(), 'the FIRST registration wins the collision' );
+		$this->assertSame(
+			[ 'setting' => Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, 'value' => 'first' ],
+			$setting->get_show_if_conditions(),
+			'the winning field keeps ITS OWN provider\'s show_if, not the loser\'s'
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// is_configured() === false must NOT remove a provider from the select
+	// -------------------------------------------------------------------------
+
+	public function test_an_unconfigured_provider_is_not_removed_from_the_active_provider_select(): void {
+		$unconfigured = new Fake_Location_Provider(
+			'unconfigured',
+			'Unconfigured',
+			[
+				'required_key' => [
+					'name'     => 'Required key',
+					'type'     => \Woodev_Setting::TYPE_STRING,
+					'required' => true,
+					'default'  => '',
+				],
+			]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $unconfigured ] );
+		$this->stub_active_provider_option( 'unconfigured' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $unconfigured->is_configured(), 'sanity: the fixture really is unconfigured (a required field with no value)' );
+
+		$provider_select = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER );
+		$this->assertArrayHasKey(
+			'unconfigured',
+			$provider_select->get_options(),
+			'is_configured() === false must NOT remove a provider from the select (#375)'
+		);
+		$this->assertInstanceOf( Fake_Location_Provider::class, $registry->get_active_provider(), 'an unconfigured provider can still be resolved as ACTIVE' );
+	}
+
+	// -------------------------------------------------------------------------
+	// Saving must not wipe an inactive provider's stored keys (#375/#377)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * `filter_visible_values()` strips a hidden field from the SUBMITTED map
+	 * only — it never calls `update_option()`/`delete_option()` itself, so an
+	 * inactive provider's ALREADY-STORED value is never touched by a save that
+	 * merely doesn't include it. This is the entire safety of the "register
+	 * every provider's fields" approach (#375/#377).
+	 */
+	public function test_hidden_provider_field_is_stripped_from_the_submitted_map_only(): void {
+		$active = new Fake_Location_Provider(
+			'active-fixture',
+			'Active',
+			[ 'active_fixture_key' => [ 'name' => 'Active key', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => '' ] ]
+		);
+		$inactive = new Fake_Location_Provider(
+			'inactive',
+			'Inactive',
+			[ 'inactive_secret' => [ 'name' => 'Inactive secret', 'type' => \Woodev_Setting::TYPE_STRING, 'default' => '' ] ]
+		);
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $active, $inactive ] );
+		$this->stub_active_provider_option( 'active-fixture' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$submitted = [
+			Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'active-fixture',
+			'active_fixture_key' => 'new-active-value',
+			// A crafted/stale submission still carrying the HIDDEN field — this
+			// is exactly what a naive "merge and save whatever was posted"
+			// implementation would wipe.
+			'inactive_secret'    => 'attempted-overwrite',
+		];
+
+		$filtered = $registry->get_settings_handler()->filter_visible_values( $submitted );
+
+		$this->assertArrayHasKey( 'active_fixture_key', $filtered, 'a VISIBLE field survives the filter' );
+		$this->assertArrayNotHasKey( 'inactive_secret', $filtered, 'a HIDDEN field is stripped from what gets persisted' );
+	}
+
+	// -------------------------------------------------------------------------
+	// The bundled default provider's own fields (#377) — the WIDE `in`
+	// condition, evaluated for the STORE's own country
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The real bundled Dadata_Provider registers under `DEFAULT_PROVIDER_ID`
+	 * ('dadata') in every test in this file (autoloaded, `class_exists()`
+	 * always true) — so `token`/`clean_secret` always exist on the handler,
+	 * and their `show_if` is always the WIDE `in` condition, never the plain
+	 * equality one every other provider's field gets.
+	 */
+	public function test_dadata_own_fields_get_the_wide_in_show_if_condition(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$token = $registry->get_settings_handler()->get_setting( 'token' );
+		$this->assertNotNull( $token );
+
+		$conditions = $token->get_show_if_conditions();
+		$this->assertSame( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER, $conditions['setting'] );
+		$this->assertSame( 'in', $conditions['operator'] );
+		$this->assertContains( 'dadata', $conditions['value'], 'DaData is unconditionally in its own wide list' );
+	}
+
+	/**
+	 * A carrier that DOES serve `address` FOR THE STORE'S OWN COUNTRY must NOT
+	 * appear in DaData's wide `in` list — DaData's keys stay hidden while such
+	 * a carrier is active, because its OWN address suggestions already work
+	 * and DaData is not needed as a fallback (operator's #377 reasoning, its
+	 * converse).
+	 */
+	public function test_dadata_fields_hide_a_carrier_that_serves_address_for_the_store_country(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+		$kz_carrier = new Fake_Country_Scoped_Location_Provider( 'kz-carrier', 'KZ Carrier', [ 'KZ' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $kz_carrier ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertNotContains(
+			'kz-carrier',
+			$conditions['value'],
+			'kz-carrier serves address for the store\'s own country (KZ) — DaData keys must stay hidden while it is active'
+		);
+	}
+
+	/**
+	 * An address-capable provider still loses the runtime fallback decision
+	 * when it is unconfigured, so DaData's credentials must remain reachable.
+	 */
+	public function test_dadata_fields_show_an_unconfigured_carrier_that_serves_address_for_the_store_country(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+		$kz_carrier = new Fake_Country_Scoped_Location_Provider( 'unconfigured-kz-carrier', 'Unconfigured KZ Carrier', [ 'KZ' ], 'KZ', false );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $kz_carrier ] );
+		$this->stub_active_provider_option( 'unconfigured-kz-carrier' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertContains(
+			'unconfigured-kz-carrier',
+			$conditions['value'],
+			'the runtime falls through an unconfigured address-capable carrier, so DaData keys must be reachable'
+		);
+
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'unconfigured-kz-carrier' ];
+		$this->assertTrue(
+			\Woodev_Setting::evaluate_conditions( $conditions, $submitted ),
+			'the DaData key fields must actually SHOW while the unconfigured carrier is active'
+		);
+	}
+
+	/**
+	 * THE COUNTRY-SENSITIVITY PROOF (coordinator correction, s82): the SAME
+	 * provider that serves `address` for KZ does NOT serve it for RU — so
+	 * whether its id lands in DaData's wide list depends on the STORE's own
+	 * country, never a country-blind "does this provider EVER serve address"
+	 * union. Same fixture as the test above, opposite store country.
+	 */
+	public function test_dadata_fields_show_the_same_carrier_for_a_different_store_country_it_does_not_serve_address_in(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+
+		$kz_carrier = new Fake_Country_Scoped_Location_Provider( 'kz-carrier', 'KZ Carrier', [ 'KZ', 'RU' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $kz_carrier ] );
+		$this->stub_active_provider_option( 'kz-carrier' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertContains(
+			'kz-carrier',
+			$conditions['value'],
+			'the same carrier does NOT serve address for the store\'s own country (RU) — DaData keys must be reachable as the fallback'
+		);
+
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'kz-carrier' ];
+		$this->assertTrue(
+			\Woodev_Setting::evaluate_conditions( $conditions, $submitted ),
+			'the DaData key fields must actually SHOW while kz-carrier is active, for this store country'
+		);
+	}
+
+	/**
+	 * A carrier NOT even covering the store's country (no `get_countries()`
+	 * overlap) trivially cannot serve address there either — it lands in
+	 * DaData's wide list too, via the SAME {@see \Woodev\Framework\Shipping\Location\Location_Service::provider_serves_level()}
+	 * predicate (its own country-coverage gate), not a second hand-rolled check.
+	 */
+	public function test_dadata_fields_show_a_carrier_that_does_not_cover_the_store_country_at_all(): void {
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+
+		$uncovering_carrier = new Fake_Country_Scoped_Location_Provider( 'elsewhere-carrier', 'Elsewhere', [ 'KZ' ], 'KZ' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $uncovering_carrier ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+
+		$this->assertContains( 'elsewhere-carrier', $conditions['value'] );
+	}
+
+	/**
+	 * THE "test-list" SCENARIO (coordinator correction, s82): a list-only
+	 * carrier that NEVER serves address, for ANY country — {@see Fake_Location_Provider}
+	 * itself, matching the rig's own `test-list` fixture shape exactly. The
+	 * #375 target table's "test-list shows nothing" is about test-list's OWN
+	 * fields and its OWN notice — NOT about DaData's fallback keys, which
+	 * correctly stay reachable here (the converse of the operator's #377
+	 * reasoning: this carrier brings no addresses, so DaData is the only
+	 * thing that can, and its keys must be enterable).
+	 */
+	public function test_dadata_fields_show_while_a_test_list_shaped_provider_is_active(): void {
+		$list_only = new Fake_Location_Provider( 'test-list-like', 'List-only', [] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_only ] );
+		$this->stub_active_provider_option( 'test-list-like' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$conditions = $registry->get_settings_handler()->get_setting( 'token' )->get_show_if_conditions();
+		$this->assertContains( 'test-list-like', $conditions['value'] );
+
+		$submitted = [ Location_Provider_Registry::SETTING_ACTIVE_PROVIDER => 'test-list-like' ];
+		$this->assertTrue(
+			\Woodev_Setting::evaluate_conditions( $conditions, $submitted ),
+			'DaData key fields must actually SHOW while a test-list-shaped (list-only, never-address) provider is active'
+		);
+	}
+
+	// -------------------------------------------------------------------------
 	// reset_for_tests()
 	// -------------------------------------------------------------------------
 
@@ -831,6 +1238,11 @@ final class LocationProviderRegistryTest extends TestCase {
 	// Task 13 (spec D7) — offered field modes = f(active provider capabilities)
 	// -------------------------------------------------------------------------
 
+	/**
+	 * DaData has no `list` capability, so `related-list` (the one value still
+	 * gated on it) is never offered — but `ajax-select2` IS (issue #380
+	 * correction, see {@see self::test_offered_field_modes_include_ajax_select2_even_without_list_capability()}).
+	 */
 	public function test_offered_field_modes_typeahead_only_for_the_real_dadata_provider(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] ); // active provider falls back to the bundled DaData default.
@@ -839,7 +1251,10 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $registry->get_offered_field_modes() );
+		$this->assertSame(
+			[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
+			$registry->get_offered_field_modes()
+		);
 	}
 
 	public function test_offered_field_modes_include_related_list_and_ajax_select2_for_a_list_capable_active_provider(): void {
@@ -861,17 +1276,24 @@ final class LocationProviderRegistryTest extends TestCase {
 
 	public function test_offered_field_modes_typeahead_only_when_no_active_provider_resolves(): void {
 		// Gate open, but nothing collected yet — get_active_provider() is null.
+		// `ajax-select2` is STILL offered (issue #380 — unconditional now); only
+		// `related-list` needs a resolved, list-capable provider.
 		Functions\when( 'add_action' )->justReturn( true );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 
-		$this->assertSame( [ Location_Provider_Registry::MODE_TYPEAHEAD ], $registry->get_offered_field_modes() );
+		$this->assertSame(
+			[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
+			$registry->get_offered_field_modes()
+		);
 	}
 
 	/**
-	 * The settings surface's own `field_mode` select must offer EXACTLY the
-	 * same options {@see Location_Provider_Registry::get_offered_field_modes()}
+	 * The settings surface's own two field-mode axes (issue #380: same
+	 * gate, same options, for BOTH `field_mode_region` and
+	 * `field_mode_settlement`) must offer EXACTLY the same options
+	 * {@see Location_Provider_Registry::get_offered_field_modes()}
 	 * computes — proving the registration-time computation (which cannot call
 	 * `get_active_provider()` — the settings handler does not exist yet, see
 	 * that private helper's own docblock) agrees with the read-time one.
@@ -887,13 +1309,20 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+		$region_setting     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION );
+		$settlement_setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT );
 
 		$this->assertSame(
-			array_keys( $setting->get_options() ),
+			array_keys( $region_setting->get_options() ),
 			$registry->get_offered_field_modes()
 		);
-		$this->assertSame( \Woodev_Control::TYPE_SELECT, $setting->get_control()->get_type() );
+		$this->assertSame(
+			array_keys( $settlement_setting->get_options() ),
+			$registry->get_offered_field_modes(),
+			'both axes share the same offering gate (issue #380)'
+		);
+		$this->assertSame( \Woodev_Control::TYPE_SELECT, $region_setting->get_control()->get_type() );
+		$this->assertSame( \Woodev_Control::TYPE_SELECT, $settlement_setting->get_control()->get_type() );
 	}
 
 	/**
@@ -930,13 +1359,13 @@ final class LocationProviderRegistryTest extends TestCase {
 				return $default;
 			}
 		);
-		Functions\when( 'get_option' )->justReturn( 'acme' );
+		$this->stub_active_provider_option( 'acme' );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
 
-		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION );
 
 		$this->assertSame(
 			$registry->get_offered_field_modes(),
@@ -951,10 +1380,11 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Task 13 — get_field_mode(): default + clamp against the offered set
+	// Issue #380 — get_field_mode_region()/get_field_mode_settlement(): default
+	// + clamp against the offered set, split from the legacy get_field_mode()
 	// -------------------------------------------------------------------------
 
-	public function test_field_mode_defaults_to_typeahead(): void {
+	public function test_field_mode_region_defaults_to_typeahead(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 		Functions\when( 'get_option' )->justReturn( null );
@@ -963,10 +1393,28 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
 	}
 
-	public function test_field_mode_returns_the_stored_value_when_it_is_offered(): void {
+	public function test_field_mode_settlement_defaults_to_typeahead(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
+	}
+
+	/**
+	 * The two axes are genuinely INDEPENDENT (issue #380's whole point): a
+	 * store can carry `region = related-list` while `settlement = typeahead`
+	 * at the same time — the exact combination the legacy single `field_mode`
+	 * could never express.
+	 */
+	public function test_field_mode_region_and_settlement_are_independent(): void {
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -976,7 +1424,37 @@ final class LocationProviderRegistryTest extends TestCase {
 				if ( 'woodev_location_active_provider' === $name ) {
 					return 'list-fixture';
 				}
-				if ( 'woodev_location_field_mode' === $name ) {
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+				if ( 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_TYPEAHEAD;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
+	}
+
+	/**
+	 * A stored `related-list` value from BEFORE a provider switch to a
+	 * non-`list` provider (e.g. back to DaData) must never be served as-is —
+	 * clamps to typeahead, the one mode every provider can always back. Pins
+	 * BOTH axes, since each clamps against the SAME offered set independently.
+	 */
+	public function test_field_mode_axes_clamp_a_stored_value_the_current_active_provider_no_longer_supports(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] ); // active provider falls back to DaData (no `list`).
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_field_mode_region' === $name || 'woodev_location_field_mode_settlement' === $name ) {
 					return Location_Provider_Registry::MODE_RELATED_LIST;
 				}
 
@@ -988,20 +1466,43 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
 	}
 
 	/**
-	 * A stored `related-list` value from BEFORE a provider switch to a
-	 * non-`list` provider (e.g. back to DaData) must never be served as-is —
-	 * clamps to typeahead, the one mode every provider can always back.
+	 * Issue #369 closure: with `region_field = remove`, the region axis
+	 * clamps to typeahead REGARDLESS of what is stored — the derived
+	 * "предустановленный список" overlay this axis drives can therefore never
+	 * engage while the region field itself is gone, so `region_field=remove`
+	 * combined with a list-mode region (the original silent НП breakage)
+	 * becomes unconstructible. This is a READ-side clamp
+	 * (`Location_Provider_Registry::get_field_mode_region()` reading
+	 * `Checkout_Field_Settings::effective('region_field')` across handlers via
+	 * `Shipping_Settings_Tab::instance()->get_field_settings()`), never a
+	 * `show_if`-only mechanism — `Composite_Settings_Handler::filter_visible_values()`
+	 * splits a submission by owning child BEFORE evaluating conditions, so a
+	 * cross-handler `show_if` alone has no server-side enforcement power
+	 * (design §7).
 	 */
-	public function test_field_mode_clamps_a_stored_value_the_current_active_provider_no_longer_supports(): void {
+	public function test_field_mode_region_clamps_to_typeahead_when_region_field_is_removed(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
 		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [] ); // active provider falls back to DaData (no `list`).
+		$this->stub_providers_filter( [ $list_provider ] );
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) {
-				return 'woodev_location_field_mode' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+				if ( 'woodev_checkout_fields_region_field' === $name ) {
+					return 'remove';
+				}
+
+				return $default;
 			}
 		);
 
@@ -1009,13 +1510,162 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+		$this->assertSame(
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			$registry->get_field_mode_region(),
+			'region_field=remove must clamp the region axis to typeahead regardless of the stored value'
+		);
 	}
 
-	public function test_field_mode_is_typeahead_while_the_gate_is_closed(): void {
+	/**
+	 * The settlement axis carries no `region_field` clamp of its own — the
+	 * settlement level has nothing analogous to remove. `region_field=remove`
+	 * must not affect it.
+	 */
+	public function test_field_mode_settlement_is_unaffected_by_region_field_removal(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+				if ( 'woodev_checkout_fields_region_field' === $name ) {
+					return 'remove';
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_settlement() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Issue #380 — migrate_legacy_field_mode(): the framework ships VENDORED
+	// inside plugins, so an untagged snapshot may already hold the legacy
+	// single `field_mode` option even though no TAGGED release ever did.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A small in-memory options store — `get_option()`/`update_option()`/
+	 * `delete_option()` all read/write the SAME array — needed here (unlike
+	 * every other test in this file) because the migration's own effect must
+	 * be observable through a LATER `get_option()` read within the same
+	 * request, not merely asserted as a call that happened.
+	 *
+	 * @param array<string, mixed> $seed initial option values.
+	 * @return array<string, mixed> the live store, passed BY REFERENCE into
+	 *                              the three stubs — mutate it directly to
+	 *                              change what a later `get_option()` sees.
+	 */
+	private function stub_options_store( array $seed ): array {
+		$options = $seed;
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( &$options ) {
+				return array_key_exists( $name, $options ) ? $options[ $name ] : $default;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( &$options ) {
+				$options[ $name ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_option' )->alias(
+			static function ( $name ) use ( &$options ) {
+				unset( $options[ $name ] );
+
+				return true;
+			}
+		);
+
+		return $options;
+	}
+
+	public function test_migrate_legacy_field_mode_decomposes_losslessly_onto_both_axes(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$this->stub_options_store( [ 'woodev_location_field_mode' => Location_Provider_Registry::MODE_AJAX_SELECT2 ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_AJAX_SELECT2, $registry->get_field_mode_settlement() );
+	}
+
+	public function test_migrate_legacy_field_mode_deletes_the_legacy_option(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		Functions\expect( 'delete_option' )->once()->with( 'woodev_location_field_mode' )->andReturn( true );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				return 'woodev_location_field_mode' === $name ? Location_Provider_Registry::MODE_TYPEAHEAD : $default;
+			}
+		);
+		Functions\when( 'update_option' )->justReturn( true );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+	}
+
+	public function test_migrate_legacy_field_mode_is_a_no_op_without_a_legacy_option(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\expect( 'update_option' )->never();
+		Functions\expect( 'delete_option' )->never();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
+	}
+
+	/**
+	 * A legacy value this layer no longer recognizes (corrupted option, or a
+	 * value from some future version) clamps to typeahead — the same
+	 * always-safe floor every other read-side clamp in this class falls back
+	 * to — rather than propagating garbage onto both new axes.
+	 */
+	public function test_migrate_legacy_field_mode_clamps_an_unrecognized_legacy_value(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$this->stub_options_store( [ 'woodev_location_field_mode' => 'some-future-mode' ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
+	}
+
+	public function test_field_mode_axes_are_typeahead_while_the_gate_is_closed(): void {
 		$registry = Location_Provider_Registry::instance();
 
-		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1058,7 +1708,7 @@ final class LocationProviderRegistryTest extends TestCase {
 				if ( 'woodev_location_active_provider' === $name ) {
 					return $provider->get_id();
 				}
-				if ( 'woodev_location_field_mode' === $name ) {
+				if ( 'woodev_location_field_mode_region' === $name ) {
 					return Location_Provider_Registry::MODE_RELATED_LIST;
 				}
 
@@ -1315,15 +1965,16 @@ final class LocationProviderRegistryTest extends TestCase {
 
 	public function test_inject_is_a_no_op_when_the_active_provider_lacks_the_list_capability(): void {
 		// The real bundled DaData provider is active (no fixture override) — it
-		// has no `list` capability at all, so even if field_mode somehow held
-		// 'related-list' (a value get_field_mode() itself would clamp away —
-		// this test calls the injector directly to prove the injector's OWN
-		// gate is independently defensive, not merely relying on that clamp).
+		// has no `list` capability at all, so even if the region axis somehow
+		// held 'related-list' (a value get_field_mode_region() itself would
+		// clamp away — this test calls the injector directly to prove the
+		// injector's OWN gate is independently defensive, not merely relying
+		// on that clamp).
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) {
-				return 'woodev_location_field_mode' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
+				return 'woodev_location_field_mode_region' === $name ? Location_Provider_Registry::MODE_RELATED_LIST : $default;
 			}
 		);
 
@@ -1618,16 +2269,19 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Review finding F4: `default_locality_record` / `default_locality_needs_repick`
-	// stay registered (the internal read/write machinery still works) but are
+	// Issue #376 (closing #370, review finding F4): `default_locality_record`
+	// now gets a REAL `location-picker` control, gated `show_if` on the sibling
+	// `default_locality_policy` field being `fixed`; `default_locality_needs_repick`
+	// stays registered (the internal read/write machinery still works) but is
 	// registered WITHOUT a control — never an editable widget on the settings
-	// page.
+	// page, at any policy.
 	// -------------------------------------------------------------------------
 
-	public function test_default_locality_record_and_needs_repick_have_no_control(): void {
+	public function test_default_locality_record_gets_a_location_picker_control_gated_on_the_fixed_policy(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
@@ -1638,7 +2292,55 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$record_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD );
 		$this->assertNotNull( $record_setting, 'the setting itself must stay registered — internal read/write still needs it' );
-		$this->assertNull( $record_setting->get_control(), 'mutant: registering a control here re-exposes the raw-JSON textarea on the settings page' );
+
+		$control = $record_setting->get_control();
+		$this->assertNotNull( $control, 'mutant: #376 gave this field a real picker control — a null control re-exposes the raw-JSON text input' );
+		$this->assertSame( \Woodev_Control::TYPE_LOCATION_PICKER, $control->get_type() );
+		$this->assertSame( 'RU', $control->get_country(), 'the control must carry the resolved store country (Location_Service::resolve_default_country())' );
+
+		$this->assertSame(
+			[
+				'setting' => Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
+				'value'   => Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+			],
+			$record_setting->get_show_if_conditions(),
+			'mutant: the picker must only show while the policy is `fixed`'
+		);
+	}
+
+	/**
+	 * The control's `country` arg reuses `Location_Service::resolve_default_country()`
+	 * verbatim (never a second, hand-rolled cascade) — a non-default store base
+	 * location must be reflected.
+	 */
+	public function test_default_locality_record_control_country_follows_the_store_base_location(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => '' ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$control = $registry->get_settings_handler()
+			->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD )
+			->get_control();
+
+		$this->assertSame( 'KZ', $control->get_country() );
+	}
+
+	public function test_default_locality_needs_repick_has_no_control(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+		$this->assertNotNull( $handler );
 
 		$repick_setting = $handler->get_setting( Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
 		$this->assertNotNull( $repick_setting );
@@ -1802,7 +2504,19 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
 	}
 
-	public function test_owned_setting_ids_order_places_address_suggestions_after_field_mode(): void {
+	/**
+	 * Issue #380: the field-mode axes and `address_suggestions` moved OUT of
+	 * this list — they still exist on `Location_Settings`, but display in
+	 * «Поля» now (see `Shipping_Settings_Tab::build_sections()`), not
+	 * «Локация». `get_owned_setting_ids()` is only the «Локация» section's
+	 * own display list.
+	 *
+	 * Issue #376/#370 (variant 2): `default_locality_needs_repick` moved OUT
+	 * of this list too — it stays registered and writable, it simply never
+	 * renders, at any policy (its live equivalent surfaces through the
+	 * `default_locality_policy` field's own description instead).
+	 */
+	public function test_owned_setting_ids_no_longer_include_field_mode_axes_or_address_suggestions(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 
@@ -1819,17 +2533,22 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame(
 			[
 				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
-				Location_Provider_Registry::SETTING_FIELD_MODE,
-				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_POLICY,
 				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_RECORD,
-				Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
 			],
-			array_slice( $ids, 0, 6 )
+			array_slice( $ids, 0, 3 )
+		);
+		$this->assertNotContains( Location_Provider_Registry::SETTING_FIELD_MODE_REGION, $ids );
+		$this->assertNotContains( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, $ids );
+		$this->assertNotContains( Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS, $ids );
+		$this->assertNotContains(
+			Location_Provider_Registry::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK,
+			$ids,
+			'mutant: #376/#370 removed this id from get_owned_setting_ids() entirely'
 		);
 	}
 
-	public function test_field_mode_setting_is_relabelled_to_field_type(): void {
+	public function test_field_mode_axes_are_labelled_region_and_settlement(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 
@@ -1837,9 +2556,37 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE );
+		$region_setting     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION );
+		$settlement_setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT );
 
-		$this->assertSame( 'Тип поля НП/Регион', $setting->get_name() );
+		$this->assertSame( 'Тип поля Регион', $region_setting->get_name() );
+		$this->assertSame( 'Тип поля НП', $settlement_setting->get_name() );
+	}
+
+	/**
+	 * Issue #369 closure — the `region_field` `show_if` on the region axis
+	 * ONLY (the settlement axis carries no such condition; it has no
+	 * `region_field`-shaped counterpart to hide against).
+	 */
+	public function test_field_mode_region_carries_a_show_if_on_region_field(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$region_setting     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION );
+		$settlement_setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT );
+
+		$this->assertSame(
+			[
+				'setting' => 'region_field',
+				'value'   => 'show',
+			],
+			$region_setting->get_show_if_conditions()
+		);
+		$this->assertSame( [], $settlement_setting->get_show_if_conditions() );
 	}
 
 	public function test_address_suggestions_control_is_disabled_when_nobody_serves_address(): void {
@@ -1932,5 +2679,46 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$this->assertFalse( $registry->is_address_suggestions_available() );
 		$this->assertFalse( $registry->is_address_suggestions_enabled() );
+	}
+
+	// -------------------------------------------------------------------------
+	// Copy coverage (issue #373) — every field `Location_Settings` itself
+	// registers (as opposed to a provider's own declared fields, covered by
+	// DadataProviderTest) and that actually renders somewhere across the
+	// «Локация»/«Поля» sections must carry a tooltip, so the next field added
+	// here never ships bare.
+	// -------------------------------------------------------------------------
+
+	public function test_every_location_owned_field_has_a_non_empty_tooltip(): void {
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$handler = $registry->get_settings_handler();
+
+		// `get_owned_setting_ids()` deliberately excludes the two field-mode axes
+		// and `address_suggestions` (issue #380: they DISPLAY on «Поля», not
+		// «Локация», but are still registered by this same handler) — added back
+		// here since `Shipping_Settings_Tab::build_sections()` does render them.
+		// `default_locality_needs_repick` stays excluded on both sides: it has no
+		// control at all (by design), and issue #373's own rule is that a
+		// tooltip can only live on a control.
+		$rendered_ids = array_merge(
+			$handler->get_owned_setting_ids(),
+			[
+				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
+				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
+			]
+		);
+
+		foreach ( $rendered_ids as $id ) {
+			$control = $handler->get_setting( $id )->get_control();
+
+			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
+			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
+		}
 	}
 }

@@ -130,4 +130,23 @@ final class PickupMapSettingsTest extends TestCase {
 		$this->assertInstanceOf( Pickup_Map_Settings::class, Pickup_Map_Settings::current() );
 		$this->assertSame( 'rate', Pickup_Map_Settings::current()->get_value( 'pickup_button_placement' ) );
 	}
+
+	// -------------------------------------------------------------------------
+	// Copy coverage (issue #373) — every field of the «Карта» section must carry
+	// a tooltip, so the next field added here never ships bare. A single test
+	// with an internal loop rather than a `@dataProvider`: providers run BEFORE
+	// `setUp()`, and constructing `Pickup_Map_Settings` needs the `get_option`/
+	// `wp_parse_args` stubs `setUp()` installs.
+	// -------------------------------------------------------------------------
+
+	public function test_every_field_has_a_non_empty_tooltip(): void {
+		$s = new Pickup_Map_Settings();
+
+		foreach ( $s->get_owned_setting_ids() as $id ) {
+			$control = $s->get_setting( $id )->get_control();
+
+			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
+			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
+		}
+	}
 }

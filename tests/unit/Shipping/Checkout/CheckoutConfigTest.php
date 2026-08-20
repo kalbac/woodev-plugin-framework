@@ -108,8 +108,11 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string[] */
 	private array $countries;
 
-	/** @var string Task 13: get_field_mode() return value. */
-	private string $mode;
+	/** @var string Issue #380: get_field_mode_region() return value. */
+	private string $mode_region;
+
+	/** @var string Issue #380: get_field_mode_settlement() return value. */
+	private string $mode_settlement;
 
 	/** @var string[] Task 13/issue #294: countries owns_region_states() reports true for. */
 	private array $owned_region_countries;
@@ -128,9 +131,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   get_supported_countries() (D15 gate fix, block
 	 *                                                                                                   PR-B: the UNION across the chain, no longer a
 	 *                                                                                                   single active-provider list) reports.
-	 * @param string                                                            $mode                   Task 13: get_field_mode() return value; defaults to
-	 *                                                                                                   the pre-Task-13 hardcoded constant so every existing
-	 *                                                                                                   call site is unaffected.
+	 * @param string                                                            $mode_region            Issue #380: get_field_mode_region() return value;
+	 *                                                                                                   defaults to typeahead so every existing call site is
+	 *                                                                                                   unaffected.
 	 * @param string[]                                                          $owned_region_countries Task 13/issue #294: countries owns_region_states()
 	 *                                                                                                   reports `true` for.
 	 * @param string                                                            $default_country        Issue #296: resolve_default_country() return
@@ -140,22 +143,30 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   this fake never touches WordPress option state at
 	 *                                                                                                   all, mirroring every other method on this class.
 	 * @param array<string, Location_Record>|null                              $chain_records           Issue #330: see {@see self::$chain_records}.
+	 * @param string|null                                                       $mode_settlement        Issue #380: get_field_mode_settlement() return
+	 *                                                                                                   value; `null` (the default) mirrors `$mode_region` —
+	 *                                                                                                   the pre-#380 behaviour where a single shared mode
+	 *                                                                                                   moved both axes together, so every existing call
+	 *                                                                                                   site stays unaffected. A test exercising the two
+	 *                                                                                                   axes INDEPENDENTLY passes this explicitly.
 	 */
 	public function __construct(
 		bool $active,
 		array $supported_levels,
 		?array $customer,
 		array $countries,
-		string $mode = Location_Provider_Registry::MODE_TYPEAHEAD,
+		string $mode_region = Location_Provider_Registry::MODE_TYPEAHEAD,
 		array $owned_region_countries = [],
 		string $default_country = 'RU',
-		?array $chain_records = null
+		?array $chain_records = null,
+		?string $mode_settlement = null
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
 		$this->customer                = $customer;
 		$this->countries               = $countries;
-		$this->mode                    = $mode;
+		$this->mode_region             = $mode_region;
+		$this->mode_settlement         = $mode_settlement ?? $mode_region;
 		$this->owned_region_countries = $owned_region_countries;
 		$this->default_country         = $default_country;
 		$this->chain_records            = $chain_records;
@@ -213,8 +224,12 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		return $this->countries;
 	}
 
-	public function get_field_mode(): string {
-		return $this->mode;
+	public function get_field_mode_region(): string {
+		return $this->mode_region;
+	}
+
+	public function get_field_mode_settlement(): string {
+		return $this->mode_settlement;
 	}
 
 	public function owns_region_states( string $country, array $final_states ): bool {
@@ -650,7 +665,8 @@ class CheckoutConfigTest extends TestCase {
 		);
 		$this->assertNull( $location['current'] );
 		$this->assertFalse( $location['implicit'] );
-		$this->assertIsString( $location['mode'] );
+		$this->assertIsString( $location['mode']['region'] );
+		$this->assertIsString( $location['mode']['settlement'] );
 	}
 
 	/**
@@ -1296,8 +1312,9 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// Task 13 — `mode` reads the real store setting (via Location_Service),
-	// no longer the hardcoded 'typeahead' constant
+	// Issue #380 — `mode` publishes TWO independent axes read from the real
+	// store settings (via Location_Service), no longer one shared hardcoded
+	// 'typeahead' constant.
 	// -------------------------------------------------------------------------
 
 	public function test_mode_reads_from_the_location_service(): void {
@@ -1311,7 +1328,31 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
 			->build( Checkout_Fields::from_array( [] ) );
 
-		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $config['location']['mode'] );
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $config['location']['mode']['region'] );
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $config['location']['mode']['settlement'] );
+	}
+
+	/**
+	 * Issue #380's whole point: the two axes are genuinely INDEPENDENT — a
+	 * combination the legacy single `field_mode` could never express.
+	 */
+	public function test_mode_region_and_settlement_are_independent(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true ],
+			null,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			[],
+			'RU',
+			null,
+			Location_Provider_Registry::MODE_TYPEAHEAD
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $config['location']['mode']['region'] );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode']['settlement'] );
 	}
 
 	public function test_mode_defaults_to_typeahead(): void {
@@ -1319,7 +1360,8 @@ class CheckoutConfigTest extends TestCase {
 		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
 			->build( Checkout_Fields::from_array( [] ) );
 
-		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode'] );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode']['region'] );
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode']['settlement'] );
 	}
 
 	// -------------------------------------------------------------------------

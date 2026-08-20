@@ -115,6 +115,94 @@ class CompositeSettingsHandlerTest extends TestCase {
 		new Composite_Settings_Handler( 'shipping', [ $a, $b ] );
 	}
 
+	public function test_filters_cross_handler_conditions_against_submitted_or_stored_controller_values(): void {
+		$checkout_fields = $this->make_handler(
+			'checkout_fields',
+			function ( $h ) {
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region field',
+					'default' => 'remove',
+				] );
+			}
+		);
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region mode',
+					'default' => 'typeahead',
+					'show_if' => [ 'setting' => 'region_field', 'operator' => '!=', 'value' => 'remove' ],
+				] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $checkout_fields, $location ] );
+
+		$this->assertSame(
+			[ 'region_field' => 'remove' ],
+			$composite->filter_visible_values( [ 'region_field' => 'remove', 'field_mode_region' => 'list' ] )
+		);
+		$this->assertSame(
+			[],
+			$composite->filter_visible_values( [ 'field_mode_region' => 'list' ] )
+		);
+		$this->assertSame(
+			[ 'region_field' => 'show', 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values( [ 'region_field' => 'show', 'field_mode_region' => 'list' ] )
+		);
+	}
+
+	public function test_filters_cross_handler_conditions_order_independently_and_degrades_unknown_controller_to_empty(): void {
+		$checkout_fields = $this->make_handler(
+			'checkout_fields',
+			function ( $h ) {
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region field',
+					'default' => 'show',
+					'show_if' => [ 'setting' => 'mode', 'value' => 'live' ],
+				] );
+			}
+		);
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Region mode',
+					'default' => 'typeahead',
+					'show_if' => [ 'setting' => 'region_field', 'value' => 'show' ],
+				] );
+				$h->register_setting( 'unknown_controller', \Woodev_Setting::TYPE_STRING, [
+					'name'    => 'Unknown controller',
+					'default' => 'x',
+					'show_if' => [ 'setting' => 'missing', 'value' => 'present' ],
+				] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $checkout_fields, $location ] );
+
+		$this->assertSame(
+			[ 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values(
+				[
+					'field_mode_region' => 'list',
+					'unknown_controller' => 'value',
+					'region_field'       => 'show',
+					'mode'               => 'test',
+				]
+			)
+		);
+		$this->assertSame(
+			[ 'field_mode_region' => 'list' ],
+			$composite->filter_visible_values(
+				[
+					'field_mode_region' => 'list',
+					'mode'              => 'test',
+					'region_field'      => 'show',
+					'unknown_controller' => 'value',
+				]
+			)
+		);
+	}
+
 	/**
 	 * Decision (deviates from the plan's skeleton, which returned null/false): get_value() and
 	 * update_value() on an unknown id THROW \Woodev_Plugin_Exception, mirroring
@@ -122,6 +210,52 @@ class CompositeSettingsHandlerTest extends TestCase {
 	 * path (class-rest-api-settings-page.php:189, try/catch(\Throwable)) believe an update
 	 * succeeded when it did nothing.
 	 */
+	/**
+	 * A section that interleaves two handlers' fields must render in the order it declared,
+	 * not grouped by owning handler.
+	 *
+	 * Found on the rig: the «Поля» section lists `region_field` (checkout handler) and the
+	 * region field-type axis (location handler) next to each other on purpose — each axis
+	 * belongs beside the field it governs — but collecting child by child pulled every
+	 * location-owned setting above every checkout-owned one, so the axes rendered detached
+	 * from their fields. Unit and jest suites both passed: nothing asserted display order
+	 * across handlers.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_get_settings_follows_the_requested_id_order_across_children(): void {
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Тип поля Регион' ] );
+			}
+		);
+
+		$checkout = $this->make_handler(
+			'checkout',
+			function ( $h ) {
+				$h->register_setting( 'country_field', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Страна' ] );
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Регион' ] );
+			}
+		);
+
+		$composite = new Composite_Settings_Handler( 'shipping', [ $location, $checkout ] );
+
+		$this->assertSame(
+			[ 'country_field', 'region_field', 'field_mode_region' ],
+			array_keys( $composite->get_settings( [ 'country_field', 'region_field', 'field_mode_region' ] ) ),
+			'the section declared order wins over child order'
+		);
+
+		$this->assertSame(
+			[ 'field_mode_region', 'country_field' ],
+			array_keys( $composite->get_settings( [ 'field_mode_region', 'country_field' ] ) ),
+			'a different requested order is honoured too, and an omitted id stays omitted'
+		);
+	}
+
 	public function test_get_value_and_update_value_throw_on_unknown_id(): void {
 		$a = $this->make_handler(
 			'alpha',

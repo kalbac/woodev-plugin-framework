@@ -187,4 +187,34 @@ final class CheckoutFieldSettingsTest extends TestCase {
 
 		$this->assertStringContainsString( 'Город', $s->get_section_note() );
 	}
+
+	// -------------------------------------------------------------------------
+	// Copy coverage (issue #373) — every field of the «Поля» section this
+	// handler owns must carry a tooltip, so the next field added here never
+	// ships bare. Checked against BOTH environments (block/classic checkout,
+	// multi-country) — a control disabled by `apply_availability()` still
+	// keeps its own tooltip, it is not swapped out for a bare one.
+	// -------------------------------------------------------------------------
+
+	public function test_every_field_has_a_non_empty_tooltip_on_the_classic_checkout(): void {
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		foreach ( $s->get_owned_setting_ids() as $id ) {
+			$control = $s->get_setting( $id )->get_control();
+
+			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
+			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
+		}
+	}
+
+	public function test_every_field_has_a_non_empty_tooltip_on_the_block_checkout(): void {
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( true, 2 ) );
+
+		foreach ( $s->get_owned_setting_ids() as $id ) {
+			$control = $s->get_setting( $id )->get_control();
+
+			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
+			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
+		}
+	}
 }

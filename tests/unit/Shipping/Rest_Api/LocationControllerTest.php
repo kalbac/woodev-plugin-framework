@@ -159,6 +159,33 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	public array $is_country_supported_calls = [];
 
 	/**
+	 * Admin provider-override test seam (issue #380): the SET of provider ids
+	 * {@see self::has_provider()} answers `true` for — a test simulating an
+	 * "unknown id" simply never lists it here.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $registered_provider_ids;
+
+	/**
+	 * Admin provider-override test seam (issue #380): id => what
+	 * {@see self::provider_by_id()} answers for that id. An id present in
+	 * {@see self::$registered_provider_ids} but ABSENT (or explicitly `null`)
+	 * here simulates "registered but not currently eligible" (unconfigured,
+	 * or does not serve the requested level/country) — the real method's own
+	 * documented degradation.
+	 *
+	 * @var array<string, Location_Provider|null>
+	 */
+	private array $providers_by_id;
+
+	/** @var array<int, string> */
+	public array $has_provider_calls = [];
+
+	/** @var array<int, array{0: string, 1: string, 2: string|null}> */
+	public array $provider_by_id_calls = [];
+
+	/**
 	 * Task 14: {@see self::supports_locate()}'s own return value, and
 	 * {@see self::locate()}'s own return value/spy — a SEPARATE pair from the
 	 * `/suggest`/`/select`/`/list` fakes above, since the admin-only
@@ -196,6 +223,8 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	 * @param bool                                    $supports_locate                       Task 14: {@see self::supports_locate()}'s own return value.
 	 * @param Location_Record|null                   $locate_result                         Task 14: {@see self::locate()}'s own return value.
 	 * @param array<string, Location_Record>|null    $chain_records                         Issue #330: see {@see self::$chain_records}.
+	 * @param array<int, string>                     $registered_provider_ids               Issue #380: see {@see self::$registered_provider_ids}.
+	 * @param array<string, Location_Provider|null>  $providers_by_id                       Issue #380: see {@see self::$providers_by_id}.
 	 */
 	public function __construct(
 		bool $active = true,
@@ -208,7 +237,9 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		?Location_Provider $list_provider = null,
 		bool $supports_locate = false,
 		?Location_Record $locate_result = null,
-		?array $chain_records = null
+		?array $chain_records = null,
+		array $registered_provider_ids = [],
+		array $providers_by_id = []
 	) {
 		$this->active                                = $active;
 		$this->provider                               = $provider;
@@ -221,6 +252,8 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		$this->supports_locate                        = $supports_locate;
 		$this->locate_result                          = $locate_result;
 		$this->chain_records                          = $chain_records;
+		$this->registered_provider_ids                = $registered_provider_ids;
+		$this->providers_by_id                        = $providers_by_id;
 	}
 
 	/**
@@ -295,6 +328,18 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		}
 
 		return $this->provider;
+	}
+
+	public function has_provider( string $provider_id ): bool {
+		$this->has_provider_calls[] = $provider_id;
+
+		return in_array( $provider_id, $this->registered_provider_ids, true );
+	}
+
+	public function provider_by_id( string $provider_id, string $level, ?string $country = null ): ?Location_Provider {
+		$this->provider_by_id_calls[] = [ $provider_id, $level, $country ];
+
+		return $this->providers_by_id[ $provider_id ] ?? null;
 	}
 
 	public function get_customer_record( ?string $for_country = null ): ?array {
@@ -1980,6 +2025,171 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+	}
+
+	// -------------------------------------------------------------------
+	// Admin `provider` override (issue #380, closes #375's residual gap: the
+	// picker used to keep asking whichever provider was STORED, ignoring the
+	// merchant's own live, unsaved select change).
+	// -------------------------------------------------------------------
+
+	public function test_admin_suggest_override_provider_is_honoured_instead_of_the_d15_chain(): void {
+		$record          = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва',
+			]
+		);
+		$chain_provider  = new Location_Controller_Fake_Provider( static fn() => [] );
+		$override_provider = new Location_Controller_Fake_Provider( static fn() => [ $record ] );
+
+		// $chain_provider is what the D15 chain would resolve — proves the
+		// override BYPASSES it entirely rather than merely running first.
+		$service = new Location_Controller_Fake_Service(
+			true,
+			$chain_provider,
+			null,
+			true,
+			true,
+			null,
+			null,
+			null,
+			false,
+			null,
+			null,
+			[ 'dadata' ],
+			[ 'dadata' => $override_provider ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider' => 'dadata' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $result['suggestions'] );
+		$this->assertSame( 'dadata:fias-1', $result['suggestions'][0]['key'] );
+
+		$this->assertCount( 1, $override_provider->suggest_calls, 'the override must be the one actually queried' );
+		$this->assertCount( 0, $chain_provider->suggest_calls, 'the D15-chain-resolved provider must never be queried once an override is given' );
+		$this->assertSame( [], $service->provider_for_level_calls, 'the chain must never even be walked when an override is given' );
+		$this->assertSame( [ 'dadata' ], $service->has_provider_calls );
+		$this->assertSame( [ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null ] ], $service->provider_by_id_calls );
+	}
+
+	public function test_admin_suggest_unknown_override_provider_returns_400_never_falling_back_to_the_stored_provider(): void {
+		$chain_provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service        = new Location_Controller_Fake_Service( true, $chain_provider );
+		$ctrl           = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider' => 'not-a-real-provider' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertSame( 'woodev_location_unknown_provider', $result->get_error_code() );
+		$this->assertCount( 0, $chain_provider->suggest_calls, 'an unknown override must never silently fall back to the stored/chain provider' );
+		$this->assertSame( [], $service->provider_by_id_calls, 'a registration check that already failed must never proceed to resolve eligibility' );
+	}
+
+	public function test_admin_suggest_a_registered_but_ineligible_override_degrades_like_no_provider_for_the_level(): void {
+		// Registered (has_provider() -> true) but provider_by_id() itself
+		// answers null — simulates "unconfigured" or "does not serve this
+		// level" (Location_Service::provider_by_id()'s own documented
+		// degradation), which must NOT be a 400 — only an UNKNOWN id is.
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			null,
+			true,
+			true,
+			null,
+			null,
+			null,
+			false,
+			null,
+			null,
+			[ 'dadata' ],
+			[]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider' => 'dadata' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+	}
+
+	public function test_admin_suggest_override_provider_not_covering_the_requested_country_returns_empty_200_without_calling_it(): void {
+		// Eligible for the LEVEL (level-blind check), but its OWN country list
+		// does not cover the request's country — must degrade exactly like the
+		// D15-chain's own "unsupported country" branch, never reach suggest().
+		$override_provider = new Location_Controller_Fake_Provider( static fn() => [ /* would-be suggestions */ ], [ 'RU' ] );
+		$service            = new Location_Controller_Fake_Service(
+			true,
+			null,
+			null,
+			true,
+			true,
+			null,
+			null,
+			null,
+			false,
+			null,
+			null,
+			[ 'dadata' ],
+			[ 'dadata' => $override_provider ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'US', 'provider' => 'dadata' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [], $result['suggestions'] );
+		$this->assertCount( 0, $override_provider->suggest_calls, 'an unsupported country must never reach the override provider either' );
+	}
+
+	public function test_admin_suggest_without_a_provider_param_never_touches_the_override_seam(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertSame( [], $service->has_provider_calls, 'an absent provider param must resolve through the ordinary D15 chain untouched' );
+		$this->assertSame( [], $service->provider_by_id_calls );
+		$this->assertCount( 1, $service->provider_for_level_calls );
+	}
+
+	public function test_suggest_public_route_never_touches_the_override_seam_even_with_a_provider_param(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		// D4: a shopper naming a provider must never even reach the
+		// registration check — the public route structurally never reads
+		// this param at all (self::handle_suggest_request() never extracts
+		// it), unlike the admin route above.
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'provider' => 'dadata' ]
+		);
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( [], $service->has_provider_calls );
+		$this->assertSame( [], $service->provider_by_id_calls );
 	}
 
 	// -------------------------------------------------------------------

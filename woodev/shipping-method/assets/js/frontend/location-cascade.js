@@ -9,12 +9,17 @@
  * WC's OWN Address Autocomplete provider registry for mixed-country stores (see the
  * "WC Address Autocomplete suppression" section below).
  *
- * RENDERER SEAM (Task 13, spec D7 — "mode is presentation, provider is data"): this module
- * owns exactly ONE renderer itself — the baseline typeahead ({@see attachOne}'s fallback path,
- * gated by the D15 `isLevelServed()` chain) — and otherwise only knows how to ASK for one:
- * {@see resolveModeRenderer} looks up `window.WoodevLocationRenderers[mode(+':'+level)]`,
- * a registry `location-select-modes.js` populates with the `related-list` and `ajax-select2`
- * renderers. This file never imports that module, never branches on its presence, and never
+ * RENDERER SEAM (Task 13, spec D7 — "mode is presentation, provider is data"; issue #380 —
+ * `location.mode` became TWO independent axes, `{ region, settlement }`, resolved PER LEVEL):
+ * this module owns exactly ONE renderer itself — the baseline typeahead ({@see attachOne}'s
+ * fallback path, gated by the D15 `isLevelServed()` chain) — and otherwise only knows how to
+ * ASK for one: {@see resolveModeRenderer} looks up
+ * `window.WoodevLocationRenderers[axisMode(+':'+level)]`, where `axisMode` is the REGION axis
+ * for the region node and the SETTLEMENT axis for every other node (see that function's own
+ * docblock for why address follows settlement) — a registry `location-select-modes.js`
+ * populates with the `related-list` and `ajax-select2` renderers, unchanged by the split (this
+ * cascade re-keys the LOOKUP, never the registry itself). This file never imports that module,
+ * never branches on its presence, and never
  * inspects what a resolved renderer actually does with the `fetch`/`onSelect`/scoping
  * primitives {@see attachOne} hands it — the cascade stays entirely ignorant of WHICH
  * presentation a field gets, only of the fixed chain and persistence contract every
@@ -499,48 +504,89 @@
 	}
 
 	/**
-	 * Whether `node` is the region level of an entry in `related-list` mode (spec D7; Task 13;
-	 * issue #294 arbitration) — the ONE case where {@see isLevelServed}'s "region" answer is
-	 * structurally unable to describe reality and must not be consulted at all.
+	 * The REGION axis value for `entry` (issue #380 — the location layer now publishes TWO
+	 * independent axes, `entry.location.mode = { region, settlement }`, instead of one shared
+	 * mode string). `'typeahead'` when the entry carries no `location.mode` at all (an older
+	 * server config, or a test fixture that never set one) — the same floor default the server
+	 * side's own clamp falls back to.
+	 *
+	 * @param {Object} entry
+	 * @returns {string}
+	 */
+	function regionAxisMode( entry ) {
+		return ( entry.location && entry.location.mode && entry.location.mode.region ) || 'typeahead';
+	}
+
+	/**
+	 * The SETTLEMENT axis value for `entry` (issue #380). See {@see regionAxisMode}'s own
+	 * docblock — same shape, same default.
+	 *
+	 * @param {Object} entry
+	 * @returns {string}
+	 */
+	function settlementAxisMode( entry ) {
+		return ( entry.location && entry.location.mode && entry.location.mode.settlement ) || 'typeahead';
+	}
+
+	/**
+	 * Whether `node` is the region level of an entry whose REGION AXIS is `related-list` (spec
+	 * D7; Task 13; issue #294 arbitration; issue #380 — re-keyed from the single shared mode
+	 * string to the region axis specifically, independent of whatever the settlement axis
+	 * carries) — the ONE case where {@see isLevelServed}'s "region" answer is structurally
+	 * unable to describe reality and must not be consulted at all.
 	 *
 	 * Per `class-checkout-config.php::build_location_block()`'s own docblock: `levels[country]
 	 * .region` reads `false` for EVERY country whose region `<select>` already has WooCommerce
 	 * states registered — REGARDLESS of whether those states came from a genuine conflict
-	 * (some other source already owns the field) or from THIS layer's OWN `related-list` mode
-	 * injecting them on purpose (`Location_Provider_Registry::inject_related_list_states()`).
-	 * The server's own docblock says the client "must NOT try to tell the two apart... it does
-	 * not need to" — and it does not, because the real gate for the region node under
-	 * `related-list` mode is not "does the D15 suggest chain want this level" at all, it is
-	 * "did WooCommerce actually render a `<select>` here", which {@see attachOne}'s own
-	 * `related-list:region` renderer checks directly against the live DOM (`el.tagName`) —
-	 * this predicate only decides whether that renderer gets a chance to run.
+	 * (some other source already owns the field) or from THIS layer's OWN region-axis
+	 * `related-list` injecting them on purpose (`Location_Provider_Registry::inject_related_list_states()`,
+	 * itself gated on the region axis alone since issue #380). The server's own docblock says
+	 * the client "must NOT try to tell the two apart... it does not need to" — and it does not,
+	 * because the real gate for the region node under a `related-list` region axis is not "does
+	 * the D15 suggest chain want this level" at all, it is "did WooCommerce actually render a
+	 * `<select>` here", which {@see attachOne}'s own `related-list:region` renderer checks
+	 * directly against the live DOM (`el.tagName`) — this predicate only decides whether that
+	 * renderer gets a chance to run.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string}} node
 	 * @returns {boolean}
 	 */
 	function isRelatedListRegionNode( entry, node ) {
-		return 'related-list' === ( entry.location && entry.location.mode ) && 'region' === node.level;
+		return 'related-list' === regionAxisMode( entry ) && 'region' === node.level;
 	}
 
 	/**
 	 * Resolves the mode-specific renderer for `node`, if Task 13's `location-select-modes.js`
 	 * registered one — spec D7's "mode is presentation, provider is data": this cascade must
-	 * not know WHICH renderer a field uses, only how to ask the registry for one. Lookup order:
-	 * `{mode}:{level}` (a renderer specific to one field kind under one mode — e.g.
-	 * `related-list`'s region native-`<select>` watcher, which shares nothing with its own
-	 * settlement renderer) first, then the bare `{mode}` (a renderer that serves every level
-	 * uniformly — `ajax-select2`'s select2 widget is the same shape for region, settlement, or
-	 * address). Returns `null` when nothing is registered for either key, or when
-	 * `location-select-modes.js` never loaded at all — {@see attachOne}'s baseline typeahead
-	 * path is the fallback either way, never a special case of this function.
+	 * not know WHICH renderer a field uses, only how to ask the registry for one.
+	 *
+	 * MODE RESOLUTION IS PER-LEVEL (issue #380, re-keyed from a single shared mode string to
+	 * two independent axes): the REGION node resolves against {@see regionAxisMode}; every
+	 * OTHER node (settlement, and — with no axis of its own — address, which follows the
+	 * SETTLEMENT axis) resolves against {@see settlementAxisMode}. Address following the
+	 * settlement axis is a deliberate backward-compatible choice, not a spec requirement: under
+	 * the OLD single-mode `ajax-select2`, address got the bare `registry['ajax-select2']`
+	 * fallback exactly like every other level (the same shared mode string reached it too);
+	 * under OLD `related-list`, address got NOTHING registered for it (no `related-list:address`
+	 * key, no bare `related-list` key) and fell straight through to the baseline typeahead below.
+	 * Keying address's lookup off the settlement axis reproduces BOTH outcomes exactly, because
+	 * `related-list` still has no bare-registry entry — only `ajax-select2` does.
+	 *
+	 * Lookup order per level: `{axisMode}:{level}` (a renderer specific to one field kind under
+	 * one axis value — e.g. `related-list`'s region native-`<select>` watcher, which shares
+	 * nothing with its own settlement renderer) first, then the bare `{axisMode}` (a renderer
+	 * that serves every level uniformly — `ajax-select2`'s select2 widget is the same shape for
+	 * region, settlement, or address). Returns `null` when nothing is registered for either key,
+	 * or when `location-select-modes.js` never loaded at all — {@see attachOne}'s baseline
+	 * typeahead path is the fallback either way, never a special case of this function.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string}} node
 	 * @returns {function(Element, Object): ({detach: Function}|null)|null}
 	 */
 	function resolveModeRenderer( entry, node ) {
-		var mode = ( entry.location && entry.location.mode ) || 'typeahead';
+		var mode = 'region' === node.level ? regionAxisMode( entry ) : settlementAxisMode( entry );
 		var registry = window.WoodevLocationRenderers || {};
 
 		if ( 'function' === typeof registry[ mode + ':' + node.level ] ) {

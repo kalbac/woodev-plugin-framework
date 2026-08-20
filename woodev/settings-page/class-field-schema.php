@@ -60,6 +60,14 @@ final class Field_Schema {
 				'required'    => $setting->is_required(),
 			];
 
+			// Only `TYPE_LOCATION_PICKER` controls carry a resolved store country
+			// (issue #376) — every other control's `Woodev_Control::$country`
+			// stays '', so this key is omitted rather than shipping a meaningless
+			// empty string on every other field's schema entry.
+			if ( $control && '' !== $control->get_country() ) {
+				$entry['country'] = $control->get_country();
+			}
+
 			// Any secret (declared sensitive OR constant-backed) is masked in the UI
 			// via the password control; a defined constant additionally renders the
 			// read-only wp-config note (ControlField checks constant_managed first).
@@ -91,12 +99,13 @@ final class Field_Schema {
 				$entry['show_if'] = $show_if;
 			}
 
+			// `disabled_reason` is its own schema key — it must never overwrite the
+			// authored `description`. Both are legitimate at once: the description
+			// explains what the option does, the reason explains why it is
+			// currently unavailable. The React client renders both distinctly.
 			if ( $control && $control->is_disabled() ) {
 				$entry['disabled']        = true;
 				$entry['disabled_reason'] = $control->get_disabled_reason();
-				if ( '' !== $entry['disabled_reason'] ) {
-					$entry['description'] = $entry['disabled_reason'];
-				}
 			}
 
 			$schema[ $setting->get_id() ] = $entry;

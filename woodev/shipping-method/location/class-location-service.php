@@ -1568,6 +1568,94 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 
 		/**
+		 * Whether a provider is registered under `$provider_id` — a thin proxy
+		 * for {@see Location_Provider_Registry::has_provider()} so a caller
+		 * holding only this façade (e.g.
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}) never
+		 * needs its own reference to the registry singleton.
+		 *
+		 * Answers "is this id registered AT ALL", regardless of whether the
+		 * provider is configured or serves any particular level/country —
+		 * {@see self::provider_by_id()} is the eligibility check built on top
+		 * of this one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id Provider id.
+		 *
+		 * @return bool
+		 */
+		public function has_provider( string $provider_id ): bool {
+			return $this->registry->has_provider( $provider_id );
+		}
+
+		/**
+		 * Resolves ONE SPECIFIC registered provider for a suggest level — the
+		 * admin-override counterpart to {@see self::provider_for_level()}'s D15
+		 * chosen -> bundled-fallback chain walk (issue #380).
+		 *
+		 * Where {@see self::provider_for_level()} lets the CHAIN pick a
+		 * provider, this lets the CALLER name one explicitly (e.g. an admin
+		 * previewing a provider other than the store's currently active one)
+		 * and applies the exact same per-candidate eligibility check the chain
+		 * itself uses — `is_configured()` plus
+		 * {@see self::provider_serves_level()} — to that one named id instead
+		 * of walking chosen -> fallback. A caller MUST already have confirmed
+		 * the id is registered via {@see self::has_provider()} before treating
+		 * a `null` return as "not eligible right now" rather than "unknown id"
+		 * — this method itself does not distinguish the two, since both
+		 * legitimately answer `null`.
+		 *
+		 * Applies the SAME `address_suggestions` store gate
+		 * {@see self::provider_for_level()} applies for
+		 * `Location_Record::LEVEL_ADDRESS` — an override must not bypass a
+		 * store-wide switch the ordinary chain itself already honours.
+		 *
+		 * Deliberately bypasses {@see self::FILTER_PROVIDER_FOR_LEVEL}: that
+		 * filter's own docblock documents it as filtering the D15 CHAIN's
+		 * resolution specifically; an explicit override never walks that chain,
+		 * so running the chain's filter over it would misrepresent what this
+		 * method actually did.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string      $provider_id Provider id (assumed already validated
+		 *                                 via {@see self::has_provider()}).
+		 * @param string      $level       One of {@see Location_Record::LEVELS}.
+		 * @param string|null $country     ISO-3166 alpha-2 country code, or
+		 *                                 `null` for the country-blind check.
+		 *
+		 * @return Location_Provider|null
+		 *
+		 * @throws \InvalidArgumentException When `$level` is not one of
+		 *                                    {@see Location_Record::LEVELS}.
+		 */
+		public function provider_by_id( string $provider_id, string $level, ?string $country = null ): ?Location_Provider {
+			if ( ! in_array( $level, Location_Record::LEVELS, true ) ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Location_Service::provider_by_id(): "level" must be one of %s, got "%s".',
+						implode( ', ', Location_Record::LEVELS ),
+						$level
+					)
+				);
+			}
+
+			if ( Location_Record::LEVEL_ADDRESS === $level && ! $this->registry->get_address_suggestions_raw() ) {
+				return null;
+			}
+
+			$candidate = $this->registry->get_providers()[ $provider_id ] ?? null;
+
+			if ( null === $candidate || ! $candidate->is_configured() ) {
+				return null;
+			}
+
+			return $this->provider_serves_level( $candidate, $level, $country ) ? $candidate : null;
+		}
+
+
+		/**
 		 * Whether the D15 chain COULD serve one suggest LEVEL — bypassing
 		 * BOTH the `address_suggestions` store gate {@see self::provider_for_level()}
 		 * applies for `LEVEL_ADDRESS` AND {@see self::FILTER_PROVIDER_FOR_LEVEL}
@@ -1658,7 +1746,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * country-blind (unnarrowed) level set decides — identical to this
 		 * class's behavior before the `$country` parameter existed.
 		 *
+		 * PUBLIC (widened from `private`, #375/#377): {@see Location_Provider_Registry::register_settings()}
+		 * reuses this EXACT predicate — never a hand-rolled one — to decide,
+		 * for every registered (not just the active) provider, whether it
+		 * serves `address` for the STORE's own country, when building the
+		 * bundled default provider's `show_if` condition. Calling this
+		 * instead of inlining `in_array( $level, $provider->get_suggest_levels( $country ), true )`
+		 * matters: the country-coverage gate above (`get_countries()`) is
+		 * NOT part of `get_suggest_levels()` itself, and a caller skipping
+		 * it would silently disagree with every other D15 chain-walk call
+		 * site in this class.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Widened from `private` to `public` (#375/#377) so
+		 *              {@see Location_Provider_Registry} can reuse it for a
+		 *              non-active, arbitrary provider.
 		 *
 		 * @param Location_Provider $provider Candidate provider.
 		 * @param string            $level    One of {@see Location_Record::LEVELS}.
@@ -1666,7 +1768,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * @return bool
 		 */
-		private function provider_serves_level( Location_Provider $provider, string $level, ?string $country ): bool {
+		public function provider_serves_level( Location_Provider $provider, string $level, ?string $country ): bool {
 			if ( null === $country ) {
 				return in_array( $level, $provider->get_suggest_levels(), true );
 			}
@@ -1764,18 +1866,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
-		 * Gets the store's field-presentation mode (Task 13; spec D7) — thin
-		 * pass-through to {@see Location_Provider_Registry::get_field_mode()},
-		 * clamped against {@see self::get_offered_field_modes()} so a stale
-		 * saved value can never name a mode the current active provider does
-		 * not back.
+		 * Gets the store's REGION-level field-presentation mode (issue #380 —
+		 * split from the legacy single mode) — thin pass-through to
+		 * {@see Location_Provider_Registry::get_field_mode_region()}, clamped
+		 * against {@see self::get_offered_field_modes()} (and, on TOP of
+		 * that, against `region_field` being removed — issue #369 closure)
+		 * so a stale saved value can never name a mode the current active
+		 * provider does not back.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
-		public function get_field_mode(): string {
-			return $this->registry->get_field_mode();
+		public function get_field_mode_region(): string {
+			return $this->registry->get_field_mode_region();
+		}
+
+		/**
+		 * Gets the store's SETTLEMENT (НП) level field-presentation mode
+		 * (issue #380 — split from the legacy single mode) — thin
+		 * pass-through to {@see Location_Provider_Registry::get_field_mode_settlement()},
+		 * clamped against {@see self::get_offered_field_modes()} exactly like
+		 * {@see self::get_field_mode_region()} — but without that method's
+		 * `region_field` clamp.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_field_mode_settlement(): string {
+			return $this->registry->get_field_mode_settlement();
 		}
 
 		/**

@@ -92,6 +92,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_max' )->andReturn( 10.0 );
 		$control->shouldReceive( 'get_step' )->andReturn( 0.5 );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
+		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
 
 		$setting = $this->make_setting( 'weight', 'integer', $control );
 
@@ -121,6 +122,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
+		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
 
 		$setting = $this->make_setting( 'api_key', 'string', $control );
 
@@ -233,6 +235,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
+		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
 
 		$required_setting = $this->make_setting( 'phone', 'string', $control );
 		$required_setting->shouldReceive( 'is_required' )->andReturn( true );
@@ -296,6 +299,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_max' )->andReturn( null );
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( false )->byDefault();
+		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
 
 		$setting = $this->make_setting( 'city', 'string', $control );
 
@@ -306,6 +310,55 @@ class FieldSchemaTest extends TestCase {
 		$schema = Field_Schema::from_handler( $handler );
 
 		$this->assertSame( 'enter value', $schema['city']['placeholder'] );
+	}
+
+	/**
+	 * Field_Schema must emit `country` from the control when a `location-picker`
+	 * control set one (issue #376) — and must NOT emit the key at all for every
+	 * other control, whose `Woodev_Control::$country` stays the default empty
+	 * string, so a plain field's schema entry never carries a meaningless
+	 * `country: ''`.
+	 *
+	 * @return void
+	 */
+	public function test_from_handler_emits_country_only_when_the_control_set_one(): void {
+		$picker_control = Mockery::mock();
+		$picker_control->shouldReceive( 'get_type' )->andReturn( 'location-picker' );
+		$picker_control->shouldReceive( 'get_description' )->andReturn( '' );
+		$picker_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$picker_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$picker_control->shouldReceive( 'get_min' )->andReturn( null );
+		$picker_control->shouldReceive( 'get_max' )->andReturn( null );
+		$picker_control->shouldReceive( 'get_step' )->andReturn( null );
+		$picker_control->shouldReceive( 'is_disabled' )->andReturn( false );
+		$picker_control->shouldReceive( 'get_country' )->andReturn( 'RU' );
+
+		$plain_control = Mockery::mock();
+		$plain_control->shouldReceive( 'get_type' )->andReturn( 'text' );
+		$plain_control->shouldReceive( 'get_description' )->andReturn( '' );
+		$plain_control->shouldReceive( 'get_tooltip' )->andReturn( '' );
+		$plain_control->shouldReceive( 'get_placeholder' )->andReturn( '' );
+		$plain_control->shouldReceive( 'get_min' )->andReturn( null );
+		$plain_control->shouldReceive( 'get_max' )->andReturn( null );
+		$plain_control->shouldReceive( 'get_step' )->andReturn( null );
+		$plain_control->shouldReceive( 'is_disabled' )->andReturn( false );
+		$plain_control->shouldReceive( 'get_country' )->andReturn( '' );
+
+		$picker_setting = $this->make_setting( 'default_locality_record', 'string', $picker_control );
+		$plain_setting  = $this->make_setting( 'city', 'string', $plain_control );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'get_settings' )->with( [] )->andReturn( [
+			'default_locality_record' => $picker_setting,
+			'city'                    => $plain_setting,
+		] );
+		$handler->shouldReceive( 'get_value' )->with( 'default_locality_record' )->andReturn( '' );
+		$handler->shouldReceive( 'get_value' )->with( 'city' )->andReturn( '' );
+
+		$schema = Field_Schema::from_handler( $handler );
+
+		$this->assertSame( 'RU', $schema['default_locality_record']['country'] );
+		$this->assertArrayNotHasKey( 'country', $schema['city'] );
 	}
 
 	/**
@@ -337,15 +390,18 @@ class FieldSchemaTest extends TestCase {
 	}
 
 	/**
-	 * A disabled control emits `disabled` + `disabled_reason`, and the reason
-	 * doubles as the description so a client ignoring `disabled` still shows it.
+	 * A disabled control emits `disabled` + `disabled_reason` as its OWN key and
+	 * must NOT clobber the authored `description` — both are legitimate at once:
+	 * the description explains what the option does, the reason explains why it
+	 * is currently unavailable. (Previously `disabled_reason` was assigned INTO
+	 * `description`, destroying whatever description the author registered.)
 	 *
 	 * @return void
 	 */
-	public function test_disabled_control_emits_disabled_and_reason(): void {
+	public function test_disabled_control_emits_reason_without_clobbering_description(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
 		$control->shouldReceive( 'get_type' )->andReturn( 'checkbox' );
-		$control->shouldReceive( 'get_description' )->andReturn( '' );
+		$control->shouldReceive( 'get_description' )->andReturn( 'Скрывает адрес получателя из письма.' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' );
 		$control->shouldReceive( 'get_min' )->andReturn( null );
@@ -353,6 +409,7 @@ class FieldSchemaTest extends TestCase {
 		$control->shouldReceive( 'get_step' )->andReturn( null );
 		$control->shouldReceive( 'is_disabled' )->andReturn( true );
 		$control->shouldReceive( 'get_disabled_reason' )->andReturn( 'Недоступно на блочном чекауте' );
+		$control->shouldReceive( 'get_country' )->andReturn( '' )->byDefault();
 
 		$setting = $this->make_setting( 'x', 'boolean', $control );
 		$handler = Mockery::mock();
@@ -363,8 +420,9 @@ class FieldSchemaTest extends TestCase {
 
 		$this->assertTrue( $schema['x']['disabled'] );
 		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['disabled_reason'] );
-		// The reason doubles as the description so a client that ignores `disabled` still shows it.
-		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['description'] );
+		// The authored description must survive untouched — disabled_reason is a
+		// separate key, never folded into description.
+		$this->assertSame( 'Скрывает адрес получателя из письма.', $schema['x']['description'] );
 	}
 
 	/**
@@ -374,7 +432,7 @@ class FieldSchemaTest extends TestCase {
 	 */
 	public function test_enabled_control_emits_no_disabled_key(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
-		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '' ] as $m => $r ) {
+		foreach ( [ 'get_type' => 'text', 'get_description' => 'd', 'get_tooltip' => '', 'get_placeholder' => '', 'get_min' => null, 'get_max' => null, 'get_step' => null, 'is_disabled' => false, 'get_disabled_reason' => '', 'get_country' => '' ] as $m => $r ) {
 			$control->shouldReceive( $m )->andReturn( $r );
 		}
 		$setting = $this->make_setting( 'y', 'string', $control );

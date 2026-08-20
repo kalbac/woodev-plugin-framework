@@ -60,6 +60,19 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		/** @var string the multiselect control type */
 		const TYPE_MULTISELECT = 'multiselect';
 
+		/**
+		 * The admin default-locality picker control type (issue #376) — a
+		 * debounced async search over the active {@see \Woodev\Framework\Shipping\Location\Location_Provider},
+		 * fed by `GET woodev/v1/location/default-locality/suggest`. Distinct
+		 * from `TYPE_SELECT`: its "options" are not a fixed enum, they are
+		 * fetched per keystroke, and a selection stores a serialized
+		 * `Location_Record` JSON string rather than an option key.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		const TYPE_LOCATION_PICKER = 'location-picker';
+
 		/** @var string|null the setting ID to which this control belongs */
 		protected $setting_id;
 
@@ -95,6 +108,19 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 
 		/** @var string the human-readable reason a disabled control cannot be used right now. */
 		protected $disabled_reason = '';
+
+		/**
+		 * The store country a `TYPE_LOCATION_PICKER` control's suggest requests
+		 * should be scoped to (issue #376) — resolved server-side once, at
+		 * registration time, so the client never re-derives the store's
+		 * fallback country chain on its own (see
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}).
+		 * Empty for every other control type.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		protected $country = '';
 
 		/**
 		 * The setting ID to which this control belongs.
@@ -346,6 +372,29 @@ if ( ! class_exists( 'Woodev_Control' ) ) :
 		 */
 		public function set_placeholder( string $value ): void {
 			$this->placeholder = $value;
+		}
+
+		/**
+		 * Gets the store country a `TYPE_LOCATION_PICKER` control's suggest
+		 * requests should be scoped to.
+		 *
+		 * @since 2.0.2
+		 * @return string
+		 */
+		public function get_country(): string {
+			return $this->country;
+		}
+
+		/**
+		 * Sets the store country a `TYPE_LOCATION_PICKER` control's suggest
+		 * requests should be scoped to.
+		 *
+		 * @since 2.0.2
+		 * @param string $value ISO-3166 alpha-2 country code.
+		 * @return void
+		 */
+		public function set_country( string $value ): void {
+			$this->country = $value;
 		}
 
 		/**

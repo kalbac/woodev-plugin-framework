@@ -110,8 +110,9 @@ Two rules govern every option on this tab:
   → `Field_Schema` → the React field. Where only one VALUE is unavailable, the option list is
   narrowed instead and the reason appended to the description.
 - **A stored value that is no longer allowed clamps on READ, and is never rewritten**
-  (`Checkout_Field_Settings::effective()`, `Location_Provider_Registry::get_field_mode()`), so the
-  merchant's original choice comes back the moment it becomes valid again.
+  (`Checkout_Field_Settings::effective()`, `Location_Provider_Registry::get_field_mode_region()`/
+  `get_field_mode_settlement()`), so the merchant's original choice comes back the moment it
+  becomes valid again.
 
 ### The two-instrument rule
 
@@ -144,6 +145,43 @@ derived question (`get_levels_for_country()`, `get_level_owners_for_country()`,
 Whether the control should be OFFERED at all is a different question — the capability, not the
 runtime answer — and is asked through `Location_Service::is_level_servable()`, which deliberately
 bypasses both that gate and the resolution filter.
+
+### Where a location provider's credentials live — two legitimate models
+
+A `Location_Provider` chooses ONE of these, and the choice is visible to the merchant:
+
+| Model | `get_settings_fields()` | `is_configured()` |
+|---|---|---|
+| **Own credentials** — the provider is the only thing using this key | declares its fields | inherited: `false` iff a declared `required` field is empty |
+| **Carrier's credentials** — the key is shared by every call to that carrier's API | returns `[]` | **MUST be overridden** to answer from the carrier's own settings |
+
+The second model exists because a carrier's API keys are not a location-layer concern: CDEK's
+client id and secret authenticate every CDEK request, so they belong to the carrier's own settings
+screen and the location provider merely reads them. The reference implementation is the test
+fixture `Woodev_Test_CDEK_Location_Provider` + `Woodev_Test_CDEK_Integration`.
+
+Two rules bind both models:
+
+- **Overriding `is_configured()` is mandatory in the second model.** The inherited implementation
+  derives its answer from declared `required` fields, so a provider with no fields reports
+  `true` — it would claim to be configured while holding no credentials at all.
+- **Never read credentials through the settings handler — use `get_option()` directly.** The
+  handler only knows the fields it registered, but `is_configured()` is called on a provider even
+  while ANOTHER provider is active (the D15 fallback chain asks the bundled provider whether it can
+  still serve `address`). Going through the handler throws `Setting … does not exist`.
+
+**Field ids are globally unique across providers.** Every provider's fields share the
+`woodev_location_*` option namespace, and since #375 the settings surface registers EVERY
+registered provider's fields at once — each hidden behind a `show_if` condition on
+`active_provider`, so the form reacts to the select without a save round-trip. Two providers
+declaring the same field id would silently overwrite one definition with the other; the registry
+keeps the first registration and reports the conflict through `_doing_it_wrong()`.
+
+The bundled DaData provider's own fields carry a WIDER condition: they are visible when DaData is
+active **or** when the active provider cannot serve `address` for the store's country — because
+then DaData is the only thing the fallback chain can still use for addresses, and its keys must be
+reachable to enter. That predicate is deliberately country-scoped (a provider can serve `address`
+in one country and not another), resolved through `Location_Service::resolve_default_country()`.
 
 ## Licensing (`woodev/licensing/`)
 

@@ -11,7 +11,7 @@
  * @package woodev-plugin-framework
  */
 
-import { createElement, useState, Fragment } from '@wordpress/element';
+import { createElement, useState, Fragment, RawHTML } from '@wordpress/element';
 import { validateField, isRequirable } from './validate';
 import {
 	TextControl,
@@ -21,8 +21,21 @@ import {
 	RangeControl,
 } from '@wordpress/components';
 import FieldRow from './field-row';
+import FieldTip from './field-tip';
 import SelectField from './select-field';
+import LocationPickerField from './location-picker-field';
 import WizardRichText from './richtext';
+
+/**
+ * Setting id of the Location provider select — mirrors
+ * `Location_Provider_Registry::SETTING_ACTIVE_PROVIDER` (PHP) exactly. The
+ * `location-picker` control reads this key out of `conditionValues` (issue
+ * #380) to send the CURRENTLY SELECTED provider with its suggest requests,
+ * rather than whatever the store has persisted.
+ *
+ * @type {string}
+ */
+const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
 
 /**
  * Password input with a show/hide eye toggle.
@@ -204,7 +217,10 @@ function resolveControl( schema ) {
 }
 
 /**
- * Wraps a control with the shared field anatomy (label + tooltip + description + error).
+ * Wraps a control with the shared field anatomy (label + tooltip + description +
+ * disabled reason + error). `description` and `disabledReason` are both passed
+ * through unconditionally — legitimate at once, rendered as separate notes by
+ * `FieldRow` — the disabled reason only actually renders while `schema.disabled`.
  *
  * @param {Object}      schema  field schema slice.
  * @param {Object}      control rendered control element.
@@ -219,6 +235,7 @@ function withAnatomy( schema, control, error ) {
 			required: schema.required && isRequirable( resolveControl( schema ) ),
 			tooltip: schema.tooltip,
 			description: schema.description,
+			disabledReason: schema.disabled ? schema.disabled_reason : null,
 			error,
 		},
 		control
@@ -243,10 +260,16 @@ function withAnatomy( schema, control, error ) {
  * @param {boolean}  props.showErrors   when true, reveal errors without waiting for blur.
  * @param {boolean}  [props.hasEdit]    whether an explicit edit is staged (sensitive clear).
  * @param {Function} [props.onRevert]   drops a staged edit (enables the sensitive clear affordance).
+ * @param {Object}   [props.conditionValues] tab-wide effective values (settingId => value),
+ *                                            the same map `show_if` visibility is computed
+ *                                            from (App's own `conditionValues`) — reused here
+ *                                            (issue #380) so a control can react to a SIBLING
+ *                                            field's live, unsaved value; currently only the
+ *                                            `location-picker` control reads it.
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -268,7 +291,8 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	}
 
 	// D11: a disabled control is rendered read-only (native `disabled`), never hidden or
-	// silently ignoring input — its reason already reached us as `schema.description`.
+	// silently ignoring input — its reason already reached us as `schema.disabled_reason`
+	// (withAnatomy renders it separately from `schema.description`).
 	// Computed before the sensitive branch below so SecretControl gets it too.
 	const disabled = !! schema.disabled;
 
@@ -300,16 +324,35 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	switch ( control ) {
 		case 'toggle':
 		case 'checkbox':
-			// Toggle rows carry their own label/description meta beside the pill.
+			// Toggle rows carry their own label/description meta beside the pill
+			// (they don't go through withAnatomy/FieldRow) — the tooltip icon and
+			// the disabled-reason note are reproduced here via the shared FieldTip
+			// so a boolean setting gets the same affordances as any other control.
 			return createElement(
 				'div',
 				{ className: 'woodev-field__toggle-row' },
 				createElement(
 					'div',
 					{ className: 'woodev-field__toggle-meta' },
-					createElement( 'div', { className: 'woodev-field__toggle-label' }, schema.name ),
+					createElement(
+						'div',
+						{ className: 'woodev-field__toggle-label' },
+						schema.name,
+						createElement( FieldTip, { text: schema.tooltip } )
+					),
+					// RawHTML, matching FieldRow's own `description` rendering (issue #373) —
+					// `schema.description` is always a hardcoded, developer-authored `__()`
+					// string, never user data; see field-row.js's docblock for the full
+					// justification. Without this, an `<a>` link in a boolean field's
+					// description would render as escaped literal text.
 					schema.description &&
-						createElement( 'div', { className: 'woodev-field__toggle-desc' }, schema.description )
+						createElement(
+							'div',
+							{ className: 'woodev-field__toggle-desc' },
+							createElement( RawHTML, null, schema.description )
+						),
+					disabled && schema.disabled_reason &&
+						createElement( 'div', { className: 'woodev-field__disabled-reason' }, schema.disabled_reason )
 				),
 				createElement( ToggleControl, {
 					__nextHasNoMarginBottom: true,
@@ -326,6 +369,28 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
 					options: normalizeOptions( schema.options ),
+					disabled,
+					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
+				} ),
+				error
+			);
+
+		case 'location-picker':
+			// Admin default-locality picker (#376): debounced async search over
+			// the active Location_Provider, never the plain text/select fallback
+			// resolveControl() would otherwise infer for a bare `string` setting.
+			// `provider` (#380) is the LIVE, unsaved `active_provider` select
+			// value (via `conditionValues` — the same tab-wide map `show_if`
+			// visibility already reuses), not the persisted one `schema.country`
+			// itself is resolved from — see LocationPickerField's own docblock
+			// for why the picker must follow the select immediately rather than
+			// only after Save.
+			return withAnatomy(
+				schema,
+				createElement( LocationPickerField, {
+					value: value ?? schema.value ?? '',
+					country: schema.country || '',
+					provider: ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '',
 					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),

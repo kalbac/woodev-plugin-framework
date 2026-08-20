@@ -7,18 +7,25 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-19 (s81).** Last CODE commit — see PR closing **#362**. **#362 is COMPLETE**: all
-twelve tasks shipped across four PRs — #363 (1–4), #367 (5–7), #368 (8–9) and #372 (task 10,
-the docs, the full rig matrix, plus everything the audit of s80 turned up). Rig on the s81 branch.
-Tests: **2405 unit / 5930 assertions / 1209 jest / 110 integration**; phpcs and phpstan clean.
-Gotchas: **168**. Docs gate: `npm run lint:docs` (session-start reading budget 120 KB).
+**As of 2026-08-20 (s82).** Branch `feat/shipping-tab-admin-polish` — **10 commits, pushed, NOT
+merged**: this is UI/UX work and stops at the operator's own review. All six «Доставка» polish cards
+are done (#375, #377, #380 closing #369, #376 closing #370, #373, #378), plus four defects of the
+settings surface nobody had filed and one found by the rig pass. Tests: **2448 unit / 6067
+assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **170**.
 
-s81 re-audited every one of s80's nine tasks with four independent reviewers, and then found two
-defects that only a finished rig pass could find — both in the shipped `hide_for_pickup` /
-`country=hide` policy, both now fixed: the server still required a field the browser had hidden
-(gotcha `js-hidden-checkout-field-is-still-required-server-side`), and WooCommerce's own
-`address-i18n.js` re-showed the hidden row with an inline `display:block` that beat our class
-(gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`). Detail: `sessions/s81.md`.
+**Codex works on this machine.** Measured in s82: in an Orca terminal it has a real shell and reads
+files byte-exact; only `codex exec -s read-only` from Bash hits the broken sandbox. The gotcha that
+claimed otherwise for two months is rewritten. The inline bundle and canary are obsolete.
+
+**PR #403 открыт, CI зелёный (19 pass), НЕ смержен** — ждёт осмотра оператором. Он уже посмотрел
+админку и принял выравнивание иконок и смену провайдера налету; по итогам заведены **#404** (значение
+«Предустановленный список» предлагается шире, чем работает), **#405** (неверные ключи неотличимы от
+«города нет»), **#406** (не давать сохранить запись от чужого провайдера) и **#407** (проза обещает
+блокировку поля НП, код её не делает). Все в `Бэклог`, чинить в следующей сессии.
+
+**A local 27B review was verified** in a dedicated worktree: 20 confirmed findings filed as
+#383–#402, including a **critical IDOR** (a Subscriber can read and delete any user's saved payment
+cards). One of them, #386, fired here hours later and is fixed. Detail: `sessions/s82.md`.
 
 ## Program status (high level)
 
@@ -70,38 +77,29 @@ defects that only a finished rig pass could find — both in the shipped `hide_f
 
 ## Next Actions
 
-0. **#362 — ЗАКРЫТ (s81).** Вкладка «Доставка» с тремя секциями живёт на `main` целиком: политика
-   полей через два шва WC, поведение карты, «Подсказки для адреса». Спека переведена в IMPLEMENTED.
-   **Что стоит посмотреть глазами оператора** (я проверял сам в браузере, но это UI): вкладка
-   `Woodev → Настройки → Доставка`, все три секции.
-   Новые карточки, все в `Бэклог`, все — развилки для оператора, а не баги к немедленной починке:
-   **#369** (`region_field=remove` вместе с `field_mode=related-list` молча ломает выбор НП —
-   блокировки между настройками спека не предусматривала), **#370** (машинные поля
-   «Зафиксированная локация» / «…требует повторного выбора» редактируются вручную: `Field_Schema`
-   не исключает бесконтрольную настройку, а кладёт `controlType: null`, и React выбирает контрол
-   по типу значения — приехало с задачи 14 слоя локаций), **#371** (мультипакетная доставка: JS
-   смотрит на первый пакет, PHP — на любой). По итогам осмотра оператором добавлены **#373**
-   (нет ни одной подсказки у полей вкладки — механика `desc_tip`+`description` уже есть, нужно
-   наполнение), **#374** (длинные названия опций и словарь значений), **#375** (ключи провайдера
-   локаций принадлежат карьеру, а не секции «Локация»; плюс уведомление при `is_configured()` false).
-1. **Доводка админки вкладки «Доставка» — следующая сессия целиком.** Оператор просил довести ВСЁ и
-   звать на ревью один раз, а не по карточке. Порядок и целевые картинки — в
-   `next-session-prompt.md`. Карточки: **#375** (динамическая видимость полей провайдера +
-   уведомление), **#377** (три сценария «Подсказок для адреса»; там открытый вопрос за оператором —
-   где живут ключи DaData), **#376** (picker «Зафиксированной локации», закрывает #370), **#373**
-   (подсказки), **#378** (описания секций), **#374** (названия — НЕ начинать без оператора),
-   **#379** (цвет/текст кнопки карты — низкий приоритет: цепочка «магазин → карьер → фреймворк»
-   уже реализована в `resolve_accent_color()`, не хватает лишь вывода существующего поля на
-   вкладку), **#380** (переезд типов полей в «Поля» и разделение «Тип поля НП/Регион» на две
-   опции — **отменяет решение S2 спеки**; значения — чистая декомпозиция
-   сегодняшних режимов, новых состояний нет).
-2. **Остатки слоя локаций, все в `Бэклог`:** #353 (провайдер без уровня НП не регистрируется —
-   правило есть у оператора в голове, в коде его нет), #356 (настоящий forget-путь: гейт не пишет,
-   протухший блоб живёт на диске), #358 (провайдерский шов не сообщает, учёл ли чужого родителя),
-   #361 (`within_status` едет на клиент, но никто его не читает).
-3. **Постановки оператора:** #331 (подсказки в корзине), #332 (подсказки в ЛК).
-4. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
-5. **Тулинг:** Codex чинится одной командой из-под администратора — `winget install --id Microsoft.PowerShell`. Готча `codex-shell-sandbox-broken-windows`. **У codex-cli 0.147.0 больше нет `--prompt-file`** (и он выходит с кодом 0, молча не создавая файл вывода) — рабочий транспорт stdin.
+0. **Вкладка «Доставка» — доводка ЗАКОНЧЕНА (s82), ждёт твоих глаз.** Ветка
+   `feat/shipping-tab-admin-polish`, 10 коммитов, запушена, **не смержена**. Я проверил всё в
+   браузере на риге сам (три миграции, две оси по три значения, ключи провайдера без сохранения,
+   picker с живыми подсказками, консоль чистая), но это UI — по правилу решает оператор.
+   Смотреть: `Woodev → Настройки → Доставка`, все три секции. **Риг стоит на этой ветке.**
+1. **#374 (названия опций и словарь значений)** — НЕ начинать без оператора, его прямая просьба.
+   Сейчас самое время: после разделения осей значений стало больше, и вся копия уже написана.
+2. **#379 (цвет/текст кнопки карты)** — низкий приоритет; цепочка «магазин → карьер → фреймворк»
+   уже реализована в `resolve_accent_color()`, не хватает лишь вывода поля `pickup_accent_color`
+   на вкладку.
+3. **Ревью локальной 27B — 20 карточек #383–#402 в `Инбокс`, приоритизация за оператором.**
+   Самое тяжёлое: **#383** — критический IDOR, Подписчик читает и удаляет чужие сохранённые карты;
+   **#394** stored-XSS; **#395** ключ лицензии в логах открытым текстом. Ещё **6 развилок** ждут
+   его решения — они в комментарии к #382, карточек на них нет намеренно.
+4. **Открытый вопрос из Блока 2:** проза (спека и карточка) утверждает, что поле НП «блокируется
+   до выбора региона», но такого механизма в коде НЕТ — есть только скоупленная и нескоупленная
+   предзагрузка. Воркер справедливо отказался это изобретать. Решить: нужна ли настоящая блокировка.
+5. **Остатки слоя локаций, все в `Бэклог`:** #353, #356, #358, #361.
+6. **Постановки оператора:** #331 (подсказки в корзине), #332 (подсказки в ЛК).
+7. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
+8. **Тулинг: Codex РАБОТАЕТ** — запускать в Orca-терминале (`orca terminal create --worktree active
+   --command codex`), а не через `codex exec` из Bash. Готча `codex-shell-sandbox-broken-windows`
+   переписана. Промпты ему — на английском, вердикт просить в файл.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -115,7 +113,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`). Current state: tree on `main`.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  `feat/shipping-tab-admin-polish` (s82) — ветка ЖДЁТ ревью оператора, не переключать дерево, пока он не посмотрит.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.

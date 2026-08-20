@@ -25,6 +25,14 @@
 		font-weight: 600;
 		color: wd.$ink;
 		margin-bottom: 6px;
+
+		// Pin the tooltip to the RIGHT edge of the label column, so the icons form a
+		// straight line instead of trailing each label's own text length. Scoped to
+		// this label deliberately: the checkbox/toggle label keeps its tip inline
+		// beside the text, where the control itself sits far to the right.
+		.woodev-field__tip {
+			margin-left: auto;
+		}
 	}
 
 	&__req {
@@ -67,12 +75,26 @@
 		margin: 6px 0 0;
 	}
 
+	// Disabled-reason note: a STATE note (why unavailable now), not documentation
+	// — kept visually distinct from `&__desc` (warn color, italic) so the two
+	// never read as one merged sentence when both are present (D11 follow-up).
+	&__disabled-reason {
+		font-size: 13px;
+		line-height: 1.55;
+		color: wd.$warn;
+		font-style: italic;
+		margin: 6px 0 0;
+	}
+
 	// Tooltip trigger — the bubble itself is now wp `Tooltip` (portal, zam.4).
 	&__tip {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		// Never let the flex parent squash the circle into an oval: a long label
+		// shrinks every flexible sibling, and a 17x17 circle became a 12x17 ellipse.
+		flex: 0 0 auto;
 		width: 17px;
 		height: 17px;
 		border-radius: 50%;
@@ -212,6 +234,9 @@
 	}
 
 	&__toggle-label {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
 		font-size: 15px;
 		font-weight: 600;
 		color: wd.$ink;
@@ -222,6 +247,13 @@
 		color: wd.$ink-muted;
 		margin-top: 3px;
 		line-height: 1.5;
+	}
+
+	// Toggle rows render &__disabled-reason inline (same meta column as the
+	// label/description) rather than under the control — override the shared
+	// spacing to match &__toggle-desc's rhythm.
+	&__toggle-meta &__disabled-reason {
+		margin-top: 3px;
 	}
 
 	// Richtext (contentEditable editor + toolbar).
@@ -559,4 +591,31 @@
 	padding: 0;
 	border-radius: wd.$radius-sm;
 	box-shadow: 0 12px 32px rgba( 10, 30, 40, 0.16 );
+}
+
+// Admin default-locality picker (#376) — a fork of .woodev-select whose list is
+// fetched, not static: a distinct "broken stored value" trigger state (a value
+// is present but failed to parse — never rendered as if nothing were chosen),
+// and a loading/error row inside the popover.
+.woodev-location-picker {
+	.woodev-select__value.is-broken {
+		color: wd.$warn;
+	}
+
+	&__status {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: 10px;
+		color: wd.$muted;
+		font-size: 13px;
+
+		&--error {
+			color: wd.$error;
+		}
+	}
+}
+
+.woodev-select__trigger.is-broken {
+	border-color: wd.$warn;
 }

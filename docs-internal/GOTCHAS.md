@@ -99,7 +99,8 @@
 
 ### [testing/*] — Testing patterns
 - [testing/*] **Measure a gate only where the gate can actually fire — an AND-ed precondition you did not control answers for you.** → [measure-a-gate-where-the-gate-can-actually-fire](gotchas/measure-a-gate-where-the-gate-can-actually-fire.md) (s78)
-- [testing/*] **A `perl -0pi` mutation with `\n` silently misses every CRLF file, and the green run reads as proof.** → [perl-multiline-mutation-silently-misses-crlf-files](gotchas/perl-multiline-mutation-silently-misses-crlf-files.md) (s78)
+- [testing/*] **A `perl -0pi` newline-pattern mutation silently misses a CRLF file — and this tree is LF, so a CRLF file means Serena flipped it (root cause corrected s82).** → [perl-multiline-mutation-silently-misses-crlf-files](gotchas/perl-multiline-mutation-silently-misses-crlf-files.md) (s78, corrected s82)
+- [testing/measurement] **A cached token makes an invalid-credential test PASS — you tested the cache, not the credential.** → [a-cached-token-makes-an-invalid-credential-test-pass](gotchas/a-cached-token-makes-an-invalid-credential-test-pass.md) (s82)
 - [testing/*] **A probe that uses the production accessor creates the state it measures.** → [a-probe-that-uses-the-production-accessor-creates-the-state-it-measures](gotchas/a-probe-that-uses-the-production-accessor-creates-the-state-it-measures.md) (s74)
 - [testing/*] **A mutation you did not confirm APPLIED proves nothing — a silently-missed edit reads as "the test survives it".** → [a-mutation-you-did-not-confirm-applied-proves-nothing](gotchas/a-mutation-you-did-not-confirm-applied-proves-nothing.md) (s73)
 - [testing/unit] **`Functions\expect( 'f' )->once()->with( X )` does NOT reject a second call with different arguments.** → [brain-monkey-expect-with-does-not-reject-extra-calls](gotchas/brain-monkey-expect-with-does-not-reject-extra-calls.md) (s72)
@@ -261,7 +262,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
-- [tooling/codex-shell-sandbox-broken-windows] **codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72)
+- [tooling/parallel-agents] **Two agents editing one file is the ORCHESTRATOR's bug — one `git checkout` erased another agent's finished, uncommitted work.** → [two-agents-one-file-is-the-orchestrator-s-bug](gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) (s82)
+- [tooling/codex-shell-sandbox-broken-windows] **Codex's shell WORKS — launch it in an Orca terminal; only `codex exec -s read-only` hits the broken windows sandbox. Same binary, trusted project, no sandbox.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72, **solved s82**)
 - [tooling/windows] **Git Bash mangles Cyrillic in curl arguments — the API answers 400/500 and it reads as the API's fault.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76)
 - [tooling/serena-eol-flip] **Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows.** → [serena-replace-content-eol-flip](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] **PHPStan crashes with exit `-1073741819` on Windows — environmental, not a code error.** → [phpstan-windows-parallel-worker-segfault](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)

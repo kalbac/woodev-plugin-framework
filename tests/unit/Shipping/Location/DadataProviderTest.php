@@ -328,6 +328,13 @@ final class DadataProviderTest extends TestCase {
 
 		Functions\when( 'get_option' )->justReturn( '' );
 		Functions\when( 'apply_filters' )->returnArg( 2 );
+		// #375/#377: Location_Provider_Registry::register_settings() now builds a
+		// `show_if` condition for the bundled default provider's own fields via
+		// Location_Service::resolve_default_country(), which reads
+		// wc_get_base_location() — only reached by this file's own registry-
+		// integration test below, but stubbed here so that test does not have to
+		// know about a WooCommerce function it is not about.
+		Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
 		Functions\when( 'wp_json_encode' )->alias(
 			static function ( $data ) {
 				return json_encode( $data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
@@ -422,6 +429,25 @@ final class DadataProviderTest extends TestCase {
 
 	public function test_provider_id_matches_the_registry_default_provider_id(): void {
 		$this->assertSame( Location_Provider_Registry::DEFAULT_PROVIDER_ID, ( new Dadata_Provider() )->get_id() );
+	}
+
+	/**
+	 * Copy coverage (issue #373) — the operator's own rule: `tooltip` is the
+	 * default explainer, `description` is reserved for a clickable link (e.g.
+	 * "получить в личном кабинете"). Both fields this provider declares must
+	 * carry a non-empty `tooltip`, and `description` must actually contain an
+	 * `<a href="…">` — an empty or link-less `description` here would be dead
+	 * weight, since `tooltip` alone already carries the explanation.
+	 */
+	public function test_every_declared_field_has_a_tooltip_and_a_link_bearing_description(): void {
+		foreach ( ( new Dadata_Provider() )->get_settings_fields() as $id => $field ) {
+			$this->assertNotSame( '', $field['tooltip'] ?? '', "Field \"{$id}\" has an empty tooltip." );
+			$this->assertStringContainsString(
+				'<a href=',
+				$field['description'] ?? '',
+				"Field \"{$id}\"'s description should carry the clickable DaData account link."
+			);
+		}
 	}
 
 	/**

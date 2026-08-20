@@ -28,7 +28,7 @@
  * system (Task 6's `Checkout_Field_Policy` calls it for all five ids): the stored
  * value clamped to what is currently allowed (design §7 — clamp on READ, never
  * rewrite), mirroring
- * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode()}.
+ * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode_region()}.
  *
  * @since 2.0.2
  */
@@ -130,7 +130,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 * option itself is left untouched, so a condition change (e.g. the merchant
 		 * adding a second shipping country, or switching checkout experience) restores
 		 * the merchant's original choice the moment it becomes valid again — same shape
-		 * as {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode()}.
+		 * as {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode_region()}.
 		 *
 		 * Clamping rules:
 		 *  - `field_order_preset` — never disabled, returned as stored (cast to bool).
@@ -189,11 +189,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 			return in_array( $stored, $offered, true ) ? $stored : 'show';
 		}
 
-		/**
-		 * {@inheritDoc}
-		 *
-		 * @since 2.0.2
-		 */
 		protected function register_settings() {
 
 			$this->register_setting(
@@ -204,7 +199,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					'default' => true,
 				]
 			);
-			$this->register_control( 'field_order_preset', \Woodev_Control::TYPE_CHECKBOX );
+			$this->register_control(
+				'field_order_preset',
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Приводит порядок и формат полей адреса на чекауте к единому стандарту фреймворка вместо порядка, который задаёт тема или сторонний плагин.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'country_field',
@@ -218,7 +219,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					'default' => 'show',
 				]
 			);
-			$this->register_control( 'country_field', \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				'country_field',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Показывать ли поле «Страна» на чекауте. «Скрывать» доступно только когда магазин доставляет ровно в одну страну — тогда она подставляется автоматически и покупателю нечего выбирать.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'region_field',
@@ -232,7 +239,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					'default' => 'show',
 				]
 			);
-			$this->register_control( 'region_field', \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				'region_field',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( '«Удалять» полностью убирает поле «Регион» из формы чекаута — его значение никогда не попадёт в заказ, а настройки «Тип поля Регион» ниже перестают действовать (поле нечем управлять). «Показывать» оставляет обычное поле региона.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'address_field',
@@ -246,7 +259,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					'default' => 'show',
 				]
 			);
-			$this->register_control( 'address_field', \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				'address_field',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( '«Скрывать для методов ПВЗ» прячет поле «Адрес» на чекауте, пока выбран способ доставки до пункта выдачи, но его значение всё равно может уйти в заказ (например, адрес, записанный из выбранного пункта, если это включено в разделе «Карта»). Работает только на классическом чекауте.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->register_setting(
 				'postcode_field',
@@ -261,7 +280,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					'default' => 'show',
 				]
 			);
-			$this->register_control( 'postcode_field', \Woodev_Control::TYPE_SELECT );
+			$this->register_control(
+				'postcode_field',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( '«Скрывать для методов ПВЗ» прячет поле «Индекс» при выборе пункта выдачи, но его значение всё ещё может уйти в заказ; «Удалять» убирает поле из формы совсем, и его значение никогда не попадёт в заказ. Первый вариант работает только на классическом чекауте, второй — на обоих.', 'woodev-plugin-framework' ),
+				]
+			);
 
 			$this->apply_availability();
 		}

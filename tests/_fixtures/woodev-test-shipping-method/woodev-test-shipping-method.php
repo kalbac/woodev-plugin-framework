@@ -310,6 +310,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 	require_once __DIR__ . '/class-test-location-adapter.php';
 	require_once __DIR__ . '/class-test-credential-seeder.php';
 
+	// Issue #375: the CDEK test-contour credentials' new home — the carrier's own
+	// Integration settings, not the location-provider settings surface. Required
+	// unconditionally, same reasoning as the requires just above; must be loadable
+	// before `class-test-cdek-location-provider.php` below, whose is_configured()
+	// references this class's FIELD_* constants.
+	require_once __DIR__ . '/class-test-cdek-integration.php';
+
 	// Task 13: the `list`-capable fixture provider — the bundled DaData provider has no
 	// `list` capability at all, so tests and the rig need a fake that DOES enumerate to
 	// exercise `related-list`/`ajax-select2` field modes. Required unconditionally, same
@@ -943,6 +950,52 @@ function woodev_test_shipping_method_plugin_init(): void {
 			}
 
 			/**
+			 * Cached Integration handler instance — the carrier-wide settings home
+			 * for the CDEK test-contour credentials (issue #375).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @var \Woodev\Framework\Shipping\Shipping_Integration|null
+			 */
+			private ?\Woodev\Framework\Shipping\Shipping_Integration $integration_handler_instance = null;
+
+			/**
+			 * {@inheritDoc}
+			 *
+			 * Built and cached DIRECTLY here — deliberately NOT via
+			 * `WC()->integrations->get_integration( $this->get_method_id() )`, the
+			 * pattern both `plugins-reference/woocommerce-edostavka` and
+			 * `plugins-reference/woocommerce-yandex-delivery` use for their own
+			 * `get_integration_handler()`. That pattern depends on `WC_Integrations`
+			 * having ALREADY processed the `woocommerce_integrations` filter by the
+			 * time it is called — true once WooCommerce has finished its own boot,
+			 * but NOT necessarily true at the exact moment
+			 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::add_hooks()} calls
+			 * this method (during THIS plugin's own construction) to decide whether
+			 * to hook `register_integration` at all — see that method's own guard,
+			 * `get_integration_handler() instanceof Shipping_Integration`. Constructing
+			 * (and caching) our own instance directly sidesteps that ordering
+			 * question entirely: this accessor always answers correctly, from the
+			 * very first call. `register_integration()` (inherited) separately hands
+			 * WooCommerce the CLASS NAME for its OWN admin-rendered instance — two
+			 * instances of {@see \Woodev_Test_Cdek_Integration} end up existing, both
+			 * agreeing on the same `WC_Settings_API::get_option_key()`-derived option
+			 * name, which is all that matters for them to never disagree about a
+			 * stored value.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @inheritDoc
+			 */
+			public function get_integration_handler(): ?\Woodev\Framework\Shipping\Shipping_Integration {
+				if ( null === $this->integration_handler_instance ) {
+					$this->integration_handler_instance = new \Woodev_Test_Cdek_Integration( $this );
+				}
+
+				return $this->integration_handler_instance;
+			}
+
+			/**
 			 * Bridges the rig's own wp-config credential constants into the location
 			 * providers' store-level settings options via
 			 * {@see \Woodev_Test_Credential_Seeder::maybe_seed()} — see that class's own
@@ -962,17 +1015,30 @@ function woodev_test_shipping_method_plugin_init(): void {
 				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_token', 'WOODEV_TEST_DADATA_TOKEN' );
 				\Woodev_Test_Credential_Seeder::maybe_seed( 'woodev_location_clean_secret', 'WOODEV_TEST_DADATA_SECRET' );
 
-				// Issue #343: the same bridge for the CDEK test-contour credentials. CDEK
-				// publishes shared test keys, but a credential that is public elsewhere is
-				// still not ours to commit here (gotcha
+				// Issue #343 (rehomed by issue #375): the same bridge for the CDEK
+				// test-contour credentials — now seeded into Woodev_Test_Cdek_Integration's
+				// OWN array-shaped option, not the location-provider settings surface, since
+				// #375 moved the credentials to the carrier's own settings (CDEK's Client
+				// ID/Secret authenticate every CDEK API call, not only the location
+				// dictionary). CDEK publishes shared test keys, but a credential that is
+				// public elsewhere is still not ours to commit here (gotcha
 				// `public-repo-third-party-credentials`) — so they live in the rig's own
 				// wp-config exactly like the DaData token does, and never in this repo.
-				\Woodev_Test_Credential_Seeder::maybe_seed(
-					'woodev_location_' . \Woodev_Test_Cdek_Location_Provider::FIELD_CLIENT_ID,
+				// Mirrors WC_Settings_API::get_option_key()'s own construction
+				// ('woocommerce_' . $this->id . '_settings') — Woodev_Test_Cdek_Integration
+				// never overrides $plugin_id, so the default 'woocommerce_' prefix applies,
+				// and Shipping_Integration::__construct() sets $this->id to the PLUGIN's own
+				// id_underscored (not the shipping METHOD's id).
+				$integration_option = 'woocommerce_' . $this->get_id_underscored() . '_settings';
+
+				\Woodev_Test_Credential_Seeder::maybe_seed_into_array_option(
+					$integration_option,
+					\Woodev_Test_Cdek_Integration::FIELD_CLIENT_ID,
 					'WOODEV_TEST_CDEK_CLIENT_ID'
 				);
-				\Woodev_Test_Credential_Seeder::maybe_seed(
-					'woodev_location_' . \Woodev_Test_Cdek_Location_Provider::FIELD_CLIENT_SECRET,
+				\Woodev_Test_Credential_Seeder::maybe_seed_into_array_option(
+					$integration_option,
+					\Woodev_Test_Cdek_Integration::FIELD_CLIENT_SECRET,
 					'WOODEV_TEST_CDEK_CLIENT_SECRET'
 				);
 			}

@@ -117,7 +117,11 @@ namespace Woodev\Tests\Unit\Shipping {
 			return $this->provider->get_countries();
 		}
 
-		public function get_field_mode(): string {
+		public function get_field_mode_region(): string {
+			return 'typeahead';
+		}
+
+		public function get_field_mode_settlement(): string {
 			return 'typeahead';
 		}
 
