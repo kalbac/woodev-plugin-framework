@@ -45,15 +45,22 @@ thinking hard, and `check --wait` will burn its entire timeout on it.
 
 In s83 this cost two full nine-minute wait windows before anyone looked at a buffer.
 
-## Related observation, not proven
+## The hook timeout is NOT the cause — settled, do not re-derive it
 
-The same session saw `UserPromptSubmit hook timed out after 10s — output discarded` in a worker
-buffer, and Orca installs eleven hooks into `~/.claude/settings.json` all with `timeout: 10`. That
-message concerns the hook's own output, not the prompt, and it was observed on a later nudge
-rather than on the original delivery — so it is **not** established as the cause of the stall.
-Recorded here only so the next person does not re-derive the correlation and mistake it for a
-finding. Codex's Orca hooks were separately observed failing outright (`PostToolUse hook (failed)
-— exited with code 1`), which is what `orca agent hooks prepare-codex` exists to repair.
+The same session repeatedly saw `UserPromptSubmit hook timed out after 10s — output discarded`,
+and Orca installs eleven hooks into `~/.claude/settings.json` all with `timeout: 10`. It is a
+tempting explanation and it is **wrong**: a later dispatch printed that exact timeout and the
+prompt executed anyway. The message concerns the hook's own output, which is context injection,
+not the submission. Two independent things happen to be noisy at the same time.
+
+Codex's Orca hooks were separately observed failing outright (`PostToolUse hook (failed) — exited
+with code 1`, `Stop hook (failed)`), which is what `orca agent hooks prepare-codex` exists to
+repair, and which is the likely reason `worker-read` falls back to `source: "terminal"` with
+`fallbackReason: "session_not_reported"` instead of returning the real transcript. Also cosmetic
+for the stall, but worth repairing separately.
+
+**Every observed stall was a Codex launch**, where MCP server startup is slow enough to swallow
+the Enter. Claude workers hit it once; Codex hit it every single time. Budget for it.
 
 ## Related
 
