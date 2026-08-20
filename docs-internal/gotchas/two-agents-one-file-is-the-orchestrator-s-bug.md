@@ -57,6 +57,21 @@ Both run against `D:\Projects\woodev_framework`. Whoever discards first wins.
 **Commit each block the moment its gates are green.** Uncommitted work is the only thing a stray
 `git checkout` can destroy. Every minute a finished block sits uncommitted is a window.
 
+That habit was then tested on the author of this file, in the same session, an hour after writing
+it: wanting to inspect an untouched file's line endings, I ran `git checkout -q main -- .` — which
+does not inspect anything, it OVERWRITES the working tree and index from another branch. Fifty
+files reverted. Nothing was lost, purely because the block had been committed minutes earlier;
+`git reset --hard HEAD` restored everything and the suite came back at the same 2440/6013.
+
+Two lessons, both worth more than the embarrassment:
+
+- **To READ another revision, never check it out.** `git show <ref>:<path>`, `git diff <ref> -- <path>`
+  and `git ls-files --eol <path>` all answer without touching the working tree. Reaching for
+  `git checkout` to answer a question is the mistake, independent of who else is editing.
+- **Knowing the trap does not disarm it.** This file existed, indexed and committed, and the trap
+  still fired — because the destructive command arrived dressed as a read. The protection that
+  actually worked was the commit, not the knowledge.
+
 ## Related
 
 - [[git-checkout-destroys-uncommitted-mutation-revert]] — the same command, the same class of loss,
