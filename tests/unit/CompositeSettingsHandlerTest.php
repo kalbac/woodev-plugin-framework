@@ -210,6 +210,52 @@ class CompositeSettingsHandlerTest extends TestCase {
 	 * path (class-rest-api-settings-page.php:189, try/catch(\Throwable)) believe an update
 	 * succeeded when it did nothing.
 	 */
+	/**
+	 * A section that interleaves two handlers' fields must render in the order it declared,
+	 * not grouped by owning handler.
+	 *
+	 * Found on the rig: the «Поля» section lists `region_field` (checkout handler) and the
+	 * region field-type axis (location handler) next to each other on purpose — each axis
+	 * belongs beside the field it governs — but collecting child by child pulled every
+	 * location-owned setting above every checkout-owned one, so the axes rendered detached
+	 * from their fields. Unit and jest suites both passed: nothing asserted display order
+	 * across handlers.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_get_settings_follows_the_requested_id_order_across_children(): void {
+		$location = $this->make_handler(
+			'location',
+			function ( $h ) {
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Тип поля Регион' ] );
+			}
+		);
+
+		$checkout = $this->make_handler(
+			'checkout',
+			function ( $h ) {
+				$h->register_setting( 'country_field', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Страна' ] );
+				$h->register_setting( 'region_field', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Регион' ] );
+			}
+		);
+
+		$composite = new Composite_Settings_Handler( 'shipping', [ $location, $checkout ] );
+
+		$this->assertSame(
+			[ 'country_field', 'region_field', 'field_mode_region' ],
+			array_keys( $composite->get_settings( [ 'country_field', 'region_field', 'field_mode_region' ] ) ),
+			'the section declared order wins over child order'
+		);
+
+		$this->assertSame(
+			[ 'field_mode_region', 'country_field' ],
+			array_keys( $composite->get_settings( [ 'field_mode_region', 'country_field' ] ) ),
+			'a different requested order is honoured too, and an omitted id stays omitted'
+		);
+	}
+
 	public function test_get_value_and_update_value_throw_on_unknown_id(): void {
 		$a = $this->make_handler(
 			'alpha',

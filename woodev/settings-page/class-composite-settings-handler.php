@@ -77,17 +77,45 @@ final class Composite_Settings_Handler {
 
 	/**
 	 * @since 2.0.2
-	 * @param string[] $ids optional filter.
-	 * @return \Woodev_Setting[] keyed by id, children in order.
+	 * @since 2.0.2 When `$ids` is given, the result follows THAT order rather than child
+	 *              order — a `Settings_Section` interleaving fields from two handlers gets
+	 *              the order it declared.
+	 * @param string[] $ids optional filter, in the desired display order.
+	 * @return \Woodev_Setting[] keyed by id, in `$ids` order when given, else child order.
 	 */
 	public function get_settings( array $ids = [] ): array {
-		$out = [];
+		$collected = [];
+
 		foreach ( $this->children as $child ) {
 			foreach ( $child->get_settings( $ids ) as $sid => $setting ) {
-				$out[ $sid ] = $setting;
+				$collected[ $sid ] = $setting;
 			}
 		}
-		return $out;
+
+		if ( empty( $ids ) ) {
+			return $collected;
+		}
+
+		/*
+		 * Child-major order is wrong for a section that interleaves handlers. The
+		 * «Поля» section lists `region_field` (checkout handler) and the region field-type
+		 * axis (location handler) next to each other on purpose — each axis belongs beside
+		 * the field it governs — and collecting child by child pulled every location-owned
+		 * setting above every checkout-owned one, so the axes rendered detached from their
+		 * fields. Reorder to the caller's list; ids no child owns simply never appear,
+		 * which is this class's documented divergence.
+		 */
+		$ordered = [];
+
+		foreach ( $ids as $id ) {
+			$id = (string) $id;
+
+			if ( isset( $collected[ $id ] ) ) {
+				$ordered[ $id ] = $collected[ $id ];
+			}
+		}
+
+		return $ordered;
 	}
 
 	/**
