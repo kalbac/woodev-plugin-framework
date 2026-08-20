@@ -1288,6 +1288,22 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertNotSame( '', $config['location']['i18n']['notPersisted'] );
 	}
 
+	/**
+	 * Issue #405: the checkout typeahead's DISTINCT "the source could not answer" string
+	 * — never the same sentence as `noResults` above (see `location-typeahead.js`'s own
+	 * `errorText` docblock and `Location_Provider::suggest()`'s "EMPTY VS. FAILED"
+	 * section for the full contract this string closes).
+	 */
+	public function test_location_block_carries_the_unavailable_message_distinct_from_no_results(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertIsString( $config['location']['i18n']['unavailable'] );
+		$this->assertNotSame( '', $config['location']['i18n']['unavailable'] );
+		$this->assertNotSame( $config['location']['i18n']['noResults'], $config['location']['i18n']['unavailable'] );
+	}
+
 	public function test_no_token_or_secret_leaks_into_the_i18n_block(): void {
 		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
 		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )

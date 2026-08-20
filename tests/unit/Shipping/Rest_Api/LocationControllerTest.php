@@ -734,6 +734,41 @@ final class LocationControllerTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------
+	// Issue #405: a RESOLVED provider's `suggest()` call must answer
+	// DIFFERENTLY depending on whether the request FAILED (throws -> 502)
+	// or COMPLETED with nothing to show (returns `[]` -> 200 + empty) — the
+	// whole gap the issue closes. Mirrors `/list`'s own
+	// `test_list_provider_exception_returns_502()` below.
+	// -------------------------------------------------------------------
+
+	public function test_suggest_provider_resolves_to_zero_matches_returns_empty_200(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Заброшенный', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( [], $result['suggestions'] );
+	}
+
+	public function test_suggest_provider_exception_returns_502(): void {
+		$provider = new Location_Controller_Fake_Provider(
+			static function () {
+				throw new \RuntimeException( 'wrong keys — upstream rejected the request' );
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	// -------------------------------------------------------------------
 	// /suggest — degradation: no provider for the level, and the whole
 	// layer inactive, BOTH collapse to 200 + empty (never 404/500)
 	// -------------------------------------------------------------------

@@ -303,11 +303,19 @@
 	 * @param {string}           [options.emptyText] Message shown in the listbox when a completed
 	 *                                                search returned nothing. Omitted/blank keeps
 	 *                                                the listbox hidden instead.
+	 * @param {string}           [options.errorText] Message shown in the listbox when `fetch()`
+	 *                                                REJECTS or throws — the request itself could
+	 *                                                not be completed, as opposed to `emptyText`'s
+	 *                                                "completed, found nothing" (issue #405: the two
+	 *                                                must never read the same to the customer).
+	 *                                                Omitted/blank keeps the old contract — the
+	 *                                                listbox just closes silently, no message shown.
 	 * @returns {{detach: function(): void}}
 	 */
 	function attachTypeahead( input, options ) {
 		var opts = options || {};
 		var emptyText = 'string' === typeof opts.emptyText ? opts.emptyText : '';
+		var errorText = 'string' === typeof opts.errorText ? opts.errorText : '';
 		var fetchFn = 'function' === typeof opts.fetch ? opts.fetch : function() {
 			return Promise.resolve( [] );
 		};
@@ -536,6 +544,43 @@
 		}
 
 		/**
+		 * Renders `errorText` inside an OPEN listbox — the request-FAILED counterpart to
+		 * {@see renderItems}'s own empty-message row (issue #405). Reached ONLY when a
+		 * search could not be completed at all (a rejected/thrown `fetch()`), NEVER when
+		 * it completed and found nothing — the two must read as different sentences to
+		 * the customer, not the same "nothing here" (see the file docblock's own note on
+		 * this — {@see renderItems}'s `emptyText` row keeps its own class/wording,
+		 * `woodev-location-error` is this row's own so a caller can style them apart).
+		 *
+		 * Not an option — same `role="presentation"` treatment as the empty-message row:
+		 * `items` stays `[]`, so ArrowDown/Enter cannot land on it and a click selects
+		 * nothing.
+		 *
+		 * @returns {void}
+		 */
+		function renderError() {
+			items = [];
+			activeIndex = -1;
+
+			while ( listbox.firstChild ) {
+				listbox.removeChild( listbox.firstChild );
+			}
+
+			input.removeAttribute( 'aria-activedescendant' );
+
+			var errorRow = document.createElement( 'li' );
+
+			errorRow.setAttribute( 'role', 'presentation' );
+			errorRow.setAttribute( 'aria-live', 'polite' );
+			errorRow.className = 'woodev-location-error';
+			errorRow.textContent = errorText;
+
+			listbox.appendChild( errorRow );
+			listbox.hidden = false;
+			input.setAttribute( 'aria-expanded', 'true' );
+		}
+
+		/**
 		 * Moves the highlighted item to `index`, clamped to the valid range, and
 		 * reflects it via `aria-selected` on the options plus
 		 * `aria-activedescendant` on the input.
@@ -616,9 +661,14 @@
 			try {
 				result = fetchFn( query );
 			} catch ( syncError ) {
-				// A synchronous throw is treated exactly like a rejected fetch: nothing
-				// to show — and nothing still outstanding, so the search is over.
+				// A synchronous throw is treated exactly like a rejected fetch (issue #405: see
+				// the rejection branch below for the errorText/no-errorText split) — and nothing
+				// still outstanding, so the search is over.
 				setBusy( false );
+
+				if ( '' !== errorText ) {
+					renderError();
+				}
 
 				return Promise.resolve();
 			}
@@ -648,12 +698,25 @@
 						return;
 					}
 
-					// `closeListbox()` clears the busy state itself. Deliberately does NOT touch
-					// `lastCompletedQuery`/`lastCompletedItems` — a rejection leaves whatever the
-					// PREVIOUS completed fetch left there, which is exactly what makes those two
-					// read as stale-for-this-query rather than "resolved to zero" (see
-					// {@see handleBlur}: it only trusts them when `lastCompletedQuery === query`).
-					closeListbox();
+					// Deliberately does NOT touch `lastCompletedQuery`/`lastCompletedItems` either
+					// way below — a rejection leaves whatever the PREVIOUS completed fetch left
+					// there, which is exactly what makes those two read as stale-for-this-query
+					// rather than "resolved to zero" (see {@see handleBlur}: it only trusts them
+					// when `lastCompletedQuery === query`).
+					if ( '' === errorText ) {
+						// Old contract, unchanged — see the file docblock's own note on this
+						// default. `closeListbox()` clears the busy state itself.
+						closeListbox();
+
+						return;
+					}
+
+					// Issue #405: the request itself failed — a DIFFERENT customer-facing sentence
+					// from `emptyText`'s "searched, found nothing" (see {@see renderError}'s own
+					// docblock). Busy clears the same way `closeListbox()` would; the listbox stays
+					// OPEN (showing the error row) rather than closing.
+					setBusy( false );
+					renderError();
 				}
 			);
 

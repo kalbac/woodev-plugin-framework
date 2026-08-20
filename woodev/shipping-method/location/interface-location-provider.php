@@ -286,7 +286,27 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * for an unsupported level is a caller error the framework's own chain-walk
 		 * (spec D15) is responsible for avoiding, not this method.
 		 *
+		 * **EMPTY VS. FAILED — THE #405 CONTRACT.** An empty array means the request
+		 * COMPLETED and genuinely found nothing: a blank/too-short query, a provider
+		 * this instance reports {@see self::is_configured()} `false` for, or a query
+		 * the upstream source answered with zero matches. It must NEVER be returned
+		 * for a request that could not be made at all — wrong credentials, a network
+		 * failure, a malformed upstream payload. THAT case is signalled by throwing
+		 * (typically {@see Location_Provider_Exception}, or a lower-level failure —
+		 * e.g. `\Woodev_API_Exception` — left to propagate); `Location_Controller`
+		 * catches any `\Throwable` here and answers a DISTINCT response (502,
+		 * "источник подсказок недоступен") from its ordinary 200+empty degradation,
+		 * so a shopkeeper testing keys and a customer at checkout can both tell "no
+		 * matches" from "the provider could not answer" instead of both reading as
+		 * silence. {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::suggest()}
+		 * and {@see \Woodev_Test_Cdek_Location_Provider::suggest()} are the reference
+		 * implementations of this split.
+		 *
 		 * @since 2.0.2
+		 * @since 2.1.0 Documented the throw-on-failure contract (#405) — a provider
+		 *              built before this MUST be revisited: swallowing every
+		 *              failure into `[]`, this method's ENTIRE previous contract,
+		 *              is exactly the bug #405 closes.
 		 *
 		 * @param string         $query Free-text search term, as typed so far.
 		 * @param Location_Scope $scope Lookup scope.
@@ -294,6 +314,9 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * @return Location_Record[] Zero or more matches, contract-shaped (spec D12);
 		 *                           the provider's own payload rides along opaque
 		 *                           under each record's `raw`.
+		 *
+		 * @throws \Throwable When the request itself could not be completed — see
+		 *                    the EMPTY VS. FAILED section above.
 		 */
 		public function suggest( string $query, Location_Scope $scope ): array;
 
