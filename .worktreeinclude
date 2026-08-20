@@ -1,0 +1,24 @@
+# Gitignored files copied into every new Orca worktree, so an agent working
+# there gets the same environment as the primary checkout instead of a stripped
+# one. Each worktree owns its copy — unlike orca.yaml's sharedDirectories, which
+# are shared rather than copied.
+#
+# Literal paths only. Globs and negation are skipped with a warning.
+
+# Project MCP servers. Without it an agent silently loses them and works blind.
+.mcp.json
+
+# Local rig ports (dev :8973 / tests :8974). Gitignored because they are
+# per-machine, but a worker that touches wp-env needs them.
+.wp-env.override.json
+
+# Local permission allowlist, so a worker does not stall on prompts the primary
+# checkout was already granted.
+.claude/settings.local.json
+
+# Composer's vendor tree, COPIED rather than shared. It cannot go in orca.yaml's
+# sharedDirectories: a symlinked vendor makes composer's generated autoloader
+# resolve $baseDir to the PRIMARY checkout, so every class is declared twice.
+# A real copy resolves inside the worktree and works. Measured s83: the copy
+# costs seconds on one volume, `composer install` costs ~7 minutes.
+vendor

@@ -1,0 +1,28 @@
+# Orca repository configuration.
+#
+# Read by the Orca app when it creates a worktree for this repo. Checked in on
+# purpose: it is the part of the worktree contract that belongs to the project
+# rather than to one machine. The per-machine half (worktree base path, setup
+# hooks) lives in Orca's own settings — see docs-internal/wiki/orchestrating-agents-with-orca.md.
+
+worktree:
+  # Gitignored directories shared into every new worktree instead of being
+  # rebuilt there. Orca clone-copies them on macOS and symlinks them elsewhere.
+  #
+  # Why node_modules: a fresh worktree otherwise arrives without it and cannot
+  # run the JS gate until it installs 658 MB. In s83 that cost every worker a
+  # wasted lap and had to be worked around by hand in each brief.
+  #
+  # Entries must exist in the primary checkout AND be gitignored, or Orca skips
+  # them silently. Ours is .gitignore line 1.
+  #
+  # ⚠️ vendor/ is deliberately NOT here, and must never be added. Composer's
+  # generated autoloader computes `$baseDir = dirname(dirname(__DIR__))`, and PHP
+  # resolves a symlink to its real path — so inside a worktree the classmap would
+  # point at the PRIMARY checkout's sources while the bootstrap loads the
+  # worktree's own copies. Every shared class then gets declared twice:
+  # "Cannot redeclare class Woodev_Packer". Measured, s83. A worktree runs
+  # `composer install` for itself; at 76 MB with a warm cache that is the cheap
+  # half. Gotcha: sharing-vendor-breaks-composer-autoload-in-a-worktree.
+  sharedDirectories:
+    - node_modules
