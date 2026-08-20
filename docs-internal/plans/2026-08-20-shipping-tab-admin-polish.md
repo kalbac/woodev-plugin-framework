@@ -46,6 +46,17 @@ dynamic without saving, and `show_if` is exactly that mechanism, with server-sid
   — the id list is computed server-side at schema-build time, so the client only ever compares values.
   This is operator variant 2 for #377 ("show when DaData is active OR the active provider brings no
   addresses"), not variant 1.
+- **The predicate is evaluated for the STORE's country only** (correction after the Codex critique).
+  "Serves address" is country-dependent — DaData drops `address` for specific countries and
+  `get_suggest_levels( null )` returns the UN-narrowed set — and also depends on whether the chosen
+  provider and the fallback are configured. A country-blind list answers a different question. The
+  settings page is a store-level surface with one store country, so reuse
+  `Location_Service::resolve_default_country()` ("store setting → RU") and state the narrowing in a
+  comment instead of implying the condition is universal.
+- Consequence to keep, not to fix: `test-list` declares only region+settlement, so DaData's keys ARE
+  shown while it is active. #375's "nothing for test-list" is about that provider's OWN fields and
+  its notice; the fallback keys are governed by #377's rule, whose converse the operator stated
+  himself.
 - Field-id collision between two providers must fail loudly (`_doing_it_wrong()`, first wins) and be
   documented in the `Location_Provider` contract — the shared option namespace `woodev_location_*`
   makes ids global.

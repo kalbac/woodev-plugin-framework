@@ -261,7 +261,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
-- [tooling/codex-shell-sandbox-broken-windows] **codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72)
+- [tooling/codex-shell-sandbox-broken-windows] **Codex's shell WORKS — launch it in an Orca terminal; only `codex exec -s read-only` hits the broken windows sandbox. Same binary, trusted project, no sandbox.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72, **solved s82**)
 - [tooling/windows] **Git Bash mangles Cyrillic in curl arguments — the API answers 400/500 and it reads as the API's fault.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76)
 - [tooling/serena-eol-flip] **Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows.** → [serena-replace-content-eol-flip](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] **PHPStan crashes with exit `-1073741819` on Windows — environmental, not a code error.** → [phpstan-windows-parallel-worker-segfault](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)

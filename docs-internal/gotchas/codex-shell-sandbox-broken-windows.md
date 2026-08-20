@@ -1,9 +1,85 @@
-# gotcha: codex exec shell-sandbox broken on this Windows box — run critics with an inline bundle
+# gotcha: codex's shell works — run it from an Orca terminal, not `codex exec -s read-only`
 
-> **✅ ROOT CAUSE FOUND (s72, 2026-08-14).** After two months of treating this as an opaque
-> "the sandbox is broken", the mechanism is now known and there is a real fix. **Read the s72
-> section at the bottom first** — it supersedes the workarounds above as the primary advice,
-> though the inline-bundle recipe stays valid as a fallback.
+> **✅ SOLVED (s82, 2026-08-20). Everything below this box is HISTORY.** Codex is fully usable on
+> this machine: real shell, real file reads, no fabrication. The inline bundle, the canary line and
+> the "review through GitHub" workaround are all obsolete. Keep reading only if you need the
+> archaeology.
+
+## The one thing you need
+
+Launch Codex in an **Orca terminal**, not through `codex exec` from the Bash tool:
+
+```bash
+orca terminal create --worktree active --title "codex" --command "codex" --json
+```
+
+Measured s82, first-hand, both probes in the same session:
+
+| Probe | `codex exec -s read-only` from Bash | Codex in an Orca terminal |
+|---|---|---|
+| `git rev-parse --short HEAD` | `CreateProcessAsUserW failed: 5` | `Ran … └ 04608d8` — correct |
+| first heading of a named spec file | s74: **fabricated** `# Location Chain Design` | `# Location chain — design for #334 + #330` — byte-exact, em dash and all |
+
+### Why — and it is NOT "a different binary"
+
+Both paths run the SAME npm binary (`~/AppData/Roaming/npm/codex`). The discriminator is the
+**windows sandbox**, which is genuinely broken here (see the s72 history below for the
+`CreateProcessAsUserW failed: 5` root cause — MSIX PowerShell unreachable to the sandbox accounts).
+
+`~/.codex/config.toml` marks this project trusted:
+
+```toml
+[projects.'d:\projects\woodev_framework']
+trust_level = "trusted"
+```
+
+The **interactive TUI in a trusted project does not engage the sandbox at all**, so nothing tries to
+spawn through the broken path. `codex exec -s read-only` from the Bash tool asks for that sandbox
+explicitly, and dies. An earlier s82 draft of this file claimed Orca launched the desktop binary —
+that was wrong and is corrected here.
+
+## Two traps in driving the TUI from the CLI — both hit in s82
+
+### 1. `terminal wait --for tui-idle` cannot tell "ready for a prompt" from "waiting on a dialog"
+
+Codex showed its self-update prompt on startup:
+
+```
+✨ Update available! 0.147.0 -> 0.148.0
+› 1. Update now   2. Skip   3. Skip until next version
+```
+
+`tui-idle` reported satisfied — a blocking dialog IS idle. The following
+`terminal send --text "<review prompt>" --enter` therefore **answered the dialog**, picking
+"1. Update now". Codex ran `npm install -g @openai/codex`, upgraded itself, printed "Please restart
+Codex" and exited; every remaining line of the prompt then landed in the bare PowerShell that was
+left behind, which answered with `ParserError`. An unintended global package upgrade, from a review
+request.
+
+**The rule:** after `terminal create`, check the wait result's `satisfied` field (never redirect it
+to `/dev/null`), then **READ the buffer and confirm the composer is on screen** before sending
+anything with `--enter`. A cheap `PING`-style first message is a fine guard.
+
+### 2. Read the verdict from a FILE, not from the terminal
+
+The TUI redraws constantly, so `terminal read` returns spinner fragments interleaved with content
+and the answer is painful to recover. End every critic prompt with: *"write your full answer to
+`<path>` and reply with the single line WRITTEN"*, then read the file.
+
+## Prompts to Codex are written in ENGLISH
+
+Codex is a subagent. The standing rule — Russian only in conversation with the operator and in
+GitHub cards, English for everything durable and for all agent-to-agent communication — covers it.
+A Russian prompt also makes Codex reason in Russian. Operator's correction, s82.
+
+---
+
+# History (superseded — kept for the archaeology)
+
+> **ROOT CAUSE FOUND (s72, 2026-08-14).** After two months of treating this as an opaque
+> "the sandbox is broken", the mechanism is now known. The s72 section at the bottom explains the
+> `CreateProcessAsUserW failed: 5` failure itself, which is still real — it is simply no longer in
+> the path when the TUI runs in a trusted project.
 
 > **⚠️ UPDATE (s36, 2026-06-27):** the Codex **companion auth/runtime** works
 > (`codex-companion.mjs setup --json` → `loggedIn: true`, `sessionRuntime.mode: "direct"`),
