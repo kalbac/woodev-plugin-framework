@@ -179,7 +179,10 @@ public function get_plugin_name() {
 
 ### Rule 5 — Docblocks
 Docblocks are **required** on all public and protected methods:
-- `@since` — version when method was introduced
+- `@since` — the **planned release** the change ships in, currently `2.0.2`. It is NOT the
+  `Woodev_Plugin::VERSION` constant: `VERSION` records the *released* version (`2.0.1`) and lags on
+  purpose, because raising it on `main` publishes a release (#285). Operator decision, #409 (s83) —
+  the earlier "uses current VERSION" wording contradicted 1388 tags against one and was wrong.
 - `@param` — all parameters with types
 - `@return` — return type with description
 - `@deprecated` — if applicable, with replacement method

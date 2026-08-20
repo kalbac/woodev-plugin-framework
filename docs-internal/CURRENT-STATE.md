@@ -32,9 +32,24 @@ valid keys and never threw. The rig's CDEK fixture does not fail on a bad client
 level, so s82's observed conditions were never reproduced. #405 rests on unit tests covering both
 states and the critic's trace of every failure path. #404 and #407 WERE verified live.
 
-New cards: **#408** (Orca repo setup hook empty → fresh worktrees have no `vendor/`/`node_modules/`),
-**#409** (`@since` convention contradicts the code — `Инбокс`, needs the operator's decision),
-**#410**, **#411** (the `truncated` flag nobody reads), **#412** (settlement option set not live).
+**Orca is configured, not left on defaults.** A fresh agent worktree is gate-capable with **no
+install step**: `orca.yaml` shares `node_modules` by symlink, `.worktreeinclude` copies `vendor`,
+`.mcp.json`, `.wp-env.override.json` and `.claude/settings.local.json`. Worktrees live at
+`.orca/worktrees/` inside the project (gitignored; Serena skips it for free). `vendor` must be
+COPIED and never shared — Composer bakes `$baseDir` into its autoloader and a symlink makes every
+class declare twice (gotcha `sharing-vendor-breaks-composer-autoload-in-a-worktree`). Measured:
+2475 unit / 1260 jest / phpstan clean in a fresh worktree, against 411s for `composer install`.
+
+**Operator decision, #409 (closed):** `@since` records the **planned release** (currently `2.0.2`);
+`VERSION` records the **released** one (`2.0.1`) and lags on purpose, because raising it publishes a
+release (#285). `AGENTS.md` and `AGENT-RULES.md` Rule 5 corrected — they had said "uses current
+VERSION" against 1388 tags to one.
+
+Cards filed this session: **#410**, **#411** (the `truncated` flag no JS consumer reads — a list
+silently capped at 500 reads as "my city is missing"), **#412** (settlement option set only
+refreshes after save+reload), **#415** (the Save button is never disabled for a foreign-provider
+record — the server refuses correctly, but only after the click). **#408**, **#409** and **#414**
+are closed. The `Инбокс` column is empty — everything triaged into `Бэклог`.
 
 ## Program status (high level)
 
@@ -86,20 +101,19 @@ New cards: **#408** (Orca repo setup hook empty → fresh worktrees have no `ven
 
 ## Next Actions
 
-0. **Ничего не висит.** PR #413 смержен, ветка удалена, дерево на `main`. Следующая сессия
-   начинается с приоритизации, а не с хвостов.
-1. **#409 — конвенция `@since`, в `Инбокс`, ждёт твоего решения.** Три варианта в карточке. Правило
-   в `AGENT-RULES.md` Rule 5 сейчас противоречит коду: 1388 тегов `2.0.2` против одного `2.0.1`.
-   Пока не решено — новый код тегать `2.0.2`, как весь остальной репозиторий.
-2. **#408 — прописать setup-скрипт репо в Orca** (`composer install && npm ci`). Твоё действие в UI,
-   команды в CLI нет. Без этого каждый воркер тратит круг на бутстрап.
-3. **Настройки приложения Orca** — то, о чём ты просил и что сделано лишь наполовину. Из CLI снято
-   всё измеримое (см. `sessions/s83.md`), панели Settings в десктопном приложении НЕ пройдены.
-   `orca computer` умеет их водить, но не при живых воркерах.
-4. **#411 — флаг `truncated` никто не читает**: список локаций молча режется на 500 записях, и для
-   покупателя это выглядит как «моего города нет». Тот же класс тихого отказа, что и #405.
-5. **#412** — набор значений «Тип поля НП» обновляется только после сохранения и перезагрузки, тогда
-   как смена провайдера рядом работает на лету.
+0. **Ничего не висит.** PR #413 смержен, ветка удалена, дерево на `main`, Инбокс пуст.
+   Следующая сессия начинается с работы, а не с хвостов.
+1. **#411 — мой кандидат на первое место.** Сервер режет список локаций на 500 и честно ставит флаг
+   `truncated`, а JS его выбрасывает: для покупателя это «моего города нет». Дефект, а не полировка,
+   и тот же класс тихого отказа, что #405.
+2. **#383 — критический IDOR** из ревью 27B (#383–#402). Подписчик читает и удаляет чужие
+   сохранённые карты. Самое тяжёлое из всего бэклога.
+3. **#412**, **#415** — UX-остатки вкладки: набор значений НП не обновляется на лету; кнопка
+   «Сохранить» не блокируется при чужом провайдере (сервер отказывает, но только после клика).
+4. **#405 — долг по проверке.** Вживую не подтверждена: заведомо неверный ключ СДЭК дал те же
+   результаты, что и валидный. Прежде чем мерить — найти условие, при котором фикстура реально падает.
+5. **Настройки приложения Orca** — панели Settings не пройдены. `orca computer` умеет их водить,
+   но только когда нет живых воркеров.
 6. **#374 (названия опций и словарь значений)** — НЕ начинать без оператора, его прямая просьба.
 7. **#379 (цвет/текст кнопки карты)** — низкий приоритет; `resolve_accent_color()` уже реализован.
 8. **Ревью локальной 27B — 20 карточек #383–#402 в `Инбокс`**, приоритизация за оператором.

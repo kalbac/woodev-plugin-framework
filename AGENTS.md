@@ -294,7 +294,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 | Arrays | Short syntax `[]` **only — never `array()`** in new or modified code |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
-| `@since` | Uses current `VERSION` constant value |
+| `@since` | The **planned release** the change ships in — currently `2.0.2`. NOT the `VERSION` constant, which records the **released** version (`2.0.1`). Operator decision, #409 (s83): the two are deliberately separate concepts. Raising `VERSION` on `main` publishes a release, so it lags behind by design (#285). |
 
 ---
 
