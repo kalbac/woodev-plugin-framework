@@ -27,6 +27,26 @@
 > existing `typeahead` (a text input WITH suggestions), so the settlement-level record every other
 > part of the layer depends on is still produced.
 >
+> **Correction (20.08.2026, cards #404/#407).** "Wait for a region, then scope to it" overstated what
+> ships — there is no blocking state. `related-list` НП preloads a nationwide list when no region is
+> chosen yet and a region-scoped one once it is, never a disabled control. Card #407 decided the
+> PROSE was wrong, not the code: fixed the settlement tooltip and this note instead of building a
+> block nothing measured as necessary — a preloaded nationwide list is functional on its own. Card
+> #404 (the operator's own correction to S2/#380) closed the other missing half of "region gates
+> settlement": `related-list` is now only OFFERED to the settlement axis when the region axis is
+> ITSELF `related-list` — a provider without `CAPABILITY_LIST` has no list to scope at all. Where a
+> provider DOES have it, the gate is NOT about the unscoped request failing — it doesn't, per the
+> paragraph above. It is that `/location/list` caps every response at
+> `Location_Controller::LIST_HARD_CAP` (500 records) and marks it `truncated: true` past that, a flag
+> this axis's own client (`location-select-modes.js`) currently drops on the floor. `related-list`
+> ("Предустановленный список") promises a list loaded ONCE and searched locally end-to-end; a possibly-truncated
+> country-wide list can silently break that promise — a country's settlement count routinely exceeds
+> the cap, a single region's is far more likely to stay inside it. So `related-list` only reliably
+> keeps its own promise for the settlement axis scoped to a region, and #404 gates on that, not on
+> whether the request technically succeeds. Enforced as a read-side clamp
+> (`Location_Provider_Registry::get_field_mode_settlement()`), never rewriting the stored value — it
+> returns on its own once the region axis is `related-list` again.
+>
 > Input document (BUILT / DECIDED / OPEN markup, measurements, traps):
 > `docs-internal/specs/2026-08-18-location-and-field-settings-brainstorm-input.md`. Everything marked
 > DECIDED there (D1–D11) stays in force and is not restated unless this design depends on it.

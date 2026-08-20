@@ -1290,13 +1290,18 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
-	 * The settings surface's own two field-mode axes (issue #380: same
-	 * gate, same options, for BOTH `field_mode_region` and
-	 * `field_mode_settlement`) must offer EXACTLY the same options
-	 * {@see Location_Provider_Registry::get_offered_field_modes()}
-	 * computes — proving the registration-time computation (which cannot call
+	 * The settings surface's REGION axis must offer EXACTLY the options
+	 * {@see Location_Provider_Registry::get_offered_field_modes()} computes
+	 * — proving the registration-time computation (which cannot call
 	 * `get_active_provider()` — the settings handler does not exist yet, see
 	 * that private helper's own docblock) agrees with the read-time one.
+	 *
+	 * The SETTLEMENT axis no longer always matches (issue #404 — see the
+	 * `#404` test block above): here the region axis's raw stored value
+	 * defaults to `typeahead` (nothing stubs `woodev_location_field_mode_region`),
+	 * so `related-list` drops out of the settlement axis's own options even
+	 * though the active provider has `CAPABILITY_LIST` and the region
+	 * axis's OWN options still offer it.
 	 */
 	public function test_field_mode_setting_options_match_the_list_capable_active_providers_offered_modes(): void {
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
@@ -1317,9 +1322,9 @@ final class LocationProviderRegistryTest extends TestCase {
 			$registry->get_offered_field_modes()
 		);
 		$this->assertSame(
+			[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
 			array_keys( $settlement_setting->get_options() ),
-			$registry->get_offered_field_modes(),
-			'both axes share the same offering gate (issue #380)'
+			'issue #404: related-list drops out for settlement while the region axis (unstubbed, defaults to typeahead) is not itself related-list'
 		);
 		$this->assertSame( \Woodev_Control::TYPE_SELECT, $region_setting->get_control()->get_type() );
 		$this->assertSame( \Woodev_Control::TYPE_SELECT, $settlement_setting->get_control()->get_type() );
@@ -1443,6 +1448,227 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
 	}
 
+	// -------------------------------------------------------------------------
+	// Issue #404 (operator's own correction to the #380 brainstorm): the
+	// settlement axis's `related-list` is only ever OFFERED when the region
+	// axis is ITSELF `related-list` — a bulk list of every settlement in a
+	// country does not exist, only a per-region one. The provider-capability
+	// gate (already covered above) is necessary but no longer sufficient.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Pins the SELECT's own offered options, built at
+	 * {@see Location_Provider_Registry::register_settings()} time — not just
+	 * the read-side clamp (a separate test below). `related-list` drops out
+	 * once the region axis is not `related-list`, even though the active
+	 * provider itself still has `CAPABILITY_LIST`.
+	 */
+	public function test_field_mode_settlement_options_drop_related_list_when_region_is_not_related_list(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_TYPEAHEAD;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$settlement_options = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT )->get_options();
+
+		$this->assertArrayNotHasKey( Location_Provider_Registry::MODE_RELATED_LIST, $settlement_options );
+		// The provider-capability gate alone still offers the other two values.
+		$this->assertArrayHasKey( Location_Provider_Registry::MODE_TYPEAHEAD, $settlement_options );
+		$this->assertArrayHasKey( Location_Provider_Registry::MODE_AJAX_SELECT2, $settlement_options );
+	}
+
+	/**
+	 * The positive case — the ONE configuration card #404 calls «Связанный
+	 * поиск»: region ALSO `related-list` offers `related-list` to the
+	 * settlement axis too. The region axis's own options are UNAFFECTED
+	 * either way — issue #404 is a settlement-only condition.
+	 */
+	public function test_field_mode_settlement_options_include_related_list_when_region_is_related_list(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$region_options     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION )->get_options();
+		$settlement_options = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT )->get_options();
+
+		$this->assertArrayHasKey( Location_Provider_Registry::MODE_RELATED_LIST, $region_options );
+		$this->assertArrayHasKey( Location_Provider_Registry::MODE_RELATED_LIST, $settlement_options );
+	}
+
+	/**
+	 * Read-side clamp (issue #404 — the actual correctness mechanism; the
+	 * options-level narrowing above only hides the admin CONTROL): a stored
+	 * `related-list` settlement value stops taking effect the instant the
+	 * region axis is not `related-list`, exactly like
+	 * {@see Location_Provider_Registry::get_field_mode_region()}'s own
+	 * `region_field=remove` clamp.
+	 */
+	public function test_field_mode_settlement_clamps_to_typeahead_when_region_is_not_related_list(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_TYPEAHEAD;
+				}
+				if ( 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_region() );
+		$this->assertSame(
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			$registry->get_field_mode_settlement(),
+			'settlement must clamp to typeahead once the region axis is not related-list, even though the active provider itself has CAPABILITY_LIST'
+		);
+	}
+
+	/**
+	 * The «Связанный поиск» configuration itself (card #404's own name for
+	 * it): BOTH axes `related-list` — the stored settlement value survives
+	 * the clamp.
+	 */
+	public function test_field_mode_settlement_related_list_survives_when_region_is_also_related_list(): void {
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name || 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_region() );
+		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_settlement() );
+	}
+
+	/**
+	 * Design §7's "clamp on read, never rewrite" discipline: the settlement
+	 * axis's #404 clamp must NEVER touch the stored option — the value
+	 * comes back on its own the moment the region axis returns to
+	 * `related-list`, without this class ever calling `update_option()` for
+	 * either axis along the way. Mirrors
+	 * {@see self::test_address_suggestions_read_never_writes_the_stored_option()}'s
+	 * own discipline for a different setting.
+	 */
+	public function test_field_mode_settlement_clamp_never_rewrites_and_the_value_returns_once_region_is_related_list_again(): void {
+		Functions\expect( 'update_option' )->never();
+
+		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $list_provider ] );
+
+		// Phase 1: region flipped away from `related-list` — the stored
+		// settlement value (still `related-list`) must NOT take effect.
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name ) {
+					return Location_Provider_Registry::MODE_TYPEAHEAD;
+				}
+				if ( 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
+
+		// Phase 2: a later page load — region back to `related-list`, the
+		// settlement OPTION never having been touched in between (same raw
+		// `related-list` value; `update_option()` still never called).
+		$registry->reset_for_tests();
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) {
+				if ( 'woodev_location_active_provider' === $name ) {
+					return 'list-fixture';
+				}
+				if ( 'woodev_location_field_mode_region' === $name || 'woodev_location_field_mode_settlement' === $name ) {
+					return Location_Provider_Registry::MODE_RELATED_LIST;
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertSame(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			$registry->get_field_mode_settlement(),
+			'the same stored related-list value must take effect again once the region axis is related-list, having never been rewritten'
+		);
+	}
+
 	/**
 	 * A stored `related-list` value from BEFORE a provider switch to a
 	 * non-`list` provider (e.g. back to DaData) must never be served as-is —
@@ -1518,11 +1744,20 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
-	 * The settlement axis carries no `region_field` clamp of its own — the
-	 * settlement level has nothing analogous to remove. `region_field=remove`
-	 * must not affect it.
+	 * The settlement axis carries no `region_field` clamp OF ITS OWN — the
+	 * settlement level has nothing analogous to remove. But issue #404 makes
+	 * it TRANSITIVELY affected by `region_field=remove` anyway: that state
+	 * forces the region axis to `typeahead`
+	 * ({@see self::test_field_mode_region_clamps_to_typeahead_when_region_field_is_removed()}),
+	 * and the settlement axis's OWN #404 condition ("`related-list` only
+	 * when region is `related-list`") then clamps it too — not because
+	 * settlement gained a `region_field` clamp of its own, but because the
+	 * condition it already has chains through the region axis's clamp.
+	 * Before issue #404 this test asserted the OPPOSITE (`related-list`
+	 * survived) — that was correct then, since no cross-axis condition
+	 * existed yet.
 	 */
-	public function test_field_mode_settlement_is_unaffected_by_region_field_removal(): void {
+	public function test_field_mode_settlement_is_transitively_clamped_when_region_field_is_removed(): void {
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -1547,7 +1782,11 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_settlement() );
+		$this->assertSame(
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			$registry->get_field_mode_settlement(),
+			'region_field=remove forces the region axis to typeahead, which (issue #404) transitively clamps settlement away from related-list too'
+		);
 	}
 
 	// -------------------------------------------------------------------------
