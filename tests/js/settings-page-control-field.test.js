@@ -16,8 +16,15 @@ import { render, screen } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import ControlField from '../../src/components/control-field';
 
-test( 'a disabled checkbox renders disabled with the reason as description', () => {
-	render(
+/**
+ * `disabled_reason` must never clobber the authored `description` — both are
+ * legitimate at once: the description explains what the option does, the
+ * reason explains why it is currently unavailable. Regression coverage for
+ * the fix in `Field_Schema::from_handler()`: the two render as separate,
+ * visually distinguishable notes.
+ */
+test( 'a disabled checkbox renders its description and disabled reason as separate notes', () => {
+	const { container } = render(
 		createElement( ControlField, {
 			schema: {
 				type: 'boolean',
@@ -25,7 +32,7 @@ test( 'a disabled checkbox renders disabled with the reason as description', () 
 				name: 'Скрывать адрес',
 				disabled: true,
 				disabled_reason: 'Недоступно на блочном чекауте',
-				description: 'Недоступно на блочном чекауте',
+				description: 'Скрывает адрес получателя из письма на этапе оформления.',
 			},
 			value: true,
 			onChange: () => {},
@@ -34,9 +41,88 @@ test( 'a disabled checkbox renders disabled with the reason as description', () 
 	);
 
 	expect( screen.getByRole( 'checkbox' ) ).toBeDisabled();
+
+	// The authored description survives, unmodified.
 	expect(
-		screen.getByText( 'Недоступно на блочном чекауте' )
+		screen.getByText( 'Скрывает адрес получателя из письма на этапе оформления.' )
 	).toBeInTheDocument();
+
+	// The disabled reason renders too, in its own, visually distinguishable node.
+	const reasonNode = container.querySelector( '.woodev-field__disabled-reason' );
+	expect( reasonNode ).not.toBeNull();
+	expect( reasonNode ).toHaveTextContent( 'Недоступно на блочном чекауте' );
+} );
+
+/**
+ * Same contract for a control that goes through `withAnatomy`/`FieldRow`
+ * (every non-checkbox control) rather than the checkbox branch's own markup.
+ */
+test( 'a disabled text field renders its description and disabled reason as separate notes', () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'text',
+				name: 'Значение',
+				disabled: true,
+				description: 'Что делает это поле.',
+				disabled_reason: 'Недоступно в этом режиме.',
+			},
+			value: 'x',
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	expect( screen.getByDisplayValue( 'x' ) ).toBeDisabled();
+	expect( screen.getByText( 'Что делает это поле.' ) ).toBeInTheDocument();
+
+	const reasonNode = container.querySelector( '.woodev-field__disabled-reason' );
+	expect( reasonNode ).not.toBeNull();
+	expect( reasonNode ).toHaveTextContent( 'Недоступно в этом режиме.' );
+} );
+
+/**
+ * The checkbox/toggle branch renders its own label+description markup instead
+ * of going through `withAnatomy`/`FieldRow`, so a `tooltip` declared on a
+ * boolean setting used to render nothing at all. Regression coverage for the
+ * fix: the tooltip affordance now shows next to the checkbox's label too.
+ */
+test( 'a boolean field with a tooltip shows the tooltip affordance next to its label', () => {
+	render(
+		createElement( ControlField, {
+			schema: {
+				type: 'boolean',
+				controlType: 'checkbox',
+				name: 'Подсказки для адреса',
+				tooltip: 'Показывать варианты адреса по мере ввода.',
+			},
+			value: false,
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	expect(
+		screen.getByRole( 'img', { name: 'Показывать варианты адреса по мере ввода.' } )
+	).toBeInTheDocument();
+} );
+
+test( 'a boolean field without a tooltip renders no tooltip affordance', () => {
+	const { container } = render(
+		createElement( ControlField, {
+			schema: {
+				type: 'boolean',
+				controlType: 'checkbox',
+				name: 'Подсказки для адреса',
+			},
+			value: false,
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
+
+	expect( container.querySelector( '.woodev-field__tip' ) ).toBeNull();
 } );
 
 test( 'an enabled checkbox stays interactive', () => {

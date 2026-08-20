@@ -21,6 +21,7 @@ import {
 	RangeControl,
 } from '@wordpress/components';
 import FieldRow from './field-row';
+import FieldTip from './field-tip';
 import SelectField from './select-field';
 import WizardRichText from './richtext';
 
@@ -204,7 +205,10 @@ function resolveControl( schema ) {
 }
 
 /**
- * Wraps a control with the shared field anatomy (label + tooltip + description + error).
+ * Wraps a control with the shared field anatomy (label + tooltip + description +
+ * disabled reason + error). `description` and `disabledReason` are both passed
+ * through unconditionally — legitimate at once, rendered as separate notes by
+ * `FieldRow` — the disabled reason only actually renders while `schema.disabled`.
  *
  * @param {Object}      schema  field schema slice.
  * @param {Object}      control rendered control element.
@@ -219,6 +223,7 @@ function withAnatomy( schema, control, error ) {
 			required: schema.required && isRequirable( resolveControl( schema ) ),
 			tooltip: schema.tooltip,
 			description: schema.description,
+			disabledReason: schema.disabled ? schema.disabled_reason : null,
 			error,
 		},
 		control
@@ -268,7 +273,8 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	}
 
 	// D11: a disabled control is rendered read-only (native `disabled`), never hidden or
-	// silently ignoring input — its reason already reached us as `schema.description`.
+	// silently ignoring input — its reason already reached us as `schema.disabled_reason`
+	// (withAnatomy renders it separately from `schema.description`).
 	// Computed before the sensitive branch below so SecretControl gets it too.
 	const disabled = !! schema.disabled;
 
@@ -300,16 +306,26 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	switch ( control ) {
 		case 'toggle':
 		case 'checkbox':
-			// Toggle rows carry their own label/description meta beside the pill.
+			// Toggle rows carry their own label/description meta beside the pill
+			// (they don't go through withAnatomy/FieldRow) — the tooltip icon and
+			// the disabled-reason note are reproduced here via the shared FieldTip
+			// so a boolean setting gets the same affordances as any other control.
 			return createElement(
 				'div',
 				{ className: 'woodev-field__toggle-row' },
 				createElement(
 					'div',
 					{ className: 'woodev-field__toggle-meta' },
-					createElement( 'div', { className: 'woodev-field__toggle-label' }, schema.name ),
+					createElement(
+						'div',
+						{ className: 'woodev-field__toggle-label' },
+						schema.name,
+						createElement( FieldTip, { text: schema.tooltip } )
+					),
 					schema.description &&
-						createElement( 'div', { className: 'woodev-field__toggle-desc' }, schema.description )
+						createElement( 'div', { className: 'woodev-field__toggle-desc' }, schema.description ),
+					disabled && schema.disabled_reason &&
+						createElement( 'div', { className: 'woodev-field__disabled-reason' }, schema.disabled_reason )
 				),
 				createElement( ToggleControl, {
 					__nextHasNoMarginBottom: true,

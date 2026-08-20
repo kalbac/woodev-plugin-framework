@@ -337,15 +337,18 @@ class FieldSchemaTest extends TestCase {
 	}
 
 	/**
-	 * A disabled control emits `disabled` + `disabled_reason`, and the reason
-	 * doubles as the description so a client ignoring `disabled` still shows it.
+	 * A disabled control emits `disabled` + `disabled_reason` as its OWN key and
+	 * must NOT clobber the authored `description` — both are legitimate at once:
+	 * the description explains what the option does, the reason explains why it
+	 * is currently unavailable. (Previously `disabled_reason` was assigned INTO
+	 * `description`, destroying whatever description the author registered.)
 	 *
 	 * @return void
 	 */
-	public function test_disabled_control_emits_disabled_and_reason(): void {
+	public function test_disabled_control_emits_reason_without_clobbering_description(): void {
 		$control = Mockery::mock( \Woodev_Control::class );
 		$control->shouldReceive( 'get_type' )->andReturn( 'checkbox' );
-		$control->shouldReceive( 'get_description' )->andReturn( '' );
+		$control->shouldReceive( 'get_description' )->andReturn( 'Скрывает адрес получателя из письма.' );
 		$control->shouldReceive( 'get_tooltip' )->andReturn( '' );
 		$control->shouldReceive( 'get_placeholder' )->andReturn( '' );
 		$control->shouldReceive( 'get_min' )->andReturn( null );
@@ -363,8 +366,9 @@ class FieldSchemaTest extends TestCase {
 
 		$this->assertTrue( $schema['x']['disabled'] );
 		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['disabled_reason'] );
-		// The reason doubles as the description so a client that ignores `disabled` still shows it.
-		$this->assertSame( 'Недоступно на блочном чекауте', $schema['x']['description'] );
+		// The authored description must survive untouched — disabled_reason is a
+		// separate key, never folded into description.
+		$this->assertSame( 'Скрывает адрес получателя из письма.', $schema['x']['description'] );
 	}
 
 	/**

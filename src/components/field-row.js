@@ -14,20 +14,22 @@
  * @package woodev-plugin-framework
  */
 
-import { Tooltip } from '@wordpress/components';
-import { InfoIcon } from './icons';
+import FieldTip from './field-tip';
 
 /**
- * @param {Object}    props               component props.
- * @param {string}    [props.label]       field label.
- * @param {boolean}   [props.required]    show the required marker.
- * @param {string}    [props.tooltip]     tooltip text.
- * @param {string}    [props.description] help text under the control.
- * @param {string}    [props.error]       validation error message (red, under control).
- * @param {*}         props.children      the control element(s).
+ * @param {Object}    props                  component props.
+ * @param {string}    [props.label]          field label.
+ * @param {boolean}   [props.required]       show the required marker.
+ * @param {string}    [props.tooltip]        tooltip text.
+ * @param {string}    [props.description]    help text under the control (what the option does).
+ * @param {string}    [props.disabledReason] why the control is currently disabled — rendered
+ *                                            as a separate, visually distinguishable note from
+ *                                            `description` (a state note, not documentation).
+ * @param {string}    [props.error]          validation error message (red, under control).
+ * @param {*}         props.children         the control element(s).
  * @return {JSX.Element} the field row.
  */
-export default function FieldRow( { label, required, tooltip, description, error, children } ) {
+export default function FieldRow( { label, required, tooltip, description, disabledReason, error, children } ) {
 	return (
 		<div className={ `woodev-field${ error ? ' woodev-field--error' : '' }` }>
 			{ label && (
@@ -38,24 +40,16 @@ export default function FieldRow( { label, required, tooltip, description, error
 							*
 						</abbr>
 					) }
-					{ tooltip && (
-						<Tooltip text={ tooltip } placement="top">
-							<span
-								className="woodev-field__tip"
-								tabIndex={ 0 }
-								role="img"
-								aria-label={ tooltip }
-							>
-								<InfoIcon />
-							</span>
-						</Tooltip>
-					) }
+					<FieldTip text={ tooltip } />
 				</div>
 			) }
 			<div className="woodev-field__control">
 				{ children }
 				{ description && (
 					<div className="woodev-field__desc">{ description }</div>
+				) }
+				{ disabledReason && (
+					<div className="woodev-field__disabled-reason">{ disabledReason }</div>
 				) }
 				{ error && (
 					<div className="woodev-field__error" aria-live="polite" aria-atomic="true">

@@ -91,12 +91,13 @@ final class Field_Schema {
 				$entry['show_if'] = $show_if;
 			}
 
+			// `disabled_reason` is its own schema key — it must never overwrite the
+			// authored `description`. Both are legitimate at once: the description
+			// explains what the option does, the reason explains why it is
+			// currently unavailable. The React client renders both distinctly.
 			if ( $control && $control->is_disabled() ) {
 				$entry['disabled']        = true;
 				$entry['disabled_reason'] = $control->get_disabled_reason();
-				if ( '' !== $entry['disabled_reason'] ) {
-					$entry['description'] = $entry['disabled_reason'];
-				}
 			}
 
 			$schema[ $setting->get_id() ] = $entry;

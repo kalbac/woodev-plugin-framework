@@ -67,6 +67,17 @@
 		margin: 6px 0 0;
 	}
 
+	// Disabled-reason note: a STATE note (why unavailable now), not documentation
+	// — kept visually distinct from `&__desc` (warn color, italic) so the two
+	// never read as one merged sentence when both are present (D11 follow-up).
+	&__disabled-reason {
+		font-size: 13px;
+		line-height: 1.55;
+		color: wd.$warn;
+		font-style: italic;
+		margin: 6px 0 0;
+	}
+
 	// Tooltip trigger — the bubble itself is now wp `Tooltip` (portal, zam.4).
 	&__tip {
 		position: relative;
@@ -212,6 +223,9 @@
 	}
 
 	&__toggle-label {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
 		font-size: 15px;
 		font-weight: 600;
 		color: wd.$ink;
@@ -222,6 +236,13 @@
 		color: wd.$ink-muted;
 		margin-top: 3px;
 		line-height: 1.5;
+	}
+
+	// Toggle rows render &__disabled-reason inline (same meta column as the
+	// label/description) rather than under the control — override the shared
+	// spacing to match &__toggle-desc's rhythm.
+	&__toggle-meta &__disabled-reason {
+		margin-top: 3px;
 	}
 
 	// Richtext (contentEditable editor + toolbar).
