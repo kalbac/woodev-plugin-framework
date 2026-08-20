@@ -7,18 +7,18 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-20 (s83).** Branch `feat/location-post-review-fixes` — integration branch off `main`,
-**not pushed, not merged**. `#403` was merged to `main` first (19/19 CI jobs green, state CLEAN), so
-the four post-review cards branch from a clean base instead of stacking.
+**As of 2026-08-20 (s83).** **`main`, everything merged.** PR #403 (`bf86ece`) and PR #413
+(`ef97e80`) both landed with all 19 CI jobs individually green and state CLEAN. Cards #404, #405,
+#406 and #407 closed themselves on the merge and the board moved them to `Готово`.
 
 **All four post-review cards are done: #404, #405, #406, #407** — three Sonnet workers under Orca
 orchestration, each result reviewed by a Codex critic, every approved finding fixed rather than
-deferred. #406 needed three rounds; its last round was still running when this was written.
+deferred. #406 needed three critic rounds before it was sound.
 
 Tests measured on `main`: **2454 unit / 6090 assertions / 1241 jest** (the s82 handoff's
 2448/6067/1232 was stale, and both workers were briefed with the wrong numbers before it was caught).
-On the integration branch with #404/#407 and #405 merged: phpcs clean, phpstan **0 errors**,
-**2467 unit / 6111 assertions**, **1251 jest**, asset build parity holds. Gotchas: **172**.
+On `main` after the merge: phpcs clean, phpstan **0 errors**, **2475 unit / 6128 assertions**,
+**1260 jest**, asset build parity holds, class map regenerates to no diff. Gotchas: **172**.
 
 **Orca is now the subagent path** — worker = Sonnet 5, critic = Codex, nobody accepts their own work.
 Recipe, placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Two gotchas came out of
@@ -86,10 +86,8 @@ New cards: **#408** (Orca repo setup hook empty → fresh worktrees have no `ven
 
 ## Next Actions
 
-0. **Смержить `feat/location-post-review-fixes`.** Ветка собрана локально, **не запушена**. Осталось
-   влить в неё #406 (третий круг критика), прогнать гейты целиком, запушить, открыть PR, проверить
-   КАЖДУЮ джобу CI отдельно на pass + state CLEAN, и только тогда мержить. Оператор уже разрешил
-   мержить самому: «мержь сам, по-нормальному».
+0. **Ничего не висит.** PR #413 смержен, ветка удалена, дерево на `main`. Следующая сессия
+   начинается с приоритизации, а не с хвостов.
 1. **#409 — конвенция `@since`, в `Инбокс`, ждёт твоего решения.** Три варианта в карточке. Правило
    в `AGENT-RULES.md` Rule 5 сейчас противоречит коду: 1388 тегов `2.0.2` против одного `2.0.1`.
    Пока не решено — новый код тегать `2.0.2`, как весь остальной репозиторий.
@@ -122,7 +120,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево сейчас на `feat/location-post-review-fixes` (s83)** — интеграционная ветка с #404/#407 и #405. Риг отдаёт именно её. После мержа переключить на `main`.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `main` (s83, после мержа #413).** Риг отдаёт main со всей работой s82 и s83.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
