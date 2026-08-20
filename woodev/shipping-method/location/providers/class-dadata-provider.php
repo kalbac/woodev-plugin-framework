@@ -21,6 +21,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Framework\Shipping\Location\Locality_Key;
+use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -373,13 +374,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		/**
 		 * {@inheritDoc}
 		 *
-		 * Degrades to an empty result — never throws — on a blank query, an
-		 * unconfigured provider, or an HTTP/network failure; every failure path
-		 * is logged via `do_action( 'woodev_location_dadata_suggest_failed', … )`
-		 * so a carrier outage is observable without ever fataling a checkout
-		 * render (Task 7 requirement).
+		 * Degrades to an empty result — never throws — on a blank query or an
+		 * unconfigured provider: both are "nothing to ask", not a failed request.
+		 * An HTTP/network failure is a DIFFERENT case (#405): it THROWS
+		 * {@see Location_Provider_Exception}, wrapping the original failure, instead
+		 * of degrading — see {@see \Woodev\Framework\Shipping\Location\Location_Provider::suggest()}'s
+		 * own "EMPTY VS. FAILED" docblock section for why. Every failure path is
+		 * still logged via `do_action( 'woodev_location_dadata_operation_failed', … )`
+		 * before the throw, so a carrier outage remains observable the same way it
+		 * always was (Task 7 requirement) — the ONLY change is that a checkout/admin
+		 * render now also learns about it, instead of being told "nothing found".
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Rethrows an HTTP/network failure as {@see Location_Provider_Exception}
+		 *              instead of degrading to `[]` (#405).
 		 */
 		public function suggest( string $query, Location_Scope $scope ): array {
 			if ( '' === trim( $query ) || ! $this->is_configured() ) {
@@ -391,7 +399,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			} catch ( \Throwable $exception ) {
 				$this->log_failure( 'suggest', $exception );
 
-				return [];
+				throw new Location_Provider_Exception( 'DaData suggest request failed.', 0, $exception );
 			}
 
 			$records = [];

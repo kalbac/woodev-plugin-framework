@@ -16,8 +16,14 @@ symbolically — faster and more accurate than a raw file read.
 2. If they are missing — **report to the operator before any PHP work**. Do not silently fall back
    to `Read`; that is how sessions s45–s59 drifted.
 3. Activate by **path**, not by name: `activate_project` with `D:/Projects/woodev_framework`.
-4. **Repeat this rule in every subagent brief that touches PHP.** A rule that does not travel into
-   delegated work is not in force (s68).
+   **That path is right only for a session working in the main tree.** A worker running in its own
+   worktree must activate on ITS OWN path, and verify it took by checking that a `find_symbol`
+   result reports a path under that worktree — otherwise its Serena edits land in the main tree
+   while its git work happens in the worktree, and the work splits silently across two checkouts
+   (gotcha `serena-activate-path-must-be-the-worker-s-worktree`, s83).
+4. **Repeat this rule in every subagent brief that touches PHP — with the brief's own path
+   substituted.** A rule that does not travel into delegated work is not in force (s68); a rule
+   that travels with the wrong path is worse than absent (s83).
 
 | Task | Tool |
 |------|------|
@@ -42,6 +48,24 @@ dependency — **read the reference before writing the implementation**, never r
 signature that is reachable.
 
 Package: `@upstash/context7-mcp`.
+
+## Orca — the runtime this session lives in
+
+Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and multi-agent
+coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
+Codex, nobody accepts their own work.** Recipe, placement rules and traps:
+`docs-internal/wiki/orchestrating-agents-with-orca.md`.
+
+Never recall an `orca` flag from memory — the binary serves its own version-matched guide:
+
+```bash
+orca status --json
+orca skills get orca-cli        # worktrees, terminals, handoffs, built-in browser
+orca skills get orchestration   # runs, tasks, dispatch, worker_done, ask/reply
+```
+
+Codex is launched as an Orca terminal (`orca terminal create --worktree active --command codex`),
+never through `codex exec` — gotcha `codex-shell-sandbox-broken-windows`.
 
 ## Where to look things up
 

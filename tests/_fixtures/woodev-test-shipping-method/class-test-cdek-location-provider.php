@@ -230,9 +230,13 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * happen here; a caller's `within` is therefore honoured even though the carrier
 		 * cannot honour it itself.
 		 *
-		 * A transport or payload failure returns `[]` rather than throwing: a suggestion
-		 * list that cannot be fetched is an empty list to the customer, and the checkout
-		 * must not fatal because a carrier dictionary is briefly unreachable.
+		 * A transport or payload failure THROWS {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception}
+		 * (issue #405) rather than degrading to `[]` — see {@see self::token()} and
+		 * {@see self::request()}, which is where that failure actually originates.
+		 * With WRONG keys, {@see self::is_configured()} still answers `true` (both
+		 * fields are non-empty), so without this the OAuth exchange failing at
+		 * {@see self::token()} used to be indistinguishable from a real "no such
+		 * city" — exactly the bug #405 exists to close.
 		 */
 		public function suggest( string $query, \Woodev\Framework\Shipping\Location\Location_Scope $scope ): array {
 			$needle = mb_strtolower( trim( $query ) );
@@ -634,16 +638,30 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 
 		/**
 		 * Performs one authenticated GET against the test contour and returns the decoded
-		 * LIST body, or `[]` on any failure.
+		 * LIST body.
 		 *
-		 * Never throws. Every caller here is on the suggestion path, where the honest
-		 * degradation is an empty list — and where an exception would surface as a broken
-		 * checkout rather than as a carrier that had nothing to say.
+		 * THROWS {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception} (#405)
+		 * on a transport failure, a non-200 response, or a `200` body that is not a
+		 * decodable JSON array (malformed JSON, or valid JSON of the wrong shape —
+		 * a string, a bare scalar) — a request that could not be completed, or whose
+		 * answer could not be understood, is not the same thing as "this carrier
+		 * dictionary has nothing here", and conflating any of these with that is
+		 * exactly the bug #405 exists to close. Still returns `[]`, never throws,
+		 * when {@see self::token()} itself returns `''` (the provider is not
+		 * configured at all) — that is the ALREADY-honest #375 signal
+		 * ({@see self::is_configured()} answers `false` for it), not this method's own
+		 * concern to re-report.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Throws on a transport/non-200/malformed-body failure instead
+		 *              of degrading to `[]` (#405).
 		 *
 		 * @param string               $path   Endpoint path, leading slash.
 		 * @param array<string, mixed> $params Query parameters.
 		 *
 		 * @return array<int, mixed>
+		 *
+		 * @throws \Woodev\Framework\Shipping\Location\Location_Provider_Exception
 		 */
 		private function request( string $path, array $params ): array {
 			$token = $this->token();
@@ -666,12 +684,22 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 				$this->log( sprintf( 'GET %s failed', $path ), $response );
 
-				return [];
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour GET %s failed.', $path )
+				);
 			}
 
 			$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-			return is_array( $body ) ? $body : [];
+			if ( ! is_array( $body ) ) {
+				$this->log( sprintf( 'GET %s returned a malformed body', $path ), $response );
+
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour GET %s returned a malformed body.', $path )
+				);
+			}
+
+			return $body;
 		}
 
 		/**
@@ -680,7 +708,26 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * Cached for the lifetime CDEK itself reports, less a minute of slack so a token
 		 * cannot expire between being read here and arriving there.
 		 *
-		 * @return string Empty when unconfigured or the exchange failed.
+		 * THROWS {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception} (#405)
+		 * when {@see self::is_configured()} is `true` (both credential fields are
+		 * non-empty) but the exchange itself fails — wrong `client_id`/`client_secret`
+		 * (CDEK answers 401 the same way a network failure answers non-200: this
+		 * fixture does not need to tell the two apart, only "configured but not
+		 * working" from "not configured"), an unreachable test contour, or a 200
+		 * response carrying no `access_token`. THIS is the exact rig reproduction
+		 * #405's own card walks through: `is_configured()` reads only whether the two
+		 * fields are non-empty, so wrong keys used to reach this point, fail here,
+		 * and return `''` — indistinguishable downstream from "no such city". Still
+		 * returns `''`, never throws, when {@see self::is_configured()} is `false` —
+		 * that is the ALREADY-honest #375 signal, not this method's own concern.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Throws on a configured-but-failing exchange instead of
+		 *              degrading to `''` (#405).
+		 *
+		 * @return string Empty ONLY when unconfigured.
+		 *
+		 * @throws \Woodev\Framework\Shipping\Location\Location_Provider_Exception
 		 */
 		private function token(): string {
 			$cached = get_transient( self::TOKEN_TRANSIENT );
@@ -709,14 +756,20 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 				$this->log( 'OAuth token exchange failed', $response );
 
-				return '';
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK OAuth token exchange failed — check the configured Client ID/Secret.'
+				);
 			}
 
 			$body  = json_decode( wp_remote_retrieve_body( $response ), true );
 			$token = is_array( $body ) && is_string( $body['access_token'] ?? null ) ? $body['access_token'] : '';
 
 			if ( '' === $token ) {
-				return '';
+				$this->log( 'OAuth token exchange returned no access_token', $response );
+
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK OAuth token exchange returned no access_token.'
+				);
 			}
 
 			$ttl = isset( $body['expires_in'] ) ? max( 60, (int) $body['expires_in'] - 60 ) : 5 * MINUTE_IN_SECONDS;

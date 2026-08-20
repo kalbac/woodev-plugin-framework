@@ -904,15 +904,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Gets the field-presentation modes EITHER AXIS ({@see self::SETTING_FIELD_MODE_REGION}
-		 * or {@see self::SETTING_FIELD_MODE_SETTLEMENT}) is allowed to offer
-		 * right now (Task 13; spec D7; both axes share one gate — issue #380:
-		 * "each axis carries the same three values"), gated by the ACTIVE
-		 * provider's OWN capabilities — never the whole D15 chain:
-		 * `related-list` alone feeds `list_localities()`, which is not a D15
-		 * fallback-chained capability the way `suggest()` is (spec D15 is
-		 * about per-LEVEL suggest support; a provider either can or cannot
-		 * enumerate at all).
+		 * Gets the field-presentation modes the REGION axis
+		 * ({@see self::SETTING_FIELD_MODE_REGION}) is allowed to offer right
+		 * now (Task 13; spec D7), gated by the ACTIVE provider's OWN
+		 * capabilities — never the whole D15 chain: `related-list` alone
+		 * feeds `list_localities()`, which is not a D15 fallback-chained
+		 * capability the way `suggest()` is (spec D15 is about per-LEVEL
+		 * suggest support; a provider either can or cannot enumerate at
+		 * all).
 		 *
 		 * `typeahead` and `ajax-select2` are BOTH unconditional — every
 		 * provider implements `suggest()` (spec D7 baseline: it is REQUIRED,
@@ -921,9 +920,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * correction — see {@see self::MODE_AJAX_SELECT2}'s own docblock).
 		 * Only `related-list` is gated on {@see Location_Provider::CAPABILITY_LIST}.
 		 *
+		 * The SETTLEMENT axis ({@see self::SETTING_FIELD_MODE_SETTLEMENT})
+		 * used to share this exact gate (issue #380: "each axis carries the
+		 * same three values") but no longer does in full — issue #404 added
+		 * a cross-axis condition ON TOP of it, see
+		 * {@see self::offered_field_modes_for()}'s own `$requires_region_list`
+		 * parameter and {@see self::get_field_mode_settlement()}. This method
+		 * stays the REGION axis's own, unconditional answer.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 `ajax-select2` is no longer gated on `CAPABILITY_LIST`
 		 *              (issue #380) — only `related-list` still needs it.
+		 * @since 2.0.2 No longer shared verbatim by the settlement axis
+		 *              (issue #404) — kept as the region axis's own gate.
 		 *
 		 * @return string[] Subset of {@see self::FIELD_MODES}, always containing
 		 *                  {@see self::MODE_TYPEAHEAD} and {@see self::MODE_AJAX_SELECT2}.
@@ -932,10 +941,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return self::offered_field_modes_for( $this->get_active_provider() );
 		}
 
-		private static function offered_field_modes_for( ?Location_Provider $provider ): array {
+		/**
+		 * Shared `related-list` gate for both axes (provider capability),
+		 * with an ADDITIONAL cross-axis condition the settlement axis alone
+		 * opts into (issue #404): an unscoped, country-wide settlement
+		 * request DOES work — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+		 * `/location/list` serves one with no `within` param (issue #407) —
+		 * but it is not a guaranteed-COMPLETE one, since that route caps
+		 * every response at `Location_Controller::LIST_HARD_CAP` records
+		 * and flags `truncated: true` past that, a flag this axis's own
+		 * client currently drops. `related-list` ("Предустановленный
+		 * список") promises a list loaded ONCE and searched locally
+		 * end-to-end; a possibly-truncated country-wide list can silently
+		 * break that promise, while a region-scoped one is far more likely
+		 * to genuinely be the whole set. So `related-list` only reliably
+		 * keeps its promise for the settlement axis when it is scoped to a
+		 * region that is ITSELF a preset list, so the caller for the
+		 * settlement axis passes `$requires_region_list = true` and the
+		 * region axis's own current effective mode.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Added `$requires_region_list`/`$region_mode` (issue #404).
+		 *
+		 * @param Location_Provider|null $provider            The provider to gate `related-list` against.
+		 * @param bool                   $requires_region_list Issue #404: true for the SETTLEMENT axis only —
+		 *                                                      the region axis carries no such cross-axis
+		 *                                                      condition of its own.
+		 * @param string                 $region_mode          The region axis's CURRENT effective mode; only
+		 *                                                      consulted when `$requires_region_list` is true.
+		 *
+		 * @return string[]
+		 */
+		private static function offered_field_modes_for( ?Location_Provider $provider, bool $requires_region_list = false, string $region_mode = self::MODE_TYPEAHEAD ): array {
 			$modes = [ self::MODE_TYPEAHEAD ];
 
-			if ( null !== $provider && in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true ) ) {
+			$provider_has_list = null !== $provider && in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true );
+
+			if ( $provider_has_list && ( ! $requires_region_list || self::MODE_RELATED_LIST === $region_mode ) ) {
 				$modes[] = self::MODE_RELATED_LIST;
 			}
 
@@ -967,23 +1009,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Builds the SHARED `id => label` options map both the
-		 * `field_mode_region` and `field_mode_settlement` selects use (issue
-		 * #380 — both axes offer the same three values), gated against
-		 * `$provider` via {@see self::offered_field_modes_for()}.
+		 * Builds an `id => label` options map for a field-mode select (issue
+		 * #380 — both axes started out offering the same three values from
+		 * this one builder; issue #404 lets the SETTLEMENT caller narrow
+		 * further via `$requires_region_list`/`$region_mode`, forwarded
+		 * verbatim to {@see self::offered_field_modes_for()}).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `$requires_region_list`/`$region_mode` (issue #404).
 		 *
-		 * @param Location_Provider|null $provider The provider to gate against.
+		 * @param Location_Provider|null $provider            The provider to gate against.
+		 * @param bool                   $requires_region_list Issue #404: true for the SETTLEMENT axis only.
+		 * @param string                 $region_mode          The region axis's CURRENT effective mode; only
+		 *                                                      consulted when `$requires_region_list` is true.
 		 *
 		 * @return array<string, string>
 		 */
-		private static function offered_field_mode_options( ?Location_Provider $provider ): array {
+		private static function offered_field_mode_options( ?Location_Provider $provider, bool $requires_region_list = false, string $region_mode = self::MODE_TYPEAHEAD ): array {
 			$labels = self::field_mode_labels();
 
 			$options = [];
 
-			foreach ( self::offered_field_modes_for( $provider ) as $mode ) {
+			foreach ( self::offered_field_modes_for( $provider, $requires_region_list, $region_mode ) as $mode ) {
 				$options[ $mode ] = $labels[ $mode ];
 			}
 
@@ -1044,12 +1091,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		/**
 		 * Gets the store's SETTLEMENT (НП) level field-presentation mode
 		 * (issue #380 — split from the legacy single `field_mode`), clamped
-		 * against {@see self::get_offered_field_modes()} exactly like
+		 * against the provider-capability gate exactly like
 		 * {@see self::get_field_mode_region()} — but WITHOUT that method's
 		 * `region_field` clamp: the settlement level has no analogous "field
 		 * removed" state of its own.
 		 *
+		 * ALSO clamps `related-list` away once the REGION axis is itself not
+		 * `related-list` (issue #404 — the operator's own correction to the
+		 * #380 brainstorm): an unscoped, country-wide settlement list DOES
+		 * work (issue #407 — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+		 * `/location/list` serves one with no `within`), but not a
+		 * guaranteed-COMPLETE one — that route caps every response at
+		 * `Location_Controller::LIST_HARD_CAP` records, silently truncated
+		 * from this axis's own client. `related-list`'s "load once, search
+		 * locally" promise only reliably holds scoped to a region, so this
+		 * value only ever made sense scoped to a region that is ITSELF a
+		 * preset list. A stored value is NOT rewritten when the condition
+		 * stops holding — it comes
+		 * back the moment the region axis returns to `related-list` (design
+		 * §7's "clamp on read" pattern, the same discipline
+		 * {@see self::get_field_mode_region()} already applies for
+		 * `region_field=remove`). Deliberately a READ-side clamp, not a
+		 * `show_if` alone: unlike the cross-handler `region_field` case, both
+		 * axes DO live in the same handler here, so a same-handler `show_if`
+		 * would actually carry server-side enforcement — but narrowing the
+		 * OFFERED values (this method, and {@see self::register_settings()}
+		 * for the select's own options) is the mechanism already established
+		 * in this file for the provider-capability gate, and one mechanism
+		 * per concern beats two that must agree.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also clamps against the region axis's own effective
+		 *              mode (issue #404).
 		 *
 		 * @return string
 		 */
@@ -1059,7 +1132,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 
 			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
-			$offered = $this->get_offered_field_modes();
+			$offered = self::offered_field_modes_for( $this->get_active_provider(), true, $this->get_field_mode_region() );
 
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}
@@ -1085,6 +1158,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			return (string) \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()
 				->get_field_settings()
 				->effective( 'region_field' );
+		}
+
+		/**
+		 * Reads the store's raw `field_mode_region` option value and applies
+		 * the SAME two clamps {@see self::get_field_mode_region()} applies
+		 * once {@see self::$settings_handler} exists — the `region_field=remove`
+		 * gate (issue #369) and the offered-modes gate — without going
+		 * through that handler, mirroring
+		 * {@see self::resolve_stored_active_provider_id()}'s own "handler
+		 * does not exist yet" pattern.
+		 *
+		 * Needed ONLY at BUILD time ({@see self::register_settings()}, issue
+		 * #404): the settlement axis's OFFERED options must be computed
+		 * against the region axis's effective value, but the handler that
+		 * would normally answer that (through
+		 * {@see self::get_field_mode_region()}) is what this method's caller
+		 * is in the middle of constructing. Once the handler exists,
+		 * {@see self::get_field_mode_settlement()} calls
+		 * {@see self::get_field_mode_region()} directly instead — this raw
+		 * reader is never used for the READ-side clamp, only the build-time
+		 * options list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider|null $provider The active provider, gating the region axis's own offered modes.
+		 *
+		 * @return string
+		 */
+		private function resolve_stored_field_mode_region( ?Location_Provider $provider ): string {
+			if ( 'remove' === $this->region_field_effective_value() ) {
+				return self::MODE_TYPEAHEAD;
+			}
+
+			$option_name = 'woodev_' . self::SETTINGS_SERVICE_ID . '_' . self::SETTING_FIELD_MODE_REGION;
+			$stored      = (string) get_option( $option_name, self::MODE_TYPEAHEAD );
+			$offered     = self::offered_field_modes_for( $provider );
+
+			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}
 
 
@@ -1381,9 +1492,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * (gotcha `woodev-setting-get-value-is-cached-not-a-live-option-read`:
 		 * writing the option directly would leave this SAME request's cached
 		 * {@see \Woodev_Setting::$value} stale). A no-op while the gate is closed
-		 * — there is no settings handler to write through.
+		 * — there is no settings handler to write through — and ALSO a no-op
+		 * (issue #406 defect 3) when `$record` is foreign to the CURRENT active
+		 * provider, mirroring {@see \Woodev\Framework\Shipping\Location\Location_Settings::validate_values()}'s
+		 * REST-path rule so every writer, not only the form, is bound by the
+		 * same invariant.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Refuses (no-op) a record foreign to the current active
+		 *              provider (issue #406 defect 3) — previously wrote
+		 *              unconditionally, the only writer that bypassed the
+		 *              new `Location_Settings::validate_values()` check.
 		 *
 		 * @param Location_Record $record The record to store.
 		 *
@@ -1394,45 +1513,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return;
 			}
 
-			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_RECORD, wp_json_encode( $record->to_array() ) );
-		}
+			// Issue #406 defect 3: this is the ONE public writer that bypasses
+			// Location_Settings::validate_values() entirely — update_value()
+			// only runs the record's own per-field string validation, never the
+			// map-level cross-field check the REST save path is now gated by.
+			// No in-repo caller exists today, but leaving this writer able to
+			// persist a foreign record would silently overstate "the server is
+			// authoritative for every writer" the moment one is added. Refusing
+			// here — rather than throwing — matches this SAME method's existing
+			// no-op-on-unmet-precondition style for the closed-gate case above.
+			$active = $this->get_active_provider();
 
-		/**
-		 * Gets whether the FIXED default needs re-picking (spec §4.6/D15
-		 * amendment): the merchant's stored record's provider namespace was
-		 * stranded by a provider switch and {@see Location_Service::resolve_default()}'s
-		 * own re-resolution attempt through the new provider failed. Purely
-		 * informational — never gates resolution itself.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return bool
-		 */
-		public function get_default_locality_needs_repick(): bool {
-			if ( null === $this->settings_handler ) {
-				return false;
-			}
-
-			return (bool) $this->settings_handler->get_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK );
-		}
-
-		/**
-		 * Writes the "needs re-picking" flag — see {@see self::get_default_locality_needs_repick()}.
-		 * A no-op while the gate is closed.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param bool $needs_repick Whether the FIXED default currently needs re-picking.
-		 *
-		 * @return void
-		 */
-		public function set_default_locality_needs_repick( bool $needs_repick ): void {
-			if ( null === $this->settings_handler ) {
+			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
 				return;
 			}
 
-			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK, $needs_repick );
+			$this->settings_handler->update_value( self::SETTING_DEFAULT_LOCALITY_RECORD, wp_json_encode( $record->to_array() ) );
 		}
+
+		/*
+		 * REMOVED (issue #406): get_default_locality_needs_repick() / set_default_locality_needs_repick()
+		 * — spec §4.6/D15's "stranded record" flag, added by Task 14 for a
+		 * form-external provider switch (wp option update, plugin
+		 * deactivation) to signal. Deleted rather than wired up: its ONE
+		 * historical write site was inside the customer-facing
+		 * {@see Location_Service::resolve_fixed_default()}, and review
+		 * finding F2 deliberately removed that call — a getter reachable by
+		 * anonymous checkout traffic must never mutate a merchant setting —
+		 * with nothing replacing it since (Task 14's own commit history: zero
+		 * production callers, only round-trip tests). Wiring the setter alone
+		 * would still be inert: {@see self::apply_default_locality_status_note()}
+		 * already surfaces the SAME "stranded" condition, computed LIVE
+		 * against {@see self::get_active_provider()} on every settings-page
+		 * load — independent of any stored flag, so it already covers a
+		 * form-external switch too, the merchant just sees it on next page
+		 * load rather than immediately. A genuine form-external-change ALERT
+		 * (a dashboard/system-status notice firing before the merchant
+		 * thinks to open Location settings) is a real, separate feature —
+		 * filed as issue #410 rather than half-built here as a flag nothing
+		 * reads. The setting id itself, {@see self::SETTING_DEFAULT_LOCALITY_NEEDS_REPICK},
+		 * stays registered (still writable through the generic
+		 * {@see \Woodev_Abstract_Settings} accessors, never rendered) — only
+		 * these two dead typed wrappers are gone.
+		 */
 
 		/**
 		 * Whether {@see self::inject_related_list_states()} itself successfully
@@ -1723,6 +1846,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              issue #380 split the single `field_mode` option into
 		 *              two axes; an untagged vendored snapshot may already
 		 *              hold the legacy value.
+		 * @since 2.0.2 The settlement axis's OFFERED options are now built
+		 *              separately from the region axis's own (issue #404),
+		 *              narrowed by the region axis's raw effective value via
+		 *              {@see self::resolve_stored_field_mode_region()}.
+		 * @since 2.0.2 Also hands `Location_Settings` a resolver CALLABLE
+		 *              wrapping {@see self::resolve_active_provider_for_id()}
+		 *              (issue #406 follow-up) — its `validate_values()`
+		 *              cross-field check needs the SAME runtime resolution
+		 *              {@see self::get_active_provider()} applies (including
+		 *              {@see self::FILTER_ACTIVE_PROVIDER}) for BOTH a
+		 *              submitted id and a stored one, never a raw string
+		 *              compare against either.
 		 *
 		 * @return void
 		 */
@@ -1743,15 +1878,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$provider_options[ $id ] = $provider->get_name();
 			}
 
-			$field_mode_options              = self::offered_field_mode_options( $active_provider );
-			$default_locality_policy_options = self::offered_default_locality_policy_options_for( $active_provider );
+			// Issue #404: the settlement axis's `related-list` option is only
+			// offered when the region axis is ITSELF `related-list` — read the
+			// region axis's raw effective value (the handler that would
+			// normally answer this does not exist until a few lines below).
+			$region_mode = $this->resolve_stored_field_mode_region( $active_provider );
+
+			$field_mode_region_options        = self::offered_field_mode_options( $active_provider );
+			$field_mode_settlement_options    = self::offered_field_mode_options( $active_provider, true, $region_mode );
+			$default_locality_policy_options  = self::offered_default_locality_policy_options_for( $active_provider );
 
 			$this->settings_handler = new Location_Settings(
 				self::SETTINGS_SERVICE_ID,
 				$provider_options,
 				$provider_fields,
-				$field_mode_options,
-				$default_locality_policy_options
+				$field_mode_region_options,
+				$field_mode_settlement_options,
+				$default_locality_policy_options,
+				// Issue #406 follow-up (second pass): a CALLABLE, not a
+				// pre-computed id — resolve_active_provider_for_id() must
+				// run per SUBMITTED id too (not only as a stored-value
+				// fallback), including the FILTER_ACTIVE_PROVIDER filter,
+				// exactly like self::get_active_provider() itself resolves.
+				// A pre-computed snapshot could only ever answer for ONE id
+				// (this request's stored one); validate_values() needs the
+				// SAME answer for whatever id a submission moves to.
+				function ( string $id ): string {
+					$provider = $this->resolve_active_provider_for_id( $id );
+
+					return null !== $provider ? $provider->get_id() : '';
+				}
 			);
 
 			$this->apply_default_locality_status_note();

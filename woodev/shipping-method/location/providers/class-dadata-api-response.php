@@ -30,13 +30,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * Gets every raw suggestion from a `suggest/address` or `findById/address`
 		 * response body (`{ suggestions: [ { value, unrestricted_value, data }, … ] }`).
 		 *
+		 * THROWS {@see \Woodev_API_Exception} (#405) when the decoded body is not that
+		 * shape — malformed JSON (`json_decode()` failure leaves `$response_data` `null`),
+		 * or valid JSON that is not an object carrying an array `suggestions` — instead
+		 * of degrading to `[]`. A `200 OK` whose body could not be understood is a FAILED
+		 * request, not an empty one; {@see Dadata_Provider::suggest()}'s own try/catch is
+		 * what turns this into {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception},
+		 * same as it already does for the HTTP-level failures
+		 * {@see Dadata_Api_Client::do_post_parse_response_validation()} throws.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Throws on a malformed/wrongly-shaped body instead of degrading
+		 *              to `[]` (#405).
 		 *
 		 * @return array<int, array<string, mixed>>
+		 *
+		 * @throws \Woodev_API_Exception
 		 */
 		public function get_suggestions(): array {
 			if ( ! is_object( $this->response_data ) || ! isset( $this->response_data->suggestions ) || ! is_array( $this->response_data->suggestions ) ) {
-				return [];
+				throw new \Woodev_API_Exception( 'DaData suggest response body is malformed or of the wrong shape.' );
 			}
 
 			return array_map( [ $this, 'to_associative' ], $this->response_data->suggestions );

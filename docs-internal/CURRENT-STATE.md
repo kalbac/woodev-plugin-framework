@@ -7,25 +7,34 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-20 (s82).** Branch `feat/shipping-tab-admin-polish` — **10 commits, pushed, NOT
-merged**: this is UI/UX work and stops at the operator's own review. All six «Доставка» polish cards
-are done (#375, #377, #380 closing #369, #376 closing #370, #373, #378), plus four defects of the
-settings surface nobody had filed and one found by the rig pass. Tests: **2448 unit / 6067
-assertions / 1232 jest / 112 integration**; phpcs, phpstan and `lint:docs` clean. Gotchas: **170**.
+**As of 2026-08-20 (s83).** Branch `feat/location-post-review-fixes` — integration branch off `main`,
+**not pushed, not merged**. `#403` was merged to `main` first (19/19 CI jobs green, state CLEAN), so
+the four post-review cards branch from a clean base instead of stacking.
 
-**Codex works on this machine.** Measured in s82: in an Orca terminal it has a real shell and reads
-files byte-exact; only `codex exec -s read-only` from Bash hits the broken sandbox. The gotcha that
-claimed otherwise for two months is rewritten. The inline bundle and canary are obsolete.
+**All four post-review cards are done: #404, #405, #406, #407** — three Sonnet workers under Orca
+orchestration, each result reviewed by a Codex critic, every approved finding fixed rather than
+deferred. #406 needed three rounds; its last round was still running when this was written.
 
-**PR #403 открыт, CI зелёный (19 pass), НЕ смержен** — ждёт осмотра оператором. Он уже посмотрел
-админку и принял выравнивание иконок и смену провайдера налету; по итогам заведены **#404** (значение
-«Предустановленный список» предлагается шире, чем работает), **#405** (неверные ключи неотличимы от
-«города нет»), **#406** (не давать сохранить запись от чужого провайдера) и **#407** (проза обещает
-блокировку поля НП, код её не делает). Все в `Бэклог`, чинить в следующей сессии.
+Tests measured on `main`: **2454 unit / 6090 assertions / 1241 jest** (the s82 handoff's
+2448/6067/1232 was stale, and both workers were briefed with the wrong numbers before it was caught).
+On the integration branch with #404/#407 and #405 merged: phpcs clean, phpstan **0 errors**,
+**2467 unit / 6111 assertions**, **1251 jest**, asset build parity holds. Gotchas: **172**.
 
-**A local 27B review was verified** in a dedicated worktree: 20 confirmed findings filed as
-#383–#402, including a **critical IDOR** (a Subscriber can read and delete any user's saved payment
-cards). One of them, #386, fired here hours later and is fixed. Detail: `sessions/s82.md`.
+**Orca is now the subagent path** — worker = Sonnet 5, critic = Codex, nobody accepts their own work.
+Recipe, placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Two gotchas came out of
+using it, both orchestrator errors: a worker's Serena `activate_project` path must be its OWN
+worktree (`serena-activate-path-must-be-the-worker-s-worktree`), and `input_accepted` is not proof a
+worker started (`input-accepted-is-not-proof-a-worker-started`).
+
+**⚠️ #405 is NOT rig-verified.** With a deliberately bogus CDEK client id — confirmed in wp-config,
+token transient cleared, measured against a control — the provider returned the same results as with
+valid keys and never threw. The rig's CDEK fixture does not fail on a bad client id at the settlement
+level, so s82's observed conditions were never reproduced. #405 rests on unit tests covering both
+states and the critic's trace of every failure path. #404 and #407 WERE verified live.
+
+New cards: **#408** (Orca repo setup hook empty → fresh worktrees have no `vendor/`/`node_modules/`),
+**#409** (`@since` convention contradicts the code — `Инбокс`, needs the operator's decision),
+**#410**, **#411** (the `truncated` flag nobody reads), **#412** (settlement option set not live).
 
 ## Program status (high level)
 
@@ -77,29 +86,29 @@ cards). One of them, #386, fired here hours later and is fixed. Detail: `session
 
 ## Next Actions
 
-0. **Вкладка «Доставка» — доводка ЗАКОНЧЕНА (s82), ждёт твоих глаз.** Ветка
-   `feat/shipping-tab-admin-polish`, 10 коммитов, запушена, **не смержена**. Я проверил всё в
-   браузере на риге сам (три миграции, две оси по три значения, ключи провайдера без сохранения,
-   picker с живыми подсказками, консоль чистая), но это UI — по правилу решает оператор.
-   Смотреть: `Woodev → Настройки → Доставка`, все три секции. **Риг стоит на этой ветке.**
-1. **#374 (названия опций и словарь значений)** — НЕ начинать без оператора, его прямая просьба.
-   Сейчас самое время: после разделения осей значений стало больше, и вся копия уже написана.
-2. **#379 (цвет/текст кнопки карты)** — низкий приоритет; цепочка «магазин → карьер → фреймворк»
-   уже реализована в `resolve_accent_color()`, не хватает лишь вывода поля `pickup_accent_color`
-   на вкладку.
-3. **Ревью локальной 27B — 20 карточек #383–#402 в `Инбокс`, приоритизация за оператором.**
-   Самое тяжёлое: **#383** — критический IDOR, Подписчик читает и удаляет чужие сохранённые карты;
-   **#394** stored-XSS; **#395** ключ лицензии в логах открытым текстом. Ещё **6 развилок** ждут
-   его решения — они в комментарии к #382, карточек на них нет намеренно.
-4. **Открытый вопрос из Блока 2:** проза (спека и карточка) утверждает, что поле НП «блокируется
-   до выбора региона», но такого механизма в коде НЕТ — есть только скоупленная и нескоупленная
-   предзагрузка. Воркер справедливо отказался это изобретать. Решить: нужна ли настоящая блокировка.
-5. **Остатки слоя локаций, все в `Бэклог`:** #353, #356, #358, #361.
-6. **Постановки оператора:** #331 (подсказки в корзине), #332 (подсказки в ЛК).
-7. **Отложено оператором до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
-8. **Тулинг: Codex РАБОТАЕТ** — запускать в Orca-терминале (`orca terminal create --worktree active
-   --command codex`), а не через `codex exec` из Bash. Готча `codex-shell-sandbox-broken-windows`
-   переписана. Промпты ему — на английском, вердикт просить в файл.
+0. **Смержить `feat/location-post-review-fixes`.** Ветка собрана локально, **не запушена**. Осталось
+   влить в неё #406 (третий круг критика), прогнать гейты целиком, запушить, открыть PR, проверить
+   КАЖДУЮ джобу CI отдельно на pass + state CLEAN, и только тогда мержить. Оператор уже разрешил
+   мержить самому: «мержь сам, по-нормальному».
+1. **#409 — конвенция `@since`, в `Инбокс`, ждёт твоего решения.** Три варианта в карточке. Правило
+   в `AGENT-RULES.md` Rule 5 сейчас противоречит коду: 1388 тегов `2.0.2` против одного `2.0.1`.
+   Пока не решено — новый код тегать `2.0.2`, как весь остальной репозиторий.
+2. **#408 — прописать setup-скрипт репо в Orca** (`composer install && npm ci`). Твоё действие в UI,
+   команды в CLI нет. Без этого каждый воркер тратит круг на бутстрап.
+3. **Настройки приложения Orca** — то, о чём ты просил и что сделано лишь наполовину. Из CLI снято
+   всё измеримое (см. `sessions/s83.md`), панели Settings в десктопном приложении НЕ пройдены.
+   `orca computer` умеет их водить, но не при живых воркерах.
+4. **#411 — флаг `truncated` никто не читает**: список локаций молча режется на 500 записях, и для
+   покупателя это выглядит как «моего города нет». Тот же класс тихого отказа, что и #405.
+5. **#412** — набор значений «Тип поля НП» обновляется только после сохранения и перезагрузки, тогда
+   как смена провайдера рядом работает на лету.
+6. **#374 (названия опций и словарь значений)** — НЕ начинать без оператора, его прямая просьба.
+7. **#379 (цвет/текст кнопки карты)** — низкий приоритет; `resolve_accent_color()` уже реализован.
+8. **Ревью локальной 27B — 20 карточек #383–#402 в `Инбокс`**, приоритизация за оператором.
+   **#383 — критический IDOR**, чинить первым. Ещё 6 развилок в комментарии к #382.
+9. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+10. **Постановки оператора:** #331, #332. **Отложено до релиза:** #285, #247.
+    **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -113,7 +122,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  `feat/shipping-tab-admin-polish` (s82) — ветка ЖДЁТ ревью оператора, не переключать дерево, пока он не посмотрит.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево сейчас на `feat/location-post-review-fixes` (s83)** — интеграционная ветка с #404/#407 и #405. Риг отдаёт именно её. После мержа переключить на `main`.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.

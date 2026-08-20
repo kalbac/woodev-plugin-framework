@@ -25,6 +25,7 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Locality_Key;
+use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
@@ -50,6 +51,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-exception.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
@@ -868,24 +870,75 @@ final class DadataProviderTest extends TestCase {
 		$this->assertSame( [ [ 'country_iso_code' => 'BY' ] ], $body['locations'] );
 	}
 
-	public function test_suggest_http_failure_degrades_to_empty_and_is_logged(): void {
+	/**
+	 * Issue #405: a request that could not be COMPLETED must never read the same as one
+	 * that completed and found nothing — see {@see Location_Provider::suggest()}'s own
+	 * "EMPTY VS. FAILED" docblock section. `suggest()` now THROWS
+	 * {@see Location_Provider_Exception} on an HTTP/network failure instead of degrading
+	 * to `[]`; the original swallowed-exception log line still fires first (unchanged —
+	 * Task 7's own observability requirement).
+	 */
+	public function test_suggest_http_failure_throws_and_is_logged(): void {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 500, '' );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		try {
+			( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+			$this->fail( 'Expected Location_Provider_Exception was not thrown.' );
+		} catch ( Location_Provider_Exception $exception ) {
+			// expected
+		}
 
-		$this->assertSame( [], $records );
 		$this->assertTrue( $this->failure_was_logged( 'suggest' ) );
 	}
 
-	public function test_suggest_401_response_degrades_to_empty_and_is_logged(): void {
+	/**
+	 * The #405 rig reproduction, at the provider level: WRONG (not merely absent) keys
+	 * still pass {@see Dadata_Provider::is_configured()} (both fields are non-empty), so
+	 * the request is actually attempted, and DaData answers 401 — this must throw,
+	 * exactly like the generic transport failure above, never degrade to `[]`.
+	 */
+	public function test_suggest_401_response_throws_and_is_logged(): void {
 		$this->set_token( 'bad-token' );
 		$this->stub_http_response( 401, '' );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		try {
+			( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+			$this->fail( 'Expected Location_Provider_Exception was not thrown.' );
+		} catch ( Location_Provider_Exception $exception ) {
+			// expected
+		}
 
-		$this->assertSame( [], $records );
 		$this->assertTrue( $this->failure_was_logged( 'suggest' ) );
+	}
+
+	/**
+	 * Critic follow-up (#405): a `200 OK` whose body is not JSON at all — a request
+	 * that COMPLETED but could not be understood is still a FAILED request, not an
+	 * empty one; {@see Dadata_Api_Response::get_suggestions()} must throw rather than
+	 * degrade to `[]` when `json_decode()` itself fails.
+	 */
+	public function test_suggest_malformed_json_body_throws(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{not-json' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+	}
+
+	/**
+	 * Critic follow-up (#405): a `200 OK` whose body IS valid JSON, but not the
+	 * documented `{ suggestions: [...] }` shape — a bare JSON array at the top level,
+	 * with no `suggestions` key at all — must also throw, not degrade to `[]`.
+	 */
+	public function test_suggest_wrongly_shaped_json_body_throws(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '[1,2,3]' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 	}
 
 	// -------------------------------------------------------------------------

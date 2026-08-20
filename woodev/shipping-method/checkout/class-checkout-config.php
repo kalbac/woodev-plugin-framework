@@ -848,6 +848,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 						'Не удалось сохранить выбор — попробуйте ещё раз.',
 						'woodev-plugin-framework'
 					),
+
+					// Issue #405: shown INSIDE the open listbox when a search could not be
+					// COMPLETED at all (the provider's own request failed — wrong keys, a
+					// network failure, a malformed upstream payload), as opposed to `noResults`/
+					// `noResultsAddress` above, which mean "the search ran and genuinely found
+					// nothing". `location-typeahead.js`'s own `errorText` docblock and
+					// `Location_Provider::suggest()`'s "EMPTY VS. FAILED" docblock section are
+					// the two ends of this same contract — a REST 502 from `/location/suggest`
+					// is what actually triggers this string.
+					'unavailable'      => __(
+						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
+						'woodev-plugin-framework'
+					),
 				]
 			);
 

@@ -44,6 +44,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Location\\Locality_Key' => 'woodev/shipping-method/location/class-locality-key.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Adapter' => 'woodev/shipping-method/location/interface-location-adapter.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Provider' => 'woodev/shipping-method/location/interface-location-provider.php',
+	'Woodev\\Framework\\Shipping\\Location\\Location_Provider_Exception' => 'woodev/shipping-method/location/class-location-provider-exception.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Provider_Registry' => 'woodev/shipping-method/location/class-location-provider-registry.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Record' => 'woodev/shipping-method/location/class-location-record.php',
 	'Woodev\\Framework\\Shipping\\Location\\Location_Resolution_Cache' => 'woodev/shipping-method/location/class-location-resolution-cache.php',

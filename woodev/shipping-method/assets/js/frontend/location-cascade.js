@@ -1752,6 +1752,13 @@
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
 			emptyText: 'string' === typeof emptyKey ? emptyKey : '',
+			// Issue #405: a DIFFERENT server-supplied string from `emptyText` above — "the
+			// source could not answer" is not "searched, found nothing", and conflating the
+			// two at checkout is exactly the bug #405 closes. Same server-supplied/filterable
+			// route as `emptyText`; see `location-typeahead.js`'s own `errorText` docblock for
+			// when this actually renders (a rejected/thrown `fetch()`, never a resolved-empty
+			// one).
+			errorText: 'string' === typeof i18n.unavailable ? i18n.unavailable : '',
 			node: node,
 			location: entry.location,
 			country: function() {

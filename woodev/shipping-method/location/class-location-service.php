@@ -790,7 +790,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 No longer writes {@see Location_Provider_Registry::set_default_locality_record()}
-		 *              / {@see Location_Provider_Registry::set_default_locality_needs_repick()}
+		 *              / the (issue #406: since removed) needs-repick setter
 		 *              — review finding F2: a customer-facing getter must not
 		 *              mutate store settings.
 		 *

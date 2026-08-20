@@ -1,5 +1,5 @@
 # Agent Rules — Woodev Plugin Framework
-> For AI agents. Keep updated. Last updated: 2026-08-09 (s60 docs audit).
+> For AI agents. Keep updated. Last updated: 2026-08-20 (s83: Orca orchestration is the subagent path).
 > Navigation → `DOCS-INDEX.md` | Current status → `CURRENT-STATE.md`
 
 ---
@@ -66,6 +66,11 @@ measured effect is fewer mistakes and fewer tokens. Three hard requirements:
    this way: Serena silently disappeared from sessions and agents fell back without telling anyone.)
 2. **Propagate into subagent briefs:** every brief for a task that touches PHP source MUST repeat
    this rule. A brief without it is a defective brief — the orchestrator is responsible.
+   **Substitute the worker's OWN worktree path when you do.** Copying `D:/Projects/woodev_framework`
+   into a brief for a worker running elsewhere sends its Serena edits into the main tree while its
+   git work stays in its worktree — silently, with no error (s83, gotcha
+   `serena-activate-path-must-be-the-worker-s-worktree`). Require the worker to verify activation
+   by checking that a `find_symbol` result reports a path under its own worktree.
 3. **Fallback is an exception, not a routine:** if Serena errors on a specific call, note it in the
    session log and only then use built-in tools for that call.
 
@@ -76,9 +81,21 @@ After implementing each logical code block:
 3. Git commit with Conventional Commits message
 
 ### Subagent-Driven Execution for Parallelism
-When a task has **3+ independent workstreams each taking > 2 minutes**, use subagent-driven execution: implementer subagents working in isolated git worktrees, with a Codex critic pass over the result (worker+critic pattern). Do NOT parallelize simple single-file edits or inherently sequential tasks.
+When a task has **3+ independent workstreams each taking > 2 minutes**, use subagent-driven
+execution. Do NOT parallelize simple single-file edits or inherently sequential tasks.
 
-Jest caveat: worktrees under `.claude/worktrees/` are inside the repo, and a bare jest run scans them — **always** run `npm run test:js -- --roots "<rootDir>/tests/js"`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`).
+**The shape (operator decision, s83): worker = Sonnet 5, critic = Codex, and nobody accepts their
+own work.** Run it through Orca orchestration, not in-process subagents — the worker keeps its own
+context in its own terminal and the orchestrator reads only the `worker_done` report. Full recipe,
+placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Never recall an `orca` flag
+from memory; the binary serves its own version-matched guide via `orca skills get orchestration`.
+
+**Placement is the orchestrator's responsibility.** Name each worker's expected file set before
+starting a wave; any two that overlap get separate worktrees or a `--deps` chain. A worker cannot
+know what another worker is editing — dispatching two into one tree and hoping is how s82 lost
+finished work (gotcha `two-agents-one-file-is-the-orchestrator-s-bug`).
+
+Jest caveat: **always** run `npm run test:js -- --roots "<rootDir>/tests/js"`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Worktrees under `.claude/worktrees/` live inside the repo and a bare jest run scans them; Orca worktrees land outside the repo and do not have that problem, but `npx jest` still loses the wp-scripts jsdom environment either way. And a fresh Orca worktree has **no `node_modules/`** until the worker runs `npm ci` — the repo has no Orca setup hook.
 
 ### Conventional Commits (REQUIRED)
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:

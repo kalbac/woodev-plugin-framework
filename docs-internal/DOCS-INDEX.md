@@ -91,6 +91,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 
 - `CLAUDE.md` — Claude Code entry point: Serena/Context7 tooling + lookup table (Claude Code)
 - `wiki/architecture.md` — subsystems, base classes, seams (opened on demand, not at session start)
+- `wiki/orchestrating-agents-with-orca.md` — how multi-agent work is run here: worker Sonnet / critic Codex, worktree placement, what we did not adopt
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `QWEN.md` — Qwen-specific agent instructions
 - `.ai/QUICK-REFERENCE.md` — shared project rules and conventions for all AI agents
