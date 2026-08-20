@@ -8,7 +8,7 @@
  * signal to give besides `[]`, indistinguishable from a request that genuinely completed
  * and found nothing. This exception IS that signal.
  *
- * @since 2.1.0
+ * @since 2.0.2
  */
 
 namespace Woodev\Framework\Shipping\Location;
@@ -36,7 +36,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 	 * wants to distinguish a DEGRADED REQUEST from an outright bug in provider code (a
 	 * `\TypeError`, a missing class) can catch this one specifically.
 	 *
-	 * @since 2.1.0
+	 * @since 2.0.2
 	 */
 	class Location_Provider_Exception extends \RuntimeException {}
 

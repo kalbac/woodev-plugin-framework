@@ -912,6 +912,35 @@ final class DadataProviderTest extends TestCase {
 		$this->assertTrue( $this->failure_was_logged( 'suggest' ) );
 	}
 
+	/**
+	 * Critic follow-up (#405): a `200 OK` whose body is not JSON at all — a request
+	 * that COMPLETED but could not be understood is still a FAILED request, not an
+	 * empty one; {@see Dadata_Api_Response::get_suggestions()} must throw rather than
+	 * degrade to `[]` when `json_decode()` itself fails.
+	 */
+	public function test_suggest_malformed_json_body_throws(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{not-json' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+	}
+
+	/**
+	 * Critic follow-up (#405): a `200 OK` whose body IS valid JSON, but not the
+	 * documented `{ suggestions: [...] }` shape — a bare JSON array at the top level,
+	 * with no `suggestions` key at all — must also throw, not degrade to `[]`.
+	 */
+	public function test_suggest_wrongly_shaped_json_body_throws(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '[1,2,3]' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+	}
+
 	// -------------------------------------------------------------------------
 	// Key derivation across tiers — every fixture's key must come from the
 	// provider's own `fias_id` (a real GUID for RU/ФИАС, a bare number for

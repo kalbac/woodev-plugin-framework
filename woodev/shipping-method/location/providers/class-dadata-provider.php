@@ -386,7 +386,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * render now also learns about it, instead of being told "nothing found".
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.0 Rethrows an HTTP/network failure as {@see Location_Provider_Exception}
+		 * @since 2.0.2 Rethrows an HTTP/network failure as {@see Location_Provider_Exception}
 		 *              instead of degrading to `[]` (#405).
 		 */
 		public function suggest( string $query, Location_Scope $scope ): array {

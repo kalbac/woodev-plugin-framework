@@ -303,7 +303,7 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * implementations of this split.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.0 Documented the throw-on-failure contract (#405) — a provider
+		 * @since 2.0.2 Documented the throw-on-failure contract (#405) — a provider
 		 *              built before this MUST be revisited: swallowing every
 		 *              failure into `[]`, this method's ENTIRE previous contract,
 		 *              is exactly the bug #405 closes.

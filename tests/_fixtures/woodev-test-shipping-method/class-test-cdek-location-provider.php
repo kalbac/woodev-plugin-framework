@@ -641,17 +641,20 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * LIST body.
 		 *
 		 * THROWS {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception} (#405)
-		 * on a transport failure or a non-200 response — a request that could not be
-		 * completed is not the same thing as "this carrier dictionary has nothing here",
-		 * and conflating the two is exactly the bug #405 exists to close. Still returns
-		 * `[]`, never throws, when {@see self::token()} itself returns `''` (the provider
-		 * is not configured at all) — that is the ALREADY-honest #375 signal
+		 * on a transport failure, a non-200 response, or a `200` body that is not a
+		 * decodable JSON array (malformed JSON, or valid JSON of the wrong shape —
+		 * a string, a bare scalar) — a request that could not be completed, or whose
+		 * answer could not be understood, is not the same thing as "this carrier
+		 * dictionary has nothing here", and conflating any of these with that is
+		 * exactly the bug #405 exists to close. Still returns `[]`, never throws,
+		 * when {@see self::token()} itself returns `''` (the provider is not
+		 * configured at all) — that is the ALREADY-honest #375 signal
 		 * ({@see self::is_configured()} answers `false` for it), not this method's own
 		 * concern to re-report.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.0 Throws on a transport/non-200 failure instead of degrading to
-		 *              `[]` (#405).
+		 * @since 2.0.2 Throws on a transport/non-200/malformed-body failure instead
+		 *              of degrading to `[]` (#405).
 		 *
 		 * @param string               $path   Endpoint path, leading slash.
 		 * @param array<string, mixed> $params Query parameters.
@@ -688,7 +691,15 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 
 			$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-			return is_array( $body ) ? $body : [];
+			if ( ! is_array( $body ) ) {
+				$this->log( sprintf( 'GET %s returned a malformed body', $path ), $response );
+
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour GET %s returned a malformed body.', $path )
+				);
+			}
+
+			return $body;
 		}
 
 		/**
@@ -711,7 +722,7 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * that is the ALREADY-honest #375 signal, not this method's own concern.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.0 Throws on a configured-but-failing exchange instead of
+		 * @since 2.0.2 Throws on a configured-but-failing exchange instead of
 		 *              degrading to `''` (#405).
 		 *
 		 * @return string Empty ONLY when unconfigured.

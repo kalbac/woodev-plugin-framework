@@ -21,14 +21,18 @@
 
 namespace Woodev\Tests\Unit\Shipping\Location;
 
+use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
 use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-exception.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 require_once dirname( __DIR__, 3 ) . '/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php';
 
@@ -180,6 +184,81 @@ class CdekFixtureProviderTest extends TestCase {
 				'region'     => 'Московская область',
 			],
 			\Woodev_Test_Cdek_Location_Provider::split_full_name( ' Пушкино ,, Пушкинский городской округ ,  Московская область , Россия ' )
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Issue #405 (critic follow-up): a `200 OK` whose body cannot be understood
+	// — malformed JSON, or valid JSON of the wrong shape — is a FAILED request,
+	// not an empty one. `request()` must throw, never degrade to `[]`, in both
+	// cases. Exercised through `suggest()` at the SETTLEMENT level with no
+	// parent scope: `suggest_settlements()` calls `request()` before it ever
+	// touches the region dictionary, so a cached transient token is all the
+	// network stubbing this needs — no Woodev_Test_Cdek_Integration/
+	// Woodev_Test_Shipping_Method_Plugin bootstrap required.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Stubs a cached OAuth token (bypassing credential()/is_configured() entirely —
+	 * {@see \Woodev_Test_Cdek_Location_Provider::token()} returns it straight from
+	 * {@see get_transient()} before ever touching the carrier's own Integration
+	 * settings) and a GET response carrying `$body` as its raw response body.
+	 *
+	 * @param string $body Raw (un-decoded) HTTP response body.
+	 *
+	 * @return void
+	 */
+	private function stub_settlement_suggest_transport( string $body ): void {
+		Functions\when( 'get_transient' )->justReturn( 'fake-cached-token' );
+		Functions\when( 'add_query_arg' )->justReturn( 'https://api.edu.cdek.ru/v2/location/suggest/cities' );
+		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( $body );
+	}
+
+	/**
+	 * A `200 OK` body that is not JSON at all — `json_decode()` returns `null`,
+	 * which is not an array.
+	 */
+	public function test_suggest_throws_on_a_200_response_with_a_malformed_json_body(): void {
+		$this->stub_settlement_suggest_transport( '{not-json' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		$provider->suggest( 'Мос', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+	}
+
+	/**
+	 * A `200 OK` body that IS valid JSON, but not the documented list shape — a bare
+	 * JSON string decodes to a PHP string, not an array.
+	 */
+	public function test_suggest_throws_on_a_200_response_with_valid_json_of_the_wrong_shape(): void {
+		$this->stub_settlement_suggest_transport( '"just a string"' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		$provider->suggest( 'Мос', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+	}
+
+	/**
+	 * The counterpart proving the fix did not overcorrect: a well-shaped `200` body
+	 * (a real JSON array, even an empty one — CDEK's own "no matches" answer) must
+	 * still return `[]`, never throw. This is the "succeeded with zero matches" state
+	 * #405 requires staying distinguishable from the two failures above.
+	 */
+	public function test_suggest_returns_empty_for_a_well_shaped_zero_match_response(): void {
+		$this->stub_settlement_suggest_transport( '[]' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->assertSame(
+			[],
+			$provider->suggest( 'Заброшенный', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) )
 		);
 	}
 }

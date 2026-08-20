@@ -1633,7 +1633,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * rebuilt around it.
 		 *
 		 * @since 2.0.2
-		 * @since 2.1.0 Added the `$provider_id` parameter and the
+		 * @since 2.0.2 Added the `$provider_id` parameter and the
 		 *              `woodev_location_provider_operation_failed` action
 		 *              (#405).
 		 *
@@ -1660,7 +1660,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * fails and the REST layer degrades to its distinct 502 response
 			 * instead of the ordinary 200+empty one (#405).
 			 *
-			 * @since 2.1.0
+			 * @since 2.0.2
 			 *
 			 * @param string     $provider_id The failing provider's own id.
 			 * @param string     $operation   One of `suggest`, `list`.
