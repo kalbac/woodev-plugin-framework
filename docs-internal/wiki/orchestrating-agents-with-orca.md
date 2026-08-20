@@ -50,6 +50,17 @@ for real activity; if the prompt is sitting there as `[Pasted Content N chars]`,
 `orca terminal send --terminal <handle> --text "" --enter --json` (gotcha
 `input-accepted-is-not-proof-a-worker-started`).
 
+**Reusing a settled worker for a follow-up** — which is how a critic's findings get fixed by the
+agent that wrote the code — needs BOTH flags, not just the handle:
+
+```bash
+orca orchestration worker-start --task <new_task_id>   --worktree id:<repoId>::<thatWorkersWorktreePath>   --terminal <handle> --json
+```
+
+`--terminal` alone resolves `--worktree` to the coordinator's own worktree and fails with
+`terminal_worktree_mismatch`. Note also that `--model`/`--effort` cannot combine with `--terminal`:
+a reused terminal keeps the model it launched with, so a follow-up cannot silently change tiers.
+
 Verify provenance before calling anything orchestrated:
 
 ```bash
