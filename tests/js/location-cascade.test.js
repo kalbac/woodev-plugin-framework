@@ -223,6 +223,9 @@ function buildConfig( opts ) {
 				noResults: 'Поиск не дал результатов. Попробуйте изменить запрос.',
 				noResultsAddress: 'Адрес не найден — введите вручную.',
 				notPersisted: 'Не удалось сохранить выбор — попробуйте ещё раз.',
+				// Issue #405: DISTINCT from noResults/noResultsAddress above — see
+				// attachOne()'s own errorText wiring.
+				unavailable: 'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
 			},
 		},
 	};
@@ -241,7 +244,7 @@ function fakeTypeahead() {
 		const detach = jest.fn();
 		const call = {
 			el, fetch: opts.fetch, onSelect: opts.onSelect, onAbandon: opts.onAbandon,
-			emptyText: opts.emptyText, detach,
+			emptyText: opts.emptyText, errorText: opts.errorText, detach,
 		};
 
 		attachCalls.push( call );
@@ -2870,6 +2873,33 @@ describe( 'empty-result message', () => {
 		boot( { region: true, settlement: true, address: true, i18n: null } );
 
 		expect( callFor( 'billing_city' ).emptyText ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Source-unavailable message (issue #405) — server-supplied, DISTINCT from
+// the empty-result message above: "the source could not answer" must never
+// read the same as "searched, found nothing" at checkout.
+// -----------------------------------------------------------------------
+
+describe( 'source-unavailable message (issue #405)', () => {
+	it( 'hands the widget the translated unavailable string from the config, distinct from emptyText', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( callFor( 'billing_city' ).errorText ).toBe( 'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.' );
+		expect( callFor( 'billing_city' ).errorText ).not.toBe( callFor( 'billing_city' ).emptyText );
+	} );
+
+	it( 'passes an empty string when the config carries no i18n block at all', () => {
+		boot( { region: true, settlement: true, address: true, i18n: null } );
+
+		expect( callFor( 'billing_city' ).errorText ).toBe( '' );
+	} );
+
+	it( 'passes an empty string when the server sent no unavailable string of its own', () => {
+		boot( { region: true, settlement: true, address: true, i18n: { noResults: 'x' } } );
+
+		expect( callFor( 'billing_city' ).errorText ).toBe( '' );
 	} );
 } );
 

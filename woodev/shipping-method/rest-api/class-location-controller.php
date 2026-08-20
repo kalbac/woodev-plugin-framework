@@ -1008,7 +1008,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			try {
 				$records = $provider->suggest( $query, $scope );
 			} catch ( \Throwable $exception ) {
-				$this->log_failure( 'suggest', $exception );
+				$this->log_failure( $provider->get_id(), 'suggest', $exception );
 
 				return $this->upstream_error();
 			}
@@ -1132,7 +1132,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			try {
 				$records = $provider->list_localities( $scope );
 			} catch ( \Throwable $exception ) {
-				$this->log_failure( 'list', $exception );
+				$this->log_failure( $provider->get_id(), 'list', $exception );
 
 				return $this->upstream_error();
 			}
@@ -1612,25 +1612,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		/**
 		 * Logs a swallowed provider exception's real message — same
 		 * swallowed-exception diagnostic convention
-		 * {@see Pickup_Controller::log_carrier_failure()} uses.
+		 * {@see Pickup_Controller::log_carrier_failure()} uses — and fires a
+		 * provider-agnostic action so an external consumer can observe a
+		 * degraded suggest/list call without parsing `error_log()` (#405).
+		 *
+		 * NO admin-notice consumer ships for this action yet — #405's own card
+		 * raised the question ("заодно решить, нужно ли админское уведомление
+		 * о повторяющихся сбоях") and this PR deliberately did not build one:
+		 * there is no production telemetry on this rig (a single operator, not
+		 * real traffic) to defensibly pick a failure-count/time-window
+		 * threshold, and picking one without evidence is exactly what
+		 * `docs-internal` gotcha-level guidance warns against. The REST 502
+		 * this failure already produces (`self::upstream_error()`), together
+		 * with the admin picker's OWN already-built `status: 'error'` state
+		 * ({@see \LocationPickerField} — issue #376) and the checkout
+		 * typeahead's new `errorText` (issue #405), already give an operator
+		 * testing the picker an immediate, honest signal — this hook exists so
+		 * a FUTURE repeated-failure notice (once real usage data justifies a
+		 * threshold) has something to attach to without needing this fix
+		 * rebuilt around it.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the `$provider_id` parameter and the
+		 *              `woodev_location_provider_operation_failed` action
+		 *              (#405).
 		 *
-		 * @param string     $operation One of `suggest`, `list`.
-		 * @param \Throwable $exception The caught failure.
+		 * @param string     $provider_id The failing provider's {@see Location_Provider::get_id()}.
+		 * @param string     $operation   One of `suggest`, `list`.
+		 * @param \Throwable $exception   The caught failure.
 		 *
 		 * @return void
 		 */
-		private function log_failure( string $operation, \Throwable $exception ): void {
+		private function log_failure( string $provider_id, string $operation, \Throwable $exception ): void {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a
 			// provider failure; the browser only ever sees a generic 502.
 			error_log(
 				sprintf(
-					'[woodev] location %s failed: %s',
+					'[woodev] location %s (%s) failed: %s',
 					$operation,
+					$provider_id,
 					$exception->getMessage()
 				)
 			);
+
+			/**
+			 * Fires when a Location Provider `suggest()`/`list_localities()` call
+			 * fails and the REST layer degrades to its distinct 502 response
+			 * instead of the ordinary 200+empty one (#405).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string     $provider_id The failing provider's own id.
+			 * @param string     $operation   One of `suggest`, `list`.
+			 * @param \Throwable $exception   The caught failure.
+			 */
+			do_action( 'woodev_location_provider_operation_failed', $provider_id, $operation, $exception );
 		}
 
 		// is_rate_limited(), get_client_ip() and cap_length() are provided by

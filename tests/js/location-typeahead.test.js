@@ -853,6 +853,146 @@ test( 'without emptyText the listbox still hides silently — the old contract i
 } );
 
 // -----------------------------------------------------------------------
+// errorText (issue #405) — a REJECTED/thrown fetch(), the "request could not
+// be completed" state, must read as a DIFFERENT sentence from emptyText's
+// "searched, found nothing" above — never the same message, never silence
+// when the caller opted in. Mirrors the emptyText suite above exactly.
+// -----------------------------------------------------------------------
+
+function errorRowOf() {
+	return document.querySelector( '.woodev-location-error' );
+}
+
+async function searchRejecting( options ) {
+	const fetchMock = jest.fn( () => Promise.reject( new Error( 'upstream unavailable' ) ) );
+
+	attachTypeahead( input, Object.assign( { fetch: fetchMock, onSelect: jest.fn() }, options || {} ) );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+}
+
+test( 'a rejected fetch shows the errorText message inside an OPEN listbox, distinct from emptyText', async () => {
+	jest.useFakeTimers();
+
+	await searchRejecting( {
+		errorText: 'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
+		emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+	} );
+
+	expect( listboxOf().hidden ).toBe( false );
+	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+	expect( errorRowOf() ).not.toBeNull();
+	expect( errorRowOf().textContent ).toBe( 'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.' );
+	// Never the emptyText row — the two states must never collapse into the same message.
+	expect( emptyRowOf() ).toBeNull();
+} );
+
+test( 'the error message is NOT an option — no role=option, and Enter selects nothing', async () => {
+	jest.useFakeTimers();
+	const onSelect = jest.fn();
+	const fetchMock = jest.fn( () => Promise.reject( new Error( 'boom' ) ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect, errorText: 'недоступно' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( errorRowOf().getAttribute( 'role' ) ).toBe( 'presentation' );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowDown', bubbles: true } ) );
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Enter', bubbles: true } ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( input.value ).toBe( 'ba' );
+	expect( input.hasAttribute( 'aria-activedescendant' ) ).toBe( false );
+} );
+
+test( 'clicking the error message selects nothing', async () => {
+	jest.useFakeTimers();
+	const onSelect = jest.fn();
+	const fetchMock = jest.fn( () => Promise.reject( new Error( 'boom' ) ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect, errorText: 'недоступно' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	errorRowOf().dispatchEvent( new MouseEvent( 'mousedown', { bubbles: true } ) );
+
+	expect( onSelect ).not.toHaveBeenCalled();
+	expect( input.value ).toBe( 'ba' );
+} );
+
+test( 'the error message is replaced by real suggestions on the next search', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn()
+		.mockImplementationOnce( () => Promise.reject( new Error( 'boom' ) ) )
+		.mockImplementationOnce( () => Promise.resolve( [ { label: 'г Москва' } ] ) );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn(), errorText: 'недоступно' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( errorRowOf() ).not.toBeNull();
+
+	input.value = 'bar';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( errorRowOf() ).toBeNull();
+	expect( listboxOf().children.length ).toBe( 1 );
+	expect( listboxOf().children[ 0 ].getAttribute( 'role' ) ).toBe( 'option' );
+} );
+
+test( 'closing the listbox clears the error message too', async () => {
+	jest.useFakeTimers();
+
+	await searchRejecting( { errorText: 'недоступно' } );
+
+	input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'Escape', bubbles: true } ) );
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( errorRowOf() ).toBeNull();
+} );
+
+test( 'without errorText a rejected fetch still hides the listbox silently — the old contract is the default', async () => {
+	jest.useFakeTimers();
+
+	await searchRejecting();
+
+	expect( listboxOf().hidden ).toBe( true );
+	expect( errorRowOf() ).toBeNull();
+	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+} );
+
+test( 'a fetch that throws synchronously shows the errorText message when supplied', () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => {
+		throw new Error( 'boom' );
+	} );
+
+	attachTypeahead( input, { fetch: fetchMock, onSelect: jest.fn(), errorText: 'недоступно' } );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+
+	expect( errorRowOf() ).not.toBeNull();
+	expect( errorRowOf().textContent ).toBe( 'недоступно' );
+} );
+
+// -----------------------------------------------------------------------
 // ABANDON — adopt or report on blur (issue #350)
 // -----------------------------------------------------------------------
 //
