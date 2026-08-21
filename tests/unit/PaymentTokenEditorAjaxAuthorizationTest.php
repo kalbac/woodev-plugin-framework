@@ -320,6 +320,45 @@ namespace Woodev\Tests\Unit {
 			$this->assertSame( [], $editor->removed_tokens, 'A user_id that does not resolve to an existing user must be rejected' );
 		}
 
+		/**
+		 * Pins the enumeration fix: a shop manager who is not allowed to edit
+		 * the target must see the SAME error for a real-but-forbidden user ID
+		 * as for one that does not exist at all, so the response can never be
+		 * used to fingerprint which arbitrary IDs are real users.
+		 */
+		public function test_ajax_remove_token_gives_the_same_error_for_an_existing_forbidden_user_id_as_for_a_nonexistent_one(): void {
+			$this->stub_capabilities_for_shop_manager( [] );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+
+			$errors = [];
+			Functions\when( 'wp_send_json_error' )->alias(
+				static function ( $message = null ) use ( &$errors ) {
+					$errors[] = $message;
+				}
+			);
+
+			$_REQUEST['token_id'] = 'tok_1';
+
+			// An existing user (e.g. an administrator) the shop manager may not edit.
+			$_REQUEST['user_id'] = '1';
+			Functions\when( 'get_userdata' )->justReturn( true );
+			$editor_forbidden = $this->make_editor();
+			$editor_forbidden->ajax_remove_token();
+
+			// A user_id that does not resolve to any user at all.
+			$_REQUEST['user_id'] = '999999';
+			Functions\when( 'get_userdata' )->justReturn( false );
+			$editor_nonexistent = $this->make_editor();
+			$editor_nonexistent->ajax_remove_token();
+
+			$this->assertCount( 2, $errors, 'Both requests must be rejected' );
+			$this->assertSame( $errors[0], $errors[1], 'A capable caller must not be able to tell an existing-but-forbidden user apart from a nonexistent one' );
+			$this->assertMatchesRegularExpression( '/permission/i', (string) $errors[0], 'The capability check — not the existence lookup — must be what rejects both requests' );
+
+			$this->assertSame( [], $editor_forbidden->removed_tokens );
+			$this->assertSame( [], $editor_nonexistent->removed_tokens );
+		}
+
 		// -------------------------------------------------------------------
 		// ajax_refresh_tokens() — GH-383: lists another user's saved cards
 		// -------------------------------------------------------------------
