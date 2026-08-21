@@ -131,8 +131,9 @@ final class DadataApiClientTest extends TestCase {
 
 	/**
 	 * The masked X-Secret header must follow the SAME masking convention the
-	 * base class already applies to Authorization: same character, same
-	 * length (not a fixed-width placeholder, not merely absent).
+	 * base class already applies to Authorization: the fixed
+	 * {@see \Woodev_API_Base::SECRET_VALUE_MASK} placeholder, not a
+	 * length-revealing run of `*` (#395 Round 3) and not merely absent.
 	 */
 	public function test_the_masked_x_secret_header_matches_the_authorization_masking_style(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
@@ -150,7 +151,7 @@ final class DadataApiClientTest extends TestCase {
 
 		( new Dadata_Api_Client( 'tok', $secret ) )->suggest_address( 'q' );
 
-		$this->assertSame( str_repeat( '*', strlen( $secret ) ), $broadcast['headers']['X-Secret'] );
+		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $broadcast['headers']['X-Secret'] );
 	}
 
 	// -------------------------------------------------------------------------

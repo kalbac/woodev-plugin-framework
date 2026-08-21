@@ -46,6 +46,30 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected $response;
 
 		/**
+		 * The fixed placeholder used everywhere a credential value is masked out
+		 * of a log — headers and request params (both via
+		 * {@see self::mask_secret_values()}, including through
+		 * {@see Woodev_Licensing_API_Request} and {@see Woodev_API_JSON_Request},
+		 * which reuse it outside this hierarchy) and free text
+		 * ({@see self::redact_secret_query_params()}).
+		 *
+		 * Round 1 and round 2 of #395 masked with `*` repeated to the value's
+		 * original length, matching the convention this class already used for
+		 * headers. Two independent critic passes flagged the same problem with
+		 * that convention: the mask's LENGTH still leaks information about the
+		 * secret — enough, for a fixed-format credential (this framework's own
+		 * license keys follow a known shape/length), to help fingerprint or
+		 * narrow down what kind of secret was logged from the redacted line
+		 * alone. A fixed placeholder leaks nothing about the original value at
+		 * all, which is the stronger property a log-redaction routine should
+		 * have — "consistency with the pre-existing header convention" doesn't
+		 * outweigh that once the same finding has been raised twice.
+		 *
+		 * @since 2.0.2
+		 */
+		public const SECRET_VALUE_MASK = '[REDACTED]';
+
+		/**
 		 * Perform the request and return the parsed response
 		 *
 		 * @param Woodev_API_Request|object $request class instance which implements Woodev_API_Request
@@ -346,13 +370,39 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * {@see Woodev_API_JSON_Request::get_secret_param_names()}) — one list,
 		 * never two that can drift apart.
 		 *
+		 * Matching against this list ({@see self::mask_secret_values()},
+		 * {@see self::redact_secret_query_params()}) is case- AND
+		 * separator-insensitive, so `api_key`, `api-key`, `apikey`, and `apiKey`
+		 * are all one entry as far as matching is concerned — kept spelled out
+		 * three ways below anyway, so the list stays self-documenting about the
+		 * real-world spellings it is guarding against, not because matching
+		 * needs it. `license_key` is included alongside `license` for the same
+		 * reason: it is the literal REST arg name used by
+		 * {@see Woodev_REST_API_License} and the `edd_license_key` checkout param
+		 * built by {@see Woodev_License_Messages}, i.e. a real spelling in THIS
+		 * codebase, not a hypothetical one.
+		 *
+		 * This list is defence in depth, NOT a guarantee that every credential a
+		 * request carries is masked: it can only mask a value that appears next
+		 * to one of these names in a `name=value` or `<name>value</name>` shape
+		 * (see {@see self::redact_secret_query_params()}) or as a `name => value`
+		 * array entry (see {@see self::mask_secret_values()}). A secret carried
+		 * under an uncommon name not on this list, or with no name attached at
+		 * all (a bare path segment), is not caught by this default — a request
+		 * class that knows its own shape should still mask itself explicitly
+		 * (as {@see Woodev_Licensing_API_Request} does for `license`) rather than
+		 * relying on this fallback alone.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 added `license_key`; documented as defence in depth, not a
+		 *              guarantee — #395 Round 3, Blocking 1 & 2.
 		 *
 		 * @return array<int, string>
 		 */
 		public static function get_default_secret_param_names(): array {
 			return [
 				'license',
+				'license_key',
 				'token',
 				'access_token',
 				'refresh_token',
@@ -368,32 +418,70 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Redacts every `name=value` occurrence, for a known secret param name,
-		 * anywhere it appears in $text — a URI's query string, or free text such
-		 * as a transport-thrown WP_Error message that happens to embed the URI it
-		 * was given (see #395, Blocking 2). Matching is by exact param NAME, not
-		 * by a URL parse, so this works uniformly whether $text is a well-formed
-		 * `path?query` string or an arbitrary error message. A param name is only
-		 * matched when immediately followed by `=` and preceded by a non-word
-		 * character or the start of the string, so a value that happens to
-		 * CONTAIN a secret name as a substring (e.g. a license key literally
-		 * containing the word "license") is never mistaken for the param itself.
+		 * Redacts every occurrence of a known secret param name anywhere it
+		 * appears in $text — a URI's query string, a request/response body of
+		 * ANY format, or free text such as a transport-thrown WP_Error message
+		 * that happens to embed the URI it was given (see #395). $text is
+		 * scanned for two shapes, independent of whether it happens to be a
+		 * well-formed `path?query` string, a form-encoded body, an XML body, or
+		 * an arbitrary error message:
 		 *
-		 * Uses the same masking convention as {@see self::mask_secret_values()}
-		 * (`*` repeated to the value's original length) so a log reader sees one
-		 * consistent style everywhere; kept as a separate routine rather than
+		 * - `name=value` (query string / form body), including the nested-array
+		 *   shape `http_build_query()` emits for an array value — both the
+		 *   percent-encoded wire form (`name%5Bsub%5D=value`) and the literal
+		 *   form (`name[sub]=value`) — matched by the array's own top-level
+		 *   name; the bracket suffix is preserved untouched in the output, only
+		 *   the value is masked;
+		 * - `<name>value</name>` (a single, non-nested XML element) — the
+		 *   backstop {@see self::get_sanitized_request_body()} needs now that it
+		 *   runs this same routine over whatever an XML (or other non-JSON)
+		 *   request class's `to_string_safe()` returns, format be damned — see
+		 *   #395 Round 3, Blocking 2. {@see Woodev_API_XML_Request::to_string_safe()}
+		 *   is a concrete example already in this codebase of a `to_string_safe()`
+		 *   that applies NO masking of its own.
+		 *
+		 * A candidate name is matched against $secret_names case- and
+		 * separator-insensitively (`api_key`, `api-key`, `apikey`, and `apiKey`
+		 * all canonicalize to the same comparison key — #395 Round 3, Blocking 1),
+		 * never by substring: the FULL candidate name must canonicalize to a
+		 * canonicalized entry in $secret_names, so a value that happens to
+		 * CONTAIN a secret name (e.g. a param literally called `mylicense`, or a
+		 * license key value containing the word "license") is never mistaken for
+		 * the param itself.
+		 *
+		 * Uses {@see self::SECRET_VALUE_MASK} — the same fixed placeholder
+		 * {@see self::mask_secret_values()} uses — so a log reader sees one
+		 * consistent mask everywhere; kept as a separate routine rather than
 		 * reused through it because this one operates on a flat string, not an
 		 * associative array.
+		 *
+		 * This is defence in depth, NOT a guarantee: it can only mask a value
+		 * that carries an explicit name (a `key=` or a `<tag>` wrapper) somewhere
+		 * in the text. A secret carried as a bare PATH SEGMENT with no such
+		 * wrapper — e.g. a REST-style `/license/{key}/status` URL — has no name
+		 * to match against and is NOT caught here; a request class shaped that
+		 * way must mask its own {@see Woodev_API_Request} path getter (there is
+		 * no generic way to know which segment of an arbitrary path is the
+		 * secret one).
 		 *
 		 * This is the fail-safe backstop for
 		 * {@see self::get_sanitized_request_path()} (when a request class
 		 * implements no `get_path_safe()` of its own),
 		 * {@see self::get_sanitized_request_uri()} (run AFTER the
 		 * `woodev_{api_id}_api_request_uri` filter, so a filter that itself
-		 * appends a secret-bearing param cannot bypass it), and
-		 * {@see self::handle_response()} (a transport-thrown WP_Error message).
+		 * appends a secret-bearing param cannot bypass it),
+		 * {@see self::get_sanitized_request_body()} (when a request class's
+		 * `to_string_safe()` masks nothing, or masks in a format this routine
+		 * doesn't otherwise recognise), and {@see self::handle_response()} (a
+		 * transport-thrown WP_Error message).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 also matches a name's nested/percent-encoded/casing
+		 *              variants instead of only its exact literal spelling, also
+		 *              masks a `<name>value</name>` XML element, and masks with
+		 *              {@see self::SECRET_VALUE_MASK} instead of a
+		 *              length-revealing run of `*` — #395 Round 3 (Blocking 1 & 2,
+		 *              and the masking-shape SHOULD-FIX).
 		 *
 		 * @param string             $text
 		 * @param array<int, string> $secret_names
@@ -405,16 +493,74 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return $text;
 			}
 
-			$names_pattern = implode(
-				'|',
-				array_map( static fn( string $name ): string => preg_quote( $name, '/' ), $secret_names )
+			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
+
+			$text = (string) preg_replace_callback(
+				'/([A-Za-z0-9_\-\[\]%]+)=([^&\s]*)/',
+				static function ( array $matches ) use ( $canonical_secret_names ): string {
+
+					$base_name = self::get_query_param_base_name( $matches[1] );
+
+					if ( ! in_array( self::canonicalize_secret_param_name( $base_name ), $canonical_secret_names, true ) ) {
+						return $matches[0];
+					}
+
+					return $matches[1] . '=' . self::SECRET_VALUE_MASK;
+				},
+				$text
 			);
 
 			return (string) preg_replace_callback(
-				'/\b(' . $names_pattern . ')=([^&\s]*)/i',
-				static fn( array $matches ): string => $matches[1] . '=' . str_repeat( '*', strlen( $matches[2] ) ),
+				'/<([A-Za-z0-9_-]+)>([^<]*)<\/\1>/',
+				static function ( array $matches ) use ( $canonical_secret_names ): string {
+
+					if ( ! in_array( self::canonicalize_secret_param_name( $matches[1] ), $canonical_secret_names, true ) ) {
+						return $matches[0];
+					}
+
+					return '<' . $matches[1] . '>' . self::SECRET_VALUE_MASK . '</' . $matches[1] . '>';
+				},
 				$text
 			);
+		}
+
+		/**
+		 * Canonicalizes a param/header/tag name for secret-name comparison:
+		 * lowercased, with every non-alphanumeric separator stripped. Folds
+		 * `api_key`, `api-key`, `apikey`, and `apiKey` (or `license_key` and
+		 * `licenseKey`) down to the same comparison key, so
+		 * {@see self::redact_secret_query_params()} recognises a casing or
+		 * separator variant of a listed name without the list needing an entry
+		 * for every spelling — #395 Round 3, Blocking 1.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $name
+		 * @return string
+		 */
+		private static function canonicalize_secret_param_name( string $name ): string {
+			return strtolower( (string) preg_replace( '/[^A-Za-z0-9]+/', '', $name ) );
+		}
+
+		/**
+		 * Extracts the top-level param name from a possibly nested/percent-encoded
+		 * query key, e.g. `token%5Bprimary%5D` or `token[primary]` both yield
+		 * `token` — the name `http_build_query()` derives it from, and the one a
+		 * secret-param denylist entry is written against. A key with no bracket
+		 * suffix is returned unchanged. Used only by
+		 * {@see self::redact_secret_query_params()} — #395 Round 3, Blocking 1.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key Raw query key, as captured from the wire text.
+		 * @return string
+		 */
+		private static function get_query_param_base_name( string $key ): string {
+
+			$decoded_key      = str_ireplace( [ '%5b', '%5d' ], [ '[', ']' ], $key );
+			$bracket_position = strpos( $decoded_key, '[' );
+
+			return false === $bracket_position ? $decoded_key : substr( $decoded_key, 0, $bracket_position );
 		}
 
 		protected function get_request_args() {
@@ -457,6 +603,28 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Gets the sanitized request body, for logging.
 		 *
+		 * Same "harmless second pass" pattern as
+		 * {@see self::get_sanitized_request_path()}: whatever the request's
+		 * `to_string_safe()` returns is run through
+		 * {@see self::redact_secret_query_params()} unconditionally, instead of
+		 * being trusted outright. Before this, the base took the interface-required
+		 * `to_string_safe()` result on faith — but that method is opaque to the
+		 * base (it declares no format, and any concrete class is free to return
+		 * whatever it wants), so a request class that implements it naively still
+		 * logged a raw credential by default. {@see Woodev_API_XML_Request::to_string_safe()}
+		 * is a concrete example already in this codebase: it prettifies the XML
+		 * body but masks nothing in it. See #395 Round 3, Blocking 2.
+		 *
+		 * A `Woodev_API_JSON_Request`/`Woodev_Licensing_API_Request` body that
+		 * already masked its own secret params (via {@see self::mask_secret_values()}
+		 * before serializing) is unaffected: the second pass only rewrites text
+		 * matching a `name=value` or `<name>value</name>` shape, and neither JSON
+		 * (`"name":"value"`) nor a `print_r()` dump (`[name] => value`) matches
+		 * that shape, so an already-safe body passes through unchanged.
+		 *
+		 * @since 2.0.2 runs {@see self::redact_secret_query_params()} over whatever
+		 *              `to_string_safe()` returns, instead of trusting it outright.
+		 *
 		 * @return string
 		 */
 		protected function get_sanitized_request_body() {
@@ -465,7 +633,9 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return '';
 			}
 
-			return ( $this->get_request() && $this->get_request()->to_string_safe() ) ? $this->get_request()->to_string_safe() : '';
+			$body = ( $this->get_request() && $this->get_request()->to_string_safe() ) ? $this->get_request()->to_string_safe() : '';
+
+			return self::redact_secret_query_params( $body, $this->get_secret_param_names() );
 		}
 
 		protected function get_request_http_version() {
@@ -481,8 +651,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * Masks the VALUE of every header whose name (matched case-insensitively —
 		 * HTTP header names are case-insensitive) appears in
-		 * {@see self::get_secret_header_names()}, using the same convention
-		 * as before (`*` repeated to the value's original length). The original key
+		 * {@see self::get_secret_header_names()}, using
+		 * {@see self::mask_secret_values()}'s fixed placeholder. The original key
 		 * casing sent on the wire is preserved in the returned array; only the
 		 * comparison is case-insensitive.
 		 *
@@ -510,12 +680,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Masks the VALUE of every entry whose name (matched case-insensitively —
-		 * HTTP header names are case-insensitive, and this is also used for
-		 * request/query params — see below) appears in $secret_names, using
-		 * the convention `*` repeated to the value's original length. The original
-		 * key casing is preserved in the returned array; only the comparison is
-		 * case-insensitive.
+		 * Masks the VALUE of every entry whose name matches $secret_names, using
+		 * {@see self::SECRET_VALUE_MASK}. The match is decided by
+		 * {@see self::canonicalize_secret_param_name()} on both sides — lowercased,
+		 * separators stripped — so it is both case-insensitive (HTTP header names
+		 * are case-insensitive, and this is also used for request/query params —
+		 * see below) AND tolerant of a `snake_case`/`kebab-case`/`camelCase`
+		 * spelling difference (`api_key`, `api-key`, `apikey`, `apiKey` all match
+		 * the same entry — #395 Round 3, Blocking 1). The original key casing is
+		 * preserved in the returned array; only the comparison is normalized.
 		 *
 		 * A value can itself be an array: WordPress's HTTP transport
 		 * (`WP_HTTP_Requests_Response::get_headers()`) folds a duplicated response
@@ -549,32 +722,35 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @since 2.0.2 renamed from `mask_secret_headers()` to `mask_secret_values()`
 		 *              — the name no longer matched what it masked once request
 		 *              params joined headers as callers.
+		 * @since 2.0.2 name matching is now separator-insensitive too (not only
+		 *              case-insensitive), and masks with {@see self::SECRET_VALUE_MASK}
+		 *              instead of a length-revealing run of `*` — #395 Round 3.
 		 *
 		 * @param array<string, mixed> $headers Name/value pairs (value: string, or array<int, string>
 		 *                              for a duplicated header), casing as sent/received.
-		 * @param array<int, string>   $secret_names Names to mask, matched case-insensitively.
+		 * @param array<int, string>   $secret_names Names to mask, matched case- and separator-insensitively.
 		 * @return array<string, mixed>
 		 */
 		public static function mask_secret_values( array $headers, array $secret_names ): array {
 
-			$secret_names = array_map( 'strtolower', $secret_names );
+			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
 
 			/*
 			 * Membership is decided by header NAME alone, never by the value being
 			 * truthy: `empty()` is true for the string `'0'`, so a credential whose
 			 * value happens to be `0` would have reached the logger in clear text.
-			 * Masking a genuinely empty value costs nothing — the mask is as long as
-			 * the value, so an empty header still logs as empty.
+			 * Masking a genuinely empty value costs nothing — it still logs as
+			 * SECRET_VALUE_MASK rather than being skipped and logged as `''`.
 			 */
 			foreach ( $headers as $name => $value ) {
 
-				if ( ! in_array( strtolower( (string) $name ), $secret_names, true ) ) {
+				if ( ! in_array( self::canonicalize_secret_param_name( (string) $name ), $canonical_secret_names, true ) ) {
 					continue;
 				}
 
 				$headers[ $name ] = is_array( $value )
-					? array_map( static fn( $item ) => str_repeat( '*', strlen( (string) $item ) ), $value )
-					: str_repeat( '*', strlen( (string) $value ) );
+					? array_map( static fn( $item ) => self::SECRET_VALUE_MASK, $value )
+					: self::SECRET_VALUE_MASK;
 			}
 
 			return $headers;

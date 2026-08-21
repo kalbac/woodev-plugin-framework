@@ -40,8 +40,8 @@
  *   license key — masking must affect ONLY what is logged, never what is sent;
  * - the logging-only getters ({@see \Woodev_Licensing_API_Request::get_path_safe()},
  *   {@see \Woodev_Licensing_API_Request::to_string_safe()}) mask the license
- *   key, using the exact same convention as header masking (`*` repeated to
- *   the value's original length);
+ *   key, using the same fixed placeholder as header masking
+ *   ({@see \Woodev_API_Base::SECRET_VALUE_MASK});
  * - non-secret params (edd_action, item_id, ...) pass through unmasked, on
  *   both sides;
  * - end to end, {@see \Woodev_API_Base::get_request_data_for_broadcast()}
@@ -414,7 +414,7 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 		$safe_path = $request->get_path_safe();
 		$params    = $this->parse_query( $safe_path );
 
-		$this->assertSame( str_repeat( '*', strlen( $license_key ) ), $params['license'] );
+		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $params['license'] );
 		$this->assertStringNotContainsString( $license_key, $safe_path, 'the license key leaked into the sanitized path' );
 	}
 
@@ -480,7 +480,7 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 		$safe_body = (string) $request->to_string_safe();
 
 		$this->assertStringNotContainsString( $license_key, $safe_body, 'the license key leaked into the sanitized body' );
-		$this->assertStringContainsString( str_repeat( '*', strlen( $license_key ) ), $safe_body );
+		$this->assertStringContainsString( \Woodev_API_Base::SECRET_VALUE_MASK, $safe_body );
 	}
 
 	/**
