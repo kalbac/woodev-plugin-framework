@@ -174,6 +174,51 @@ same runtime carries running workers is the wrong trade. **Rig verification stay
 chrome-devtools MCP against `:8973`.** Anyone who wants to revisit this should do it with no
 workers in flight.
 
+## What s84 added — three agents, four launch steps, two lying gates
+
+The s83 recipe above is still right. s84 ran twelve dispatches through it and found four things it
+did not say.
+
+**Cap the wave at three agents.** With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
+Codex died on `VirtualAlloc`. Even at three, `composer phpcs` OOM'd for one agent and blamed five
+innocent files for another (failed `shell_exec()` syntax checks read as PHPCS internal exceptions),
+and jest died with `Fatal process out of memory`. A Codex terminal starts about eleven MCP servers
+of its own, so it is much heavier than a Claude one. Release AND close settled workers before the
+next wave, not at the end — and note that `worker-release` refuses with
+`retained / user_takeover` for any terminal the coordinator wrote to, which is every Codex worker.
+Gotcha: `three-agents-is-the-concurrency-cap-on-this-machine`.
+
+**Launching Codex takes four steps.** `worker-start --agent codex` produced a bare PowerShell
+terminal three times out of four, and the injected brief was executed by the shell as a here-string
+until it hit a ParserError. The reliable path is `terminal create --command codex` → ESC the
+`codex-update-prompt` that `tui-idle` reports → `dispatch --inject` → `terminal send --text "" --enter`
+because the brief arrives as `[Pasted Content N chars]` and sits unsubmitted. After a `worker-stop`
+the task goes to `blocked`; `task-update --status ready` before redispatching. Gotcha:
+`starting-codex-under-orca-needs-four-steps-not-one`.
+
+**Two gates read green in a worktree and are not.** Five `Contract/Yandex*` tests SKIP there
+because `plugins-reference/` is gitignored (fixed in s84 by adding it to `.worktreeinclude`), and
+`npm run build` reproduces the committed bundles because the worktree shares the primary
+checkout's warm webpack cache — while CI's cold `npm ci && npm run build` does not. PR #422 went
+red on assets parity after two agents had independently measured zero diff. Gotchas:
+`a-worktree-silently-skips-five-contract-tests`, `local-npm-run-build-is-not-assets-parity-evidence`.
+
+**Every brief needs four standing lines.** They earned their place: every agent told about the
+memory pressure reported its OOM honestly instead of claiming a green gate, and every agent told
+about the CRLF churn left the seven dirty files unstaged.
+
+1. Serena `activate_project` on YOUR worktree — get it from `git rev-parse --show-toplevel`, then
+   verify a `find_symbol` result reports a path under it.
+2. No install step. `vendor` and `node_modules` are already there.
+3. Never `git add -A` — this worktree starts dirty with seven CRLF-only files.
+4. The machine is shared and low on memory; if a gate OOMs, say so and retry once — never report a
+   gate green whose aggregate result you never saw, and never substitute `npx jest`.
+
+A fifth line is worth its weight on anything non-trivial: **you are licensed to contradict this
+brief; if the code disagrees, the code wins.** In s84 it produced a correction in almost every
+report — a third AJAX handler with the same hole, a preflight check that existed but was never
+consumed, and a "the brief's baseline is stale" that turned out to be the skipped-test gap above.
+
 ## Traps
 
 - **`terminal wait --for tui-idle` lies.** It counts an open dialog as idle. Check the
