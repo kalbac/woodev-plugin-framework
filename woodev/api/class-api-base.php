@@ -633,50 +633,62 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * is always valid JSON because it was rebuilt from a decoded structure,
 		 * never edited as text.
 		 *
-		 * A body that decodes as a JSON SCALAR (a bare string, number, bool, or
-		 * `null`) is returned UNCHANGED: there is no key to canonicalize against
-		 * the denylist, so — like a secret carried as a bare path segment (see
-		 * {@see self::redact_secret_query_params()}) — it is simply outside what
-		 * a name-keyed redactor can catch. Round 4 instead ran this case through
-		 * the `name=value` regex scan, which could match a trailing quote into
-		 * the value and hand back invalid, truncated JSON (`"token=secret"`
-		 * becoming `"token=[REDACTED]`, missing its closing quote) without
-		 * actually being able to tell whether the scalar itself was the secret —
-		 * #395 Round 5, SHOULD-FIX.
+		 * Anything else — a body that decodes as a JSON SCALAR (a bare string,
+		 * number, bool, or `null`), or a body that is not valid JSON at all — is
+		 * replaced with {@see self::UNPARSEABLE_BODY_MASK} IN FULL. This covers
+		 * three cases that used to be handled separately, and unsafely:
 		 *
-		 * A body that is NOT valid JSON at all is either:
-		 *
-		 * - genuinely query-string-shaped (`name=value&name=value…`, verified by
-		 *   {@see self::is_form_encoded_body()} rather than assumed) — parsed
-		 *   with `parse_str()` and walked the same way a query string is (see
-		 *   {@see self::redact_secret_query_string()}), so a form-encoded body
-		 *   gets the same per-field masking a JSON body does, siblings included; or
-		 * - anything else (XML, a `print_r()` dump, or free text) — replaced with
-		 *   {@see self::UNPARSEABLE_BODY_MASK} IN FULL. #395 Round 4 fell back to
-		 *   {@see self::redact_secret_query_params()} here on the theory that its
-		 *   `<name>value</name>` pass covers XML and a `print_r()` dump
-		 *   (`[name] => value`) never needed covering because
-		 *   {@see Woodev_Licensing_API_Request::to_string_safe()} already masks its
-		 *   own `license` entry before handing the dump to this method. An
-		 *   independent critic review proved that reasoning false by invoking this
-		 *   method directly with a `print_r()`-shaped body carrying an UNMASKED
-		 *   secret: the regex cannot match `[name] => value`, so the secret came
-		 *   back verbatim. Any request class whose body reaches this method
-		 *   without having masked itself first — not only the licensing one — was
-		 *   exposed the same way. Once a format cannot be parsed and walked, there
-		 *   is no reliable way to tell a secret-named field apart from a safe
-		 *   sibling one, so the whole body is masked instead — #395 Round 5,
+		 * - Round 4 fell back to {@see self::redact_secret_query_params()} for a
+		 *   non-JSON body, on the theory that its `<name>value</name>` pass
+		 *   covers XML and a `print_r()` dump (`[name] => value`) never needed
+		 *   covering because {@see Woodev_Licensing_API_Request::to_string_safe()}
+		 *   already masks its own `license` entry before handing the dump to
+		 *   this method. An independent critic review proved that reasoning
+		 *   false by invoking this method directly with a `print_r()`-shaped
+		 *   body carrying an UNMASKED secret: the regex cannot match
+		 *   `[name] => value`, so the secret came back verbatim — #395 Round 5,
 		 *   Blocking.
+		 * - Round 5 tried to parse a non-JSON body as a query string
+		 *   (`name=value&name=value…`) whenever it merely LOOKED shaped that
+		 *   way, via a syntax check ({@see self::is_form_encoded_body()},
+		 *   removed in Round 6). A critic review broke that with two shapes
+		 *   that both pass a syntax check without being a form body at all: a
+		 *   URL a caller pasted as free text (`https://x?token=SECRET`) parses
+		 *   as `https://x?token` `=` `SECRET`, and free text containing a
+		 *   newline still matches per-line. You cannot infer the body's actual
+		 *   format from what its bytes merely look like — #395 Round 6,
+		 *   Blocking 1. No concrete request class in this codebase ever
+		 *   produces a form-encoded body (every {@see self::set_request_content_type_header()}
+		 *   call in this codebase passes `application/json`; there is no
+		 *   `Woodev_API_Form_Request` counterpart to
+		 *   {@see Woodev_API_JSON_Request}/{@see Woodev_API_XML_Request}, and
+		 *   the `Woodev_API_Request` interface declares no content-type/format
+		 *   accessor a body could be checked against independently), so there
+		 *   is no trustworthy signal to parse the body against in the first
+		 *   place — whole-masking is not a lesser default, it is the only
+		 *   correct one until a request class can declare its own format
+		 *   through a channel the body's bytes cannot forge.
+		 * - Round 5 also returned a JSON SCALAR body unchanged, reasoning that
+		 *   there is no key to redact by. That is true, but incomplete: with no
+		 *   key, the scalar VALUE itself is the only thing there, and nothing
+		 *   rules out that value being the secret itself (a body that is
+		 *   `"super-secret-token-value"` and nothing else) — #395 Round 6,
+		 *   Blocking 2. A scalar has exactly the same "no key to redact by"
+		 *   problem a non-JSON body does, so it now gets the same answer:
+		 *   `null` is masked too, for the same reason — not because it can
+		 *   carry a secret (it cannot: it carries no value at all), but because
+		 *   a reader of the log should not have to learn that JSON scalars
+		 *   split into "one kind that's shown" and "three kinds that are
+		 *   masked" to understand a log line; one rule for every scalar is
+		 *   simpler and costs nothing a null body's absence of information
+		 *   didn't already cost.
 		 *
-		 * A parsed rendering of either shape is a LOG rendering, not the wire
-		 * bytes — over-redaction is the acceptable side to err on here, but a
-		 * reader relying on a log line to reconstruct the original request
-		 * should know these are lossy, by design:
+		 * A parsed rendering of the surviving case (a JSON array/object) is a
+		 * LOG rendering, not the wire bytes — over-redaction is the acceptable
+		 * side to err on here, but a reader relying on a log line to
+		 * reconstruct the original request should know this is lossy, by
+		 * design:
 		 *
-		 * - `parse_str()`/`http_build_query()` drop a duplicate key (only the
-		 *   last survives), turn a `.` or a space in a key into `_`, and are
-		 *   capped by PHP's `max_input_vars` — a body with more top-level keys
-		 *   than that ini setting allows is silently truncated;
 		 * - re-encoding through `json_decode()`/`json_encode()` changes a
 		 *   numeric literal's shape (`1.0` becomes `1`), the slash- and
 		 *   Unicode-escaping (this method requests `JSON_UNESCAPED_SLASHES |
@@ -698,6 +710,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              a non-JSON body is genuinely query-string-shaped before
 		 *              parsing it as one, and returns a scalar JSON body unchanged
 		 *              instead of regex-scanning it — #395 Round 5.
+		 * @since 2.0.2 drops the query-string-shaped exception entirely — no
+		 *              request class in this codebase can prove a body is
+		 *              actually form-encoded rather than merely shaped like it,
+		 *              so every non-JSON-array/object body is now whole-masked
+		 *              — and masks a JSON scalar (including `null`) the same
+		 *              way, instead of returning it unchanged, because a bare
+		 *              scalar has no key to redact by and may itself BE the
+		 *              secret — #395 Round 6, Blocking 1 & 2.
 		 *
 		 * @param string             $body
 		 * @param array<int, string> $secret_names
@@ -711,12 +731,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$decoded = json_decode( $body, true );
 
-			if ( JSON_ERROR_NONE === json_last_error() ) {
-
-				if ( ! is_array( $decoded ) ) {
-					// A scalar/null JSON body carries no key to redact by.
-					return $body;
-				}
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
 
 				$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
 				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names );
@@ -725,48 +740,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return false !== $encoded ? $encoded : $body;
 			}
 
-			if ( self::is_form_encoded_body( $body ) ) {
-
-				parse_str( $body, $params );
-
-				if ( ! empty( $params ) ) {
-
-					$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
-					$redacted               = self::redact_secret_values_recursively( $params, $canonical_secret_names );
-
-					return http_build_query( $redacted, '', '&' );
-				}
-			}
-
 			return self::UNPARSEABLE_BODY_MASK;
-		}
-
-		/**
-		 * Verifies that $text is GENUINELY shaped like a `name=value&name=value…`
-		 * query string, rather than merely containing an `=` somewhere — used by
-		 * {@see self::redact_secret_request_body()} to decide whether a non-JSON
-		 * body may be safely parsed with `parse_str()` and rebuilt with
-		 * `http_build_query()`, instead of assuming any body that isn't JSON must
-		 * be form-encoded. `parse_str()` is lenient enough to produce SOMETHING
-		 * for almost any input, including a `print_r()` dump — so a shape check
-		 * has to run first, or the "trust the format" guarantee this validates is
-		 * hollow.
-		 *
-		 * Every `name` segment, over the WHOLE string, must consist only of the
-		 * characters a real `http_build_query()` output ever uses for a key
-		 * (letters, digits, `_-[]%+`) immediately followed by `=` — the same
-		 * charset {@see self::redact_secret_query_params()} accepts for a
-		 * candidate key. A `print_r()` dump (`[name] => value`) or an XML body
-		 * (`<name>value</name>`) both fail this immediately: neither has a key
-		 * made up of nothing but that charset immediately followed by `=`.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param string $text
-		 * @return bool
-		 */
-		private static function is_form_encoded_body( string $text ): bool {
-			return 1 === preg_match( '/^[A-Za-z0-9_\-\[\]%+]+=[^&]*(?:&[A-Za-z0-9_\-\[\]%+]+=[^&]*)*$/D', $text );
 		}
 
 		/**
