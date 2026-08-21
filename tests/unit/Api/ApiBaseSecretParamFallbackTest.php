@@ -1,0 +1,241 @@
+<?php
+/**
+ * Unit tests for Woodev_API_Base's fail-safe DEFAULT redaction — #395,
+ * round-two critic fix (Blocking 1 & 2).
+ *
+ * The first round of the #395 fix (see LicensingApiRequestMaskingTest.php)
+ * only made `Woodev_Licensing_API_Request` mask its own `license` param, via
+ * an opt-in `get_path_safe()` / `to_string_safe()` seam on `Woodev_API_Base`.
+ * An independent critic review rejected it: any OTHER request class — a
+ * future one, or an existing third-party extension — that carries a
+ * credential in its path/body but does NOT implement that opt-in seam still
+ * logged it raw by default. Worse, `Woodev_API_Base::get_sanitized_request_uri()`
+ * applied the `woodev_{api_id}_api_request_uri` filter AFTER masking, so a
+ * filter that itself appended a secret-bearing param bypassed masking
+ * entirely.
+ *
+ * This file pins the round-two fix using a minimal `Woodev_API_Request`
+ * double that implements NEITHER `get_path_safe()` nor a masking
+ * `to_string_safe()` — i.e. exactly the "unknown request class" scenario the
+ * critic described:
+ *
+ * - {@see \Woodev_API_Base::get_sanitized_request_path()} masks a known
+ *   secret param name even with no `get_path_safe()` to delegate to;
+ * - {@see \Woodev_API_Base::get_sanitized_request_uri()} masks the same,
+ *   end to end;
+ * - a secret param appended by the `woodev_{api_id}_api_request_uri` filter
+ *   itself is ALSO masked — proving redaction runs after the filter, not
+ *   before;
+ * - a non-secret param passes through the fallback untouched.
+ *
+ * @package Woodev\Tests\Unit\Api
+ */
+
+namespace Woodev\Tests\Unit\Api;
+
+use Brain\Monkey\Functions;
+use Woodev\Tests\Unit\TestCase;
+
+require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-request.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';
+
+/**
+ * A minimal Woodev_API_Request implementation carrying a secret in its path
+ * under a common param name, implementing NEITHER `get_path_safe()` nor a
+ * masking `to_string_safe()` — the "unknown request class" scenario Blocking
+ * 1 was about.
+ */
+class Testable_Unknown_Secret_Carrying_Request implements \Woodev_API_Request {
+
+	/** @var string */
+	private $path;
+
+	/**
+	 * @param string $path Raw request path, query string included.
+	 */
+	public function __construct( string $path ) {
+		$this->path = $path;
+	}
+
+	/** @return string */
+	public function get_method() {
+		return 'GET';
+	}
+
+	/** @return string */
+	public function get_path() {
+		return $this->path;
+	}
+
+	/** @return string */
+	public function to_string() {
+		return '';
+	}
+
+	/**
+	 * Deliberately unsafe — mirrors what any interface-conforming request
+	 * class could still do before Woodev_API_JSON_Request's own default was
+	 * fixed. Not exercised by the path/URI tests in this file, but present
+	 * to satisfy the Woodev_API_Request interface.
+	 *
+	 * @return string
+	 */
+	public function to_string_safe() {
+		return $this->to_string();
+	}
+}
+
+/**
+ * Minimal concrete Woodev_API_Base double exposing the protected path/URI
+ * sanitizers under test, without pulling in the HTTP/broadcast machinery
+ * this fix does not touch.
+ */
+class Testable_Api_Base_For_Fallback_Test extends \Woodev_API_Base {
+
+	public function __construct() {
+		$this->request_uri = 'https://vendor.example';
+	}
+
+	/**
+	 * Seeds the request under test.
+	 *
+	 * @param \Woodev_API_Request $request Request instance.
+	 * @return void
+	 */
+	public function set_request_for_test( \Woodev_API_Request $request ): void {
+		$this->request = $request;
+	}
+
+	/**
+	 * Exposes the protected path sanitizer under test.
+	 *
+	 * @return string
+	 */
+	public function get_sanitized_request_path_for_test(): string {
+		return $this->get_sanitized_request_path();
+	}
+
+	/**
+	 * Exposes the protected URI sanitizer under test.
+	 *
+	 * @return string
+	 */
+	public function get_sanitized_request_uri_for_test(): string {
+		return $this->get_sanitized_request_uri();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return string
+	 */
+	protected function get_api_id() {
+		return 'test_vendor';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return null
+	 */
+	protected function get_new_request( $args = [] ) {
+		return null;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return null
+	 */
+	protected function get_plugin() {
+		return null;
+	}
+}
+
+/**
+ * Class ApiBaseSecretParamFallbackTest.
+ */
+final class ApiBaseSecretParamFallbackTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				return $value;
+			}
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_unknown_request_class_path_is_masked_by_default(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?token=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_path = $api->get_sanitized_request_path_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_path,
+			'BLOCKING 1: an unknown request class with no get_path_safe() must not leak its secret param by default'
+		);
+		$this->assertStringContainsString( 'format=json', $safe_path, 'a non-secret param must survive the fallback untouched' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_unknown_request_class_uri_is_masked_by_default(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?token=' . $token );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_uri = $api->get_sanitized_request_uri_for_test();
+
+		$this->assertStringNotContainsString( $token, $safe_uri, 'BLOCKING 1: the fallback URI must not leak the secret param either' );
+	}
+
+	/**
+	 * BLOCKING 1, second half: a filter on the `woodev_{api_id}_api_request_uri`
+	 * hook that ITSELF appends a secret-bearing param must not bypass masking
+	 * — redaction must run AFTER the filter, not before.
+	 *
+	 * @return void
+	 */
+	public function test_a_secret_param_appended_by_the_uri_filter_is_also_masked(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status' );
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) use ( $token ) {
+
+				if ( 'woodev_test_vendor_api_request_uri' === $tag ) {
+					return $value . '?token=' . $token;
+				}
+
+				return $value;
+			}
+		);
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_uri = $api->get_sanitized_request_uri_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_uri,
+			'a secret param appended by the uri filter must still be masked — redaction runs AFTER the filter'
+		);
+	}
+}

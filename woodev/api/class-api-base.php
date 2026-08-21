@@ -95,6 +95,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Handle and parse the response
 		 *
+		 * @since 2.0.2 a WP_Error's message is redacted (see {@see self::redact_secret_query_params()})
+		 *              before it is used to build the thrown exception — a transport
+		 *              override or an `http_api_curl`-style filter is free to embed the
+		 *              raw request URI it was given in the error message, and that
+		 *              message is what {@see Woodev_Plugin_Updater::get_version_from_remote()}
+		 *              (and any other caller) ends up logging — see #395 (Blocking 2).
+		 *
 		 * @param array|WP_Error $response response data
 		 * @throws Woodev_API_Exception network issues, timeouts, API errors, etc
 		 * @return Woodev_API_Request|object request class instance that implements Woodev_API_Request
@@ -102,7 +109,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected function handle_response( $response ) {
 
 			if ( is_wp_error( $response ) ) {
-				throw new Woodev_API_Exception( $response->get_error_message(), (int) $response->get_error_code() );
+
+				$message = self::redact_secret_query_params( $response->get_error_message(), $this->get_secret_param_names() );
+
+				throw new Woodev_API_Exception( $message, (int) $response->get_error_code() );
 			}
 
 			$this->response_code     = wp_remote_retrieve_response_code( $response );
@@ -241,46 +251,170 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * Delegates to the request object's `get_path_safe()` when it implements
 		 * one — an opt-in method, not part of the {@see Woodev_API_Request}
-		 * interface, so a request class carrying nothing secret in its path
-		 * (the common case) is never forced to grow a method it doesn't need.
-		 * This mirrors the existing `is_callable()` opt-in already used by
-		 * {@see self::get_sanitized_response_body()} for `to_string_safe()`.
-		 * Falls back to the real {@see self::get_request_path()} — byte-for-byte
-		 * unchanged — for every request class that has nothing to mask.
+		 * interface — for a request class that wants full control over its own
+		 * masking. Falls back to the real {@see self::get_request_path()} when it
+		 * doesn't. Either way, the result is then run through
+		 * {@see self::redact_secret_query_params()} unconditionally: a request
+		 * class implementing `get_path_safe()` gets a harmless second pass over
+		 * an already-masked value, but a request class that implements NO masking
+		 * of its own — the common case, and the one a future or third-party
+		 * extension is most likely to be — is never logged with its raw path.
+		 * Before this fix, that fallback path was the raw, unmasked one; a
+		 * request carrying a credential under an unrecognised param name (e.g.
+		 * `token`, `api_key`, `secret`, `instance_id`) still logged it in clear
+		 * text by default — see #395 (Blocking 1).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 made fail-safe by default via {@see self::redact_secret_query_params()}
+		 *              instead of falling back to the raw path unconditionally.
 		 *
 		 * @return string
 		 */
-		protected function get_sanitized_request_path() {
+		protected function get_sanitized_request_path(): string {
 
 			$request = $this->get_request();
 
-			return ( $request && is_callable( array( $request, 'get_path_safe' ) ) )
+			$path = ( $request && is_callable( [ $request, 'get_path_safe' ] ) )
 				? $request->get_path_safe()
 				: $this->get_request_path();
+
+			return self::redact_secret_query_params( $path, $this->get_secret_param_names() );
 		}
 
 		/**
 		 * Gets the sanitized request URI, for logging.
 		 *
 		 * Same as {@see self::get_request_uri()} but built from
-		 * {@see self::get_sanitized_request_path()} instead of the raw path, so
-		 * a request class that carries a secret in its query string (e.g.
-		 * {@see Woodev_Licensing_API_Request}, whose `license` param used to
-		 * reach the log in clear text — see #395) never leaks it. The request
-		 * actually sent to the server always goes through the unmodified
-		 * {@see self::get_request_uri()}; only what gets logged changes here.
+		 * {@see self::get_sanitized_request_path()}, and with
+		 * {@see self::redact_secret_query_params()} run again on the FINAL
+		 * string — AFTER the `woodev_{api_id}_api_request_uri` filter, not
+		 * before. A filter attached to that hook can append its own query
+		 * param (some third-party transports do, e.g. a signature or replay
+		 * token); redacting before the filter ran would let such an addition
+		 * reach the log unmasked. Redacting after covers both the path this
+		 * class already sanitized AND anything the filter added — see #395
+		 * (Blocking 1). The request actually sent to the server always goes
+		 * through the unmodified {@see self::get_request_uri()}; only what
+		 * gets logged changes here.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 redaction now runs AFTER the request-uri filter, not before.
 		 *
 		 * @return string
 		 */
-		protected function get_sanitized_request_uri() {
+		protected function get_sanitized_request_uri(): string {
 
 			$uri = $this->request_uri . $this->get_sanitized_request_path();
+			$uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
 
-			return apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+			return self::redact_secret_query_params( $uri, $this->get_secret_param_names() );
+		}
+
+
+		/**
+		 * Names of query-string / body params — as opposed to headers, see
+		 * {@see self::get_secret_header_names()} — that carry a credential and
+		 * must be redacted from any request path, URI, exception message, or
+		 * body before it reaches a log. This is the list
+		 * {@see self::redact_secret_query_params()} applies unconditionally,
+		 * regardless of whether the concrete request class implements its own
+		 * `get_path_safe()`/`to_string_safe()` masking — the fail-safe backstop
+		 * for #395 (Blocking 1 & 2): an unknown or future request class carrying
+		 * a credential under one of these common names must never be logged raw
+		 * by default.
+		 *
+		 * A request class with a credential under an uncommon name should still
+		 * add its own masking (as {@see Woodev_Licensing_API_Request} does,
+		 * defensively, for `license` even though it is already in this default
+		 * list) — this list only covers the common cases so a class that forgets
+		 * to isn't left fully exposed. Override to extend it, the same pattern as
+		 * {@see self::get_secret_header_names()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, string>
+		 */
+		protected function get_secret_param_names(): array {
+			return self::get_default_secret_param_names();
+		}
+
+		/**
+		 * The default secret param name list, shared by
+		 * {@see self::get_secret_param_names()} and, statically, by request
+		 * classes outside this hierarchy that need the same fail-safe default
+		 * for their own body serialization (e.g.
+		 * {@see Woodev_API_JSON_Request::get_secret_param_names()}) — one list,
+		 * never two that can drift apart.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, string>
+		 */
+		public static function get_default_secret_param_names(): array {
+			return [
+				'license',
+				'token',
+				'access_token',
+				'refresh_token',
+				'api_key',
+				'api-key',
+				'apikey',
+				'api_secret',
+				'client_secret',
+				'secret',
+				'password',
+				'instance_id',
+			];
+		}
+
+		/**
+		 * Redacts every `name=value` occurrence, for a known secret param name,
+		 * anywhere it appears in $text — a URI's query string, or free text such
+		 * as a transport-thrown WP_Error message that happens to embed the URI it
+		 * was given (see #395, Blocking 2). Matching is by exact param NAME, not
+		 * by a URL parse, so this works uniformly whether $text is a well-formed
+		 * `path?query` string or an arbitrary error message. A param name is only
+		 * matched when immediately followed by `=` and preceded by a non-word
+		 * character or the start of the string, so a value that happens to
+		 * CONTAIN a secret name as a substring (e.g. a license key literally
+		 * containing the word "license") is never mistaken for the param itself.
+		 *
+		 * Uses the same masking convention as {@see self::mask_secret_values()}
+		 * (`*` repeated to the value's original length) so a log reader sees one
+		 * consistent style everywhere; kept as a separate routine rather than
+		 * reused through it because this one operates on a flat string, not an
+		 * associative array.
+		 *
+		 * This is the fail-safe backstop for
+		 * {@see self::get_sanitized_request_path()} (when a request class
+		 * implements no `get_path_safe()` of its own),
+		 * {@see self::get_sanitized_request_uri()} (run AFTER the
+		 * `woodev_{api_id}_api_request_uri` filter, so a filter that itself
+		 * appends a secret-bearing param cannot bypass it), and
+		 * {@see self::handle_response()} (a transport-thrown WP_Error message).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string             $text
+		 * @param array<int, string> $secret_names
+		 * @return string
+		 */
+		protected static function redact_secret_query_params( string $text, array $secret_names ): string {
+
+			if ( '' === $text || empty( $secret_names ) ) {
+				return $text;
+			}
+
+			$names_pattern = implode(
+				'|',
+				array_map( static fn( string $name ): string => preg_quote( $name, '/' ), $secret_names )
+			);
+
+			return (string) preg_replace_callback(
+				'/\b(' . $names_pattern . ')=([^&\s]*)/i',
+				static fn( array $matches ): string => $matches[1] . '=' . str_repeat( '*', strlen( $matches[2] ) ),
+				$text
+			);
 		}
 
 		protected function get_request_args() {
@@ -355,14 +489,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * {@see self::get_request_headers()} is not return-typed, so a subclass
 		 * override is free to return something other than an array (e.g. `null`);
 		 * that is passed through unchanged rather than handed to
-		 * {@see self::mask_secret_headers()}, mirroring the guard
+		 * {@see self::mask_secret_values()}, mirroring the guard
 		 * {@see self::get_sanitized_response_headers()} already applies for the same
 		 * reason — a logging call must never fatal a request.
 		 *
 		 * @since 2.0.2 masks every header from {@see self::get_secret_header_names()},
 		 *              not only `Authorization`; guards against a non-array
 		 *              {@see self::get_request_headers()} override instead of letting
-		 *              {@see self::mask_secret_headers()}'s `array` type hint fatal.
+		 *              {@see self::mask_secret_values()}'s `array` type hint fatal.
 		 *
 		 * @return array<string, string>|null
 		 */
@@ -371,13 +505,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$headers = $this->get_request_headers();
 
 			return is_array( $headers )
-				? self::mask_secret_headers( $headers, $this->get_secret_header_names() )
+				? self::mask_secret_values( $headers, $this->get_secret_header_names() )
 				: $headers;
 		}
 
 		/**
 		 * Masks the VALUE of every entry whose name (matched case-insensitively —
-		 * HTTP header names are case-insensitive, and this is also reused for
+		 * HTTP header names are case-insensitive, and this is also used for
 		 * request/query params — see below) appears in $secret_names, using
 		 * the convention `*` repeated to the value's original length. The original
 		 * key casing is preserved in the returned array; only the comparison is
@@ -396,12 +530,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * {@see self::get_sanitized_response_headers()} so both directions of the
 		 * `woodev_{api_id}_api_request_performed` broadcast mask header names
 		 * identically — one masking routine, never two that can drift apart.
-		 * Despite the name (kept for git-blame continuity — the routine is fully
-		 * generic over any associative array), also reused by
-		 * {@see Woodev_Licensing_API_Request} to mask the `license` param out of
-		 * the logged query string and request body — see #395. Marked `public`
-		 * rather than `protected` so a request class outside this hierarchy can
-		 * reuse it instead of re-implementing the masking convention.
+		 * Also reused by {@see Woodev_Licensing_API_Request} and
+		 * {@see Woodev_API_JSON_Request} to mask secret-carrying request params
+		 * out of the logged query string and request body — see #395. Named
+		 * generically (renamed from `mask_secret_headers()`, which had grown
+		 * misleading once params joined headers as callers) rather than after
+		 * either caller, since the routine itself is fully generic over any
+		 * associative array. Marked `public` rather than `protected` so a request
+		 * class outside this hierarchy can reuse it instead of re-implementing the
+		 * masking convention.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 masks array-valued headers element-wise instead of casting the
@@ -409,13 +546,16 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @since 2.0.2 widened from `protected` to `public` so request classes that
 		 *              don't extend this hierarchy (e.g. {@see Woodev_Licensing_API_Request})
 		 *              can reuse it for masking secret-carrying request params.
+		 * @since 2.0.2 renamed from `mask_secret_headers()` to `mask_secret_values()`
+		 *              — the name no longer matched what it masked once request
+		 *              params joined headers as callers.
 		 *
 		 * @param array<string, mixed> $headers Name/value pairs (value: string, or array<int, string>
 		 *                              for a duplicated header), casing as sent/received.
 		 * @param array<int, string>   $secret_names Names to mask, matched case-insensitively.
 		 * @return array<string, mixed>
 		 */
-		public static function mask_secret_headers( array $headers, array $secret_names ): array {
+		public static function mask_secret_values( array $headers, array $secret_names ): array {
 
 			$secret_names = array_map( 'strtolower', $secret_names );
 
@@ -582,7 +722,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$headers = $this->get_response_headers();
 
 			return is_array( $headers )
-				? self::mask_secret_headers( $headers, $this->get_secret_header_names() )
+				? self::mask_secret_values( $headers, $this->get_secret_header_names() )
 				: $headers;
 		}
 

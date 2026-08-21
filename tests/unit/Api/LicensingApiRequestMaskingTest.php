@@ -13,14 +13,25 @@
  * `print_r()` dump of every param, masking nothing).
  *
  * Request headers already had a masking convention
- * ({@see \Woodev_API_Base::mask_secret_headers()}, exercised by
+ * ({@see \Woodev_API_Base::mask_secret_values()}, exercised by
  * ApiBaseSanitizedHeadersTest.php) — the fix for #395 reuses that exact
  * routine for the license param instead of inventing a second, differently
- * shaped one, via two new opt-in seams on `Woodev_API_Base`:
- * `get_sanitized_request_path()` / `get_sanitized_request_uri()`, mirroring
- * the existing `is_callable( ..., 'to_string_safe' )` opt-in already used for
- * the response body. `Woodev_Licensing_API_Request::get_path_safe()` /
- * `to_string_safe()` are the opt-in implementations.
+ * shaped one, via `Woodev_API_Base::get_sanitized_request_path()` /
+ * `get_sanitized_request_uri()`, and `Woodev_Licensing_API_Request::get_path_safe()`
+ * / `to_string_safe()`.
+ *
+ * An independent critic review rejected the first round of this fix: both
+ * seams FAILED OPEN for any request class that didn't implement its own
+ * `get_path_safe()`/override `to_string_safe()` — falling back to the raw,
+ * unmasked path/body by default — and a transport-thrown WP_Error message
+ * could carry the raw URI straight into an exception, bypassing masking
+ * entirely. The round-two fix made both fail SAFE by default: an
+ * unconditional, regex-based redaction
+ * ({@see \Woodev_API_Base::get_secret_param_names()} /
+ * {@see \Woodev_API_Base::redact_secret_query_params()}) now runs on every
+ * path, URI (after the `woodev_{api_id}_api_request_uri` filter, not
+ * before), and WP_Error message — regardless of whether the concrete
+ * request class implements any masking of its own.
  *
  * This file pins:
  *
@@ -50,6 +61,8 @@ use Woodev\Tests\Unit\TestCase;
 require_once dirname( __DIR__, 3 ) . '/woodev/api/interface-api-request.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/api/abstract-api-json-request.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-base.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/api/class-api-exception.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 3 ) . '/woodev/licensing/api/class-licensing-api-request.php';
 
 /**
@@ -142,6 +155,159 @@ class Testable_Licensing_Request_Api_Base extends \Woodev_API_Base {
 }
 
 /**
+ * A response class instantiable by {@see \Woodev_API_Base::get_parsed_response()}
+ * — this fix does not touch response parsing, only what is logged around it.
+ */
+class Testable_Licensing_Response_For_Wire_Test {
+
+	/**
+	 * @param string $raw_body Unused — only the constructor shape matters here.
+	 */
+	public function __construct( $raw_body ) {}
+}
+
+/**
+ * A minimal Woodev_Plugin double satisfying the one call
+ * {@see \Woodev_API_Base::perform_request()} makes on it directly.
+ */
+class Testable_License_Plugin_Stub {
+
+	/**
+	 * @return bool
+	 */
+	public function require_tls_1_2() {
+		return false;
+	}
+}
+
+/**
+ * Extends the shared test double with a transport override that CAPTURES its
+ * arguments instead of performing a real HTTP call, so
+ * {@see \Woodev_API_Base::perform_request()} can be exercised end to end —
+ * this is what the SHOULD-FIX critic finding asked the wire-parity test to
+ * actually do: observe the transport's real arguments, not just re-read the
+ * same getters the broadcast payload also reads.
+ */
+class Testable_Licensing_Request_Api_Base_With_Transport_Capture extends Testable_Licensing_Request_Api_Base {
+
+	/** @var string|null */
+	public $captured_request_uri;
+
+	/** @var array<string, mixed>|null */
+	public $captured_request_args;
+
+	/** @var array<string, mixed>|null */
+	public $captured_broadcast_request_data;
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param string $request_uri
+	 * @param array<string, mixed> $request_args
+	 * @return array<string, mixed>
+	 */
+	protected function do_remote_request( $request_uri, $request_args ) {
+
+		$this->captured_request_uri  = $request_uri;
+		$this->captured_request_args = $request_args;
+
+		return [
+			'response' => [
+				'code'    => 200,
+				'message' => 'OK',
+			],
+			'headers'  => [],
+			'body'     => '',
+		];
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * Captures the broadcast (logging) payload alongside the raw transport
+	 * arguments above, so both sides of the same {@see \Woodev_API_Base::perform_request()}
+	 * call can be compared in one test.
+	 *
+	 * @return void
+	 */
+	protected function broadcast_request() {
+
+		$this->captured_broadcast_request_data = $this->get_request_data_for_broadcast();
+
+		parent::broadcast_request();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return string
+	 */
+	protected function get_response_handler() {
+		return Testable_Licensing_Response_For_Wire_Test::class;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return Testable_License_Plugin_Stub
+	 */
+	protected function get_plugin() {
+		return new Testable_License_Plugin_Stub();
+	}
+
+	/**
+	 * Exposes the protected perform_request() under test.
+	 *
+	 * @param \Woodev_Licensing_API_Request $request Request instance.
+	 * @return mixed
+	 */
+	public function perform_request_for_test( $request ) {
+		return $this->perform_request( $request );
+	}
+}
+
+/**
+ * A transport override that returns a WP_Error carrying the RAW request URI
+ * it was given in its message — the concrete route from the license key to
+ * `error_log()` the critic identified (Blocking 2): a transport override or
+ * an `http_api_curl`-style filter is free to embed the URI in a failure
+ * message, and {@see \Woodev_API_Base::handle_response()} used to hand that
+ * message straight into the thrown exception unredacted.
+ */
+class Testable_Licensing_Request_Api_Base_With_Wp_Error_Transport extends Testable_Licensing_Request_Api_Base {
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param string $request_uri
+	 * @param array<string, mixed> $request_args
+	 * @return \WP_Error
+	 */
+	protected function do_remote_request( $request_uri, $request_args ) {
+		return new \WP_Error( 'http_request_failed', 'cURL error 6: Could not resolve host: ' . $request_uri );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return Testable_License_Plugin_Stub
+	 */
+	protected function get_plugin() {
+		return new Testable_License_Plugin_Stub();
+	}
+
+	/**
+	 * Exposes the protected perform_request() under test.
+	 *
+	 * @param \Woodev_Licensing_API_Request $request Request instance.
+	 * @return mixed
+	 */
+	public function perform_request_for_test( $request ) {
+		return $this->perform_request( $request );
+	}
+}
+
+/**
  * Class LicensingApiRequestMaskingTest.
  */
 final class LicensingApiRequestMaskingTest extends TestCase {
@@ -154,6 +320,27 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 				return $value;
 			}
 		);
+	}
+
+	/**
+	 * Stubs the WP HTTP-transport functions {@see \Woodev_API_Base::perform_request()}
+	 * and {@see \Woodev_API_Base::handle_response()} call, so those methods can
+	 * be exercised end to end without a real WordPress environment.
+	 *
+	 * @return void
+	 */
+	private function stub_wp_http_functions(): void {
+
+		Functions\when( 'do_action' )->justReturn( null );
+
+		Functions\when( 'is_wp_error' )->alias(
+			static fn( $thing ) => $thing instanceof \WP_Error
+		);
+
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'OK' );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '' );
+		Functions\when( 'wp_remote_retrieve_headers' )->justReturn( [] );
 	}
 
 	/**
@@ -301,13 +488,19 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 	 */
 	public function test_to_string_safe_leaves_non_secret_params_untouched(): void {
 
-		$request = $this->make_request();
+		$license_key = 'AAAA-BBBB-CCCC-DDDD-license-secret-value';
+		$request     = $this->make_request( $license_key );
 
 		$safe_body = (string) $request->to_string_safe();
 
 		$this->assertStringContainsString( 'check_license', $safe_body );
 		$this->assertStringContainsString( '123', $safe_body );
 		$this->assertStringContainsString( 'example.test', $safe_body );
+
+		// SHOULD-FIX: this test previously only asserted the non-secret params
+		// were present, never that the secret was ABSENT — it passed both
+		// before and after the fix and proved nothing about masking.
+		$this->assertStringNotContainsString( $license_key, $safe_body, 'the license key must not appear in the sanitized body' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -345,23 +538,90 @@ final class LicensingApiRequestMaskingTest extends TestCase {
 	/**
 	 * The whole point of masking ONLY the broadcast/log path: the bytes
 	 * actually sent to the licensing server must be byte-for-byte identical
-	 * before and after this fix.
+	 * before and after this fix. Exercises the REAL perform_request()
+	 * codepath end to end, with a transport override that CAPTURES its
+	 * actual arguments — rather than re-reading the same getters the
+	 * broadcast payload itself reads, which would pass even if masking
+	 * corrupted the wire request.
+	 *
+	 * SHOULD-FIX: the previous version of this test called
+	 * get_request_data_for_broadcast_for_test() and then asserted against
+	 * get_request_uri_for_test()/get_request_body_for_test() — the same two
+	 * getters perform_request() itself calls to build the wire request. It
+	 * never observed the transport, so it passed identically before and
+	 * after the fix and proved nothing about wire parity.
 	 *
 	 * @return void
 	 */
 	public function test_actual_wire_request_is_unaffected_by_broadcast_masking(): void {
 
+		$this->stub_wp_http_functions();
+
 		$license_key = 'AAAA-BBBB-CCCC-DDDD-license-secret-value';
 		$request     = $this->make_request( $license_key );
 
-		$api = new Testable_Licensing_Request_Api_Base();
+		// The pre-redaction ground truth: what the wire request SHOULD look
+		// like, built independently of anything perform_request() does.
+		$expected_uri  = 'https://woodev.ru/' . $request->get_path();
+		$expected_body = $request->to_string();
+
+		$api = new Testable_Licensing_Request_Api_Base_With_Transport_Capture();
 		$api->set_request_for_test( $request );
 
-		// Exercise the logging codepath first, to prove it has no side effect
-		// on the getters used to actually perform the request.
-		$api->get_request_data_for_broadcast_for_test();
+		// do_remote_request() (captured, raw) runs BEFORE handle_response()
+		// -> broadcast_request() (captured, sanitized) — the real production
+		// order — so this proves the masking that runs second has no way to
+		// reach back and affect what already went out first.
+		$api->perform_request_for_test( $request );
 
-		$this->assertStringContainsString( $license_key, $api->get_request_uri_for_test() );
-		$this->assertStringContainsString( $license_key, $api->get_request_body_for_test() );
+		$this->assertStringContainsString( $license_key, $api->captured_request_uri, 'the real request must carry the real license key over the wire' );
+		$this->assertSame( $expected_uri, $api->captured_request_uri, 'query encoding must be byte-for-byte unaffected by broadcast masking' );
+
+		$this->assertStringContainsString( $license_key, $api->captured_request_args['body'], 'the real request body must carry the real license key over the wire' );
+		$this->assertSame( $expected_body, $api->captured_request_args['body'], 'body bytes must be byte-for-byte unaffected by broadcast masking' );
+
+		// And prove the masking actually ran, in the very same call, on the
+		// sibling broadcast payload.
+		$this->assertStringNotContainsString( $license_key, $api->captured_broadcast_request_data['uri'] );
+		$this->assertStringNotContainsString( $license_key, $api->captured_broadcast_request_data['body'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// BLOCKING 2 regression guard: a transport-thrown WP_Error message must
+	// be redacted before it reaches an exception (and, downstream,
+	// Woodev_Plugin_Updater::get_version_from_remote()'s error_log()).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A transport override (or an `http_api_curl`-style filter) can return a
+	 * WP_Error whose message embeds the raw URI it was given — a real route
+	 * third-party code can trigger, independent of any request-class-specific
+	 * masking. Woodev_Plugin_Updater::get_version_from_remote() logs
+	 * `$e->getMessage()` verbatim via error_log() on ANY \Throwable, so an
+	 * unredacted WP_Error message here reaches the PHP error log regardless
+	 * of WOODEV_LICENSE_DEBUG or the WooCommerce logger.
+	 *
+	 * @return void
+	 */
+	public function test_wp_error_transport_message_is_redacted_before_it_reaches_an_exception(): void {
+
+		$this->stub_wp_http_functions();
+
+		$license_key = 'AAAA-BBBB-CCCC-DDDD-license-secret-value';
+		$request     = $this->make_request( $license_key );
+
+		$api = new Testable_Licensing_Request_Api_Base_With_Wp_Error_Transport();
+		$api->set_request_for_test( $request );
+
+		try {
+			$api->perform_request_for_test( $request );
+			$this->fail( 'Expected a Woodev_API_Exception to be thrown.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertStringNotContainsString(
+				$license_key,
+				$e->getMessage(),
+				'a raw transport WP_Error message leaked the license key into the exception'
+			);
+		}
 	}
 }

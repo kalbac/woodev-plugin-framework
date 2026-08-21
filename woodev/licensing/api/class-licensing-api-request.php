@@ -83,28 +83,37 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		 * masked before {@see self::get_path_safe()} or {@see self::to_string_safe()}
 		 * hand the request off to logging — see #395.
 		 *
+		 * `license` is already in the parent's generic default list (see
+		 * {@see Woodev_API_Base::get_default_secret_param_names()}), so this
+		 * override is redundant with it today — kept anyway, `protected` instead
+		 * of `private`, so this class documents its OWN known secret explicitly
+		 * and stays correct even if the generic default list ever changes.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 widened from `private` to `protected` and merged with the
+		 *              parent's list instead of replacing it outright.
 		 *
 		 * @return array<int, string>
 		 */
-		private function get_secret_param_names(): array {
-			return [ 'license' ];
+		protected function get_secret_param_names(): array {
+			return array_merge( parent::get_secret_param_names(), [ 'license' ] );
 		}
 
 		/**
 		 * Masks the VALUE of every param named in {@see self::get_secret_param_names()}.
 		 *
-		 * Reuses {@see Woodev_API_Base::mask_secret_headers()} — the same masking
+		 * Reuses {@see Woodev_API_Base::mask_secret_values()} — the same masking
 		 * convention (`*` repeated to the value's original length) already applied
 		 * to request/response headers, so a log reader sees one consistent masking
 		 * style everywhere instead of a second, differently-shaped one.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 reuses the renamed {@see Woodev_API_Base::mask_secret_values()}.
 		 *
 		 * @return array<string, mixed>
 		 */
 		private function get_masked_params(): array {
-			return Woodev_API_Base::mask_secret_headers( $this->get_params(), $this->get_secret_param_names() );
+			return Woodev_API_Base::mask_secret_values( $this->get_params(), $this->get_secret_param_names() );
 		}
 
 		/**
