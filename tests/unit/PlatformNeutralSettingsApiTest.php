@@ -50,6 +50,27 @@ class Testable_Platform_Neutral_Settings extends \Woodev_Abstract_Settings {
 }
 
 /**
+ * Settings handler that registers a boolean multi-value setting for load tests.
+ */
+class Boolean_Multi_Load_Settings extends \Woodev_Abstract_Settings {
+
+	/**
+	 * Registers the legacy-compatible boolean multi-value setting.
+	 *
+	 * @return void
+	 */
+	protected function register_settings() {
+		$this->register_setting(
+			'flags',
+			\Woodev_Setting::TYPE_BOOLEAN,
+			[
+				'is_multi' => true,
+			]
+		);
+	}
+}
+
+/**
  * Class PlatformNeutralSettingsApiTest.
  */
 class PlatformNeutralSettingsApiTest extends TestCase {
@@ -91,6 +112,72 @@ class PlatformNeutralSettingsApiTest extends TestCase {
 		$this->assertFalse( $settings->convert_from_database( 'false', $setting ) );
 		$this->assertFalse( $settings->convert_from_database( '0', $setting ) );
 		$this->assertNull( $settings->convert_from_database( null, $setting ) );
+	}
+
+	/**
+	 * Boolean multi-value settings must preserve the installed-site yes/no shape
+	 * for every element when saved.
+	 *
+	 * @return void
+	 */
+	public function test_boolean_multi_setting_persists_every_value_to_yes_no_contract(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+		$setting  = new \Woodev_Setting();
+
+		$setting->set_type( \Woodev_Setting::TYPE_BOOLEAN );
+		$setting->set_is_multi( true );
+		$setting->set_value( [ true, false ] );
+
+		$this->assertSame( [ 'yes', 'no' ], $settings->convert_for_database( $setting ) );
+	}
+
+	/**
+	 * A previously stored boolean multi-value setting must load without a type
+	 * error and retain one native boolean for every stored element.
+	 *
+	 * @return void
+	 */
+	public function test_boolean_multi_setting_loads_stored_values(): void {
+		Functions\when( 'get_option' )->justReturn( [ 'yes', 'no' ] );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		$settings = new Boolean_Multi_Load_Settings( 'test-plugin' );
+
+		$this->assertSame( [ true, false ], $settings->get_value( 'flags' ) );
+	}
+
+	/**
+	 * Numeric multi-value settings must receive the same element-wise database
+	 * conversion instead of discarding the complete stored array.
+	 *
+	 * @return void
+	 */
+	public function test_integer_multi_setting_restores_each_stored_value(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+		$setting  = new \Woodev_Setting();
+
+		$setting->set_type( \Woodev_Setting::TYPE_INTEGER );
+		$setting->set_is_multi( true );
+
+		$this->assertSame( [ 7, 42 ], $settings->convert_from_database( [ '7', '42' ], $setting ) );
+	}
+
+	/**
+	 * Malformed object data for a boolean setting must not reach strtolower().
+	 *
+	 * @return void
+	 */
+	public function test_boolean_setting_treats_stored_object_as_false(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+		$setting  = new \Woodev_Setting();
+
+		$setting->set_type( \Woodev_Setting::TYPE_BOOLEAN );
+
+		$this->assertFalse( $settings->convert_from_database( new \stdClass(), $setting ) );
 	}
 
 	/**

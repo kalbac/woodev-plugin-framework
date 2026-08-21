@@ -527,7 +527,9 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			$value = $setting->get_value();
 
 			if ( null !== $value && Woodev_Setting::TYPE_BOOLEAN === $setting->get_type() ) {
-				$value = self::bool_to_string( $value );
+				$value = $setting->is_is_multi() && is_array( $value )
+					? array_map( [ self::class, 'bool_to_string' ], $value )
+					: self::bool_to_string( $value );
 			}
 
 			return $value;
@@ -547,15 +549,31 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 				switch ( $setting->get_type() ) {
 
 					case Woodev_Setting::TYPE_BOOLEAN:
-						$value = self::string_to_bool( $value );
+						$value = $setting->is_is_multi() && is_array( $value )
+							? array_map( [ self::class, 'string_to_bool' ], $value )
+							: self::string_to_bool( $value );
 						break;
 
 					case Woodev_Setting::TYPE_INTEGER:
-						$value = is_numeric( $value ) ? (int) $value : null;
+						$value = $setting->is_is_multi() && is_array( $value )
+							? array_map(
+								static function ( $item ) {
+									return is_numeric( $item ) ? (int) $item : null;
+								},
+								$value
+							)
+							: ( is_numeric( $value ) ? (int) $value : null );
 						break;
 
 					case Woodev_Setting::TYPE_FLOAT:
-						$value = is_numeric( $value ) ? (float) $value : null;
+						$value = $setting->is_is_multi() && is_array( $value )
+							? array_map(
+								static function ( $item ) {
+									return is_numeric( $item ) ? (float) $item : null;
+								},
+								$value
+							)
+							: ( is_numeric( $value ) ? (float) $value : null );
 						break;
 				}
 			}
@@ -570,9 +588,12 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		 * @return bool
 		 */
 		private static function string_to_bool( $string ) {
-			$string = $string ?? '';
-
-			return is_bool( $string ) ? $string : ( 'yes' === strtolower( $string ) || 1 === $string || 'true' === strtolower( $string ) || '1' === $string );
+			return is_bool( $string )
+				? $string
+				: (
+					( is_string( $string ) && ( 'yes' === strtolower( $string ) || 'true' === strtolower( $string ) || '1' === $string ) )
+					|| 1 === $string
+				);
 		}
 
 		/**
