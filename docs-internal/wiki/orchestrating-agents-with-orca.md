@@ -179,6 +179,14 @@ workers in flight.
 The s83 recipe above is still right. s84 ran twelve dispatches through it and found four things it
 did not say.
 
+**Codex is critic-only until 27.08.2026** (operator decision, 21.08.2026): s84 burned 45% of the
+weekly Codex allowance in one night by running it as worker, planner and critic simultaneously. The
+"use Codex proactively as a second worker" rule resumes after that date, under the caps below.
+
+**Cap rounds per card at two, three at the outside.** s84 put six worker rounds and six critic
+passes into #395 and still did not close it. The third REJECT is the signal to stop and hand the
+operator the fork, not to brief a fourth round.
+
 **Cap the wave at three agents.** With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
 Codex died on `VirtualAlloc`. Even at three, `composer phpcs` OOM'd for one agent and blamed five
 innocent files for another (failed `shell_exec()` syntax checks read as PHPCS internal exceptions),
