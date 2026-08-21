@@ -505,7 +505,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			$title = '<span class="title">';
 
 			if ( $token->get_nickname() ) {
-				$title .= '<span class="nickname">' . $token->get_nickname() . '</span>';
+				$title .= '<span class="nickname">' . esc_html( $token->get_nickname() ) . '</span>';
 			}
 
 			if ( $image_url ) {
@@ -528,7 +528,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			if ( $token->get_exp_month() && $token->get_exp_year() ) {
 
 				/* translators: Placeholders: %s - expiry date */
-				$title .= ' ' . sprintf( esc_html__( '(expires %s)', 'woodev-plugin-framework' ), $token->get_exp_date() );
+				$title .= ' ' . sprintf( esc_html__( '(expires %s)', 'woodev-plugin-framework' ), esc_html( $token->get_exp_date() ) );
 			}
 
 			$title .= '</span>';
