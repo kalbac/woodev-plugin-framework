@@ -210,6 +210,63 @@
 	registry[ 'related-list:region' ] = attachRelatedListRegion;
 
 	// -------------------------------------------------------------------------
+	// Pure select2 config builder (issue #450, harness option 2) — no DOM read beyond its own
+	// arguments, no jQuery, no `.select2()` call. Testable with NO select2 present in the
+	// environment at all, and independently of `buildSelectField()`'s init-guard/idempotency
+	// wrapper — this is the SAME object `ensureSelect2()` hands to `.select2()`, extracted so
+	// a test can assert its shape directly instead of inferring it from a stubbed `select2()`
+	// call (issue #450's own point: jsdom has no select2, so nothing here ran under any test
+	// before this function existed to be called on its own).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds the config object for `strategy` — the exact object `ensureSelect2()` passes to
+	 * `.select2()`.
+	 *
+	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{initialValue: string, placeholder: string, applyEntries: function(Array, boolean): void}} seed
+	 *   `applyEntries` is called with `(entries, false)` on every successful ajax response —
+	 *   the SAME merge-only call `ensureSelect2()`'s own transport made before this extraction.
+	 * @returns {Object}
+	 */
+	function selectConfigFor( strategy, seed ) {
+		var config = { width: '100%' };
+
+		if ( strategy.ajax ) {
+			// Only meaningful when the field starts EMPTY — select2's own docs require a
+			// blank leading <option> for this to render at all (verified against
+			// select2/select2 docs/placeholders.md, "Single select placeholders" AND "Using
+			// placeholders with AJAX" — the empty <option> is required in BOTH cases).
+			// `attachAjaxSelect2()`'s own seeding only appends that leading option in this
+			// same empty case — see `buildSelectField()`.
+			if ( seed.placeholder && ! seed.initialValue ) {
+				config.placeholder = seed.placeholder;
+			}
+
+			config.ajax = {
+				transport: function( params, success, failure ) {
+					var term = params && params.data && params.data.term ? params.data.term : '';
+
+					strategy.fetchEntries( term ).then( function( entries ) {
+						seed.applyEntries( entries, false );
+
+						success( {
+							results: ( entries || [] ).map( function( entry ) {
+								return {
+									id: entry.key,
+									text: entry.record && entry.record.label ? entry.record.label : entry.label,
+								};
+							} ),
+						} );
+					}, failure );
+				},
+			};
+		}
+
+		return config;
+	}
+
+	// -------------------------------------------------------------------------
 	// Shared select2-ish field builder — turns a plain <input> into a <select> select2 CAN
 	// enhance (select2 requires a real <select>; it cannot attach to an arbitrary text input).
 	// -------------------------------------------------------------------------
@@ -249,6 +306,11 @@
 		select.id = input.id;
 		select.name = input.name || '';
 		select.className = input.className;
+
+		// Captured BEFORE the <input> is detached — issue #447: a field re-rendered with an
+		// existing value (a page reload, or a sibling level's re-render) must not lose it.
+		var initialValue = input.value || '';
+		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' ) || '';
 
 		input.parentNode.insertBefore( select, input );
 		input.parentNode.removeChild( input );
@@ -328,37 +390,39 @@
 
 			select2Initialized = true;
 
-			var config = { width: '100%' };
-
-			if ( strategy.ajax ) {
-				config.ajax = {
-					transport: function( params, success, failure ) {
-						var term = params && params.data && params.data.term ? params.data.term : '';
-
-						strategy.fetchEntries( term ).then( function( entries ) {
-							applyEntries( entries, false );
-
-							success( {
-								results: ( entries || [] ).map( function( entry ) {
-									return {
-										id: entry.key,
-										text: entry.record && entry.record.label ? entry.record.label : entry.label,
-									};
-								} ),
-							} );
-						}, failure );
-					},
-				};
-			}
-
-			$select.select2( config );
+			$select.select2( selectConfigFor( strategy, {
+				initialValue: initialValue,
+				placeholder: placeholder,
+				applyEntries: applyEntries,
+			} ) );
 		}
 
 		if ( strategy.ajax ) {
 			// select2's own `ajax.transport` (wired above) drives population per keystroke —
-			// nothing to pre-fetch. Without select2 available at all, the field is simply an
-			// empty native <select> a customer cannot search; `ajax-select2` mode is only ever
-			// offered by the store setting when the real plugin is expected to be present.
+			// nothing to PRE-FETCH. But the field's OWN current value (issue #447) is not a
+			// fetch result at all: it is the label the field already carries, exactly the
+			// select2-documented "Preselect option in AJAX Select2" pattern (append a real,
+			// pre-selected <option> before init — see the CDEK reference,
+			// plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:69,90-98,
+			// which does the same thing for the same reason) — without it the select renders
+			// with NO options at all until the first keystroke.
+			if ( initialValue ) {
+				var seededOption = document.createElement( 'option' );
+
+				seededOption.value = initialValue;
+				seededOption.textContent = initialValue;
+				seededOption.selected = true;
+
+				select.appendChild( seededOption );
+			} else if ( placeholder ) {
+				// The empty leading <option> select2's placeholder requires (see ensureSelect2()).
+				select.appendChild( document.createElement( 'option' ) );
+			}
+
+			// Without select2 available at all, the field is simply a native <select> carrying
+			// the option above (or genuinely empty) — a customer cannot search it; `ajax-select2`
+			// mode is only ever offered by the store setting when the real plugin is expected to
+			// be present.
 			ensureSelect2();
 		} else {
 			strategy.fetchEntries( '' ).then(
@@ -492,6 +556,7 @@
 			attachRelatedListSettlement: attachRelatedListSettlement,
 			attachAjaxSelect2: attachAjaxSelect2,
 			bindChangeBothWorlds: bindChangeBothWorlds,
+			selectConfigFor: selectConfigFor,
 		};
 	}
 
