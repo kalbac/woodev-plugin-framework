@@ -235,6 +235,54 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return ( $this->get_request() ) ? $this->get_request()->get_path() : '';
 		}
 
+
+		/**
+		 * Gets the sanitized request path, for logging.
+		 *
+		 * Delegates to the request object's `get_path_safe()` when it implements
+		 * one — an opt-in method, not part of the {@see Woodev_API_Request}
+		 * interface, so a request class carrying nothing secret in its path
+		 * (the common case) is never forced to grow a method it doesn't need.
+		 * This mirrors the existing `is_callable()` opt-in already used by
+		 * {@see self::get_sanitized_response_body()} for `to_string_safe()`.
+		 * Falls back to the real {@see self::get_request_path()} — byte-for-byte
+		 * unchanged — for every request class that has nothing to mask.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_sanitized_request_path() {
+
+			$request = $this->get_request();
+
+			return ( $request && is_callable( array( $request, 'get_path_safe' ) ) )
+				? $request->get_path_safe()
+				: $this->get_request_path();
+		}
+
+		/**
+		 * Gets the sanitized request URI, for logging.
+		 *
+		 * Same as {@see self::get_request_uri()} but built from
+		 * {@see self::get_sanitized_request_path()} instead of the raw path, so
+		 * a request class that carries a secret in its query string (e.g.
+		 * {@see Woodev_Licensing_API_Request}, whose `license` param used to
+		 * reach the log in clear text — see #395) never leaks it. The request
+		 * actually sent to the server always goes through the unmodified
+		 * {@see self::get_request_uri()}; only what gets logged changes here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_sanitized_request_uri() {
+
+			$uri = $this->request_uri . $this->get_sanitized_request_path();
+
+			return apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+		}
+
 		protected function get_request_args() {
 
 			$args = array(
@@ -328,13 +376,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Masks the VALUE of every header whose name (matched case-insensitively —
-		 * HTTP header names are case-insensitive) appears in $secret_names, using
+		 * Masks the VALUE of every entry whose name (matched case-insensitively —
+		 * HTTP header names are case-insensitive, and this is also reused for
+		 * request/query params — see below) appears in $secret_names, using
 		 * the convention `*` repeated to the value's original length. The original
 		 * key casing is preserved in the returned array; only the comparison is
 		 * case-insensitive.
 		 *
-		 * A header value can itself be an array: WordPress's HTTP transport
+		 * A value can itself be an array: WordPress's HTTP transport
 		 * (`WP_HTTP_Requests_Response::get_headers()`) folds a duplicated response
 		 * header — e.g. multiple `Set-Cookie` lines, the normal shape of a
 		 * session-establishing response — into an array of values rather than a
@@ -346,20 +395,27 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Shared by {@see self::get_sanitized_request_headers()} and
 		 * {@see self::get_sanitized_response_headers()} so both directions of the
 		 * `woodev_{api_id}_api_request_performed` broadcast mask header names
-		 * identically — one masking routine, never two that can drift apart. Marked
-		 * `protected` rather than `private` so a subclass overriding either
-		 * sanitizer can reuse it instead of re-implementing the masking convention.
+		 * identically — one masking routine, never two that can drift apart.
+		 * Despite the name (kept for git-blame continuity — the routine is fully
+		 * generic over any associative array), also reused by
+		 * {@see Woodev_Licensing_API_Request} to mask the `license` param out of
+		 * the logged query string and request body — see #395. Marked `public`
+		 * rather than `protected` so a request class outside this hierarchy can
+		 * reuse it instead of re-implementing the masking convention.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 masks array-valued headers element-wise instead of casting the
 		 *              whole array to a string.
+		 * @since 2.0.2 widened from `protected` to `public` so request classes that
+		 *              don't extend this hierarchy (e.g. {@see Woodev_Licensing_API_Request})
+		 *              can reuse it for masking secret-carrying request params.
 		 *
-		 * @param array<string, mixed> $headers Header name/value pairs (value: string, or array<int, string>
+		 * @param array<string, mixed> $headers Name/value pairs (value: string, or array<int, string>
 		 *                              for a duplicated header), casing as sent/received.
-		 * @param array<int, string>   $secret_names Header names to mask, matched case-insensitively.
+		 * @param array<int, string>   $secret_names Names to mask, matched case-insensitively.
 		 * @return array<string, mixed>
 		 */
-		protected static function mask_secret_headers( array $headers, array $secret_names ): array {
+		public static function mask_secret_headers( array $headers, array $secret_names ): array {
 
 			$secret_names = array_map( 'strtolower', $secret_names );
 
@@ -467,12 +523,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Gets the request data for broadcasting the request.
 		 * Overriding this method allows child classes to customize the request data when broadcasting the request.
 		 *
+		 * @since 2.0.2 `uri` is now {@see self::get_sanitized_request_uri()}
+		 *              instead of the raw {@see self::get_request_uri()} — see #395.
+		 *
 		 * @return array
 		 */
 		protected function get_request_data_for_broadcast() {
 			return array(
 				'method'     => $this->get_request_method(),
-				'uri'        => $this->get_request_uri(),
+				'uri'        => $this->get_sanitized_request_uri(),
 				'user-agent' => $this->get_request_user_agent(),
 				'headers'    => $this->get_sanitized_request_headers(),
 				'body'       => $this->get_sanitized_request_body(),

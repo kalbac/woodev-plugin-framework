@@ -23,6 +23,32 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 			return $path;
 		}
 
+
+		/**
+		 * Gets the sanitized request path, for logging.
+		 *
+		 * Same as {@see self::get_path()} but the query string is built from
+		 * {@see self::get_masked_params()} instead of the raw params, so the
+		 * `license` param never reaches the log — see #395. The actual request
+		 * sent to the server is unaffected: {@see self::get_path()} is untouched
+		 * and still builds the real query string with the real license key.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_path_safe() {
+
+			$path   = $this->path;
+			$params = $this->get_params();
+
+			if ( in_array( $this->get_method(), array( 'GET', 'POST' ) ) && ! empty( $params ) ) {
+				$path .= '?' . http_build_query( $this->get_masked_params(), '', '&' );
+			}
+
+			return $path;
+		}
+
 		public function to_string() {
 
 			if ( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
@@ -31,8 +57,54 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 			}
 		}
 
+		/**
+		 * Gets the sanitized request body, for logging.
+		 *
+		 * Same as {@see self::to_string()} but dumps {@see self::get_masked_params()}
+		 * instead of the raw params, so the `license` param never reaches the
+		 * log — see #395. {@see self::to_string()} (used to build the real
+		 * request body sent to the server) is untouched.
+		 *
+		 * @since 2.0.2 actually sanitizes, instead of aliasing {@see self::to_string()}.
+		 *
+		 * @return string|bool|null
+		 */
 		public function to_string_safe() {
-			return $this->to_string();
+
+			if ( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
+				return self::print_r( $this->get_masked_params(), true );
+			}
+
+			return null;
+		}
+
+		/**
+		 * Names of request params whose values carry a credential and must be
+		 * masked before {@see self::get_path_safe()} or {@see self::to_string_safe()}
+		 * hand the request off to logging — see #395.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, string>
+		 */
+		private function get_secret_param_names(): array {
+			return [ 'license' ];
+		}
+
+		/**
+		 * Masks the VALUE of every param named in {@see self::get_secret_param_names()}.
+		 *
+		 * Reuses {@see Woodev_API_Base::mask_secret_headers()} — the same masking
+		 * convention (`*` repeated to the value's original length) already applied
+		 * to request/response headers, so a log reader sees one consistent masking
+		 * style everywhere instead of a second, differently-shaped one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed>
+		 */
+		private function get_masked_params(): array {
+			return Woodev_API_Base::mask_secret_headers( $this->get_params(), $this->get_secret_param_names() );
 		}
 
 		/**

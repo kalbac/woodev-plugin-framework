@@ -147,7 +147,20 @@ class PlatformNeutralLicensingTest extends TestCase {
 			),
 			$request->to_string()
 		);
-		$this->assertSame( $request->to_string(), $request->to_string_safe() );
+
+		// #395: to_string_safe() must no longer alias to_string() verbatim — the
+		// license key is masked (same convention as Woodev_API_Base header
+		// masking), while every other param passes through untouched.
+		$this->assertSame(
+			print_r(
+				[
+					'license' => str_repeat( '*', strlen( 'abc123' ) ),
+					'item_id' => 42,
+				],
+				true
+			),
+			$request->to_string_safe()
+		);
 	}
 
 	/**
