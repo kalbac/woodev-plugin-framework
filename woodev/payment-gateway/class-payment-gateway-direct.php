@@ -741,9 +741,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					/* translators: Payment method as in a specific credit card. Placeholders: %1$s - card type (visa, mastercard, ...), %2$s - last four digits of the card, %3$s - card expiry date */
 					$message = sprintf(
 						esc_html__( 'Nice! New payment method added: %1$s ending in %2$s (expires %3$s)', 'woodev-plugin-framework' ),
-						$token->get_type_full(),
-						$token->get_last_four(),
-						$token->get_exp_date()
+						esc_html( $token->get_type_full() ),
+						esc_html( $token->get_last_four() ),
+						esc_html( $token->get_exp_date() )
 					);
 
 				} else {
