@@ -21,19 +21,21 @@ critical IDOR), **#428** (#384 + #388 + #390 background jobs), **#430** (#389 bo
 - **#422 — #412 + #415**, live settlement choices and the Save button disabled for a foreign
   provider. Four-step rig checklist in the PR body.
 
-**One card left in flight: #395** (the license key in the debug log), on
-`fix/395-mask-license-key-in-logs` — branch pushed, **no PR opened**. Four worker rounds and four
-critic passes; the first three critic passes were REJECTs and each was correct. Round 4 stopped
-extending the regex and started parsing (`parse_str()` + a recursive walk + `http_build_query()`
-for query strings, `json_decode()` + the same walk for JSON bodies). Round 4 declined to return a fixed marker for unknown/XML/form bodies; the fourth critic
-disproved that by INVOKING the method with a `print_r`-shaped body and getting the secret back
-verbatim. Round 5 was dispatched with that evidence. See `sessions/s84.md`.
+**#395 is open as PR #433 with CI green and MUST NOT be merged.** Five worker rounds, five critic
+passes, **five REJECTs, every one of them real**. The last two critics did not argue — they invoked
+the sanitizer and watched the secret come back. Still open after round 5: `is_form_encoded_body()`
+infers the form type from the body's own syntax, so a URL-shaped string carrying
+`token=SECRET` and a newline free-text body both get parsed with the secret intact; and a valid
+JSON scalar that IS the secret passes through unchanged. Round 6 was in flight at handoff. The
+verdict and both findings are in a comment on PR #433. **The question that may need the operator:
+the form type cannot be inferred from the body — either whole-mask every untrusted non-JSON body
+and lose safe sibling fields in the log, or trust only a declared content type.**
 
 **Nobody accepted their own work, and it paid.** Every card that went to a critic came back with
 something real: #394's worker missed a fifth sink in a file it was already editing; #383 was
-REJECTED once and then caught a user-existence oracle on the re-critic; #395 was REJECTED twice —
-first for an opt-in redaction seam that failed open, then for matching only a literal `name=` while
-`token%5Bprimary%5D=` (what `http_build_query()` actually emits) sailed through.
+REJECTED once and then caught a user-existence oracle on the re-critic; #395 was rejected five
+times running. **The strongest habit to copy: the last two #395 critics settled the argument by
+INVOKING the method and pasting what came back, rather than reading the code and reasoning.**
 
 **⚠️ A worktree's test suite is NOT the primary checkout's — the difference is the SKIP count.**
 Measured s84: primary checkout **2475 / 6128 / 66 skipped**, an agent worktree **2475 / 6114 / 71**.
