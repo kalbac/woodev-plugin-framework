@@ -11,6 +11,7 @@
 
 import {
 	buildSavePayload,
+	hasBlockingProviderMismatch,
 	validatableFields,
 } from '../../src/settings-page/app';
 
@@ -66,5 +67,55 @@ describe( 'validatableFields', () => {
 		expect( Object.keys( validatableFields( fields, values ) ) ).toEqual( [
 			'b',
 		] );
+	} );
+} );
+
+describe( 'hasBlockingProviderMismatch', () => {
+	const fixedRecord = ( providerId ) => JSON.stringify( {
+		key: `${ providerId }:city-1`,
+		label: 'Москва',
+		provider_id: providerId,
+	} );
+
+	const fields = {
+		active_provider: { value: 'cdek' },
+		default_locality_record: { controlType: 'location-picker', value: fixedRecord( 'cdek' ) },
+	};
+
+	test( 'blocks Save before the round trip for an ordinary in-form provider switch away from a matching fixed record', () => {
+		expect(
+			hasBlockingProviderMismatch( fields, {
+				active_provider: 'dadata',
+				default_locality_record: fixedRecord( 'cdek' ),
+			} )
+		).toBe( true );
+	} );
+
+	test( 'fails open when the persisted raw provider already differs from the record provider', () => {
+		// A deregistered provider can fall back server-side, and a public filter
+		// can substitute another provider instance. The client cannot resolve
+		// either path, so this must reach the server rather than dead-ending Save.
+		expect(
+			hasBlockingProviderMismatch(
+				{
+					...fields,
+					active_provider: { value: 'filtered-provider' },
+					default_locality_record: { controlType: 'location-picker', value: fixedRecord( 'dadata' ) },
+				},
+				{
+					active_provider: 'cdek',
+					default_locality_record: fixedRecord( 'dadata' ),
+				}
+			)
+		).toBe( false );
+	} );
+
+	test( 'unblocks immediately when the provider is restored to the record provider', () => {
+		expect(
+			hasBlockingProviderMismatch( fields, {
+				active_provider: 'cdek',
+				default_locality_record: fixedRecord( 'cdek' ),
+			} )
+		).toBe( false );
 	} );
 } );

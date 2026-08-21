@@ -64,6 +64,48 @@ export function validatableFields( fields, values ) {
 	return out;
 }
 
+/**
+ * Gets client-side provider-mismatch errors that are safe to use as a Save
+ * disablement. A mismatch is only proven locally when the fixed record belongs
+ * to the raw provider value that loaded with this form; otherwise the server's
+ * provider fallback/filter resolution remains the authority and Save fails open.
+ *
+ * @since 2.0.2
+ * @param {Object} fields current tab field schemas.
+ * @param {Object} values current effective form values.
+ * @return {Object} location-picker setting ids mapped to mismatch errors.
+ */
+export function getBlockingProviderMismatchErrors( fields, values ) {
+	const errors = {};
+	const visibleFields = validatableFields( fields, values );
+	const persistedProviderId = ( fields[ ACTIVE_PROVIDER_SETTING_ID ] && fields[ ACTIVE_PROVIDER_SETTING_ID ].value ) || '';
+	const providerId = values[ ACTIVE_PROVIDER_SETTING_ID ] || '';
+
+	Object.keys( visibleFields ).forEach( ( id ) => {
+		if ( 'location-picker' !== visibleFields[ id ].controlType ) {
+			return;
+		}
+		const mismatch = getProviderMismatchError( values[ id ], providerId, persistedProviderId );
+		if ( mismatch ) {
+			errors[ id ] = mismatch;
+		}
+	} );
+
+	return errors;
+}
+
+/**
+ * Whether a proven fixed-locality/provider mismatch should disable Save now.
+ *
+ * @since 2.0.2
+ * @param {Object} fields current tab field schemas.
+ * @param {Object} values current effective form values.
+ * @return {boolean} whether Save must be disabled before a REST request.
+ */
+export function hasBlockingProviderMismatch( fields, values ) {
+	return Object.keys( getBlockingProviderMismatchErrors( fields, values ) ).length > 0;
+}
+
 export default function App() {
 	const [ tabs, setTabs ] = useState( null );
 	const [ loadError, setLoadError ] = useState( '' );
@@ -178,21 +220,13 @@ export default function App() {
 		const clientErrors = validateFields( visibleFields, merged, providerEdits );
 
 		// Issue #406: a FIXED default-locality record from a different provider
-		// than the one THIS save resolves to must block Save — same message,
-		// same comparison the server's authoritative gate (Location_Settings::
-		// validate_values()) runs, previewed here purely to save the merchant a
-		// round trip; `visibleFields` already excludes a `default_locality_record`
-		// hidden by `show_if` (policy switched to `off` in this same save), so
-		// the rule lifts itself the same way it does server-side.
-		Object.keys( visibleFields ).forEach( ( id ) => {
-			if ( 'location-picker' !== visibleFields[ id ].controlType ) {
-				return;
-			}
-			const mismatch = getProviderMismatchError( merged[ id ], merged[ ACTIVE_PROVIDER_SETTING_ID ] || '' );
-			if ( mismatch ) {
-				clientErrors[ id ] = mismatch;
-			}
-		} );
+		// than the one THIS save visibly switched away from must block Save. The
+		// exact server resolver can apply a fallback or public filter, so unknown
+		// raw-id states deliberately fall through to its authoritative check.
+		// `visibleFields` already excludes a `default_locality_record` hidden by
+		// `show_if` (policy switched to `off` in this same save), so the rule
+		// lifts itself the same way it does server-side.
+		Object.assign( clientErrors, getBlockingProviderMismatchErrors( allFields, merged ) );
 
 		if ( Object.keys( clientErrors ).length > 0 ) {
 			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
@@ -271,6 +305,7 @@ export default function App() {
 		( tab.sections || [] ).forEach( ( s ) => {
 			Object.assign( tabFields, s.fields || {} );
 		} );
+		const hasProviderMismatch = hasBlockingProviderMismatch( tabFields, conditionValues );
 
 		return (
 			<Card className="woodev-settings__card">
@@ -309,7 +344,7 @@ export default function App() {
 						<Button
 							variant="primary"
 							isBusy={ saving === tab.id }
-							disabled={ saving === tab.id || ! hasChanges }
+							disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
 							onClick={ () => onSave( tab.id, tab ) }
 						>
 							{ __( 'Сохранить', 'woodev-plugin-framework' ) }

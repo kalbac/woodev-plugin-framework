@@ -311,10 +311,13 @@ function withAnatomy( schema, control, error ) {
  *                                            `location-picker` control reads it.
  * @param {Object}   [props.fieldModeRegionOptions] server-offered region-mode options, used
  *                                                   only to refresh the settlement choice set.
+ * @param {string}   [props.providerMismatchBaseline] raw provider value loaded with the form;
+ *                                                    makes mismatches that may be server-side
+ *                                                    substitutions fail open.
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, fieldModeRegionOptions } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, fieldModeRegionOptions, providerMismatchBaseline } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -372,7 +375,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	const error = schema.serverError || ( ( touched || showErrors )
 		? ( validateField( schema, value, hasEdit )
 			|| ( 'location-picker' === control
-				? getProviderMismatchError( value ?? schema.value ?? '', ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '' )
+				? getProviderMismatchError( value ?? schema.value ?? '', ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '', providerMismatchBaseline )
 				: null ) )
 		: null );
 	const onBlur = () => setTouched( true );
