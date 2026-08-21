@@ -315,13 +315,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		 */
 		public function add_payment_methods_columns( $columns = [] ) {
 
-			$title_column = array( 'title' => __( 'Title', 'woocommerce-plugin-framework' ) );
+			$title_column = [ 'title' => __( 'Title', 'woodev-plugin-framework' ) ];
 			$columns      = Woodev_Helper::array_insert_after( $columns, 'method', $title_column );
 
-			$details_column = array( 'details' => __( 'Details', 'woocommerce-plugin-framework' ) );
+			$details_column = [ 'details' => __( 'Details', 'woodev-plugin-framework' ) ];
 			$columns        = Woodev_Helper::array_insert_after( $columns, 'title', $details_column );
 
-			$default_column = array( 'default' => __( 'Default?', 'woocommerce-plugin-framework' ) );
+			$default_column = [ 'default' => __( 'Default?', 'woodev-plugin-framework' ) ];
 			$columns        = Woodev_Helper::array_insert_after( $columns, 'expires', $default_column );
 
 			/**

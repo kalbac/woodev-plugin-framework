@@ -2209,7 +2209,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$message .= ': ' . sprintf(
 					/* translators: Placeholders: %1$s - credit card type (MasterCard, Visa, etc...), %2$s - last four digits of the card */
-					__( '%1$s ending in %2$s', 'woocommerce-plugin-framework' ),
+					__( '%1$s ending in %2$s', 'woodev-plugin-framework' ),
 					esc_html( Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ) ),
 					esc_html( $last_four )
 				);
@@ -2692,7 +2692,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'label'       => __( 'Capture Paid Orders', 'woodev-plugin-framework' ),
 					'type'        => 'checkbox',
 					'description' => sprintf(
-						__( 'Automatically capture orders when they are changed to %s.', 'woocommerce-plugin-framework' ),
+						__( 'Automatically capture orders when they are changed to %s.', 'woodev-plugin-framework' ),
 						esc_html( ! empty( $paid_statuses ) ? Woodev_Helper::list_array_items( $paid_statuses, $conjuction ) : __( 'a paid status', 'woodev-plugin-framework' ) )
 					),
 					'default'     => 'no',
