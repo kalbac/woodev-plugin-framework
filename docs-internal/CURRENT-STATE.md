@@ -7,49 +7,83 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-20 (s83).** **`main`, everything merged.** PR #403 (`bf86ece`) and PR #413
-(`ef97e80`) both landed with all 19 CI jobs individually green and state CLEAN. Cards #404, #405,
-#406 and #407 closed themselves on the merge and the board moved them to `Готово`.
+**As of 2026-08-21 (s84, overnight).** **`main`, everything merged that was ready.** Seven PRs landed
+with every CI job individually green and state CLEAN: **#420** (#394 stored-XSS), **#426** (#383
+critical IDOR), **#428** (#384 + #388 + #390 background jobs), **#430** (#389 boolean + is_multi),
+**#431** (#385 + #392 + #398 + #401 payment gateway), **#424** and **#425** (worktree gate parity
++ the gotchas that came out of the night).
 
-**All four post-review cards are done: #404, #405, #406, #407** — three Sonnet workers under Orca
-orchestration, each result reviewed by a Codex critic, every approved finding fixed rather than
-deferred. #406 needed three critic rounds before it was sound.
+**Two PRs are OPEN and waiting for the operator's browser pass, both fully green:**
 
-Tests measured on `main`: **2454 unit / 6090 assertions / 1241 jest** (the s82 handoff's
-2448/6067/1232 was stale, and both workers were briefed with the wrong numbers before it was caught).
-On `main` after the merge: phpcs clean, phpstan **0 errors**, **2475 unit / 6128 assertions**,
-**1260 jest**, asset build parity holds, class map regenerates to no diff. Gotchas: **172**.
+- **#423 — #411**, the location list silently capped at 500. The PR body carries a four-step rig
+  checklist and **one copy question for him**: in the `applied` branch the hint says "choose a
+  different region", which a shopper cannot act on.
+- **#422 — #412 + #415**, live settlement choices and the Save button disabled for a foreign
+  provider. Four-step rig checklist in the PR body.
 
-**Orca is now the subagent path** — worker = Sonnet 5, critic = Codex, nobody accepts their own work.
-Recipe, placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Two gotchas came out of
-using it, both orchestrator errors: a worker's Serena `activate_project` path must be its OWN
-worktree (`serena-activate-path-must-be-the-worker-s-worktree`), and `input_accepted` is not proof a
-worker started (`input-accepted-is-not-proof-a-worker-started`).
+**One card left in flight: #395** (the license key in the debug log), on
+`fix/395-mask-license-key-in-logs` — branch pushed, **no PR opened**. Four worker rounds and four
+critic passes; the first three critic passes were REJECTs and each was correct. Round 4 stopped
+extending the regex and started parsing (`parse_str()` + a recursive walk + `http_build_query()`
+for query strings, `json_decode()` + the same walk for JSON bodies). Round 4 declined to return a fixed marker for unknown/XML/form bodies; the fourth critic
+disproved that by INVOKING the method with a `print_r`-shaped body and getting the secret back
+verbatim. Round 5 was dispatched with that evidence. See `sessions/s84.md`.
 
-**⚠️ #405 is NOT rig-verified.** With a deliberately bogus CDEK client id — confirmed in wp-config,
-token transient cleared, measured against a control — the provider returned the same results as with
-valid keys and never threw. The rig's CDEK fixture does not fail on a bad client id at the settlement
-level, so s82's observed conditions were never reproduced. #405 rests on unit tests covering both
-states and the critic's trace of every failure path. #404 and #407 WERE verified live.
+**Nobody accepted their own work, and it paid.** Every card that went to a critic came back with
+something real: #394's worker missed a fifth sink in a file it was already editing; #383 was
+REJECTED once and then caught a user-existence oracle on the re-critic; #395 was REJECTED twice —
+first for an opt-in redaction seam that failed open, then for matching only a literal `name=` while
+`token%5Bprimary%5D=` (what `http_build_query()` actually emits) sailed through.
 
-**Orca is configured, not left on defaults.** A fresh agent worktree is gate-capable with **no
-install step**: `orca.yaml` shares `node_modules` by symlink, `.worktreeinclude` copies `vendor`,
-`.mcp.json`, `.wp-env.override.json` and `.claude/settings.local.json`. Worktrees live at
-`.orca/worktrees/` inside the project (gitignored; Serena skips it for free). `vendor` must be
-COPIED and never shared — Composer bakes `$baseDir` into its autoloader and a symlink makes every
-class declare twice (gotcha `sharing-vendor-breaks-composer-autoload-in-a-worktree`). Measured:
-2475 unit / 1260 jest / phpstan clean in a fresh worktree, against 411s for `composer install`.
+**⚠️ A worktree's test suite is NOT the primary checkout's — the difference is the SKIP count.**
+Measured s84: primary checkout **2475 / 6128 / 66 skipped**, an agent worktree **2475 / 6114 / 71**.
+Five `Contract/Yandex*` classes — release-blocking data-contract guards — skip where
+`plugins-reference/` is absent, and it is gitignored. Fixed in #424 by adding it to
+`.worktreeinclude`; worktrees created BEFORE that fix still skip five. When a worker's numbers
+disagree with a briefed baseline, compare skips first.
+
+**⚠️ Generated bundles are built in the PRIMARY CHECKOUT, never in a worktree.** PR #422 went red on
+`Assets build parity` after two agents had independently measured zero diff locally. `node_modules`
+is shared by symlink, webpack resolves it out of the project and emits `../../../../node_modules/…`
+module requests, which changes every content hash. Rebuild at a detached HEAD in the primary
+checkout, push, then `git checkout main` — the rig serves that tree. Gotcha
+`local-npm-run-build-is-not-assets-parity-evidence`.
+
+**⚠️ Three agents is this machine's cap.** At six, free RAM hit 0.4 GB of 15.3 and a starting Codex
+died on `VirtualAlloc`. Even at three, jest OOM'd once and `phpcs` failed twice in ways that read as
+code defects — once OOM, once with five PHPCS *internal* exceptions blaming innocent files, which
+were `shell_exec()` fork failures. Warn every brief; the agents that were warned reported the OOM
+instead of claiming a green gate. Gotcha `three-agents-is-the-concurrency-cap-on-this-machine`.
+
+**Launching Codex takes four steps, not one:** `terminal create --command codex` → ESC the
+`codex-update-prompt` → `dispatch --inject` → `terminal send --text "" --enter`, then read the
+buffer back. `worker-start --agent codex` produced a bare PowerShell terminal three times out of
+four and the shell executed the brief as a here-string. Gotcha
+`starting-codex-under-orca-needs-four-steps-not-one`.
+
+**⚠️ #405 is still NOT rig-verified** — unchanged from s83, and nothing in s84 touched it. With a
+deliberately bogus CDEK client id (confirmed in wp-config, transient cleared, measured against a
+control) the provider returned the same results as with valid keys and never threw. It rests on unit
+tests plus the critic's trace. #404 and #407 WERE verified live.
 
 **Operator decision, #409 (closed):** `@since` records the **planned release** (currently `2.0.2`);
 `VERSION` records the **released** one (`2.0.1`) and lags on purpose, because raising it publishes a
-release (#285). `AGENTS.md` and `AGENT-RULES.md` Rule 5 corrected — they had said "uses current
-VERSION" against 1388 tags to one.
+release (#285). Two workers drifted to `2.0.3` in s84 and were corrected by critics — it is not a
+per-commit bump.
 
-Cards filed this session: **#410**, **#411** (the `truncated` flag no JS consumer reads — a list
-silently capped at 500 reads as "my city is missing"), **#412** (settlement option set only
-refreshes after save+reload), **#415** (the Save button is never disabled for a foreign-provider
-record — the server refuses correctly, but only after the click). **#408**, **#409** and **#414**
-are closed. The `Инбокс` column is empty — everything triaged into `Бэклог`.
+**Orca is configured, not left on defaults.** A fresh worktree is gate-capable with **no install
+step**: `orca.yaml` shares `node_modules` by symlink; `.worktreeinclude` copies `vendor`,
+`plugins-reference` (added s84), `.mcp.json`, `.wp-env.override.json` and
+`.claude/settings.local.json`. Worktrees live at `.orca/worktrees/` inside the project. `vendor`
+must be COPIED and never shared (gotcha
+`sharing-vendor-breaks-composer-autoload-in-a-worktree`). Every fresh worktree also starts dirty
+with seven CRLF-only files — **never `git add -A` there** (gotcha
+`an-orca-worktree-starts-dirty-with-crlf-churn`).
+
+Cards filed in s84: **#416** (stored-XSS in the payment form — `nickname` and expiry unescaped,
+same class as #394), **#421** (wrong text domain in `class-payment-gateway.php:2188`), **#427** (API
+response bodies logged unredacted while the request side no longer is), **#429** (three
+background-job leftovers). Gotchas: **180**.
 
 ## Program status (high level)
 
@@ -101,23 +135,26 @@ are closed. The `Инбокс` column is empty — everything triaged into `Бэ
 
 ## Next Actions
 
-0. **Ничего не висит.** PR #413 смержен, ветка удалена, дерево на `main`, Инбокс пуст.
-   Следующая сессия начинается с работы, а не с хвостов.
-1. **#411 — мой кандидат на первое место.** Сервер режет список локаций на 500 и честно ставит флаг
-   `truncated`, а JS его выбрасывает: для покупателя это «моего города нет». Дефект, а не полировка,
-   и тот же класс тихого отказа, что #405.
-2. **#383 — критический IDOR** из ревью 27B (#383–#402). Подписчик читает и удаляет чужие
-   сохранённые карты. Самое тяжёлое из всего бэклога.
-3. **#412**, **#415** — UX-остатки вкладки: набор значений НП не обновляется на лету; кнопка
-   «Сохранить» не блокируется при чужом провайдере (сервер отказывает, но только после клика).
-4. **#405 — долг по проверке.** Вживую не подтверждена: заведомо неверный ключ СДЭК дал те же
-   результаты, что и валидный. Прежде чем мерить — найти условие, при котором фикстура реально падает.
-5. **Настройки приложения Orca** — панели Settings не пройдены. `orca computer` умеет их водить,
-   но только когда нет живых воркеров.
-6. **#374 (названия опций и словарь значений)** — НЕ начинать без оператора, его прямая просьба.
-7. **#379 (цвет/текст кнопки карты)** — низкий приоритет; `resolve_accent_color()` уже реализован.
-8. **Ревью локальной 27B — 20 карточек #383–#402 в `Инбокс`**, приоритизация за оператором.
-   **#383 — критический IDOR**, чинить первым. Ещё 6 развилок в комментарии к #382.
+0. **Два PR ждут ТЕБЯ, оба зелёные.** #423 (#411, обрезка списка на 500 — есть вопрос по
+   формулировке) и #422 (#412 + #415, вкладка настроек). В теле каждого пошаговый чек-лист для
+   браузера. Мержить после твоей проверки.
+1. **Довести три ветки, оставшиеся в работе.** Ветки существуют, ничего не запушено:
+   `fix/395-mask-license-key-in-logs` (#395 — три круга воркера и три прохода критика),
+   `fix/385-392-398-401-payment-gateway` (#385/#392/#398/#401),
+   `fix/389-boolean-multi-setting` (#389). Где каждая остановилась — в `sessions/s84.md`.
+2. **#387** — плоский список опций: клиент шлёт индекс, сервер его принимает, в опции ложится `"1"`
+   вместо `"green"`. **Намеренно отложена за #422:** её клиентская половина живёт в
+   `src/components/control-field.js`, который правит #422. Брать сразу после мержа #422.
+3. **Остаток ревью 27B:** #385–#402 минус закрытые. Не тронуты: #391, #393, #396, #397, #399,
+   #400, #402. Ещё 6 развилок в комментарии к #382 — они за тобой.
+4. **Новые карточки s84:** #416 (stored-XSS в форме оплаты — тот же класс, что #394),
+   #421 (текст-домен), #427 (тело ответа логируется без редактирования), #429 (остатки по джобам).
+5. **#405 — долг по проверке.** Вживую не подтверждена. Прежде чем мерить — найти условие, при
+   котором фикстура СДЭК реально падает, иначе замер бессмысленный.
+6. **Настройки приложения Orca** — панели Settings не пройдены. `orca computer` умеет их водить,
+   но только когда нет живых воркеров и с твоего согласия.
+7. **#374 (названия опций и словарь значений)** — НЕ начинать без тебя, твоя прямая просьба.
+8. **#379 (цвет/текст кнопки карты)** — низкий приоритет; `resolve_accent_color()` уже реализован.
 9. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
 10. **Постановки оператора:** #331, #332. **Отложено до релиза:** #285, #247.
     **Старое:** #289, #270, #310, #318, #321, #322.

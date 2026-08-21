@@ -60,20 +60,32 @@ invoke them rather than recalling a flag. Their guides are version-matched to th
 remembered from a previous release is a guess. Recipe, placement rules and the traps that cost s83
 real time: `docs-internal/wiki/orchestrating-agents-with-orca.md`.
 
-Three project facts no skill knows, because they are ours:
+Five project facts no skill knows, because they are ours:
 
 1. **A fresh worktree needs NO install step.** `orca.yaml` shares `node_modules`,
-   `.worktreeinclude` copies `vendor` and the local config. Never put "run composer install and
-   npm ci" in a brief — it is stale and wastes a worker's lap.
+   `.worktreeinclude` copies `vendor`, `plugins-reference` and the local config. Never put "run
+   composer install and npm ci" in a brief — it is stale and wastes a worker's lap.
 2. **Every subagent brief carries the WORKER's own worktree path** for Serena `activate_project`,
    never this repo's root, and requires the worker to verify the activation took. Copying the path
    from this file is how s83 split two workers' edits into the wrong tree, silently.
-3. **`input_accepted` is not proof a worker started.** Read its buffer once, early; if the prompt
-   sits there unsubmitted, send `orca terminal send --terminal <handle> --text "" --enter`. Every
-   Codex launch in s83 needed it.
+3. **`input_accepted` is not proof a worker started**, and for Codex the launch itself is not
+   either: `worker-start --agent codex` produced a bare PowerShell terminal three times out of four
+   in s84, and the shell executed the brief as a here-string. Codex takes four steps —
+   `terminal create --command codex` → ESC the `codex-update-prompt` → `dispatch --inject` →
+   `terminal send --text "" --enter` — and you read the buffer back after each
+   (gotcha `starting-codex-under-orca-needs-four-steps-not-one`).
+4. **Cap the wave at three agents.** At six, free RAM hit 0.4 GB of 15.3 and a starting Codex died
+   on `VirtualAlloc`; even at three, `phpcs` failed in ways that read as code defects and jest
+   OOM'd (gotcha `three-agents-is-the-concurrency-cap-on-this-machine`).
+5. **A worker's green gate is not this tree's green gate.** A worktree can skip tests the primary
+   checkout runs, and its `npm run build` can never match CI's. Generated bundles are built in the
+   PRIMARY CHECKOUT only (gotchas `a-worktree-silently-skips-five-contract-tests`,
+   `local-npm-run-build-is-not-assets-parity-evidence`). And `phpunit.xml` sets
+   `executionOrder="depends,defects"`, so `rm -f .phpunit.result.cache` before every measurement or
+   two runs of the same tree disagree.
 
-Codex is launched through orchestration (`worker-start --agent codex`) or an Orca terminal, never
-through `codex exec` — gotcha `codex-shell-sandbox-broken-windows`.
+Codex is launched through an Orca terminal (see fact 3 for the four steps), never through
+`codex exec` — gotcha `codex-shell-sandbox-broken-windows`.
 
 ## Where to look things up
 

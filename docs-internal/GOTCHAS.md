@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 178 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 180 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -131,6 +131,9 @@
 ### [js/*] — JavaScript language traps
 - [js/jquery-event-worlds] **A jQuery `.trigger( 'change' )` fires no native event — and that is how select2 reports a pick.** → [jquery-trigger-change-fires-no-native-event](gotchas/jquery-trigger-change-fires-no-native-event.md) (s66)
 - [js/object-as-map] **A plain object is not an insertion-ordered map, and not a safe one.** → [plain-object-is-not-an-insertion-ordered-map](gotchas/plain-object-is-not-an-insertion-ordered-map.md) (s59)
+
+- [testing/global-stub-collision] **A `class_exists`-guarded global test stub is won by whichever file loads first — one file returning `get_id() === 0` silently broke an untouched test in another directory.** → [a-class-exists-guarded-test-stub-is-won-by-whoever-loads-first](gotchas/a-class-exists-guarded-test-stub-is-won-by-whoever-loads-first.md) (s84)
+- [testing/result-cache] **`executionOrder="depends,defects"` + a stale `.phpunit.result.cache` makes the same tree report 45 errors on one run and 2 failures on the next.** → [phpunit-result-cache-makes-a-run-unreproducible](gotchas/phpunit-result-cache-makes-a-run-unreproducible.md) (s84)
 
 ### [testing/js] — JavaScript testing pitfalls
 - [testing/js] **PowerShell drops `--roots` from the documented jest command.** → [powershell-drops-the-roots-flag-from-the-jest-command](gotchas/powershell-drops-the-roots-flag-from-the-jest-command.md) (s73)
