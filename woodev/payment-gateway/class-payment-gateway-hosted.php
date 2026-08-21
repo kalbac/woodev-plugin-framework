@@ -581,9 +581,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 								sprintf(
 									__( '%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)', 'woodev-plugin-framework' ),
 									$this->get_method_title(),
-									$token->get_type_full(),
-									$token->get_last_four(),
-									$token->get_exp_date()
+									esc_html( $token->get_type_full() ),
+									esc_html( $token->get_last_four() ),
+									esc_html( $token->get_exp_date() )
 								)
 							);
 

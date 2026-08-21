@@ -704,7 +704,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			}
 
 			if ( $last_four = $token->get_last_four() ) {
-				$html .= "&bull; &bull; &bull; {$last_four}";
+				$html .= '&bull; &bull; &bull; ' . esc_html( $last_four );
 			}
 
 			/**

@@ -560,8 +560,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					$this->get_method_title(),
 					$this->is_test_environment() ? esc_html_x( 'Test', 'noun, software environment', 'woodev-plugin-framework' ) : '',
 					$this->perform_credit_card_authorization( $order ) ? esc_html_x( 'Authorization', 'credit card transaction type', 'woodev-plugin-framework' ) : esc_html_x( 'Charge', 'noun, credit card transaction type', 'woodev-plugin-framework' ),
-					Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ),
-					$last_four
+					esc_html( Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ) ),
+					esc_html( $last_four )
 				);
 
 				// add the expiry date if it is available
@@ -570,7 +570,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					$message .= ' ' . sprintf(
 						/** translators: Placeholders: %s - credit card expiry date */
 						__( '(expires %s)', 'woodev-plugin-framework' ),
-						$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
+						esc_html( $order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 ) )
 					);
 				}
 
