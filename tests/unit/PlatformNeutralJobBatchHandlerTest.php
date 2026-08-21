@@ -42,6 +42,54 @@ class Testable_Platform_Neutral_Job_Batch_Handler extends \Woodev_Job_Batch_Hand
 	public function render_js_public(): void {
 		$this->render_js();
 	}
+
+	/**
+	 * Exposes job status formatting for testing.
+	 *
+	 * @param object $job Job status source.
+	 * @return object
+	 */
+	public function process_job_status_public( $job ) {
+		return $this->process_job_status( $job );
+	}
+
+	/**
+	 * Requires an explicit capability from the consumer plugin.
+	 *
+	 * @return string
+	 */
+	protected function get_required_capability(): string {
+		return 'manage_woocommerce';
+	}
+
+	/**
+	 * Tracks whether ajax_process_batch() tried to process a job.
+	 *
+	 * @var bool
+	 */
+	public $processed_batch = false;
+
+	/**
+	 * Job returned by the test batch processor.
+	 *
+	 * @var object|null
+	 */
+	public $batch_job;
+
+	/**
+	 * Test double for the batch processor.
+	 *
+	 * @param string $job_id Job identifier.
+	 * @return object
+	 */
+	public function process_batch( $job_id ) {
+		$this->processed_batch = true;
+
+		return $this->batch_job ?: (object) [
+			'progress' => 1,
+			'total'    => 1,
+		];
+	}
 }
 
 /**
@@ -93,5 +141,109 @@ class PlatformNeutralJobBatchHandlerTest extends TestCase {
 			'window.test_job_batch_handler = new Woodev_Job_Batch_Handler( {"id":"test_job","process_nonce":"nonce-test_job_process_batch","cancel_nonce":"nonce-test_job_cancel_job"} );',
 			$woodev_queued_js
 		);
+	}
+
+	/**
+	 * A zero-item job has already completed in the background handler, so the
+	 * batch response must report 100% rather than throw a division-by-zero error.
+	 *
+	 * @return void
+	 */
+	public function test_process_job_status_marks_zero_total_completed_job_as_complete(): void {
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$job     = (object) [
+			'status'   => 'completed',
+			'progress' => 0,
+			'total'    => 0,
+		];
+
+		$result = $handler->process_job_status_public( $job );
+
+		$this->assertSame( '100.00', $result->percentage );
+	}
+
+	/**
+	 * The public AJAX path returns a completed zero-item job at 100%, avoiding an
+	 * uncaught DivisionByZeroError and a 500 response.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_process_batch_returns_completed_zero_total_job(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+		$handler->batch_job = (object) [
+			'status'   => 'completed',
+			'progress' => 0,
+			'total'    => 0,
+		];
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( true );
+		Functions\expect( 'wp_send_json_success' )->once()->with(
+			Mockery::on(
+				static function ( array $job ): bool {
+					return 'completed' === $job['status'] && '100.00' === $job['percentage'];
+				}
+			)
+		);
+
+		$_POST['job_id'] = 'job-1';
+		$handler->ajax_process_batch();
+		unset( $_POST['job_id'] );
+	}
+
+	/**
+	 * A nonce does not authorize a user without the consumer-selected capability
+	 * to process a job batch.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_process_batch_rejects_user_without_required_capability(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'wp_send_json_success' )->justReturn( null );
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( false );
+		Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::type( 'array' ), 403 );
+
+		$_POST['job_id'] = 'job-1';
+		$handler->ajax_process_batch();
+		unset( $_POST['job_id'] );
+
+		$this->assertFalse( $handler->processed_batch );
+	}
+
+	/**
+	 * A nonce does not authorize a user without the consumer-selected capability
+	 * to delete a job.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_cancel_job_rejects_user_without_required_capability(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldNotReceive( 'delete_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\when( 'wp_send_json_success' )->justReturn( null );
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( false );
+		Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::type( 'array' ), 403 );
+
+		$_POST['job_id'] = 'job-1';
+		$handler->ajax_cancel_job();
+		unset( $_POST['job_id'] );
 	}
 }

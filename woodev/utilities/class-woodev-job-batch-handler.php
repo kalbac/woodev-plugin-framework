@@ -8,9 +8,11 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 	 * The job batch handler class.
 	 *
 	 * This provides a way for plugins to process "background" jobs in batches when
-	 * regular background processing isn't available.
+	 * regular background processing isn't available. Concrete subclasses must
+	 * implement get_required_capability() with the capability that authorizes their
+	 * users to process or cancel jobs; a nonce alone is not authorization.
 	 */
-	class Woodev_Job_Batch_Handler {
+	abstract class Woodev_Job_Batch_Handler {
 
 		/** @var Woodev_Background_Job_Handler job handler instance */
 		protected $job_handler;
@@ -125,6 +127,11 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			check_ajax_referer( $this->get_job_handler()->get_identifier() . '_process_batch', 'security' );
 
+			if ( ! current_user_can( $this->get_required_capability() ) ) {
+				wp_send_json_error( [ 'message' => __( 'У вас нет прав для управления фоновыми задачами.', 'woodev-plugin-framework' ) ], 403 );
+				return;
+			}
+
 			$job_id = isset( $_POST['job_id'] ) ? sanitize_text_field( $_POST['job_id'] ) : '';
 
 			if ( empty( $job_id ) ) {
@@ -159,6 +166,11 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			check_ajax_referer( $this->get_job_handler()->get_identifier() . '_cancel_job', 'security' );
 
+			if ( ! current_user_can( $this->get_required_capability() ) ) {
+				wp_send_json_error( [ 'message' => __( 'У вас нет прав для управления фоновыми задачами.', 'woodev-plugin-framework' ) ], 403 );
+				return;
+			}
+
 			$job_id = isset( $_POST['job_id'] ) ? sanitize_text_field( $_POST['job_id'] ) : '';
 
 			if ( empty( $job_id ) ) {
@@ -182,7 +194,9 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 */
 		protected function process_job_status( $job ) {
 
-			$job->percentage = Woodev_Helper::number_format( (int) $job->progress / (int) $job->total * 100 );
+			$job->percentage = 0 === (int) $job->total
+				? Woodev_Helper::number_format( 100 )
+				: Woodev_Helper::number_format( (int) $job->progress / (int) $job->total * 100 );
 
 			return $job;
 		}
@@ -227,6 +241,19 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			return $items_per_batch > 0 ? $items_per_batch : 1;
 		}
+
+
+		/**
+		 * Gets the capability required to process and cancel jobs.
+		 *
+		 * Every concrete batch handler must choose the capability that grants access
+		 * to its jobs. This is required because a nonce protects only against CSRF.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		abstract protected function get_required_capability(): string;
 
 
 		/**
