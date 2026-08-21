@@ -168,24 +168,50 @@ by exactly one bit:
 
 One search path, one flag.
 
-### 8. Linked mode is derived, not configured
+### 8. Linked mode is a checkbox, defaulting to on
 
-There is **no setting**. Linked mode switches on automatically when the capability is there: a
-region field in the chain, and a provider that can narrow settlement search by region for the
-selected country.
+**Decision revised** later the same day. The first version had no setting at all — linked mode
+derived purely from capability, overridable only by filter. The operator overruled it, and the
+reason is one this design had not priced: **support load.** A filter-only override turns every
+merchant who wants "let them type the settlement without a region" into a ticket whose answer is
+"write code" — which for most of them means hiring someone.
 
-The reasoning is not "fewer options". It is an **asymmetry of visibility**. A merchant offered a
-switch weighs a *visible* small cost (an extra checkout field, a conversion worry) against an
-*invisible* large one (a customer who could not find their "Октябрьский" and silently left). People
-optimise what they can see. This is the project's standing rule: an obligation the author can
-silently forget must be **enforced, plus a filter override** — never an optional parameter.
+The shape:
 
-The condition is stated carefully, because **presence is not precedence**. A region field existing
-is about the address contract — the carrier needs a region regardless. Linkage is about input order
-and search quality. Deriving linkage from "a region field exists" alone would conflate the two.
+- a single checkbox, **"включить гранулярность"**, global rather than per-country;
+- **default ON** whenever the capability is there: a region field in the chain, and a provider that
+  can narrow settlement search by region for the selected country;
+- **off and inactive** when the region field cannot be relied on — the `Регион` option set to
+  `Удалять`, or the field removed by other code.
 
-An override exists as a **filter**, not a setting. Anyone who genuinely must disable it does so in
-code, deliberately. The filter ships even with no consumer.
+The original objection still stands and is worth stating rather than burying: a switch lets a
+merchant trade an *invisible* large cost (a customer who could not find their settlement and left)
+for a *visible* small one (a field in the checkout). **Default-ON absorbs most of it** — the safe
+state is free, and turning it off becomes a deliberate act rather than an unset checkbox.
+
+Two things the checkbox needs to be safe.
+
+**The inactive state must explain itself.** A greyed-out checkbox with no reason is exactly the
+complaint in #412 — "выглядит как оно не работает". The merchant sees the prohibition and not
+what lifts it, so the reason has to be on screen.
+
+**Third-party detection must not be load-bearing.** `Регион = Удалять` is our own option and reads
+deterministically server-side. But a field removed by another plugin or by the theme is only
+visible to us if it goes through our registry; a late `woocommerce_checkout_fields` filter, or a
+removal in JS, we cannot see at all.
+
+So the dependency is inverted: **granularity self-releases on read when the region is not actually
+in the chain.** Undetected third-party removal then degrades to country-wide search rather than to
+a dead field the shopper cannot escape — the same self-releasing pattern already agreed in #406.
+Detection is then only needed to grey the checkbox nicely in the admin, and its imperfection stops
+being dangerous.
+
+That also settles global-versus-per-country: **global**, because in a country without the
+capability it self-releases anyway.
+
+The checkbox is a **new stored option**, so existing installs need a defined default. Default-ON
+means they gain the behaviour on upgrade, which is intended — but it is a deliberate choice, not a
+side effect.
 
 ### 9. The region is a correctness precondition, enforced on the server
 
@@ -208,6 +234,10 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
 - Whether `search_settlements_within` and `search_settlements_countrywide` are one contract method
   with an optional scope or two, given decision 7 collapses the difference to one bit.
 - What the settlement field offers when a provider declares neither settlement-search capability.
+- **Does the merchant learn when granularity self-releases at runtime?** The checkbox says on, the
+  region was removed by other code, and the field quietly falls back to country-wide search. Silent
+  degradation is honest towards the shopper, but the merchant will believe the setting is in
+  effect. If we surface it, where — a hint at the checkbox, or a notice on the orders screen?
 
 ## Related
 
