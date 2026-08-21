@@ -267,6 +267,11 @@ export default function App() {
 			} );
 		} );
 
+		const tabFields = {};
+		( tab.sections || [] ).forEach( ( s ) => {
+			Object.assign( tabFields, s.fields || {} );
+		} );
+
 		return (
 			<Card className="woodev-settings__card">
 				<CardBody>
@@ -288,6 +293,7 @@ export default function App() {
 						key={ `${ tab.id }:${ section.id }` }
 						providerId={ tab.id }
 						section={ section }
+						tabFields={ tabFields }
 						values={ values }
 						conditionValues={ conditionValues }
 						onFieldChange={ ( settingId, value ) =>
