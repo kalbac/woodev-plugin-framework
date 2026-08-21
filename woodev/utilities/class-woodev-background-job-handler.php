@@ -49,6 +49,9 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		/** @var string debug message, used by the system status tool */
 		protected $debug_message;
 
+		/** @var stdClass|object|null job being processed when PHP shuts down */
+		protected $job_being_processed;
+
 
 		/**
 		 * Initiate new background job handler
@@ -549,13 +552,15 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			$this->lock_process();
 
+			// Only the current job may be failed by a fatal error. Registering once
+			// prevents a later fatal from being applied to every earlier job.
+			$this->register_shutdown_handler();
+
 			do {
 
 				// Get next job in the queue
-				$job = $this->get_job();
-
-				// handle PHP errors from here on out
-				register_shutdown_function( array( $this, 'handle_shutdown' ), $job );
+				$job                        = $this->get_job();
+				$this->job_being_processed = $job;
 
 				// Start processing
 				$this->process_job( $job );
@@ -754,6 +759,12 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 				return false;
 			}
 
+			// A shutdown callback can run after a job has already reached a terminal
+			// state. Never corrupt that result or emit a duplicate failure signal.
+			if ( in_array( $job->status, [ 'completed', 'failed' ], true ) ) {
+				return $job;
+			}
+
 			$job->status    = 'failed';
 			$job->failed_at = current_time( 'mysql' );
 
@@ -814,6 +825,17 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$this->clear_scheduled_event();
 		}
 
+
+		/**
+		 * Registers the single shutdown callback for the active process.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function register_shutdown_handler(): void {
+			register_shutdown_function( [ $this, 'handle_shutdown' ] );
+		}
 
 		/**
 		 * Schedule cron healthcheck
@@ -910,16 +932,18 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		/**
 		 * Handles PHP shutdown, say after a fatal error.
 		 *
-		 * @param stdClass|object $job the job being processed
+		 * @since 2.0.2
+		 *
+		 * @return void
 		 */
-		public function handle_shutdown( $job ) {
+		public function handle_shutdown(): void {
 
 			$error = error_get_last();
 
 			// if shutting down because of a fatal error, fail the job
-			if ( $error && E_ERROR === $error['type'] ) {
+			if ( $error && E_ERROR === $error['type'] && $this->job_being_processed ) {
 
-				$this->fail_job( $job, $error['message'] );
+				$this->fail_job( $this->job_being_processed, $error['message'] );
 
 				$this->unlock_process();
 			}
