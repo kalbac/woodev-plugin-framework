@@ -2059,7 +2059,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$this->update_order_meta( $order, 'trans_id', $response->get_transaction_id() );
 
-				update_post_meta( $order->get_id(), '_transaction_id', $response->get_transaction_id() );
+				// use the core WC setter (HPOS-safe) instead of update_post_meta(), which bypasses
+				// the orders table when HPOS is enabled; the `_transaction_id` meta key itself is
+				// unchanged, only how it's written
+				$order->set_transaction_id( $response->get_transaction_id() );
+				$order->save();
 			}
 
 			// transaction date
