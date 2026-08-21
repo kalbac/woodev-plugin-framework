@@ -198,9 +198,11 @@ the task goes to `blocked`; `task-update --status ready` before redispatching. G
 
 **Two gates read green in a worktree and are not.** Five `Contract/Yandex*` tests SKIP there
 because `plugins-reference/` is gitignored (fixed in s84 by adding it to `.worktreeinclude`), and
-`npm run build` reproduces the committed bundles because the worktree shares the primary
-checkout's warm webpack cache — while CI's cold `npm ci && npm run build` does not. PR #422 went
-red on assets parity after two agents had independently measured zero diff. Gotchas:
+`npm run build` in a worktree can never match CI, because webpack resolves the shared
+`node_modules` symlink out of the project and emits `../../../../node_modules/...` module requests,
+which changes every content hash. PR #422 went red on assets parity after two agents had
+independently measured zero diff. Generated bundles must be rebuilt in the primary checkout
+(`git checkout --detach origin/<branch>`, build, push, then `git checkout main`). Gotchas:
 `a-worktree-silently-skips-five-contract-tests`, `local-npm-run-build-is-not-assets-parity-evidence`.
 
 **Every brief needs four standing lines.** They earned their place: every agent told about the
