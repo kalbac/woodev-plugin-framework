@@ -55,6 +55,12 @@ Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and mu
 coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
 Codex, nobody accepts their own work.**
 
+**⛔ Until 27.08.2026, Codex is CRITIC-ONLY** — not a worker, not a planner, not a scout. One
+overnight session burned 45% of the weekly Codex allowance running it in every role at once
+(operator decision, 21.08.2026). Cap the wave at **2–3 agents** and **2–3 rounds per card**; a card
+still REJECTed after the third verdict needs decomposition or an operator decision, not a fourth
+round.
+
 The `orchestration` and `orca-cli` skills are installed globally, so they surface on their own —
 invoke them rather than recalling a flag. Their guides are version-matched to the binary; a flag
 remembered from a previous release is a guess. Recipe, placement rules and the traps that cost s83

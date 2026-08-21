@@ -13,6 +13,12 @@ critical IDOR), **#428** (#384 + #388 + #390 background jobs), **#430** (#389 bo
 **#431** (#385 + #392 + #398 + #401 payment gateway), **#424** and **#425** (worktree gate parity
 + the gotchas that came out of the night).
 
+**⛔ Budget constraint, operator decision 21.08.2026: Codex is CRITIC-ONLY until 27.08.2026.** One
+overnight session burned **45% of the weekly Codex allowance** by running it as worker, planner and
+critic at once. Until that date all implementation goes to Sonnet workers. Standing caps from the
+same decision: **2–3 concurrent agents** (not 5–6) and **2–3 rounds per card** — a card still
+REJECTed after the third verdict needs decomposition or an operator decision, not a fourth round.
+
 **Two PRs are OPEN and waiting for the operator's browser pass, both fully green:**
 
 - **#423 — #411**, the location list silently capped at 500. The PR body carries a four-step rig
