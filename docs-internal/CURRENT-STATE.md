@@ -27,19 +27,22 @@ REJECTed after the third verdict needs decomposition or an operator decision, no
 - **#422 — #412 + #415**, live settlement choices and the Save button disabled for a foreign
   provider. Four-step rig checklist in the PR body.
 
-**#395 is open as PR #433 with CI green and MUST NOT be merged.** Five worker rounds, five critic
-passes, **five REJECTs, every one of them real**. The last two critics did not argue — they invoked
-the sanitizer and watched the secret come back. Still open after round 5: `is_form_encoded_body()`
-infers the form type from the body's own syntax, so a URL-shaped string carrying
-`token=SECRET` and a newline free-text body both get parsed with the secret intact; and a valid
-JSON scalar that IS the secret passes through unchanged. Round 6 landed (`e2b5e39`, pushed to PR #433): it REMOVES the
-form-sniffing branch rather than patching it, because no request class in this codebase declares a
-form-encoded body, and whole-masks scalar JSON. Verified by invoking the sanitizer with all five
-leak shapes. **A sixth critic pass was started and STOPPED mid-run, so `e2b5e39` has NO verdict —
-do not read the absence of a rejection as approval.** The fifth critic's findings are in a comment
-on PR #433. **The question that may need the operator:
-the form type cannot be inferred from the body — either whole-mask every untrusted non-JSON body
-and lose safe sibling fields in the log, or trust only a declared content type.**
+**#395 is open as PR #433 with CI green and MUST NOT be merged.** Six worker rounds, five critic
+REJECTs, every one real. Round 6 (`e2b5e39`) deletes the mechanism that produced the last two leaks
+instead of patching it; **a sixth critic pass was started and stopped mid-run, so it carries NO
+verdict — the absence of a rejection is not an approval.** Details and what the sixth critic should
+have checked: `sessions/s84.md` and the comment on PR #433.
+
+**Design decided in conversation at the end of s84: card #437, spec
+`specs/2026-08-21-settlement-search-design.md`.** It **absorbs #411**. The settlement axis stops
+being a flat list: `list_localities()` for settlements and `LIST_HARD_CAP = 500` are deleted
+rather than tuned, because the cap is a symptom of the framework asking "give me everything in
+scope" (measured in production: ~3000 settlements for Московская область, 3-5 s to render, and the
+select stays slow). The framework stores regions and the shop's 20-30 most-ordered settlements,
+never a settlement dictionary. Three provider capabilities, none of them about bulk. "Связанный
+поиск" is redefined as "the settlement field REQUIRES the region", is derived rather than
+configured, and is overridable only by filter. **PR #423 is deliberately still open** — its
+truncation hint may serve as an interim measure if #437 does not start soon.
 
 **Nobody accepted their own work, and it paid.** Every card that went to a critic came back with
 something real: #394's worker missed a fifth sink in a file it was already editing; #383 was
@@ -47,31 +50,25 @@ REJECTED once and then caught a user-existence oracle on the re-critic; #395 was
 times running. **The strongest habit to copy: the last two #395 critics settled the argument by
 INVOKING the method and pasting what came back, rather than reading the code and reasoning.**
 
-**⚠️ A worktree's test suite is NOT the primary checkout's — the difference is the SKIP count.**
-Measured s84: primary checkout **2475 / 6128 / 66 skipped**, an agent worktree **2475 / 6114 / 71**.
-Five `Contract/Yandex*` classes — release-blocking data-contract guards — skip where
-`plugins-reference/` is absent, and it is gitignored. Fixed in #424 by adding it to
-`.worktreeinclude`; worktrees created BEFORE that fix still skip five. When a worker's numbers
-disagree with a briefed baseline, compare skips first.
+**⚠️ Four s84 warnings about our own tooling — each fully owned by a gotcha, hooks only here:**
 
-**⚠️ Generated bundles are built in the PRIMARY CHECKOUT, never in a worktree.** PR #422 went red on
-`Assets build parity` after two agents had independently measured zero diff locally. `node_modules`
-is shared by symlink, webpack resolves it out of the project and emits `../../../../node_modules/…`
-module requests, which changes every content hash. Rebuild at a detached HEAD in the primary
-checkout, push, then `git checkout main` — the rig serves that tree. Gotcha
-`local-npm-run-build-is-not-assets-parity-evidence`.
+- **A worktree's suite is not this tree's suite.** Primary checkout **66 skipped**, a worktree
+  before #424 **71** — five release-blocking Yandex contract guards, silently. When a worker's
+  numbers disagree with a baseline, **compare skips first, not assertions**.
+  `a-worktree-silently-skips-five-contract-tests`
+- **`rm -f .phpunit.result.cache` before every measurement.** `executionOrder="depends,defects"`
+  made the same tree report 45 errors on one run and 2 failures on the next.
+  `phpunit-result-cache-makes-a-run-unreproducible`
+- **Generated bundles are built in the PRIMARY CHECKOUT, never in a worktree** — PR #422 went red
+  on parity after two agents each measured zero diff locally.
+  `local-npm-run-build-is-not-assets-parity-evidence`
+- **Three agents is the memory ceiling here**; above it phpcs and jest fail in ways that read as
+  code defects. `three-agents-is-the-concurrency-cap-on-this-machine`
 
-**⚠️ Three agents is this machine's cap.** At six, free RAM hit 0.4 GB of 15.3 and a starting Codex
-died on `VirtualAlloc`. Even at three, jest OOM'd once and `phpcs` failed twice in ways that read as
-code defects — once OOM, once with five PHPCS *internal* exceptions blaming innocent files, which
-were `shell_exec()` fork failures. Warn every brief; the agents that were warned reported the OOM
-instead of claiming a green gate. Gotcha `three-agents-is-the-concurrency-cap-on-this-machine`.
-
-**Launching Codex takes four steps, not one:** `terminal create --command codex` → ESC the
-`codex-update-prompt` → `dispatch --inject` → `terminal send --text "" --enter`, then read the
-buffer back. `worker-start --agent codex` produced a bare PowerShell terminal three times out of
-four and the shell executed the brief as a here-string. Gotcha
-`starting-codex-under-orca-needs-four-steps-not-one`.
+Also: launching Codex takes four steps, not one
+(`starting-codex-under-orca-needs-four-steps-not-one`), and a `class_exists`-guarded global test
+stub is won by whichever file loads first
+(`a-class-exists-guarded-test-stub-is-won-by-whoever-loads-first`).
 
 **⚠️ #405 is still NOT rig-verified** — unchanged from s83, and nothing in s84 touched it. With a
 deliberately bogus CDEK client id (confirmed in wp-config, transient cleared, measured against a
