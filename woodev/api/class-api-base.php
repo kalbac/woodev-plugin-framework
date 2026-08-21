@@ -278,19 +278,20 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * interface — for a request class that wants full control over its own
 		 * masking. Falls back to the real {@see self::get_request_path()} when it
 		 * doesn't. Either way, the result is then run through
-		 * {@see self::redact_secret_query_params()} unconditionally: a request
+		 * {@see self::redact_secret_query_string()} unconditionally: a request
 		 * class implementing `get_path_safe()` gets a harmless second pass over
 		 * an already-masked value, but a request class that implements NO masking
 		 * of its own — the common case, and the one a future or third-party
 		 * extension is most likely to be — is never logged with its raw path.
-		 * Before this fix, that fallback path was the raw, unmasked one; a
-		 * request carrying a credential under an unrecognised param name (e.g.
-		 * `token`, `api_key`, `secret`, `instance_id`) still logged it in clear
-		 * text by default — see #395 (Blocking 1).
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 made fail-safe by default via {@see self::redact_secret_query_params()}
-		 *              instead of falling back to the raw path unconditionally.
+		 * @since 2.0.2 made fail-safe by default via redaction instead of falling
+		 *              back to the raw path unconditionally — #395 Blocking 1.
+		 * @since 2.0.2 redaction now parses the query string structurally via
+		 *              {@see self::redact_secret_query_string()} instead of
+		 *              scanning it with a `name=value` regex, so a secret nested
+		 *              under a NON-secret param name at any depth (e.g.
+		 *              `a[token]=…`) is still caught — #395 Round 4, Blocking.
 		 *
 		 * @return string
 		 */
@@ -302,7 +303,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				? $request->get_path_safe()
 				: $this->get_request_path();
 
-			return self::redact_secret_query_params( $path, $this->get_secret_param_names() );
+			return self::redact_secret_query_string( $path, $this->get_secret_param_names() );
 		}
 
 		/**
@@ -310,7 +311,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * Same as {@see self::get_request_uri()} but built from
 		 * {@see self::get_sanitized_request_path()}, and with
-		 * {@see self::redact_secret_query_params()} run again on the FINAL
+		 * {@see self::redact_secret_query_string()} run again on the FINAL
 		 * string — AFTER the `woodev_{api_id}_api_request_uri` filter, not
 		 * before. A filter attached to that hook can append its own query
 		 * param (some third-party transports do, e.g. a signature or replay
@@ -323,6 +324,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 redaction now runs AFTER the request-uri filter, not before.
+		 * @since 2.0.2 redaction now parses the query string structurally via
+		 *              {@see self::redact_secret_query_string()} — #395 Round 4, Blocking.
 		 *
 		 * @return string
 		 */
@@ -331,7 +334,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$uri = $this->request_uri . $this->get_sanitized_request_path();
 			$uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
 
-			return self::redact_secret_query_params( $uri, $this->get_secret_param_names() );
+			return self::redact_secret_query_string( $uri, $this->get_secret_param_names() );
 		}
 
 
@@ -419,26 +422,34 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		/**
 		 * Redacts every occurrence of a known secret param name anywhere it
-		 * appears in $text — a URI's query string, a request/response body of
-		 * ANY format, or free text such as a transport-thrown WP_Error message
-		 * that happens to embed the URI it was given (see #395). $text is
-		 * scanned for two shapes, independent of whether it happens to be a
-		 * well-formed `path?query` string, a form-encoded body, an XML body, or
-		 * an arbitrary error message:
+		 * appears in $text, by SCANNING the raw string for two shapes — this is
+		 * the regex-based backstop, kept (only) for text that {@see self::redact_secret_request_body()}
+		 * cannot structurally parse (XML, form-encoded, or free text such as a
+		 * transport-thrown WP_Error message that happens to embed the URI it was
+		 * given, see #395), and for {@see self::handle_response()}. A well-formed
+		 * `path?query` string is no longer scanned by this routine — see
+		 * {@see self::redact_secret_query_string()}, which parses it structurally
+		 * instead, so it cannot corrupt anything it rebuilds — #395 Round 4.
 		 *
-		 * - `name=value` (query string / form body), including the nested-array
-		 *   shape `http_build_query()` emits for an array value — both the
-		 *   percent-encoded wire form (`name%5Bsub%5D=value`) and the literal
-		 *   form (`name[sub]=value`) — matched by the array's own top-level
-		 *   name; the bracket suffix is preserved untouched in the output, only
-		 *   the value is masked;
+		 * $text is scanned for two shapes:
+		 *
+		 * - `name=value` (form-encoded body / free text), including the
+		 *   nested-array shape `http_build_query()` emits for an array value —
+		 *   both the percent-encoded wire form (`name%5Bsub%5D=value`) and the
+		 *   literal form (`name[sub]=value`) — matched against EVERY bracket
+		 *   segment of the key, not only the first, so a secret nested under a
+		 *   NON-secret outer name (`a[token]=…`) is still caught — #395 Round 4,
+		 *   Blocking. The key is URL-decoded (`+` included, so `api+key=…`
+		 *   canonicalizes the same as `api_key=…`) before any segment is
+		 *   compared — #395 Round 4, SHOULD-FIX. The bracket suffix is preserved
+		 *   untouched in the output, only the value is masked;
 		 * - `<name>value</name>` (a single, non-nested XML element) — the
-		 *   backstop {@see self::get_sanitized_request_body()} needs now that it
-		 *   runs this same routine over whatever an XML (or other non-JSON)
-		 *   request class's `to_string_safe()` returns, format be damned — see
-		 *   #395 Round 3, Blocking 2. {@see Woodev_API_XML_Request::to_string_safe()}
-		 *   is a concrete example already in this codebase of a `to_string_safe()`
-		 *   that applies NO masking of its own.
+		 *   backstop {@see self::get_sanitized_request_body()} needs for an XML
+		 *   (or other non-JSON) request class's `to_string_safe()` that masks
+		 *   nothing of its own — see #395 Round 3, Blocking 2.
+		 *   {@see Woodev_API_XML_Request::to_string_safe()} is a concrete example
+		 *   already in this codebase of a `to_string_safe()` that applies NO
+		 *   masking of its own.
 		 *
 		 * A candidate name is matched against $secret_names case- and
 		 * separator-insensitively (`api_key`, `api-key`, `apikey`, and `apiKey`
@@ -464,17 +475,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * no generic way to know which segment of an arbitrary path is the
 		 * secret one).
 		 *
-		 * This is the fail-safe backstop for
-		 * {@see self::get_sanitized_request_path()} (when a request class
-		 * implements no `get_path_safe()` of its own),
-		 * {@see self::get_sanitized_request_uri()} (run AFTER the
-		 * `woodev_{api_id}_api_request_uri` filter, so a filter that itself
-		 * appends a secret-bearing param cannot bypass it),
-		 * {@see self::get_sanitized_request_body()} (when a request class's
-		 * `to_string_safe()` masks nothing, or masks in a format this routine
-		 * doesn't otherwise recognise), and {@see self::handle_response()} (a
-		 * transport-thrown WP_Error message).
-		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 also matches a name's nested/percent-encoded/casing
 		 *              variants instead of only its exact literal spelling, also
@@ -482,6 +482,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              {@see self::SECRET_VALUE_MASK} instead of a
 		 *              length-revealing run of `*` — #395 Round 3 (Blocking 1 & 2,
 		 *              and the masking-shape SHOULD-FIX).
+		 * @since 2.0.2 checks EVERY bracket segment of a key, not only the first,
+		 *              and URL-decodes the key (so `+` is treated as a space)
+		 *              before canonicalizing; no longer scans a `path?query`
+		 *              string (see {@see self::redact_secret_query_string()}) or a
+		 *              successfully-decoded JSON body (see
+		 *              {@see self::redact_secret_request_body()}) — #395 Round 4
+		 *              (Blocking, both SHOULD-FIXes).
 		 *
 		 * @param string             $text
 		 * @param array<int, string> $secret_names
@@ -496,16 +503,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
 
 			$text = (string) preg_replace_callback(
-				'/([A-Za-z0-9_\-\[\]%]+)=([^&\s]*)/',
+				'/([A-Za-z0-9_\-\[\]%+]+)=([^&\s]*)/',
 				static function ( array $matches ) use ( $canonical_secret_names ): string {
 
-					$base_name = self::get_query_param_base_name( $matches[1] );
+					foreach ( self::get_query_param_name_segments( $matches[1] ) as $segment ) {
 
-					if ( ! in_array( self::canonicalize_secret_param_name( $base_name ), $canonical_secret_names, true ) ) {
-						return $matches[0];
+						if ( in_array( self::canonicalize_secret_param_name( $segment ), $canonical_secret_names, true ) ) {
+							return $matches[1] . '=' . self::SECRET_VALUE_MASK;
+						}
 					}
 
-					return $matches[1] . '=' . self::SECRET_VALUE_MASK;
+					return $matches[0];
 				},
 				$text
 			);
@@ -522,6 +530,155 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				},
 				$text
 			);
+		}
+
+		/**
+		 * Redacts a `path?query` or full URI string by PARSING its query string
+		 * structurally, instead of scanning the text with a regex — the fix for
+		 * #395 Round 4, Blocking: {@see self::redact_secret_query_params()} only
+		 * ever compared the FIRST bracket segment of a key against the denylist,
+		 * so a secret nested under a non-secret outer name (`a[token]=SECRET`,
+		 * literal or percent-encoded) sailed through untouched.
+		 *
+		 * `parse_str()` decodes the query string into a real, arbitrarily-nested
+		 * PHP array — handling percent-encoding, `+`-as-space, and bracket
+		 * nesting the same way `http_build_query()` (which built the query in
+		 * the first place) emits them, for free. {@see self::redact_secret_values_recursively()}
+		 * then walks that array and redacts by canonicalized key at ANY depth,
+		 * and the result is rebuilt with `http_build_query()` — never by editing
+		 * the original text, so this cannot corrupt anything the way a text-scan
+		 * over an unrelated format can (see {@see self::redact_secret_request_body()}
+		 * for the JSON-body version of the same problem).
+		 *
+		 * Only the LOG string is rebuilt here; the request actually sent to the
+		 * server is always built independently from the real, unredacted params
+		 * (see {@see self::get_request_uri()}), so a rebuild being acceptable for
+		 * a log line has no bearing on the wire request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string             $text A path (`?query` included), or a full URI.
+		 * @param array<int, string> $secret_names
+		 * @return string
+		 */
+		protected static function redact_secret_query_string( string $text, array $secret_names ): string {
+
+			if ( '' === $text || empty( $secret_names ) ) {
+				return $text;
+			}
+
+			$query_start = strpos( $text, '?' );
+
+			if ( false === $query_start ) {
+				return $text;
+			}
+
+			$query_string = substr( $text, $query_start + 1 );
+
+			if ( '' === $query_string ) {
+				return $text;
+			}
+
+			parse_str( $query_string, $params );
+
+			if ( empty( $params ) ) {
+				return $text;
+			}
+
+			$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
+			$redacted_params        = self::redact_secret_values_recursively( $params, $canonical_secret_names );
+
+			return substr( $text, 0, $query_start + 1 ) . http_build_query( $redacted_params, '', '&' );
+		}
+
+		/**
+		 * Redacts a request/response BODY, for logging — dispatches on format
+		 * instead of running one text-scanning regex over every shape, per #395
+		 * Round 4 (SHOULD-FIX 2): a JSON body containing the literal text
+		 * `token=value` inside a legitimate string field used to be truncated by
+		 * {@see self::redact_secret_query_params()}'s `name=value` scan, corrupting
+		 * a body the redactor was never meant to touch.
+		 *
+		 * A body that decodes as JSON is walked and redacted STRUCTURALLY —
+		 * `json_decode()`, {@see self::redact_secret_values_recursively()} by key
+		 * at any depth, `json_encode()` back — so a secret-shaped substring
+		 * embedded in an unrelated string VALUE is never touched, and the result
+		 * is always valid JSON because it was rebuilt from a decoded structure,
+		 * never edited as text.
+		 *
+		 * A body that does NOT decode as JSON (form-encoded, XML, a `print_r()`
+		 * dump, or anything else — "if it does not decode, it is not JSON") falls
+		 * back to {@see self::redact_secret_query_params()}, unchanged from
+		 * before: its `name=value` pass masks a form-encoded body, its
+		 * `<name>value</name>` pass masks an XML body, and a `print_r()` dump
+		 * (`[name] => value`) matches neither shape and passes through
+		 * untouched — which is correct, not a gap, because
+		 * {@see Woodev_Licensing_API_Request::to_string_safe()} already masked
+		 * its own `[license]` entry before handing the dump to this method; this
+		 * routine only needs to catch what a request class did NOT mask itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string             $body
+		 * @param array<int, string> $secret_names
+		 * @return string
+		 */
+		protected static function redact_secret_request_body( string $body, array $secret_names ): string {
+
+			if ( '' === $body || empty( $secret_names ) ) {
+				return $body;
+			}
+
+			$decoded = json_decode( $body, true );
+
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+
+				$canonical_secret_names = array_unique( array_map( [ self::class, 'canonicalize_secret_param_name' ], $secret_names ) );
+				$redacted               = self::redact_secret_values_recursively( $decoded, $canonical_secret_names );
+				$encoded                = json_encode( $redacted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+
+				return false !== $encoded ? $encoded : $body;
+			}
+
+			return self::redact_secret_query_params( $body, $secret_names );
+		}
+
+		/**
+		 * Walks a decoded query-string or JSON array and redacts the value of
+		 * every entry whose KEY canonicalizes to a denylisted name, AT ANY DEPTH
+		 * — not only the top level. A matching key's entire value is replaced
+		 * with {@see self::SECRET_VALUE_MASK} in one shot, even when that value
+		 * is itself an array (e.g. `token[primary]=…`): there is no safe way to
+		 * partially mask a subtree whose very key is the secret's name. A
+		 * NON-matching key whose value is an array is recursed into, so a secret
+		 * nested under a non-secret outer name (`a[token]=…`) is still caught —
+		 * #395 Round 4, Blocking.
+		 *
+		 * Shared by {@see self::redact_secret_query_string()} (query strings) and
+		 * {@see self::redact_secret_request_body()} (JSON bodies) so both use the
+		 * exact same nesting rule.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $values
+		 * @param array<int, string>       $canonical_secret_names Already-canonicalized names.
+		 * @return array<int|string, mixed>
+		 */
+		private static function redact_secret_values_recursively( array $values, array $canonical_secret_names ): array {
+
+			foreach ( $values as $key => $value ) {
+
+				if ( in_array( self::canonicalize_secret_param_name( (string) $key ), $canonical_secret_names, true ) ) {
+					$values[ $key ] = self::SECRET_VALUE_MASK;
+					continue;
+				}
+
+				if ( is_array( $value ) ) {
+					$values[ $key ] = self::redact_secret_values_recursively( $value, $canonical_secret_names );
+				}
+			}
+
+			return $values;
 		}
 
 		/**
@@ -543,24 +700,39 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Extracts the top-level param name from a possibly nested/percent-encoded
-		 * query key, e.g. `token%5Bprimary%5D` or `token[primary]` both yield
-		 * `token` — the name `http_build_query()` derives it from, and the one a
-		 * secret-param denylist entry is written against. A key with no bracket
-		 * suffix is returned unchanged. Used only by
-		 * {@see self::redact_secret_query_params()} — #395 Round 3, Blocking 1.
+		 * Splits a possibly nested/percent-encoded query key into ALL of its
+		 * name segments, e.g. `token%5Bprimary%5D` and `token[primary]` both
+		 * yield `[ 'token', 'primary' ]` — not only the top-level `token` a
+		 * previous round of this fix stopped at, which is how `a[token]=SECRET`
+		 * (a secret nested under a NON-secret outer name) sailed through: only
+		 * `a` was ever compared against the denylist. Every segment is now
+		 * returned so the caller can check ALL of them — #395 Round 4, Blocking.
+		 *
+		 * The key is fully URL-decoded (`urldecode()`, so `+` becomes a literal
+		 * space the same as any other percent-encoded byte) before splitting, so
+		 * `api+key` decodes to `api key`, which {@see self::canonicalize_secret_param_name()}
+		 * then folds down to `apikey` same as `api_key`/`api-key`/`apiKey` — #395
+		 * Round 4, SHOULD-FIX 1. A key with no bracket suffix yields a single
+		 * segment: itself, decoded.
+		 *
+		 * Used only by {@see self::redact_secret_query_params()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 renamed from `get_query_param_base_name()` and returns
+		 *              EVERY bracket segment instead of only the first; fully
+		 *              URL-decodes the key instead of unescaping only brackets —
+		 *              #395 Round 4 (Blocking, SHOULD-FIX 1).
 		 *
 		 * @param string $key Raw query key, as captured from the wire text.
-		 * @return string
+		 * @return array<int, string>
 		 */
-		private static function get_query_param_base_name( string $key ): string {
+		private static function get_query_param_name_segments( string $key ): array {
 
-			$decoded_key      = str_ireplace( [ '%5b', '%5d' ], [ '[', ']' ], $key );
-			$bracket_position = strpos( $decoded_key, '[' );
+			$decoded_key = urldecode( $key );
 
-			return false === $bracket_position ? $decoded_key : substr( $decoded_key, 0, $bracket_position );
+			preg_match_all( '/[^\[\]]+/', $decoded_key, $matches );
+
+			return $matches[0];
 		}
 
 		protected function get_request_args() {
@@ -606,7 +778,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Same "harmless second pass" pattern as
 		 * {@see self::get_sanitized_request_path()}: whatever the request's
 		 * `to_string_safe()` returns is run through
-		 * {@see self::redact_secret_query_params()} unconditionally, instead of
+		 * {@see self::redact_secret_request_body()} unconditionally, instead of
 		 * being trusted outright. Before this, the base took the interface-required
 		 * `to_string_safe()` result on faith — but that method is opaque to the
 		 * base (it declares no format, and any concrete class is free to return
@@ -617,13 +789,20 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * A `Woodev_API_JSON_Request`/`Woodev_Licensing_API_Request` body that
 		 * already masked its own secret params (via {@see self::mask_secret_values()}
-		 * before serializing) is unaffected: the second pass only rewrites text
-		 * matching a `name=value` or `<name>value</name>` shape, and neither JSON
-		 * (`"name":"value"`) nor a `print_r()` dump (`[name] => value`) matches
-		 * that shape, so an already-safe body passes through unchanged.
+		 * before serializing) is unaffected: a JSON body is walked and redacted
+		 * by key, so an already-masked value stays masked; a `print_r()` dump
+		 * (`[name] => value`) matches neither the JSON nor the form/XML shapes
+		 * {@see self::redact_secret_query_params()} scans for, so an already-safe
+		 * body passes through unchanged either way.
 		 *
 		 * @since 2.0.2 runs {@see self::redact_secret_query_params()} over whatever
 		 *              `to_string_safe()` returns, instead of trusting it outright.
+		 * @since 2.0.2 dispatches on body format via
+		 *              {@see self::redact_secret_request_body()} instead of running
+		 *              the same `name=value` text-scan over every body, so a JSON
+		 *              body is no longer at risk of the scan mistaking text inside
+		 *              a legitimate string value for a `name=value` pair and
+		 *              truncating it — #395 Round 4, SHOULD-FIX 2.
 		 *
 		 * @return string
 		 */
@@ -635,7 +814,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$body = ( $this->get_request() && $this->get_request()->to_string_safe() ) ? $this->get_request()->to_string_safe() : '';
 
-			return self::redact_secret_query_params( $body, $this->get_secret_param_names() );
+			return self::redact_secret_request_body( $body, $this->get_secret_param_names() );
 		}
 
 		protected function get_request_http_version() {

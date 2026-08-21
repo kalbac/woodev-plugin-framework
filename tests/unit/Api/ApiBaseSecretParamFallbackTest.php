@@ -465,4 +465,200 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 
 		$this->assertSame( '', $api->get_sanitized_request_body_for_test() );
 	}
+
+	// -------------------------------------------------------------------------
+	// #395 Round 4, BLOCKING: a secret nested under a NON-secret param name
+	// must still be masked — the round-3 matcher only ever compared the FIRST
+	// bracket segment of a key against the denylist, so `a[token]=SECRET`
+	// (literal or percent-encoded) sailed through untouched because only `a`
+	// was checked, and `a` isn't itself a secret name.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return void
+	 */
+	public function test_secret_nested_under_a_non_secret_param_name_is_masked_in_the_path(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?a[token]=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_path = $api->get_sanitized_request_path_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_path,
+			'#395 Round 4, BLOCKING: a[token]=SECRET must be masked even though the top-level name "a" is not itself a secret'
+		);
+		$this->assertStringContainsString( 'format=json', $safe_path, 'a non-secret sibling param must survive untouched' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_percent_encoded_secret_nested_under_a_non_secret_param_name_is_masked_in_the_path(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?a%5Btoken%5D=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_path = $api->get_sanitized_request_path_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_path,
+			'#395 Round 4, BLOCKING: the percent-encoded a%5Btoken%5D=SECRET form must be masked too'
+		);
+		$this->assertStringContainsString( 'format=json', $safe_path, 'a non-secret sibling param must survive untouched' );
+	}
+
+	/**
+	 * The same nesting gap, exercised via a form-encoded POST BODY instead of
+	 * a query string — {@see \Woodev_API_Base::redact_secret_query_params()}
+	 * is the shared matcher behind both call sites.
+	 *
+	 * @return void
+	 */
+	public function test_secret_nested_under_a_non_secret_param_name_is_masked_in_the_body(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( 'a[token]=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_body,
+			'#395 Round 4, BLOCKING: a[token]=SECRET must be masked in a body too'
+		);
+		$this->assertStringContainsString( 'format=json', $safe_body, 'a non-secret sibling param must survive untouched' );
+	}
+
+	// -------------------------------------------------------------------------
+	// #395 Round 4, SHOULD-FIX 1: `+` (an encoded space in a query string) must
+	// still be recognised as a separator between words in a param name, e.g.
+	// `api+key` must match the same denylist entry as `api_key`/`apiKey`.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return void
+	 */
+	public function test_plus_separated_secret_param_name_is_masked_in_the_path(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Request( '/v1/status?api+key=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_path = $api->get_sanitized_request_path_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_path,
+			'#395 Round 4, SHOULD-FIX 1: api+key=SECRET must be masked — "+" is an encoded space, so this is the same name as api_key'
+		);
+		$this->assertStringContainsString( 'format=json', $safe_path, 'a non-secret sibling param must survive untouched' );
+	}
+
+	/**
+	 * @return void
+	 */
+	public function test_plus_separated_secret_param_name_is_masked_in_the_body(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( 'api+key=' . $token . '&format=json' );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+
+		$this->assertStringNotContainsString( $token, $safe_body, '#395 Round 4, SHOULD-FIX 1: api+key=SECRET must be masked in a body too' );
+		$this->assertStringContainsString( 'format=json', $safe_body, 'a non-secret sibling param must survive untouched' );
+	}
+
+	// -------------------------------------------------------------------------
+	// #395 Round 4, SHOULD-FIX 2: a JSON body must be redacted by parsing it,
+	// never by scanning its raw text for a `name=value` shape — the round-3
+	// regex backstop could mistake a `name=value`-looking SUBSTRING inside an
+	// unrelated string VALUE for a real param and truncate it, corrupting an
+	// otherwise-valid JSON body it was never meant to touch.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @return void
+	 */
+	public function test_json_body_secret_key_is_masked_without_corrupting_the_json(): void {
+
+		$secret = 'super-secret-token-value';
+		$body   = json_encode(
+			[
+				'note'     => 'contact support, token=should-stay-exactly-here for reference',
+				'password' => $secret,
+				'item_id'  => 42,
+			]
+		);
+
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( $body );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+		$decoded   = json_decode( $safe_body, true );
+
+		$this->assertIsArray( $decoded, 'SHOULD-FIX 2: the redacted body must still be valid, parseable JSON' );
+		$this->assertStringNotContainsString( $secret, $safe_body, 'the password value must not leak' );
+		$this->assertSame(
+			\Woodev_API_Base::SECRET_VALUE_MASK,
+			$decoded['password'],
+			'the password key must be masked by key, not by scanning the text'
+		);
+		$this->assertSame(
+			'contact support, token=should-stay-exactly-here for reference',
+			$decoded['note'],
+			'SHOULD-FIX 2: a name=value-looking SUBSTRING inside an unrelated string value must survive untouched'
+		);
+		$this->assertSame( 42, $decoded['item_id'], 'a non-secret param must survive untouched' );
+	}
+
+	/**
+	 * A secret nested inside a JSON object (not only at the top level) must
+	 * also be masked — the structural JSON walk redacts by key at ANY depth,
+	 * same as the query-string walk.
+	 *
+	 * @return void
+	 */
+	public function test_json_body_nested_secret_key_is_masked(): void {
+
+		$secret  = 'super-secret-token-value';
+		$body    = json_encode(
+			[
+				'auth' => [
+					'token' => $secret,
+				],
+				'format' => 'json',
+			]
+		);
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( $body );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+		$decoded   = json_decode( $safe_body, true );
+
+		$this->assertIsArray( $decoded, 'the redacted body must still be valid JSON' );
+		$this->assertStringNotContainsString( $secret, $safe_body );
+		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $decoded['auth']['token'] );
+		$this->assertSame( 'json', $decoded['format'], 'a non-secret sibling param must survive untouched' );
+	}
 }
