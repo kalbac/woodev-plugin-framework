@@ -22,3 +22,11 @@
 # A real copy resolves inside the worktree and works. Measured s83: the copy
 # costs seconds on one volume, `composer install` costs ~7 minutes.
 vendor
+
+# Donor plugin copies the contract tests read. Gitignored (.gitignore line 25) and 17 MB, so a
+# fresh worktree arrives without them and the four tests/unit/Contract/Yandex*ContractTest.php
+# classes silently markTestSkipped(). Measured s84: the main checkout runs 2475 tests with 66
+# skipped, an agent worktree runs the same 2475 with 71 skipped — five release-blocking
+# data-contract guards, gone, with a green suite either way. COPIED rather than shared: these are
+# read-only references, and a copy keeps a worker from writing through into the primary checkout.
+plugins-reference
