@@ -151,49 +151,31 @@ export function parseStoredRecord( raw ) {
  * Client-side PREVIEW of the server's authoritative save-blocking check
  * ({@see Location_Settings::validate_values()}, issue #406) — same message,
  * an APPROXIMATION of the same comparison (`parseStoredRecord().providerId`
- * vs the effective `active_provider` value for this save — NOT an exact
- * mirror, see "KNOWN GAP" below), reused by `ControlField` (live,
- * blur-gated inline error) and `app.js` (blocks the Save click, mirroring
- * how every other field's client-caught error already blocks it). The
- * server remains the actual gate; this only saves the merchant a round trip
- * for a mismatch the client can already see.
+ * vs the effective `active_provider` value for this save), reused by
+ * `ControlField` (live, blur-gated inline error) and `app.js` (Save
+ * disablement). When the loaded raw provider id does not match the record's
+ * provider, the client deliberately fails open: deregistered-provider
+ * fallback and `woodev_location_active_provider` filter substitutions are
+ * only knowable on the server. The server remains the actual gate.
  *
- * KNOWN GAP, left deliberately unfixed here (codex critic review, both
- * passes): `providerId` is compared RAW, never resolved the way the
- * server's own `Location_Provider_Registry::resolve_active_provider_for_id()`
- * resolves it — through the registered-instance lookup AND the public
- * `woodev_location_active_provider` filter. Two cases this misses:
- * (1) a provider id the store no longer registers (e.g. its plugin was
- * deactivated OUTSIDE the form) still falls back to a DIFFERENT provider at
- * runtime; (2) a site's own filter callback can swap in an entirely
- * different provider instance than the id names, unconditionally or by
- * branching on the id — {@see LocationProviderRegistryTest::test_active_provider_filter_can_swap_the_resolved_instance()}
- * proves this is real, supported behavior, not a theoretical edge. The
- * SERVER now resolves through that full path for both a submitted and a
- * stored id; this client preview still does not, for either case. Fixing
- * it client-side would need the active_provider field's own registered
- * `options` (still insufficient for case 2 — a filter can return an
- * instance no `options` map ever named) threaded down through
- * `ControlField`/`app.js` (neither has it today), AND — since `app.js`'s
- * pre-flight check and `ControlField`'s live inline error call this SAME
- * function independently — fixing only one call site would let a click get
- * blocked with no visible per-field reason (a worse UX than the gap
- * itself). The server closes the actual hole regardless of what this
- * preview shows; both cases can only arise from a change OUTSIDE the form
- * to begin with, which the client has no live signal for anyway (matches
- * this file's own "STALE-RECORD WARNING" section above, which is subject
- * to the identical limitation) — the merchant still reaches the server's
- * own rejection on Save (one extra round trip), and `policy=off` remains
- * an in-form escape either way, so this is not a lock-in.
- *
- * @param {*}      raw        the record field's raw stored/edited value.
- * @param {string} providerId the effective `active_provider` value for this same save.
+ * @param {*}      raw                 the record field's raw stored/edited value.
+ * @param {string} providerId          the effective `active_provider` value for this same save.
+ * @param {string|null} [persistedProviderId] raw provider value before this form was edited.
  * @return {string|null} error message, or null when there is nothing to block.
  */
-export function getProviderMismatchError( raw, providerId ) {
+export function getProviderMismatchError( raw, providerId, persistedProviderId = null ) {
 	const stored = parseStoredRecord( raw );
 
 	if ( 'ok' !== stored.state || ! stored.providerId || ! providerId || stored.providerId === providerId ) {
+		return null;
+	}
+
+	// The server resolves raw provider ids through the registered-provider lookup
+	// and a public filter. If the persisted raw id does not name the record's
+	// provider, the client cannot prove that a raw mismatch is invalid (it may be
+	// a deregistered-provider fallback or a filter substitution), so leave Save
+	// available for the authoritative server check.
+	if ( null !== persistedProviderId && stored.providerId !== persistedProviderId ) {
 		return null;
 	}
 

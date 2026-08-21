@@ -40,6 +40,16 @@ import WizardRichText from './richtext';
 export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
 
 /**
+ * Setting ids for the two location field-mode axes. These mirror
+ * `Location_Provider_Registry` and keep the client-side display-only refresh
+ * scoped to the paired controls that need it.
+ *
+ * @type {string}
+ */
+export const FIELD_MODE_REGION_SETTING_ID = 'field_mode_region';
+export const FIELD_MODE_SETTLEMENT_SETTING_ID = 'field_mode_settlement';
+
+/**
  * Password input with a show/hide eye toggle.
  *
  * When `isSet` is true and the user has not typed anything, the input stays
@@ -193,6 +203,36 @@ function normalizeOptions( options ) {
 }
 
 /**
+ * Gets the options a select should display from the current form state.
+ *
+ * The server remains authoritative: it clamps unsupported stored field-mode
+ * values on read. This only reflects the region axis's unsaved choice in the
+ * settlement chooser, so a merchant sees the option the server will offer
+ * after saving without requiring a reload.
+ *
+ * @since 2.0.2
+ * @param {string} settingId               current field id.
+ * @param {Object} schema                  current field schema.
+ * @param {Object} [conditionValues]       tab-wide effective form values.
+ * @param {Object} [fieldModeRegionOptions] region field's server-offered options.
+ * @return {Object|Array} options to render.
+ */
+export function getLiveSelectOptions( settingId, schema, conditionValues, fieldModeRegionOptions ) {
+	if ( FIELD_MODE_SETTLEMENT_SETTING_ID !== settingId || ! fieldModeRegionOptions ) {
+		return schema.options;
+	}
+
+	if ( 'related-list' === ( conditionValues && conditionValues[ FIELD_MODE_REGION_SETTING_ID ] ) ) {
+		return fieldModeRegionOptions;
+	}
+
+	const options = { ...( schema.options || {} ) };
+	delete options[ 'related-list' ];
+
+	return options;
+}
+
+/**
  * Resolves which control to render from controlType, then legacy inference.
  *
  * @param {Object} schema field schema slice.
@@ -262,16 +302,22 @@ function withAnatomy( schema, control, error ) {
  * @param {boolean}  props.showErrors   when true, reveal errors without waiting for blur.
  * @param {boolean}  [props.hasEdit]    whether an explicit edit is staged (sensitive clear).
  * @param {Function} [props.onRevert]   drops a staged edit (enables the sensitive clear affordance).
+ * @param {string}   [props.settingId] field id in the current section.
  * @param {Object}   [props.conditionValues] tab-wide effective values (settingId => value),
  *                                            the same map `show_if` visibility is computed
  *                                            from (App's own `conditionValues`) — reused here
  *                                            (issue #380) so a control can react to a SIBLING
  *                                            field's live, unsaved value; currently only the
  *                                            `location-picker` control reads it.
+ * @param {Object}   [props.fieldModeRegionOptions] server-offered region-mode options, used
+ *                                                   only to refresh the settlement choice set.
+ * @param {string}   [props.providerMismatchBaseline] raw provider value loaded with the form;
+ *                                                    makes mismatches that may be server-side
+ *                                                    substitutions fail open.
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, fieldModeRegionOptions, providerMismatchBaseline } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -329,7 +375,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 	const error = schema.serverError || ( ( touched || showErrors )
 		? ( validateField( schema, value, hasEdit )
 			|| ( 'location-picker' === control
-				? getProviderMismatchError( value ?? schema.value ?? '', ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '' )
+				? getProviderMismatchError( value ?? schema.value ?? '', ( conditionValues && conditionValues[ ACTIVE_PROVIDER_SETTING_ID ] ) || '', providerMismatchBaseline )
 				: null ) )
 		: null );
 	const onBlur = () => setTouched( true );
@@ -383,7 +429,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				schema,
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
-					options: normalizeOptions( schema.options ),
+					options: normalizeOptions( getLiveSelectOptions( settingId, schema, conditionValues, fieldModeRegionOptions ) ),
 					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),

@@ -11,7 +11,7 @@ import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
 import { isFieldVisible } from '../components/validate';
 
-export default function SectionView( { providerId, section, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
+export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
 	if ( ! section ) {
 		return null;
 	}
@@ -40,9 +40,12 @@ export default function SectionView( { providerId, section, values, conditionVal
 				.map( ( settingId ) => (
 					<ControlField
 						key={ settingId }
+						settingId={ settingId }
 						schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 						value={ values[ settingId ] ?? section.fields[ settingId ].value }
 						conditionValues={ conditionValues || values }
+						fieldModeRegionOptions={ tabFields && tabFields.field_mode_region && tabFields.field_mode_region.options }
+						providerMismatchBaseline={ tabFields && tabFields.active_provider && tabFields.active_provider.value }
 						onChange={ ( next ) => onFieldChange( settingId, next ) }
 						hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
 						onRevert={ () => onFieldRevert( settingId ) }

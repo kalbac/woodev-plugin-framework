@@ -14,7 +14,50 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import ControlField from '../../src/components/control-field';
+import ControlField, { getLiveSelectOptions } from '../../src/components/control-field';
+
+describe( 'getLiveSelectOptions', () => {
+	const regionOptions = {
+		typeahead: 'Текст с подсказками',
+		'related-list': 'Предустановленный список',
+		'ajax-select2': 'Список с поиском',
+	};
+
+	test( 'adds the preset-list choice to settlement immediately when the unsaved region mode selects it', () => {
+		expect(
+			getLiveSelectOptions(
+				'field_mode_settlement',
+				{ options: { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] } },
+				{ field_mode_region: 'related-list' },
+				regionOptions
+			)
+		).toEqual( regionOptions );
+	} );
+
+	test( 'removes the preset-list choice from settlement immediately when the unsaved region mode leaves it', () => {
+		expect(
+			getLiveSelectOptions(
+				'field_mode_settlement',
+				{ options: regionOptions },
+				{ field_mode_region: 'typeahead' },
+				regionOptions
+			)
+		).toEqual( { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] } );
+	} );
+
+	test( 'does not invent a preset-list choice when the provider did not offer one for the region either', () => {
+		const noListOptions = { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] };
+
+		expect(
+			getLiveSelectOptions(
+				'field_mode_settlement',
+				{ options: noListOptions },
+				{ field_mode_region: 'related-list' },
+				noListOptions
+			)
+		).toEqual( noListOptions );
+	} );
+} );
 
 /**
  * `disabled_reason` must never clobber the authored `description` — both are
