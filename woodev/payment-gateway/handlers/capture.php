@@ -172,11 +172,19 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 				// if the original auth amount has been captured, complete payment
 				if ( $this->get_gateway()->get_order_meta( $order, 'capture_total' ) >= $order->get_total() ) {
 
-					// prevent stock from being reduced when payment is completed as this is done when the charge was authorized
-					add_filter( 'woocommerce_payment_complete_reduce_order_stock', '__return_false', 100 );
+					// prevent stock from being reduced when payment is completed as this is done when the charge was authorized;
+					// use a handler-specific callback (not the generic __return_false) so remove_filter() below can never
+					// touch an identical __return_false callback a consumer plugin may have added independently
+					add_filter( 'woocommerce_payment_complete_reduce_order_stock', array( $this, 'suppress_order_stock_reduction' ), 100 );
 
-					// complete the order
-					$order->payment_complete();
+					try {
+						// complete the order
+						$order->payment_complete();
+					} finally {
+						// always remove the filter, even if payment_complete() throws, so it never leaks into a
+						// later payment_complete() call for a different order in the same request (e.g. bulk capture)
+						remove_filter( 'woocommerce_payment_complete_reduce_order_stock', array( $this, 'suppress_order_stock_reduction' ), 100 );
+					}
 				}
 
 				return array(
@@ -206,6 +214,24 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					'message' => $exception->getMessage(),
 				);
 			}
+		}
+
+
+		/**
+		 * Callback for the `woocommerce_payment_complete_reduce_order_stock` filter, used to suppress
+		 * stock reduction for an order whose stock was already reduced when the charge was authorized.
+		 *
+		 * A dedicated method (rather than `__return_false`) is used so `remove_filter()` in
+		 * perform_capture() only ever removes the filter this handler added, never an identical
+		 * `__return_false` callback a consumer plugin may have added independently at the same priority.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function suppress_order_stock_reduction() {
+
+			return false;
 		}
 
 
