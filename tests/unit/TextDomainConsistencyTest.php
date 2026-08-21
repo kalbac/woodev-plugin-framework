@@ -175,6 +175,18 @@ final class TextDomainConsistencyTest extends TestCase {
 			],
 			'ternary first argument'          => [ "__( \$flag ? 'a' : 'b', 'wrong-domain' );", [ 'wrong-domain' ] ],
 			'first-class callable is not one' => [ "\$fn = __( ... );", [] ],
+
+			// Round 3: a root-qualified call is the same global function, is natural inside a
+			// namespace, and already appears seven times in class-setup-wizard.php. PHP 7.4
+			// and PHP 8 tokenise it differently and CI runs both.
+			'root-qualified call'             => [ "\\__( 'text', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'root-qualified, correct domain'  => [ "\\__( 'text', 'woodev-plugin-framework' );", [] ],
+			'root-qualified context wrapper'  => [ "\\esc_html_x( 'text', 'ctx', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'root-qualified, named argument'  => [ "\\__( domain: 'wrong-domain', text: 'x' );", [ 'wrong-domain' ] ],
+			'namespaced look-alike, absolute' => [ "\\Foo\\__( 'text', 'wrong-domain' );", [] ],
+			'namespaced look-alike, relative' => [ "Foo\\__( 'text', 'wrong-domain' );", [] ],
+			'case-insensitive wrapper name'   => [ "_X( 'text', 'ctx', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'declaration is not a call'       => [ "function __( \$t, \$d = 'wrong-domain' ) {}", [] ],
 		];
 	}
 
@@ -206,13 +218,9 @@ final class TextDomainConsistencyTest extends TestCase {
 		$found  = [];
 
 		foreach ( $tokens as $index => $token ) {
-			if ( ! is_array( $token ) || \T_STRING !== $token[0] || ! array_key_exists( $token[1], self::TRANSLATION_FUNCTIONS ) ) {
-				continue;
-			}
+			$wrapper = $this->gettext_wrapper_at( $tokens, $index );
 
-			// A method or property of the same name is not a gettext call.
-			$preceding = $this->previous_significant( $tokens, $index );
-			if ( is_array( $preceding ) && in_array( $preceding[0], [ \T_OBJECT_OPERATOR, \T_DOUBLE_COLON, \T_FUNCTION ], true ) ) {
+			if ( null === $wrapper ) {
 				continue;
 			}
 
@@ -242,7 +250,7 @@ final class TextDomainConsistencyTest extends TestCase {
 				continue;
 			}
 
-			$domain_token = $this->domain_argument( $call, self::TRANSLATION_FUNCTIONS[ $token[1] ] );
+			$domain_token = $this->domain_argument( $call, self::TRANSLATION_FUNCTIONS[ $wrapper ] );
 
 			// No domain argument at all: WordPress falls back to its own `default` domain.
 			// A real defect, but a different one, and not this test's assertion.
@@ -376,6 +384,112 @@ final class TextDomainConsistencyTest extends TestCase {
 
 			$is_first = false;
 			$current  = $token;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Returns the gettext wrapper invoked at $index — normalised to its lower-case bare name
+	 * — or null when the token is not a call to one.
+	 *
+	 * Three things have to be normalised away, and each was a false green until it was:
+	 *
+	 * ROOT QUALIFICATION. `\__( 'x', 'wrong' )` calls the same global function, and it is
+	 * natural to write inside a namespace — 89 files under `woodev/` declare one, and
+	 * `class-setup-wizard.php` already writes it seven times. **The two supported PHP lines
+	 * tokenise it differently**, which is why this cannot be left to luck: PHP 8 emits ONE
+	 * `T_NAME_FULLY_QUALIFIED` token holding `\__`, so a `T_STRING`-only check never sees it,
+	 * while PHP 7.4 emits `T_NS_SEPARATOR` then `T_STRING`, which such a check does see. The
+	 * scanner would therefore have guarded those seven calls on the CI matrix's 7.4 job and
+	 * silently ignored them on 8.x — a guarantee that depends on the interpreter version is
+	 * not a guarantee. An independent critic review found this; it is the third round of
+	 * false greens on this file.
+	 *
+	 * NAMESPACED LOOK-ALIKES. `\Foo\__()` and `Foo\__()` are a DIFFERENT function that happens
+	 * to end in the same name, so they must NOT match — under either tokenisation.
+	 *
+	 * CASE. PHP function names are case-insensitive, so `_X( 'a', 'b', 'wrong' )` really does
+	 * call `_x()`.
+	 *
+	 * @param array<int, array{0:int,1:string,2:int}|string> $tokens
+	 * @param int                                            $index
+	 * @return string|null
+	 */
+	private function gettext_wrapper_at( array $tokens, int $index ): ?string {
+		$token = $tokens[ $index ];
+
+		if ( ! is_array( $token ) ) {
+			return null;
+		}
+
+		$fully_qualified = defined( 'T_NAME_FULLY_QUALIFIED' ) ? \T_NAME_FULLY_QUALIFIED : -1;
+		$qualified       = defined( 'T_NAME_QUALIFIED' ) ? \T_NAME_QUALIFIED : -2;
+
+		// PHP 8: `Foo\__` arrives whole, and is not the global function.
+		if ( $qualified === $token[0] ) {
+			return null;
+		}
+
+		if ( $fully_qualified === $token[0] ) {
+			// PHP 8: `\__` arrives whole. `\Foo\__` does too — reject anything still
+			// carrying a separator once the leading one is gone.
+			$name = substr( $token[1], 1 );
+
+			if ( false !== strpos( $name, '\\' ) ) {
+				return null;
+			}
+		} elseif ( \T_STRING === $token[0] ) {
+			$name = $token[1];
+		} else {
+			return null;
+		}
+
+		$name = strtolower( $name );
+
+		if ( ! array_key_exists( $name, self::TRANSLATION_FUNCTIONS ) ) {
+			return null;
+		}
+
+		$preceding = $this->previous_significant( $tokens, $index );
+
+		if ( ! is_array( $preceding ) ) {
+			return $name;
+		}
+
+		// A method, a static call, or a function DECLARATION of the same name is not a call
+		// to the global wrapper.
+		if ( in_array( $preceding[0], [ \T_OBJECT_OPERATOR, \T_DOUBLE_COLON, \T_FUNCTION ], true ) ) {
+			return null;
+		}
+
+		// PHP 7.4: the leading `\` is its own token. It is the global function only when
+		// nothing precedes the separator — `\Foo\__()` must not match.
+		if ( \T_NS_SEPARATOR === $preceding[0] ) {
+			$before = $this->previous_significant( $tokens, $this->previous_significant_index( $tokens, $index ) ?? 0 );
+
+			if ( is_array( $before ) && in_array( $before[0], [ \T_STRING, $qualified, $fully_qualified ], true ) ) {
+				return null;
+			}
+		}
+
+		return $name;
+	}
+
+	/**
+	 * Index of the last significant token before $index, or null when there is none.
+	 *
+	 * @param array<int, array{0:int,1:string,2:int}|string> $tokens
+	 * @param int                                            $index
+	 * @return int|null
+	 */
+	private function previous_significant_index( array $tokens, int $index ): ?int {
+		for ( $i = $index - 1; $i >= 0; $i-- ) {
+			if ( is_array( $tokens[ $i ] ) && in_array( $tokens[ $i ][0], [ \T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT ], true ) ) {
+				continue;
+			}
+
+			return $i;
 		}
 
 		return null;
