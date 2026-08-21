@@ -26,6 +26,14 @@ namespace {
 	if ( ! class_exists( 'WC_Order', false ) ) {
 		/**
 		 * Minimal WooCommerce order base for the order test double.
+		 *
+		 * get_id() returns 123 (not 0) to match the shape every other guarded
+		 * `WC_Order` stub in this suite uses (see PaymentGatewayDirectXssTest.php).
+		 * Because this class is declared behind a `class_exists()` guard in the
+		 * global namespace, whichever test file's version PHPUnit loads first for
+		 * the whole run "wins" for every other test file too — an id of 0 fails
+		 * `$order_id > 0` checks (e.g. Woodev_Order_Compatibility::update_order_meta())
+		 * in unrelated tests that construct a bare `new WC_Order()`.
 		 */
 		class WC_Order {
 
@@ -33,7 +41,7 @@ namespace {
 			 * @return int
 			 */
 			public function get_id(): int {
-				return 0;
+				return 123;
 			}
 		}
 	}
