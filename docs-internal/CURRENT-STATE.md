@@ -26,8 +26,12 @@ passes, **five REJECTs, every one of them real**. The last two critics did not a
 the sanitizer and watched the secret come back. Still open after round 5: `is_form_encoded_body()`
 infers the form type from the body's own syntax, so a URL-shaped string carrying
 `token=SECRET` and a newline free-text body both get parsed with the secret intact; and a valid
-JSON scalar that IS the secret passes through unchanged. Round 6 was in flight at handoff. The
-verdict and both findings are in a comment on PR #433. **The question that may need the operator:
+JSON scalar that IS the secret passes through unchanged. Round 6 landed (`e2b5e39`, pushed to PR #433): it REMOVES the
+form-sniffing branch rather than patching it, because no request class in this codebase declares a
+form-encoded body, and whole-masks scalar JSON. Verified by invoking the sanitizer with all five
+leak shapes. **A sixth critic pass was started and STOPPED mid-run, so `e2b5e39` has NO verdict —
+do not read the absence of a rejection as approval.** The fifth critic's findings are in a comment
+on PR #433. **The question that may need the operator:
 the form type cannot be inferred from the body — either whole-mask every untrusted non-JSON body
 and lose safe sibling fields in the log, or trust only a declared content type.**
 
