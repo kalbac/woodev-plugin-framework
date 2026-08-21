@@ -360,6 +360,35 @@ describe( 'related-list settlement renderer', () => {
 		expect( fetchJsonCalls[ 0 ].url ).not.toContain( 'within=' );
 	} );
 
+	it( 'shows the translated truncation hint when the list response was capped', async () => {
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), buildOptions() );
+
+		fetchJsonCalls[ 0 ].resolve( {
+			localities: [],
+			truncated: true,
+			truncated_message: 'Показаны первые 500 населённых пунктов. Уточните регион.',
+		} );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const notice = document.querySelector( '.woodev-location-list-truncated-notice' );
+
+		expect( notice ).not.toBeNull();
+		expect( notice.textContent ).toBe( 'Показаны первые 500 населённых пунктов. Уточните регион.' );
+	} );
+
+	it( 'does not show a truncation hint when the list response is complete', async () => {
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), buildOptions() );
+
+		fetchJsonCalls[ 0 ].resolve( {
+			localities: [],
+			truncated: false,
+			truncated_message: 'Показаны первые 500 населённых пунктов. Уточните регион.',
+		} );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( document.querySelector( '.woodev-location-list-truncated-notice' ) ).toBeNull();
+	} );
+
 	it( 'picking an option calls the shared onSelect with the matching record — the SAME persist path as every other level', async () => {
 		const options = buildOptions( { node: { level: 'settlement', fieldId: 'billing_city' } } );
 

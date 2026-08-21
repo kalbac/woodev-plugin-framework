@@ -227,7 +227,7 @@
 	 *
 	 * @param {HTMLInputElement} input
 	 * @param {Object}           options   See the file docblock's shared contract.
-	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array|{entries: Array, truncated: boolean, truncatedMessage: string}>}} strategy
 	 *   `ajax: false` — `fetchEntries()` is called ONCE (a static, region-scoped full list —
 	 *   `related-list` settlement); the `<select>` is populated with real `<option>` elements
 	 *   up front, and select2 (when present) gets NO `ajax` config at all — it search-filters
@@ -256,6 +256,7 @@
 		/** @type {Object.<string, Object>} locality key -> the record it resolves to. */
 		var dataByKey = {};
 		var lastHandledValue = null;
+		var listTruncatedNotice = null;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -294,6 +295,37 @@
 					select.appendChild( option );
 				}
 			} );
+		}
+
+		/**
+		 * Shows the server-supplied explanation when a static list was capped, or removes the
+		 * explanation when the list is complete. The REST response owns the wording because it is
+		 * translated by WordPress, just like the cascade's other location strings.
+		 *
+		 * @param {{truncated?: boolean, truncatedMessage?: string}} result
+		 * @returns {void}
+		 */
+		function updateListTruncatedNotice( result ) {
+			if ( listTruncatedNotice && listTruncatedNotice.parentNode ) {
+				listTruncatedNotice.parentNode.removeChild( listTruncatedNotice );
+			}
+
+			listTruncatedNotice = null;
+
+			if ( ! result || true !== result.truncated || 'string' !== typeof result.truncatedMessage || '' === result.truncatedMessage ) {
+				return;
+			}
+
+			var notice = document.createElement( 'p' );
+
+			notice.className = 'woodev-location-notice woodev-location-list-truncated-notice';
+			notice.setAttribute( 'role', 'status' );
+			notice.textContent = result.truncatedMessage;
+
+			if ( select.parentNode ) {
+				select.parentNode.insertBefore( notice, select.nextSibling );
+				listTruncatedNotice = notice;
+			}
 		}
 
 		function handleChange() {
@@ -362,13 +394,17 @@
 			ensureSelect2();
 		} else {
 			strategy.fetchEntries( '' ).then(
-				function( entries ) {
+				function( result ) {
+					var entries = result && Array.isArray( result.entries ) ? result.entries : ( Array.isArray( result ) ? result : [] );
+
 					applyEntries( entries, true );
+					updateListTruncatedNotice( result );
 					ensureSelect2();
 				},
 				function( error ) {
 					logError( error );
 					applyEntries( [], true );
+					updateListTruncatedNotice();
 					ensureSelect2();
 				}
 			);
@@ -391,6 +427,8 @@
 					select.parentNode.insertBefore( input, select );
 					select.parentNode.removeChild( select );
 				}
+
+				updateListTruncatedNotice();
 			},
 		};
 	}
@@ -430,7 +468,11 @@
 					{ method: 'GET', headers: options.nonceHeader() }
 				).then(
 					function( body ) {
-						return body && Array.isArray( body.localities ) ? body.localities : [];
+						return {
+							entries: body && Array.isArray( body.localities ) ? body.localities : [],
+							truncated: body && true === body.truncated,
+							truncatedMessage: body && 'string' === typeof body.truncated_message ? body.truncated_message : '',
+						};
 					},
 					function( error ) {
 						logError( error );

@@ -1073,7 +1073,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool, within_status: string}
+		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool, truncated_message: string, within_status: string}
 		 */
 		public function handle_list_request( $request ) {
 
@@ -1139,11 +1139,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			$truncated = count( $records ) > $limit;
 			$records   = array_slice( $records, 0, $limit );
+			$truncated_message = $truncated ? sprintf(
+				/* translators: %d: number of location records shown. */
+				__( 'Показаны первые %d населённых пунктов. Уточните регион для более точного списка.', 'woodev-plugin-framework' ),
+				$limit
+			) : '';
 
 			return rest_ensure_response(
 				[
 					'localities'    => $this->to_response_records( $records ),
 					'truncated'     => $truncated,
+					'truncated_message' => $truncated_message,
 					'within_status' => $within_status,
 				]
 			);

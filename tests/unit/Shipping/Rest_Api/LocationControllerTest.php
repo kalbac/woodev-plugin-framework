@@ -1797,6 +1797,7 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertCount( 500, $result['localities'], 'the response must never exceed LIST_HARD_CAP' );
 		$this->assertTrue( $result['truncated'] );
+		$this->assertSame( 'Показаны первые 500 населённых пунктов. Уточните регион для более точного списка.', $result['truncated_message'] );
 	}
 
 	public function test_list_exactly_at_the_hard_cap_is_not_reported_truncated(): void {
@@ -1809,6 +1810,7 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertCount( 500, $result['localities'] );
 		$this->assertFalse( $result['truncated'], 'the provider handed back exactly the cap, nothing was actually cut' );
+		$this->assertSame( '', $result['truncated_message'] );
 	}
 
 	public function test_list_limit_arg_narrows_the_response_below_the_hard_cap(): void {
