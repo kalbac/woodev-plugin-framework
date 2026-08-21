@@ -98,6 +98,51 @@ final class TextDomainConsistencyTest extends TestCase {
 	}
 
 	/**
+	 * Guards the scanner itself.
+	 *
+	 * The scan above is only worth its runtime if it cannot be walked past, and the failure
+	 * that matters is the FALSE GREEN — a wrong domain the scanner does not report. The
+	 * trailing-comma case below is not hypothetical: an independent critic review found and
+	 * reproduced it against the first version of this file, where a legal
+	 * `__( 'text', 'wrong-domain', )` read as three arguments, missed the arity check for
+	 * `__()`, and was skipped as though it had declared no domain at all.
+	 *
+	 * @dataProvider provide_scanner_cases
+	 *
+	 * @param string             $source   PHP source to scan.
+	 * @param array<int, string> $expected Domains the scanner must report, in order.
+	 */
+	public function test_the_scanner_reports_exactly_these_domains( string $source, array $expected ): void {
+		$this->assertSame( $expected, array_values( $this->extract_wrong_domains( "<?php\n" . $source ) ) );
+	}
+
+	/**
+	 * @return array<string, array{0:string, 1:array<int, string>}>
+	 */
+	public function provide_scanner_cases(): array {
+		return [
+			'plain wrong domain'              => [ "__( 'text', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'wrong domain, trailing comma'    => [ "__( 'text', 'wrong-domain', );", [ 'wrong-domain' ] ],
+			'correct domain'                  => [ "__( 'text', 'woodev-plugin-framework' );", [] ],
+			'correct domain, trailing comma'  => [ "__( 'text', 'woodev-plugin-framework', );", [] ],
+			'borrowed domain is allowed'      => [ "__( 'WooCommerce', 'woocommerce' );", [] ],
+			'no domain is a different defect' => [ "__( 'text' );", [] ],
+			'context wrapper'                 => [ "_x( 'text', 'context', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'plural wrapper'                  => [ "_n( 'one', 'many', \$n, 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'nested call in first argument'   => [ "__( sprintf( '%s, %s', \$a, \$b ), 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'inline array in first argument'  => [ "__( \$map[ 'a', ], 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'closure in first argument'       => [ "__( \$f( function ( \$v ) { return [ \$v, 1 ]; } ), 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'brace interpolation in string'   => [ "__( \"text {\$var} more\", 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'method of the same name'         => [ "\$obj->__( 'text', 'wrong-domain' );", [] ],
+			'static of the same name'         => [ "Klass::__( 'text', 'wrong-domain' );", [] ],
+			'non-literal domain is reported'  => [
+				"__( 'text', SOME_CONSTANT );",
+				[ 'SOME_CONSTANT (not a string literal, so its domain cannot be verified)' ],
+			],
+		];
+	}
+
+	/**
 	 * Returns `line number => declared domain` for every translation call in $source whose
 	 * domain is a string literal other than the framework's.
 	 *
@@ -143,7 +188,18 @@ final class TextDomainConsistencyTest extends TestCase {
 			}
 
 			$last = $call['last'];
+
+			// A domain that is not a plain string literal cannot be checked here, and
+			// skipping it silently is the same false green the trailing comma produced: a
+			// constant or variable is free to resolve to any domain at all. There are none
+			// in woodev/ today, so the honest assertion is that there continue to be none —
+			// if one ever appears, this fails and someone decides deliberately how to verify
+			// it, rather than the guarantee quietly narrowing.
 			if ( ! is_array( $last ) || \T_CONSTANT_ENCAPSED_STRING !== $last[0] ) {
+				$found[ $token[2] ] = sprintf(
+					'%s (not a string literal, so its domain cannot be verified)',
+					is_array( $last ) ? $last[1] : (string) $last
+				);
 				continue;
 			}
 
@@ -158,12 +214,24 @@ final class TextDomainConsistencyTest extends TestCase {
 
 	/**
 	 * Reads the call whose parenthesis opens at $opening, returning how many top-level
-	 * arguments it passes and the final token of the last one — or null when the call is
-	 * unbalanced or takes no arguments.
+	 * arguments it passes and the final significant token of the last one — or null when the
+	 * call is unbalanced.
 	 *
-	 * Nesting is tracked for `()`, `[]` and `{}` alike, so a comma inside an inner call or
-	 * an inline array does not inflate the argument count, and the returned token belongs to
-	 * the outer call's own last argument.
+	 * Arguments are accumulated rather than counted, because a PHP trailing comma
+	 * (`__( 'text', 'domain', )`, legal since 7.3) otherwise reads as one argument more than
+	 * the call really passes. That inflated count missed the wrapper's arity, the caller
+	 * skipped the call as "no domain given", and a genuinely wrong domain written that way
+	 * was accepted silently — a FALSE GREEN in the one direction that matters, found by an
+	 * independent critic review and reproduced before this fix. Collecting each argument's
+	 * final token and taking the last non-empty one gets both the count and the domain right,
+	 * with or without the trailing comma.
+	 *
+	 * Nesting is tracked for `()`, `[]` and `{}`, so a comma inside an inner call, an inline
+	 * array or a closure body does not split an argument. `{` also arrives as the ARRAY
+	 * tokens `T_CURLY_OPEN` / `T_DOLLAR_OPEN_CURLY_BRACES` when a double-quoted string
+	 * interpolates (`"text {$var}"`) while its `}` arrives as the plain string — counting
+	 * only the plain `{` would leave the depth permanently short and make every later comma
+	 * in the file read at the wrong level.
 	 *
 	 * @param array<int, array{0:int,1:string,2:int}|string> $tokens
 	 * @param int                                            $opening
@@ -171,13 +239,14 @@ final class TextDomainConsistencyTest extends TestCase {
 	 */
 	private function read_call( array $tokens, int $opening ): ?array {
 		$depth     = 0;
-		$last      = null;
-		$arguments = 0;
+		$current   = null;
+		$arguments = [];
 
 		for ( $i = $opening, $count = count( $tokens ); $i < $count; $i++ ) {
 			$token = $tokens[ $i ];
 
-			if ( in_array( $token, [ '(', '[', '{' ], true ) ) {
+			if ( in_array( $token, [ '(', '[', '{' ], true )
+				|| ( is_array( $token ) && in_array( $token[0], [ \T_CURLY_OPEN, \T_DOLLAR_OPEN_CURLY_BRACES ], true ) ) ) {
 				++$depth;
 				continue;
 			}
@@ -186,9 +255,13 @@ final class TextDomainConsistencyTest extends TestCase {
 				--$depth;
 
 				if ( 0 === $depth ) {
+					if ( null !== $current ) {
+						$arguments[] = $current;
+					}
+
 					return [
-						'arguments' => null === $last && 0 === $arguments ? 0 : $arguments + 1,
-						'last'      => $last,
+						'arguments' => count( $arguments ),
+						'last'      => [] === $arguments ? null : end( $arguments ),
 					];
 				}
 
@@ -200,13 +273,13 @@ final class TextDomainConsistencyTest extends TestCase {
 			}
 
 			if ( ',' === $token ) {
-				++$arguments;
-				$last = null;
+				$arguments[] = $current;
+				$current     = null;
 				continue;
 			}
 
 			if ( is_array( $token ) && ! in_array( $token[0], [ \T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT ], true ) ) {
-				$last = $token;
+				$current = $token;
 			}
 		}
 
