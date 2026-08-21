@@ -10,8 +10,8 @@
 **As of 2026-08-21 (s84, overnight).** **`main`, everything merged that was ready.** Seven PRs landed
 with every CI job individually green and state CLEAN: **#420** (#394 stored-XSS), **#426** (#383
 critical IDOR), **#428** (#384 + #388 + #390 background jobs), **#430** (#389 boolean + is_multi),
-**#431** (#385 + #392 + #398 + #401 payment gateway), **#424** and **#425** (worktree gate parity
-+ the gotchas that came out of the night).
+**#431** (#385 + #392 + #398 + #401 payment gateway), **#424** and **#425**
+(worktree gate parity, plus the gotchas that came out of the night).
 
 **⛔ Budget constraint, operator decision 21.08.2026: Codex is CRITIC-ONLY until 27.08.2026.** One
 overnight session burned **45% of the weekly Codex allowance** by running it as worker, planner and
