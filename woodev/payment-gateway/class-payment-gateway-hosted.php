@@ -133,7 +133,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 				}
 			}
 
-			return $order;
+			return false;
 		}
 
 
