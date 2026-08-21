@@ -250,4 +250,24 @@ class SettingsControlTypesTest extends TestCase {
 		$this->assertSame( [ 'courier', 'pickup', 'locker' ], $this->settings->get_setting( 'methods' )->get_default() );
 		$this->assertSame( [ 'courier', 'pickup', 'locker' ], $this->settings->get_value( 'methods' ) );
 	}
+
+	/**
+	 * Scalar toggle and checkbox controls must not collapse a boolean multi-value setting.
+	 *
+	 * @return void
+	 */
+	public function test_boolean_multi_setting_rejects_scalar_toggle_and_checkbox_controls(): void {
+		$this->settings->register_setting(
+			'flags',
+			'boolean',
+			[ 'is_multi' => true ]
+		);
+		Functions\when( '_doing_it_wrong' )->justReturn();
+
+		foreach ( [ 'toggle', 'checkbox' ] as $type ) {
+			$this->assertFalse( $this->settings->register_control( 'flags', $type ) );
+		}
+
+		$this->assertNull( $this->settings->get_setting( 'flags' )->get_control() );
+	}
 }
