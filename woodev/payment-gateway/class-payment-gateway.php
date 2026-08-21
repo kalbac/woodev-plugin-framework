@@ -194,8 +194,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		/** @var Woodev_Payment_Gateway_Payment_Form|null payment form instance */
 		protected $payment_form;
 
-		/** @var string transient voided order message, passed between mark_order_as_voided() and maybe_cancel_voided_order() */
-		private $voided_order_message = '';
+		/** @var array<int, string> transient voided order messages keyed by order ID, passed between mark_order_as_voided() and maybe_cancel_voided_order() */
+		private $voided_order_messages = [];
 
 
 		/**
@@ -1918,7 +1918,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			// mark order as cancelled, since no money was actually transferred
 			if ( ! $order->has_status( 'cancelled' ) ) {
 
-				$this->voided_order_message = $message;
+				$this->voided_order_messages[ $order->get_id() ] = $message;
 
 				add_filter(
 					'woocommerce_order_fully_refunded_status',
@@ -1949,14 +1949,35 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		public function maybe_cancel_voided_order( $order_status, $order_id ) {
 
-			if ( empty( $this->voided_order_message ) ) {
+			// only act on the specific order(s) that mark_order_as_voided() installed this filter for;
+			// otherwise, in the same request, an unrelated order being fully refunded would incorrectly
+			// be forced to 'cancelled' and would pick up a stale order note meant for a different order
+			if ( ! isset( $this->voided_order_messages[ $order_id ] ) ) {
 				return $order_status;
+			}
+
+			$message = $this->voided_order_messages[ $order_id ];
+
+			unset( $this->voided_order_messages[ $order_id ] );
+
+			// once every order this filter was installed for has been handled, remove it so it
+			// doesn't affect any later, unrelated `woocommerce_order_fully_refunded_status` calls
+			// in the same request
+			if ( empty( $this->voided_order_messages ) ) {
+				remove_filter(
+					'woocommerce_order_fully_refunded_status',
+					array(
+						$this,
+						'maybe_cancel_voided_order',
+					),
+					10
+				);
 			}
 
 			$order = wc_get_order( $order_id );
 
 			// no way to set the order note with the status change
-			$order->add_order_note( $this->voided_order_message );
+			$order->add_order_note( $message );
 
 			return 'cancelled';
 		}
