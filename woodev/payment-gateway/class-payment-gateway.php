@@ -2185,8 +2185,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$message .= ': ' . sprintf(
 					/* translators: Placeholders: %1$s - credit card type (MasterCard, Visa, etc...), %2$s - last four digits of the card */
 					__( '%1$s ending in %2$s', 'woocommerce-plugin-framework' ),
-					Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ),
-					$last_four
+					esc_html( Woodev_Payment_Gateway_Helper::payment_type_to_name( $card_type ) ),
+					esc_html( $last_four )
 				);
 			}
 
@@ -2196,7 +2196,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$message .= ' ' . sprintf(
 					/** translators: Placeholders: %s - credit card expiry date */
 					__( '(expires %s)', 'woodev-plugin-framework' ),
-					$order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 )
+					esc_html( $order->payment->exp_month . '/' . substr( $order->payment->exp_year, - 2 ) )
 				);
 			}
 
