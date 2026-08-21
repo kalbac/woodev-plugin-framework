@@ -12,7 +12,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
 import ControlField, { getLiveSelectOptions } from '../../src/components/control-field';
 
@@ -366,4 +366,38 @@ test( 'an enabled select stays a plain (non-disabled) trigger', () => {
 	expect(
 		container.querySelector( '.woodev-select__trigger' )
 	).not.toBeDisabled();
+} );
+
+/**
+ * Issue #387: for a flat-array options list ( `set_options( [ 'red', 'green', 'blue' ] )` ),
+ * the option's own string is both the value and the label — there is no separate machine
+ * key. `normalizeOptions()` used to submit the array INDEX instead ( `String( i )` ), so
+ * selecting "green" silently sent "1". `Woodev_Setting::get_validation_error()` (PHP) is
+ * fixed to match: a flat list now validates strictly against its values, never its keys.
+ *
+ * Exercised via the `radio` control (native inputs, no popover portal) rather than
+ * `select` — same `normalizeOptions()` call, simpler to interact with synchronously.
+ */
+test( 'a flat-array option submits its own value, not its array index', () => {
+	let submitted;
+
+	render(
+		createElement( ControlField, {
+			schema: {
+				type: 'string',
+				controlType: 'radio',
+				name: 'Цвет',
+				options: [ 'red', 'green', 'blue' ],
+			},
+			value: '',
+			onChange: ( next ) => {
+				submitted = next;
+			},
+			showErrors: false,
+		} )
+	);
+
+	fireEvent.click( screen.getByLabelText( 'green' ) );
+
+	expect( submitted ).toBe( 'green' );
 } );

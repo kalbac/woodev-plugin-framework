@@ -187,6 +187,14 @@ function SecretControl( { value, onChange, isSet, hasEdit, onRevert, disabled } 
  * Normalizes a schema's options ({key:label} object OR array) into a list of
  * { value, label } pairs.
  *
+ * For a flat array ( `set_options( [ 'red', 'green' ] )` ), the option's own string is
+ * BOTH the value and the label — there is no separate machine key, that is the whole
+ * point of the shorthand. The submitted value must therefore be the string itself, not
+ * its position in the array: an index is meaningless once options are reordered, and
+ * `Woodev_Setting::get_validation_error()` (PHP) now validates a flat list strictly
+ * against its values, not its keys (issue #387 — the two sides used to disagree, and
+ * the index silently passed the server's enum check via numeric-string coercion).
+ *
  * @param {Object|Array} options raw options from the schema.
  * @return {Array} normalized [{ value, label }] list.
  */
@@ -196,7 +204,7 @@ function normalizeOptions( options ) {
 	}
 
 	if ( Array.isArray( options ) ) {
-		return options.map( ( label, i ) => ( { value: String( i ), label } ) );
+		return options.map( ( label ) => ( { value: label, label } ) );
 	}
 
 	return Object.entries( options ).map( ( [ value, label ] ) => ( { value, label } ) );
