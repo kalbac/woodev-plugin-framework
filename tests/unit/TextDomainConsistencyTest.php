@@ -27,14 +27,35 @@ final class TextDomainConsistencyTest extends TestCase {
 	private const TEXT_DOMAIN = 'woodev-plugin-framework';
 
 	/**
-	 * Gettext wrappers mapped to the argument count at which their LAST argument is the text
-	 * domain. The position varies by wrapper — `__()` takes two arguments, `_nx()` takes five
-	 * — so the arity has to be known per function: a call with FEWER arguments than this has
-	 * omitted its domain entirely (WordPress then falls back to its own `default` domain),
-	 * which is a different defect and is not what this test asserts.
+	 * The name of the domain parameter, identical across every wrapper below — which is what
+	 * makes a named argument resolvable without a per-function table of parameter names.
+	 */
+	private const DOMAIN_PARAMETER = 'domain';
+
+	/**
+	 * Gettext wrappers mapped to their POSITIONAL domain argument's 1-based position. It
+	 * varies by wrapper — `__( $text, $domain )` puts it second, `_nx( $single, $plural,
+	 * $number, $context, $domain )` fifth — so the position has to be known per function.
 	 *
-	 * `_n_noop()`/`_nx_noop()` are included: their domain argument is also last, and a wrong
-	 * one there fails at `translate_nooped_plural()` time rather than at the call site.
+	 * Read as a POSITION, not as an argument count. An earlier version of this file treated it
+	 * as "the call must pass exactly this many arguments, and the domain is the last one", and
+	 * an independent critic review broke that three separate ways, each a FALSE GREEN:
+	 *
+	 * - `__( domain: 'wrong', text: 'x' )` — named arguments are order-independent, so the
+	 *   domain is not last and the call does not even have a positional domain;
+	 * - `__( 'x', 'wrong', 'extra' )` — PHP passes surplus arguments to a userland function
+	 *   without complaint, so the domain is still second while the last token is not it;
+	 * - `__( ...$args )` — nothing about the domain is knowable statically.
+	 *
+	 * Position plus a named lookup answers the first two exactly; the third is reported as
+	 * unverifiable rather than skipped.
+	 *
+	 * A call passing FEWER positional arguments than this and naming no domain has omitted the
+	 * domain entirely — WordPress then falls back to its own `default` domain. That is a real
+	 * defect, but a different one, and not what this test asserts.
+	 *
+	 * `_n_noop()`/`_nx_noop()` are included: a wrong domain there fails at
+	 * `translate_nooped_plural()` time rather than at the call site.
 	 */
 	private const TRANSLATION_FUNCTIONS = [
 		'__'          => 2,
@@ -139,22 +160,43 @@ final class TextDomainConsistencyTest extends TestCase {
 				"__( 'text', SOME_CONSTANT );",
 				[ 'SOME_CONSTANT (not a string literal, so its domain cannot be verified)' ],
 			],
+
+			// The three shapes a second critic pass broke the position-as-arity version with.
+			// Each is legal PHP that reaches WordPress with the wrong domain, and each was
+			// silently accepted.
+			'named argument, in order'        => [ "__( text: 'x', domain: 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'named argument, reversed'        => [ "__( domain: 'wrong-domain', text: 'x' );", [ 'wrong-domain' ] ],
+			'named argument, correct domain'  => [ "__( domain: 'woodev-plugin-framework', text: 'x' );", [] ],
+			'named context wrapper reversed'  => [ "_x( domain: 'wrong-domain', text: 'x', context: 'c' );", [ 'wrong-domain' ] ],
+			'surplus positional argument'     => [ "__( 'text', 'wrong-domain', 'extra' );", [ 'wrong-domain' ] ],
+			'spread cannot be verified'       => [
+				"__( ...\$args );",
+				[ 'a spread argument list, so its domain cannot be verified' ],
+			],
+			'ternary first argument'          => [ "__( \$flag ? 'a' : 'b', 'wrong-domain' );", [ 'wrong-domain' ] ],
+			'first-class callable is not one' => [ "\$fn = __( ... );", [] ],
 		];
 	}
 
 	/**
 	 * Returns `line number => declared domain` for every translation call in $source whose
-	 * domain is a string literal other than the framework's.
+	 * domain is a string literal other than the framework's, plus every call whose domain
+	 * cannot be read statically at all.
 	 *
-	 * Tokenising rather than pattern-matching: the domain is the LAST argument, and its
-	 * position varies by function (`__()` takes two arguments, `_nx()` takes four), so a
-	 * regex would have to encode the arity of every wrapper. Walking the token stream to the
-	 * call's closing parenthesis reads the last argument directly, whatever the arity — and
-	 * it will not match the function names where they appear inside a comment or a string.
+	 * Tokenising rather than pattern-matching, for two reasons: the domain's position varies
+	 * by wrapper, so a regex would have to encode every signature; and a regex matches the
+	 * function names inside comments and strings, which the token stream does not.
 	 *
-	 * A call whose last argument is not a plain string literal (a constant, a variable, a
-	 * concatenation) is skipped rather than reported: this test cannot know what it resolves
-	 * to, and guessing would make it fail on code that is fine.
+	 * The domain is located by PARAMETER, not by position in the source text — a named
+	 * `domain:` argument wherever it sits, otherwise the positional argument at the wrapper's
+	 * recorded position. Reading "the last argument" instead is what let three false greens
+	 * through; see {@see self::TRANSLATION_FUNCTIONS}.
+	 *
+	 * A domain that cannot be read as a plain string literal — a constant, a variable, a
+	 * concatenation, or an argument list spread with `...` — is REPORTED as unverifiable
+	 * rather than skipped. Skipping it silently would be the same false green in a quieter
+	 * costume: the value is free to be anything, and this test would still claim to have
+	 * checked it.
 	 *
 	 * @param string $source
 	 * @return array<int, string>
@@ -181,29 +223,47 @@ final class TextDomainConsistencyTest extends TestCase {
 
 			$call = $this->read_call( $tokens, $opening );
 
-			// Fewer arguments than the wrapper's arity means no domain was passed at all —
-			// a real defect, but a different one, and not this test's assertion.
-			if ( null === $call || $call['arguments'] !== self::TRANSLATION_FUNCTIONS[ $token[1] ] ) {
+			if ( null === $call ) {
 				continue;
 			}
 
-			$last = $call['last'];
+			// `__( ... )` with nothing else is PHP 8.1's first-class callable syntax: it
+			// creates a Closure and translates nothing, so it declares no domain and is not
+			// this test's business. It is told apart from a real spread by carrying no
+			// argument at all — `__( ...$args )` carries one.
+			if ( $call['spread'] && [] === $call['arguments'] ) {
+				continue;
+			}
 
-			// A domain that is not a plain string literal cannot be checked here, and
-			// skipping it silently is the same false green the trailing comma produced: a
-			// constant or variable is free to resolve to any domain at all. There are none
-			// in woodev/ today, so the honest assertion is that there continue to be none —
-			// if one ever appears, this fails and someone decides deliberately how to verify
-			// it, rather than the guarantee quietly narrowing.
-			if ( ! is_array( $last ) || \T_CONSTANT_ENCAPSED_STRING !== $last[0] ) {
+			// `__( ...$args )` — the argument list is assembled at runtime, so nothing about
+			// the domain is knowable here. Report it; do not pretend to have checked it.
+			if ( $call['spread'] ) {
+				$found[ $token[2] ] = 'a spread argument list, so its domain cannot be verified';
+				continue;
+			}
+
+			$domain_token = $this->domain_argument( $call, self::TRANSLATION_FUNCTIONS[ $token[1] ] );
+
+			// No domain argument at all: WordPress falls back to its own `default` domain.
+			// A real defect, but a different one, and not this test's assertion.
+			if ( null === $domain_token ) {
+				continue;
+			}
+
+			// A domain that is not a plain string literal is free to resolve to anything, so
+			// passing over it silently is a false green too. There are none in woodev/ today;
+			// the assertion is that there continue to be none, and if one appears somebody
+			// decides deliberately how to verify it rather than the guarantee quietly
+			// narrowing.
+			if ( ! is_array( $domain_token ) || \T_CONSTANT_ENCAPSED_STRING !== $domain_token[0] ) {
 				$found[ $token[2] ] = sprintf(
 					'%s (not a string literal, so its domain cannot be verified)',
-					is_array( $last ) ? $last[1] : (string) $last
+					is_array( $domain_token ) ? $domain_token[1] : (string) $domain_token
 				);
 				continue;
 			}
 
-			$domain = trim( $last[1], "'\"" );
+			$domain = trim( $domain_token[1], "'\"" );
 			if ( self::TEXT_DOMAIN !== $domain && ! in_array( $domain, self::BORROWED_DOMAINS, true ) ) {
 				$found[ $token[2] ] = $domain;
 			}
@@ -213,34 +273,38 @@ final class TextDomainConsistencyTest extends TestCase {
 	}
 
 	/**
-	 * Reads the call whose parenthesis opens at $opening, returning how many top-level
-	 * arguments it passes and the final significant token of the last one — or null when the
-	 * call is unbalanced.
+	 * Reads the call whose parenthesis opens at $opening into its top-level arguments — or
+	 * null when the call is unbalanced.
 	 *
-	 * Arguments are accumulated rather than counted, because a PHP trailing comma
+	 * Each argument is `{name, value}`: `name` is its parameter name when written as a named
+	 * argument (`domain: 'x'`) and null otherwise, and `value` is the argument's FINAL
+	 * significant token, which for the literal domains this test cares about is the whole of
+	 * it. `spread` reports whether any argument was spread with `...`.
+	 *
+	 * Arguments are accumulated rather than counted. A PHP trailing comma
 	 * (`__( 'text', 'domain', )`, legal since 7.3) otherwise reads as one argument more than
-	 * the call really passes. That inflated count missed the wrapper's arity, the caller
-	 * skipped the call as "no domain given", and a genuinely wrong domain written that way
-	 * was accepted silently — a FALSE GREEN in the one direction that matters, found by an
-	 * independent critic review and reproduced before this fix. Collecting each argument's
-	 * final token and taking the last non-empty one gets both the count and the domain right,
-	 * with or without the trailing comma.
+	 * the call passes — the miscount defeated the position check, the caller skipped the call
+	 * as "no domain given", and a wrong domain written that way was accepted silently. An
+	 * independent critic review found and reproduced it.
 	 *
 	 * Nesting is tracked for `()`, `[]` and `{}`, so a comma inside an inner call, an inline
 	 * array or a closure body does not split an argument. `{` also arrives as the ARRAY
 	 * tokens `T_CURLY_OPEN` / `T_DOLLAR_OPEN_CURLY_BRACES` when a double-quoted string
 	 * interpolates (`"text {$var}"`) while its `}` arrives as the plain string — counting
-	 * only the plain `{` would leave the depth permanently short and make every later comma
-	 * in the file read at the wrong level.
+	 * only the plain `{` would leave the depth permanently short and put every later comma in
+	 * the file at the wrong level.
 	 *
 	 * @param array<int, array{0:int,1:string,2:int}|string> $tokens
 	 * @param int                                            $opening
-	 * @return array{arguments:int, last:array{0:int,1:string,2:int}|string|null}|null
+	 * @return array{arguments:array<int, array{name:?string, value:array{0:int,1:string,2:int}|string|null}>, spread:bool}|null
 	 */
 	private function read_call( array $tokens, int $opening ): ?array {
 		$depth     = 0;
-		$current   = null;
 		$arguments = [];
+		$spread    = false;
+		$current   = null;
+		$name      = null;
+		$is_first  = true;
 
 		for ( $i = $opening, $count = count( $tokens ); $i < $count; $i++ ) {
 			$token = $tokens[ $i ];
@@ -255,13 +319,16 @@ final class TextDomainConsistencyTest extends TestCase {
 				--$depth;
 
 				if ( 0 === $depth ) {
-					if ( null !== $current ) {
-						$arguments[] = $current;
+					if ( null !== $current || null !== $name ) {
+						$arguments[] = [
+							'name'  => $name,
+							'value' => $current,
+						];
 					}
 
 					return [
-						'arguments' => count( $arguments ),
-						'last'      => [] === $arguments ? null : end( $arguments ),
+						'arguments' => $arguments,
+						'spread'    => $spread,
 					];
 				}
 
@@ -273,17 +340,76 @@ final class TextDomainConsistencyTest extends TestCase {
 			}
 
 			if ( ',' === $token ) {
-				$arguments[] = $current;
-				$current     = null;
+				$arguments[] = [
+					'name'  => $name,
+					'value' => $current,
+				];
+
+				$current  = null;
+				$name     = null;
+				$is_first = true;
 				continue;
 			}
 
-			if ( is_array( $token ) && ! in_array( $token[0], [ \T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT ], true ) ) {
-				$current = $token;
+			if ( is_array( $token ) && in_array( $token[0], [ \T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT ], true ) ) {
+				continue;
 			}
+
+			if ( is_array( $token ) && \T_ELLIPSIS === $token[0] ) {
+				$spread = true;
+				continue;
+			}
+
+			// A named argument opens the argument as `name:` — a bare label immediately
+			// followed by a colon. The ternary's colon cannot be mistaken for it: there the
+			// label is not the argument's FIRST token, and its `?` intervenes.
+			if ( $is_first && is_array( $token ) && \T_STRING === $token[0] ) {
+				$after = $this->next_significant_index( $tokens, $i );
+
+				if ( null !== $after && ':' === $tokens[ $after ] ) {
+					$name     = $token[1];
+					$is_first = false;
+					$i        = $after;
+					continue;
+				}
+			}
+
+			$is_first = false;
+			$current  = $token;
 		}
 
 		return null;
+	}
+
+	/**
+	 * Picks the token carrying the text domain out of a read call — the argument named
+	 * `domain` wherever it sits, otherwise the positional argument at $position (1-based).
+	 * Returns null when the call passes no domain at all.
+	 *
+	 * Named arguments are order-independent in PHP 8, and positional ones are counted among
+	 * themselves so a named argument elsewhere in the list does not shift them. Surplus
+	 * arguments — which PHP passes to a userland function without complaint — leave the
+	 * domain exactly where its position says it is, which is why this reads a position rather
+	 * than the last argument.
+	 *
+	 * @param array{arguments:array<int, array{name:?string, value:array{0:int,1:string,2:int}|string|null}>, spread:bool} $call
+	 * @param int                                                                                                          $position
+	 * @return array{0:int,1:string,2:int}|string|null
+	 */
+	private function domain_argument( array $call, int $position ) {
+		$positional = [];
+
+		foreach ( $call['arguments'] as $argument ) {
+			if ( self::DOMAIN_PARAMETER === $argument['name'] ) {
+				return $argument['value'];
+			}
+
+			if ( null === $argument['name'] ) {
+				$positional[] = $argument['value'];
+			}
+		}
+
+		return $positional[ $position - 1 ] ?? null;
 	}
 
 	/**
