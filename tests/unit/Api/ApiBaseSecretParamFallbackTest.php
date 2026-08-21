@@ -429,6 +429,18 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 	 * prettifies the XML — must still be masked by the base's own fail-safe
 	 * pass.
 	 *
+	 * #395 Round 5: this used to also assert that `<Format>json</Format>`
+	 * survived untouched, pinning the OLD regex backstop's partial-masking
+	 * behavior as if it were a contract. It never was one: an independent
+	 * critic review proved that same regex backstop cannot see a secret in a
+	 * `print_r()`-shaped body at all (see
+	 * `test_unknown_request_class_print_r_shaped_post_body_is_masked_in_full_by_default()`
+	 * below), so XML's partial masking was luck of the shape, not a
+	 * guarantee. The base now cannot tell a secret-named element apart from
+	 * a safe sibling one in ANY format it cannot parse structurally, so it
+	 * masks the whole body instead — deliberately coarser, and the correct
+	 * side to err on.
+	 *
 	 * @return void
 	 */
 	public function test_unknown_request_class_xml_post_body_is_masked_by_default(): void {
@@ -446,7 +458,41 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 			$safe_body,
 			'BLOCKING 2: an XML-shaped POST body the request class did not mask itself must still not leak its secret param by default'
 		);
-		$this->assertStringContainsString( '<Format>json</Format>', $safe_body, 'a non-secret element must survive the fallback untouched' );
+		$this->assertSame(
+			\Woodev_API_Base::UNPARSEABLE_BODY_MASK,
+			$safe_body,
+			'#395 Round 5: a body format the base cannot parse and walk structurally is masked in FULL, not selectively — it has no reliable way to tell the secret element apart from a safe sibling one'
+		);
+	}
+
+	/**
+	 * A `print_r()`-shaped (`[name] => value`) POST body — the exact shape
+	 * {@see \Woodev_Licensing_API_Request::to_string_safe()} produces, and the
+	 * shape an independent critic review used to demonstrate the gap this
+	 * round closes: neither of {@see \Woodev_API_Base::redact_secret_query_params()}'s
+	 * two regex shapes (`name=value`, `<name>value</name>`) can match
+	 * `[name] => value`, so a request class relying on the base's fail-safe
+	 * default — never masking its own body — leaked an UNMASKED secret in
+	 * this shape before this fix.
+	 *
+	 * @return void
+	 */
+	public function test_unknown_request_class_print_r_shaped_post_body_is_masked_in_full_by_default(): void {
+
+		$token   = 'super-secret-token-value';
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( print_r( array( 'token' => $token, 'format' => 'json' ), true ) );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+
+		$this->assertStringNotContainsString(
+			$token,
+			$safe_body,
+			'#395 Round 5, Blocking: a print_r()-shaped body the request class did not mask itself must not leak its secret param'
+		);
+		$this->assertSame( \Woodev_API_Base::UNPARSEABLE_BODY_MASK, $safe_body );
 	}
 
 	/**
@@ -660,5 +706,55 @@ final class ApiBaseSecretParamFallbackTest extends TestCase {
 		$this->assertStringNotContainsString( $secret, $safe_body );
 		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $decoded['auth']['token'] );
 		$this->assertSame( 'json', $decoded['format'], 'a non-secret sibling param must survive untouched' );
+	}
+
+	// -------------------------------------------------------------------------
+	// #395 Round 5, SHOULD-FIX: a body that decodes as a JSON SCALAR (a bare
+	// string, number, bool, or null) carries no key to redact by, so it must
+	// be returned unchanged — never partially mangled by a regex scan that
+	// cannot tell whether the scalar itself is the secret either.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A bare JSON string scalar that happens to LOOK like a `name=value` pair
+	 * must survive byte-for-byte: Round 4 ran it through the regex backstop,
+	 * which matched the trailing quote into the value and handed back
+	 * `"token=[REDACTED]` — truncated, invalid JSON — without ever being able
+	 * to tell whether the scalar was actually a secret.
+	 *
+	 * @return void
+	 */
+	public function test_scalar_json_string_body_passes_through_unchanged(): void {
+
+		$body    = json_encode( 'token=secret' );
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( $body );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+
+		$this->assertSame( $body, $safe_body, '#395 Round 5, SHOULD-FIX: a scalar JSON body has no key to redact by and must not be mangled' );
+	}
+
+	/**
+	 * A bare JSON `null` body must be treated the same coherent way as the
+	 * string-scalar case above — both are JSON scalars, so both pass through
+	 * unchanged, instead of `null` silently surviving while a string scalar
+	 * got mangled.
+	 *
+	 * @return void
+	 */
+	public function test_scalar_json_null_body_passes_through_unchanged(): void {
+
+		$body    = 'null';
+		$request = new Testable_Unknown_Secret_Carrying_Body_Request( $body );
+
+		$api = new Testable_Api_Base_For_Fallback_Test();
+		$api->set_request_for_test( $request );
+
+		$safe_body = (string) $api->get_sanitized_request_body_for_test();
+
+		$this->assertSame( $body, $safe_body, '#395 Round 5, SHOULD-FIX: a scalar JSON body (including null) must pass through unchanged, coherently with the string-scalar case' );
 	}
 }
