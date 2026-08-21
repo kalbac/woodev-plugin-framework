@@ -68,8 +68,22 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Load the editor scripts and styles.
+		 *
+		 * Only enqueued for a capable user (`manage_woocommerce`) viewing a user
+		 * profile screen, so the editor's AJAX nonces are never localized for an
+		 * unauthorized visitor or on unrelated admin screens.
+		 *
+		 * @since 2.0.2
 		 */
 		public function enqueue_scripts_styles() {
+
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+
+			if ( ! Woodev_Helper::is_current_screen( 'profile' ) && ! Woodev_Helper::is_current_screen( 'user-edit' ) ) {
+				return;
+			}
 
 			// Stylesheet
 			wp_enqueue_style( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-token-editor.css', array(), Woodev_Plugin::VERSION );
@@ -185,8 +199,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Add a token via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
+		 * @since 2.0.2 capability check now runs before the nonce check, consistent with the other handlers
 		 */
 		public function ajax_get_blank_token() {
+
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_send_json_error();
+				return;
+			}
 
 			check_ajax_referer( 'wc_payment_gateway_admin_get_blank_payment_token', 'security' );
 
@@ -222,21 +244,25 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Remove a token via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
+		 * @since 2.0.2 also requires `edit_user` on the target user, since `manage_woocommerce`
+		 *              alone does not authorize acting on an arbitrary user object
 		 */
 		public function ajax_remove_token() {
 
 			try {
 
+				if ( ! current_user_can( 'manage_woocommerce' ) ) {
+					throw new Woodev_Payment_Gateway_Exception( 'You do not have permission to do this' );
+				}
+
 				if ( ! check_ajax_referer( 'wc_payment_gateway_admin_remove_payment_token', 'security' ) ) {
 					throw new Woodev_Payment_Gateway_Exception( 'Invalid nonce' );
 				}
 
-				$user_id  = Woodev_Helper::get_requested_value( 'user_id' );
+				$user_id  = $this->get_authorized_target_user_id();
 				$token_id = Woodev_Helper::get_requested_value( 'token_id' );
-
-				if ( ! $user_id ) {
-					throw new Woodev_Payment_Gateway_Exception( 'User ID is missing' );
-				}
 
 				if ( ! $token_id ) {
 					throw new Woodev_Payment_Gateway_Exception( 'Token ID is missing' );
@@ -256,20 +282,24 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Refresh the tokens list via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
+		 * @since 2.0.2 also requires `edit_user` on the target user, since `manage_woocommerce`
+		 *              alone does not authorize acting on an arbitrary user object
 		 */
 		public function ajax_refresh_tokens() {
 
 			try {
 
+				if ( ! current_user_can( 'manage_woocommerce' ) ) {
+					throw new Woodev_Payment_Gateway_Exception( 'You do not have permission to do this' );
+				}
+
 				if ( ! check_ajax_referer( 'wc_payment_gateway_admin_refresh_payment_tokens', 'security', false ) ) {
 					throw new Woodev_Payment_Gateway_Exception( 'Invalid nonce' );
 				}
 
-				$user_id = Woodev_Helper::get_requested_value( 'user_id' );
-
-				if ( ! $user_id ) {
-					throw new Woodev_Payment_Gateway_Exception( 'User ID is missing' );
-				}
+				$user_id = $this->get_authorized_target_user_id();
 
 				ob_start();
 
@@ -283,6 +313,62 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 				wp_send_json_error( $e->getMessage() );
 			}
+		}
+
+
+		/**
+		 * Resolve and authorize the user ID targeted by an AJAX request.
+		 *
+		 * Normalizes the requested value to a positive integer, then requires
+		 * `edit_user` on it, and only then confirms the ID resolves to an
+		 * existing user. `manage_woocommerce` alone does not authorize acting
+		 * on an arbitrary target: WordPress checks object-level capabilities
+		 * like `edit_user` per target, so a shop manager holding
+		 * `manage_woocommerce` is not necessarily allowed to edit an
+		 * administrator (or, on multisite, a user outside the current site).
+		 *
+		 * The capability check runs before the existence lookup deliberately:
+		 * `current_user_can( 'edit_user', $id )` resolves to WordPress core's
+		 * generic `edit_users` capability for any non-self, non-multisite-superadmin
+		 * target — it does not query whether `$id` is a real user — so a caller
+		 * without `edit_user` on the target is denied identically whether that
+		 * target exists or not. Running `get_userdata()` first would instead let
+		 * such a caller distinguish an existing-but-forbidden user ID from a
+		 * nonexistent one by which error comes back.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 capability check now runs before the existence lookup, so
+		 *              a caller cannot use the error to enumerate real user IDs
+		 *
+		 * @param string $key the request key holding the target user ID
+		 *
+		 * @return int the authorized target user ID
+		 *
+		 * @throws Woodev_Payment_Gateway_Exception if the user ID is missing, invalid, not editable by the current user, or does not resolve to an existing user
+		 */
+		protected function get_authorized_target_user_id( string $key = 'user_id' ): int {
+
+			$raw_user_id = Woodev_Helper::get_requested_value( $key );
+
+			if ( ! is_scalar( $raw_user_id ) ) {
+				throw new Woodev_Payment_Gateway_Exception( 'User ID is missing' );
+			}
+
+			$user_id = filter_var( $raw_user_id, FILTER_VALIDATE_INT );
+
+			if ( false === $user_id || $user_id <= 0 ) {
+				throw new Woodev_Payment_Gateway_Exception( 'User ID is missing' );
+			}
+
+			if ( ! current_user_can( 'edit_user', $user_id ) ) {
+				throw new Woodev_Payment_Gateway_Exception( 'You do not have permission to do this' );
+			}
+
+			if ( ! get_userdata( $user_id ) ) {
+				throw new Woodev_Payment_Gateway_Exception( 'User ID is missing' );
+			}
+
+			return $user_id;
 		}
 
 
