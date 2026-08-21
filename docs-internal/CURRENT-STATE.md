@@ -40,8 +40,10 @@ rather than tuned, because the cap is a symptom of the framework asking "give me
 scope" (measured in production: ~3000 settlements for Московская область, 3-5 s to render, and the
 select stays slow). The framework stores regions and the shop's 20-30 most-ordered settlements,
 never a settlement dictionary. Three provider capabilities, none of them about bulk. "Связанный
-поиск" is redefined as "the settlement field REQUIRES the region", is derived rather than
-configured, and is overridable only by filter. **PR #423 is deliberately still open** — its
+поиск" is redefined as "the settlement field REQUIRES the region" and is controlled by a single
+checkbox that defaults ON when the capability is there — and **self-releases on read** when the
+region is not actually in the chain, so third-party removal degrades to country-wide search rather
+than to a field the shopper cannot escape. **PR #423 is deliberately still open** — its
 truncation hint may serve as an interim measure if #437 does not start soon.
 
 **Nobody accepted their own work, and it paid.** Every card that went to a critic came back with
