@@ -68,8 +68,22 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Load the editor scripts and styles.
+		 *
+		 * Only enqueued for a capable user (`manage_woocommerce`) viewing a user
+		 * profile screen, so the editor's AJAX nonces are never localized for an
+		 * unauthorized visitor or on unrelated admin screens.
+		 *
+		 * @since 2.0.2
 		 */
 		public function enqueue_scripts_styles() {
+
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				return;
+			}
+
+			if ( ! Woodev_Helper::is_current_screen( 'profile' ) && ! Woodev_Helper::is_current_screen( 'user-edit' ) ) {
+				return;
+			}
 
 			// Stylesheet
 			wp_enqueue_style( 'woodev-payment-gateway-token-editor', $this->get_gateway()->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-token-editor.css', array(), Woodev_Plugin::VERSION );
@@ -185,10 +199,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Add a token via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
 		 */
 		public function ajax_get_blank_token() {
 
 			check_ajax_referer( 'wc_payment_gateway_admin_get_blank_payment_token', 'security' );
+
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_send_json_error();
+				return;
+			}
 
 			$index = Woodev_Helper::get_requested_value( 'index' );
 
@@ -222,10 +243,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Remove a token via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
 		 */
 		public function ajax_remove_token() {
 
 			try {
+
+				if ( ! current_user_can( 'manage_woocommerce' ) ) {
+					throw new Woodev_Payment_Gateway_Exception( 'You do not have permission to do this' );
+				}
 
 				if ( ! check_ajax_referer( 'wc_payment_gateway_admin_remove_payment_token', 'security' ) ) {
 					throw new Woodev_Payment_Gateway_Exception( 'Invalid nonce' );
@@ -256,10 +283,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 		/**
 		 * Refresh the tokens list via AJAX.
+		 *
+		 * @since 2.0.2 gated behind `manage_woocommerce`, in addition to the nonce
 		 */
 		public function ajax_refresh_tokens() {
 
 			try {
+
+				if ( ! current_user_can( 'manage_woocommerce' ) ) {
+					throw new Woodev_Payment_Gateway_Exception( 'You do not have permission to do this' );
+				}
 
 				if ( ! check_ajax_referer( 'wc_payment_gateway_admin_refresh_payment_tokens', 'security', false ) ) {
 					throw new Woodev_Payment_Gateway_Exception( 'Invalid nonce' );
