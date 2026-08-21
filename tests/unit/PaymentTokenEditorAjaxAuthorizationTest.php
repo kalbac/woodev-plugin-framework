@@ -14,6 +14,14 @@
  * capability plus the profile/user-edit admin screens, so the nonces are never
  * localized for an unauthorized visitor.
  *
+ * Follow-up: `manage_woocommerce` alone does not authorize acting on an
+ * arbitrary target user — WordPress checks object-level capabilities like
+ * `edit_user` per target, so a shop manager holding `manage_woocommerce` is
+ * not necessarily allowed to edit an administrator. ajax_remove_token() and
+ * ajax_refresh_tokens() now also normalize the requested `user_id` to a
+ * positive integer referencing an existing user and require
+ * `current_user_can( 'edit_user', $user_id )` before touching anything.
+ *
  * @package Woodev\Tests\Unit
  */
 
@@ -68,16 +76,16 @@ namespace {
 	class Token_Editor_IDOR_Test_Editor extends \Woodev_Payment_Gateway_Admin_Payment_Token_Editor {
 
 		/** @var array<int,array{0:mixed,1:mixed}> */
-		public $removed_tokens = array();
+		public $removed_tokens = [];
 
 		/** @var bool */
 		public $remove_token_return = true;
 
 		/** @var array<int,mixed> */
-		public $refreshed_user_ids = array();
+		public $refreshed_user_ids = [];
 
 		protected function remove_token( $user_id, $token_id ) {
-			$this->removed_tokens[] = array( $user_id, $token_id );
+			$this->removed_tokens[] = [ $user_id, $token_id ];
 
 			return $this->remove_token_return;
 		}
@@ -107,12 +115,16 @@ namespace Woodev\Tests\Unit {
 			Functions\when( 'sanitize_text_field' )->returnArg();
 			Functions\when( 'wp_unslash' )->returnArg();
 
+			// Default: the requested target user exists. Tests covering an
+			// absent/nonexistent user_id override this per-test.
+			Functions\when( 'get_userdata' )->justReturn( true );
+
 			$GLOBALS['current_screen'] = null;
 		}
 
 		protected function tearDown(): void {
 			unset( $GLOBALS['current_screen'] );
-			unset( $_REQUEST['user_id'], $_REQUEST['token_id'] );
+			unset( $_REQUEST['user_id'], $_REQUEST['token_id'], $_REQUEST['index'] );
 
 			parent::tearDown();
 		}
@@ -147,6 +159,33 @@ namespace Woodev\Tests\Unit {
 			return $screen;
 		}
 
+		/**
+		 * Stubs current_user_can() so `manage_woocommerce` is always granted
+		 * (the feature capability the shop manager legitimately holds) while
+		 * `edit_user` is granted only for the given allowed target user ID(s)
+		 * — modelling a shop manager who is NOT permitted to edit every user
+		 * on the site (e.g. an administrator, or another site's user).
+		 *
+		 * @param int[] $editable_user_ids user IDs `edit_user` should allow
+		 */
+		private function stub_capabilities_for_shop_manager( array $editable_user_ids ): void {
+
+			Functions\when( 'current_user_can' )->alias(
+				static function ( $capability, ...$args ) use ( $editable_user_ids ) {
+
+					if ( 'manage_woocommerce' === $capability ) {
+						return true;
+					}
+
+					if ( 'edit_user' === $capability ) {
+						return in_array( $args[0], $editable_user_ids, true );
+					}
+
+					return false;
+				}
+			);
+		}
+
 		// -------------------------------------------------------------------
 		// ajax_remove_token() — GH-383: deletes another user's saved card
 		// -------------------------------------------------------------------
@@ -164,7 +203,7 @@ namespace Woodev\Tests\Unit {
 
 			$editor->ajax_remove_token();
 
-			$this->assertSame( array(), $editor->removed_tokens, 'remove_token() must never run for an unauthorized caller — this is the #383 IDOR' );
+			$this->assertSame( [], $editor->removed_tokens, 'remove_token() must never run for an unauthorized caller — this is the #383 IDOR' );
 		}
 
 		public function test_ajax_remove_token_succeeds_for_an_authorized_caller(): void {
@@ -180,7 +219,7 @@ namespace Woodev\Tests\Unit {
 
 			$editor->ajax_remove_token();
 
-			$this->assertSame( array( array( '7', 'tok_1' ) ), $editor->removed_tokens, 'A capable, correctly-nonced caller must still be able to remove a token' );
+			$this->assertSame( [ [ 7, 'tok_1' ] ], $editor->removed_tokens, 'A capable, correctly-nonced caller must still be able to remove a token' );
 		}
 
 		public function test_ajax_remove_token_rejects_an_invalid_nonce_even_for_a_capable_user(): void {
@@ -195,7 +234,90 @@ namespace Woodev\Tests\Unit {
 
 			$editor->ajax_remove_token();
 
-			$this->assertSame( array(), $editor->removed_tokens, 'The nonce stays a required CSRF check on top of the capability check' );
+			$this->assertSame( [], $editor->removed_tokens, 'The nonce stays a required CSRF check on top of the capability check' );
+		}
+
+		public function test_ajax_remove_token_rejects_a_shop_manager_targeting_a_user_they_may_not_edit(): void {
+			$editor = $this->make_editor();
+
+			// A shop manager holds manage_woocommerce, but user 1 (e.g. an
+			// administrator) is outside the set of users they may edit.
+			$_REQUEST['user_id']  = '1';
+			$_REQUEST['token_id'] = 'tok_1';
+
+			$this->stub_capabilities_for_shop_manager( [] );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/permission/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_remove_token();
+
+			$this->assertSame( [], $editor->removed_tokens, 'manage_woocommerce alone must not authorize removing an arbitrary target user\'s token — GH-383 follow-up' );
+		}
+
+		public function test_ajax_remove_token_rejects_a_non_numeric_user_id(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['user_id']  = 'not-a-number';
+			$_REQUEST['token_id'] = 'tok_1';
+
+			Functions\when( 'current_user_can' )->justReturn( true );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/user id/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_remove_token();
+
+			$this->assertSame( [], $editor->removed_tokens, 'A non-numeric user_id must be rejected before it reaches remove_token()' );
+		}
+
+		public function test_ajax_remove_token_rejects_a_negative_user_id(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['user_id']  = '-5';
+			$_REQUEST['token_id'] = 'tok_1';
+
+			Functions\when( 'current_user_can' )->justReturn( true );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/user id/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_remove_token();
+
+			$this->assertSame( [], $editor->removed_tokens, 'A negative user_id must be rejected before it reaches remove_token()' );
+		}
+
+		public function test_ajax_remove_token_rejects_an_array_user_id(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['user_id']  = [ '1', '2' ];
+			$_REQUEST['token_id'] = 'tok_1';
+
+			Functions\when( 'current_user_can' )->justReturn( true );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/user id/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_remove_token();
+
+			$this->assertSame( [], $editor->removed_tokens, 'An array user_id must be rejected — it must never reach a user-ID array key downstream' );
+		}
+
+		public function test_ajax_remove_token_rejects_a_nonexistent_user_id(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['user_id']  = '999999';
+			$_REQUEST['token_id'] = 'tok_1';
+
+			Functions\when( 'current_user_can' )->justReturn( true );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\when( 'get_userdata' )->justReturn( false );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/user id/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_remove_token();
+
+			$this->assertSame( [], $editor->removed_tokens, 'A user_id that does not resolve to an existing user must be rejected' );
 		}
 
 		// -------------------------------------------------------------------
@@ -213,7 +335,7 @@ namespace Woodev\Tests\Unit {
 
 			$editor->ajax_refresh_tokens();
 
-			$this->assertSame( array(), $editor->refreshed_user_ids, 'display_tokens() must never run for an unauthorized caller — this is the #383 IDOR' );
+			$this->assertSame( [], $editor->refreshed_user_ids, 'display_tokens() must never run for an unauthorized caller — this is the #383 IDOR' );
 		}
 
 		public function test_ajax_refresh_tokens_succeeds_for_an_authorized_caller(): void {
@@ -227,7 +349,77 @@ namespace Woodev\Tests\Unit {
 
 			$editor->ajax_refresh_tokens();
 
-			$this->assertSame( array( '99' ), $editor->refreshed_user_ids, 'A capable, correctly-nonced caller must still be able to refresh the tokens list' );
+			$this->assertSame( [ 99 ], $editor->refreshed_user_ids, 'A capable, correctly-nonced caller must still be able to refresh the tokens list' );
+		}
+
+		public function test_ajax_refresh_tokens_rejects_a_shop_manager_targeting_a_user_they_may_not_edit(): void {
+			$editor = $this->make_editor();
+
+			// A shop manager holds manage_woocommerce, but user 1 (e.g. an
+			// administrator) is outside the set of users they may edit.
+			$_REQUEST['user_id'] = '1';
+
+			$this->stub_capabilities_for_shop_manager( [] );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/permission/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_refresh_tokens();
+
+			$this->assertSame( [], $editor->refreshed_user_ids, 'manage_woocommerce alone must not authorize listing an arbitrary target user\'s tokens — GH-383 follow-up' );
+		}
+
+		public function test_ajax_refresh_tokens_allows_a_shop_manager_targeting_a_user_they_may_edit(): void {
+			$editor = $this->make_editor();
+
+			// The shop manager IS allowed to edit this customer (e.g. a
+			// subscriber they created / manage), so the refresh must succeed.
+			$_REQUEST['user_id'] = '42';
+
+			$this->stub_capabilities_for_shop_manager( [ 42 ] );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\expect( 'wp_send_json_success' )->once()->with( 'tokens-markup-for-42' );
+			Functions\expect( 'wp_send_json_error' )->never();
+
+			$editor->ajax_refresh_tokens();
+
+			$this->assertSame( [ 42 ], $editor->refreshed_user_ids, 'A shop manager must still be able to refresh tokens for a customer they are allowed to edit' );
+		}
+
+		public function test_ajax_refresh_tokens_rejects_a_nonexistent_user_id(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['user_id'] = '999999';
+
+			Functions\when( 'current_user_can' )->justReturn( true );
+			Functions\when( 'check_ajax_referer' )->justReturn( true );
+			Functions\when( 'get_userdata' )->justReturn( false );
+			Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::pattern( '/user id/i' ) );
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_refresh_tokens();
+
+			$this->assertSame( [], $editor->refreshed_user_ids, 'A user_id that does not resolve to an existing user must be rejected' );
+		}
+
+		// -------------------------------------------------------------------
+		// ajax_get_blank_token() — no target user_id, but must still gate on
+		// the feature capability, and do so before the CSRF check
+		// -------------------------------------------------------------------
+
+		public function test_ajax_get_blank_token_rejects_an_uncapable_caller_with_a_valid_nonce(): void {
+			$editor = $this->make_editor();
+
+			$_REQUEST['index'] = '1';
+
+			Functions\when( 'current_user_can' )->justReturn( false );
+			// Authorization must precede the CSRF check consistently across
+			// all three handlers, so check_ajax_referer() must never run here.
+			Functions\expect( 'check_ajax_referer' )->never();
+			Functions\expect( 'wp_send_json_error' )->once()->withNoArgs();
+			Functions\expect( 'wp_send_json_success' )->never();
+
+			$editor->ajax_get_blank_token();
 		}
 
 		// -------------------------------------------------------------------
