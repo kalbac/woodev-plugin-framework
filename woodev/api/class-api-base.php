@@ -718,6 +718,11 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              way, instead of returning it unchanged, because a bare
 		 *              scalar has no key to redact by and may itself BE the
 		 *              secret — #395 Round 6, Blocking 1 & 2.
+		 * @since 2.0.2 also called by {@see self::get_sanitized_response_body()}
+		 *              to redact response bodies — #427. Every rule above is
+		 *              about the body's FORMAT, not which direction it
+		 *              travelled, so no response-specific branch was needed;
+		 *              only the caller changed, not this method.
 		 *
 		 * @param string             $body
 		 * @param array<int, string> $secret_names
@@ -1199,8 +1204,34 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return $this->raw_response_body;
 		}
 
-		protected function get_sanitized_response_body() {
-			return is_callable( array( $this->get_response(), 'to_string_safe' ) ) ? $this->get_response()->to_string_safe() : null;
+		/**
+		 * Gets the sanitized response body, for logging.
+		 *
+		 * Symmetric with {@see self::get_sanitized_request_body()} — #427. Before
+		 * this, the response side had no fail-safe pass at all: every concrete
+		 * response class in this codebase ({@see Woodev_API_JSON_Response},
+		 * {@see Woodev_API_XML_Response}) aliases `to_string_safe()` straight onto
+		 * the raw `to_string()`, so whatever came back over the wire reached the
+		 * log unredacted by default — the exact gap {@see self::redact_secret_request_body()}
+		 * already closed on the request side.
+		 *
+		 * Whatever `to_string_safe()` returns — or `''` when there is no response
+		 * yet, or its class does not implement the method at all — is run through
+		 * {@see self::redact_secret_request_body()} unconditionally, exactly like
+		 * the request side: a JSON object/array body is walked and redacted by
+		 * key at any depth, anything else (XML, a `print_r()` dump, free text, a
+		 * bare JSON scalar) is replaced with {@see self::UNPARSEABLE_BODY_MASK} in
+		 * full.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_sanitized_response_body(): string {
+
+			$body = is_callable( [ $this->get_response(), 'to_string_safe' ] ) ? (string) $this->get_response()->to_string_safe() : '';
+
+			return self::redact_secret_request_body( $body, $this->get_secret_param_names() );
 		}
 
 		/**
@@ -1209,17 +1240,30 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *
 		 * @since 2.0.2 `headers` is now {@see self::get_sanitized_response_headers()}
 		 *              instead of the raw {@see self::get_response_headers()} — see #300.
-		 *              The `body` policy is unchanged.
+		 * @since 2.0.2 `body` is now {@see self::get_sanitized_response_body()} taken
+		 *              unconditionally, instead of falling back to the raw
+		 *              {@see self::get_raw_response_body()} whenever the sanitized
+		 *              value was falsy (`''`, `'0'`, ...) — #427. That fallback was
+		 *              exactly the case redaction exists to cover: a response class
+		 *              with no `to_string_safe()`, or one that returns a falsy but
+		 *              real value, fell straight through to the never-redacted
+		 *              bytes off the wire — the second, undocumented leak behind
+		 *              #427. A genuinely empty sanitized body already logs as `''`
+		 *              (see {@see self::get_sanitized_response_body()}, same "empty
+		 *              stays empty" convention {@see self::redact_secret_request_body()}
+		 *              uses for an empty request body), so there is no longer a
+		 *              case where the raw body carries information the sanitized
+		 *              one does not — falling back to raw bytes is never correct.
 		 *
-		 * @return array
+		 * @return array<string, mixed>
 		 */
 		protected function get_response_data_for_broadcast() {
-			return array(
+			return [
 				'code'    => $this->get_response_code(),
 				'message' => $this->get_response_message(),
 				'headers' => $this->get_sanitized_response_headers(),
-				'body'    => $this->get_sanitized_response_body() ? $this->get_sanitized_response_body() : $this->get_raw_response_body(),
-			);
+				'body'    => $this->get_sanitized_response_body(),
+			];
 		}
 
 		public function get_request() {
