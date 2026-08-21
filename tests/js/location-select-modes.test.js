@@ -389,6 +389,27 @@ describe( 'related-list settlement renderer', () => {
 		expect( document.querySelector( '.woodev-location-list-truncated-notice' ) ).toBeNull();
 	} );
 
+	it( 'removes a truncation hint when the next list response is complete', async () => {
+		const options = buildOptions();
+		const first = mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+
+		fetchJsonCalls[ 0 ].resolve( {
+			localities: [],
+			truncated: true,
+			truncated_message: 'Показаны первые 500 населённых пунктов. Уточните регион.',
+		} );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( document.querySelector( '.woodev-location-list-truncated-notice' ) ).not.toBeNull();
+
+		first.detach();
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+		fetchJsonCalls[ 1 ].resolve( { localities: [], truncated: false, truncated_message: '' } );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( document.querySelector( '.woodev-location-list-truncated-notice' ) ).toBeNull();
+	} );
+
 	it( 'picking an option calls the shared onSelect with the matching record — the SAME persist path as every other level', async () => {
 		const options = buildOptions( { node: { level: 'settlement', fieldId: 'billing_city' } } );
 

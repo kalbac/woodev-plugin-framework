@@ -1800,6 +1800,22 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( 'Показаны первые 500 населённых пунктов. Уточните регион для более точного списка.', $result['truncated_message'] );
 	}
 
+	public function test_list_truncation_message_acknowledges_an_applied_region_scope(): void {
+		$region   = $this->region_record( 'dadata:region-1' );
+		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 501 ) );
+		$service  = new Location_Controller_Fake_Service( true, null, [ 'record' => $region, 'implicit' => false, 'saved_at' => 0 ], true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$result = $ctrl->handle_list_request( $request );
+
+		$this->assertTrue( $result['truncated'] );
+		$this->assertSame( 'applied', $result['within_status'] );
+		$this->assertSame( 'Показаны первые 500 населённых пунктов выбранного региона. Если нужного населённого пункта нет в списке, выберите другой регион.', $result['truncated_message'] );
+	}
+
 	public function test_list_exactly_at_the_hard_cap_is_not_reported_truncated(): void {
 		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 500 ) );
 		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );

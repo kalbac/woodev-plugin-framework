@@ -1065,6 +1065,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 * @since 2.0.2 Capped at {@see self::LIST_HARD_CAP} records, with an
 		 *              optional clamped `limit` arg and a `truncated` response
 		 *              flag (PR #304 review finding 5).
+		 * @since 2.0.2 Returns a translated `truncated_message` that acknowledges
+		 *              when the requested `within` region was applied (#411).
 		 * @since 2.0.2 Response gained `within_status` (#333) — see
 		 *              {@see self::build_scope()} for the values; unlike
 		 *              `/suggest` this route never shipped a `within_applied`
@@ -1137,13 +1139,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				return $this->upstream_error();
 			}
 
-			$truncated = count( $records ) > $limit;
-			$records   = array_slice( $records, 0, $limit );
-			$truncated_message = $truncated ? sprintf(
-				/* translators: %d: number of location records shown. */
-				__( 'Показаны первые %d населённых пунктов. Уточните регион для более точного списка.', 'woodev-plugin-framework' ),
-				$limit
-			) : '';
+			$truncated         = count( $records ) > $limit;
+			$records           = array_slice( $records, 0, $limit );
+			$truncated_message = '';
+
+			if ( $truncated ) {
+				$truncated_message = sprintf(
+					/* translators: %d: number of location records shown. */
+					self::WITHIN_STATUS_APPLIED === $within_status
+						? __( 'Показаны первые %d населённых пунктов выбранного региона. Если нужного населённого пункта нет в списке, выберите другой регион.', 'woodev-plugin-framework' )
+						: __( 'Показаны первые %d населённых пунктов. Уточните регион для более точного списка.', 'woodev-plugin-framework' ),
+					$limit
+				);
+			}
 
 			return rest_ensure_response(
 				[
