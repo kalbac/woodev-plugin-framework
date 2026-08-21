@@ -162,6 +162,11 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 					throw new InvalidArgumentException( "Setting {$setting_id} does not exist" );
 				}
 
+				if ( $setting->is_is_multi() && Woodev_Setting::TYPE_BOOLEAN === $setting->get_type()
+					&& in_array( $type, [ Woodev_Control::TYPE_TOGGLE, Woodev_Control::TYPE_CHECKBOX ], true ) ) {
+					throw new UnexpectedValueException( "{$type} controls only support scalar boolean settings" );
+				}
+
 				$setting_control_types = $this->get_setting_control_types( $setting );
 				if ( ! empty( $setting_control_types ) && ! in_array( $type, $setting_control_types, true ) ) {
 					throw new UnexpectedValueException( "{$type} is not a valid control type for setting {$setting->get_id()} of type {$setting->get_type()}" );
@@ -519,6 +524,12 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		/**
 		 * Converts the value of a setting to be stored in an option.
 		 *
+		 * Multi-value settings are serialized element by element to match
+		 * Woodev_Setting::update_value(), which validates every element. Boolean
+		 * multi-values are therefore supported, but register_control() rejects
+		 * toggle and checkbox controls for them: the admin UI renders those
+		 * controls as one scalar boolean and would collapse the stored array.
+		 *
 		 * @param Woodev_Setting $setting
 		 * @return mixed
 		 */
@@ -537,6 +548,11 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 
 		/**
 		 * Converts the stored value of a setting to the proper setting type.
+		 *
+		 * Multi-value settings are restored element by element to preserve the
+		 * same generic is_multi contract used by Woodev_Setting::update_value().
+		 * Boolean multi-values must remain unpaired with toggle and checkbox
+		 * controls until an array-aware list-of-booleans control exists.
 		 *
 		 * @param mixed          $value the value stored in an option
 		 * @param Woodev_Setting $setting

@@ -167,6 +167,22 @@ class PlatformNeutralSettingsApiTest extends TestCase {
 	}
 
 	/**
+	 * Float multi-value settings must receive the same element-wise database
+	 * conversion instead of discarding the complete stored array.
+	 *
+	 * @return void
+	 */
+	public function test_float_multi_setting_restores_each_stored_value(): void {
+		$settings = new Testable_Platform_Neutral_Settings( 'test-plugin' );
+		$setting  = new \Woodev_Setting();
+
+		$setting->set_type( \Woodev_Setting::TYPE_FLOAT );
+		$setting->set_is_multi( true );
+
+		$this->assertSame( [ 7.25, 42.5 ], $settings->convert_from_database( [ '7.25', '42.5' ], $setting ) );
+	}
+
+	/**
 	 * Malformed object data for a boolean setting must not reach strtolower().
 	 *
 	 * @return void
