@@ -605,18 +605,55 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				return sprintf( __( 'Недопустимое значение для типа %s.', 'woodev-plugin-framework' ), $this->type );
 			}
 
-			// Enum: accept an option KEY (assoc map) or VALUE (plain list).
-			if ( ! empty( $this->options )
-				&& ! ( is_scalar( $value ) && array_key_exists( $value, $this->options ) )
-				&& ! in_array( $value, $this->options, true ) ) {
+			// Enum: a flat STRING list ( `set_options( [ 'red', 'green' ] )` ) is validated
+			// against its VALUES — the client now always sends the option's own string, never
+			// a positional index (issue #387: normalizeOptions() used to submit the index, and
+			// this check's former array_key_exists()-on-either-shape leniency let a numeric
+			// string like "1" silently match it via PHP's implicit numeric-string-to-int key
+			// coercion). Every other shape — an associative map ( `set_options( [ 'red' =>
+			// 'Красный' ] )` ), OR an integer/float enum whose labels are free-text display
+			// strings that could never themselves be a valid typed value ( `set_options( [ 0 =>
+			// 'Zero', 1 => 'One' ] )`, see set_options()'s own docblock and
+			// SettingUpdateValueTest::test_update_value_accepts_integer_enum_key() ) — is
+			// validated against its KEYS only, via a STRICT (non type-coercing) lookup so a
+			// numeric string can no longer alias an unrelated int key either. The display
+			// label was also being silently accepted for an associative map before this fix —
+			// the same class of defect the other direction: a caller could never rely on which
+			// token (key or label) actually got stored.
+			if ( ! empty( $this->options ) ) {
 
-				return sprintf(
-					__( 'Значение должно быть одним из: %s.', 'woodev-plugin-framework' ),
-					Woodev_Helper::list_array_items( $this->options, 'or' )
-				);
+				$is_valid_option = ( self::TYPE_STRING === $this->type && self::is_flat_options_list( $this->options ) )
+					? in_array( $value, $this->options, true )
+					: ( is_scalar( $value ) && in_array( $value, array_keys( $this->options ), true ) );
+
+				if ( ! $is_valid_option ) {
+					return sprintf(
+						__( 'Значение должно быть одним из: %s.', 'woodev-plugin-framework' ),
+						Woodev_Helper::list_array_items( $this->options, 'or' )
+					);
+				}
 			}
 
 			return null;
+		}
+
+		/**
+		 * Determines whether $options is a flat, zero-indexed list ( `set_options( [ 'red', 'green' ] )` )
+		 * as opposed to an associative key => label map ( `set_options( [ 'red' => 'Красный' ] )` ).
+		 *
+		 * PHP cannot distinguish an implicit flat list from an explicit `[ 0 => 'Zero', 1 => 'One' ]`
+		 * map with the same array shape — the two are the same array. `get_validation_error()` resolves
+		 * that ambiguity by gating this check on `self::TYPE_STRING === $this->type`: a non-string enum
+		 * (e.g. `[ 0 => 'Zero', 1 => 'One' ]` on a TYPE_INTEGER setting) always validates by KEY, because
+		 * its free-text labels could never themselves be a valid value of that type — only a STRING-typed
+		 * setting's flat list is treated as "the value IS the label" (issue #387).
+		 *
+		 * @since 2.0.2
+		 * @param array $options
+		 * @return bool
+		 */
+		private static function is_flat_options_list( array $options ): bool {
+			return [] === $options || array_keys( $options ) === range( 0, count( $options ) - 1 );
 		}
 
 		/**

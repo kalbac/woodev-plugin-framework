@@ -114,6 +114,38 @@ class SettingValidationTest extends TestCase {
 		$this->assertStringStartsWith( 'Значение должно быть одним из:', (string) $setting->get_validation_error( 'c' ) );
 	}
 
+	/**
+	 * Issue #387: a flat-array setting ( `set_options( [ 'red', 'green', 'blue' ] )` ) must
+	 * validate against its VALUES, not its positional index. Before the fix, submitting the
+	 * numeric string "1" silently passed — PHP's implicit numeric-string-to-int coercion in
+	 * `array_key_exists( '1', $options )` matched it against the key `1` ( 'green' ) — so the
+	 * client's stray array index (client bug, fixed separately in control-field.js) was
+	 * accepted as if it were a real option value.
+	 */
+	public function test_enum_flat_list_rejects_numeric_string_index(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ 'red', 'green', 'blue' ] );
+
+		// "1" is only the KEY of 'green' ( index 1 ) — never a value in the list itself.
+		$this->assertNotNull( $setting->get_validation_error( '1' ) );
+		// The actual option value must still be accepted.
+		$this->assertNull( $setting->get_validation_error( 'green' ) );
+	}
+
+	/**
+	 * Tightened per #387: an associative options map ( key => label ) now validates the KEY
+	 * only. The display label used to also be accepted via `in_array( $value, $this->options, true )`,
+	 * which is the same class of defect the other direction — a caller could never rely on
+	 * which token (key or label) actually ended up stored.
+	 */
+	public function test_enum_assoc_map_rejects_label_accepts_key(): void {
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ 'red' => 'Красный', 'green' => 'Зелёный' ] );
+
+		$this->assertNull( $setting->get_validation_error( 'green' ) );
+		$this->assertNotNull( $setting->get_validation_error( 'Зелёный' ) );
+	}
+
 	public function test_checkbox_required_is_noop(): void {
 		$setting = $this->make( 'boolean', 'checkbox', true );
 		$this->assertNull( $setting->get_validation_error( false ) );
