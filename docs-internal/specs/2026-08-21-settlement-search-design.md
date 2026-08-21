@@ -195,16 +195,64 @@ Two things the checkbox needs to be safe.
 complaint in #412 — "выглядит как оно не работает". The merchant sees the prohibition and not
 what lifts it, so the reason has to be on screen.
 
-**Third-party detection must not be load-bearing.** `Регион = Удалять` is our own option and reads
-deterministically server-side. But a field removed by another plugin or by the theme is only
-visible to us if it goes through our registry; a late `woocommerce_checkout_fields` filter, or a
-removal in JS, we cannot see at all.
+**Detection is for the UI. Self-release is what carries correctness.** The operator pushed back on
+the first version of this, which said detection was unreliable in general — and he was partly
+right, so here is what was actually checked.
+
+Reading the merged field config IS possible, and on the classic checkout it is honest: our own
+filter runs at `LATE`, "after everyone who has an opinion", so WooCommerce's defaults and any
+third-party field manager have already had their say. The API is
+`WC()->checkout()->get_checkout_fields( 'billing' )` — used in four of our own production plugins.
+(Not `get_field( 'billing', 'state' )`, which does not exist; and `class` is an array, not a
+string.)
+
+What it does not cover is the reason detection cannot be load-bearing. **There are two
+instruments, and that API sees only one:**
+
+| Instrument | Read by |
+|---|---|
+| `woocommerce_checkout_fields` | the **classic** checkout only, by construction |
+| `woocommerce_get_country_locale` | the **block** checkout — `CheckoutFields::get_core_fields()` hard-codes the core address fields (gotcha `block-checkout-reads-country-locale-not-checkout-fields`) |
+
+So on the block checkout a third party can remove the region through the locale instrument and
+`get_checkout_fields()` will not show it. A second risk worth measuring: the settings screen renders
+in wp-admin, while some third-party hooks register on the front end only — an admin-time read could
+then differ from what the shopper gets.
+
+Keep one more distinction in mind: `hidden` in the locale sense means *not rendered and not
+required* — **hidden is not removed**. In this layer hiding is never done by unsetting (T1/T2).
+
+`Регион = Удалять` is our own option and reads deterministically either way.
 
 So the dependency is inverted: **granularity self-releases on read when the region is not actually
 in the chain.** Undetected third-party removal then degrades to country-wide search rather than to
 a dead field the shopper cannot escape — the same self-releasing pattern already agreed in #406.
 Detection is then only needed to grey the checkbox nicely in the admin, and its imperfection stops
 being dangerous.
+
+This is also why the checkbox must be labelled as an **intention, not a state**. "Включить
+гранулярность" is never false. "Гранулярность активна" would be a lie in exactly the case detection
+misses — the box looks on while the runtime has released it.
+
+### 8a. What the control says in each state
+
+Three states, not two, because the cause of unavailability changes the remedy. Structure:
+**state, cause, what to do.** Wording is the operator's to set; this is the shape.
+
+| State | Draft copy |
+|---|---|
+| Unavailable — our own setting removed the region | «Недоступно: поле «Регион» удалено из чекаута настройкой выше. Верните его, чтобы включить.» |
+| Unavailable — other code removed the region | «Недоступно: поле «Регион» отсутствует в чекауте — его убирает тема или другой плагин.» |
+| Available, switched off | «Ограничивает поиск населённого пункта выбранным регионом. Без этого покупатель может не найти свой пункт среди тёзок — «Октябрьский» встречается в России более 25 раз.» |
+
+The third one names the failure it prevents rather than the mechanism it performs. A merchant
+reading "narrows the search to the region" learns what it does; they do not learn why they would
+want it.
+
+**No admin notice when granularity self-releases at runtime** (operator decision). The precondition
+is observable in the product itself — the merchant opens the checkout and sees whether a region
+field is there. A notice would be noise for a case a human can check by looking, and nothing is
+broken when it happens: the search degrades to country-wide, it does not lock anyone out.
 
 That also settles global-versus-per-country: **global**, because in a country without the
 capability it self-releases anyway.
@@ -234,10 +282,9 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
 - Whether `search_settlements_within` and `search_settlements_countrywide` are one contract method
   with an optional scope or two, given decision 7 collapses the difference to one bit.
 - What the settlement field offers when a provider declares neither settlement-search capability.
-- **Does the merchant learn when granularity self-releases at runtime?** The checkbox says on, the
-  region was removed by other code, and the field quietly falls back to country-wide search. Silent
-  degradation is honest towards the shopper, but the merchant will believe the setting is in
-  effect. If we surface it, where — a hint at the checkbox, or a notice on the orders screen?
+- Whether an admin-time read of the checkout fields matches what the shopper actually gets, given
+  that some third-party hooks register on the front end only. Worth measuring before relying on the
+  greying-out; it does not affect correctness, only the quality of the hint.
 
 ## Related
 
