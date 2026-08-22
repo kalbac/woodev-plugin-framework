@@ -1263,6 +1263,83 @@ describe( 'backwards fill', () => {
 		// Still filled: postcode is not a chain level and is never gated by ownership.
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 	} );
+
+	/**
+	 * Issue #460 (measured on the rig, s86: `region mode: ajax-select2`). A mode-specific
+	 * renderer (`location-select-modes.js`, not this module) replaces the region `<input>`
+	 * with a `<select>` — under `ajax-select2` it starts with NO `<option>` elements at all
+	 * (see `buildSelectField()`'s own docblock: "nothing is pre-populated"). Before this fix,
+	 * `backwardsFill()`'s plain `el.value = ...` selected NOTHING on such a field
+	 * (`selectedIndex` stays `-1`), so the region silently never reached WooCommerce and the
+	 * store kept its `RU:*` "no state" default across a reload — exactly the reported symptom.
+	 */
+	it( 'creates and selects a synthetic option when backward-filling a select2-enhanced region field with no matching option', () => {
+		boot( { region: true, settlement: true } );
+
+		// Simulates the mode renderer's own swap (see this test's own docblock) — this
+		// module never performs it itself, it only ever finds whatever is live by id.
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		expect( regionEl.tagName ).toBe( 'SELECT' );
+		expect( regionEl.value ).toBe( 'Московская область' );
+		expect( regionEl.selectedOptions[ 0 ].textContent ).toBe( 'Московская область' );
+	} );
+
+	/**
+	 * Issue #460's `related-list` half: that mode pre-populates the WHOLE country's real,
+	 * WC-registered `<option>` elements up front (`class-checkout-config.php::build_location_block()`'s
+	 * own "related-list region seam" docblock) — option VALUE is `wc_strtoupper(trim(label))`,
+	 * option TEXT is the human label. Backward-fill must select the EXISTING option (by
+	 * matching its TEXT against the bare component name {@see fieldValueFor} derives) and
+	 * inherit ITS real value — never fabricate one WooCommerce's own state-list validation
+	 * would then reject.
+	 */
+	it( 'selects the EXISTING option by matching its text when backward-filling a related-list-enhanced region field', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const option = document.createElement( 'option' );
+
+		option.value = 'МОСКОВСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Московская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		// The REGISTERED WC value, not a synthetic one carrying the bare name — a value
+		// posted for a related-list field must match what `woocommerce_states` registered.
+		expect( regionEl.value ).toBe( 'МОСКОВСКАЯ ОБЛАСТЬ' );
+		expect( regionEl.options.length ).toBe( 1 );
+	} );
 } );
 
 // -----------------------------------------------------------------------

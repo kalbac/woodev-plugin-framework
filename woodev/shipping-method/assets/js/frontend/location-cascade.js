@@ -958,11 +958,85 @@
 	}
 
 	/**
+	 * Writes `value` onto `el` — an `<input>` gets a plain `.value` assignment (unchanged);
+	 * a `<select>` (issue #460) needs an actually SELECTED `<option>`, or the field is
+	 * silently omitted from the next `update_checkout` POST.
+	 *
+	 * A mode-specific renderer (Task 13; `location-select-modes.js`) replaces a chain field's
+	 * plain `<input>` with a `<select>` whose OWN `<option>` VALUE space this module
+	 * deliberately never learns (the D7 "mode is presentation" seam — see the file docblock's
+	 * RENDERER SEAM section): `ajax-select2`'s underlying `<select>` starts with NO options at
+	 * all (populated lazily, per keystroke, into select2's own detached UI — see that file's
+	 * own `buildSelectField()` docblock), and `related-list`'s registers real WooCommerce
+	 * state options whose VALUE is `wc_strtoupper( trim( label ) )`, never a bare component
+	 * name (`class-checkout-config.php::build_location_block()`'s own "related-list region
+	 * seam" docblock). {@see fieldValueFor} — this module's ONLY value vocabulary — produces
+	 * neither. Setting `.value` directly on a `<select>` with no matching `<option>` selects
+	 * NOTHING (`selectedIndex` becomes `-1`, per the HTMLSelectElement value setter steps), so
+	 * a backwards-filled region or settlement never reaches WooCommerce at all, regardless of
+	 * what the DOM briefly showed — measured on the rig: the store's own `RU:*` "no state"
+	 * default survives untouched.
+	 *
+	 * Three tries, in order: (1) an EXISTING option whose `value` already matches — the
+	 * ordinary case for anything this module already wrote itself; (2) an existing option
+	 * whose visible TEXT matches — `related-list` pre-populates the WHOLE country's real,
+	 * WC-canonical options up front (see that mode's own seam), so a text match finds and
+	 * selects the CORRECT registered value, never a guess; (3) only when neither exists (the
+	 * `ajax-select2` case above, where no real option ever precedes a live search) — a new
+	 * `<option>` carrying `value` verbatim as both its value and its text, appended and
+	 * selected. `ajax-select2` is offered by this layer only for a country WooCommerce's own
+	 * state list has NOTHING registered for (`levels[country]['region']`'s own derivation), so
+	 * a synthetic option is a value WooCommerce's checkout processing accepts and stores as
+	 * written — strictly better than the status quo (a field submitting nothing at all), never
+	 * a claim that this is the value the field's own widget would have produced from a live
+	 * pick.
+	 *
+	 * @param {Element} el
+	 * @param {string}  value
+	 * @returns {void}
+	 */
+	function applyValueToElement( el, value ) {
+		if ( 'SELECT' !== el.tagName ) {
+			el.value = value;
+			return;
+		}
+
+		var options = el.options || [];
+		var i;
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].value === value ) {
+				el.selectedIndex = i;
+				return;
+			}
+		}
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].textContent === value ) {
+				el.selectedIndex = i;
+				return;
+			}
+		}
+
+		var option = document.createElement( 'option' );
+
+		option.value = value;
+		option.textContent = value;
+
+		el.appendChild( option );
+		el.selectedIndex = el.options.length - 1;
+	}
+
+	/**
 	 * Writes `value` into `fieldId`'s store slot AND its live DOM element WITHOUT dispatching
 	 * any event — the write path for backwards fill and the `updated_checkout` safety-net
 	 * restore, both of which must NOT be mistaken for a user-driven parent change by this same
 	 * module's own change-gate (see the file docblock). Also seeds `resolved[fieldId]` to the
 	 * SAME value, so a later genuine event comparing against it correctly sees "unchanged".
+	 *
+	 * The live DOM write goes through {@see applyValueToElement} (issue #460) rather than a
+	 * bare `.value =` — see that function's own docblock for why a `<select>` needs more than
+	 * that to actually submit what this call intends.
 	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
@@ -976,7 +1050,7 @@
 		var el = document.getElementById( fieldId );
 
 		if ( el ) {
-			el.value = value;
+			applyValueToElement( el, value );
 		}
 	}
 
