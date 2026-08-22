@@ -741,6 +741,51 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( select.options[ 0 ].value ).toBe( 'Казань' );
 	} );
 
+	/**
+	 * Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s own
+	 * `country_to_state_changed` handler) carries neither a `value` nor a `placeholder`/
+	 * `data-placeholder` attribute — the "thin strip" report (zero content height until the
+	 * customer picks something). `entry.location.i18n.placeholder` — the SAME server-supplied,
+	 * translatable string `Checkout_Config::build_location_block()` already emits for the main
+	 * config — is the fallback, never a hardcoded JS literal.
+	 */
+	it( 'an empty field with NO placeholder attribute falls back to location.i18n.placeholder', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'shipping_state' ),
+			buildOptions( {
+				node: { level: 'region', fieldId: 'shipping_state' },
+				location: { endpoints: { list: LIST_URL }, mode: 'related-list', i18n: { placeholder: 'Выберите регион' } },
+			} )
+		);
+
+		expect( instances[ 0 ].config.placeholder ).toBe( 'Выберите регион' );
+
+		const select = document.getElementById( 'shipping_state' );
+
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( '' );
+	} );
+
+	it( 'a placeholder/data-placeholder attribute still wins over location.i18n.placeholder', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" placeholder="Своя подсказка" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'shipping_state' ),
+			buildOptions( {
+				node: { level: 'region', fieldId: 'shipping_state' },
+				location: { endpoints: { list: LIST_URL }, mode: 'related-list', i18n: { placeholder: 'Выберите регион' } },
+			} )
+		);
+
+		expect( instances[ 0 ].config.placeholder ).toBe( 'Своя подсказка' );
+	} );
+
 	it( 'the seeded option is already IN THE DOM at the moment select2() is called — proven via the #450 fake, not inferred', () => {
 		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="Татарстан" />';
 

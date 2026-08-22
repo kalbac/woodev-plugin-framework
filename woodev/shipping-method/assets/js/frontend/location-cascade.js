@@ -2765,6 +2765,15 @@
 	 * `checkout-field-classic.js`'s own `updated_checkout` handler: "restore is a safety net,
 	 * not an overwrite").
 	 *
+	 * The restore runs BEFORE the re-attach, not after (issue #460): a mode-specific renderer
+	 * that SWAPS the node (`ajax-select2`'s `<input>` → `<select>`, same as
+	 * `location-select-modes.js`'s own `buildSelectField()`) reads its seed value off the LIVE
+	 * element at attach time (issue #447's "capture BEFORE the `<input>` is detached"), so a
+	 * value written onto `live` only AFTER `attachOne()` already ran lands on the element the
+	 * renderer just replaced — orphaned, invisible, and gone the moment it is garbage
+	 * collected. Restoring first means the renderer's OWN seed read sees it, exactly like a
+	 * server-rendered value would.
+	 *
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
@@ -2782,15 +2791,15 @@
 				return;
 			}
 
-			if ( ! current || current.el !== live ) {
-				detachOne( entry, node.fieldId );
-				attachOne( entry, node );
-			}
-
 			var stored = entry.store.getValue( node.fieldId );
 
 			if ( ! live.value && undefined !== stored && null !== stored && '' !== stored ) {
 				live.value = stored;
+			}
+
+			if ( ! current || current.el !== live ) {
+				detachOne( entry, node.fieldId );
+				attachOne( entry, node );
 			}
 		} );
 
@@ -2821,6 +2830,51 @@
 		}
 
 		document.body.addEventListener( 'updated_checkout', handleCheckoutUpdated );
+	}
+
+	/**
+	 * Binds the `country_to_state_changed` subscriber (issue #460) — reuses the EXACT same
+	 * `reconcileAfterCheckoutUpdate()` an `updated_checkout` re-render already runs, because the
+	 * defect this closes is the SAME shape: WooCommerce's OWN `country-select.js` rebuilds
+	 * `#billing_state`/`#shipping_state`/`#calc_shipping_state` on the country field's `change`/
+	 * `refresh` — unconditionally `.replaceWith()`-ing whatever currently occupies that id,
+	 * including a `<select>` a mode-specific renderer here (`ajax-select2`) built for a country
+	 * with NO WooCommerce state list — and fires `country_to_state_changed` right after, on
+	 * EVERY branch, whether or not anything this layer owns was touched. `updated_checkout`
+	 * never fires as part of this: the rebuild is synchronous client-side DOM churn, not a
+	 * server round-trip, so a listener bound only to `updated_checkout` (the prior state of
+	 * this file) never runs at all for this rebuild — this module's own widget is simply gone,
+	 * empty, with nothing to notice.
+	 *
+	 * Read `country-select.js` itself (WooCommerce core,
+	 * `assets/js/frontend/country-select.js`) before assuming this is a narrow patch: its
+	 * "country has no WC state list" branch (the RU case) builds the replacement node from
+	 * `$statebox.attr(...)` alone and NEVER reads back the `value` it captured earlier in the
+	 * same handler — there is no code path in core that could carry a value across that
+	 * specific branch, which is why surviving the rebuild (carrying `data-input-classes` etc.
+	 * onto our own `<select>`) cannot work here: the fresh node core builds is unconditionally
+	 * empty regardless of what the replaced node carried. Re-seeding from `entry.store` after
+	 * the fact — the same store {@see prefill} already populated before this rebuild ever
+	 * happened — is the only side of this that can restore the value.
+	 *
+	 * Harmless for the country field's OWN `<select>`/`<input class="country_to_state">` (this
+	 * layer never attaches anything to `billing_country`/`shipping_country`) and for a
+	 * WC-managed state field (a country WC DOES carry states for): `isWcManagedField()` /
+	 * `isNodeActive()`'s own gating already keeps this layer off those — see
+	 * `checkout-field-classic.js`'s own `isWcManagedField()` docblock for why. Re-running the
+	 * reconcile for every entry on every `country_to_state_changed` is a no-op for whichever
+	 * entry's fields the event did not touch, exactly like `handleCheckoutUpdated()` already is
+	 * for an `updated_checkout` that replaced a different section's fragment.
+	 *
+	 * @returns {void}
+	 */
+	function bindCountryToStateChangedWatcher() {
+		if ( window.jQuery ) {
+			window.jQuery( document.body ).on( 'country_to_state_changed', handleCheckoutUpdated );
+			return;
+		}
+
+		document.body.addEventListener( 'country_to_state_changed', handleCheckoutUpdated );
 	}
 
 	// -------------------------------------------------------------------------
@@ -2989,6 +3043,7 @@
 		suppressWcAddressAutocomplete();
 		bindChangeWatchers();
 		bindCheckoutUpdatedWatcher();
+		bindCountryToStateChangedWatcher();
 
 		// Issue #339. A native CustomEvent, like `woodev_location_applied` going the other
 		// way — `dispatchEvent()` runs every listener INLINE, so the re-seed is already done
