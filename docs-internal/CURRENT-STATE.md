@@ -7,11 +7,12 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-21 (s84, overnight).** **`main`, everything merged that was ready.** Seven PRs landed
-with every CI job individually green and state CLEAN: **#420** (#394 stored-XSS), **#426** (#383
-critical IDOR), **#428** (#384 + #388 + #390 background jobs), **#430** (#389 boolean + is_multi),
-**#431** (#385 + #392 + #398 + #401 payment gateway), **#424** and **#425**
-(worktree gate parity, plus the gotchas that came out of the night).
+**As of 2026-08-22 (s85).** **`main` carries eight merged PRs from this session:** **#433**
+(#395 license key in logs — unblocked after a fresh Codex APPROVE), **#442** (#416 stored-XSS),
+**#422** (#412 + #415), **#445** (#427 response-body redaction), **#446** (#387 flat-array
+options), **#452** (select2 reference study), **#443** (#421 text domain + a token-walking scanner),
+plus the bundle-rebuild commit pushed into #422. **#423 was closed UNMERGED** — the operator
+declared it and #411 obsolete, superseded by the #437 spec.
 
 **⛔ Budget constraint, operator decision 21.08.2026: Codex is CRITIC-ONLY until 27.08.2026.** One
 overnight session burned **45% of the weekly Codex allowance** by running it as worker, planner and
@@ -19,19 +20,43 @@ critic at once. Until that date all implementation goes to Sonnet workers. Stand
 same decision: **2–3 concurrent agents** (not 5–6) and **2–3 rounds per card** — a card still
 REJECTed after the third verdict needs decomposition or an operator decision, not a fourth round.
 
-**Two PRs are OPEN and waiting for the operator's browser pass, both fully green:**
+## ⚠️ Two PRs open, and the checkout is NOT shippable — read this before touching the location layer
 
-- **#423 — #411**, the location list silently capped at 500. The PR body carries a four-step rig
-  checklist and **one copy question for him**: in the `applied` branch the hint says "choose a
-  different region", which a shopper cannot act on.
-- **#422 — #412 + #415**, live settlement choices and the Save button disabled for a foreign
-  provider. Four-step rig checklist in the PR body.
+**PR #454 (#448) — VERIFIED by the operator on the rig 22.08.2026, green, CLEAN, awaiting the merge
+button only.** The address field no longer inherits the settlement axis mode. `resolveModeRenderer()`
+used a binary ternary against three levels, so `address` took the settlement axis and, because
+`ajax-select2` was registered under a bare level-less key, became a select the settings never
+offered it.
 
-**#395 is open as PR #433 with CI green and MUST NOT be merged.** Six worker rounds, five critic
-REJECTs, every one real. Round 6 (`e2b5e39`) deletes the mechanism that produced the last two leaks
-instead of patching it; **a sixth critic pass was started and stopped mid-run, so it carries NO
-verdict — the absence of a rejection is not an approval.** Details and what the sixth critic should
-have checked: `sessions/s84.md` and the comment on PR #433.
+**PR #456 (#450 + #447) — green and correct, DELIBERATELY HELD (operator decision, 22.08.2026).**
+It seeds the ajax-select2 field with its current value and adds the harness that makes select2's
+config visible to jsdom at all. Held because with it the shopper sees a raw provider key
+(`dadata:0c5b2444-…`) where the city name belongs. **Merge it together with the #455 label fix, not
+before.** The counter-argument the operator accepted as reasonable but did not take: data survival
+beats appearance, and a key is better than an empty field that silently wipes the address.
+
+**The data loss in #447 is REAL and was measured on the rig, not argued.** An empty `<select>`
+returns `null` from jQuery's `.val()` (not `''` — that is the native getter), `jQuery.param()` puts
+it on the wire as a PRESENT-but-empty `s_state=`, and `WC_Data::set_props()` skips only `null`,
+never `''`. Confirmed live: `wp_woocommerce_sessions` holds `shipping_city = ""` in five sessions
+while `usermeta.shipping_city` is still `Москва`. **The customer's profile is intact; the SESSION is
+what gets wiped — so the ORDER is what suffers.**
+
+**Four more defects were found on the rig 22.08.2026 and are NOT fixed by either PR:**
+
+| Card | What |
+|---|---|
+| **#457** | `detach()` calls `select2('destroy')` off a closure flag; jQuery's `cleanData()` has already purged the node's `select2` data when WooCommerce replaces the address fragment. Console fills with `TypeError` on every `update_checkout`. Also: the flag is set BEFORE `.select2()`, not after. |
+| **#458** | **The biggest one.** Our location fields apply ONLY to shipping. Billing runs on the old fixture/mu-plugin rules. Operator tested «Force shipping to the customer billing address» — our settings still did not apply, so in that shop configuration the module does not participate in checkout at all. |
+| **#459** | The address field stays disabled until the settlement is re-picked. Filling the region does not help; only a fresh pick unlocks it. So the gate is on a cascade record, not on the field's value. |
+| **#460** | The region does not survive a reload — the SERVER-rendered `input` is already empty. Session holds `shipping_state = "*"`, which nobody has explained yet. Start there. |
+
+**One unresolved white spot — do NOT fix #455 before closing it.** The provider key visible in the
+city field is not in WooCommerce's session (`shipping_city` is `""` or `Moscow`), not in
+`usermeta`, and the cascade's own store is memory-only and cannot survive a reload. Our
+`woodev_customer_location` session record holds the key correctly and by design. **The path that
+puts the key into the rendered `input` was not found.** Fixing the symptom without it risks
+papering over the real write.
 
 **Design decided in conversation at the end of s84: card #437, spec
 `specs/2026-08-21-settlement-search-design.md`.** It **absorbs #411**. The settlement axis stops
@@ -94,7 +119,7 @@ with seven CRLF-only files — **never `git add -A` there** (gotcha
 Cards filed in s84: **#416** (stored-XSS in the payment form — `nickname` and expiry unescaped,
 same class as #394), **#421** (wrong text domain in `class-payment-gateway.php:2188`), **#427** (API
 response bodies logged unredacted while the request side no longer is), **#429** (three
-background-job leftovers). Gotchas: **180**.
+background-job leftovers). Gotchas: **184**.
 
 ## Program status (high level)
 
@@ -146,24 +171,31 @@ background-job leftovers). Gotchas: **180**.
 
 ## Next Actions
 
-0. **Два PR ждут ТЕБЯ, оба зелёные.** #423 (#411, обрезка списка на 500 — есть вопрос по
-   формулировке) и #422 (#412 + #415, вкладка настроек). В теле каждого пошаговый чек-лист для
-   браузера. Мержить после твоей проверки.
-1. **Довести три ветки, оставшиеся в работе.** Ветки существуют, ничего не запушено:
-   `fix/395-mask-license-key-in-logs` (#395 — три круга воркера и три прохода критика),
-   `fix/385-392-398-401-payment-gateway` (#385/#392/#398/#401),
-   `fix/389-boolean-multi-setting` (#389). Где каждая остановилась — в `sessions/s84.md`.
-2. **#387** — плоский список опций: клиент шлёт индекс, сервер его принимает, в опции ложится `"1"`
-   вместо `"green"`. **Намеренно отложена за #422:** её клиентская половина живёт в
-   `src/components/control-field.js`, который правит #422. Брать сразу после мержа #422.
-3. **Остаток ревью 27B:** #385–#402 минус закрытые. Не тронуты: #391, #393, #396, #397, #399,
-   #400, #402. Ещё 6 развилок в комментарии к #382 — они за тобой.
-4. **Новые карточки s84:** #416 (stored-XSS в форме оплаты — тот же класс, что #394),
-   #421 (текст-домен), #427 (тело ответа логируется без редактирования), #429 (остатки по джобам).
-5. **#405 — долг по проверке.** Вживую не подтверждена. Прежде чем мерить — найти условие, при
+0. **Одна кнопка за тобой:** смержить **PR #454** (#448). Ты проверил его на риге 22.08.2026,
+   он зелёный и CLEAN. Автомерж из сессии заблокирован классификатором.
+1. **Слой локации на чекауте — главный фронт.** Порядок предлагается такой, и он не произвольный:
+   - **#460** (регион не переживает перезагрузку) первым — начать с необъяснённого
+     `shipping_state = "*"` в сессии. Если регион пишется звёздочкой, «пустое поле» это следствие.
+   - **белое пятно #455** — найти путь, которым ключ провайдера попадает в отрисованный `input`.
+     Без этого чинить #455 нельзя, а без #455 нельзя мержить #456.
+   - **#459** (адрес не разблокируется) — вероятно общий корень с #460: состояние каскада не
+     восстанавливается на бутстрапе. Проверять вместе, гипотезу подтверждать исполнением.
+   - **#449** (поиск при пустом вводе, запрос на символ, мигание) — оснастка под неё уже готова и
+     в #456 лежит `it.skip` с её номером, который падает при снятии скипа. Проверено.
+   - **#457** (`destroy` по флагу из замыкания) — самостоятельный, небольшой.
+2. **#458 — billing простаивает.** Крупнее остальных и это вопрос продукта, а не только кода:
+   нужно решить, обслуживаем ли мы обе колонки или только ту, что определяет доставку. Первым делом
+   выяснить, зашит ли `shipping_` литералом в `class-checkout-handler.php` / `class-checkout-config.php`.
+3. **#437 — поиск НП вместо предустановленного списка.** Спека готова
+   (`specs/2026-08-21-settlement-search-design.md`), поглощает #411. Не начата. Учесть, что #423
+   закрыт, то есть промежуточной меры по обрезке списка больше нет.
+4. **Мелкие остатки этой сессии:** #444 (26 строк i18n без домена — оснастка уже есть, довести
+   `TextDomainConsistencyTest` до отчёта о вызовах короче позиции домена), #451 (сырая
+   reason-фраза), #453 (числовые строковые ключи опций).
+5. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402. Ещё 6 развилок в комментарии
+   к #382 — они за тобой.
+6. **#405 — долг по проверке.** Вживую не подтверждена. Прежде чем мерить — найти условие, при
    котором фикстура СДЭК реально падает, иначе замер бессмысленный.
-6. **Настройки приложения Orca** — панели Settings не пройдены. `orca computer` умеет их водить,
-   но только когда нет живых воркеров и с твоего согласия.
 7. **#374 (названия опций и словарь значений)** — НЕ начинать без тебя, твоя прямая просьба.
 8. **#379 (цвет/текст кнопки карты)** — низкий приоритет; `resolve_accent_color()` уже реализован.
 9. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
@@ -182,7 +214,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `main` (s83, после мержа #413).** Риг отдаёт main со всей работой s82 и s83.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `main` (s85).** В s85 риг временно стоял на `rig/s85-select2-verify` (= `main` + #454 + #456) для проверки оператором; ветка НЕ удалена и её можно поднять снова. Если проверяешь #456, дерево надо переключить на неё явно — на `main` его починки нет.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.

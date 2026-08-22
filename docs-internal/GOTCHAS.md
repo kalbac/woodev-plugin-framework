@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 180 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 184 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -274,6 +274,10 @@
 - [tooling/parallel-agents] **Every fresh worktree starts dirty with seven CRLF-only files — a worker running `git add -A` commits 483 lines of line-ending churn.** → [an-orca-worktree-starts-dirty-with-crlf-churn](gotchas/an-orca-worktree-starts-dirty-with-crlf-churn.md) (s84)
 - [tooling/parallel-agents] **`worker-start --agent codex` lands in a PowerShell prompt that executes the brief; launching Codex takes four steps, ESC for the update dialog included.** → [starting-codex-under-orca-needs-four-steps-not-one](gotchas/starting-codex-under-orca-needs-four-steps-not-one.md) (s84)
 - [tooling/parallel-agents] **Three agents is this machine's real cap — past it phpcs blames innocent files and jest OOMs, both of which read as code defects.** → [three-agents-is-the-concurrency-cap-on-this-machine](gotchas/three-agents-is-the-concurrency-cap-on-this-machine.md) (s84)
+- [tooling/parallel-agents] **`dispatch --inject` can report `ok:false` after it already injected AND submitted — the retry duplicates the paste and revokes the worker's capability.** → [dispatch-inject-reports-failure-after-succeeding](gotchas/dispatch-inject-reports-failure-after-succeeding.md) (s85)
+- [tooling/parallel-agents] **`.worktreeinclude` is copied from the PRIMARY checkout's working tree — parking it on a stale branch silently degrades every worktree made afterwards.** → [a-stale-primary-checkout-degrades-every-worktree-made-from-it](gotchas/a-stale-primary-checkout-degrades-every-worktree-made-from-it.md) (s85)
+- [tooling/parallel-agents] **A Codex bundle over ~32 KB will not fit in argv — pass a file path and put the anti-fabrication canary INSIDE the file, never in the dispatch.** → [a-codex-bundle-over-32k-needs-a-file-and-an-in-file-canary](gotchas/a-codex-bundle-over-32k-needs-a-file-and-an-in-file-canary.md) (s85)
+- [tooling/parallel-agents] **`git worktree remove --force` follows the shared `node_modules` symlink and empties the PRIMARY checkout — remove Orca worktrees through Orca.** → [git-worktree-remove-empties-the-primary-checkout-s-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkout-s-node-modules.md) (s85)
 - [tooling/codex-shell-sandbox-broken-windows] **Codex's shell WORKS — launch it in an Orca terminal; only `codex exec -s read-only` hits the broken windows sandbox. Same binary, trusted project, no sandbox.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72, **solved s82**)
 - [tooling/windows] **Git Bash mangles Cyrillic in curl arguments — the API answers 400/500 and it reads as the API's fault.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76)
 - [tooling/serena-eol-flip] **Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows.** → [serena-replace-content-eol-flip](gotchas/serena-replace-content-eol-flip.md) (s25)
