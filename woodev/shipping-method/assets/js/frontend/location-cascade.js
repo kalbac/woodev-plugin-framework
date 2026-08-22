@@ -180,6 +180,16 @@
 	/** @type {string} marks the address input while it is locked (issue #337) — see {@see refreshAddressLock}. */
 	var LOCKED_CLASS = 'woodev-location-locked';
 
+	/**
+	 * Marks the ONE synthetic `<option>` {@see applyValueToElement} may own on a given `<select>`
+	 * — reused across calls instead of appended anew each time (issue #462 round 2), so a region
+	 * changed twice never leaves a stale, deselected option littering the node the customer's
+	 * form submits.
+	 *
+	 * @type {string}
+	 */
+	var SYNTHETIC_OPTION_ATTR = 'data-woodev-location-synthetic';
+
 	var factory = window.WoodevCheckoutFieldStore;
 
 	if ( ! factory || 'function' !== typeof factory.createStore ) {
@@ -958,11 +968,147 @@
 	}
 
 	/**
+	 * Writes `value` onto `el` — an `<input>` gets a plain `.value` assignment (unchanged);
+	 * a `<select>` (issue #460) needs an actually SELECTED `<option>`, or the field is
+	 * silently omitted from the next `update_checkout` POST.
+	 *
+	 * A mode-specific renderer (Task 13; `location-select-modes.js`) replaces a chain field's
+	 * plain `<input>` with a `<select>` whose OWN `<option>` VALUE space this module
+	 * deliberately never learns (the D7 "mode is presentation" seam — see the file docblock's
+	 * RENDERER SEAM section): `ajax-select2`'s underlying `<select>` starts with NO options at
+	 * all (populated lazily, per keystroke, into select2's own detached UI — see that file's
+	 * own `buildSelectField()` docblock), and `related-list`'s registers real WooCommerce
+	 * state options whose VALUE is `wc_strtoupper( trim( label ) )`, never a bare component
+	 * name (`class-checkout-config.php::build_location_block()`'s own "related-list region
+	 * seam" docblock). {@see fieldValueFor} — this module's ONLY value vocabulary — produces
+	 * neither. Setting `.value` directly on a `<select>` with no matching `<option>` selects
+	 * NOTHING (`selectedIndex` becomes `-1`, per the HTMLSelectElement value setter steps), so
+	 * a backwards-filled region or settlement never reaches WooCommerce at all, regardless of
+	 * what the DOM briefly showed — measured on the rig: the store's own `RU:*` "no state"
+	 * default survives untouched.
+	 *
+	 * Three tries, in order: (1) an EXISTING option whose `value` already matches — the
+	 * ordinary case for anything this module already wrote itself; (2) an existing option
+	 * whose visible TEXT matches — `related-list` pre-populates the WHOLE country's real,
+	 * WC-canonical options up front (see that mode's own seam), so a text match finds and
+	 * selects the CORRECT registered value, never a guess; (3) only when neither exists (the
+	 * `ajax-select2` case above, where no real option ever precedes a live search) — a synthetic
+	 * `<option>` carrying `value` verbatim as both its value and its text, marked with
+	 * {@see SYNTHETIC_OPTION_ATTR} and REUSED on every later call rather than appended anew (a
+	 * region changed twice must not leave a stale, deselected option behind — issue #462 round
+	 * 2). `ajax-select2` is offered by this layer only for a country WooCommerce's own state
+	 * list has NOTHING registered for (`levels[country]['region']`'s own derivation), so a
+	 * synthetic option is a value WooCommerce's checkout processing accepts and stores as
+	 * written — strictly better than the status quo (a field submitting nothing at all), never
+	 * a claim that this is the value the field's own widget would have produced from a live
+	 * pick.
+	 *
+	 * A selected `<option>` alone is not enough once select2/selectWoo has enhanced the field
+	 * (issue #462 round 2 — Codex critic, s86): the widget renders from a snapshot it only
+	 * re-pulls on a `change` event it hears itself
+	 * (`Select2.prototype._registerDomEvents`'s `this.$element.on('change.select2', ...)`,
+	 * `selectWoo.full.js:5345-5354`), so a bare `selectedIndex` assignment (tries 1, 2, and the
+	 * reuse half of try 3) updates the real `<select>` but leaves the WIDGET showing whatever it
+	 * last rendered — stale or empty — while the field silently posts the newly restored value.
+	 * A freshly APPENDED `<option>` (try 3's first-ever call) needs no such nudge: selectWoo
+	 * separately watches the element with a `MutationObserver({childList:true, subtree:false})`
+	 * and re-renders on any added/removed child (`Select2.prototype._syncSubtree`,
+	 * `selectWoo.full.js:5573-5611`) — but REUSING that same option node on a later call only
+	 * mutates properties of an already-present child, which that observer's `subtree:false`
+	 * scope never sees. So every branch that selects via `selectedIndex` on a node already
+	 * present in `el.options` explicitly re-fires the widget via {@see refreshSelectWooWidget}.
+	 *
+	 * @param {Element} el
+	 * @param {string}  value
+	 * @returns {void}
+	 */
+	function applyValueToElement( el, value ) {
+		if ( 'SELECT' !== el.tagName ) {
+			el.value = value;
+			return;
+		}
+
+		var options = el.options || [];
+		var i;
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].value === value ) {
+				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
+				return;
+			}
+		}
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].textContent === value ) {
+				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
+				return;
+			}
+		}
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].hasAttribute( SYNTHETIC_OPTION_ATTR ) ) {
+				options[ i ].value = value;
+				options[ i ].textContent = value;
+				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
+				return;
+			}
+		}
+
+		var option = document.createElement( 'option' );
+
+		option.value = value;
+		option.textContent = value;
+		option.setAttribute( SYNTHETIC_OPTION_ATTR, '' );
+
+		el.appendChild( option );
+		el.selectedIndex = el.options.length - 1;
+	}
+
+	/**
+	 * Re-renders a select2/selectWoo widget after a SILENT `selectedIndex` change on its
+	 * underlying `<select>` (see {@see applyValueToElement}'s own docblock for why this is
+	 * needed at all) — WITHOUT tripping this module's own change-gate ({@see bindChangeWorlds},
+	 * {@see handleFieldChanged}).
+	 *
+	 * The trigger is NAMESPACED — `change.select2`, never a bare `change` — deliberately: jQuery
+	 * only invokes a handler whose OWN namespace is a superset of the triggered one
+	 * (`jQuery.event.dispatch`'s `event.rnamespace.test( handleObj.namespace )`, verified against
+	 * `node_modules/jquery/dist/jquery.js`), so this reaches ONLY select2's own internal
+	 * `change.select2` binding (`selectWoo.full.js:5348`) — never this module's own delegated
+	 * `change` listener, which is bound with NO namespace on both event worlds and would
+	 * otherwise misread a silent restore as a user-driven parent change (the exact failure mode
+	 * `writeSilently()`'s own docblock documents). A jQuery `.trigger()` never dispatches a real
+	 * native DOM event either way (gotcha `jquery-trigger-change-fires-no-native-event`, this
+	 * file's own docblock), so the native half of the change-gate is untouched regardless.
+	 *
+	 * A no-op with no jQuery loaded (plain `<select>`, this file's own jQuery-less test paths) —
+	 * mirrors {@see triggerCheckoutUpdate}'s own guard — and a no-op with jQuery loaded but no
+	 * select2 ever bound to `el` (an ordinary WC `<select>`, or this file's jsdom test
+	 * environment, which has no select2 package at all): a namespaced trigger with no matching
+	 * listener does nothing.
+	 *
+	 * @param {Element} el
+	 * @returns {void}
+	 */
+	function refreshSelectWooWidget( el ) {
+		if ( window.jQuery ) {
+			window.jQuery( el ).trigger( 'change.select2' );
+		}
+	}
+
+	/**
 	 * Writes `value` into `fieldId`'s store slot AND its live DOM element WITHOUT dispatching
 	 * any event — the write path for backwards fill and the `updated_checkout` safety-net
 	 * restore, both of which must NOT be mistaken for a user-driven parent change by this same
 	 * module's own change-gate (see the file docblock). Also seeds `resolved[fieldId]` to the
 	 * SAME value, so a later genuine event comparing against it correctly sees "unchanged".
+	 *
+	 * The live DOM write goes through {@see applyValueToElement} (issue #460) rather than a
+	 * bare `.value =` — see that function's own docblock for why a `<select>` needs more than
+	 * that to actually submit what this call intends.
 	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
@@ -976,7 +1122,7 @@
 		var el = document.getElementById( fieldId );
 
 		if ( el ) {
-			el.value = value;
+			applyValueToElement( el, value );
 		}
 	}
 
