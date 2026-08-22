@@ -786,6 +786,69 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( instances[ 0 ].config.placeholder ).toBe( 'Своя подсказка' );
 	} );
 
+	/**
+	 * Issue #466: WooCommerce's `country-select.js` reads `data-input-classes` and
+	 * `placeholder`/`data-placeholder` straight off whatever CURRENTLY occupies the state
+	 * field before replacing it (`country-select.js:103,105`; verified against the vendored
+	 * copy at `D:/Projects/wordpress/woocommerce/assets/js/frontend/country-select.js`) —
+	 * never `class`. A `<select>` this file built without either attribute makes WC's next
+	 * rebuild carry forward `undefined`/empty, measured on the rig as the field WC left behind
+	 * reading `class="input-text undefined"`. The CDEK reference
+	 * (`plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:79-80`)
+	 * already carries both for exactly this reason.
+	 */
+	it( 'carries data-input-classes from the input onto the generated <select> (issue #466)', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" class="input-text" data-input-classes="input-text validate-required" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( document.getElementById( 'shipping_state' ).getAttribute( 'data-input-classes' ) ).toBe( 'input-text validate-required' );
+	} );
+
+	it( 'never fabricates data-input-classes when the input never carried one (issue #466)', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( document.getElementById( 'shipping_state' ).hasAttribute( 'data-input-classes' ) ).toBe( false );
+	} );
+
+	it( 'writes the resolved placeholder onto BOTH placeholder and data-placeholder on the generated <select> — WC\'s rebuild reads either (issue #466)', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" placeholder="Своя подсказка" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		const select = document.getElementById( 'shipping_state' );
+
+		expect( select.getAttribute( 'placeholder' ) ).toBe( 'Своя подсказка' );
+		expect( select.getAttribute( 'data-placeholder' ) ).toBe( 'Своя подсказка' );
+	} );
+
+	it( 'the i18n-fallback placeholder is ALSO written onto the generated <select>, not just handed to select2 (issue #466)', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" />';
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'shipping_state' ),
+			buildOptions( {
+				node: { level: 'region', fieldId: 'shipping_state' },
+				location: { endpoints: { list: LIST_URL }, mode: 'related-list', i18n: { placeholder: 'Выберите регион' } },
+			} )
+		);
+
+		expect( document.getElementById( 'shipping_state' ).getAttribute( 'data-placeholder' ) ).toBe( 'Выберите регион' );
+	} );
+
+	it( 'sets neither placeholder attribute when the field carries no placeholder anywhere (issue #466)', () => {
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), buildOptions() );
+
+		const select = document.getElementById( 'billing_address_1' );
+
+		expect( select.hasAttribute( 'placeholder' ) ).toBe( false );
+		expect( select.hasAttribute( 'data-placeholder' ) ).toBe( false );
+	} );
+
 	it( 'the seeded option is already IN THE DOM at the moment select2() is called — proven via the #450 fake, not inferred', () => {
 		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="Татарстан" />';
 
