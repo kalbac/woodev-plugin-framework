@@ -24,6 +24,8 @@
 
 'use strict';
 
+const { installFakeSelect2 } = require( './support/fake-select2.js' );
+
 const LIST_URL = 'https://example.test/wp-json/woodev/v1/location/list';
 
 let fetchJsonCalls;
@@ -117,6 +119,72 @@ beforeEach( () => {
 // -----------------------------------------------------------------------
 // Registration — the seam location-cascade.js reads from
 // -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+// selectConfigFor() — the PURE half of the #450 harness: no DOM, no jQuery, no select2 call.
+// Testable in an environment with no select2 present at all (issue #450, harness option 2).
+// -----------------------------------------------------------------------
+
+describe( 'selectConfigFor() — pure config builder, no select2 required', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	it( 'a non-ajax strategy gets width only — no ajax block, no placeholder', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: false },
+			{ initialValue: '', placeholder: 'Регион', applyEntries: jest.fn() }
+		);
+
+		expect( config ).toEqual( { width: '100%' } );
+	} );
+
+	it( 'an ajax strategy with an initial value gets no placeholder — the seeded <option> already carries it', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: 'Татарстан', placeholder: 'Регион', applyEntries: jest.fn() }
+		);
+
+		expect( config.placeholder ).toBeUndefined();
+		expect( typeof config.ajax.transport ).toBe( 'function' );
+	} );
+
+	it( 'an ajax strategy with NO initial value and a placeholder attribute gets config.placeholder', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: 'Улица, дом', applyEntries: jest.fn() }
+		);
+
+		expect( config.placeholder ).toBe( 'Улица, дом' );
+	} );
+
+	it( 'the transport calls strategy.fetchEntries(term), merges results via seed.applyEntries(entries, false), and reports {id, text} shaped results', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } },
+		] ) );
+		const applyEntries = jest.fn();
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries }
+		);
+
+		const success = jest.fn();
+		const failure = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Твер' } }, success, failure );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( fetchEntries ).toHaveBeenCalledWith( 'Твер' );
+		expect( applyEntries ).toHaveBeenCalledWith(
+			[ { key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } } ],
+			false
+		);
+		expect( success ).toHaveBeenCalledWith( { results: [ { id: 'dadata:tv', text: 'ул Тверская' } ] } );
+		expect( failure ).not.toHaveBeenCalled();
+	} );
+} );
 
 describe( 'registers onto window.WoodevLocationRenderers on load', () => {
 	it( 'registers related-list:region, related-list:settlement, and the bare ajax-select2 key', () => {
@@ -540,5 +608,264 @@ describe( 'ajax-select2 renderer', () => {
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:tv', label: 'ул Тверская' } } );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — seeding the field's OWN current value (issue #447), proven through the
+// #450 harness (a fake jQuery.fn.select2 that records config and can drive ajax.transport,
+// PLUS the plain-DOM assertions the file docblock already promised were possible without it).
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — current value is seeded before select2 init (issue #447)', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'a field with a non-empty value produces a select containing that value, selected, with NO select2 present at all', () => {
+		// No jQuery.fn.select2 installed — ensureSelect2() no-ops (see the file docblock's
+		// "SELECT2 IS OPTIONAL AT RUNTIME" section), so whatever the DOM looks like here is
+		// exactly what buildSelectField() itself produced, unmodified by any plugin. FAILS on
+		// main: buildSelectField() never reads input.value at all today.
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="Татарстан" />';
+		const input = document.getElementById( 'shipping_state' );
+
+		mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		const select = document.getElementById( 'shipping_state' );
+
+		expect( select.tagName ).toBe( 'SELECT' );
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( 'Татарстан' );
+		expect( select.options[ 0 ].selected ).toBe( true );
+		expect( select.value ).toBe( 'Татарстан' );
+	} );
+
+	it( 'a field with an empty value produces a select with NO options (unchanged behaviour, no placeholder attribute present)', () => {
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), buildOptions() );
+
+		const select = document.getElementById( 'billing_address_1' );
+
+		expect( select.options.length ).toBe( 0 );
+	} );
+
+	it( 'DATA LOSS CLAIM, ajax order-review path: jQuery(\'#shipping_state\').val() returns the seeded value — the exact call checkout.js:532 makes before writing s_state', () => {
+		// Mirrors checkout.js's OWN mechanism for the shipping_state field exactly:
+		// `s_state = $( '#shipping_state' ).val();` (assets/js/frontend/checkout.js:532) — this
+		// is jQuery's `.val()`, not the native `.value` getter; jQuery's own valHook for a
+		// select-one with selectedIndex === -1 returns `null` (main's select has zero options,
+		// so `.val()` is `null` there too). This test pins the FIXED behaviour: a real value now
+		// comes back from `.val()` as itself, so the ajax order-review update never wipes it.
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_state" name="shipping_state" value="Татарстан" /></form>';
+		const input = document.getElementById( 'shipping_state' );
+
+		mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( window.jQuery( '#shipping_state' ).val() ).toBe( 'Татарстан' );
+	} );
+
+	it( 'DATA LOSS CLAIM, form-submit path: $(\'#checkout\').serialize() carries the seeded value, never an absent/empty shipping_state key', () => {
+		// jQuery.param() serializes a `null` .val() as an EMPTY STRING in the actual POST body
+		// (verified empirically against this repo's own jQuery devDependency) — an empty select
+		// never simply drops the field from the wire, it arrives as `shipping_state=`, and
+		// WooCommerce's own get_posted_data() treats an ABSENT posted key exactly like an empty
+		// one, writing '' over the stored address (includes/class-wc-checkout.php:784-789). This
+		// test pins the FIXED behaviour: the seeded value now survives the whole serialize() call.
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_state" name="shipping_state" value="Татарстан" /></form>';
+		const input = document.getElementById( 'shipping_state' );
+
+		mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_state=' + encodeURIComponent( 'Татарстан' ) );
+	} );
+
+	it( 'placeholder: an empty field WITH a placeholder attribute gets an empty leading <option> and select2 receives config.placeholder (select2 docs: required even for AJAX single selects)', () => {
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" placeholder="Улица, дом" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), buildOptions() );
+
+		expect( instances ).toHaveLength( 1 );
+		expect( instances[ 0 ].config.placeholder ).toBe( 'Улица, дом' );
+
+		const select = document.getElementById( 'billing_address_1' );
+
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( '' );
+	} );
+
+	it( 'a non-empty value takes priority over a placeholder attribute — the select carries the VALUE, not a blank leading option, and select2 gets no config.placeholder', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="Казань" placeholder="Населённый пункт" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' } } ) );
+
+		expect( instances[ 0 ].config.placeholder ).toBeUndefined();
+
+		const select = document.getElementById( 'shipping_city' );
+
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( 'Казань' );
+	} );
+
+	it( 'the seeded option is already IN THE DOM at the moment select2() is called — proven via the #450 fake, not inferred', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="Татарстан" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( instances ).toHaveLength( 1 );
+
+		const liveSelect = instances[ 0 ].el[ 0 ];
+
+		expect( liveSelect.options.length ).toBe( 1 );
+		expect( liveSelect.value ).toBe( 'Татарстан' );
+		expect( typeof instances[ 0 ].config.ajax.transport ).toBe( 'function' );
+	} );
+
+	it( 'the #450 fake reproduces the minimumInputLength gate and the abort contract — pinning that OUR transport still returns nothing (issue #449, unfixed here on purpose)', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		// No minimumInputLength is set today (issue #449) — the fake's own gate is a no-op,
+		// and every query reaches the transport. This is a SHAPE assertion pinning today's
+		// config, not a claim that it is correct.
+		expect( instances[ 0 ].config.minimumInputLength ).toBeUndefined();
+
+		const first = instances[ 0 ].query( 'Твер' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// Our transport never `return`s its underlying request (location-select-modes.js's own
+		// `config.ajax.transport`, issue #449) — the fake's `_request` therefore stays `null`
+		// after the first query, so a second query never calls anything's `.abort()`. Asserted
+		// here by construction: `query()` only calls `request.abort()` when the PREVIOUS
+		// request was non-null and abortable, and nothing in this test double tracks an abort
+		// call, so there is nothing to assert a call COUNT against — the absence itself is the
+		// pin. A future #449 fix that starts returning `{ abort() {} }` would need this test
+		// extended with an abort spy; documented here so that fix doesn't have to rediscover it.
+		expect( first ).not.toBeNull();
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
+	} );
+
+	// eslint-disable-next-line jest/no-disabled-tests
+	it.skip( 'PENDING #449: ajax.transport should return an abortable handle so selectWoo can cancel an in-flight request on the next keystroke — today it returns nothing at all', () => {
+		// selectConfigFor()'s own `config.ajax.transport` (this file, issue #449) never `return`s
+		// its call to `strategy.fetchEntries( term ).then( ... )` — the function body ends there,
+		// so the real selectWoo AjaxAdapter always stores `undefined` as `this._request`, and its
+		// own guard (`this._request != null && 'function' === typeof this._request.abort`) can
+		// never fire `.abort()` on it. That is exactly issue #449's "requests are never aborted,
+		// results flicker" defect. This assertion states the desired contract — the transport's
+		// return value must be abort()-able — and fails against today's code on purpose; #449
+		// fixes it, not this PR (see tests/js/support/fake-select2.js's own docblock for the
+		// selectWoo source lines this mirrors).
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		const request = instances[ 0 ].config.ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+
+		expect( Boolean( request && 'function' === typeof request.abort ) ).toBe( true );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// The #450 fake's OWN contract — driven directly, independently of any renderer, to prove the
+// fake itself gates and aborts exactly the way selectWoo does (issue #456 follow-up: the
+// original #450 harness modeled these two points but no test ever exercised either — see the
+// fake's own docblock, `tests/js/support/fake-select2.js`).
+// -----------------------------------------------------------------------
+
+describe( 'the #450 fake — minimumInputLength gate and store-then-abort, driven directly', () => {
+	let instances;
+	let el;
+
+	beforeEach( () => {
+		document.body.innerHTML = '<input type="text" id="fake-select2-driver" name="fake-select2-driver" value="" />';
+		el = document.getElementById( 'fake-select2-driver' );
+		instances = installFakeSelect2( window.jQuery );
+	} );
+
+	it( 'minimumInputLength gate: a query SHORTER than the minimum never reaches ajax.transport', () => {
+		const transport = jest.fn();
+
+		window.jQuery( el ).select2( { minimumInputLength: 3, ajax: { transport: transport } } );
+
+		const result = instances[ 0 ].query( 'ab' );
+
+		expect( result ).toBeNull();
+		expect( transport ).not.toHaveBeenCalled();
+	} );
+
+	it( 'minimumInputLength gate: a query AT OR ABOVE the minimum reaches ajax.transport', () => {
+		const transport = jest.fn();
+
+		window.jQuery( el ).select2( { minimumInputLength: 3, ajax: { transport: transport } } );
+
+		const result = instances[ 0 ].query( 'abc' );
+
+		expect( result ).not.toBeNull();
+		expect( transport ).toHaveBeenCalledTimes( 1 );
+		expect( transport ).toHaveBeenCalledWith( { data: { term: 'abc' } }, result.success, result.failure );
+	} );
+
+	it( 'store-then-abort: a second query aborts the first one\'s returned request when the transport returns something abortable', () => {
+		const firstAbort = jest.fn();
+		const secondAbort = jest.fn();
+		const transport = jest.fn()
+			.mockReturnValueOnce( { abort: firstAbort } )
+			.mockReturnValueOnce( { abort: secondAbort } );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+		instances[ 0 ].query( 'b' );
+
+		expect( firstAbort ).toHaveBeenCalledTimes( 1 );
+		expect( secondAbort ).not.toHaveBeenCalled();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'store-then-abort guard: a second query does not throw when the previous transport call returned nothing abortable', () => {
+		const transport = jest.fn().mockReturnValue( undefined );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+
+		expect( () => instances[ 0 ].query( 'b' ) ).not.toThrow();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'store-then-abort guard: a second query does not throw when the previous transport call returned an object with no abort() method', () => {
+		const transport = jest.fn().mockReturnValue( { notAbort: true } );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+
+		expect( () => instances[ 0 ].query( 'b' ) ).not.toThrow();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
 	} );
 } );
