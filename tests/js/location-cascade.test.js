@@ -1039,6 +1039,58 @@ describe( 'dependent clearing (downward only, remembered-parent gate)', () => {
 		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'Тверская 1' );
 		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
 	} );
+
+	/**
+	 * Issue #465, symptom B (rig, s86): picking a region manually does not visually clear the
+	 * settlement. `city.value` DID clear (the assertion above already pins that) — the WIDGET
+	 * kept showing the old text because `clearDescendants()` used to write `el.value = ''`
+	 * DIRECTLY, bypassing {@see applyValueToElement} entirely — the same silent-write path
+	 * {@see writeSilently} already goes through for every OTHER silent write in this module. A
+	 * select2-enhanced descendant therefore never got the `change.select2` nudge
+	 * {@see refreshSelectWooWidget} sends, exactly the display-vs-value gap issue #462 round 2
+	 * closed for backwards-fill.
+	 */
+	it( 'refreshes a select2-enhanced descendant\'s WIDGET (not just .value) when it is silently cleared (issue #465, symptom B)', () => {
+		bootFilled();
+
+		// Simulates the mode renderer having already swapped the settlement <input> for a
+		// select2-enhanced <select> carrying the customer's current pick — same shape
+		// applyValueToElement() itself would have produced via its synthetic-option path.
+		const cityInput = document.getElementById( 'billing_city' );
+		const citySelect = document.createElement( 'select' );
+		const cityOption = document.createElement( 'option' );
+
+		cityOption.value = 'Москва';
+		cityOption.textContent = 'Москва';
+		cityOption.selected = true;
+		citySelect.appendChild( cityOption );
+		citySelect.id = cityInput.id;
+		citySelect.name = cityInput.name;
+		cityInput.parentNode.replaceChild( citySelect, cityInput );
+
+		const cityEl = document.getElementById( 'billing_city' );
+		const widgetRefreshSpy = jest.fn();
+		const gateSpyNative = jest.fn();
+		const gateSpyJquery = jest.fn();
+
+		window.jQuery( cityEl ).on( 'change.select2', widgetRefreshSpy );
+		document.body.addEventListener( 'change', gateSpyNative );
+		window.jQuery( document.body ).on( 'change', gateSpyJquery );
+
+		// A genuine region transition — clearDescendants() clears settlement/address/postcode.
+		document.getElementById( 'billing_state' ).value = 'г Санкт-Петербург';
+		document.getElementById( 'billing_state' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( cityEl.value ).toBe( '' ); // unchanged behaviour: the clear itself still works.
+		// THE FIX: the widget must have been told to re-render...
+		expect( widgetRefreshSpy ).toHaveBeenCalledTimes( 1 );
+		// ...WITHOUT the clear reading as a customer-driven edit to this module's own change-gate
+		// (a plain, unnamespaced `change`) — exactly the silence writeSilently() already
+		// guarantees for backwards-fill; a clear that tripped the gate would run a SECOND,
+		// destructive cascade off of clearing the settlement itself.
+		expect( gateSpyNative.mock.calls.map( ( call ) => call[ 0 ].target ) ).not.toContain( cityEl );
+		expect( gateSpyJquery.mock.calls.map( ( call ) => call[ 0 ].target ) ).not.toContain( cityEl );
+	} );
 } );
 
 // -----------------------------------------------------------------------
@@ -1498,6 +1550,113 @@ describe( 'backwards fill', () => {
 		expect( regionEl.options.length ).toBe( 1 );
 		expect( regionEl.value ).toBe( 'Ленинградская область' );
 		expect( regionEl.selectedOptions[ 0 ].textContent ).toBe( 'Ленинградская область' );
+	} );
+
+	/**
+	 * Issue #465 (measured on the rig, s86): the region updates only once per full page reload.
+	 * `refreshSelectWooWidget()`'s `change.select2` trigger (issue #462 round 2's own fix) makes
+	 * selectWoo RE-RUN its own rendering pass, but that pass is `SelectAdapter.prototype.current()`
+	 * -> `item($option)` (`selectWoo.full.js:3167-3180,3352-3396`, verified against the vendored
+	 * copy at `D:/Projects/wordpress/woocommerce/assets/js/selectWoo/selectWoo.full.js`), which
+	 * returns `$.data($option[0], 'data')` WITHOUT rebuilding it if that key is already set — and
+	 * `item()` ITSELF sets that key the first time it ever reads a node (line 3393). The synthetic
+	 * option this fix reuses (never a fresh append — issue #462 round 2) is exactly such a node:
+	 * its FIRST fill gets read (by selectWoo's own separate MutationObserver re-sync) and cached;
+	 * every fill after that mutates the node's `value`/`textContent` in place but the STALE cached
+	 * object survives untouched, so a namespaced `change.select2` trigger re-renders the widget
+	 * from data that no longer matches the DOM at all. `regionEl.value` was already correct before
+	 * this fix — this is the gap none of the tests above this one closed, because none of them
+	 * modelled the cache at all (only the DOM's own `value`/`textContent`, which was never wrong).
+	 *
+	 * @see docs-internal/research/2026-08-21-select2-location-fields.md
+	 */
+	it( 'invalidates the reused synthetic option\'s select2 data cache so the WIDGET (not just .value) shows each new fill (issue #465)', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		/**
+		 * Mirrors `SelectAdapter.prototype.item()` exactly (selectWoo.full.js:3352-3396): return
+		 * the cached `data` key if already set, otherwise build `{id, text}` fresh off the LIVE
+		 * DOM and cache it. Real selectWoo calls this from `current()` — bound both to its own
+		 * `change.select2` listener (`_registerDomEvents`) and to its separate MutationObserver
+		 * re-sync on a freshly appended child (`_syncSubtree`) — this fake only stands in for the
+		 * FORMER; the latter is invoked directly below to seed the FIRST fill's cache, exactly as
+		 * `applyValueToElement()`'s own docblock describes the two paths differing.
+		 */
+		function selectWooItem( option ) {
+			var cached = window.jQuery.data( option, 'data' );
+
+			if ( null != cached ) {
+				return cached;
+			}
+
+			var data = { id: option.value, text: option.textContent };
+
+			window.jQuery.data( option, 'data', data );
+
+			return data;
+		}
+
+		var widgetRenderedText = null;
+
+		// Stands in for selectWoo's OWN internal `change.select2` binding.
+		window.jQuery( regionEl ).on( 'change.select2', function() {
+			widgetRenderedText = selectWooItem( regionEl.options[ regionEl.selectedIndex ] ).text;
+		} );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		// The FIRST fill: stands in for selectWoo's own MutationObserver re-sync on the freshly
+		// APPENDED node — never `refreshSelectWooWidget()`'s trigger, which the append path does
+		// not call at all (see `applyValueToElement()`'s own docblock).
+		widgetRenderedText = selectWooItem( regionEl.options[ regionEl.selectedIndex ] ).text;
+		expect( widgetRenderedText ).toBe( 'Московская область' );
+
+		// A SECOND, DIFFERENT pick — reuses the SAME synthetic option node (issue #462 round 2).
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city2', label: 'г Санкт-Петербург', level: 'settlement',
+			record: {
+				key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Ленинградская область', type: '' },
+				label: 'г Санкт-Петербург',
+			},
+		} );
+
+		expect( regionEl.value ).toBe( 'Ленинградская область' ); // the field's real value: always correct.
+		// THE FIX (issue #465): the WIDGET must show the fill it was just told about — not the
+		// FIRST fill's stale cached {id,text}, which survives on the reused node unless something
+		// invalidates it before the `change.select2` trigger runs.
+		expect( widgetRenderedText ).toBe( 'Ленинградская область' );
+
+		// A THIRD pick, back to the FIRST region's own name — proves this isn't "the cache just
+		// happens to equal the new value again" (both fills before this one used names the cache
+		// never held), and matches the brief's "at least three consecutive fills" requirement.
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city3', label: 'г Тверь', level: 'settlement',
+			record: {
+				key: 'dadata:city3', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Тверская область', type: '' },
+				label: 'г Тверь',
+			},
+		} );
+
+		expect( regionEl.value ).toBe( 'Тверская область' );
+		expect( widgetRenderedText ).toBe( 'Тверская область' );
 	} );
 
 	/**

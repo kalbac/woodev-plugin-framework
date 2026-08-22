@@ -1010,14 +1010,34 @@
 	 * `selectWoo.full.js:5345-5354`), so a bare `selectedIndex` assignment (tries 1, 2, and the
 	 * reuse half of try 3) updates the real `<select>` but leaves the WIDGET showing whatever it
 	 * last rendered — stale or empty — while the field silently posts the newly restored value.
-	 * A freshly APPENDED `<option>` (try 3's first-ever call) needs no such nudge: selectWoo
-	 * separately watches the element with a `MutationObserver({childList:true, subtree:false})`
-	 * and re-renders on any added/removed child (`Select2.prototype._syncSubtree`,
-	 * `selectWoo.full.js:5573-5611`) — but REUSING that same option node on a later call only
-	 * mutates properties of an already-present child, which that observer's `subtree:false`
-	 * scope never sees. So every branch that selects via `selectedIndex` on a node already
-	 * present in `el.options` explicitly re-fires the widget via {@see refreshSelectWooWidget}.
+	 * A freshly APPENDED `<option>` (try 3's final fallback) is, IN PRINCIPLE, exactly what
+	 * selectWoo's own separate `MutationObserver({childList:true, subtree:false})` watches for —
+	 * REUSING an already-present node is what that `subtree:false` scope cannot see, an append
+	 * always can (`Select2.prototype._syncSubtree`, `selectWoo.full.js:5573-5611`). Issue #465
+	 * (symptom B) is what makes this branch call {@see refreshSelectWooWidget} too, unconditionally,
+	 * rather than resting on that observer alone — see the append branch's own comment for why.
+	 * So every branch — matched-option select, synthetic reuse, AND fresh append — now explicitly
+	 * re-fires the widget via {@see refreshSelectWooWidget}.
 	 *
+	 * ISSUE #465 (rig, s86, region "only updates once per reload"): `refreshSelectWooWidget()`'s
+	 * `change.select2` trigger makes selectWoo RE-RUN its render pass, but that pass —
+	 * `SelectAdapter.prototype.current()` -> `item($option)` (`selectWoo.full.js:3167-3180`,
+	 * `3352-3396`) — returns `$.data($option[0], 'data')` VERBATIM when that key is already set,
+	 * never rebuilding it from the option's live `value`/`text`. `item()` itself is what SETS
+	 * that key, the first time anything reads the node (the initial append, read by selectWoo's
+	 * own `MutationObserver` re-sync above — correct, since the node is fresh). Every later call
+	 * through the SYNTHETIC-REUSE branch below mutates that SAME node's `value`/`textContent` in
+	 * place (issue #462 round 2's own fix for option accumulation) without ever touching the
+	 * cache, so `refreshSelectWooWidget()`'s trigger re-renders the widget from data describing
+	 * the PREVIOUS fill, not the one just written — the field posts correctly; only the widget
+	 * lies. `$.removeData(option, 'data')` — the exact key `item()`/`.option()` write to
+	 * (`selectWoo.full.js:3347,3393`) — forces the next `item()` call to rebuild from the DOM,
+	 * which by then already carries the new value/text. The two matched-option tries (1, 2)
+	 * never mutate an option's `value`/`text` — they select an option someone ELSE already built
+	 * correctly for THIS value — so their own cache, if any, was never wrong and needs no
+	 * invalidation.
+	 *
+	 * @see docs-internal/research/2026-08-21-select2-location-fields.md
 	 * @param {Element} el
 	 * @param {string}  value
 	 * @returns {void}
@@ -1051,6 +1071,16 @@
 			if ( options[ i ].hasAttribute( SYNTHETIC_OPTION_ATTR ) ) {
 				options[ i ].value = value;
 				options[ i ].textContent = value;
+
+				// Issue #465: this node is REUSED (issue #462 round 2), so select2/selectWoo's
+				// own `item()` cache from a PREVIOUS fill is still attached to it — see this
+				// function's own docblock. Clearing the exact key selectWoo itself reads/writes
+				// (`$.data(el, 'data')`) forces its next render to rebuild from the value/text
+				// just written above, instead of replaying a stale fill.
+				if ( window.jQuery ) {
+					window.jQuery.removeData( options[ i ], 'data' );
+				}
+
 				el.selectedIndex = i;
 				refreshSelectWooWidget( el );
 				return;
@@ -1065,6 +1095,19 @@
 
 		el.appendChild( option );
 		el.selectedIndex = el.options.length - 1;
+
+		// Issue #465, symptom B: a freshly appended option is, in principle, exactly what
+		// selectWoo's own MutationObserver watches for (`Select2.prototype._syncSubtree`,
+		// `selectWoo.full.js:5573-5611` — re-pulls `current()` whenever an added node's
+		// `.selected` is `true`, which it already is by the time that observer's callback runs,
+		// since `el.selectedIndex` was set synchronously above, before the microtask queue
+		// flushes). This call site is specifically {@see clearDescendants}/{@see clearCountryScope}
+		// silently blanking a field THROUGH THIS FUNCTION for the first time (issue #465's own
+		// fix) — the observer theory above is unverified against a real widget for a clear that
+		// follows immediately after attach, and `refreshSelectWooWidget()` is a proven no-op
+		// whenever nothing needs it (see its own docblock), so this branch gets the same explicit
+		// nudge as the three above rather than leaning on an unverified race.
+		refreshSelectWooWidget( el );
 	}
 
 	/**
@@ -2437,7 +2480,12 @@
 			entry.resolved[ node.fieldId ] = '';
 
 			if ( el ) {
-				el.value = '';
+				// Issue #465, symptom B: a bare `.value = ''` on a select2-enhanced descendant
+				// clears the field's REAL value but leaves the WIDGET showing whatever it last
+				// rendered — {@see applyValueToElement} is the same silent write path
+				// {@see writeSilently} already uses for exactly this reason (its own namespaced
+				// `change.select2` refresh never trips this module's OWN change-gate).
+				applyValueToElement( el, '' );
 			}
 		}
 
@@ -2557,7 +2605,8 @@
 			var el = document.getElementById( node.fieldId );
 
 			if ( el ) {
-				el.value = '';
+				// Issue #465, symptom B — same reasoning as {@see clearDescendants}'s own fix.
+				applyValueToElement( el, '' );
 			}
 		} );
 
