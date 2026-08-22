@@ -395,6 +395,30 @@
 		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
 			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
 
+		// Issue #466: WooCommerce's own `country-select.js` rebuild reads `data-input-classes`
+		// and `placeholder`/`data-placeholder` straight off whatever CURRENTLY occupies the
+		// state field (`$statebox.attr('data-input-classes')`,
+		// `$statebox.attr('placeholder') || $statebox.attr('data-placeholder')`,
+		// `country-select.js:103,105`) before replacing it — never `class`. A `<select>` this
+		// function built without either attribute makes WC's next rebuild carry forward
+		// `undefined`/empty (measured on the rig: the field it left behind read
+		// `class="input-text undefined"`), same defect the CDEK reference
+		// (`plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:79-80`)
+		// already carries both of for exactly this reason. `data-input-classes` is carried
+		// verbatim (never fabricated) — an `<input>` WC never stamped one onto simply leaves
+		// this unset, same as before. `placeholder`, already resolved above with its own
+		// fallback chain, is written as BOTH attributes since WC's rebuild accepts either.
+		var inputClasses = input.getAttribute( 'data-input-classes' );
+
+		if ( null !== inputClasses ) {
+			select.setAttribute( 'data-input-classes', inputClasses );
+		}
+
+		if ( placeholder ) {
+			select.setAttribute( 'placeholder', placeholder );
+			select.setAttribute( 'data-placeholder', placeholder );
+		}
+
 		input.parentNode.insertBefore( select, input );
 		input.parentNode.removeChild( input );
 

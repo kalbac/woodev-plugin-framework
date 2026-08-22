@@ -3281,6 +3281,74 @@ describe( 'WooCommerce\'s country_to_state_changed rebuild (issue #460)', () => 
 		// WC's own rebuild always arrives empty (measured) — this module must have restored it.
 		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Moskovskaya' );
 	} );
+
+	/**
+	 * Issue #466 — the settlement field measured on the rig as a plain `<input>` for ~3-4s
+	 * after every page load. Two leads were proposed and both are tested here against the
+	 * REAL production `location-cascade.js`/`location-select-modes.js` boot + reconcile path
+	 * (never a stub of the cascade logic itself — only the renderer's own select2 guts are
+	 * faked, exactly like `stubAjaxSelect2` above):
+	 *
+	 * Lead A ("the country_to_state_changed subscriber only recovers the region, leaving
+	 * settlement to wait for the next updated_checkout") does not hold as read from the code:
+	 * `bindCountryToStateChangedWatcher()` calls the SAME `handleCheckoutUpdated()` an
+	 * `updated_checkout` re-render already runs, which reconciles `entry.chain` IN FULL —
+	 * region, settlement, and address together — not a region-only patch. This test proves
+	 * that empirically: both nodes attach in the SAME synchronous `boot()` pass, and a WC-style
+	 * rebuild that (per the vendored `country-select.js:90-171`) touches ONLY the state field
+	 * leaves the settlement node's element identity untouched — attached exactly once, never
+	 * torn down by an event that never touched it.
+	 *
+	 * This does NOT reproduce the multi-second delay itself — jsdom has no real select2/
+	 * selectWoo runtime, and a prior investigation already established (two separate control
+	 * scenarios, both against these same real modules) that the delay cannot be reproduced
+	 * here. What this test DOES nail down is that our OWN attach code carries no asymmetry
+	 * between the two levels — the delay's actual cause is runtime-specific to a real browser
+	 * and requires rig-level evidence this test cannot provide.
+	 */
+	it( 'a WC-style state-only rebuild leaves every chain node attached exactly once — region and settlement attach together at boot, and settlement is untouched by an event that never targets it', () => {
+		const renderer = jest.fn( stubAjaxSelect2 );
+
+		window.WoodevLocationRenderers = { 'ajax-select2': renderer };
+
+		installMarkup( { region: true, settlement: true, section: 'shipping', mode: 'ajax-select2' }, 'RU' );
+		document.getElementById( 'shipping_state' ).value = 'Moskovskaya';
+		document.getElementById( 'shipping_city' ).value = 'Zhukovsky';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { region: true, settlement: true, section: 'shipping', mode: 'ajax-select2' } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		// Both nodes attach in the SAME synchronous boot() pass — never staggered.
+		expect( renderer ).toHaveBeenCalledTimes( 2 );
+		expect( document.getElementById( 'shipping_state' ).tagName ).toBe( 'SELECT' );
+		expect( document.getElementById( 'shipping_city' ).tagName ).toBe( 'SELECT' );
+
+		const settlementNodeBeforeRebuild = document.getElementById( 'shipping_city' );
+
+		simulateWcStateRebuild( 'shipping_state' );
+
+		// The state field is torn down and rebuilt exactly once more — never a second call.
+		expect( renderer ).toHaveBeenCalledTimes( 3 );
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Moskovskaya' );
+
+		// The settlement node's element identity is UNCHANGED — WC's rebuild never touched it,
+		// and reconcileAfterCheckoutUpdate() correctly treats "current.el === live" as a no-op
+		// rather than tearing down and re-attaching a node nothing replaced.
+		expect( document.getElementById( 'shipping_city' ) ).toBe( settlementNodeBeforeRebuild );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Zhukovsky' );
+	} );
 } );
 
 // -----------------------------------------------------------------------
