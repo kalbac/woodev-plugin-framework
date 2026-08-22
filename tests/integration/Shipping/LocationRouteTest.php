@@ -18,6 +18,7 @@
 namespace Woodev\Tests\Integration\Shipping;
 
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
 
@@ -501,6 +502,64 @@ class LocationRouteTest extends TestCase {
 
 		$this->assertSame( [ 'key' => 'dadata:settlement-1', 'level' => 'settlement' ], $chain['settlement'] );
 		$this->assertSame( [ 'key' => 'dadata:address-1', 'level' => 'address' ], $chain['address'] );
+	}
+
+	/**
+	 * Issue #459 diagnosis: does a settlement pick's chain SURVIVE a fresh
+	 * {@see Location_Service} instance reading the SAME persisted session — i.e.
+	 * exactly what a subsequent page load's `Checkout_Config::build_location_block()`
+	 * does (a brand-new PHP request, new object graph, same `WC()->session` cookie)?
+	 * `location-cascade.js`'s own `prefill()`/`adoptChain()` (see that file's boot
+	 * section) restore `entry.records` — and, through {@see refreshAddressLock},
+	 * unlock the address field — ENTIRELY from `location.chain`/`location.current`
+	 * in that rendered config block; nothing else feeds them. So if the persisted
+	 * chain does not survive to a fresh `Location_Service`, the client-side restore
+	 * machinery (verified correct by inspection) has nothing to restore FROM, and
+	 * the address stays locked after a reload exactly as reported.
+	 *
+	 * Deliberately constructs `new Location_Service()` rather than reusing the
+	 * REST controller's own service instance — the whole point is to rule out
+	 * request-local memoization (`self::$unpersisted_default`) standing in for a
+	 * genuine read-after-write from persisted storage.
+	 *
+	 * @return void
+	 */
+	public function test_a_fresh_service_instance_still_sees_a_settlement_persisted_by_an_earlier_select_call(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
+
+		$settlement_request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$settlement_request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:settlement-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$settlement_request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$settlement_response = rest_get_server()->dispatch( $settlement_request );
+		$this->assertSame( 200, $settlement_response->get_status() );
+
+		// A FRESH service — models a brand-new request reading back what the
+		// call above persisted, the same read `Checkout_Config::build()` does
+		// on the customer's next page load.
+		$fresh_service = new Location_Service();
+
+		$current = $fresh_service->get_customer_record();
+		$this->assertNotNull( $current, 'a fresh Location_Service must still see the persisted settlement record' );
+		$this->assertSame( 'settlement', $current['record']->level() );
+		$this->assertSame( 'dadata:settlement-1', $current['record']->key() );
+
+		$chain = $fresh_service->get_customer_chain();
+		$this->assertNotNull( $chain, 'a fresh Location_Service must still see the persisted chain' );
+		$this->assertArrayHasKey( 'settlement', $chain['records'] );
+		$this->assertSame( 'dadata:settlement-1', $chain['records']['settlement']->key() );
 	}
 
 	/**
