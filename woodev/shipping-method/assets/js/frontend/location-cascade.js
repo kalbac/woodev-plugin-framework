@@ -180,6 +180,16 @@
 	/** @type {string} marks the address input while it is locked (issue #337) — see {@see refreshAddressLock}. */
 	var LOCKED_CLASS = 'woodev-location-locked';
 
+	/**
+	 * Marks the ONE synthetic `<option>` {@see applyValueToElement} may own on a given `<select>`
+	 * — reused across calls instead of appended anew each time (issue #462 round 2), so a region
+	 * changed twice never leaves a stale, deselected option littering the node the customer's
+	 * form submits.
+	 *
+	 * @type {string}
+	 */
+	var SYNTHETIC_OPTION_ATTR = 'data-woodev-location-synthetic';
+
 	var factory = window.WoodevCheckoutFieldStore;
 
 	if ( ! factory || 'function' !== typeof factory.createStore ) {
@@ -982,14 +992,31 @@
 	 * whose visible TEXT matches — `related-list` pre-populates the WHOLE country's real,
 	 * WC-canonical options up front (see that mode's own seam), so a text match finds and
 	 * selects the CORRECT registered value, never a guess; (3) only when neither exists (the
-	 * `ajax-select2` case above, where no real option ever precedes a live search) — a new
-	 * `<option>` carrying `value` verbatim as both its value and its text, appended and
-	 * selected. `ajax-select2` is offered by this layer only for a country WooCommerce's own
-	 * state list has NOTHING registered for (`levels[country]['region']`'s own derivation), so
-	 * a synthetic option is a value WooCommerce's checkout processing accepts and stores as
+	 * `ajax-select2` case above, where no real option ever precedes a live search) — a synthetic
+	 * `<option>` carrying `value` verbatim as both its value and its text, marked with
+	 * {@see SYNTHETIC_OPTION_ATTR} and REUSED on every later call rather than appended anew (a
+	 * region changed twice must not leave a stale, deselected option behind — issue #462 round
+	 * 2). `ajax-select2` is offered by this layer only for a country WooCommerce's own state
+	 * list has NOTHING registered for (`levels[country]['region']`'s own derivation), so a
+	 * synthetic option is a value WooCommerce's checkout processing accepts and stores as
 	 * written — strictly better than the status quo (a field submitting nothing at all), never
 	 * a claim that this is the value the field's own widget would have produced from a live
 	 * pick.
+	 *
+	 * A selected `<option>` alone is not enough once select2/selectWoo has enhanced the field
+	 * (issue #462 round 2 — Codex critic, s86): the widget renders from a snapshot it only
+	 * re-pulls on a `change` event it hears itself
+	 * (`Select2.prototype._registerDomEvents`'s `this.$element.on('change.select2', ...)`,
+	 * `selectWoo.full.js:5345-5354`), so a bare `selectedIndex` assignment (tries 1, 2, and the
+	 * reuse half of try 3) updates the real `<select>` but leaves the WIDGET showing whatever it
+	 * last rendered — stale or empty — while the field silently posts the newly restored value.
+	 * A freshly APPENDED `<option>` (try 3's first-ever call) needs no such nudge: selectWoo
+	 * separately watches the element with a `MutationObserver({childList:true, subtree:false})`
+	 * and re-renders on any added/removed child (`Select2.prototype._syncSubtree`,
+	 * `selectWoo.full.js:5573-5611`) — but REUSING that same option node on a later call only
+	 * mutates properties of an already-present child, which that observer's `subtree:false`
+	 * scope never sees. So every branch that selects via `selectedIndex` on a node already
+	 * present in `el.options` explicitly re-fires the widget via {@see refreshSelectWooWidget}.
 	 *
 	 * @param {Element} el
 	 * @param {string}  value
@@ -1007,6 +1034,7 @@
 		for ( i = 0; i < options.length; i++ ) {
 			if ( options[ i ].value === value ) {
 				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
 				return;
 			}
 		}
@@ -1014,6 +1042,17 @@
 		for ( i = 0; i < options.length; i++ ) {
 			if ( options[ i ].textContent === value ) {
 				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
+				return;
+			}
+		}
+
+		for ( i = 0; i < options.length; i++ ) {
+			if ( options[ i ].hasAttribute( SYNTHETIC_OPTION_ATTR ) ) {
+				options[ i ].value = value;
+				options[ i ].textContent = value;
+				el.selectedIndex = i;
+				refreshSelectWooWidget( el );
 				return;
 			}
 		}
@@ -1022,9 +1061,42 @@
 
 		option.value = value;
 		option.textContent = value;
+		option.setAttribute( SYNTHETIC_OPTION_ATTR, '' );
 
 		el.appendChild( option );
 		el.selectedIndex = el.options.length - 1;
+	}
+
+	/**
+	 * Re-renders a select2/selectWoo widget after a SILENT `selectedIndex` change on its
+	 * underlying `<select>` (see {@see applyValueToElement}'s own docblock for why this is
+	 * needed at all) — WITHOUT tripping this module's own change-gate ({@see bindChangeWorlds},
+	 * {@see handleFieldChanged}).
+	 *
+	 * The trigger is NAMESPACED — `change.select2`, never a bare `change` — deliberately: jQuery
+	 * only invokes a handler whose OWN namespace is a superset of the triggered one
+	 * (`jQuery.event.dispatch`'s `event.rnamespace.test( handleObj.namespace )`, verified against
+	 * `node_modules/jquery/dist/jquery.js`), so this reaches ONLY select2's own internal
+	 * `change.select2` binding (`selectWoo.full.js:5348`) — never this module's own delegated
+	 * `change` listener, which is bound with NO namespace on both event worlds and would
+	 * otherwise misread a silent restore as a user-driven parent change (the exact failure mode
+	 * `writeSilently()`'s own docblock documents). A jQuery `.trigger()` never dispatches a real
+	 * native DOM event either way (gotcha `jquery-trigger-change-fires-no-native-event`, this
+	 * file's own docblock), so the native half of the change-gate is untouched regardless.
+	 *
+	 * A no-op with no jQuery loaded (plain `<select>`, this file's own jQuery-less test paths) —
+	 * mirrors {@see triggerCheckoutUpdate}'s own guard — and a no-op with jQuery loaded but no
+	 * select2 ever bound to `el` (an ordinary WC `<select>`, or this file's jsdom test
+	 * environment, which has no select2 package at all): a namespaced trigger with no matching
+	 * listener does nothing.
+	 *
+	 * @param {Element} el
+	 * @returns {void}
+	 */
+	function refreshSelectWooWidget( el ) {
+		if ( window.jQuery ) {
+			window.jQuery( el ).trigger( 'change.select2' );
+		}
 	}
 
 	/**

@@ -1340,6 +1340,203 @@ describe( 'backwards fill', () => {
 		expect( regionEl.value ).toBe( 'МОСКОВСКАЯ ОБЛАСТЬ' );
 		expect( regionEl.options.length ).toBe( 1 );
 	} );
+
+	/**
+	 * Issue #462 round 2 (Codex critic, s86) — the BLOCKING finding. `applyValueToElement()`
+	 * used to select a PRE-EXISTING matching option via a bare `selectedIndex` assignment and
+	 * nothing else. select2/selectWoo only re-pulls its rendered snapshot on a `change` event it
+	 * hears itself (`Select2.prototype._registerDomEvents`'s `this.$element.on('change.select2',
+	 * ...)`, `selectWoo.full.js:5345-5354`) — a bare assignment fires NONE, so the widget keeps
+	 * showing whatever it last rendered (stale or empty) while the underlying `<select>` silently
+	 * carries the newly restored value. This is display-critical, not cosmetic: PR #461 makes
+	 * `ajax-select2`'s own option values `entry.value` — the SAME space `writeSilently()` writes —
+	 * so a VALUE match, not the synthetic-option path, becomes the common case for this field the
+	 * moment it lands.
+	 *
+	 * Pinned via a fake `change.select2` listener standing in for the real widget (this file's
+	 * jsdom environment has no select2 package at all — see file docblock). Also pins the other
+	 * required half: the refresh must NOT trip this module's OWN change-gate, which binds a plain
+	 * (no-namespace) `change` on `document.body` in both event worlds ({@see bindChangeWorlds}) —
+	 * a jQuery-namespaced trigger reaches only same-namespace handlers
+	 * (`jQuery.event.dispatch`'s `event.rnamespace.test( handleObj.namespace )`, verified against
+	 * `node_modules/jquery/dist/jquery.js`), so a plain listener on `document.body` must see
+	 * nothing from it.
+	 */
+	it( 'fires a namespaced change.select2 refresh — never the module\'s own change-gate — when the restored value matches an EXISTING option by VALUE', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const option = document.createElement( 'option' );
+
+		// Simulates PR #461: the select2-backed region field already carries a REAL option
+		// whose value is the exact same space writeSilently() writes into.
+		option.value = 'Московская область';
+		option.textContent = 'Московская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		const regionEl = document.getElementById( 'billing_state' );
+		const widgetRefreshSpy = jest.fn();
+		const gateSpyNative = jest.fn();
+		const gateSpyJquery = jest.fn();
+
+		// Stands in for selectWoo's own internal binding — namespaced, exactly as the real
+		// widget binds it.
+		window.jQuery( regionEl ).on( 'change.select2', widgetRefreshSpy );
+		// Stands in for this module's OWN change-gate — bound with NO namespace, exactly as
+		// bindChangeWorlds() binds it, on the SAME document.body it uses.
+		document.body.addEventListener( 'change', gateSpyNative );
+		window.jQuery( document.body ).on( 'change', gateSpyJquery );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		expect( regionEl.value ).toBe( 'Московская область' );
+		expect( regionEl.options.length ).toBe( 1 ); // no synthetic option grew alongside the real one.
+
+		// THE fix: the widget was told to re-render...
+		expect( widgetRefreshSpy ).toHaveBeenCalledTimes( 1 );
+		// ...but the module's own change-gate never saw a change event TARGETING the region
+		// field — in EITHER event world. `gateSpyNative`/`gateSpyJquery` also legitimately fire
+		// once each for `selectViaFake`'s OWN native `change` dispatch on the settlement field
+		// (the ordinary, unrelated pick path this module is designed to react to) — asserting on
+		// the event target, not on "never called at all", isolates the region refresh from that.
+		expect( gateSpyNative.mock.calls.map( ( call ) => call[ 0 ].target ) ).not.toContain( regionEl );
+		expect( gateSpyJquery.mock.calls.map( ( call ) => call[ 0 ].target ) ).not.toContain( regionEl );
+	} );
+
+	/**
+	 * Same widget-refresh requirement, TEXT-match branch (`related-list`'s own path — see the
+	 * test above this one in this file for the VALUE-match half). Reusing an existing option node
+	 * via `selectedIndex` alone is exactly as invisible to select2 regardless of WHICH loop found
+	 * it.
+	 */
+	it( 'fires a namespaced change.select2 refresh when the restored value matches an EXISTING option by TEXT', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const option = document.createElement( 'option' );
+
+		option.value = 'МОСКОВСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Московская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		const regionEl = document.getElementById( 'billing_state' );
+		const widgetRefreshSpy = jest.fn();
+
+		window.jQuery( regionEl ).on( 'change.select2', widgetRefreshSpy );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		expect( regionEl.value ).toBe( 'МОСКОВСКАЯ ОБЛАСТЬ' );
+		expect( widgetRefreshSpy ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	/**
+	 * Issue #462 round 2 (NOTED finding 1) — a region changed twice while `ajax-select2` (no
+	 * matching option either time) used to append TWO synthetic `<option>` elements, the first
+	 * left behind, deselected. `applyValueToElement()` now marks and REUSES its one synthetic
+	 * option instead of appending a fresh one every time.
+	 */
+	it( 'reuses the single synthetic option across repeated backward-fills of DISTINCT unmatched values, never accumulating stale ones', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: {
+				key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				label: 'г Москва',
+			},
+		} );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		expect( regionEl.options.length ).toBe( 1 );
+		expect( regionEl.value ).toBe( 'Московская область' );
+
+		// A SECOND settlement pick, in a DIFFERENT region — nothing in `regionEl.options` matches
+		// this new value either (still the ajax-select2 no-pre-population case).
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city2', label: 'г Санкт-Петербург', level: 'settlement',
+			record: {
+				key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Ленинградская область', type: '' },
+				label: 'г Санкт-Петербург',
+			},
+		} );
+
+		// Still exactly ONE option — the stale «Московская область» one was reused, not left
+		// behind alongside a second.
+		expect( regionEl.options.length ).toBe( 1 );
+		expect( regionEl.value ).toBe( 'Ленинградская область' );
+		expect( regionEl.selectedOptions[ 0 ].textContent ).toBe( 'Ленинградская область' );
+	} );
+
+	/**
+	 * Both required degradations at once (task round-2 brief): no jQuery loaded at all (a plain
+	 * `<select>`, and — separately — this file's own jQuery-less capability, exercised directly
+	 * here rather than assumed) must neither throw nor block the underlying value write; the
+	 * synthetic/matched-option selection logic itself has nothing to do with jQuery.
+	 */
+	it( 'degrades cleanly with no jQuery loaded — sets the value, attempts no widget refresh, never throws', () => {
+		boot( { region: true, settlement: true } );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const option = document.createElement( 'option' );
+
+		option.value = 'Московская область';
+		option.textContent = 'Московская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		delete window.jQuery;
+		delete global.jQuery;
+		delete global.$;
+
+		expect( () => {
+			selectViaFake( callFor( 'billing_city' ), {
+				key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+				record: {
+					key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+					region: { name: 'Московская область', type: '' },
+					label: 'г Москва',
+				},
+			} );
+		} ).not.toThrow();
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Московская область' );
+	} );
 } );
 
 // -----------------------------------------------------------------------
