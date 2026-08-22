@@ -657,24 +657,33 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( select.options.length ).toBe( 0 );
 	} );
 
-	it( 'DATA LOSS CLAIM: the seeded select serializes to its actual value, not to an empty/absent field — confirmed true on main (empty select drops the field from serialize() entirely, and WooCommerce\'s own get_posted_data() treats an ABSENT posted key exactly like an empty one, writing \'\' over the stored address — includes/class-wc-checkout.php:784-789)', () => {
+	it( 'DATA LOSS CLAIM, ajax order-review path: jQuery(\'#shipping_state\').val() returns the seeded value — the exact call checkout.js:532 makes before writing s_state', () => {
+		// Mirrors checkout.js's OWN mechanism for the shipping_state field exactly:
+		// `s_state = $( '#shipping_state' ).val();` (assets/js/frontend/checkout.js:532) — this
+		// is jQuery's `.val()`, not the native `.value` getter; jQuery's own valHook for a
+		// select-one with selectedIndex === -1 returns `null` (main's select has zero options,
+		// so `.val()` is `null` there too). This test pins the FIXED behaviour: a real value now
+		// comes back from `.val()` as itself, so the ajax order-review update never wipes it.
 		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_state" name="shipping_state" value="Татарстан" /></form>';
 		const input = document.getElementById( 'shipping_state' );
 
 		mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
 
-		// Mirrors checkout.js's OWN mechanism for the shipping_state field exactly:
-		// `s_state = $( '#shipping_state' ).val();` (assets/js/frontend/checkout.js:532) — this
-		// is jQuery's `.val()`, not the native `.value` getter; jQuery's own valHook for a
-		// select-one with selectedIndex === -1 returns `null`, which jQuery.param() then
-		// serializes as an EMPTY STRING in the actual POST body (verified empirically against
-		// this repo's own jQuery devDependency) — the field is never simply "missing" from the
-		// wire, it arrives as `s_state=`, which WooCommerce writes straight into the customer
-		// session (WC_Data::set_props() only skips `null`, never `''`).
-		//
-		// FAILS on main: main's select has zero options, so `.val()` is `null` here too — but
-		// this test pins the FIXED behaviour: a real value now serializes as itself.
 		expect( window.jQuery( '#shipping_state' ).val() ).toBe( 'Татарстан' );
+	} );
+
+	it( 'DATA LOSS CLAIM, form-submit path: $(\'#checkout\').serialize() carries the seeded value, never an absent/empty shipping_state key', () => {
+		// jQuery.param() serializes a `null` .val() as an EMPTY STRING in the actual POST body
+		// (verified empirically against this repo's own jQuery devDependency) — an empty select
+		// never simply drops the field from the wire, it arrives as `shipping_state=`, and
+		// WooCommerce's own get_posted_data() treats an ABSENT posted key exactly like an empty
+		// one, writing '' over the stored address (includes/class-wc-checkout.php:784-789). This
+		// test pins the FIXED behaviour: the seeded value now survives the whole serialize() call.
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_state" name="shipping_state" value="Татарстан" /></form>';
+		const input = document.getElementById( 'shipping_state' );
+
+		mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
 		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_state=' + encodeURIComponent( 'Татарстан' ) );
 	} );
 
@@ -753,5 +762,110 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		// extended with an abort spy; documented here so that fix doesn't have to rediscover it.
 		expect( first ).not.toBeNull();
 		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
+	} );
+
+	// eslint-disable-next-line jest/no-disabled-tests
+	it.skip( 'PENDING #449: ajax.transport should return an abortable handle so selectWoo can cancel an in-flight request on the next keystroke — today it returns nothing at all', () => {
+		// selectConfigFor()'s own `config.ajax.transport` (this file, issue #449) never `return`s
+		// its call to `strategy.fetchEntries( term ).then( ... )` — the function body ends there,
+		// so the real selectWoo AjaxAdapter always stores `undefined` as `this._request`, and its
+		// own guard (`this._request != null && 'function' === typeof this._request.abort`) can
+		// never fire `.abort()` on it. That is exactly issue #449's "requests are never aborted,
+		// results flicker" defect. This assertion states the desired contract — the transport's
+		// return value must be abort()-able — and fails against today's code on purpose; #449
+		// fixes it, not this PR (see tests/js/support/fake-select2.js's own docblock for the
+		// selectWoo source lines this mirrors).
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		const request = instances[ 0 ].config.ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+
+		expect( Boolean( request && 'function' === typeof request.abort ) ).toBe( true );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// The #450 fake's OWN contract — driven directly, independently of any renderer, to prove the
+// fake itself gates and aborts exactly the way selectWoo does (issue #456 follow-up: the
+// original #450 harness modeled these two points but no test ever exercised either — see the
+// fake's own docblock, `tests/js/support/fake-select2.js`).
+// -----------------------------------------------------------------------
+
+describe( 'the #450 fake — minimumInputLength gate and store-then-abort, driven directly', () => {
+	let instances;
+	let el;
+
+	beforeEach( () => {
+		document.body.innerHTML = '<input type="text" id="fake-select2-driver" name="fake-select2-driver" value="" />';
+		el = document.getElementById( 'fake-select2-driver' );
+		instances = installFakeSelect2( window.jQuery );
+	} );
+
+	it( 'minimumInputLength gate: a query SHORTER than the minimum never reaches ajax.transport', () => {
+		const transport = jest.fn();
+
+		window.jQuery( el ).select2( { minimumInputLength: 3, ajax: { transport: transport } } );
+
+		const result = instances[ 0 ].query( 'ab' );
+
+		expect( result ).toBeNull();
+		expect( transport ).not.toHaveBeenCalled();
+	} );
+
+	it( 'minimumInputLength gate: a query AT OR ABOVE the minimum reaches ajax.transport', () => {
+		const transport = jest.fn();
+
+		window.jQuery( el ).select2( { minimumInputLength: 3, ajax: { transport: transport } } );
+
+		const result = instances[ 0 ].query( 'abc' );
+
+		expect( result ).not.toBeNull();
+		expect( transport ).toHaveBeenCalledTimes( 1 );
+		expect( transport ).toHaveBeenCalledWith( { data: { term: 'abc' } }, result.success, result.failure );
+	} );
+
+	it( 'store-then-abort: a second query aborts the first one\'s returned request when the transport returns something abortable', () => {
+		const firstAbort = jest.fn();
+		const secondAbort = jest.fn();
+		const transport = jest.fn()
+			.mockReturnValueOnce( { abort: firstAbort } )
+			.mockReturnValueOnce( { abort: secondAbort } );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+		instances[ 0 ].query( 'b' );
+
+		expect( firstAbort ).toHaveBeenCalledTimes( 1 );
+		expect( secondAbort ).not.toHaveBeenCalled();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'store-then-abort guard: a second query does not throw when the previous transport call returned nothing abortable', () => {
+		const transport = jest.fn().mockReturnValue( undefined );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+
+		expect( () => instances[ 0 ].query( 'b' ) ).not.toThrow();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	it( 'store-then-abort guard: a second query does not throw when the previous transport call returned an object with no abort() method', () => {
+		const transport = jest.fn().mockReturnValue( { notAbort: true } );
+
+		window.jQuery( el ).select2( { ajax: { transport: transport } } );
+
+		instances[ 0 ].query( 'a' );
+
+		expect( () => instances[ 0 ].query( 'b' ) ).not.toThrow();
+		expect( transport ).toHaveBeenCalledTimes( 2 );
 	} );
 } );
