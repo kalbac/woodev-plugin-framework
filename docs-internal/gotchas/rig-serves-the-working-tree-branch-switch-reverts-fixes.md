@@ -95,6 +95,36 @@ MSYS_NO_PATHCONV=1 npx wp-env run cli wp config list --fields=name,value | grep 
 WORKING DIRECTORY: run this from the repo root — from a subdirectory it fails with
 "Environment not initialized" (observed s60).
 
+## s86: a DOCS commit is a branch switch too
+
+The trap does not need anyone to be testing branches. In s86 the rig was parked on a verification
+branch the operator was actively reviewing; I checked out `main` purely to commit documentation,
+committed, and got distracted before switching back. He reloaded the rig and reported that **all
+the fixes had vanished and both fields had collapsed back to thin strips** — because he was looking
+at plain `main`.
+
+Nothing was broken and nothing was lost, but it cost him a wasted review pass and a false alarm,
+and for a few minutes we were both reasoning about a build neither of us intended.
+
+**So: never `git checkout` the primary checkout while anyone is looking at the rig — not even for a
+docs-only commit.** Docs live on `main` while the rig is parked elsewhere, and the temptation to
+"just quickly switch, commit, switch back" is exactly how this fires.
+
+Do the docs work in a separate Orca worktree instead, and let the primary checkout stay where the
+rig needs it:
+
+```bash
+orca worktree create --name s86-docs --repo "id:<repoId>" --base-branch main --setup skip --json
+# edit, commit and push docs from THAT path, then remove it
+```
+
+`--setup skip` is right for a docs-only worktree: it needs no `vendor`, no `node_modules` and no
+gates.
+
+When the operator says "I don't see the fixes any more", **check `git branch --show-current` in the
+primary checkout before forming any other hypothesis.** In s86 that one command was the whole
+answer, and it is cheaper than every alternative explanation.
+
 ## Related
 
 - [[jest-scans-agent-worktrees-inside-the-repo]] — the same family: local state that silently

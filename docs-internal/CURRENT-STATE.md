@@ -7,15 +7,15 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-22 (s86, autonomous).** **`main` carries PR #454** (#448 — the address field no
-longer inherits the settlement axis mode), merged after the operator's rig pass. **Two PRs are
-open, green, CLEAN and critic-approved, and deliberately NOT merged: #461 and #462** — they change
-what the shopper sees at checkout, so they wait for a manual rig pass per the merge policy.
-**PR #456 needs no separate merge — its commits are inside #461**; close it once #461 lands.
+**As of 2026-08-23 (s86).** **`main` carries PR #454** (#448) plus this session's docs. **FIVE PRs
+are open, green, CLEAN and NOT merged — they are a stack and the order matters:
+#461 → #462 → #464 → #467 → #468.** #456's commits are inside #461; close it once #461 lands.
+Every one is critic-approved and rig-verified by both the agent and the operator.
 
-**The primary checkout is parked on `rig/s86-checkout-fixes`** (= `main` + #461 + #462, pushed).
-The rig serves the working tree, so it already shows both fixes. Return the tree to `main` after
-the pass.
+**The primary checkout is parked on `rig/s86-checkout-fixes`** (= `main` + all five, pushed). The
+rig serves the working tree, so it already shows everything. **Do NOT `git checkout` the primary
+checkout while anyone is looking at the rig — a docs-only switch to `main` counts, and cost the
+operator a wasted review pass this session.** Do docs work in a separate Orca worktree.
 
 **⛔ Budget constraint, operator decision 21.08.2026: Codex is CRITIC-ONLY until 27.08.2026.** One
 overnight session burned **45% of the weekly Codex allowance** by running it as worker, planner and
@@ -52,10 +52,14 @@ pass. **Merge order: #461 first, then #462.** Full account → `sessions/s86.md`
 
 | Card | State |
 |---|---|
+| **#466** | **Open; both leads dead, detail on the card.** The settlement field stays a plain `<input>` for seconds (measured **3.1 / 3.5 / 4.3 / 8.6 s** — a 2.5x spread, i.e. the network, not a timer of ours). Not the `country_to_state_changed` subscriber (control test), not reproducible in jsdom (two workers). PR #468's `data-input-classes` carry-forward is **inert**: the attribute is absent from the SERVER render, so it copies `null`. **The real fix is in the PHP that renders the field.** Next: a browser network timeline. |
 | **#449** | **Half closed, and the PR says so.** The abort marks a superseded response stale (blink gone) but does NOT cancel the `fetch()`. Real cancellation needs an AbortController through `options.fetch`. |
-| **#459** | **Narrowed by measurement, not fixed.** Integration test run in the primary checkout: `OK (12 tests, 45 assertions)` — the chain survives and the server returns it, so the s85 guess is wrong. Cause is CLIENT-side; three candidates, starting with whether the rendered config block actually carries `chain`/`current`. |
-| **#463** | **New.** `related-list:settlement` still submits the provider key — its `/location/list` entries never carry `.value`. Same disease, other branch. |
-| **#458** | **Specified, not a fork — operator settled it (see `AGENT-RULES.md` Rule 7).** The framework owns these fields; a plugin author does not pick the section. The cascade attaches per `woocommerce_ship_to_destination`: `billing_only` -> billing only, otherwise **both** columns. Do NOT copy `Address_Target::resolve()` — it answers a different question and returns one prefix. The framework is already section-neutral in all three layers, so nothing needs breaking; the rig fixture must stop pinning the three fields to `shipping`. |
+| **#463** | `related-list:settlement` still submits the provider key — its `/location/list` entries never carry `.value`. Same disease, other branch. |
+| **#458** | **Specified, not a fork — the operator settled it (see `AGENT-RULES.md` Rule 7).** The framework owns these fields; the cascade attaches per `woocommerce_ship_to_destination`: `billing_only` -> billing only, otherwise **both** columns. Do NOT copy `Address_Target::resolve()` — it answers a different question and returns one prefix. The rig fixture must stop pinning the three fields to `shipping`. |
+
+**#459 and #465 are resolved by the open stack** and close when it merges. #459 was proven with a
+control (address enabled after reload with a settlement; `disabled: true` once a region pick drops
+it — the second half is what makes the first meaningful).
 
 **#437 — settlement search replaces the preset list. Spec:
 `specs/2026-08-21-settlement-search-design.md`** (decided end of s84; **absorbs #411**; not
@@ -158,12 +162,9 @@ oversight.
    `update_checkout` (#457); поиск не уходит при пустом вводе и список не мигает (#449).
    Чисто → мержить **#461, затем #462** (порядок важен), закрыть **#456** (его коммиты уже в
    #461), вернуть дерево на `main`.
-1. **#459 — доделать сужение.** Причина клиентская (замерено). Первым делом замерить, что реально
-   попадает в отрисованный конфиг-блок на `/classic-checkout/`: несёт ли он `chain`/`current`.
-2. **#458 — развилка за тобой** (карточка в `Инбокс`): (а) предупреждать о мёртвой секции или
-   (б) выводить секцию самим, как `Address_Target`. Рекомендация — (б).
-2a. **#463** — `related-list:settlement` сабмитит ключ провайдера; та же болезнь, другая ветка.
-2b. **#449 доделать по-настоящему** — отмена запросов через AbortController в `options.fetch`.
+1. **#466 — единственный незакрытый из риг-прохода.** Замерить сетевой таймлайн в браузере
+   (в jsdom не воспроизводится, обе гипотезы мертвы — см. таблицу выше и карточку).
+2. **#458, #463, #449 (вторая половина)** — специфицированы, см. таблицу выше.
 3. **#437 — поиск НП вместо предустановленного списка.** Спека готова
    (`specs/2026-08-21-settlement-search-design.md`), поглощает #411. Не начата. Учесть, что #423
    закрыт, то есть промежуточной меры по обрезке списка больше нет.
