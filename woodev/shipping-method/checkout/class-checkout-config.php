@@ -861,6 +861,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
 						'woodev-plugin-framework'
 					),
+
+					// Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s
+					// `country_to_state_changed` handler) carries neither a value nor a
+					// `placeholder`/`data-placeholder` attribute, leaving an ajax-select2 widget
+					// with zero content height until the customer picks something —
+					// `location-select-modes.js`'s `buildSelectField()` falls back to this string
+					// when the DOM itself carries none. Same msgid as {@see
+					// Checkout_Handler::placeholder_label()} (shares its translation across a PO
+					// merge) — that method lives on an unrelated class this one has no reference
+					// to, so the string is repeated here rather than cross-called.
+					'placeholder'      => __( 'Выберите…', 'woodev-plugin-framework' ),
 				]
 			);
 

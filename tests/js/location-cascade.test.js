@@ -3031,6 +3031,100 @@ describe( 'checkout re-render (updated_checkout)', () => {
 } );
 
 // -----------------------------------------------------------------------
+// WooCommerce's OWN state-field rebuild (`country_to_state_changed`, issue #460)
+// -----------------------------------------------------------------------
+
+describe( 'WooCommerce\'s country_to_state_changed rebuild (issue #460)', () => {
+	/**
+	 * Mimics `location-select-modes.js`'s own `attachAjaxSelect2()`/`buildSelectField()` just
+	 * closely enough to reproduce the defect: swaps a plain `<input>` for a fresh `<select>`
+	 * carrying the SAME id, seeded from the input's OWN value at attach time (issue #447),
+	 * exactly the shape the real `ajax-select2` mode renderer produces for the region level.
+	 * Registered under the SAME registry key `resolveModeRenderer()` looks up, so
+	 * `location-cascade.js` exercises its REAL attach/detach/reconcile path against it — only
+	 * the widget's own guts are stubbed here, never the cascade code under test.
+	 */
+	function stubAjaxSelect2( el ) {
+		if ( ! el || 'INPUT' !== el.tagName ) {
+			return null;
+		}
+
+		const select = document.createElement( 'select' );
+		select.id = el.id;
+		select.name = el.name || '';
+
+		if ( el.value ) {
+			const option = document.createElement( 'option' );
+			option.value = el.value;
+			option.textContent = el.value;
+			option.selected = true;
+			select.appendChild( option );
+		}
+
+		el.parentNode.replaceChild( select, el );
+
+		return { el: select, detach: jest.fn() };
+	}
+
+	/**
+	 * Replicates WooCommerce's `country-select.js` own rebuild of `#shipping_state` for a
+	 * country it has no state list for (RU) — the exact defect measured on the live rig: the
+	 * "no WC states" branch (`country-select.js:156-167`) unconditionally replaces whatever
+	 * `<select>`/`input[type="hidden"]` currently occupies the field with a FRESH, EMPTY
+	 * `<input type="text">` — it reads `$statebox.val()` earlier in the same handler but never
+	 * uses it in this branch — then fires `country_to_state_changed`. Never fires
+	 * `updated_checkout` — this is synchronous client-side DOM churn, not a server round-trip.
+	 *
+	 * @returns {HTMLInputElement} the fresh, empty node WooCommerce left behind.
+	 */
+	function simulateWcStateRebuild( fieldId ) {
+		const current = document.getElementById( fieldId );
+		const fresh = document.createElement( 'input' );
+
+		fresh.type = 'text';
+		fresh.id = fieldId;
+		fresh.name = fieldId;
+
+		current.replaceWith( fresh );
+		window.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		return fresh;
+	}
+
+	it( 'restores the region value after WooCommerce tears down and rebuilds the field', () => {
+		window.WoodevLocationRenderers = { 'ajax-select2': stubAjaxSelect2 };
+
+		installMarkup( { region: true, section: 'shipping', mode: 'ajax-select2' }, 'RU' );
+		document.getElementById( 'shipping_state' ).value = 'Moskovskaya';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { region: true, section: 'shipping', mode: 'ajax-select2' } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		// Our own renderer already swapped input -> select, seeded from the server value —
+		// the boot-time half of the measured trace ("t=86ms our renderer swaps input -> select").
+		expect( document.getElementById( 'shipping_state' ).tagName ).toBe( 'SELECT' );
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Moskovskaya' );
+
+		simulateWcStateRebuild( 'shipping_state' );
+
+		// WC's own rebuild always arrives empty (measured) — this module must have restored it.
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Moskovskaya' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Store sharing with checkout-field-classic.js (via getStoreForField)
 // -----------------------------------------------------------------------
 
