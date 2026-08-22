@@ -380,7 +380,20 @@
 		// Captured BEFORE the <input> is detached — issue #447: a field re-rendered with an
 		// existing value (a page reload, or a sibling level's re-render) must not lose it.
 		var initialValue = input.value || '';
-		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' ) || '';
+
+		// Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s own
+		// `country_to_state_changed` handler, e.g. on a page-load `refresh`) carries neither a
+		// `value` NOR a `placeholder`/`data-placeholder` attribute — a native `<select>` (what
+		// this function's OWN previous pass here left behind) has no `placeholder` attribute at
+		// all, so WC's handler, which reads the placeholder off whatever currently occupies the
+		// field before rebuilding it, always finds nothing to carry forward. Without a
+		// placeholder select2 renders a genuinely empty widget (zero content height — the
+		// "thin strip" report) until the customer picks something. `entry.location.i18n.placeholder`
+		// (server-supplied, translatable, {@see Checkout_Config::build_location_block()}) is the
+		// SAME string this layer's own suggest/related-list fields already fall back to when the
+		// DOM carries none — never a literal here.
+		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
+			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
 
 		input.parentNode.insertBefore( select, input );
 		input.parentNode.removeChild( input );

@@ -1304,6 +1304,21 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertNotSame( $config['location']['i18n']['noResults'], $config['location']['i18n']['unavailable'] );
 	}
 
+	/**
+	 * Issue #460: `location-select-modes.js`'s `buildSelectField()` falls back to
+	 * `location.i18n.placeholder` when a WooCommerce-rebuilt state field carries neither a
+	 * value nor a `placeholder`/`data-placeholder` attribute of its own — see that function's
+	 * own docblock for why the rebuilt node never carries one.
+	 */
+	public function test_location_block_carries_a_placeholder_message(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertIsString( $config['location']['i18n']['placeholder'] );
+		$this->assertNotSame( '', $config['location']['i18n']['placeholder'] );
+	}
+
 	public function test_no_token_or_secret_leaks_into_the_i18n_block(): void {
 		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
 		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
