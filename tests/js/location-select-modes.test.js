@@ -160,11 +160,15 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		expect( config.placeholder ).toBe( 'Улица, дом' );
 	} );
 
-	it( 'the transport calls strategy.fetchEntries(term), merges results via seed.applyEntries(entries, false), and reports {id, text} shaped results', async () => {
+	it( 'the transport calls strategy.fetchEntries(term), merges results via seed.applyEntries(entries, false), and reports the ACCEPTED entries as {id, text, key} shaped results', async () => {
 		const fetchEntries = jest.fn( () => Promise.resolve( [
 			{ key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } },
 		] ) );
-		const applyEntries = jest.fn();
+		// A pass-through stand-in for the REAL applyEntries() (buildSelectField.test coverage below
+		// exercises the real one) — issue #461 BLOCKING 1/2: the transport must build `results` from
+		// applyEntries()'s OWN return value, never re-derive it from the raw `entries` array, so the
+		// two can never disagree.
+		const applyEntries = jest.fn( ( entries ) => entries );
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: fetchEntries },
 			{ initialValue: '', placeholder: '', applyEntries: applyEntries }
@@ -181,7 +185,7 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 			[ { key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } } ],
 			false
 		);
-		expect( success ).toHaveBeenCalledWith( { results: [ { id: 'dadata:tv', text: 'ул Тверская' } ] } );
+		expect( success ).toHaveBeenCalledWith( { results: [ { id: 'dadata:tv', text: 'ул Тверская', key: 'dadata:tv' } ] } );
 		expect( failure ).not.toHaveBeenCalled();
 	} );
 } );
@@ -540,8 +544,10 @@ describe( 'ajax-select2 renderer', () => {
 		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
 		expect( success ).toHaveBeenCalledTimes( 1 );
 		// issue #455: the reported id is entry.value (the location VALUE space every other
-		// renderer in this layer submits), never entry.key (the raw provider key).
-		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'ул Тверская', text: 'ул Тверская' } ] );
+		// renderer in this layer submits), never entry.key (the raw provider key). issue #461
+		// BLOCKING 2: `key` rides along too — the STABLE identity a real select2 pick hands back
+		// via `select2:select`'s `e.params.data.key`, never used as the submitted `id`/value.
+		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'ул Тверская', text: 'ул Тверская', key: 'dadata:tv' } ] );
 	} );
 
 	it( 'a selection AFTER an ajax.transport response calls the shared onSelect with the fetched record', async () => {
@@ -558,30 +564,39 @@ describe( 'ajax-select2 renderer', () => {
 
 		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
 
-		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+		const success = jest.fn();
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, success, jest.fn() );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		// select2 itself would insert the picked <option> into the underlying <select> before
-		// marking it selected (a bare `.value =` assignment is a no-op without a matching
-		// <option> present — both jQuery's and the native `<select>` value setter search the
-		// existing option list) — reproduced explicitly here, same as the next test.
-		// issue #455: the <option> select2 would insert carries entry.value as its value —
-		// the same string dataByKey is now keyed by, never the raw entry.key.
+		const pickedData = success.mock.calls[ 0 ][ 0 ].results[ 0 ];
+
+		// select2 itself would insert the picked <option> into the underlying <select>, set its
+		// value, and fire native 'change' (SelectAdapter.prototype.select,
+		// selectWoo.full.js:3182-3220) — reproduced explicitly here, same as the next test.
 		const select = document.getElementById( 'billing_address_1' );
 		const option = document.createElement( 'option' );
-		option.value = 'ул Тверская';
+		option.value = pickedData.id;
 		select.appendChild( option );
-		select.value = 'ул Тверская';
+		select.value = pickedData.id;
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// issue #461 BLOCKING 2: identity resolution for a REAL select2 pick goes through
+		// `select2:select`'s `e.params.data` — the exact object select2/selectWoo hands back
+		// verbatim (EventRelay, selectWoo.full.js:2174-2218) — never the <option>'s own DOM
+		// value/dataset, which select2's own `SelectAdapter.prototype.option()` never carries a
+		// custom `key` field onto (selectWoo.full.js:3309-3327).
+		window.jQuery( select ).trigger( window.jQuery.Event( 'select2:select', { params: { data: pickedData } } ) );
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:tv', label: 'ул Тверская' } } );
 	} );
 
-	it( 'a jQuery-only .trigger("change") (select2\'s own reporting mechanism, no native event) still reaches onSelect', async () => {
-		// The core event-world pin: select2 reports a pick via EXACTLY this call — no native
-		// DOM event is ever dispatched (gotcha `jquery-trigger-change-fires-no-native-event`).
-		// A NATIVE-only `addEventListener('change')` would never see this at all.
+	it( 'a jQuery-only select2:select trigger (select2\'s own reporting mechanism, no native event) still reaches onSelect', async () => {
+		// The core event-world pin: select2 reports a pick via EXACTLY this jQuery custom event —
+		// no native DOM event carries the picked record's identity at all (gotcha
+		// `jquery-trigger-change-fires-no-native-event`, extended by issue #461 BLOCKING 2 to
+		// select2:select specifically). A NATIVE-only `addEventListener` would never see this.
 		const fetchSpy = jest.fn( () => Promise.resolve( [
 			{ key: 'dadata:tv', label: 'ул Тверская', level: 'address', value: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } },
 		] ) );
@@ -596,19 +611,23 @@ describe( 'ajax-select2 renderer', () => {
 		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
 
 		// Prime the lookup map exactly the way a real ajax.transport response would.
-		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+		const success = jest.fn();
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, success, jest.fn() );
 		await Promise.resolve().then( () => Promise.resolve() );
 
+		const pickedData = success.mock.calls[ 0 ][ 0 ].results[ 0 ];
 		const select = document.getElementById( 'billing_address_1' );
 
 		// A real select2 pick inserts the chosen result's own <option> into the underlying
 		// <select> before marking it selected — reproduced explicitly here since no real
 		// select2 runs under jest (see the file docblock's SELECT2 IS OPTIONAL section).
 		const option = document.createElement( 'option' );
-		option.value = 'ул Тверская';
+		option.value = pickedData.id;
 		select.appendChild( option );
 
-		window.jQuery( select ).val( 'ул Тверская' ).trigger( 'change' );
+		window.jQuery( select ).val( pickedData.id ).trigger( 'change' );
+		window.jQuery( select ).trigger( window.jQuery.Event( 'select2:select', { params: { data: pickedData } } ) );
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:tv', label: 'ул Тверская' } } );
@@ -801,7 +820,7 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		// The stale first response never repaints the list — its success() never fires.
 		expect( first.success ).not.toHaveBeenCalled();
 		expect( second.success ).toHaveBeenCalledTimes( 1 );
-		expect( second.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'Москва', text: 'Москва' } ] );
+		expect( second.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'Москва', text: 'Москва', key: 'dadata:msk' } ] );
 	} );
 
 	it( 'ajax.transport returns an abortable handle so selectWoo can cancel an in-flight request on the next keystroke (issue #449)', () => {
@@ -948,11 +967,14 @@ describe( 'ajax-select2 renderer — issue #455: the submitted value is the loca
 		const results = result.success.mock.calls[ 0 ][ 0 ].results;
 
 		// The actual claim under test: what select2's own {id, text} result — and therefore the
-		// <option> value it would insert on a pick — carries for this field.
-		expect( results ).toEqual( [ { id: 'Жуковский', text: 'Жуковский' } ] );
+		// <option> value it would insert on a pick — carries for this field. `key` (issue #461
+		// BLOCKING 2) rides along as the resolution identity, never as the submitted id/value.
+		expect( results ).toEqual( [ { id: 'Жуковский', text: 'Жуковский', key: 'dadata:0c5b2444-city-zhukovsky' } ] );
 
-		// select2 itself inserts the picked result's own <option> before marking it selected
-		// (same convention as the existing "a selection AFTER an ajax.transport response" test).
+		// select2 itself inserts the picked result's own <option>, sets its value, and fires
+		// native 'change' (same convention as the existing "a selection AFTER an ajax.transport
+		// response" test) — and separately relays the pick as `select2:select` with the exact
+		// result object, which is what identity resolution now goes through (BLOCKING 2).
 		const select = document.getElementById( 'shipping_city' );
 		const option = document.createElement( 'option' );
 
@@ -960,6 +982,7 @@ describe( 'ajax-select2 renderer — issue #455: the submitted value is the loca
 		select.appendChild( option );
 		select.value = results[ 0 ].id;
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		window.jQuery( select ).trigger( window.jQuery.Event( 'select2:select', { params: { data: results[ 0 ] } } ) );
 
 		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Жуковский' } } );
 
@@ -984,7 +1007,256 @@ describe( 'ajax-select2 renderer — issue #455: the submitted value is the loca
 		const result = instances[ 0 ].query( 'Вит' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( result.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'dadata:no-value-entry', text: 'Витебск' } ] );
+		expect( result.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'dadata:no-value-entry', text: 'Витебск', key: 'dadata:no-value-entry' } ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — round-2 critic REJECT, BLOCKING 1: `entry.value || entry.key` was a truthiness
+// fallback, not a presence check — a record with no derivable component AND no usable label
+// (`fieldValueFor()` legitimately returns '') silently became selectable under its own raw
+// provider key, reintroducing #455 in the one case hardest to notice.
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #461 BLOCKING 1: an entry with an explicitly EMPTY derived value is never selectable', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'excludes the empty-value entry from select2 results entirely — FAILS on `entry.value || entry.key`, which would report it under its own raw provider key', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [
+			{
+				key: 'dadata:has-value',
+				value: 'Жуковский',
+				level: 'settlement',
+				record: { key: 'dadata:has-value', label: 'Жуковский' },
+			},
+			{
+				// fieldValueFor() found no component AND no usable label at this level — a real,
+				// legitimate '', never absent (see the next test for the absent case, which is
+				// unaffected and must keep falling back to entry.key).
+				key: 'dadata:no-derivable-value',
+				value: '',
+				level: 'settlement',
+				record: { key: 'dadata:no-derivable-value', label: '' },
+			},
+		] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_city' ), options );
+
+		const result = instances[ 0 ].query( 'Жук' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const results = result.success.mock.calls[ 0 ][ 0 ].results;
+
+		expect( results ).toEqual( [ { id: 'Жуковский', text: 'Жуковский', key: 'dadata:has-value' } ] );
+		expect( results.some( ( r ) => r.id === 'dadata:no-derivable-value' ) ).toBe( false );
+	} );
+
+	it( 'an entry with NO .value at all (undefined, not empty) is UNAFFECTED — still falls back to entry.key, out of scope here', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:no-value-entry', level: 'settlement', record: { key: 'dadata:no-value-entry', label: 'Витебск' } },
+		] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_city' ), options );
+
+		const result = instances[ 0 ].query( 'Вит' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( result.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'dadata:no-value-entry', text: 'Витебск', key: 'dadata:no-value-entry' } ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — round-2 critic REJECT, BLOCKING 2: keying `dataByKey` by the SUBMITTED value
+// (the original PR's own guidance, now WITHDRAWN) resolves the WRONG record when two entries
+// legitimately share one submitted name — the merge in `applyEntries()` always leaves whichever
+// entry was processed LAST in `dataByKey`, regardless of which one the customer actually picked.
+// Fixed by keying `dataByKey` on `entry.key` (the provider's own stable identity) and resolving a
+// real select2 pick through `select2:select`'s `e.params.data.key` — select2/selectWoo hands the
+// full, un-stripped result object back on that event (verified against the real selectWoo source,
+// selectWoo.full.js:2174-2218, 3305-3350, 3454-3466 — see the worker's report for the trace).
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #461 BLOCKING 2: two same-named localities resolve to their OWN records', () => {
+	let mod;
+
+	function fetchTwoSameNamedEntries() {
+		return jest.fn( () => Promise.resolve( [
+			{
+				key: 'dadata:first-alexandrovka',
+				value: 'Александровка',
+				level: 'settlement',
+				record: { key: 'dadata:first-alexandrovka', label: 'Александровка (Воронежская обл.)' },
+			},
+			{
+				key: 'dadata:second-alexandrovka',
+				value: 'Александровка',
+				level: 'settlement',
+				record: { key: 'dadata:second-alexandrovka', label: 'Александровка (Оренбургская обл.)' },
+			},
+		] ) );
+	}
+
+	/**
+	 * Simulates a REAL select2 pick of `resultIndex` from `results` — a real select2 inserts the
+	 * picked <option>, sets the <select>'s value, and fires native 'change'
+	 * (SelectAdapter.prototype.select, selectWoo.full.js:3182-3220) AND separately relays the
+	 * SAME pick as `select2:select` carrying the exact result object as `e.params.data`
+	 * (EventRelay, selectWoo.full.js:2174-2218) — both happen for one pick, from the same
+	 * underlying `container.trigger('select', {data})` call.
+	 *
+	 * @param {Element} select
+	 * @param {Array}   results
+	 * @param {number}  resultIndex
+	 * @returns {void}
+	 */
+	function simulateSelect2Pick( select, results, resultIndex ) {
+		var picked = results[ resultIndex ];
+		var option = document.createElement( 'option' );
+
+		option.value = picked.id;
+		select.appendChild( option );
+		select.value = picked.id;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		window.jQuery( select ).trigger( window.jQuery.Event( 'select2:select', { params: { data: picked } } ) );
+	}
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'select2 reports BOTH same-named results, each carrying its OWN key', async () => {
+		const options = buildOptions( { fetch: fetchTwoSameNamedEntries(), node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		const result = instances[ 0 ].query( 'Александровка' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const results = result.success.mock.calls[ 0 ][ 0 ].results;
+
+		expect( results ).toEqual( [
+			{ id: 'Александровка', text: 'Александровка (Воронежская обл.)', key: 'dadata:first-alexandrovka' },
+			{ id: 'Александровка', text: 'Александровка (Оренбургская обл.)', key: 'dadata:second-alexandrovka' },
+		] );
+	} );
+
+	it( 'picking the FIRST of two same-named results resolves to the FIRST record — FAILS on a value-keyed dataByKey, which always keeps whichever entry merged in last', async () => {
+		const options = buildOptions( { fetch: fetchTwoSameNamedEntries(), node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_city" name="shipping_city" value="" /></form>';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		const result = instances[ 0 ].query( 'Александровка' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const results = result.success.mock.calls[ 0 ][ 0 ].results;
+		const select = document.getElementById( 'shipping_city' );
+
+		simulateSelect2Pick( select, results, 0 );
+
+		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( options.onSelect ).toHaveBeenCalledWith( {
+			record: { key: 'dadata:first-alexandrovka', label: 'Александровка (Воронежская обл.)' },
+		} );
+	} );
+
+	it( 'picking the SECOND of two same-named results resolves to the SECOND record', async () => {
+		const options = buildOptions( { fetch: fetchTwoSameNamedEntries(), node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_city" name="shipping_city" value="" /></form>';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		const result = instances[ 0 ].query( 'Александровка' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const results = result.success.mock.calls[ 0 ][ 0 ].results;
+		const select = document.getElementById( 'shipping_city' );
+
+		simulateSelect2Pick( select, results, 1 );
+
+		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( options.onSelect ).toHaveBeenCalledWith( {
+			record: { key: 'dadata:second-alexandrovka', label: 'Александровка (Оренбургская обл.)' },
+		} );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — NOTED finding: `minimumInputLength` is now picked per level, not a universal 2
+// with no provider invariant behind it.
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — minimumInputLength is picked per level, not a universal constant', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'a region-level field gets a floor of 1 — a small, already server-cached list', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
+
+		expect( instances[ 0 ].config.minimumInputLength ).toBe( 1 );
+	} );
+
+	it( 'a settlement-level field gets a floor of 2 — matches woocommerce-edostavka\'s own city adapter default', () => {
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' } } ) );
+
+		expect( instances[ 0 ].config.minimumInputLength ).toBe( 2 );
+	} );
+
+	it( 'an address-level field also gets a floor of 2 — the same locality-name-search precedent as settlement', () => {
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), buildOptions( { node: { level: 'address', fieldId: 'billing_address_1' } } ) );
+
+		expect( instances[ 0 ].config.minimumInputLength ).toBe( 2 );
 	} );
 } );
 
