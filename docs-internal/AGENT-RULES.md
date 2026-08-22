@@ -210,6 +210,41 @@ public static function is_valid_version( string $version ): bool {
 }
 ```
 
+### Rule 7 — The framework owns the checkout address fields, and WooCommerce's own setting decides which column
+
+**Settled by the operator, twice (s44 and again s86). It has come back for re-litigation once
+already because it was recorded only in a session file — do not re-open it.**
+
+**7a. Shared settings live in the framework, never in a carrier plugin.** That is the whole point:
+several carriers run side by side, and per-carrier copies of a shared option make them fight over
+it — the failure mode observed in the production plugins. A setting that describes the SHOP (not
+one carrier's transport) belongs here.
+
+**7b. Which checkout column the location cascade attaches to is derived from
+`woocommerce_ship_to_destination`, never declared per field:**
+
+| `woocommerce_ship_to_destination` | The cascade attaches to |
+|---|---|
+| `billing_only` ("Force shipping to the customer billing address") | **billing only** |
+| anything else | **both billing and shipping** |
+
+Note the second row is **both columns**, not "whichever one determines delivery". A plugin author
+does not choose the section for a field declared with `source_location()`.
+
+**Do not derive this from `Address_Target::resolve()`.** That class answers a DIFFERENT question —
+where to WRITE a chosen pickup point's address — and therefore returns exactly one prefix
+(`billing` or `shipping`). One target versus a set of columns; the two rules coincide in the
+`billing_only` row and diverge everywhere else.
+
+**Keep two questions apart.** "Which columns is the cascade attached to" (this rule, a shop
+setting) is not "which column is active right now" (the live «Ship to a different address»
+checkbox, which `location-cascade.js` already resolves in `activeAddressSection()`).
+
+Background for 7b, in WooCommerce's own code (`class-wc-checkout.php`): `get_posted_address_data()`
+returns the billing value for a shipping key when `ship_to_different_address` is false, that flag is
+forced false in `billing_only`, and the shipping fieldset is skipped entirely. In RU/CIS billing IS
+the delivery address, so a rule that always wrote `shipping_*` would write nowhere visible.
+
 ---
 
 ## PHP/WP Gotchas Summary
