@@ -210,6 +210,133 @@
 	registry[ 'related-list:region' ] = attachRelatedListRegion;
 
 	// -------------------------------------------------------------------------
+	// Pure select2 config builder (issue #450, harness option 2) — no DOM read beyond its own
+	// arguments, no jQuery, no `.select2()` call. Testable with NO select2 present in the
+	// environment at all, and independently of `buildSelectField()`'s init-guard/idempotency
+	// wrapper — this is the SAME object `ensureSelect2()` hands to `.select2()`, extracted so
+	// a test can assert its shape directly instead of inferring it from a stubbed `select2()`
+	// call (issue #450's own point: jsdom has no select2, so nothing here ran under any test
+	// before this function existed to be called on its own).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The ajax-select2 `minimumInputLength` floor for `level` (issue #461 NOTED finding: a
+	 * universal `2` had no provider invariant behind it — the critic found none, and neither
+	 * did the research this PR already did, docs-internal/research/2026-08-21-select2-location-fields.md
+	 * §2.2). No source consulted (WC's own `wc-enhanced-select.js`, `woocommerce-edostavka`'s
+	 * `city-select.js`) states a floor for a REGION field specifically — both only cover
+	 * settlement/customer/product-style searches. Picked per level rather than left universal:
+	 *
+	 * - `region`: the list is small and already server-cached per country
+	 *   ({@see attachRelatedListRegion}'s own `fetchRegionList()` caches it too) — a 1-character
+	 *   query is cheap here and useful for short region names/abbreviations, so it is not
+	 *   floored beyond select2's own default of 1.
+	 * - everything else (settlement, address): matches `woocommerce-edostavka`'s own city
+	 *   adapter default of 2 (`city-select.js:58`) — the closest real precedent for a
+	 *   locality-name search against the same DaData-shaped provider data this layer uses.
+	 *
+	 * @param {string} level
+	 * @returns {number}
+	 */
+	function minimumInputLengthFor( level ) {
+		return 'region' === level ? 1 : 2;
+	}
+
+	/**
+	 * Builds the config object for `strategy` — the exact object `ensureSelect2()` passes to
+	 * `.select2()`.
+	 *
+	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array}} seed
+	 *   `applyEntries` is called with `(entries, false)` on every successful ajax response —
+	 *   the SAME merge-only call `ensureSelect2()`'s own transport made before this extraction —
+	 *   and now RETURNS the subset of `entries` it actually accepted (see `applyEntries()`'s own
+	 *   docblock), so the results reported to select2 and the records resolvable via `dataByKey`
+	 *   can never diverge (issue #461 BLOCKING 1/2).
+	 * @returns {Object}
+	 */
+	function selectConfigFor( strategy, seed ) {
+		var config = { width: '100%' };
+
+		if ( strategy.ajax ) {
+			// Only meaningful when the field starts EMPTY — select2's own docs require a
+			// blank leading <option> for this to render at all (verified against
+			// select2/select2 docs/placeholders.md, "Single select placeholders" AND "Using
+			// placeholders with AJAX" — the empty <option> is required in BOTH cases).
+			// `attachAjaxSelect2()`'s own seeding only appends that leading option in this
+			// same empty case — see `buildSelectField()`.
+			if ( seed.placeholder && ! seed.initialValue ) {
+				config.placeholder = seed.placeholder;
+			}
+
+			config.minimumInputLength = minimumInputLengthFor( seed.level );
+			config.ajax = {
+				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
+				transport: function( params, success, failure ) {
+					var term = params && params.data && params.data.term ? params.data.term : '';
+
+					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
+					// and aborts it (only if it looks abortable) before starting the NEXT query —
+					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. Our own
+					// `strategy.fetchEntries()` wraps `fetch()`, not `$.ajax()`, so there is no real
+					// in-flight request object to hand back (threading an AbortController through
+					// `options.fetch()` is a `location-cascade.js` change, out of scope here) — but
+					// an `abort()` that marks THIS call's own eventual result stale is enough to stop
+					// a superseded response from repainting the list, which is the actual symptom
+					// (the "last-arrived-wins" flicker, §2.4). #449's cancellation half (actually
+					// aborting the in-flight `fetch()`) is deliberately NOT done — see the PR
+					// description.
+					var stale = false;
+
+					strategy.fetchEntries( term ).then( function( entries ) {
+						if ( stale ) {
+							return;
+						}
+
+						// issue #461 BLOCKING 1/2: `applyEntries()` is the SINGLE place that
+						// decides which entries are selectable and what identifies each one —
+						// reusing its return value here (never re-deriving the same filter) is
+						// what keeps select2's own results and `dataByKey` from disagreeing.
+						var accepted = seed.applyEntries( entries, false );
+
+						success( {
+							results: accepted.map( function( entry ) {
+								return {
+									id: undefined !== entry.value ? entry.value : entry.key,
+									text: entry.record.label || entry.label,
+									// Carried through select2/selectWoo's own normalized result
+									// data — see `SelectAdapter.prototype.option()`/`.item()`,
+									// selectWoo.full.js:3309-3350 — and handed back verbatim on
+									// `select2:select` (`e.params.data.key`, EventRelay,
+									// selectWoo.full.js:2174-2218). This is the STABLE identity
+									// `buildSelectField()`'s `select2:select` handler resolves the
+									// record by; `id`/`text` are select2's own display contract and
+									// stay the submitted field VALUE, never this key (issue #455).
+									key: entry.key,
+								};
+							} ),
+						} );
+					}, function( error ) {
+						if ( stale ) {
+							return;
+						}
+
+						failure( error );
+					} );
+
+					return {
+						abort: function() {
+							stale = true;
+						},
+					};
+				},
+			};
+		}
+
+		return config;
+	}
+
+	// -------------------------------------------------------------------------
 	// Shared select2-ish field builder — turns a plain <input> into a <select> select2 CAN
 	// enhance (select2 requires a real <select>; it cannot attach to an arbitrary text input).
 	// -------------------------------------------------------------------------
@@ -250,12 +377,17 @@
 		select.name = input.name || '';
 		select.className = input.className;
 
+		// Captured BEFORE the <input> is detached — issue #447: a field re-rendered with an
+		// existing value (a page reload, or a sibling level's re-render) must not lose it.
+		var initialValue = input.value || '';
+		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' ) || '';
+
 		input.parentNode.insertBefore( select, input );
 		input.parentNode.removeChild( input );
 
-		/** @type {Object.<string, Object>} locality key -> the record it resolves to. */
+		/** @type {Object.<string, Object>} the entry's STABLE identity (`entry.key`) -> the record it resolves to. */
 		var dataByKey = {};
-		var lastHandledValue = null;
+		var lastHandledKey = null;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -263,9 +395,28 @@
 		 * (the static list strategy) or MERGING into the lookup map only, leaving the DOM to
 		 * select2's own remote-results rendering (the ajax strategy).
 		 *
+		 * issue #461 BLOCKING 1: an entry whose derived field value is an EXPLICIT empty string
+		 * (`fieldValueFor()` found no component AND no usable label at this level —
+		 * `location-cascade.js`'s own docblock calls this "the lesser of two evils", not a
+		 * value a form should ever submit) is excluded entirely, same as an entry with no
+		 * record/key. Silently falling back to `entry.key` for it would resubmit the raw
+		 * provider key — the exact #455 defect this PR already closed once. This is a real
+		 * PRESENCE check (`undefined !== entry.value`), not a truthiness one — `undefined`
+		 * (`related-list:settlement`'s own `/location/list` entries, which never carry a
+		 * `.value` at all — out of scope here, see the PR description) and `''` (a value that
+		 * WAS derived, and derived to nothing) are different states and must not collapse into
+		 * the same branch.
+		 *
+		 * issue #461 BLOCKING 2: `dataByKey` is keyed by `entry.key` — the provider's own stable
+		 * identity — never by the submitted option value. Two entries that legitimately share
+		 * the same submitted name (two same-named localities) now resolve to their OWN records
+		 * instead of whichever one happened to be merged in last.
+		 *
 		 * @param {Array}   entries
 		 * @param {boolean} replaceOptions
-		 * @returns {void}
+		 * @returns {Array} the subset of `entries` actually accepted (has a record, a key, and a
+		 *   non-empty derived value) — the caller's `results`/option list must be built from
+		 *   THIS, never re-filtered independently, so they can never disagree with `dataByKey`.
 		 */
 		function applyEntries( entries, replaceOptions ) {
 			if ( replaceOptions ) {
@@ -276,43 +427,115 @@
 				dataByKey = {};
 			}
 
+			var accepted = [];
+
 			( entries || [] ).forEach( function( entry ) {
 				var record = entry && entry.record;
 
-				if ( ! record || ! entry.key ) {
+				if ( ! record || ! entry.key || '' === entry.value ) {
 					return;
 				}
 
+				// issue #455: `entry.value` — when the entry carries one — is the SAME field
+				// value every other renderer in this layer submits (`location-cascade.js`'s
+				// `fetchFor()` already assigns it via `fieldValueFor()` before the entry ever
+				// reaches here). This is what the <select> itself SUBMITS. Entries with no
+				// `.value` (`related-list:settlement`'s own `/location/list` entries, which
+				// never carry one) fall back to `entry.key` unchanged — this function is shared
+				// with that renderer, which is out of scope here (see the PR description).
+				var optionValue = ( undefined !== entry.value ) ? entry.value : entry.key;
+
 				dataByKey[ entry.key ] = record;
+				accepted.push( entry );
 
 				if ( replaceOptions ) {
 					var option = document.createElement( 'option' );
 
-					option.value = entry.key;
+					option.value = optionValue;
 					option.textContent = record.label || entry.label || '';
+					// The RESOLUTION identity (issue #461 BLOCKING 2) — deliberately NOT the
+					// submitted value, so `handleChange()` never has to disambiguate two options
+					// that legitimately share one. Read back in `handleChange()` below.
+					option.dataset.woodevKey = entry.key;
 
 					select.appendChild( option );
 				}
 			} );
+
+			return accepted;
 		}
 
-		function handleChange() {
-			var value = select.value;
-			var record = dataByKey[ value ];
+		/**
+		 * Resolves `key` (the entry's STABLE identity, never the submitted value — issue #461
+		 * BLOCKING 2) against `dataByKey` and calls `options.onSelect()`, once per distinct pick.
+		 * Shared by both resolution paths below: a real select2 pick never touches the option's
+		 * own `dataset` (see `handleChange()`'s docblock), and a non-select2/native pick never
+		 * fires `select2:select` at all — the two are mutually exclusive per pick, so one shared
+		 * "last handled" guard is enough to make either path idempotent without double-firing
+		 * across the other.
+		 *
+		 * @param {string|null|undefined} key
+		 * @returns {void}
+		 */
+		function resolveAndSelect( key ) {
+			var record = key ? dataByKey[ key ] : null;
 
-			if ( ! record || value === lastHandledValue ) {
+			if ( ! record || key === lastHandledKey ) {
 				return;
 			}
 
-			lastHandledValue = value;
+			lastHandledKey = key;
 
 			options.onSelect( { record: record } );
+		}
+
+		/**
+		 * The NATIVE/no-select2 resolution path: reads the STABLE identity `applyEntries()`
+		 * stamped onto the selected `<option>`'s own `dataset` (issue #461 BLOCKING 2). Covers
+		 * `related-list:settlement` (select2, when present there, is LOCAL/non-ajax and wraps
+		 * these exact `<option>` elements without rebuilding them) and `ajax-select2` when no
+		 * select2/selectWoo ever loaded. Does NOT cover a real select2 AJAX pick — select2's own
+		 * `SelectAdapter.prototype.option()` builds that `<option>` itself and copies only
+		 * `value`/`textContent`/`selected`/`disabled`/`title` onto it (selectWoo.full.js:3309-
+		 * 3327), never a custom `dataset` entry — see the `select2:select` binding below for that
+		 * case.
+		 *
+		 * @returns {void}
+		 */
+		function handleChange() {
+			var option = select.options[ select.selectedIndex ];
+
+			resolveAndSelect( option ? option.dataset.woodevKey : null );
 		}
 
 		var unbind = bindChangeBothWorlds( select, handleChange );
 
 		var $select = window.jQuery ? window.jQuery( select ) : null;
 		var select2Initialized = false;
+
+		/**
+		 * The REAL select2 resolution path (issue #461 BLOCKING 2): select2/selectWoo hands the
+		 * full, un-stripped result object back on this event — `e.params.data` is exactly the
+		 * `{id, text, key}` item this file's own `ajax.transport` `success()` reported
+		 * (EventRelay relays the container's own `select`/`selecting` events onto the element
+		 * verbatim, selectWoo.full.js:2174-2218; `ArrayAdapter.prototype.select` never mutates
+		 * that object before triggering it, selectWoo.full.js:3454-3466). Using `.key` here —
+		 * never the DOM `<option>`'s own value/dataset, which select2 itself built and does not
+		 * carry it — is what makes a real select2 pick immune to two results sharing one
+		 * submitted name.
+		 *
+		 * @param {Object} event jQuery's own `select2:select` event.
+		 * @returns {void}
+		 */
+		function handleSelect2Select( event ) {
+			var data = event && event.params ? event.params.data : null;
+
+			resolveAndSelect( data ? data.key : null );
+		}
+
+		if ( $select ) {
+			$select.on( 'select2:select', handleSelect2Select );
+		}
 
 		/**
 		 * Initializes select2 on `select`, once — a no-op when the `selectWoo`/select2 script
@@ -326,39 +549,44 @@
 				return;
 			}
 
+			$select.select2( selectConfigFor( strategy, {
+				initialValue: initialValue,
+				placeholder: placeholder,
+				applyEntries: applyEntries,
+				level: options.node && options.node.level,
+			} ) );
+
+			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
+			// runs means a THROWING init still leaves this idempotency guard claiming success.
 			select2Initialized = true;
-
-			var config = { width: '100%' };
-
-			if ( strategy.ajax ) {
-				config.ajax = {
-					transport: function( params, success, failure ) {
-						var term = params && params.data && params.data.term ? params.data.term : '';
-
-						strategy.fetchEntries( term ).then( function( entries ) {
-							applyEntries( entries, false );
-
-							success( {
-								results: ( entries || [] ).map( function( entry ) {
-									return {
-										id: entry.key,
-										text: entry.record && entry.record.label ? entry.record.label : entry.label,
-									};
-								} ),
-							} );
-						}, failure );
-					},
-				};
-			}
-
-			$select.select2( config );
 		}
 
 		if ( strategy.ajax ) {
 			// select2's own `ajax.transport` (wired above) drives population per keystroke —
-			// nothing to pre-fetch. Without select2 available at all, the field is simply an
-			// empty native <select> a customer cannot search; `ajax-select2` mode is only ever
-			// offered by the store setting when the real plugin is expected to be present.
+			// nothing to PRE-FETCH. But the field's OWN current value (issue #447) is not a
+			// fetch result at all: it is the label the field already carries, exactly the
+			// select2-documented "Preselect option in AJAX Select2" pattern (append a real,
+			// pre-selected <option> before init — see the CDEK reference,
+			// plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:69,90-98,
+			// which does the same thing for the same reason) — without it the select renders
+			// with NO options at all until the first keystroke.
+			if ( initialValue ) {
+				var seededOption = document.createElement( 'option' );
+
+				seededOption.value = initialValue;
+				seededOption.textContent = initialValue;
+				seededOption.selected = true;
+
+				select.appendChild( seededOption );
+			} else if ( placeholder ) {
+				// The empty leading <option> select2's placeholder requires (see ensureSelect2()).
+				select.appendChild( document.createElement( 'option' ) );
+			}
+
+			// Without select2 available at all, the field is simply a native <select> carrying
+			// the option above (or genuinely empty) — a customer cannot search it; `ajax-select2`
+			// mode is only ever offered by the store setting when the real plugin is expected to
+			// be present.
 			ensureSelect2();
 		} else {
 			strategy.fetchEntries( '' ).then(
@@ -379,7 +607,23 @@
 			detach: function() {
 				unbind();
 
-				if ( select2Initialized && $select && 'function' === typeof $select.select2 ) {
+				if ( $select ) {
+					$select.off( 'select2:select', handleSelect2Select );
+				}
+
+				// issue #457: gated on the node's ACTUAL select2 data (the same
+				// `$element.data('select2')` key select2 itself sets on init and clears on
+				// destroy — selectWoo.full.js:5258,5782), never on the closure flag above.
+				// WooCommerce's own `update_checkout` can replace the surrounding fragment via
+				// jQuery `.html()`/`.empty()`, which runs `cleanData()` — and therefore purges
+				// this exact data key — on the very node this closure still holds a reference to,
+				// WITHOUT ever calling OUR `detach()`. By the time detach() finally does run (the
+				// next `attachAll()` pass tearing down a stale renderer), the closure flag still
+				// says "initialized" while select2's own data is already gone; calling
+				// `.select2('destroy')` on it dereferences a null instance internally
+				// (selectWoo.full.js:6562-6571) and throws a TypeError this file only ever
+				// caught, never prevented.
+				if ( $select && 'function' === typeof $select.select2 && $select.data( 'select2' ) ) {
 					try {
 						$select.select2( 'destroy' );
 					} catch ( e ) {
@@ -492,6 +736,7 @@
 			attachRelatedListSettlement: attachRelatedListSettlement,
 			attachAjaxSelect2: attachAjaxSelect2,
 			bindChangeBothWorlds: bindChangeBothWorlds,
+			selectConfigFor: selectConfigFor,
 		};
 	}
 
