@@ -129,7 +129,7 @@
 - [testing/unit] **An invented fixture tests your assumptions, not the carrier.** → [an-invented-fixture-tests-your-assumptions-not-the-carrier](gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
 
 ### [js/*] — JavaScript language traps
-- [js/select-value-space] **Writing `.value` to a `<select>` with no matching `<option>` submits nothing — and even a successful `selectedIndex` leaves select2's widget stale.** → [a-select-value-write-with-no-matching-option-submits-nothing](gotchas/a-select-value-write-with-no-matching-option-submits-nothing.md) (s86)
+- [js/select-value-space] **A `<select>` is not an `<input>`: an unmatched `.value` write submits nothing, a bare `selectedIndex` leaves select2 stale, and select2 caches the option's data ON the node — so the first write works and every later one lies.** → [a-select-value-write-with-no-matching-option-submits-nothing](gotchas/a-select-value-write-with-no-matching-option-submits-nothing.md) (s86)
 - [js/jquery-event-worlds] **A jQuery `.trigger( 'change' )` fires no native event — and that is how select2 reports a pick.** → [jquery-trigger-change-fires-no-native-event](gotchas/jquery-trigger-change-fires-no-native-event.md) (s66)
 - [js/object-as-map] **A plain object is not an insertion-ordered map, and not a safe one.** → [plain-object-is-not-an-insertion-ordered-map](gotchas/plain-object-is-not-an-insertion-ordered-map.md) (s59)
 

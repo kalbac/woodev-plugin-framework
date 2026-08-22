@@ -1,6 +1,6 @@
 # Writing `.value` to a `<select>` with no matching `<option>` submits nothing — and select2 will not redraw even when it works
 
-**Namespace:** `[js/*]` · **Discovered:** s86 (2026-08-22), rig measurement on `:8973/classic-checkout/` (#460, #455, #447)
+**Namespace:** `[js/*]` · **Discovered:** s86 (2026-08-22), rig measurement on `:8973/classic-checkout/` (#460, #455, #447); half 3 added s86 (2026-08-23) from the operator's own rig pass (#465)
 
 ## The trap
 
@@ -83,6 +83,48 @@ Verified against jQuery's own `dispatch`/`handlers` matching, not inferred.
 A native `<select>` has no `.change()` method, so the native world does not fire either — the
 degradation is safe by construction, which is what lets the jsdom tests (no select2 package at
 all) exercise the same code path.
+
+## Half 3 — select2 caches the option's data ON THE NODE, so mutating it in place lies
+
+Fix half 2 and you hit the deepest one. **selectWoo stores a result's `{id, text}` on the
+`<option>` element itself**, under the static key `$.data( option, 'data' )`
+(`SelectAdapter.prototype.item()` returns the cached object when present and only rebuilds it from
+live DOM when absent). The widget renders from that cache, not from the node's current
+`value`/`textContent`.
+
+So reusing an `<option>` by mutating it — the obvious way to avoid appending a new node on every
+write — leaves the widget showing the previous locality while the form submits the new one:
+
+```js
+optionValue:       "Tatarstan"
+optionText:        "Tatarstan"
+select2CachedData: { id: "Moscow", text: "Moscow" }   // measured on the rig
+widgetShows:       "Moscow"
+```
+
+The signature is distinctive and worth recognising: **the first write works and every later one
+does not.** The first write APPENDS a node, and selectWoo's own `MutationObserver`
+(`childList: true, subtree: false`) notices an added child and rebuilds; every later write reuses
+the same node, which the observer never sees.
+
+Invalidate the cache before refreshing:
+
+```js
+if ( window.jQuery ) {
+    window.jQuery.removeData( option, 'data' );   // static $.data key, not $( option ).data()
+}
+
+refreshSelectWooWidget( el );
+```
+
+And route the DESTRUCTIVE clears through the same write path — a clear that sets `el.value = ''`
+directly leaves the widget rendering the old locality just as surely as a stale cache does.
+
+**Why this survived a full test suite and two critics:** every existing test asserted
+`select.value`, which was correct the whole time. The bug lived entirely in what the customer saw.
+A test for a select2-backed field must assert the RENDERED text (`.select2-selection__rendered`),
+and must drive at least THREE consecutive writes without a reload — two passes even when the cache
+is stale, because the first append is what works.
 
 ## Rule of thumb
 
