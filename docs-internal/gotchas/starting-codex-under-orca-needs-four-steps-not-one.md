@@ -48,6 +48,35 @@ orca terminal read --terminal $H --json     # look for "Working (Ns • esc to i
 Step 4 needed a second `--enter` more than once: if the paste has not finished rendering, the first
 Enter lands on an empty composer and does nothing. Always read the buffer back.
 
+## s86: the update dialog can appear AFTER the terminal first reads as ready
+
+The ESC in step 2 is not a one-off at launch — **`codex` polls for updates and can raise the
+dialog a second time, after a read has already shown `Ask Codex to do anything`.** In s86 a
+terminal read clean, the dispatch was injected, and the step-4 `--enter` landed on the freshly
+raised update dialog instead of the composer. That selects **`1. Update now`**, which runs
+`npm install -g @openai/codex`; it failed with `EBUSY` (the running binary is locked on Windows),
+Codex exited to a bare PowerShell prompt, and **the injected brief was lost with it**.
+
+Nothing was damaged — the failed update left the binary untouched — but the round was wasted and
+the failure reads as "Codex died", not "Codex was asked to update".
+
+So step 4 needs a guard, not just a retry: **re-read the buffer immediately before every
+`--enter`, and if the dialog is present, ESC it first.**
+
+```bash
+out=$( orca terminal read --terminal "$H" --screen --json | ... )
+
+if echo "$out" | grep -qi "Update available"; then
+    orca terminal send --terminal "$H" --text $'\e'   # never Enter — Enter means "Update now"
+else
+    orca terminal send --terminal "$H" --text "" --enter
+fi
+```
+
+The general rule: **in this dialog Enter is not "dismiss", it is "yes"** — the default option is
+`1. Update now`. Never send a bare Enter to a Codex terminal whose current frame you have not just
+looked at.
+
 ## Recovering a botched launch
 
 `worker-stop` moves the task to `blocked`, and `dispatch` then refuses it:

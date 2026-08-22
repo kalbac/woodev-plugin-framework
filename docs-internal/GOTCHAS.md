@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 184 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 185 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -129,6 +129,7 @@
 - [testing/unit] **An invented fixture tests your assumptions, not the carrier.** → [an-invented-fixture-tests-your-assumptions-not-the-carrier](gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
 
 ### [js/*] — JavaScript language traps
+- [js/select-value-space] **Writing `.value` to a `<select>` with no matching `<option>` submits nothing — and even a successful `selectedIndex` leaves select2's widget stale.** → [a-select-value-write-with-no-matching-option-submits-nothing](gotchas/a-select-value-write-with-no-matching-option-submits-nothing.md) (s86)
 - [js/jquery-event-worlds] **A jQuery `.trigger( 'change' )` fires no native event — and that is how select2 reports a pick.** → [jquery-trigger-change-fires-no-native-event](gotchas/jquery-trigger-change-fires-no-native-event.md) (s66)
 - [js/object-as-map] **A plain object is not an insertion-ordered map, and not a safe one.** → [plain-object-is-not-an-insertion-ordered-map](gotchas/plain-object-is-not-an-insertion-ordered-map.md) (s59)
 
@@ -272,7 +273,7 @@
 - [tooling/parallel-agents] **A green suite in a worktree is not the same suite — five contract tests SKIP there because `plugins-reference/` is gitignored. Compare the skip count, not the assertion count.** → [a-worktree-silently-skips-five-contract-tests](gotchas/a-worktree-silently-skips-five-contract-tests.md) (s84)
 - [tooling/parallel-agents] **Generated bundles must be built in the PRIMARY CHECKOUT — webpack resolves the shared `node_modules` symlink out of the worktree, so its build can never match CI.** → [local-npm-run-build-is-not-assets-parity-evidence](gotchas/local-npm-run-build-is-not-assets-parity-evidence.md) (s84)
 - [tooling/parallel-agents] **Every fresh worktree starts dirty with seven CRLF-only files — a worker running `git add -A` commits 483 lines of line-ending churn.** → [an-orca-worktree-starts-dirty-with-crlf-churn](gotchas/an-orca-worktree-starts-dirty-with-crlf-churn.md) (s84)
-- [tooling/parallel-agents] **`worker-start --agent codex` lands in a PowerShell prompt that executes the brief; launching Codex takes four steps, ESC for the update dialog included.** → [starting-codex-under-orca-needs-four-steps-not-one](gotchas/starting-codex-under-orca-needs-four-steps-not-one.md) (s84)
+- [tooling/parallel-agents] **Launching Codex takes four steps, ESC for the update dialog included — and that dialog can reappear AFTER a clean read, where Enter means "Update now".** → [starting-codex-under-orca-needs-four-steps-not-one](gotchas/starting-codex-under-orca-needs-four-steps-not-one.md) (s84, extended s86)
 - [tooling/parallel-agents] **Three agents is this machine's real cap — past it phpcs blames innocent files and jest OOMs, both of which read as code defects.** → [three-agents-is-the-concurrency-cap-on-this-machine](gotchas/three-agents-is-the-concurrency-cap-on-this-machine.md) (s84)
 - [tooling/parallel-agents] **`dispatch --inject` can report `ok:false` after it already injected AND submitted — the retry duplicates the paste and revokes the worker's capability.** → [dispatch-inject-reports-failure-after-succeeding](gotchas/dispatch-inject-reports-failure-after-succeeding.md) (s85)
 - [tooling/parallel-agents] **`.worktreeinclude` is copied from the PRIMARY checkout's working tree — parking it on a stale branch silently degrades every worktree made afterwards.** → [a-stale-primary-checkout-degrades-every-worktree-made-from-it](gotchas/a-stale-primary-checkout-degrades-every-worktree-made-from-it.md) (s85)
