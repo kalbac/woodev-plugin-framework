@@ -243,22 +243,51 @@
 				config.placeholder = seed.placeholder;
 			}
 
+			config.minimumInputLength = 2; // WC's own ajax selects use 1-3; eDostavka's own city adapter defaults to 2 — docs-internal/research/2026-08-21-select2-location-fields.md §2.2.
 			config.ajax = {
+				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
 				transport: function( params, success, failure ) {
 					var term = params && params.data && params.data.term ? params.data.term : '';
 
+					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
+					// and aborts it (only if it looks abortable) before starting the NEXT query —
+					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. Our own
+					// `strategy.fetchEntries()` wraps `fetch()`, not `$.ajax()`, so there is no real
+					// in-flight request object to hand back (threading an AbortController through
+					// `options.fetch()` is a `location-cascade.js` change, out of scope here) — but
+					// an `abort()` that marks THIS call's own eventual result stale is enough to stop
+					// a superseded response from repainting the list, which is the actual symptom
+					// (the "last-arrived-wins" flicker, §2.4).
+					var stale = false;
+
 					strategy.fetchEntries( term ).then( function( entries ) {
+						if ( stale ) {
+							return;
+						}
+
 						seed.applyEntries( entries, false );
 
 						success( {
 							results: ( entries || [] ).map( function( entry ) {
 								return {
-									id: entry.key,
+									id: entry.value || entry.key,
 									text: entry.record && entry.record.label ? entry.record.label : entry.label,
 								};
 							} ),
 						} );
-					}, failure );
+					}, function( error ) {
+						if ( stale ) {
+							return;
+						}
+
+						failure( error );
+					} );
+
+					return {
+						abort: function() {
+							stale = true;
+						},
+					};
 				},
 			};
 		}
@@ -345,12 +374,23 @@
 					return;
 				}
 
-				dataByKey[ entry.key ] = record;
+				// issue #455: `entry.value` — when the entry carries one — is the SAME field
+				// value every other renderer in this layer submits (`location-cascade.js`'s
+				// `fetchFor()` already assigns it via `fieldValueFor()` before the entry ever
+				// reaches here). Keying `dataByKey` and the <option> by this value, not the
+				// provider key, is what makes the <select>'s own submitted value match the rest
+				// of the form. Entries with no `.value` (`related-list:settlement`'s own
+				// `/location/list` entries, which never carry one) fall back to `entry.key`
+				// unchanged — this function is shared with that renderer, which is out of scope
+				// here (see the PR description).
+				var optionValue = entry.value || entry.key;
+
+				dataByKey[ optionValue ] = record;
 
 				if ( replaceOptions ) {
 					var option = document.createElement( 'option' );
 
-					option.value = entry.key;
+					option.value = optionValue;
 					option.textContent = record.label || entry.label || '';
 
 					select.appendChild( option );
@@ -388,13 +428,15 @@
 				return;
 			}
 
-			select2Initialized = true;
-
 			$select.select2( selectConfigFor( strategy, {
 				initialValue: initialValue,
 				placeholder: placeholder,
 				applyEntries: applyEntries,
 			} ) );
+
+			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
+			// runs means a THROWING init still leaves this idempotency guard claiming success.
+			select2Initialized = true;
 		}
 
 		if ( strategy.ajax ) {
@@ -443,7 +485,19 @@
 			detach: function() {
 				unbind();
 
-				if ( select2Initialized && $select && 'function' === typeof $select.select2 ) {
+				// issue #457: gated on the node's ACTUAL select2 data (the same
+				// `$element.data('select2')` key select2 itself sets on init and clears on
+				// destroy — selectWoo.full.js:5258,5782), never on the closure flag above.
+				// WooCommerce's own `update_checkout` can replace the surrounding fragment via
+				// jQuery `.html()`/`.empty()`, which runs `cleanData()` — and therefore purges
+				// this exact data key — on the very node this closure still holds a reference to,
+				// WITHOUT ever calling OUR `detach()`. By the time detach() finally does run (the
+				// next `attachAll()` pass tearing down a stale renderer), the closure flag still
+				// says "initialized" while select2's own data is already gone; calling
+				// `.select2('destroy')` on it dereferences a null instance internally
+				// (selectWoo.full.js:6562-6571) and throws a TypeError this file only ever
+				// caught, never prevented.
+				if ( $select && 'function' === typeof $select.select2 && $select.data( 'select2' ) ) {
 					try {
 						$select.select2( 'destroy' );
 					} catch ( e ) {

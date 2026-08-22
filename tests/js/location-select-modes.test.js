@@ -539,7 +539,9 @@ describe( 'ajax-select2 renderer', () => {
 
 		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
 		expect( success ).toHaveBeenCalledTimes( 1 );
-		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'dadata:tv', text: 'ул Тверская' } ] );
+		// issue #455: the reported id is entry.value (the location VALUE space every other
+		// renderer in this layer submits), never entry.key (the raw provider key).
+		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'ул Тверская', text: 'ул Тверская' } ] );
 	} );
 
 	it( 'a selection AFTER an ajax.transport response calls the shared onSelect with the fetched record', async () => {
@@ -563,11 +565,13 @@ describe( 'ajax-select2 renderer', () => {
 		// marking it selected (a bare `.value =` assignment is a no-op without a matching
 		// <option> present — both jQuery's and the native `<select>` value setter search the
 		// existing option list) — reproduced explicitly here, same as the next test.
+		// issue #455: the <option> select2 would insert carries entry.value as its value —
+		// the same string dataByKey is now keyed by, never the raw entry.key.
 		const select = document.getElementById( 'billing_address_1' );
 		const option = document.createElement( 'option' );
-		option.value = 'dadata:tv';
+		option.value = 'ул Тверская';
 		select.appendChild( option );
-		select.value = 'dadata:tv';
+		select.value = 'ул Тверская';
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
@@ -601,10 +605,10 @@ describe( 'ajax-select2 renderer', () => {
 		// <select> before marking it selected — reproduced explicitly here since no real
 		// select2 runs under jest (see the file docblock's SELECT2 IS OPTIONAL section).
 		const option = document.createElement( 'option' );
-		option.value = 'dadata:tv';
+		option.value = 'ул Тверская';
 		select.appendChild( option );
 
-		window.jQuery( select ).val( 'dadata:tv' ).trigger( 'change' );
+		window.jQuery( select ).val( 'ул Тверская' ).trigger( 'change' );
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:tv', label: 'ул Тверская' } } );
@@ -734,7 +738,7 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( typeof instances[ 0 ].config.ajax.transport ).toBe( 'function' );
 	} );
 
-	it( 'the #450 fake reproduces the minimumInputLength gate and the abort contract — pinning that OUR transport still returns nothing (issue #449, unfixed here on purpose)', async () => {
+	it( 'the #450 fake reproduces the minimumInputLength gate — FIXED (issue #449): our own config now sets a real floor', async () => {
 		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
 		const options = buildOptions( { fetch: fetchSpy } );
 
@@ -744,37 +748,66 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 
 		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
 
-		// No minimumInputLength is set today (issue #449) — the fake's own gate is a no-op,
-		// and every query reaches the transport. This is a SHAPE assertion pinning today's
-		// config, not a claim that it is correct.
-		expect( instances[ 0 ].config.minimumInputLength ).toBeUndefined();
+		// issue #449: a search on a genuinely empty term (select2 queries on focus with
+		// `term: ''`) must never reach the transport — the whole point of the floor.
+		expect( instances[ 0 ].config.minimumInputLength ).toBe( 2 );
+		expect( instances[ 0 ].config.ajax.delay ).toBe( 250 );
 
-		const first = instances[ 0 ].query( 'Твер' );
+		const belowFloor = instances[ 0 ].query( '' );
+
+		expect( belowFloor ).toBeNull();
+		expect( fetchSpy ).not.toHaveBeenCalled();
+
+		const atFloor = instances[ 0 ].query( 'Тв' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		// Our transport never `return`s its underlying request (location-select-modes.js's own
-		// `config.ajax.transport`, issue #449) — the fake's `_request` therefore stays `null`
-		// after the first query, so a second query never calls anything's `.abort()`. Asserted
-		// here by construction: `query()` only calls `request.abort()` when the PREVIOUS
-		// request was non-null and abortable, and nothing in this test double tracks an abort
-		// call, so there is nothing to assert a call COUNT against — the absence itself is the
-		// pin. A future #449 fix that starts returning `{ abort() {} }` would need this test
-		// extended with an abort spy; documented here so that fix doesn't have to rediscover it.
-		expect( first ).not.toBeNull();
-		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
+		expect( atFloor ).not.toBeNull();
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Тв' );
 	} );
 
-	// eslint-disable-next-line jest/no-disabled-tests
-	it.skip( 'PENDING #449: ajax.transport should return an abortable handle so selectWoo can cancel an in-flight request on the next keystroke — today it returns nothing at all', () => {
-		// selectConfigFor()'s own `config.ajax.transport` (this file, issue #449) never `return`s
-		// its call to `strategy.fetchEntries( term ).then( ... )` — the function body ends there,
-		// so the real selectWoo AjaxAdapter always stores `undefined` as `this._request`, and its
-		// own guard (`this._request != null && 'function' === typeof this._request.abort`) can
-		// never fire `.abort()` on it. That is exactly issue #449's "requests are never aborted,
-		// results flicker" defect. This assertion states the desired contract — the transport's
-		// return value must be abort()-able — and fails against today's code on purpose; #449
-		// fixes it, not this PR (see tests/js/support/fake-select2.js's own docblock for the
-		// selectWoo source lines this mirrors).
+	it( 'FIXED (issue #449): ajax.transport returns an abortable handle, and abort() suppresses that call\'s own eventual success() — no more last-arrived-wins flicker', async () => {
+		// Two overlapping queries, slower-first: "Мо" resolves AFTER "Моск" despite being
+		// issued first — exactly the flicker the operator observed (issue #449's "results
+		// blink" symptom, a slower earlier response landing after a faster later one).
+		let resolveFirst;
+		let resolveSecond;
+		const fetchSpy = jest.fn()
+			.mockImplementationOnce( () => new Promise( ( resolve ) => {
+				resolveFirst = resolve;
+			} ) )
+			.mockImplementationOnce( () => new Promise( ( resolve ) => {
+				resolveSecond = resolve;
+			} ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		const first = instances[ 0 ].query( 'Мо' );
+
+		// The fake's own store-then-abort sequence (proven directly below) calls `.abort()`
+		// on the FIRST call's returned handle before issuing the second.
+		const second = instances[ 0 ].query( 'Моск' );
+
+		resolveSecond( [ { key: 'dadata:msk', value: 'Москва', level: 'settlement', record: { key: 'dadata:msk', label: 'Москва' } } ] );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		resolveFirst( [ { key: 'dadata:mo', value: 'Мозырь', level: 'settlement', record: { key: 'dadata:mo', label: 'Мозырь' } } ] );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// The stale first response never repaints the list — its success() never fires.
+		expect( first.success ).not.toHaveBeenCalled();
+		expect( second.success ).toHaveBeenCalledTimes( 1 );
+		expect( second.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'Москва', text: 'Москва' } ] );
+	} );
+
+	it( 'ajax.transport returns an abortable handle so selectWoo can cancel an in-flight request on the next keystroke (issue #449)', () => {
+		// selectConfigFor()'s own `config.ajax.transport` now `return`s an object with a real
+		// `abort()` — the real selectWoo AjaxAdapter stores it as `this._request` and calls
+		// `.abort()` on the NEXT query (selectWoo.full.js:3564-3571, mirrored by the #450 fake).
 		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
 		const options = buildOptions( { fetch: fetchSpy } );
 
@@ -867,5 +900,180 @@ describe( 'the #450 fake — minimumInputLength gate and store-then-abort, drive
 
 		expect( () => instances[ 0 ].query( 'b' ) ).not.toThrow();
 		expect( transport ).toHaveBeenCalledTimes( 2 );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — issue #455, the white-spot claim proven/disproven BY EXECUTION: a real pick
+// through the wired ajax.transport must submit the SAME value space every other renderer in
+// this layer uses (`location-cascade.js`'s own `fetchFor()` already stamps `entry.value` via
+// `fieldValueFor()` before an entry ever reaches this file) — never the raw provider key.
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #455: the submitted value is the location VALUE, never the raw provider key', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'a real pick through ajax.transport ends with the <select> — and the serialized form — carrying entry.value, not entry.key', async () => {
+		// Mirrors location-cascade.js's own fetchFor(): every entry reaching options.fetch
+		// already carries `.value = fieldValueFor(entry.record, node.level)`, assigned BEFORE
+		// this renderer ever sees it (location-cascade.js:915).
+		const fetchSpy = jest.fn( () => Promise.resolve( [
+			{
+				key: 'dadata:0c5b2444-city-zhukovsky',
+				value: 'Жуковский',
+				level: 'settlement',
+				record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Жуковский' },
+			},
+		] ) );
+		const options = buildOptions( { fetch: fetchSpy, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_city" name="shipping_city" value="" /></form>';
+		const input = document.getElementById( 'shipping_city' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( input, options );
+
+		const result = instances[ 0 ].query( 'Жук' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const results = result.success.mock.calls[ 0 ][ 0 ].results;
+
+		// The actual claim under test: what select2's own {id, text} result — and therefore the
+		// <option> value it would insert on a pick — carries for this field.
+		expect( results ).toEqual( [ { id: 'Жуковский', text: 'Жуковский' } ] );
+
+		// select2 itself inserts the picked result's own <option> before marking it selected
+		// (same convention as the existing "a selection AFTER an ajax.transport response" test).
+		const select = document.getElementById( 'shipping_city' );
+		const option = document.createElement( 'option' );
+
+		option.value = results[ 0 ].id;
+		select.appendChild( option );
+		select.value = results[ 0 ].id;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Жуковский' } } );
+
+		// The white-spot claim itself: the field's own submitted value, all the way through
+		// jQuery's .val() and .serialize() — the exact calls checkout.js and jQuery.param() make.
+		expect( window.jQuery( '#shipping_city' ).val() ).toBe( 'Жуковский' );
+		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_city=' + encodeURIComponent( 'Жуковский' ) );
+	} );
+
+	it( 'falls back to entry.key when an entry carries no .value (defensive — related-list:settlement entries never carry one, and fixing that renderer is out of scope here)', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:no-value-entry', level: 'settlement', record: { key: 'dadata:no-value-entry', label: 'Витебск' } },
+		] ) );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_city' ), options );
+
+		const result = instances[ 0 ].query( 'Вит' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( result.success.mock.calls[ 0 ][ 0 ].results ).toEqual( [ { id: 'dadata:no-value-entry', text: 'Витебск' } ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// ajax-select2 — issue #457: detach() must not throw when the node's select2 data has already
+// been purged out from under it (WooCommerce's own `update_checkout` replacing the address
+// fragment via jQuery `.html()`/`.empty()`, which runs `cleanData()` on this exact node).
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #457: detach() gates on the node\'s actual select2 data, not a closure flag', () => {
+	let mod;
+
+	/**
+	 * A select2 stub that mirrors selectWoo.full.js's own `$element.data('select2', this)` /
+	 * `removeData('select2')` bookkeeping (selectWoo.full.js:5258,5782) AND its own
+	 * `$.fn.selectWoo('destroy')` dispatch, which dereferences `$(this).data('select2')` with
+	 * NO null-guard even after logging (selectWoo.full.js:6562-6571) — reproducing the exact
+	 * TypeError this issue is about, not an approximation of it.
+	 *
+	 * @param {Object} $ jQuery.
+	 * @returns {void}
+	 */
+	function installSelectWooLikeStub( $ ) {
+		$.fn.select2 = jest.fn( function( methodOrConfig ) {
+			var $el = this;
+
+			if ( 'string' === typeof methodOrConfig ) {
+				var instance = $el.data( 'select2' );
+
+				if ( instance == null && window.console && console.error ) {
+					console.error( 'select2(\'' + methodOrConfig + '\') called on an element that is not using Select2.' );
+				}
+
+				return instance[ methodOrConfig ].apply( instance, [] );
+			}
+
+			$el.data( 'select2', {
+				destroy: function() {
+					$el.removeData( 'select2' );
+				},
+			} );
+
+			return $el;
+		} );
+	}
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="" />';
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'does not call select2(\'destroy\') — and never throws or logs — when the select2 data has already been purged out from under the node', () => {
+		const input = document.getElementById( 'shipping_city' );
+
+		installSelectWooLikeStub( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' } } ) );
+
+		expect( window.jQuery( api.el ).data( 'select2' ) ).toBeTruthy();
+
+		// Mirrors WooCommerce's own update_checkout: jQuery's cleanData() purges this exact
+		// node's select2 instance data WITHOUT ever calling OUR detach() — the node itself
+		// survives (this closure still holds it), only the data is gone.
+		window.jQuery( api.el ).removeData( 'select2' );
+
+		const errorSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		expect( () => api.detach() ).not.toThrow();
+		expect( errorSpy ).not.toHaveBeenCalled();
+
+		errorSpy.mockRestore();
+	} );
+
+	it( 'regression: still calls select2(\'destroy\') and clears the select2 data when it is genuinely present', () => {
+		const input = document.getElementById( 'shipping_city' );
+
+		installSelectWooLikeStub( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( input, buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' } } ) );
+		const select = api.el;
+
+		expect( window.jQuery( select ).data( 'select2' ) ).toBeTruthy();
+
+		api.detach();
+
+		expect( window.jQuery( select ).data( 'select2' ) ).toBeUndefined();
 	} );
 } );
