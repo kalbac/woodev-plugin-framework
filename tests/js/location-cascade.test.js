@@ -1918,14 +1918,23 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 		expect( bareMode ).not.toHaveBeenCalled();
 	} );
 
-	it( 'the bare {mode} key serves every level uniformly when no level-specific one is registered', () => {
+	it( 'the bare {mode} key serves the region and settlement levels uniformly when no level-specific one is registered — issue #448: NOT the address level, which never resolves an axis mode at all', () => {
+		// PRE-#448 this asserted `toHaveBeenCalledTimes( 3 )` — the address node used to
+		// inherit whichever axis mode a bare registry key answered to, exactly like region and
+		// settlement, because resolveModeRenderer() had no third branch of its own. That pinned
+		// the defect this issue fixes, not a real contract: the settings UI has never offered a
+		// mode for the address level, so there is no mode for it to inherit. Updated, not
+		// silently — see the #448 PR body for the failing-on-main verification.
 		const bareMode = jest.fn( () => ( { detach: jest.fn() } ) );
 
 		window.WoodevLocationRenderers = { 'custom-mode': bareMode };
 
 		boot( { region: true, settlement: true, address: true, mode: 'custom-mode' } );
 
-		expect( bareMode ).toHaveBeenCalledTimes( 3 );
+		expect( bareMode ).toHaveBeenCalledTimes( 2 );
+		// The address node falls straight through to the baseline typeahead — never a
+		// registry lookup, bare or level-specific.
+		expect( callFor( 'billing_address_1' ) ).toBeDefined();
 	} );
 
 	it( 'a renderer that DECLINES (returns a falsy value) falls back to the baseline typeahead', () => {
@@ -2068,6 +2077,78 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 			// exception (isRelatedListRegionNode) never engages, and no 'ajax-select2'
 			// call is made FOR the region node (only ever settlement, above).
 			expect( callFor( 'billing_state' ) ).toBeDefined();
+		} );
+	} );
+
+	// -------------------------------------------------------------------
+	// Issue #448 — the address level has NO axis of its own and must never
+	// resolve one: resolveModeRenderer()'s old binary ternary (`region` vs.
+	// "everything else") fed address the SETTLEMENT axis, so a bare registry
+	// key like `ajax-select2` — registered with no level suffix — attached to
+	// address too, turning a text field into a select nobody configured. The
+	// settings UI only ever offers a mode for the region and settlement axes;
+	// address must fall straight through to the baseline typeahead regardless
+	// of what either axis is set to.
+	// -------------------------------------------------------------------
+
+	describe( 'issue #448 — the address level never resolves an axis mode', () => {
+		it( 'does NOT attach the settlement axis\'s ajax-select2 renderer to the address field — falls through to the baseline typeahead instead', () => {
+			const settlementRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			// The REAL registry shape (location-select-modes.js): 'ajax-select2' is registered
+			// under a bare, level-less key — the exact key that let it attach to any level.
+			window.WoodevLocationRenderers = { 'ajax-select2': settlementRenderer };
+
+			boot( {
+				settlement: true, address: true,
+				mode: { region: 'typeahead', settlement: 'ajax-select2' },
+			} );
+
+			// Attached exactly once — for the settlement node the axis actually governs.
+			expect( settlementRenderer ).toHaveBeenCalledTimes( 1 );
+			expect( settlementRenderer.mock.calls[ 0 ][ 0 ].id ).toBe( 'billing_city' );
+
+			// The address node was never handed to the renderer at all, and falls through to
+			// the baseline typeahead — the D7 floor for every level nothing claims.
+			expect( callFor( 'billing_address_1' ) ).toBeDefined();
+		} );
+
+		it( 'still resolves region and settlement against their OWN axes while address stays on the baseline, all three attached together', () => {
+			const regionRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+			const settlementRenderer = jest.fn( () => ( { detach: jest.fn() } ) );
+
+			window.WoodevLocationRenderers = {
+				'related-list:region': regionRenderer,
+				'ajax-select2': settlementRenderer,
+			};
+
+			boot( {
+				region: true, settlement: true, address: true,
+				mode: { region: 'related-list', settlement: 'ajax-select2' },
+				levels: { RU: { region: false, settlement: true, address: true } },
+			} );
+
+			expect( regionRenderer ).toHaveBeenCalledTimes( 1 );
+			expect( regionRenderer.mock.calls[ 0 ][ 0 ].id ).toBe( 'billing_state' );
+
+			expect( settlementRenderer ).toHaveBeenCalledTimes( 1 );
+			expect( settlementRenderer.mock.calls[ 0 ][ 0 ].id ).toBe( 'billing_city' );
+
+			// Neither renderer was ever asked about the address node — it went straight to
+			// the baseline typeahead, the operator's rig-observed contract for that level.
+			expect( callFor( 'billing_address_1' ) ).toBeDefined();
+		} );
+
+		it( 'falls through to the baseline typeahead for the address level even when NOTHING is registered for either axis', () => {
+			// window.WoodevLocationRenderers left entirely undefined — as if
+			// location-select-modes.js never loaded (the D7 floor must still hold).
+			boot( {
+				settlement: true, address: true,
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+			} );
+
+			expect( callFor( 'billing_city' ) ).toBeDefined();
+			expect( callFor( 'billing_address_1' ) ).toBeDefined();
 		} );
 	} );
 } );

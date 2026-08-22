@@ -10,13 +10,14 @@
  * "WC Address Autocomplete suppression" section below).
  *
  * RENDERER SEAM (Task 13, spec D7 — "mode is presentation, provider is data"; issue #380 —
- * `location.mode` became TWO independent axes, `{ region, settlement }`, resolved PER LEVEL):
- * this module owns exactly ONE renderer itself — the baseline typeahead ({@see attachOne}'s
- * fallback path, gated by the D15 `isLevelServed()` chain) — and otherwise only knows how to
- * ASK for one: {@see resolveModeRenderer} looks up
- * `window.WoodevLocationRenderers[axisMode(+':'+level)]`, where `axisMode` is the REGION axis
- * for the region node and the SETTLEMENT axis for every other node (see that function's own
- * docblock for why address follows settlement) — a registry `location-select-modes.js`
+ * `location.mode` became TWO independent axes, `{ region, settlement }`, resolved PER LEVEL;
+ * issue #448 — the per-level mapping is EXPLICIT, not residual): this module owns exactly ONE
+ * renderer itself — the baseline typeahead ({@see attachOne}'s fallback path, gated by the D15
+ * `isLevelServed()` chain) — and otherwise only knows how to ASK for one:
+ * {@see resolveModeRenderer} looks up `window.WoodevLocationRenderers[axisMode(+':'+level)]`,
+ * where `axisMode` ({@see axisModeForLevel}) is the REGION axis for the region node, the
+ * SETTLEMENT axis for the settlement node, and NO axis at all for address (there is no third
+ * axis to configure — see that function's own docblock) — a registry `location-select-modes.js`
  * populates with the `related-list` and `ajax-select2` renderers, unchanged by the split (this
  * cascade re-keys the LOOKUP, never the registry itself). This file never imports that module,
  * never branches on its presence, and never
@@ -557,36 +558,71 @@
 	}
 
 	/**
+	 * The axis mode that governs `level`'s renderer lookup, or `null` when `level` has no axis
+	 * of its own at all (issue #448).
+	 *
+	 * ONLY `region` and `settlement` are configurable axes (spec D7/issue #380) — the settings
+	 * UI never offers a mode for any other level, `address` included, and there is no field in
+	 * `entry.location.mode` for one. `address`'s own contract is fixed: text, or text-with-
+	 * suggestions when that option is on (see {@see attachOne}'s baseline typeahead path) — it
+	 * is a FLOOR, never a level with a mode of its own to inherit.
+	 *
+	 * Previously this fell through to {@see settlementAxisMode} for "every node that isn't
+	 * region" — a deliberate backward-compatible shim for the OLD single shared mode string
+	 * (see the #448 issue and this function's git history for the reasoning that no longer
+	 * applies). That let a bare registry key like `registry['ajax-select2']` — registered with
+	 * no level suffix, because `ajax-select2`'s widget is the same shape for any field it
+	 * enhances — attach to the address field too, turning it into a select nobody configured
+	 * (operator, rig pass 21.08.2026, issue #448). The mapping is explicit now: `region` takes
+	 * the region axis, `settlement` takes the settlement axis, everything else — currently only
+	 * `address`, since {@see LEVELS} names exactly these three — takes none.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {string|null}
+	 */
+	function axisModeForLevel( entry, level ) {
+		if ( 'region' === level ) {
+			return regionAxisMode( entry );
+		}
+
+		if ( 'settlement' === level ) {
+			return settlementAxisMode( entry );
+		}
+
+		return null;
+	}
+
+	/**
 	 * Resolves the mode-specific renderer for `node`, if Task 13's `location-select-modes.js`
 	 * registered one — spec D7's "mode is presentation, provider is data": this cascade must
 	 * not know WHICH renderer a field uses, only how to ask the registry for one.
 	 *
 	 * MODE RESOLUTION IS PER-LEVEL (issue #380, re-keyed from a single shared mode string to
-	 * two independent axes): the REGION node resolves against {@see regionAxisMode}; every
-	 * OTHER node (settlement, and — with no axis of its own — address, which follows the
-	 * SETTLEMENT axis) resolves against {@see settlementAxisMode}. Address following the
-	 * settlement axis is a deliberate backward-compatible choice, not a spec requirement: under
-	 * the OLD single-mode `ajax-select2`, address got the bare `registry['ajax-select2']`
-	 * fallback exactly like every other level (the same shared mode string reached it too);
-	 * under OLD `related-list`, address got NOTHING registered for it (no `related-list:address`
-	 * key, no bare `related-list` key) and fell straight through to the baseline typeahead below.
-	 * Keying address's lookup off the settlement axis reproduces BOTH outcomes exactly, because
-	 * `related-list` still has no bare-registry entry — only `ajax-select2` does.
+	 * two independent axes) and EXPLICIT, not residual (issue #448) — see
+	 * {@see axisModeForLevel}'s own docblock for which level takes which axis, and why address
+	 * takes none. A node whose level has no axis never reaches the registry at all.
 	 *
-	 * Lookup order per level: `{axisMode}:{level}` (a renderer specific to one field kind under
-	 * one axis value — e.g. `related-list`'s region native-`<select>` watcher, which shares
-	 * nothing with its own settlement renderer) first, then the bare `{axisMode}` (a renderer
-	 * that serves every level uniformly — `ajax-select2`'s select2 widget is the same shape for
-	 * region, settlement, or address). Returns `null` when nothing is registered for either key,
-	 * or when `location-select-modes.js` never loaded at all — {@see attachOne}'s baseline
-	 * typeahead path is the fallback either way, never a special case of this function.
+	 * Lookup order per level, once an axis mode is known: `{axisMode}:{level}` (a renderer
+	 * specific to one field kind under one axis value — e.g. `related-list`'s region native-
+	 * `<select>` watcher, which shares nothing with its own settlement renderer) first, then the
+	 * bare `{axisMode}` (a renderer that serves every level uniformly — `ajax-select2`'s select2
+	 * widget is the same shape for region or settlement). Returns `null` when nothing is
+	 * registered for either key, when `location-select-modes.js` never loaded at all, or when
+	 * the level has no axis to look up in the first place — {@see attachOne}'s baseline
+	 * typeahead path is the fallback in every case, never a special case of this function.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string}} node
 	 * @returns {function(Element, Object): ({detach: Function}|null)|null}
 	 */
 	function resolveModeRenderer( entry, node ) {
-		var mode = 'region' === node.level ? regionAxisMode( entry ) : settlementAxisMode( entry );
+		var mode = axisModeForLevel( entry, node.level );
+
+		if ( null === mode ) {
+			return null;
+		}
+
 		var registry = window.WoodevLocationRenderers || {};
 
 		if ( 'function' === typeof registry[ mode + ':' + node.level ] ) {
