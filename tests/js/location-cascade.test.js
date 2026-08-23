@@ -2403,6 +2403,87 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 	} );
 
 	// -------------------------------------------------------------------
+	// options.list() — issue #463: the /location/list analog of options.fetch, same
+	// fieldValueFor() value stamping — a related-list renderer must never fall back to the raw
+	// provider key the way `attachRelatedListSettlement()` did before this fix (the #455 disease
+	// on the other branch).
+	// -------------------------------------------------------------------
+
+	describe( 'options.list() — issue #463', () => {
+		it( 'builds the /location/list URL scoped by level/country/within, and stamps entry.value via fieldValueFor() exactly like options.fetch does for /location/suggest', async () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( { el, options } );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( { region: true, settlement: true, mode: 'custom-mode' } );
+
+			const listPromise = specialCalls[ 0 ].options.list();
+
+			const req = fetchCalls[ fetchCalls.length - 1 ];
+
+			expect( req.url ).toBe( LIST_URL + '?level=settlement&country=RU' );
+
+			req.resolve( {
+				localities: [ {
+					key: 'dadata:zh', label: 'Московская обл., г Жуковский', level: 'settlement',
+					record: {
+						key: 'dadata:zh', provider_id: 'dadata', level: 'settlement', country: 'RU',
+						settlement: { name: 'Жуковский', type: 'г' },
+						label: 'Московская обл., г Жуковский',
+					},
+				} ],
+			} );
+
+			const localities = await listPromise;
+
+			// The value written into the field — never the raw provider key, never the
+			// ancestor-carrying label. Same derivation `fetchFor()` already gives `options.fetch`.
+			expect( localities[ 0 ].value ).toBe( 'Жуковский' );
+			expect( localities[ 0 ].label ).toBe( 'Московская обл., г Жуковский' );
+		} );
+
+		it( 'scopes `within` by the LIVE parent selection at call time, never captured at attach time', () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( { el, options } );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( { region: true, settlement: true, mode: 'custom-mode' } );
+
+			specialCalls[ 0 ].options.list();
+
+			expect( fetchCalls[ fetchCalls.length - 1 ].url ).not.toContain( 'within=' );
+
+			// A region gets picked (native <select>, related-list's own watcher persists it via
+			// the shared onSelect/backwards-fill route) — the NEXT list() call must scope to it.
+			const record = { key: 'dadata:region1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Москва', type: 'г' }, label: 'г Москва' };
+
+			specialCalls[ 0 ].options.onSelect( { record } );
+
+			const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+
+			selectReq.resolve( { current: { key: record.key, level: 'region' }, persisted: true, chain: { region: { key: record.key, level: 'region' } } } );
+
+			return flushMicrotasks().then( () => {
+				specialCalls[ 0 ].options.list();
+
+				expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( 'within=' + encodeURIComponent( 'dadata:region1' ) );
+			} );
+		} );
+	} );
+
+	// -------------------------------------------------------------------
 	// isNodeActive()'s ONE necessary D15 exception — related-list region only
 	// -------------------------------------------------------------------
 
