@@ -1139,3 +1139,145 @@ describe( 'field policy — hide-for-pickup / country-hide (#362 §4.3)', () => 
 		expect( document.getElementById( 'shipping_postcode' ).required ).toBe( true );
 	} );
 } );
+
+/**
+ * Issue #466 — the §8 adapter must not revert a field the LOCATION CASCADE owns.
+ *
+ * `runTakeover()` walks every field in the store and `applyTakeover()` reads "not a takeover
+ * field for this country" as "revert it to a plain text input". A `source_kind === 'location'`
+ * field is never a takeover field (`Checkout_Handler::inject()` skips takeover fields outright),
+ * so that branch was the ONLY thing this adapter ever did to one — and what it did was destroy
+ * the `<select>` the cascade had just attached.
+ *
+ * MEASURED ON THE RIG before the fix, with the renderer registry and every DOM-mutating jQuery
+ * method instrumented: the cascade attached `#shipping_city` at t=126 ms, and at t=227 ms
+ * `ensureText()` (via `applyTakeover()` ← `runTakeover()`) replaced it with a text input. The
+ * field then stayed a bare `<input>` under the same `name` until the FIRST `update_order_review`
+ * finished — 3.1 / 3.5 / 4.3 / 8.6 / 13.0 s across runs, i.e. the length of that request rather
+ * than any timer of ours.
+ *
+ * The region survived only by the accident of its `_state` suffix matching
+ * `isWcManagedField()` — a name heuristic, not an ownership fact. That accident is what made
+ * the defect read as an attach-timing asymmetry between two fields of the same mode, when it
+ * was really an asymmetry in what got DESTROYED.
+ *
+ * The control matters as much as the assertion: a NON-location field that is genuinely not
+ * taken over for the current country must still be reverted, or a blanket "never revert
+ * anything" would pass this file just as happily.
+ */
+describe( 'location-owned fields are not reverted by the §8 takeover (#466)', () => {
+
+	const LOCATION_CONFIG_GLOBAL = 'woodev_checkout_field_config_location';
+
+	/**
+	 * Installs markup in which BOTH managed city fields are already `<select>` elements —
+	 * `#shipping_city` because the location cascade converted it, `#billing_city` because an
+	 * earlier takeover pass did. Neither shape is something the server rendered.
+	 *
+	 * @returns {void}
+	 */
+	function installLocationMarkup() {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<div class="woocommerce-billing-fields__field-wrapper">
+					<p id="billing_country_field" class="form-row">
+						<select id="billing_country" name="billing_country">
+							<option value="RU" selected>Россия</option>
+							<option value="US">США</option>
+						</select>
+					</p>
+					<p id="billing_city_field" class="form-row">
+						<select id="billing_city" name="billing_city">
+							<option value="Москва" selected>Москва</option>
+						</select>
+					</p>
+				</div>
+				<div class="woocommerce-shipping-fields__field-wrapper">
+					<p id="shipping_city_field" class="form-row">
+						<select id="shipping_city" name="shipping_city">
+							<option value="Москва" selected>Москва</option>
+						</select>
+					</p>
+				</div>
+				<div id="shipping_method"></div>
+				<button type="submit" id="place_order"></button>
+			</form>
+		`;
+	}
+
+	/**
+	 * Boots the adapter over {@see installLocationMarkup}.
+	 *
+	 * `shipping_city` carries `source_kind: 'location'` and NO entry in the `takeover` map,
+	 * exactly as the server emits it (measured against the live rig config, where every
+	 * location field reports `source_kind: "location"` and no `takeover` key at all).
+	 * `billing_city` is taken over for US only, so with the country on RU it is the control:
+	 * a field this adapter really is entitled to revert.
+	 *
+	 * @returns {void}
+	 */
+	function bootLocation() {
+		installLocationMarkup();
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		window[ LOCATION_CONFIG_GLOBAL ] = {
+			endpoint: ENDPOINT,
+			nonce:    'test-nonce',
+			i18n:     { placeholder: 'Выберите…' },
+			fields:   {
+				billing_city:  { source_kind: 'suggest' },
+				shipping_city: { source_kind: 'location', location_level: 'settlement', section: 'shipping' },
+			},
+			takeover: {
+				billing_city: { US: true },
+			},
+		};
+
+		ajaxCalls = stubAjax();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+
+		jest.runAllTimers();
+	}
+
+	afterEach( () => {
+		delete window[ LOCATION_CONFIG_GLOBAL ];
+	} );
+
+	it( 'leaves a location-owned <select> alone on boot, while reverting a non-takeover one', () => {
+		bootLocation();
+
+		expect( document.getElementById( 'shipping_city' ).tagName ).toBe( 'SELECT' );
+		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'INPUT' );
+	} );
+
+	it( 'leaves a location-owned <select> alone on country_to_state_changed — the pass that '
+		+ 'actually destroyed it on the rig', () => {
+		bootLocation();
+
+		global.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		expect( document.getElementById( 'shipping_city' ).tagName ).toBe( 'SELECT' );
+	} );
+
+	it( 'survives THREE consecutive country_to_state_changed passes, and keeps its option', () => {
+		bootLocation();
+
+		global.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+		global.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+		global.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		const el = document.getElementById( 'shipping_city' );
+
+		expect( el.tagName ).toBe( 'SELECT' );
+		expect( Array.prototype.map.call( el.options, ( o ) => o.value ) ).toContain( 'Москва' );
+		expect( el.value ).toBe( 'Москва' );
+	} );
+} );

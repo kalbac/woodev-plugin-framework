@@ -474,6 +474,42 @@
 		return /(^|_)state$/.test( fieldId )
 	}
 
+	/**
+	 * Whether `fieldId` belongs to the LOCATION CASCADE rather than to this §8 adapter
+	 * (issue #466).
+	 *
+	 * A `source_kind === 'location'` field is owned end-to-end by `location-cascade.js` and
+	 * its mode renderers: they decide the field's DOM shape, they swap the `<input>` for a
+	 * `<select>` when the configured mode is select2-backed, and they reconcile it themselves
+	 * on every checkout re-render. This adapter must not form an opinion about such a field
+	 * at all.
+	 *
+	 * WHY THIS EXISTS: `applyTakeover()` reads "this field is not a takeover field for this
+	 * country" as "revert it to a plain text input", and a location field is NEVER a takeover
+	 * field (`Checkout_Handler::inject()` skips takeover fields outright, so the descriptor
+	 * carries no `takeover` map at all). So every `country_to_state_changed` used to destroy
+	 * the select the cascade had just attached, ~100 ms after boot, and the customer got a
+	 * bare text input under the same `name` until the FIRST `update_order_review` round-trip
+	 * finished and the cascade's own reconcile put the widget back — measured on the rig at
+	 * 3.1 / 3.5 / 4.3 / 8.6 and 13.0 seconds, i.e. the length of that request, not a timer.
+	 *
+	 * WHY NOT WIDEN {@see isWcManagedField} INSTEAD: that predicate answers a different
+	 * question ("WooCommerce owns this node"), and it only spared the region field by the
+	 * accident of its `_state` suffix — a name heuristic, not an ownership fact. The
+	 * settlement field has no such suffix, which is the whole reason the defect looked like an
+	 * attach-timing asymmetry between two fields of the same mode when it was really an
+	 * asymmetry in what got DESTROYED.
+	 *
+	 * @param {Object} entry   Запись { store, config }.
+	 * @param {string} fieldId Id поля.
+	 * @returns {boolean}
+	 */
+	function isLocationOwnedField( entry, fieldId ) {
+		var field = entry.store.getField( fieldId )
+
+		return !! field && 'location' === field.source_kind
+	}
+
 	function ensureText( entry, fieldId ) {
 		var $field = $( '#' + fieldId )
 
@@ -502,6 +538,14 @@
 		// via the `woocommerce_states` server filter, so WC renders the <select> and persists
 		// the value in its session (surviving update_checkout). Never DOM-convert them here.
 		if( isWcManagedField( fieldId ) ) {
+			return
+		}
+
+		// Issue #466: the location cascade owns its own fields' DOM shape — see
+		// {@see isLocationOwnedField}. Takeover never applied to them in the first place, so
+		// the ONLY thing this function could ever do for such a field was revert it to a text
+		// input and destroy the widget the cascade had attached.
+		if( isLocationOwnedField( entry, fieldId ) ) {
 			return
 		}
 
