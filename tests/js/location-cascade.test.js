@@ -4394,3 +4394,108 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
 	} );
 } );
+
+describe( 'buildChain() tie-break when Rule 7b fans a field into both sections (issue #458)', () => {
+	/**
+	 * Boots ONE cascade entry whose `config.fields` carries BOTH a `billing_city` and a
+	 * `shipping_city`, both claiming the SAME `location_level: 'settlement'` — the shape
+	 * `Checkout_Handler::effective_fields()` now produces for a `source_location()` field
+	 * under any `woocommerce_ship_to_destination` value except `billing_only` (issue #458).
+	 * `boot()`/`buildConfig()`/`installMarkup()` cannot express two fields in ONE config
+	 * directly (both apply a single section to the whole config/markup) — the same
+	 * limitation the "section-aware addressing" describe block above already documents for
+	 * its own harness; that block works around it with TWO separate config globals (two
+	 * plugins sharing a page), which is not what this fans out into — Rule 7b's fan-out is
+	 * ONE plugin, ONE config, two ids in the SAME `fields` map — so this needs its own,
+	 * single-entry harness instead.
+	 *
+	 * `firstFieldId` controls which key is inserted into `config.fields` FIRST. Before this
+	 * fix, `buildChain()` picked whichever field it found first via `Object.keys()`
+	 * (insertion order) with no notion of section at all — so each test below deliberately
+	 * inserts the field that the OLD code would have picked WRONGLY first, which is what
+	 * makes its assertion the one a revert of the fix actually flips (see each test's own
+	 * comment).
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @param {string}  firstFieldId `'billing_city'` or `'shipping_city'`
+	 * @returns {void}
+	 */
+	function bootWithBothSectionsInOneEntry( shipToDifferentAddress, firstFieldId ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		const secondFieldId = 'billing_city' === firstFieldId ? 'shipping_city' : 'billing_city';
+		const fields = {};
+
+		[ firstFieldId, secondFieldId ].forEach( ( id ) => {
+			fields[ id ] = locationField( 'settlement', 0 === id.indexOf( 'shipping_' ) ? 'shipping' : 'billing' );
+		} );
+
+		window[ CONFIG_GLOBAL ] = {
+			fields,
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	it( 'checkbox CHECKED (shipping is the active address section): shipping_city wins the settlement level, not billing_city', () => {
+		// billing_city inserted FIRST — the pre-fix "first key wins" rule would pick
+		// billing_city here, which is the WRONG answer once "ship to a different address" is
+		// checked. This ordering is what makes the assertion below fail without the
+		// section-aware tie-break (verified by reverting buildChain() and re-running).
+		bootWithBothSectionsInOneEntry( true, 'billing_city' );
+
+		expect( callFor( 'shipping_city' ) ).toBeDefined();
+		expect( callFor( 'billing_city' ) ).toBeUndefined();
+	} );
+
+	it( 'checkbox UNCHECKED (billing is the active address section): billing_city wins the settlement level, not shipping_city', () => {
+		// shipping_city inserted FIRST — the pre-fix "first key wins" rule would pick
+		// shipping_city here, which is the WRONG answer once "ship to a different address" is
+		// unchecked. This ordering is what makes the assertion below fail without the
+		// section-aware tie-break (verified by reverting buildChain() and re-running).
+		bootWithBothSectionsInOneEntry( false, 'shipping_city' );
+
+		expect( callFor( 'billing_city' ) ).toBeDefined();
+		expect( callFor( 'shipping_city' ) ).toBeUndefined();
+	} );
+} );
