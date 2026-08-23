@@ -4594,6 +4594,17 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		},
 	};
 
+	const ADDRESS_ITEM = {
+		key: 'dadata:addr1', label: 'г Москва, ул Тверская, д 1', level: 'address',
+		value: 'ул Тверская, 1',
+		record: {
+			key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' },
+			street: { name: 'Тверская', type: 'ул' }, house: '1',
+			label: 'г Москва, ул Тверская, д 1', postcode: '101000',
+		},
+	};
+
 	/**
 	 * One entry whose `config.fields` carries the settlement AND address levels fanned across
 	 * BOTH columns — the shape `Checkout_Handler::effective_fields()` produces under every
@@ -4744,6 +4755,70 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		// (`handleFieldChanged`: "the field's own record no longer matches its text"), applied at
 		// swap time instead of left to whichever change happens to fire first.
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	/**
+	 * Round 4 critic, HIGH blocker. Dropping only the CONTRADICTED level's own record leaves its
+	 * descendants describing a locality the customer has just disowned — and branch 1 then WRITES
+	 * one in, because the address node still sees `records.address` and finds its incoming field
+	 * empty. The customer ends up with the city they chose and a street from a different city,
+	 * and since `resolved` is now seeded, no later change event runs clearDescendants() to repair
+	 * it.
+	 *
+	 * Against the pre-fix implementation this fails on the FIRST assertion (shipping_address_1
+	 * carries 'ул Тверская, 1' instead of staying empty) — the right reason, not an incidental one.
+	 */
+	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', () => {
+		bootBothColumns( false );
+
+		// A full billing chain: settlement Москва, then an address inside it.
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
+
+		// The customer types a DIFFERENT settlement into the shipping column and leaves the
+		// shipping address empty, then switches the delivery column to it.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+
+		toggleShipToDifferentAddress( true );
+
+		// The address of Москва must NOT be written into a column whose city is Жуковский.
+		expect( document.getElementById( 'shipping_address_1' ).value ).toBe( '' );
+
+		// …and the orphaned address identity must be gone, not merely unused: with it retained
+		// the address field would read as "a locality is picked" and stay unlocked over an
+		// address that no longer exists.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'a blocked carry withholds the postcode too — it belongs to the disowned locality', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '' );
+	} );
+
+	it( 'blocking drops IDENTITY, never text the customer can already see', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		// This time the customer has typed BOTH halves of their own shipping address.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+		document.getElementById( 'shipping_address_1' ).value = 'ул Гагарина, 5';
+
+		toggleShipToDifferentAddress( true );
+
+		// Their own text survives untouched — the same rule clearDescendants() follows for an
+		// unresolvable parent (#350 follow-up, operator decision 17.08.2026).
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Жуковский' );
+		expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'ул Гагарина, 5' );
 	} );
 
 	it( 'carries the postcode onto the incoming column as well', () => {

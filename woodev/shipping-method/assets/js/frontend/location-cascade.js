@@ -905,13 +905,30 @@
 	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
 	 *    {@see prefill} does at boot.
 	 * 3. **...and that text disagrees with the carried record** — additionally drop the level's
-	 *    record. This is not a new rule: it is the module's standing invariant, applied at swap
-	 *    time instead of being left to whichever `change` fires first ({@see handleFieldChanged}:
-	 *    "the field's own record no longer matches its text"). An identity that lies about the
-	 *    text is the defect class #339 and #350 were both about.
+	 *    record, AND stop carrying anything BELOW it. This is not a new rule: it is the module's
+	 *    standing invariant, applied at swap time instead of being left to whichever `change`
+	 *    fires first ({@see handleFieldChanged}: "the field's own record no longer matches its
+	 *    text"). An identity that lies about the text is the defect class #339 and #350 were
+	 *    both about.
+	 *
+	 * THE DESCENDANT HALF OF RULE 3 IS NOT OPTIONAL (round 4 critic, HIGH). Dropping only the
+	 * contradicted level's own record leaves its descendants describing a locality the customer
+	 * has just disowned, and — worse — branch 1 would then WRITE one in: billing holds a picked
+	 * `Москва` plus a picked address, the customer types `Жуковский` into `shipping_city` and
+	 * leaves `shipping_address_1` empty, then toggles. The settlement node takes branch 3, but
+	 * the address node still sees `records.address` and silently fills the incoming column with a
+	 * street belonging to the OTHER city — and because `resolved` is now seeded, no later `change`
+	 * ever runs {@see clearDescendants} to repair it. So a contradiction blocks every deeper level:
+	 * their records and `unresolved` markers are dropped and nothing is written into their fields.
+	 *
+	 * Blocking drops IDENTITY, never text the customer can see: a descendant field that already
+	 * holds something keeps it, exactly as {@see clearDescendants}'s own #350 amendment
+	 * (operator decision, 17.08.2026) keeps downstream TEXT when the level above turns out
+	 * unresolvable. This stays a rebind, never a destructive cascade.
 	 *
 	 * The postcode node has no record of its own, so it carries the OUTGOING postcode field's
-	 * live value instead — the same string {@see backwardsFill} would have written there.
+	 * live value instead — the same string {@see backwardsFill} would have written there. A
+	 * blocked carry withholds it too: that postcode belongs to the disowned locality.
 	 *
 	 * @param {Object} entry
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} previousAllNodes
@@ -930,14 +947,35 @@
 			}
 		} );
 
+		// Set by rule 3 below. `newAllNodes` is in LEVELS order with the postcode last, so once a
+		// level's carried identity has been contradicted every node visited afterwards IS a
+		// descendant of it.
+		var carryBlocked = false;
+
 		newAllNodes.forEach( function( node ) {
+			// Runs BEFORE the "stayed in the chain" skip: a descendant that kept its field still
+			// carries an identity the contradicted ancestor above it has just invalidated.
+			if ( carryBlocked && node.level ) {
+				entry.records[ node.level ] = null;
+				entry.unresolved[ node.level ] = null;
+			}
+
 			if ( previousIds.indexOf( node.fieldId ) !== -1 ) {
-				return; // stayed in the chain — its own state was never orphaned by the swap.
+				return; // stayed in the chain — its own field state was never orphaned by the swap.
 			}
 
 			var el = document.getElementById( node.fieldId );
 
 			if ( ! el ) {
+				return;
+			}
+
+			if ( carryBlocked ) {
+				// Seed the change-gate from whatever the field already holds, and write NOTHING:
+				// anything this level could have carried describes the disowned locality.
+				entry.store.setValue( node.fieldId, el.value );
+				entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+
 				return;
 			}
 
@@ -962,6 +1000,7 @@
 			if ( record && cascadeKey( el.value ) !== carried ) {
 				entry.records[ node.level ] = null;
 				entry.unresolved[ node.level ] = null;
+				carryBlocked = true;
 			}
 		} );
 	}
