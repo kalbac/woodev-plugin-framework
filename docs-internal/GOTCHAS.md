@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 186 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 187 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -159,6 +159,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/ci] **All three integration jobs red at once on a docs-only PR — it is an `api.github.com` 504 inside the wp-env image build, not your change.** → [integration-jobs-die-on-a-github-api-504-not-on-your-code](gotchas/integration-jobs-die-on-a-github-api-504-not-on-your-code.md) (s87)
 - [build/ci] **A failing early CI job silently SKIPS dependent jobs — they never run.** → [ci-failing-gate-skips-dependent-jobs](gotchas/ci-failing-gate-skips-dependent-jobs.md)
 - [build/ci] **`composer audit --no-dev` errors when there are no runtime dependencies.** → [composer-audit-no-prod-deps](gotchas/composer-audit-no-prod-deps.md)
 - [build/git] **`git add -A` in a fresh worktree sweeps CRLF→LF normalisation of files you never touched into your commit.** → [git-add-all-sweeps-crlf-normalisation-in-a-fresh-worktree](gotchas/git-add-all-sweeps-crlf-normalisation-in-a-fresh-worktree.md) (s71)

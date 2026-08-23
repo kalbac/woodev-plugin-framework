@@ -143,4 +143,4 @@ t=5981  updated_checkout -> реконсиляция каскада возвра
 - [sessions/s87.md](sessions/s87.md) — детали этой сессии
 - [gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md](gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md) — корень #466
 - [AGENT-RULES.md](AGENT-RULES.md) — Rule 7 (кто владеет полями адреса)
-- [GOTCHAS.md](GOTCHAS.md) — 186 готчей
+- [GOTCHAS.md](GOTCHAS.md) — 187 готчей

@@ -98,7 +98,7 @@ Worktrees live at `.orca/worktrees/`. `vendor` must be COPIED, never shared
 (`sharing-vendor-breaks-composer-autoload-in-a-worktree`), and a fresh worktree starts dirty with
 seven CRLF-only files — **never `git add -A` there**.
 
-Gotchas: **186**.
+Gotchas: **187**.
 
 ## Program status (high level)
 
