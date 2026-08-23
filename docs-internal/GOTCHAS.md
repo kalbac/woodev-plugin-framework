@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 187 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 189 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -80,6 +80,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **«Список с поиском» is `ajax-select2`, NOT `related-list` — and DaData can never offer «Предустановленный список» at all.** → [the-three-location-field-modes-and-their-russian-labels](gotchas/the-three-location-field-modes-and-their-russian-labels.md) (s87)
 - [shipping/location] **`within_applied` reports what the scope BUILDER decided, not what the provider honoured — the one field that could detect a dropped scope cannot.** → [within-applied-reports-the-scope-builder-not-the-provider](gotchas/within-applied-reports-the-scope-builder-not-the-provider.md) (s78)
 - [shipping/location] **A served level can come from the FALLBACK provider, not the active one — "the active provider lacks X" and "X is unserved" are different statements.** → [a-level-served-can-come-from-the-fallback-not-the-active-provider](gotchas/a-level-served-can-come-from-the-fallback-not-the-active-provider.md) (s76)
 - [shipping/location] **One identity, two roles: one must refuse, the other must fall back.** → [one-identity-two-roles-one-must-refuse-the-other-must-fall-back](gotchas/one-identity-two-roles-one-must-refuse-the-other-must-fall-back.md) (s74)
@@ -268,6 +269,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/git-merge] **`orca worktree create --base-branch main` takes the LOCAL ref — a session that merged PRs through `gh` has a stale local `main`, and the new branch silently reverts them.** → [orca-worktree-create-base-branch-takes-the-local-ref](gotchas/orca-worktree-create-base-branch-takes-the-local-ref.md) (s87)
 - [tooling/parallel-agents] **Sharing `vendor/` into a worktree breaks Composer's autoloader — it bakes in `$baseDir`, and PHP resolves the symlink to the PRIMARY checkout. Copy it, never share it.** → [sharing-vendor-breaks-composer-autoload-in-a-worktree](gotchas/sharing-vendor-breaks-composer-autoload-in-a-worktree.md) (s83)
 - [tooling/parallel-agents] **`input_accepted` is not proof a worker started — the prompt can sit queued in the TUI while every liveness signal reads healthy.** → [input-accepted-is-not-proof-a-worker-started](gotchas/input-accepted-is-not-proof-a-worker-started.md) (s83)
 - [tooling/parallel-agents] **A worker's Serena `activate_project` path must be its OWN worktree — the repo-root path from CLAUDE.md silently splits its work across two checkouts.** → [serena-activate-path-must-be-the-worker-s-worktree](gotchas/serena-activate-path-must-be-the-worker-s-worktree.md) (s83)

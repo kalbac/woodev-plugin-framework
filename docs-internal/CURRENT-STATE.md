@@ -7,103 +7,81 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-23 (s87).** **The s86 stack is merged** — #461 → #462 → #464 → #467 → #468, with
-#456 closed as absorbed. Closed with it: #448, #460, #455, #447, #450, #457, #465, #459. **#449 is
-half closed** — the real `AbortController` through `options.fetch` is still open.
+**As of 2026-08-24 (s87).** **The s86 stack is merged, and so are #470 and #471** — the operator
+verified #471 on the rig himself and #470 was verified live by measurement (see below). Cards closed
+this session: #448, #460, #455, #447, #450, #457, #465, #459, #463, #466, #475, and #478 as
+superseded. **#449 stays half open** — the real `AbortController` through `options.fetch`.
 
-**THREE PRs are open, green, critic-passed and deliberately NOT merged: #470, #471, #472.** They are
-shopper-facing, so they wait for the operator's own rig pass (standing merge policy). Each is based
-on `main` — no stacking — so any subset merges in any order.
-
-**The primary checkout is parked on `rig/s87-checkout-fixes`** (= `main` + all three, pushed). The
-rig serves the working tree, so it already shows everything. **Do NOT `git checkout` the primary
-checkout while anyone is looking at the rig** — a docs-only switch counts, and it cost the operator a
-review pass in s86. Docs work goes in a separate Orca worktree.
+**ONE PR is open and it is RED: #472 (#458).** Round 3 closed both of the critic's HIGH blockers and
+then failed the INTEGRATION suite — 113 tests, 5 failures, all three matrix combinations. Its new
+`_doing_it_wrong()` for a field-id collision fires on a **legitimate** configuration: `billing_state`
+is claimed both by the §8 demo descriptor and by Rule 7b's own fan-out, and `_doing_it_wrong()` means
+"the developer called this wrong", which nobody did. Three rounds are spent; the operator's Rule 7c
+is the decision that unblocks a fourth. **The integration suite is in NEITHER `composer check` NOR
+jest** — it runs only in CI and in the container, which is exactly the hole this went through; every
+brief touching a server-side checkout seam must require it.
 
 **⛔ Codex is CRITIC-ONLY until 27.08.2026** (operator, 21.08.2026 — one overnight burned 45% of the
-weekly allowance). All implementation goes to Sonnet workers. Caps: **2–3 concurrent agents**,
-**2–3 rounds per card**. s87 respected both: two workers, three Codex runs, all critics.
+weekly allowance). Caps: **2–3 concurrent agents**, **2–3 rounds per card**.
 
 ## ⚠ The checkout location layer
 
-**#466 was never the network and never WooCommerce — it was our own §8 adapter.** `runTakeover()`
-walks EVERY field in the store, and `applyTakeover()` reads "not a takeover field for this country"
-as "revert it to a text input" — which, for a `source_kind === 'location'` field, was the ONLY thing
-that function ever did. It destroyed the `<select>` the cascade had attached ~100 ms earlier; the
-apparent 3–13 s delay is the length of the FIRST `update_order_review`. The region survived only
-because `isWcManagedField()` matches `/(^|_)state$/` — a NAME heuristic, not ownership. Found by
-browser measurement with stack traces. → **PR #471**. Detail: gotcha
+**#466 was our own §8 adapter, not the network and not WooCommerce.** `runTakeover()` walks EVERY
+field in the store and `applyTakeover()` reads "not a takeover field for this country" as "revert to
+a text input" — the only thing it ever did to a `source_kind === 'location'` field, destroying the
+`<select>` the cascade had attached ~100 ms earlier. The apparent 3–13 s delay was the length of the
+FIRST `update_order_review`. The region survived only because `isWcManagedField()` matches
+`/(^|_)state$/` — a NAME heuristic. Fixed in #471, guarding by ownership. Gotcha:
 `the-classic-adapter-reverts-a-select-the-location-cascade-owns`.
 
-### The three open PRs — detail on each PR page
+### Open in this layer
 
-| PR | Card | Critic | Rig |
-|---|---|---|---|
-| **#470** | #463 | **APPROVE** — 7 checkpoints, 5 by execution | **not** rig-verified: needs BOTH axes on related-list, and `get_field_mode_settlement()` clamps by provider capability and by the region axis (#404) |
-| **#471** | #466 | **APPROVE WITH NOTES** | verified: both fields select2-backed by t=244 ms, no revert, address lock intact |
-| **#472** | #458 | **REJECT** → round 3 fixed both blockers and **broke the INTEGRATION suite** (5 failures, all three matrix combinations). Three rounds spent — needs an operator decision, not a fourth | measured by me — below |
+| Card | State |
+|---|---|
+| **#472 / #458** | **RED, needs round 4 by Rule 7c**: replace the `_doing_it_wrong()` with a documented precedence (this is what fixes the 5 integration failures) and carry the chain's RECORDS across when the active column changes. Round 3's `rebuildChainForActiveSection()` stays. |
+| **#437** | **Next big one, and it now has live evidence.** Not started; spec `specs/2026-08-21-settlement-search-design.md` (absorbs #411). Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, i.e. silently truncated, and the client drops the `truncated` flag. Its decision 1 also DELETES the settlement `related-list` mode — anything fixed in `attachRelatedListSettlement()` has a delete date (that is why #478 was closed). The spec's "migrates to search" clause was **dropped** 24.08: `get_field_mode_settlement()` already clamps on read, so the empty field it guarded against cannot happen. |
+| **#449** | Half closed; real `AbortController` through `options.fetch` remains. |
+| **#469** | Our fields lose `data-input-classes`, so WC stamps a literal `undefined` class (verified against WC source). Touches `inject()`, held back from #472 on purpose; **do it first once #472 lands** — it is small. |
+| **#473** | Same disease as #466 in the same file's `updated_checkout` subscriber. The sink was **driven to fire**; the live WooCommerce path that empties the select is what is unproven. |
+| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. |
 
-**#472's two blockers, both reproduced by execution:** (1) after the live «ship to a different
-address» toggle **NEITHER column has the cascade widget**; (2) an explicitly declared field
-**silently** suppressed a fanned variant, so on the rig billing got the layer at the **address level
-only**. **No installed-data-contract loss was found.**
-
-**Round 3's own failure is the next fork.** Its `_doing_it_wrong()` for the collision fires on a
-LEGITIMATE configuration — `billing_state` is claimed both by the §8 demo descriptor and by Rule 7b's
-own fan-out, and `_doing_it_wrong()` means "the developer called this wrong", which nobody did. The
-collision needs a documented PRECEDENCE (and possibly a refusal to fan into an occupied id), not a
-notice. It also changed the rule to "first registration wins", which makes the outcome
-order-dependent. **The integration suite is in neither `composer check` nor jest** — it runs only in
-CI and in the container, which is why this reached CI instead of the worker; every brief touching a
-server-side checkout seam must require it.
-
-**#475 (`Инбокс`) is the other fork this raised, and only the operator can settle it:** does the cascade
-become per-section — two chains, two `/select` queues, one location record per column or per
-customer, and which one drives pickup and rates?
-
-### Also open in this layer — detail on the cards
-
-- **#469** — our fields lose `data-input-classes`, so WC stamps a literal `undefined` class
-  (verified against WC source). Touches `inject()`, so held back from #472; do it first once #472 lands.
-- **#473** — the same disease as #466 in the same file's `updated_checkout` subscriber. The sink was
-  **driven to fire**; the live WooCommerce path that empties the select is what is still unproven.
-- **#474** — "a location field is never a takeover field" is an UNENFORCED invariant.
-
-**#437 — settlement search replaces the preset list.** Spec
-`specs/2026-08-21-settlement-search-design.md` (end of s84; **absorbs #411**; not started):
-`list_localities()` for settlements and `LIST_HARD_CAP = 500` are deleted rather than tuned, the
-framework never stores a settlement dictionary, and "связанный поиск" becomes one checkbox that
-self-releases on read. **#423 is CLOSED**, so no interim truncation measure exists.
+**Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
+both columns, but exactly **one live cascade**, on the column that currently determines delivery,
+moving in **both directions** on the toggle, **and carrying its records with it**. The live checkbox
+is the only thing that picks the column; `woocommerce_ship_to_destination` merely decides whether the
+checkbox exists (`billing_only`) or what it defaults to — five `file:line` citations are in the rule.
 
 **⚠ Tooling traps — hooks only; each owned by its gotcha.** **Compare SKIPPED, not assertions — the
 primary is 66** (`a-worktree-silently-skips-five-contract-tests`; s87 saw it invert — a critic's
 worktree reported 1 skipped because its environment RAN 65 tests the primary skips). Also
 `phpunit-result-cache-makes-a-run-unreproducible`,
-`local-npm-run-build-is-not-assets-parity-evidence` (bundles build in the PRIMARY checkout only),
+`local-npm-run-build-is-not-assets-parity-evidence`,
 `powershell-drops-the-roots-flag-from-the-jest-command`,
 `three-agents-is-the-concurrency-cap-on-this-machine`,
 `starting-codex-under-orca-needs-four-steps-not-one`,
-`dispatch-inject-reports-failure-after-succeeding` (s87: an `ok:false` inject costs the worker its
-`worker_done` but not its work), and `stacked-pr-github-mechanics` (s87 Symptom 4: a rig aggregate
-branch turns the rest of a stack `DIRTY` on the first squash-merge; fix with
-`git rebase --onto origin/main <rig merge commit>`). CI integration jobs can die on an `HTTP/2 504`
-from api.github.com during the wp-env build — not ours, `gh run rerun --failed`.
+`dispatch-inject-reports-failure-after-succeeding`,
+`stacked-pr-github-mechanics` (s87 Symptom 4: a rig aggregate branch turns the rest of a stack
+`DIRTY` on the first squash-merge),
+`integration-jobs-die-on-a-github-api-504-not-on-your-code` (**but read the log — s87 mistook a real
+test failure for it**),
+`orca-worktree-create-base-branch-takes-the-local-ref` (use `origin/main`, and verify), and
+`the-three-location-field-modes-and-their-russian-labels` (**«Список с поиском» is `ajax-select2`,
+NOT `related-list`** — this one cost the operator a wasted rig pass).
 
 **⚠ #405 is still NOT rig-verified** (unchanged since s83). With a deliberately bogus CDEK client id
 — confirmed in wp-config, transient cleared, measured against a control — the provider returned the
-same results as with valid keys and never threw. #404 and #407 WERE verified live.
+same results as with valid keys and never threw.
 
 **Operator decision, #409 (closed):** `@since` records the **planned release** (`2.0.2`); `VERSION`
-records the **released** one (`2.0.1`) and lags on purpose — raising it publishes a release (#285).
+records the **released** one (`2.0.1`) and lags on purpose (#285).
 
-**Orca is configured, not left on defaults.** A fresh worktree is gate-capable with **no install
-step**: `orca.yaml` shares `node_modules` by symlink; `.worktreeinclude` copies `vendor`,
-`plugins-reference`, `.mcp.json`, `.wp-env.override.json` and `.claude/settings.local.json`.
-Worktrees live at `.orca/worktrees/`. `vendor` must be COPIED, never shared
-(`sharing-vendor-breaks-composer-autoload-in-a-worktree`), and a fresh worktree starts dirty with
-seven CRLF-only files — **never `git add -A` there**.
+**Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
+`node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
+Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a fresh worktree starts
+dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
+`git worktree remove`.
 
-Gotchas: **187**.
+Gotchas: **189**.
 
 ## Program status (high level)
 
@@ -161,40 +139,25 @@ oversight.
 
 ## Next Actions
 
-0. **Ручная проверка рига — она за тобой, и дерево уже стоит на нужной ветке.**
-   `rig/s87-checkout-fixes` = `main` + **#470** + **#471** + **#472**. Что смотреть:
-   - **#471 (#466):** поле НП должно быть select2 сразу, а не через 3–13 секунд. Регион тоже.
-     Адрес заблокирован до выбора НП. Старое демо §8 на `billing_city` должно продолжать работать.
-   - **#472 (#458):** переключить магазин в «Force shipping to the customer billing address» и
-     убедиться, что наши поля применились к billing. **И отдельно — переключить чекбокс «доставить
-     по другому адресу» ПОСЛЕ загрузки:** критик воспроизвёл состояние, в котором виджета не
-     остаётся ни в одной колонке.
-   - **#470 (#463):** требует переключить ОБЕ оси на «Связанный список». На риге не проверялось.
-   Три PR независимы (каждый от `main`), мержить можно любым подмножеством в любом порядке.
-1. **#472 — два подтверждённых замечания, решать до мержа.** (а) правило 7b выполняется молча
-   не полностью, когда id уже занят явным объявлением плагина; (б) живое переключение
-   «другой адрес» оставляет обе колонки без виджета. Подробности — в таблице выше и в PR.
-2. **#469** — `data-input-classes` в PHP. Маленькая, но трогает `inject()`, поэтому её держали
-   отдельно от #472. После мержа #472 сделать первой.
-3. **#473** — сток из `updated_checkout`. Сток уже доведён до срабатывания; осталось найти живой
-   путь WooCommerce, который делает селект пустым при непустом сторе. Воспроизвести на риге и
-   только потом чинить.
-4. **#449, вторая половина** — настоящая отмена запросов через `AbortController` в `options.fetch`.
-5. **#474** — закрепить инвариант `source_location()` × `set_takeover_condition()` в билдере.
-   Развилка (исключение против `_doing_it_wrong()`) за тобой — это публичный контракт.
-6. **#437 — поиск НП вместо предустановленного списка.** Спека готова
-   (`specs/2026-08-21-settlement-search-design.md`), поглощает #411. Не начата. #423 закрыт, то есть
-   промежуточной меры по обрезке списка больше нет.
-7. **Мелочи:** #444 (26 строк i18n без домена — оснастка уже есть в `TextDomainConsistencyTest`),
-   #451 (сырая reason-фраза), #453 (числовые строковые ключи опций).
-8. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402. Ещё 6 развилок в комментарии
-   к #382 — они за тобой.
-9. **#405 — долг по проверке.** Вживую не подтверждена. Прежде чем мерить — найти условие, при
-   котором фикстура СДЭК реально падает, иначе замер бессмысленный.
-10. **#374 (названия опций и словарь значений)** — НЕ начинать без тебя, твоя прямая просьба.
-    **#379 (цвет/текст кнопки карты)** — низкий приоритет.
-11. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-12. **Постановки оператора:** #331, #332. **Отложено до релиза:** #285, #247.
+1. **#472 — четвёртый круг по Rule 7c.** Убрать `_doing_it_wrong()` в пользу задокументированного
+   приоритета (именно это чинит 5 падений интеграции) и добавить перенос записей цепочки при смене
+   активной колонки. Бриф ОБЯЗАН требовать прогон интеграционного сьюта в контейнере — через эту
+   дыру поломка и доехала до CI.
+2. **#469** — `data-input-classes` в PHP. Маленькая, трогает `inject()`, поэтому держалась отдельно
+   от #472. Делать сразу после его мержа.
+3. **#437** — поиск НП вместо предустановленного списка. Спека готова, поглощает #411, не начата.
+   Живое подтверждение получено 24.08: скоупленный список упирается ровно в 500 = `LIST_HARD_CAP`.
+   Учесть снятый пункт про миграцию и то, что режим `related-list` у НП удаляется целиком.
+4. **#473** — сток из `updated_checkout`. Сток доведён до срабатывания; осталось найти живой путь
+   WooCommerce, обнуляющий селект. Воспроизвести на риге и только потом чинить.
+5. **#449, вторая половина** — настоящая отмена через `AbortController` в `options.fetch`.
+6. **#474** — закрепить инвариант `source_location()` × `set_takeover_condition()` в билдере.
+   Развилка (исключение против `_doing_it_wrong()`) за оператором — публичный контракт.
+7. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
+8. **#405 — долг по проверке.** Сперва найти условие, при котором фикстура СДЭК реально падает.
+9. **#374** — НЕ начинать без оператора, его прямая просьба. **#379** — низкий приоритет.
+10. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+11. **Постановки оператора:** #331, #332. **Отложено до релиза:** #285, #247.
     **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
@@ -211,7 +174,17 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `rig/s86-checkout-fixes` (s86), НЕ на `main`.** Ветка = `main` + #461 + #462, запушена; риг уже отдаёт обе починки. Вернуть дерево на `main` после риг-прохода. `rig/s85-select2-verify` тоже не удалена.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
-- **The active location provider on the rig is `test-cdek`, deliberately.** Kept that way at the end of s78: the mixed pair (CDEK for region+settlement, DaData for address) is the configuration that exercises every location fix shipped so far, and it is the only way to reproduce #352/#333 at all. Back to DaData: `wp option update woodev_location_active_provider dadata`.
+- **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
+  **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
+  **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
+  region-preset + settlement-search combination, which had never been run live. Options:
+  `woodev_location_active_provider`, `woodev_location_field_mode_region`,
+  `woodev_location_field_mode_settlement`. Back to the older default: provider `dadata` and both
+  axes `ajax-select2`. Note **DaData can never offer `related-list`** — the capability it
+  structurally cannot have — so switching the provider back silently removes «Предустановленный
+  список» from the region select too. Switching the provider also makes a customer record whose
+  level the new provider does not own read as ABSENT (by design, s78): the chain empties and the
+  address locks until re-picked.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
 - **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
