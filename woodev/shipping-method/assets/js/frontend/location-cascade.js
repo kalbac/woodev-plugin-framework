@@ -738,13 +738,14 @@
 	 * ONE live widget per level — see the file docblock's CHAIN ASSEMBLY section — so the
 	 * field whose `section` matches {@see activeAddressSection} wins the level; the OTHER one
 	 * is left as a plain, functioning WC text field with no attached widget (degrades to "no
-	 * live suggest for that field", never an error). This is evaluated ONCE, at boot — the
-	 * chain does not re-derive its winner when the "ship to a different address" checkbox is
-	 * toggled afterwards; a full independent second cascade for the non-winning section is a
-	 * separate, larger undertaking left for a follow-up card. When section can't decide (both
-	 * or neither candidate matches the active section) the FIRST field found wins
-	 * (deterministic, mirrors the tie-break precedent in `checkout-field-store.js`'s own
-	 * `getStoreForField()`).
+	 * live suggest for that field", never an error). Called at boot ({@see buildEntry}) AND
+	 * again, live, on every "ship to a different address" toggle ({@see
+	 * rebuildChainForActiveSection}) — a full independent second cascade for the non-winning
+	 * section (both columns live at once) remains out of scope, a separate architecture fork
+	 * left for the operator; this function only ever re-picks WHICH ONE column is live, never
+	 * runs both. When section can't decide (both or neither candidate matches the active
+	 * section) the FIRST field found wins (deterministic, mirrors the tie-break precedent in
+	 * `checkout-field-store.js`'s own `getStoreForField()`).
 	 *
 	 * @param {Object.<string, Object>} fields
 	 * @returns {Array<{level: string, fieldId: string, section: string}>}
@@ -808,6 +809,66 @@
 		}
 
 		return null;
+	}
+
+	/**
+	 * Re-derives `entry.chain` (and the `entry.allNodes`/`entry.postcodeFieldId` it feeds) for
+	 * whichever section {@see activeAddressSection} NOW reports (issue #458 round 3) —
+	 * {@see buildChain} itself reads that live, so calling it again after the "ship to a
+	 * different address" toggle flips picks a fresh per-level winner instead of the one frozen
+	 * at boot ({@see buildEntry}). Without this, {@see applyCountryArbitration} — which only ever
+	 * walks `entry.chain` — keeps detaching the now-inactive section's widget forever, and the
+	 * newly-active section's field was never IN the chain to begin with, so it never gets
+	 * attached either: after one toggle, neither address column has a live widget.
+	 *
+	 * A no-op whenever the winner did not actually move (same fieldId at every level) — called
+	 * unconditionally from {@see handleLayoutRelevantChange} for all three of its triggers, since
+	 * only the toggle can ever change the winner and the diff below is cheap.
+	 *
+	 * Detaches the OUTGOING node's widget (if attached) before swapping the chain in: the rebuilt
+	 * `entry.chain`/`entry.allNodes` no longer carries that node, so
+	 * {@see applyCountryArbitration}'s per-node reconcile would never revisit it again and its
+	 * widget would leak rather than being torn down. The incoming node is deliberately left for
+	 * `applyCountryArbitration()` (called right after this, in the same handler) to attach —
+	 * this function only ever swaps which fields are IN the chain, never attaches or detaches the
+	 * winner itself, so the two functions can never both attach it (no double-attach).
+	 *
+	 * Per-LEVEL state — `entry.records`, `entry.unresolved`, `entry.clearedByEdit` — is left
+	 * completely untouched: it already keys by LEVEL, not by fieldId (see {@see buildEntry}'s own
+	 * comments), so it carries over unchanged to whichever field now wins that level. This is a
+	 * live/not-live REBIND, never the destructive cascade {@see clearDescendants} runs for an
+	 * actual edit — no value is cleared and no record is dropped (gotcha
+	 * `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function rebuildChainForActiveSection( entry ) {
+		var newChain = buildChain( entry.config.fields );
+
+		var changed = newChain.length !== entry.chain.length || newChain.some( function( node, i ) {
+			return ! entry.chain[ i ] || node.fieldId !== entry.chain[ i ].fieldId;
+		} );
+
+		if ( ! changed ) {
+			return;
+		}
+
+		var newPostcodeNode = derivePostcodeNode( newChain );
+		var newAllNodes = newChain.concat( newPostcodeNode ? [ { level: null, fieldId: newPostcodeNode.fieldId, section: newPostcodeNode.section } ] : [] );
+		var keptFieldIds = newAllNodes.map( function( node ) {
+			return node.fieldId;
+		} );
+
+		entry.allNodes.forEach( function( node ) {
+			if ( keptFieldIds.indexOf( node.fieldId ) === -1 ) {
+				detachOne( entry, node.fieldId );
+			}
+		} );
+
+		entry.chain = newChain;
+		entry.allNodes = newAllNodes;
+		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
 	}
 
 	/**
@@ -2830,6 +2891,10 @@
 		suppressWcAddressAutocomplete();
 
 		entries.forEach( function( entry ) {
+			// Issue #458 round 3: re-derive the chain BEFORE arbitrating — a no-op unless the
+			// "ship to a different address" toggle actually moved a level's winner (see
+			// rebuildChainForActiveSection()'s own docblock for why this must run first).
+			rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
 		} );
 

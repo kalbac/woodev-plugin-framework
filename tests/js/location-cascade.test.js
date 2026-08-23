@@ -4498,4 +4498,69 @@ describe( 'buildChain() tie-break when Rule 7b fans a field into both sections (
 		expect( callFor( 'billing_city' ) ).toBeDefined();
 		expect( callFor( 'shipping_city' ) ).toBeUndefined();
 	} );
+
+	/**
+	 * Round 3 (Codex critic, HIGH blocker): the two tests above only ever check the winner
+	 * picked ONCE, at boot. `buildChain()`'s own tie-break is re-evaluated live only if
+	 * something re-derives `entry.chain` after the "ship to a different address" checkbox
+	 * changes ({@see rebuildChainForActiveSection}) — before that existed, `entry.chain` stayed
+	 * frozen at whatever `buildEntry()` picked at boot, so `applyCountryArbitration()` (which
+	 * only ever walks `entry.chain`) detached the now-inactive column's widget (still in the
+	 * frozen chain) while the newly-active column's field was never in the chain to begin with,
+	 * and so was never attached either — after ONE toggle, NEITHER address column had a live
+	 * cascade. These two tests pin BOTH halves in one assertion set each (the new column's
+	 * attach AND the old column's detach, plus a call-count check for no-double-attach) so a
+	 * partial fix — attach without detach, or vice versa — fails them too.
+	 */
+	it( 'unchecking the toggle after boot MOVES the live widget from shipping_city to billing_city, not just detaches it (issue #458 round 3)', () => {
+		bootWithBothSectionsInOneEntry( true, 'billing_city' );
+
+		var shippingCall = callFor( 'shipping_city' );
+		expect( shippingCall ).toBeDefined();
+		expect( callFor( 'billing_city' ) ).toBeUndefined();
+
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = false;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// billing_city — now the active column — must have gained a widget…
+		var billingCalls = attachCalls.filter( function( c ) {
+			return 'billing_city' === c.el.id;
+		} );
+		expect( billingCalls.length ).toBe( 1 );
+
+		// …and shipping_city's widget — no longer the active column — must have been detached,
+		// not left dangling: the "neither column" bug this pins.
+		expect( shippingCall.detach ).toHaveBeenCalled();
+
+		// shipping_city must not have been re-attached (no double-attach).
+		var shippingCalls = attachCalls.filter( function( c ) {
+			return 'shipping_city' === c.el.id;
+		} );
+		expect( shippingCalls.length ).toBe( 1 );
+	} );
+
+	it( 'checking the toggle after boot MOVES the live widget from billing_city to shipping_city, not just detaches it (issue #458 round 3)', () => {
+		bootWithBothSectionsInOneEntry( false, 'shipping_city' );
+
+		var billingCall = callFor( 'billing_city' );
+		expect( billingCall ).toBeDefined();
+		expect( callFor( 'shipping_city' ) ).toBeUndefined();
+
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = true;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		var shippingCalls = attachCalls.filter( function( c ) {
+			return 'shipping_city' === c.el.id;
+		} );
+		expect( shippingCalls.length ).toBe( 1 );
+
+		expect( billingCall.detach ).toHaveBeenCalled();
+
+		var billingCalls = attachCalls.filter( function( c ) {
+			return 'billing_city' === c.el.id;
+		} );
+		expect( billingCalls.length ).toBe( 1 );
+	} );
 } );

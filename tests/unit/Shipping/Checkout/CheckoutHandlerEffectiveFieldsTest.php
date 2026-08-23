@@ -204,4 +204,81 @@ class CheckoutHandlerEffectiveFieldsTest extends TestCase {
 		);
 		$this->assertArrayNotHasKey( 'shipping_city', $clean );
 	}
+
+	// -------------------------------------------------------------------------
+	// Round 3 (Codex critic, HIGH blocker): a directly-declared descriptor and a Rule 7b
+	// fan-out variant can claim the SAME id. Before this fix, a direct descriptor always won
+	// regardless of registration order (unconditional `$effective[$id] = $field` overwrite),
+	// and a fan-out variant colliding with an EARLIER fan-out variant lost silently (`+=`'s
+	// first-wins with no diagnostic) — neither path ever reported the conflict. The fix makes
+	// this FIRST-REGISTRATION-WINS, diagnosed via `_doing_it_wrong()`, matching the collision
+	// discipline every other id-collision site in this namespace already uses
+	// (Location_Provider_Registry::collect_all_provider_fields(), Checkout_Config::
+	// inject_states()). Proved twice, by registration order, exactly like the critic's own
+	// two-order runtime probe:
+	// -------------------------------------------------------------------------
+
+	public function test_direct_declaration_registered_first_wins_the_id_collision_and_warns(): void {
+		Functions\when( 'get_option' )->justReturn( 'shipping' );
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				\Mockery::type( 'string' ),
+				\Mockery::pattern( '/billing_city.*more than one descriptor/' ),
+				'2.0.2'
+			);
+
+		$fields  = Checkout_Fields::from_array( [
+			// Declared FIRST — an explicit, non-location billing_city field.
+			Field::create( 'billing_city' )->set_type( 'select' )->set_label( 'Explicit City' )->set_section( 'billing' )
+				->set_source( static fn() => [], 'options' )->to_array(),
+			// Declared SECOND — a location-backed field whose Rule 7b fan-out also claims
+			// billing_city (and, uncontested, shipping_city).
+			Field::create( 'city' )->set_type( 'text' )->set_label( 'Location City' )->source_location( 'settlement' )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$out = $handler->inject( [] );
+
+		$this->assertSame(
+			'select',
+			$out['billing']['billing_city']['type'] ?? null,
+			'The explicit descriptor was registered FIRST, so it must win the collision.'
+		);
+		$this->assertSame(
+			'text',
+			$out['shipping']['shipping_city']['type'] ?? null,
+			'The non-colliding shipping_city fan-out variant is unaffected by the billing_city collision.'
+		);
+	}
+
+	public function test_location_fanout_registered_first_wins_the_id_collision_and_warns(): void {
+		Functions\when( 'get_option' )->justReturn( 'shipping' );
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				\Mockery::type( 'string' ),
+				\Mockery::pattern( '/billing_city.*more than one descriptor/' ),
+				'2.0.2'
+			);
+
+		$fields  = Checkout_Fields::from_array( [
+			// Declared FIRST — the location-backed field, whose fan-out claims billing_city
+			// (and shipping_city) before the explicit descriptor below ever runs.
+			Field::create( 'city' )->set_type( 'text' )->set_label( 'Location City' )->source_location( 'settlement' )->to_array(),
+			// Declared SECOND — an explicit, non-location billing_city field.
+			Field::create( 'billing_city' )->set_type( 'select' )->set_label( 'Explicit City' )->set_section( 'billing' )
+				->set_source( static fn() => [], 'options' )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$out = $handler->inject( [] );
+
+		$this->assertSame(
+			'text',
+			$out['billing']['billing_city']['type'] ?? null,
+			'The location fan-out variant was registered FIRST, so it must win the collision — proving the precedence is order-based, not "explicit always wins".'
+		);
+		$this->assertSame( 'text', $out['shipping']['shipping_city']['type'] ?? null );
+	}
 }

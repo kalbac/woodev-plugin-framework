@@ -1829,6 +1829,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * posted-data handling and native-field bookkeeping agree on the SAME ids the
 		 * browser actually submits.
 		 *
+		 * ID COLLISIONS (issue #458 round 3): a directly-declared descriptor and a Rule 7b
+		 * fan-out variant can claim the SAME id — e.g. a plugin declares `billing_city`
+		 * itself while also registering a Location-Provider field whose fan-out produces a
+		 * `billing_city` variant. `Checkout_Fields::get_fields()` preserves registration
+		 * order, so this resolves FIRST REGISTRATION WINS, diagnosed via `_doing_it_wrong()` —
+		 * the exact same discipline id collisions already use everywhere else in this
+		 * namespace ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::
+		 * collect_all_provider_fields()}, {@see \Woodev\Framework\Shipping\Checkout\
+		 * Checkout_Config::inject_states()}), rather than a THIRD, silent rule invented just
+		 * for this method (the previous behaviour: a direct descriptor always beat a fan-out
+		 * variant regardless of order, via unconditional assignment, while two fan-out
+		 * variants raced via `+=`'s silent first-wins — neither path ever reported the
+		 * conflict). Declare the location-backed variant FIRST when a field must stay
+		 * Rule-7b-cascaded even though its id is also independently declared elsewhere.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return array<string, array<string, mixed>>
@@ -1837,12 +1852,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$effective = [];
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
-				if ( 'location' !== ( $field['source_kind'] ?? null ) ) {
-					$effective[ $id ] = $field;
-					continue;
-				}
+				$variants = 'location' === ( $field['source_kind'] ?? null )
+					? self::location_field_variants( $id, $field )
+					: [ $id => $field ];
 
-				$effective += self::location_field_variants( $id, $field );
+				foreach ( $variants as $variant_id => $variant ) {
+					if ( isset( $effective[ $variant_id ] ) ) {
+						_doing_it_wrong(
+							__METHOD__,
+							sprintf(
+								"checkout field id '%s' is claimed by more than one descriptor (a directly declared field and/or a Rule 7b location fan-out variant); the first registration wins",
+								$variant_id
+							),
+							'2.0.2'
+						);
+
+						continue;
+					}
+
+					$effective[ $variant_id ] = $variant;
+				}
 			}
 
 			return $effective;
