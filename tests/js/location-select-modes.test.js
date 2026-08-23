@@ -85,6 +85,13 @@ function buildOptions( overrides ) {
 	return Object.assign(
 		{
 			fetch: jest.fn( () => Promise.resolve( [] ) ),
+			// Issue #463: the /location/list analog of `fetch` — `location-cascade.js`'s own
+			// `listFor()` already scopes the request AND stamps `entry.value` via
+			// `fieldValueFor()` before an entry ever reaches this module (proven separately in
+			// location-cascade.test.js's own `options.list()` suite). Entries handed to THIS
+			// module's tests below therefore already carry `.value`, mirroring how `fetch`'s own
+			// overrides already do for the ajax-select2 tests.
+			list: jest.fn( () => Promise.resolve( [] ) ),
 			onSelect: jest.fn(),
 			emptyText: '',
 			node: { level: 'settlement', fieldId: 'billing_city' },
@@ -400,50 +407,98 @@ describe( 'related-list settlement renderer', () => {
 		expect( api ).toBeNull();
 	} );
 
-	it( 'replaces the <input> with a <select> carrying the SAME id, fetches the full region-scoped list, and populates <option>s', async () => {
+	it( 'replaces the <input> with a <select> carrying the SAME id, fetches entries via options.list(), and populates <option>s', async () => {
 		const input = document.getElementById( 'billing_city' );
+		const list = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
+		] ) );
 		const options = buildOptions( {
 			node: { level: 'settlement', fieldId: 'billing_city' },
-			country: jest.fn( () => 'RU' ),
-			parentKey: jest.fn( () => 'dadata:region1' ),
+			list,
 		} );
 
 		mod.attachRelatedListSettlement( input, options );
 
 		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
-		expect( fetchJsonCalls[ 0 ].url ).toBe( LIST_URL + '?level=settlement&country=RU&within=' + encodeURIComponent( 'dadata:region1' ) );
+		// Scoping (level/country/within) is `location-cascade.js`'s own `listFor()` responsibility
+		// now — proven separately in location-cascade.test.js's `options.list()` suite. This
+		// renderer only has to CALL it.
+		expect( list ).toHaveBeenCalledTimes( 1 );
 
-		fetchJsonCalls[ 0 ].resolve( {
-			localities: [ { key: 'dadata:zh', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } } ],
-		} );
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		const select = document.getElementById( 'billing_city' );
 		expect( select.options.length ).toBe( 1 ); // pinned: exactly the one entry the fake response carried.
-		expect( select.options[ 0 ].value ).toBe( 'dadata:zh' );
 		expect( select.options[ 0 ].textContent ).toBe( 'Жуковский' );
 	} );
 
-	it( 'omits `within` when parentKey() is empty (no region selected yet — country-wide list)', () => {
-		const options = buildOptions( { parentKey: jest.fn( () => null ) } );
+	// -----------------------------------------------------------------------
+	// issue #463 — the option VALUE is the derived field value (entry.value), never the raw
+	// provider key. Same claim `ajax-select2`'s own #455 suite already pins for that renderer;
+	// `attachRelatedListSettlement()` never got the fix — this is what closes the gap.
+	// -----------------------------------------------------------------------
 
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+	it( 'issue #463: a picked option submits entry.value, never entry.key — the raw provider key', async () => {
+		const list = jest.fn( () => Promise.resolve( [
+			{
+				key: 'dadata:0c5b2444-city-zhukovsky', value: 'Жуковский', label: 'Московская обл., г Жуковский',
+				level: 'settlement', record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Московская обл., г Жуковский' },
+			},
+		] ) );
+		const options = buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' }, list } );
 
-		expect( fetchJsonCalls[ 0 ].url ).not.toContain( 'within=' );
+		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_city" name="shipping_city" value="" /></form>';
+
+		mod.attachRelatedListSettlement( document.getElementById( 'shipping_city' ), options );
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const select = document.getElementById( 'shipping_city' );
+
+		// FAILS before the #463 fix: the option's own value used to be the raw provider key
+		// (`dadata:0c5b2444-city-zhukovsky`), which is what the checkout form then submitted.
+		expect( select.options[ 0 ].value ).toBe( 'Жуковский' );
+
+		select.value = 'Жуковский';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// Identity resolution still goes through the STABLE key (issue #461 BLOCKING 2), never the
+		// submitted value — same contract ajax-select2 already honours.
+		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Московская обл., г Жуковский' } } );
+
+		expect( window.jQuery( '#shipping_city' ).val() ).toBe( 'Жуковский' );
+		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_city=' + encodeURIComponent( 'Жуковский' ) );
 	} );
 
-	it( 'picking an option calls the shared onSelect with the matching record — the SAME persist path as every other level', async () => {
-		const options = buildOptions( { node: { level: 'settlement', fieldId: 'billing_city' } } );
+	it( 'issue #463/#461 BLOCKING 1: an entry with an explicitly EMPTY derived value is excluded — never selectable under its own raw key', async () => {
+		const list = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
+			{ key: 'dadata:no-derivable-value', value: '', label: 'Some place', level: 'settlement', record: { key: 'dadata:no-derivable-value', label: 'Some place' } },
+		] ) );
+		const options = buildOptions( { list } );
 
 		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
 
-		fetchJsonCalls[ 0 ].resolve( {
-			localities: [ { key: 'dadata:zh', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } } ],
-		} );
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		const select = document.getElementById( 'billing_city' );
-		select.value = 'dadata:zh';
+
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( 'Жуковский' );
+	} );
+
+	it( 'picking an option calls the shared onSelect with the matching record — the SAME persist path as every other level', async () => {
+		const list = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
+		] ) );
+		const options = buildOptions( { node: { level: 'settlement', fieldId: 'billing_city' }, list } );
+
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const select = document.getElementById( 'billing_city' );
+		select.value = 'Жуковский';
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
@@ -459,7 +514,6 @@ describe( 'related-list settlement renderer', () => {
 
 		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), buildOptions() );
 
-		fetchJsonCalls[ 0 ].resolve( { localities: [] } );
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		expect( select2Calls ).toHaveLength( 1 );
@@ -474,7 +528,6 @@ describe( 'related-list settlement renderer', () => {
 
 		const api = mod.attachRelatedListSettlement( input, options );
 
-		fetchJsonCalls[ 0 ].resolve( { localities: [] } );
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		api.detach();
@@ -1100,7 +1153,7 @@ describe( 'ajax-select2 renderer — issue #455: the submitted value is the loca
 		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_city=' + encodeURIComponent( 'Жуковский' ) );
 	} );
 
-	it( 'falls back to entry.key when an entry carries no .value (defensive — related-list:settlement entries never carry one, and fixing that renderer is out of scope here)', async () => {
+	it( 'falls back to entry.key when an entry carries no .value at all (defensive — every current caller of applyEntries() now stamps .value upstream, issues #455/#463)', async () => {
 		const fetchSpy = jest.fn( () => Promise.resolve( [
 			{ key: 'dadata:no-value-entry', level: 'settlement', record: { key: 'dadata:no-value-entry', label: 'Витебск' } },
 		] ) );

@@ -17,9 +17,11 @@
  * a selection made through ANY renderer here flows through the identical backwards-fill +
  * single-flight `/select` persist route (D8) as Task 11's typeahead. Nothing in this file ever
  * calls `fetch()`/`XMLHttpRequest` directly or re-derives a suggest/list URL by hand — it only
- * ever uses `options.fetch` (suggest, already scoped by the cascade) and the generic
- * `options.buildUrl`/`options.fetchJson`/`options.nonceHeader`/`options.country`/
- * `options.parentKey` primitives the cascade hands over for exactly this purpose.
+ * ever uses `options.fetch` (suggest) and `options.list` (the full scoped `/location/list`,
+ * issue #463) — both already scoped AND already value-stamped by the cascade's own
+ * `fieldValueFor()` — plus the generic `options.buildUrl`/`options.fetchJson`/
+ * `options.nonceHeader`/`options.country`/`options.parentKey` primitives the cascade hands over
+ * for a renderer (like `related-list:region`) that watches a WooCommerce-rendered field instead.
  *
  * THE EVENT-WORLD TRAP (gotcha `jquery-trigger-change-fires-no-native-event`): select2 (and
  * WooCommerce's own selectWoo enhancement of a plain `<select>`, which MAY independently apply
@@ -438,11 +440,11 @@
 		 * value a form should ever submit) is excluded entirely, same as an entry with no
 		 * record/key. Silently falling back to `entry.key` for it would resubmit the raw
 		 * provider key — the exact #455 defect this PR already closed once. This is a real
-		 * PRESENCE check (`undefined !== entry.value`), not a truthiness one — `undefined`
-		 * (`related-list:settlement`'s own `/location/list` entries, which never carry a
-		 * `.value` at all — out of scope here, see the PR description) and `''` (a value that
-		 * WAS derived, and derived to nothing) are different states and must not collapse into
-		 * the same branch.
+		 * PRESENCE check (`undefined !== entry.value`), not a truthiness one — `undefined` (no
+		 * renderer sharing this function leaves `.value` unset any more as of issue #463: both
+		 * `options.fetch` and `options.list` stamp it via `location-cascade.js`'s own
+		 * `fieldValueFor()`) and `''` (a value that WAS derived, and derived to nothing) are
+		 * different states and must not collapse into the same branch.
 		 *
 		 * issue #461 BLOCKING 2: `dataByKey` is keyed by `entry.key` — the provider's own stable
 		 * identity — never by the submitted option value. Two entries that legitimately share
@@ -473,13 +475,11 @@
 					return;
 				}
 
-				// issue #455: `entry.value` — when the entry carries one — is the SAME field
-				// value every other renderer in this layer submits (`location-cascade.js`'s
-				// `fetchFor()` already assigns it via `fieldValueFor()` before the entry ever
-				// reaches here). This is what the <select> itself SUBMITS. Entries with no
-				// `.value` (`related-list:settlement`'s own `/location/list` entries, which
-				// never carry one) fall back to `entry.key` unchanged — this function is shared
-				// with that renderer, which is out of scope here (see the PR description).
+				// issues #455/#463: `entry.value` is the SAME field value every renderer sharing
+				// this function submits (`location-cascade.js`'s `fetchFor()`/`listFor()` already
+				// assign it via `fieldValueFor()` before an entry ever reaches here). This is what
+				// the <select> itself SUBMITS. The `entry.key` fallback below is defensive only —
+				// every current caller of `applyEntries()` now stamps `.value` upstream.
 				var optionValue = ( undefined !== entry.value ) ? entry.value : entry.key;
 
 				dataByKey[ entry.key ] = record;
@@ -683,9 +683,16 @@
 	/**
 	 * Attaches the `related-list` settlement (city) renderer — spec D7, Task 13: "the city
 	 * level in this mode is a select2 populated from `/location/list` scoped to the chosen
-	 * region." Scoped via `options.parentKey()` (the SAME live region-record-key scoping the
-	 * baseline typeahead's own `within` param already uses for this level — country-wide when
-	 * no region is selected yet, exactly like the suggest path).
+	 * region." Scoped live at fetch time by `options.list` itself (the SAME live region-record-
+	 * key scoping the baseline typeahead's own `within` param already uses for this level —
+	 * country-wide when no region is selected yet, exactly like the suggest path).
+	 *
+	 * Issue #463: `options.list` — not a hand-rolled `options.fetchJson()` call against
+	 * `/location/list` — is what supplies entries here. `location-cascade.js`'s own `listFor()`
+	 * already stamps `entry.value` via `fieldValueFor()` before an entry ever reaches this file,
+	 * the SAME contract `options.fetch` already honours for `ajax-select2` (issue #455) — so
+	 * `buildSelectField()`'s shared `applyEntries()` never has to fall back to `entry.key` (the
+	 * raw provider key) for this renderer either.
 	 *
 	 * @param {Element} el
 	 * @param {Object}  options
@@ -699,26 +706,11 @@
 		return buildSelectField( el, options, {
 			ajax: false,
 			fetchEntries: function() {
-				var params = { level: 'settlement', country: options.country() };
-				var within = options.parentKey();
+				return Promise.resolve( options.list() ).then( null, function( error ) {
+					logError( error );
 
-				if ( within ) {
-					params.within = within;
-				}
-
-				return options.fetchJson(
-					options.buildUrl( options.location.endpoints.list, params ),
-					{ method: 'GET', headers: options.nonceHeader() }
-				).then(
-					function( body ) {
-						return body && Array.isArray( body.localities ) ? body.localities : [];
-					},
-					function( error ) {
-						logError( error );
-
-						return [];
-					}
-				);
+					return [];
+				} );
 			},
 		} );
 	}

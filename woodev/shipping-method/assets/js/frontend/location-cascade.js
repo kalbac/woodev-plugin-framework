@@ -968,6 +968,44 @@
 	}
 
 	/**
+	 * Builds the `list()` callback handed to a Task 13 `related-list` renderer for one chain
+	 * node — the `/location/list` analog of {@see fetchFor}: same live-scope semantics
+	 * (country/within read at call time, never captured at attach time) and the SAME `value`
+	 * stamping via {@see fieldValueFor}, so a `related-list` select's own value space is derived
+	 * in exactly the one place `fetchFor()` already derives it for `ajax-select2` — never
+	 * re-derived (or forgotten) at the presentation site (issue #463: `attachRelatedListSettlement()`
+	 * previously called `options.fetchJson()` against `/location/list` directly and never stamped
+	 * `.value` at all, so `buildSelectField()`'s own `applyEntries()` fell back to `entry.key` —
+	 * the raw provider key — exactly the #455 disease on the `ajax-select2` branch that PR already
+	 * closed).
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, fieldId: string}} node
+	 * @returns {function(): Promise<Array>}
+	 */
+	function listFor( entry, node ) {
+		return function() {
+			var url = buildUrl( entry.location.endpoints.list, {
+				level: node.level,
+				country: countryFor( entry, node ),
+				within: scopeKeyFor( entry, node.level ),
+			} );
+
+			return fetchJson( url, { method: 'GET', headers: nonceHeader( entry ) } ).then( function( body ) {
+				var localities = body && Array.isArray( body.localities ) ? body.localities : [];
+
+				localities.forEach( function( locality ) {
+					if ( locality ) {
+						locality.value = fieldValueFor( locality.record, node.level );
+					}
+				} );
+
+				return localities;
+			} );
+		};
+	}
+
+	/**
 	 * Writes `value` onto `el` — an `<input>` gets a plain `.value` assignment (unchanged);
 	 * a `<select>` (issue #460) needs an actually SELECTED `<option>`, or the field is
 	 * silently omitted from the next `update_checkout` POST.
@@ -1968,6 +2006,10 @@
 		// these primitives know or care which renderer, if any, ends up using them.
 		var options = {
 			fetch: fetchFor( entry, node ),
+			// Issue #463: the `/location/list` analog of `fetch` above — same live scope, same
+			// `fieldValueFor()` value stamping — for a Task 13 `related-list` renderer that needs
+			// the FULL scoped list rather than a per-keystroke suggest query.
+			list: listFor( entry, node ),
 			onSelect: onSelectFor( entry, node ),
 			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
