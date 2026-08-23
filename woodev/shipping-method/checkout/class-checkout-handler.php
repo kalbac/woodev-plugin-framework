@@ -1829,48 +1829,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * posted-data handling and native-field bookkeeping agree on the SAME ids the
 		 * browser actually submits.
 		 *
-		 * ID COLLISIONS (issue #458 round 3): a directly-declared descriptor and a Rule 7b
-		 * fan-out variant can claim the SAME id — e.g. a plugin declares `billing_city`
-		 * itself while also registering a Location-Provider field whose fan-out produces a
-		 * `billing_city` variant. `Checkout_Fields::get_fields()` preserves registration
-		 * order, so this resolves FIRST REGISTRATION WINS, diagnosed via `_doing_it_wrong()` —
-		 * the exact same discipline id collisions already use everywhere else in this
-		 * namespace ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::
-		 * collect_all_provider_fields()}, {@see \Woodev\Framework\Shipping\Checkout\
-		 * Checkout_Config::inject_states()}), rather than a THIRD, silent rule invented just
-		 * for this method (the previous behaviour: a direct descriptor always beat a fan-out
-		 * variant regardless of order, via unconditional assignment, while two fan-out
-		 * variants raced via `+=`'s silent first-wins — neither path ever reported the
-		 * conflict). Declare the location-backed variant FIRST when a field must stay
-		 * Rule-7b-cascaded even though its id is also independently declared elsewhere.
+		 * ID PRECEDENCE (issue #458 round 4). Two descriptors can claim the SAME id, and the
+		 * ordinary case is not an author error at all: the §8 demo declares `billing_state`
+		 * directly while a `source_location( 'region' )` field declared as `shipping_state`
+		 * is fanned by Rule 7b into a `billing_state` variant too. The FRAMEWORK creates that
+		 * collision — the plugin never asked for the second claim — so it is resolved by a
+		 * documented rule and reported nowhere. It was briefly a `_doing_it_wrong()` (round 3);
+		 * that was wrong twice over: the notice fired on a legitimate configuration, and
+		 * `_doing_it_wrong()` states "the developer called this incorrectly", which nobody did.
+		 * It also broke five integration tests, which is how the mistake surfaced.
+		 *
+		 * The rule, in order:
+		 *
+		 * 1. **A directly declared descriptor beats a Rule 7b fan-out variant**, whatever the
+		 *    registration order. A direct declaration names that exact id on purpose; a
+		 *    fan-out variant is derived by the framework, and deriving a claim must never
+		 *    silently displace one an author actually wrote. This is also the behaviour that
+		 *    shipped before round 3 (a direct descriptor won via unconditional assignment) —
+		 *    it is now order-independent rather than incidental.
+		 * 2. **Between two claims of the same kind, the FIRST registration wins**, matching
+		 *    the order `Checkout_Fields::get_fields()` preserves and the tie-break precedent in
+		 *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect_all_provider_fields()}.
+		 *    Two fan-out variants can only collide when two `source_location()` fields carry
+		 *    the same address-prefix-stripped suffix (e.g. `billing_city` and `shipping_city`
+		 *    both declared with `source_location()`), which Rule 7b makes redundant by
+		 *    definition.
+		 *
+		 * The losing claim keeps the WINNER's position in the returned array, so the checkout
+		 * field ORDER never depends on which descriptor won.
+		 *
+		 * KNOWN CONSEQUENCE, deliberately not worked around here: when a direct declaration
+		 * takes the id the CURRENTLY ACTIVE address column would have used, the location
+		 * cascade's only surviving variant is the other column's, so `location-cascade.js`
+		 * puts the one live cascade there (Rule 7c). That is a configuration the plugin
+		 * created by claiming one id twice, and the cure is to stop double-claiming it — not
+		 * for the framework to overrule an explicit declaration.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @return array<string, array<string, mixed>>
 		 */
 		protected function effective_fields(): array {
-			$effective = [];
+			$effective   = [];
+			$declared_by = [];
 
 			foreach ( $this->fields->get_fields() as $id => $field ) {
-				$variants = 'location' === ( $field['source_kind'] ?? null )
+				$is_location = 'location' === ( $field['source_kind'] ?? null );
+				$variants    = $is_location
 					? self::location_field_variants( $id, $field )
 					: [ $id => $field ];
 
 				foreach ( $variants as $variant_id => $variant ) {
-					if ( isset( $effective[ $variant_id ] ) ) {
-						_doing_it_wrong(
-							__METHOD__,
-							sprintf(
-								"checkout field id '%s' is claimed by more than one descriptor (a directly declared field and/or a Rule 7b location fan-out variant); the first registration wins",
-								$variant_id
-							),
-							'2.0.2'
-						);
-
+					// Rule 1: a fan-out variant never displaces an existing claim, and a direct
+					// declaration never displaces another DIRECT one (rule 2, first wins).
+					if ( isset( $effective[ $variant_id ] ) && ( $is_location || 'direct' === $declared_by[ $variant_id ] ) ) {
 						continue;
 					}
 
-					$effective[ $variant_id ] = $variant;
+					// Assigning over an existing key keeps that key's original position, so a
+					// direct declaration arriving after the fan-out variant it displaces
+					// inherits its slot rather than moving to the end.
+					$effective[ $variant_id ]   = $variant;
+					$declared_by[ $variant_id ] = $is_location ? 'fan-out' : 'direct';
 				}
 			}
 

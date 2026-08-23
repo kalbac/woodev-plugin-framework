@@ -833,12 +833,16 @@
 	 * this function only ever swaps which fields are IN the chain, never attaches or detaches the
 	 * winner itself, so the two functions can never both attach it (no double-attach).
 	 *
-	 * Per-LEVEL state — `entry.records`, `entry.unresolved`, `entry.clearedByEdit` — is left
-	 * completely untouched: it already keys by LEVEL, not by fieldId (see {@see buildEntry}'s own
-	 * comments), so it carries over unchanged to whichever field now wins that level. This is a
-	 * live/not-live REBIND, never the destructive cascade {@see clearDescendants} runs for an
-	 * actual edit — no value is cleared and no record is dropped (gotcha
-	 * `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
+	 * Per-LEVEL state — `entry.records`, `entry.unresolved`, `entry.clearedByEdit` — already keys
+	 * by LEVEL, not by fieldId (see {@see buildEntry}'s own comments), so it survives the swap on
+	 * its own. That is NOT sufficient, and believing it was is what Rule 7c had to spell out:
+	 * `entry.resolved` keys by FIELD id, and the incoming column's field was never seeded, so the
+	 * very next `change` on it compares its live text against `undefined`, reads as a real
+	 * transition, and drops the level's record — the customer gets filled fields plus a re-locked
+	 * address field, exactly the failure #337 and #459 were about. {@see
+	 * carryChainStateToIncomingNodes} closes that, and is why this function is not a widget rebind
+	 * alone. It is still never the destructive cascade {@see clearDescendants} runs for an actual
+	 * edit (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
 	 *
 	 * @param {Object} entry
 	 * @returns {void}
@@ -866,9 +870,100 @@
 			}
 		} );
 
+		var previousAllNodes = entry.allNodes;
+
 		entry.chain = newChain;
 		entry.allNodes = newAllNodes;
 		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
+
+		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes );
+	}
+
+	/**
+	 * Carries the chain's state onto the fields that just JOINED it — the second half of a
+	 * column swap, required by AGENT-RULES.md Rule 7c ("the chain's RECORDS must move with it,
+	 * not just the widget"). Called only from {@see rebuildChainForActiveSection}, only for nodes
+	 * whose fieldId was not already in the chain.
+	 *
+	 * WooCommerce does NOT copy one column's address into the other in the DOM. Read from its own
+	 * source: `checkout.js` binds `#ship-to-different-address input` to `trigger_update_checkout`
+	 * and to `ship_to_different_address`, which only slides the shipping fieldset open or shut,
+	 * and `update_order_review` replaces the order-review and payment fragments — never the
+	 * address fieldsets. The copy Rule 7c refers to is `WC_Checkout::get_posted_address_data()`,
+	 * server-side and at submit time. So on the client, the incoming column is whatever the
+	 * customer left in it, usually empty; carrying is ours to do.
+	 *
+	 * Per incoming node, exactly one of three things happens:
+	 *
+	 * 1. **Empty field, carried record** — write the record's own derived value in silently
+	 *    ({@see fieldValueFor}, the SAME derivation a direct pick at that level gets, so a
+	 *    carried field and a picked one never read differently). {@see writeSilently} seeds
+	 *    `entry.resolved` as part of the write, which is what makes the following `change`
+	 *    harmless.
+	 * 2. **Field already carrying the customer's own text** — leave the text alone (checking
+	 *    "ship to a different address" after typing a genuinely different shipping address must
+	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
+	 *    {@see prefill} does at boot.
+	 * 3. **...and that text disagrees with the carried record** — additionally drop the level's
+	 *    record. This is not a new rule: it is the module's standing invariant, applied at swap
+	 *    time instead of being left to whichever `change` fires first ({@see handleFieldChanged}:
+	 *    "the field's own record no longer matches its text"). An identity that lies about the
+	 *    text is the defect class #339 and #350 were both about.
+	 *
+	 * The postcode node has no record of its own, so it carries the OUTGOING postcode field's
+	 * live value instead — the same string {@see backwardsFill} would have written there.
+	 *
+	 * @param {Object} entry
+	 * @param {Array<{level: ?string, fieldId: string, section: string}>} previousAllNodes
+	 * @param {Array<{level: ?string, fieldId: string, section: string}>} newAllNodes
+	 * @returns {void}
+	 */
+	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes ) {
+		var previousIds = previousAllNodes.map( function( node ) {
+			return node.fieldId;
+		} );
+		var previousPostcodeId = null;
+
+		previousAllNodes.forEach( function( node ) {
+			if ( ! node.level ) {
+				previousPostcodeId = node.fieldId;
+			}
+		} );
+
+		newAllNodes.forEach( function( node ) {
+			if ( previousIds.indexOf( node.fieldId ) !== -1 ) {
+				return; // stayed in the chain — its own state was never orphaned by the swap.
+			}
+
+			var el = document.getElementById( node.fieldId );
+
+			if ( ! el ) {
+				return;
+			}
+
+			var record = node.level ? entry.records[ node.level ] : null;
+			var carried;
+
+			if ( node.level ) {
+				carried = fieldValueFor( record, node.level );
+			} else {
+				var previousEl = previousPostcodeId ? document.getElementById( previousPostcodeId ) : null;
+				carried = previousEl ? cascadeKey( previousEl.value ) : '';
+			}
+
+			if ( '' === cascadeKey( el.value ) && '' !== carried ) {
+				writeSilently( entry, node.fieldId, carried );
+				return;
+			}
+
+			entry.store.setValue( node.fieldId, el.value );
+			entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+
+			if ( record && cascadeKey( el.value ) !== carried ) {
+				entry.records[ node.level ] = null;
+				entry.unresolved[ node.level ] = null;
+			}
+		} );
 	}
 
 	/**

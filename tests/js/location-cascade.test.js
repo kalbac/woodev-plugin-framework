@@ -4564,3 +4564,196 @@ describe( 'buildChain() tie-break when Rule 7b fans a field into both sections (
 		expect( billingCalls.length ).toBe( 1 );
 	} );
 } );
+
+/**
+ * Round 4 (issue #458, AGENT-RULES.md Rule 7c): "the chain's RECORDS must move with it, not just
+ * the widget. Move the widget without moving the records and the customer gets filled fields plus
+ * a re-locked address field: exactly the failure #337 and #459 were about."
+ *
+ * Round 3 moved the widget only. `entry.records` keys by LEVEL, so it survived the swap on its own
+ * and it LOOKED sufficient — but `entry.resolved` keys by FIELD id, and the incoming column's field
+ * was never seeded. The next `change` on it (WooCommerce fires plenty of programmatic churn; this
+ * module's own `prefill()` exists to defuse exactly that at boot) compared its text against
+ * `undefined`, read as a real customer edit, and dropped the level's record — re-locking the
+ * address field.
+ *
+ * Verified against WooCommerce's own source rather than assumed: `checkout.js` binds the toggle to
+ * `trigger_update_checkout` and to `ship_to_different_address`, which only slides the shipping
+ * fieldset; `update_order_review` returns the order-review and payment fragments and never the
+ * address fieldsets. WooCommerce does NOT copy one column's address text into the other in the DOM
+ * — the copy Rule 7c refers to is `WC_Checkout::get_posted_address_data()`, server-side at submit.
+ * So carrying is ours to do, and the incoming column is usually empty.
+ */
+describe( 'a column swap carries the chain RECORDS, not just the widget (issue #458 round 4)', () => {
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		value: 'Москва',
+		record: {
+			key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' }, label: 'г Москва', postcode: '101000',
+		},
+	};
+
+	/**
+	 * One entry whose `config.fields` carries the settlement AND address levels fanned across
+	 * BOTH columns — the shape `Checkout_Handler::effective_fields()` produces under every
+	 * `woocommerce_ship_to_destination` value except `billing_only`. The address level is what
+	 * makes the failure observable: its lock is driven by `entry.records.settlement`, so "the
+	 * record was dropped by the swap" and "the address re-locked" are the same fact.
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @returns {void}
+	 */
+	function bootBothColumns( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+				<input type="text" id="billing_address_1" name="billing_address_1" value="" />
+				<input type="text" id="shipping_address_1" name="shipping_address_1" value="" />
+				<input type="text" id="billing_postcode" name="billing_postcode" value="" />
+				<input type="text" id="shipping_postcode" name="shipping_postcode" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = {
+			fields: {
+				billing_city: locationField( 'settlement', 'billing' ),
+				shipping_city: locationField( 'settlement', 'shipping' ),
+				billing_address_1: locationField( 'address', 'billing' ),
+				shipping_address_1: locationField( 'address', 'shipping' ),
+			},
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * @param {boolean} checked
+	 * @returns {void}
+	 */
+	function toggleShipToDifferentAddress( checked ) {
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = checked;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * WooCommerce's own programmatic churn on a field it just revealed — the same event
+	 * `prefill()` exists to defuse at boot. Carries whatever is currently in the field, so it is
+	 * a no-op for a correctly seeded change-gate and a "real transition" for an unseeded one.
+	 *
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function fireProgrammaticChange( fieldId ) {
+		document.getElementById( fieldId ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	it( 'checking the toggle carries the picked settlement TEXT onto the shipping column', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( '' );
+
+		toggleShipToDifferentAddress( true );
+
+		// Without the carry, the customer's newly-live column is blank while the chain still
+		// claims a picked locality — an identity that lies about the text.
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
+	} );
+
+	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+
+		toggleShipToDifferentAddress( true );
+		fireProgrammaticChange( 'shipping_city' );
+
+		// THE regression this round is about: an unseeded `entry.resolved['shipping_city']` makes
+		// this change read as a real edit, drops `records.settlement`, and re-locks the address —
+		// "filled fields plus a re-locked address field" (Rule 7c, #337, #459).
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+	} );
+
+	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', () => {
+		bootBothColumns( true );
+		selectViaFake( callFor( 'shipping_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+
+		toggleShipToDifferentAddress( false );
+		fireProgrammaticChange( 'billing_city' );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+	} );
+
+	it( 'never overwrites an address the customer typed into the incoming column themselves', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		// The customer checks "ship to a different address" BECAUSE it is a different address,
+		// and has already typed one. Carrying billing's locality over it would destroy that.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Жуковский' );
+
+		// …and because the text no longer matches the carried identity, the record is dropped
+		// rather than left lying about it — the module's own standing invariant
+		// (`handleFieldChanged`: "the field's own record no longer matches its text"), applied at
+		// swap time instead of left to whichever change happens to fire first.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'carries the postcode onto the incoming column as well', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '101000' );
+	} );
+} );
