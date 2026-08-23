@@ -41,18 +41,23 @@ browser measurement with stack traces. → **PR #471**. Detail: gotcha
 |---|---|---|---|
 | **#470** | #463 | **APPROVE** — 7 checkpoints, 5 by execution | **not** rig-verified: needs BOTH axes on related-list, and `get_field_mode_settlement()` clamps by provider capability and by the region axis (#404) |
 | **#471** | #466 | **APPROVE WITH NOTES** | verified: both fields select2-backed by t=244 ms, no revert, address lock intact |
-| **#472** | #458 | **REJECT**, two HIGH blockers; on ROUND 3 (the cap) | measured by me — below |
+| **#472** | #458 | **REJECT** → round 3 fixed both blockers and **broke the INTEGRATION suite** (5 failures, all three matrix combinations). Three rounds spent — needs an operator decision, not a fourth | measured by me — below |
 
 **#472's two blockers, both reproduced by execution:** (1) after the live «ship to a different
-address» toggle **NEITHER column has the cascade widget** — `activeAddressSection()` is evaluated
-only while `buildChain()` builds `entry.chain`, and the change handler then arbitrates over that
-frozen chain; (2) an explicitly declared field **silently** suppresses a fanned location variant
-(`+=` keeps existing keys, direct assignment overwrites), so on the rig billing got the location
-layer at the **address level only** while Rule 7b says both columns, with no diagnostic anywhere —
-exactly how s86 lost the s44 decision. **No installed-data-contract loss was found** (both ids are
-native; WooCommerce still owns address persistence).
+address» toggle **NEITHER column has the cascade widget**; (2) an explicitly declared field
+**silently** suppressed a fanned variant, so on the rig billing got the layer at the **address level
+only**. **No installed-data-contract loss was found.**
 
-**#475 (`Инбокс`) is the fork this raised, and only the operator can settle it:** does the cascade
+**Round 3's own failure is the next fork.** Its `_doing_it_wrong()` for the collision fires on a
+LEGITIMATE configuration — `billing_state` is claimed both by the §8 demo descriptor and by Rule 7b's
+own fan-out, and `_doing_it_wrong()` means "the developer called this wrong", which nobody did. The
+collision needs a documented PRECEDENCE (and possibly a refusal to fan into an occupied id), not a
+notice. It also changed the rule to "first registration wins", which makes the outcome
+order-dependent. **The integration suite is in neither `composer check` nor jest** — it runs only in
+CI and in the container, which is why this reached CI instead of the worker; every brief touching a
+server-side checkout seam must require it.
+
+**#475 (`Инбокс`) is the other fork this raised, and only the operator can settle it:** does the cascade
 become per-section — two chains, two `/select` queues, one location record per column or per
 customer, and which one drives pickup and rates?
 
