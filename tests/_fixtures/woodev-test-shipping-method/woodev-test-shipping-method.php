@@ -1067,13 +1067,19 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 *  4-6. `shipping_state`/`shipping_city`/`shipping_address_1` — Location Provider
 			 *       layer, block PR-C rig-visibility pull-forward (spec §4.4): region/settlement/
 			 *       address declared via {@see \Woodev\Framework\Shipping\Checkout\Field::source_location()}.
-			 *       Deliberately the SHIPPING section, not billing — `billing_state`/`billing_city`
-			 *       above already exercise the pre-existing static demo (source/takeover_condition)
-			 *       that `CheckoutFieldsFixtureTest` asserts on byte-for-byte; the location fields
-			 *       get their own, never-before-used native WC field ids so neither demo disturbs
-			 *       the other. The three ids follow WooCommerce's own `_state`/`_city`/`_address_1`
-			 *       naming convention on purpose — `location-cascade.js` derives the postcode
-			 *       field id from it (see that file's own docblock).
+			 *       Declared with a `shipping_` id only so they get their own, never-before-used
+			 *       native WC field ids — `billing_state`/`billing_city` above already exercise
+			 *       the pre-existing static demo (source/takeover_condition) that
+			 *       `CheckoutFieldsFixtureTest` asserts on byte-for-byte, and the location fields
+			 *       must not disturb that. The ACTUAL section(s) these three attach to are NOT
+			 *       pinned here — `Checkout_Handler::effective_fields()` derives them from
+			 *       `woocommerce_ship_to_destination` (AGENT-RULES.md Rule 7b, issue #458): a
+			 *       `billing_*` sibling id joins these `shipping_*` ones under every store
+			 *       configuration except "force shipping to billing", where only the derived
+			 *       `billing_*` id survives. The three ids follow WooCommerce's own
+			 *       `_state`/`_city`/`_address_1` naming convention on purpose — the fan-out
+			 *       derives the sibling id by swapping that prefix, and `location-cascade.js`
+			 *       derives the postcode field id from it too (see that file's own docblock).
 			 *
 			 * Domain data (regions, cities, method ids) lives here in the fixture;
 			 * the framework stays generic.
@@ -1197,30 +1203,36 @@ function woodev_test_shipping_method_plugin_init(): void {
 						),
 
 						// 4-6. Location Provider layer fields (block PR-C rig-visibility
-						// pull-forward) — shipping-section region/settlement/address, each
-						// backed by the store-level Location Provider layer rather than a
-						// plugin-supplied source callable. Type stays 'text': spec D7 says
-						// text+typeahead is the one mode available regardless of provider
-						// capability, and `Checkout_Handler::inject()` would otherwise force
-						// an empty-placeholder-only <select> for a 'select'-type field with
-						// no static options (this field's options come from the client-side
-						// cascade + REST suggest endpoint, never a static list).
+						// pull-forward) — region/settlement/address, each backed by the
+						// store-level Location Provider layer rather than a plugin-supplied
+						// source callable. NOT pinned to a `shipping` section (AGENT-RULES.md
+						// Rule 7b, issue #458): a `source_location()` field's section is owned
+						// by the framework, derived from `woocommerce_ship_to_destination` —
+						// `Checkout_Handler::effective_fields()` fans each of these into
+						// `billing_*` alone (force-shipping-to-billing stores) or into BOTH
+						// `billing_*` AND `shipping_*` (every other store), so a plugin author
+						// declaring `set_section()` here would be overridden anyway. The `_state`/
+						// `_city`/`_address_1` suffix stays WC-convention so the fan-out can
+						// derive the sibling id by swapping the address-section prefix. Type
+						// stays 'text': spec D7 says text+typeahead is the one mode available
+						// regardless of provider capability, and `Checkout_Handler::inject()`
+						// would otherwise force an empty-placeholder-only <select> for a
+						// 'select'-type field with no static options (this field's options come
+						// from the client-side cascade + REST suggest endpoint, never a static
+						// list).
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_state' )
 							->set_type( 'text' )
 							->set_label( 'Регион (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'region' ),
 
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_city' )
 							->set_type( 'text' )
 							->set_label( 'Город (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'settlement' ),
 
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_address_1' )
 							->set_type( 'text' )
 							->set_label( 'Адрес (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'address' ),
 					]
 				);

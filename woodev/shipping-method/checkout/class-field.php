@@ -277,6 +277,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		 * skipping absent links — field presence stays the plugin's own decision,
 		 * this builder only labels ONE field's place in that chain.
 		 *
+		 * The checkout SECTION this field attaches to is NOT the plugin's decision
+		 * either (AGENT-RULES.md Rule 7b, issue #458): whatever {@see self::set_section()}
+		 * is called with here is overridden by
+		 * `Checkout_Handler::effective_fields()`, which derives it from the store's
+		 * `woocommerce_ship_to_destination` setting instead — `billing` alone when
+		 * shipping is forced to the billing address, `billing` AND `shipping`
+		 * otherwise. That fan-out derives the sibling id by swapping a leading
+		 * `billing_`/`shipping_` prefix off THIS field's own id, so declare the id
+		 * following WooCommerce's own `_state`/`_city`/`_address_1` convention (e.g.
+		 * `shipping_city`, matching the id `billing_city`/`shipping_city` would take
+		 * natively) — an id with neither prefix still works, but yields the same
+		 * derived pair either way, so the prefix is only for the id to read sensibly
+		 * on its own.
+		 *
 		 * Mutually exclusive with {@see self::set_source()} in practice: a
 		 * location-backed field's data comes from the framework's own Location
 		 * Provider REST seam (`woodev/v1/location/*`), never a plugin-supplied
@@ -284,6 +298,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		 * `source_kind` twice via any other builder method.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Section is now framework-derived per Rule 7b rather than the
+		 *              plugin's own {@see self::set_section()} value (issue #458).
 		 *
 		 * @param string $level One of `'region'`, `'settlement'`, `'address'` — mirrors
 		 *                      `Woodev\Framework\Shipping\Location\Location_Record::LEVELS`.

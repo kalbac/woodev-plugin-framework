@@ -723,27 +723,54 @@
 
 	/**
 	 * Builds the ordered chain of location-kind fields ACTUALLY present in `fields` — one
-	 * entry per level found, in `LEVELS` order, skipping absent links (spec §4.4). The FIRST
-	 * field declaring a given level wins if more than one does (deterministic, mirrors the
-	 * tie-break precedent in `checkout-field-store.js`'s own `getStoreForField()`). Each node
+	 * entry per level found, in `LEVELS` order, skipping absent links (spec §4.4). Each node
 	 * also carries its OWN `section` (Finding 1) — the field's own §8 `section` key, straight
 	 * from the SAME `class-checkout-fields.php::normalize()` value `checkout-field-classic.js`
 	 * and `class-checkout-handler.php::inject()` already key off — so a node can be scoped by
 	 * the RIGHT country field even when different nodes of the same entry live in different
 	 * sections.
 	 *
+	 * MORE THAN ONE FIELD CAN NOW CLAIM THE SAME LEVEL (issue #458): a Location-Provider
+	 * field's `billing`/`shipping` fan-out (AGENT-RULES.md Rule 7b,
+	 * `class-checkout-handler.php::effective_fields()`) means `config.fields` can carry BOTH
+	 * a `billing_city` and a `shipping_city` at `location_level: 'settlement'` whenever the
+	 * store does not force shipping to the billing address. This module still drives exactly
+	 * ONE live widget per level — see the file docblock's CHAIN ASSEMBLY section — so the
+	 * field whose `section` matches {@see activeAddressSection} wins the level; the OTHER one
+	 * is left as a plain, functioning WC text field with no attached widget (degrades to "no
+	 * live suggest for that field", never an error). This is evaluated ONCE, at boot — the
+	 * chain does not re-derive its winner when the "ship to a different address" checkbox is
+	 * toggled afterwards; a full independent second cascade for the non-winning section is a
+	 * separate, larger undertaking left for a follow-up card. When section can't decide (both
+	 * or neither candidate matches the active section) the FIRST field found wins
+	 * (deterministic, mirrors the tie-break precedent in `checkout-field-store.js`'s own
+	 * `getStoreForField()`).
+	 *
 	 * @param {Object.<string, Object>} fields
 	 * @returns {Array<{level: string, fieldId: string, section: string}>}
 	 */
 	function buildChain( fields ) {
 		var byLevel = {};
+		var activeSection = activeAddressSection();
 
 		Object.keys( fields || {} ).forEach( function( id ) {
 			var field = fields[ id ];
 
-			if ( field && 'location' === field.source_kind && LEVELS.indexOf( field.location_level ) !== -1 && ! byLevel[ field.location_level ] ) {
-				byLevel[ field.location_level ] = { fieldId: id, section: field.section };
+			if ( ! field || 'location' !== field.source_kind || LEVELS.indexOf( field.location_level ) === -1 ) {
+				return;
 			}
+
+			var level = field.location_level;
+			var existing = byLevel[ level ];
+
+			// Keep the existing winner unless THIS field is the one that actually matches the
+			// active address section and the existing one does not — see this function's own
+			// docblock (issue #458).
+			if ( existing && ( existing.section === activeSection || field.section !== activeSection ) ) {
+				return;
+			}
+
+			byLevel[ level ] = { fieldId: id, section: field.section };
 		} );
 
 		var chain = [];
