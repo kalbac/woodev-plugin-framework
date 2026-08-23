@@ -49,6 +49,32 @@ orca orchestration task-update --id <task_id> --status completed --json
 
 Do not restart the worker to "do it properly". The work exists; only the capability token is dead.
 
+## s87 amendment — an `ok:false` inject costs the worker its `worker_done`, not its work
+
+Confirmed again in s87 while dispatching a Codex critic. `dispatch --inject` returned `ok:false`
+while the terminal buffer already showed `[Pasted Content 6162 chars]`, so the brief HAD landed. No
+retry was made (per this file), the run was submitted with `terminal send --text "" --enter`, and
+Codex produced a full, correct verdict — canary quoted verbatim, seven checkpoints answered, five of
+them by execution.
+
+**But its `worker_done` was rejected:** `Dispatch ctx_… capability is revoked.` The `ok:false`
+inject leaves the dispatch without a live capability token even though the prompt was delivered, so
+the structured report can never come back through orchestration.
+
+Practical consequence — plan for it rather than being surprised by it:
+
+- **Tell the critic in its brief to print the verdict IN THE TERMINAL**, and to not retry
+  `orca orchestration send` if it is rejected. A critic that spends its last turns fighting a dead
+  capability is a wasted round.
+- **Read the verdict with `orca terminal read`**, and treat the canary as the proof that the bundle
+  was really read. Do not wait on `check --wait` for a dispatch whose inject reported `ok:false` —
+  nothing will ever arrive.
+- The same run's `orca orchestration check --terminal <handle>` returns `No messages.`, which is not
+  a signal about the work either.
+
+A second Codex launched the same way in the same session got `ok:true` from the inject and ran
+without any of this, so the failure is per-attempt, not a property of Codex.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the receipt lying in the opposite direction

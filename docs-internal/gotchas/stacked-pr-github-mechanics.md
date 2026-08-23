@@ -110,6 +110,36 @@ gh pr list --head <branch> --state all --json number,state,mergedAt
 Do not hand this to the operator as a judgement call — it is a mechanical check with a definitive
 answer (s81, and he had said so once before).
 
+## Symptom 4 (s87) — a rig aggregate branch turns the REST of the stack `DIRTY` on the first squash-merge
+
+s86 staged five PRs for a rig pass by building `rig/s86-checkout-fixes` as a chain of MERGE commits
+(`rig: PR #461`, `rig: PR #462`, …), and then branched the later PRs off that rig branch. Every PR's
+base was `main`, so all five got the full CI matrix and all five reported `CLEAN`. That is the trap:
+they were clean **against the un-squashed `main`**.
+
+Merging in order, the first two went through untouched. The moment `#462` landed as a squash commit,
+`#464` flipped to `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` — its branch still carried the
+rig MERGE commits for `#461` and `#462`, and the three-way merge against a `main` that now held the
+same content under new SHAs could not be computed. And per Symptom 3's sibling gotcha
+[[pr-conflict-skips-pull-request-ci]], a `CONFLICTING` PR runs no `pull_request` CI at all.
+
+**The fix is a rebase that drops the rig commits, not a merge:**
+
+```bash
+git fetch origin --prune
+git checkout -B <pr-branch> origin/<pr-branch>
+git rebase --onto origin/main <the rig merge commit this PR sits on>   # leaves ONLY its own commit
+git push --force-with-lease origin <pr-branch>
+```
+
+Then wait for the re-triggered CI (the force-push starts a fresh matrix; the old green is about a
+commit that no longer exists) and merge. Repeat per PR — each one goes `DIRTY` in turn, because each
+one carries the rig merge for the PR ahead of it.
+
+**Cheaper next time:** build the rig branch by CHERRY-PICKING onto a throwaway branch, or merge the
+stack into the rig branch but branch each PR off `main` directly. The rig branch exists to give the
+operator one tree to look at; nothing requires the PR branches to descend from it.
+
 ## Related
 
 - [[git-squash-onto-stale-origin-main-diverge]] — the same squash-merge-breaks-ancestry root cause,
