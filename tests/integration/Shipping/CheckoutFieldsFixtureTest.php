@@ -7,6 +7,13 @@
  * layer (root select, dependent suggest, pickup slot) is exercised against real
  * WP + WC plumbing.
  *
+ * The two demo fields moved from `billing_state`/`billing_city` to
+ * `billing_company`/`billing_address_2` in issue #481 (operator decision, 24.08.2026), because
+ * the old ids were exactly the ones Rule 7b's location fan-out needs and a direct declaration
+ * beats a fan-out variant — see the fixture's own "WHY THE §8 DEMO SITS ON" docblock. Only the
+ * ids and labels moved: the option DATA is still the original region/city lists, so the source
+ * assertions below still read as "regions" and "cities" and still mean exactly what they meant.
+ *
  * Run with: composer test:integration
  * (requires wp-env; set WOODEV_FRAMEWORK_DIR inside the container or run from
  * inside wp-env's PHP context via `npx wp-env run tests-php phpunit ...`)
@@ -87,7 +94,7 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * The handler must manage `billing_state`, `billing_city`, and
+	 * The handler must manage `billing_company`, `billing_address_2`, and
 	 * `carrier_pickup_point`.
 	 *
 	 * @return void
@@ -96,8 +103,8 @@ class CheckoutFieldsFixtureTest extends TestCase {
 		$handler = $this->plugin->get_checkout_handler();
 		$fields  = $handler->get_fields()->get_fields();
 
-		$this->assertArrayHasKey( 'billing_state', $fields, 'billing_state field must be registered.' );
-		$this->assertArrayHasKey( 'billing_city', $fields, 'billing_city field must be registered.' );
+		$this->assertArrayHasKey( 'billing_company', $fields, 'billing_company field must be registered.' );
+		$this->assertArrayHasKey( 'billing_address_2', $fields, 'billing_address_2 field must be registered.' );
 		$this->assertArrayHasKey( 'carrier_pickup_point', $fields, 'carrier_pickup_point field must be registered.' );
 	}
 
@@ -123,8 +130,8 @@ class CheckoutFieldsFixtureTest extends TestCase {
 		// Simulate a WC checkout fields array with pre-existing billing section.
 		$input = [
 			'billing' => [
-				'billing_state' => [ 'type' => 'text', 'label' => 'State', 'required' => false ],
-				'billing_city'  => [ 'type' => 'text', 'label' => 'City', 'required' => false ],
+				'billing_company'   => [ 'type' => 'text', 'label' => 'Company', 'required' => false ],
+				'billing_address_2' => [ 'type' => 'text', 'label' => 'Address 2', 'required' => false ],
 			],
 		];
 
@@ -133,14 +140,14 @@ class CheckoutFieldsFixtureTest extends TestCase {
 		$this->assertArrayHasKey( 'billing', $result, 'Billing section must exist after inject().' );
 
 		$this->assertSame(
-			$input['billing']['billing_state'],
-			$result['billing']['billing_state'],
-			'billing_state is a takeover field — inject() must not touch it.'
+			$input['billing']['billing_company'],
+			$result['billing']['billing_company'],
+			'billing_company is a takeover field — inject() must not touch it.'
 		);
 		$this->assertSame(
-			$input['billing']['billing_city'],
-			$result['billing']['billing_city'],
-			'billing_city is a takeover field — inject() must not touch it.'
+			$input['billing']['billing_address_2'],
+			$result['billing']['billing_address_2'],
+			'billing_address_2 is a takeover field — inject() must not touch it.'
 		);
 	}
 
@@ -172,9 +179,9 @@ class CheckoutFieldsFixtureTest extends TestCase {
 
 		$input = [
 			'billing' => [
-				'billing_state' => [
+				'billing_company' => [
 					'type'     => 'text',
-					'label'    => 'State',
+					'label'    => 'Company',
 					'required' => false,
 					'class'    => [ 'form-row-wide' ],
 					'priority' => 40,
@@ -183,26 +190,26 @@ class CheckoutFieldsFixtureTest extends TestCase {
 		];
 
 		$result  = $handler->inject( $input );
-		$bs      = $result['billing']['billing_state'] ?? [];
+		$bs      = $result['billing']['billing_company'] ?? [];
 
 		$this->assertSame( [ 'form-row-wide' ], $bs['class'], 'class should be preserved after inject().' );
 		$this->assertSame( 40, $bs['priority'], 'priority should be preserved after inject().' );
 	}
 
 	// -------------------------------------------------------------------------
-	// 4. billing_state source callback
+	// 4. billing_company source callback
 	// -------------------------------------------------------------------------
 
 	/**
-	 * The billing_state source must return 3 regions for RU and an empty list
+	 * The billing_company source must return 3 regions for RU and an empty list
 	 * for any other country.
 	 *
 	 * We call the source directly from the normalized field descriptor.
 	 *
 	 * @return void
 	 */
-	public function test_billing_state_source_returns_ru_regions_for_ru_country(): void {
-		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_state' );
+	public function test_billing_company_source_returns_ru_regions_for_ru_country(): void {
+		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_company' );
 		$source = $field['source'];
 
 		$ru_options = $source( [ 'country' => 'RU' ] );
@@ -216,12 +223,12 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	/**
-	 * billing_state source must return an empty list for a non-CIS country.
+	 * billing_company source must return an empty list for a non-CIS country.
 	 *
 	 * @return void
 	 */
-	public function test_billing_state_source_returns_empty_for_non_cis_country(): void {
-		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_state' );
+	public function test_billing_company_source_returns_empty_for_non_cis_country(): void {
+		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_company' );
 		$source = $field['source'];
 
 		$fr_options = $source( [ 'country' => 'FR' ] );
@@ -230,16 +237,16 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 5. billing_city source callback (suggest with parent + q)
+	// 5. billing_address_2 source callback (suggest with parent + q)
 	// -------------------------------------------------------------------------
 
 	/**
-	 * billing_city source must return all cities for region 77 when q is empty.
+	 * billing_address_2 source must return all cities for region 77 when q is empty.
 	 *
 	 * @return void
 	 */
-	public function test_billing_city_source_returns_all_cities_for_region_77(): void {
-		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_city' );
+	public function test_billing_address_2_source_returns_all_cities_for_region_77(): void {
+		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_address_2' );
 		$source = $field['source'];
 
 		$cities = $source( [ 'parent' => '77', 'q' => '' ] );
@@ -252,17 +259,17 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	/**
-	 * billing_city source must filter cities by a case-insensitive substring match
+	 * billing_address_2 source must filter cities by a case-insensitive substring match
 	 * on the query string (simulating the suggest endpoint: q=мос in region 77).
 	 *
 	 * Note: this also verifies the behaviour exercised by the REST field-source
-	 * endpoint GET /woodev/v1/shipping/checkout/<plugin_id>/field-source/billing_city?parent=77&q=мос
+	 * endpoint GET /woodev/v1/shipping/checkout/<plugin_id>/field-source/billing_address_2?parent=77&q=мос
 	 * without having to dispatch an actual HTTP request.
 	 *
 	 * @return void
 	 */
-	public function test_billing_city_source_filters_by_query_substring(): void {
-		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_city' );
+	public function test_billing_address_2_source_filters_by_query_substring(): void {
+		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_address_2' );
 		$source = $field['source'];
 
 		$result = $source( [ 'parent' => '77', 'q' => 'мос' ] );
@@ -273,12 +280,12 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	/**
-	 * billing_city source must return empty for an unknown region.
+	 * billing_address_2 source must return empty for an unknown region.
 	 *
 	 * @return void
 	 */
-	public function test_billing_city_source_returns_empty_for_unknown_region(): void {
-		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_city' );
+	public function test_billing_address_2_source_returns_empty_for_unknown_region(): void {
+		$field  = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_address_2' );
 		$source = $field['source'];
 
 		$result = $source( [ 'parent' => '99', 'q' => '' ] );
@@ -315,11 +322,11 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 7. takeover_condition on billing_state
+	// 7. takeover_condition on billing_company
 	// -------------------------------------------------------------------------
 
 	/**
-	 * The billing_state takeover_condition must return true for BY, KZ and UZ,
+	 * The billing_company takeover_condition must return true for BY, KZ and UZ,
 	 * and false for everything else — INCLUDING RU.
 	 *
 	 * RU is excluded on purpose (issue #294): `woocommerce_states` is keyed by COUNTRY,
@@ -331,8 +338,8 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_billing_state_takeover_condition(): void {
-		$field     = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_state' );
+	public function test_billing_company_takeover_condition(): void {
+		$field     = $this->plugin->get_checkout_handler()->get_fields()->get_field( 'billing_company' );
 		$predicate = $field['takeover_condition'];
 
 		$this->assertIsCallable( $predicate, 'takeover_condition must be callable.' );
@@ -358,7 +365,7 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 8. inject() pre-fills options for RU billing_state (options-kind root field)
+	// 8. inject() pre-fills options for RU billing_company (options-kind root field)
 	// -------------------------------------------------------------------------
 
 	/**
@@ -372,7 +379,7 @@ class CheckoutFieldsFixtureTest extends TestCase {
 	 * own, so whatever appears here is exclusively this fixture's doing.
 	 *
 	 * The takeover mechanism itself is still exercised — by BY/KZ/UZ in
-	 * {@see self::test_billing_state_takeover_condition()} — and this fixture's source
+	 * {@see self::test_billing_company_takeover_condition()} — and this fixture's source
 	 * callable only ever returns options for RU, so the state half of the §8 demo is
 	 * dormant until #294 settles how the two subsystems share the `state` field.
 	 *
