@@ -812,6 +812,36 @@
 	}
 
 	/**
+	 * Releases the address lock this module put on `fieldId`, for a node that is LEAVING the
+	 * chain ({@see rebuildChainForActiveSection}).
+	 *
+	 * {@see refreshAddressLock} only ever reaches `chainNodeForLevel( entry, 'address' )` — the
+	 * address node the chain currently holds. So once a column swap moves that node, the field
+	 * left behind keeps `disabled` and {@see LOCKED_CLASS} forever: nothing walks it again.
+	 * MEASURED on the rig (24.08.2026): after checking "ship to a different address",
+	 * `billing_address_1` stayed `disabled` with the locked class while `shipping_address_1`
+	 * became the live one — i.e. a REQUIRED billing field the customer could no longer fill,
+	 * and a disabled input is not submitted at all. The lock is meant to say "pick a settlement
+	 * first", which is only ever a statement about the ACTIVE column.
+	 *
+	 * Guarded on the class rather than on `disabled` alone, so this can only ever clear a lock
+	 * THIS module set — never a `disabled` that WooCommerce, a theme or another plugin owns.
+	 *
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function releaseAddressLockOn( fieldId ) {
+		var el = document.getElementById( fieldId );
+
+		if ( ! el || ! el.classList || ! el.classList.contains( LOCKED_CLASS ) ) {
+			return;
+		}
+
+		el.disabled = false;
+		el.classList.remove( LOCKED_CLASS );
+	}
+
+	/**
 	 * Re-derives `entry.chain` (and the `entry.allNodes`/`entry.postcodeFieldId` it feeds) for
 	 * whichever section {@see activeAddressSection} NOW reports (issue #458 round 3) —
 	 * {@see buildChain} itself reads that live, so calling it again after the "ship to a
@@ -867,6 +897,7 @@
 		entry.allNodes.forEach( function( node ) {
 			if ( keptFieldIds.indexOf( node.fieldId ) === -1 ) {
 				detachOne( entry, node.fieldId );
+				releaseAddressLockOn( node.fieldId );
 			}
 		} );
 

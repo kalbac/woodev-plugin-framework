@@ -4821,6 +4821,26 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'ул Гагарина, 5' );
 	} );
 
+	it( 'releases the OUTGOING address lock — a required field must not stay disabled', () => {
+		// Measured on the rig 24.08.2026: refreshAddressLock() only ever walks the chain's CURRENT
+		// address node, so the field a column swap leaves behind kept `disabled` and the locked
+		// class forever. billing_address_1 is a REQUIRED billing field, and a disabled input is not
+		// submitted at all — the customer could no longer complete checkout.
+		bootBothColumns( false );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+		expect(
+			document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' )
+		).toBe( false );
+
+		// …and the lock moved to the column that is now active, rather than simply vanishing.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
 	it( 'carries the postcode onto the incoming column as well', () => {
 		bootBothColumns( false );
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
