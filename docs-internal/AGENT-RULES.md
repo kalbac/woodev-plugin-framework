@@ -212,8 +212,9 @@ public static function is_valid_version( string $version ): bool {
 
 ### Rule 7 — The framework owns the checkout address fields, and WooCommerce's own setting decides which column
 
-**Settled by the operator, twice (s44 and again s86). It has come back for re-litigation once
-already because it was recorded only in a session file — do not re-open it.**
+**Settled by the operator: 7a/7b twice (s44, and again s86), 7c in s87 (#475). 7b came back for
+re-litigation once already because it was recorded only in a session file — do not re-open any of
+them.**
 
 **7a. Shared settings live in the framework, never in a carrier plugin.** That is the whole point:
 several carriers run side by side, and per-carrier copies of a shared option make them fight over
@@ -244,6 +245,46 @@ Background for 7b, in WooCommerce's own code (`class-wc-checkout.php`): `get_pos
 returns the billing value for a shipping key when `ship_to_different_address` is false, that flag is
 forced false in `billing_only`, and the shipping fieldset is skipped entirely. In RU/CIS billing IS
 the delivery address, so a rule that always wrote `shipping_*` would write nowhere visible.
+
+**7c. ONE live cascade, and it follows the active column — settled by the operator, s87 (#475).**
+
+The fields exist on both columns per 7b. The live widget and the chain do **not**: exactly one
+cascade is live at a time, on the column that currently determines delivery, and it MOVES when that
+column changes.
+
+*The alternative was considered and rejected:* two simultaneously live cascades, one per column. The
+engine keys `records` / `unresolved` / `clearedByEdit` / `pendingRecord` by LEVEL, so that would mean
+re-keying by `[section][level]` plus a second single-flight `/select` queue — and it would force a
+data-contract answer on whether `woodev_customer_location` is one record per customer or one per
+column. It buys nothing: the customer edits one address at a time, and when the checkbox is
+unchecked the other column is not an independent address at all — WooCommerce copies billing into
+it, so an independent cascade there would fight that copy.
+
+**Which column is active is decided by the LIVE checkbox, and by nothing else.** Verified against
+WooCommerce's own source, because the setting name invites the opposite reading:
+
+| Fact | Where |
+|---|---|
+| `wc_ship_to_billing_address_only()` is literally `'billing_only' === woocommerce_ship_to_destination` | `wc-order-functions.php:544` |
+| `ship_to_different_address` = the posted checkbox **AND NOT** `billing_only` — so under `billing_only` it is forced off whatever is posted | `class-wc-checkout.php:767` |
+| With that flag false the whole shipping fieldset is skipped | `class-wc-checkout.php:742` |
+| With that flag false, `get_posted_address_data()` returns the **billing** value for a shipping key | `class-wc-checkout.php:1391` |
+| `woocommerce_ship_to_destination` sets only the checkbox's DEFAULT state (`shipping` → checked) | `templates/checkout/form-shipping.php:26` |
+
+So `woocommerce_ship_to_destination` never picks the column. It does exactly two things: at
+`billing_only` it stops the checkbox existing, and otherwise it seeds the checkbox's default. The
+live checkbox is the only thing that picks the column — which is what `activeAddressSection()`
+already computes.
+
+**Switching must work in BOTH directions, live.** A customer who fills billing with the box
+unchecked (rates already calculated from it) and then checks it must not be dropped, and neither
+must the reverse.
+
+**And the chain's RECORDS must move with it, not just the widget.** WooCommerce copies billing into
+shipping when the box is unchecked, so on a toggle the customer sees the TEXT carried over — but the
+picked-locality identity lives in our chain, not in the field text. Move the widget without moving
+the records and the customer gets filled fields plus a re-locked address field: exactly the failure
+#337 and #459 were about. Carrying the records is part of this rule, not an optimisation.
 
 ---
 
