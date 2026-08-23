@@ -174,6 +174,17 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `rig/s86-checkout-fixes` (s86), НЕ на `main`.** Ветка = `main` + #461 + #462, запушена; риг уже отдаёт обе починки. Вернуть дерево на `main` после риг-прохода. `rig/s85-select2-verify` тоже не удалена.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
+- **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
+  (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and
+  `billing_company` is a field WooCommerce REMOVES from the checkout array entirely when that
+  setting is `hidden` — measured: with it hidden the id was absent even with the customer country
+  set to RU, so the demo had nothing to take over and was invisible on the rig. Revert with
+  `wp option update woocommerce_checkout_company_field hidden`, but the §8 root demo then goes dark
+  again. Note that both demo fields keep WooCommerce's OWN labels server-side (`Company name`,
+  `Apartment, suite, unit, etc.`): a takeover field is converted CLIENT-side by
+  `checkout-field-classic.js`, and `inject()` deliberately leaves WC's entry alone
+  (`test_inject_leaves_takeover_fields_to_woocommerce` asserts exactly that). Do not read the
+  native label as "the demo is not working".
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the

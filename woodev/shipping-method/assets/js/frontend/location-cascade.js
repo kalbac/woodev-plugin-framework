@@ -723,27 +723,55 @@
 
 	/**
 	 * Builds the ordered chain of location-kind fields ACTUALLY present in `fields` — one
-	 * entry per level found, in `LEVELS` order, skipping absent links (spec §4.4). The FIRST
-	 * field declaring a given level wins if more than one does (deterministic, mirrors the
-	 * tie-break precedent in `checkout-field-store.js`'s own `getStoreForField()`). Each node
+	 * entry per level found, in `LEVELS` order, skipping absent links (spec §4.4). Each node
 	 * also carries its OWN `section` (Finding 1) — the field's own §8 `section` key, straight
 	 * from the SAME `class-checkout-fields.php::normalize()` value `checkout-field-classic.js`
 	 * and `class-checkout-handler.php::inject()` already key off — so a node can be scoped by
 	 * the RIGHT country field even when different nodes of the same entry live in different
 	 * sections.
 	 *
+	 * MORE THAN ONE FIELD CAN NOW CLAIM THE SAME LEVEL (issue #458): a Location-Provider
+	 * field's `billing`/`shipping` fan-out (AGENT-RULES.md Rule 7b,
+	 * `class-checkout-handler.php::effective_fields()`) means `config.fields` can carry BOTH
+	 * a `billing_city` and a `shipping_city` at `location_level: 'settlement'` whenever the
+	 * store does not force shipping to the billing address. This module still drives exactly
+	 * ONE live widget per level — see the file docblock's CHAIN ASSEMBLY section — so the
+	 * field whose `section` matches {@see activeAddressSection} wins the level; the OTHER one
+	 * is left as a plain, functioning WC text field with no attached widget (degrades to "no
+	 * live suggest for that field", never an error). Called at boot ({@see buildEntry}) AND
+	 * again, live, on every "ship to a different address" toggle ({@see
+	 * rebuildChainForActiveSection}) — a full independent second cascade for the non-winning
+	 * section (both columns live at once) remains out of scope, a separate architecture fork
+	 * left for the operator; this function only ever re-picks WHICH ONE column is live, never
+	 * runs both. When section can't decide (both or neither candidate matches the active
+	 * section) the FIRST field found wins (deterministic, mirrors the tie-break precedent in
+	 * `checkout-field-store.js`'s own `getStoreForField()`).
+	 *
 	 * @param {Object.<string, Object>} fields
 	 * @returns {Array<{level: string, fieldId: string, section: string}>}
 	 */
 	function buildChain( fields ) {
 		var byLevel = {};
+		var activeSection = activeAddressSection();
 
 		Object.keys( fields || {} ).forEach( function( id ) {
 			var field = fields[ id ];
 
-			if ( field && 'location' === field.source_kind && LEVELS.indexOf( field.location_level ) !== -1 && ! byLevel[ field.location_level ] ) {
-				byLevel[ field.location_level ] = { fieldId: id, section: field.section };
+			if ( ! field || 'location' !== field.source_kind || LEVELS.indexOf( field.location_level ) === -1 ) {
+				return;
 			}
+
+			var level = field.location_level;
+			var existing = byLevel[ level ];
+
+			// Keep the existing winner unless THIS field is the one that actually matches the
+			// active address section and the existing one does not — see this function's own
+			// docblock (issue #458).
+			if ( existing && ( existing.section === activeSection || field.section !== activeSection ) ) {
+				return;
+			}
+
+			byLevel[ level ] = { fieldId: id, section: field.section };
 		} );
 
 		var chain = [];
@@ -781,6 +809,231 @@
 		}
 
 		return null;
+	}
+
+	/**
+	 * Releases the address lock this module put on `fieldId`, for a node that is LEAVING the
+	 * chain ({@see rebuildChainForActiveSection}).
+	 *
+	 * {@see refreshAddressLock} only ever reaches `chainNodeForLevel( entry, 'address' )` — the
+	 * address node the chain currently holds. So once a column swap moves that node, the field
+	 * left behind keeps `disabled` and {@see LOCKED_CLASS} forever: nothing walks it again.
+	 * MEASURED on the rig (24.08.2026): after checking "ship to a different address",
+	 * `billing_address_1` stayed `disabled` with the locked class while `shipping_address_1`
+	 * became the live one — i.e. a REQUIRED billing field the customer could no longer fill,
+	 * and a disabled input is not submitted at all. The lock is meant to say "pick a settlement
+	 * first", which is only ever a statement about the ACTIVE column.
+	 *
+	 * Guarded on the class rather than on `disabled` alone, so this can only ever clear a lock
+	 * THIS module set — never a `disabled` that WooCommerce, a theme or another plugin owns.
+	 *
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function releaseAddressLockOn( fieldId ) {
+		var el = document.getElementById( fieldId );
+
+		if ( ! el || ! el.classList || ! el.classList.contains( LOCKED_CLASS ) ) {
+			return;
+		}
+
+		el.disabled = false;
+		el.classList.remove( LOCKED_CLASS );
+	}
+
+	/**
+	 * Re-derives `entry.chain` (and the `entry.allNodes`/`entry.postcodeFieldId` it feeds) for
+	 * whichever section {@see activeAddressSection} NOW reports (issue #458 round 3) —
+	 * {@see buildChain} itself reads that live, so calling it again after the "ship to a
+	 * different address" toggle flips picks a fresh per-level winner instead of the one frozen
+	 * at boot ({@see buildEntry}). Without this, {@see applyCountryArbitration} — which only ever
+	 * walks `entry.chain` — keeps detaching the now-inactive section's widget forever, and the
+	 * newly-active section's field was never IN the chain to begin with, so it never gets
+	 * attached either: after one toggle, neither address column has a live widget.
+	 *
+	 * A no-op whenever the winner did not actually move (same fieldId at every level) — called
+	 * unconditionally from {@see handleLayoutRelevantChange} for all three of its triggers, since
+	 * only the toggle can ever change the winner and the diff below is cheap.
+	 *
+	 * Detaches the OUTGOING node's widget (if attached) before swapping the chain in: the rebuilt
+	 * `entry.chain`/`entry.allNodes` no longer carries that node, so
+	 * {@see applyCountryArbitration}'s per-node reconcile would never revisit it again and its
+	 * widget would leak rather than being torn down. The incoming node is deliberately left for
+	 * `applyCountryArbitration()` (called right after this, in the same handler) to attach —
+	 * this function only ever swaps which fields are IN the chain, never attaches or detaches the
+	 * winner itself, so the two functions can never both attach it (no double-attach).
+	 *
+	 * Per-LEVEL state — `entry.records`, `entry.unresolved`, `entry.clearedByEdit` — already keys
+	 * by LEVEL, not by fieldId (see {@see buildEntry}'s own comments), so it survives the swap on
+	 * its own. That is NOT sufficient, and believing it was is what Rule 7c had to spell out:
+	 * `entry.resolved` keys by FIELD id, and the incoming column's field was never seeded, so the
+	 * very next `change` on it compares its live text against `undefined`, reads as a real
+	 * transition, and drops the level's record — the customer gets filled fields plus a re-locked
+	 * address field, exactly the failure #337 and #459 were about. {@see
+	 * carryChainStateToIncomingNodes} closes that, and is why this function is not a widget rebind
+	 * alone. It is still never the destructive cascade {@see clearDescendants} runs for an actual
+	 * edit (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function rebuildChainForActiveSection( entry ) {
+		var newChain = buildChain( entry.config.fields );
+
+		var changed = newChain.length !== entry.chain.length || newChain.some( function( node, i ) {
+			return ! entry.chain[ i ] || node.fieldId !== entry.chain[ i ].fieldId;
+		} );
+
+		if ( ! changed ) {
+			return;
+		}
+
+		var newPostcodeNode = derivePostcodeNode( newChain );
+		var newAllNodes = newChain.concat( newPostcodeNode ? [ { level: null, fieldId: newPostcodeNode.fieldId, section: newPostcodeNode.section } ] : [] );
+		var keptFieldIds = newAllNodes.map( function( node ) {
+			return node.fieldId;
+		} );
+
+		entry.allNodes.forEach( function( node ) {
+			if ( keptFieldIds.indexOf( node.fieldId ) === -1 ) {
+				detachOne( entry, node.fieldId );
+				releaseAddressLockOn( node.fieldId );
+			}
+		} );
+
+		var previousAllNodes = entry.allNodes;
+
+		entry.chain = newChain;
+		entry.allNodes = newAllNodes;
+		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
+
+		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes );
+	}
+
+	/**
+	 * Carries the chain's state onto the fields that just JOINED it — the second half of a
+	 * column swap, required by AGENT-RULES.md Rule 7c ("the chain's RECORDS must move with it,
+	 * not just the widget"). Called only from {@see rebuildChainForActiveSection}, only for nodes
+	 * whose fieldId was not already in the chain.
+	 *
+	 * WooCommerce does NOT copy one column's address into the other in the DOM. Read from its own
+	 * source: `checkout.js` binds `#ship-to-different-address input` to `trigger_update_checkout`
+	 * and to `ship_to_different_address`, which only slides the shipping fieldset open or shut,
+	 * and `update_order_review` replaces the order-review and payment fragments — never the
+	 * address fieldsets. The copy Rule 7c refers to is `WC_Checkout::get_posted_address_data()`,
+	 * server-side and at submit time. So on the client, the incoming column is whatever the
+	 * customer left in it, usually empty; carrying is ours to do.
+	 *
+	 * Per incoming node, exactly one of three things happens:
+	 *
+	 * 1. **Empty field, carried record** — write the record's own derived value in silently
+	 *    ({@see fieldValueFor}, the SAME derivation a direct pick at that level gets, so a
+	 *    carried field and a picked one never read differently). {@see writeSilently} seeds
+	 *    `entry.resolved` as part of the write, which is what makes the following `change`
+	 *    harmless.
+	 * 2. **Field already carrying the customer's own text** — leave the text alone (checking
+	 *    "ship to a different address" after typing a genuinely different shipping address must
+	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
+	 *    {@see prefill} does at boot.
+	 * 3. **...and that text disagrees with the carried record** — additionally drop the level's
+	 *    record, AND stop carrying anything BELOW it. This is not a new rule: it is the module's
+	 *    standing invariant, applied at swap time instead of being left to whichever `change`
+	 *    fires first ({@see handleFieldChanged}: "the field's own record no longer matches its
+	 *    text"). An identity that lies about the text is the defect class #339 and #350 were
+	 *    both about.
+	 *
+	 * THE DESCENDANT HALF OF RULE 3 IS NOT OPTIONAL (round 4 critic, HIGH). Dropping only the
+	 * contradicted level's own record leaves its descendants describing a locality the customer
+	 * has just disowned, and — worse — branch 1 would then WRITE one in: billing holds a picked
+	 * `Москва` plus a picked address, the customer types `Жуковский` into `shipping_city` and
+	 * leaves `shipping_address_1` empty, then toggles. The settlement node takes branch 3, but
+	 * the address node still sees `records.address` and silently fills the incoming column with a
+	 * street belonging to the OTHER city — and because `resolved` is now seeded, no later `change`
+	 * ever runs {@see clearDescendants} to repair it. So a contradiction blocks every deeper level:
+	 * their records and `unresolved` markers are dropped and nothing is written into their fields.
+	 *
+	 * Blocking drops IDENTITY, never text the customer can see: a descendant field that already
+	 * holds something keeps it, exactly as {@see clearDescendants}'s own #350 amendment
+	 * (operator decision, 17.08.2026) keeps downstream TEXT when the level above turns out
+	 * unresolvable. This stays a rebind, never a destructive cascade.
+	 *
+	 * The postcode node has no record of its own, so it carries the OUTGOING postcode field's
+	 * live value instead — the same string {@see backwardsFill} would have written there. A
+	 * blocked carry withholds it too: that postcode belongs to the disowned locality.
+	 *
+	 * @param {Object} entry
+	 * @param {Array<{level: ?string, fieldId: string, section: string}>} previousAllNodes
+	 * @param {Array<{level: ?string, fieldId: string, section: string}>} newAllNodes
+	 * @returns {void}
+	 */
+	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes ) {
+		var previousIds = previousAllNodes.map( function( node ) {
+			return node.fieldId;
+		} );
+		var previousPostcodeId = null;
+
+		previousAllNodes.forEach( function( node ) {
+			if ( ! node.level ) {
+				previousPostcodeId = node.fieldId;
+			}
+		} );
+
+		// Set by rule 3 below. `newAllNodes` is in LEVELS order with the postcode last, so once a
+		// level's carried identity has been contradicted every node visited afterwards IS a
+		// descendant of it.
+		var carryBlocked = false;
+
+		newAllNodes.forEach( function( node ) {
+			// Runs BEFORE the "stayed in the chain" skip: a descendant that kept its field still
+			// carries an identity the contradicted ancestor above it has just invalidated.
+			if ( carryBlocked && node.level ) {
+				entry.records[ node.level ] = null;
+				entry.unresolved[ node.level ] = null;
+			}
+
+			if ( previousIds.indexOf( node.fieldId ) !== -1 ) {
+				return; // stayed in the chain — its own field state was never orphaned by the swap.
+			}
+
+			var el = document.getElementById( node.fieldId );
+
+			if ( ! el ) {
+				return;
+			}
+
+			if ( carryBlocked ) {
+				// Seed the change-gate from whatever the field already holds, and write NOTHING:
+				// anything this level could have carried describes the disowned locality.
+				entry.store.setValue( node.fieldId, el.value );
+				entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+
+				return;
+			}
+
+			var record = node.level ? entry.records[ node.level ] : null;
+			var carried;
+
+			if ( node.level ) {
+				carried = fieldValueFor( record, node.level );
+			} else {
+				var previousEl = previousPostcodeId ? document.getElementById( previousPostcodeId ) : null;
+				carried = previousEl ? cascadeKey( previousEl.value ) : '';
+			}
+
+			if ( '' === cascadeKey( el.value ) && '' !== carried ) {
+				writeSilently( entry, node.fieldId, carried );
+				return;
+			}
+
+			entry.store.setValue( node.fieldId, el.value );
+			entry.resolved[ node.fieldId ] = cascadeKey( el.value );
+
+			if ( record && cascadeKey( el.value ) !== carried ) {
+				entry.records[ node.level ] = null;
+				entry.unresolved[ node.level ] = null;
+				carryBlocked = true;
+			}
+		} );
 	}
 
 	/**
@@ -2803,6 +3056,10 @@
 		suppressWcAddressAutocomplete();
 
 		entries.forEach( function( entry ) {
+			// Issue #458 round 3: re-derive the chain BEFORE arbitrating — a no-op unless the
+			// "ship to a different address" toggle actually moved a level's winner (see
+			// rebuildChainForActiveSection()'s own docblock for why this must run first).
+			rebuildChainForActiveSection( entry );
 			applyCountryArbitration( entry );
 		} );
 

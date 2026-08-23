@@ -146,6 +146,13 @@ class CheckoutHandlerEnqueueTest extends TestCase {
 			static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . basename( $path )
 		);
 
+		// enqueue_assets() now reaches Checkout_Handler::effective_fields() (issue #458),
+		// which calls wc_ship_to_billing_address_only() for every Location-Provider field
+		// in the fixture below — `false` (the default/"ship to a different address" store
+		// configuration) is not asserted on here, only that SOME value is stubbed so the
+		// call does not fatal as an undefined function.
+		Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
 		// enqueue_assets() now reaches Shipping_Settings_Tab::instance()->get_field_settings()
 		// for the `field_policy` config block (Task 6, issue #362) — that lazily constructs a
 		// real Checkout_Field_Settings, which registers settings/controls through

@@ -4394,3 +4394,461 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
 	} );
 } );
+
+describe( 'buildChain() tie-break when Rule 7b fans a field into both sections (issue #458)', () => {
+	/**
+	 * Boots ONE cascade entry whose `config.fields` carries BOTH a `billing_city` and a
+	 * `shipping_city`, both claiming the SAME `location_level: 'settlement'` — the shape
+	 * `Checkout_Handler::effective_fields()` now produces for a `source_location()` field
+	 * under any `woocommerce_ship_to_destination` value except `billing_only` (issue #458).
+	 * `boot()`/`buildConfig()`/`installMarkup()` cannot express two fields in ONE config
+	 * directly (both apply a single section to the whole config/markup) — the same
+	 * limitation the "section-aware addressing" describe block above already documents for
+	 * its own harness; that block works around it with TWO separate config globals (two
+	 * plugins sharing a page), which is not what this fans out into — Rule 7b's fan-out is
+	 * ONE plugin, ONE config, two ids in the SAME `fields` map — so this needs its own,
+	 * single-entry harness instead.
+	 *
+	 * `firstFieldId` controls which key is inserted into `config.fields` FIRST. Before this
+	 * fix, `buildChain()` picked whichever field it found first via `Object.keys()`
+	 * (insertion order) with no notion of section at all — so each test below deliberately
+	 * inserts the field that the OLD code would have picked WRONGLY first, which is what
+	 * makes its assertion the one a revert of the fix actually flips (see each test's own
+	 * comment).
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @param {string}  firstFieldId `'billing_city'` or `'shipping_city'`
+	 * @returns {void}
+	 */
+	function bootWithBothSectionsInOneEntry( shipToDifferentAddress, firstFieldId ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		const secondFieldId = 'billing_city' === firstFieldId ? 'shipping_city' : 'billing_city';
+		const fields = {};
+
+		[ firstFieldId, secondFieldId ].forEach( ( id ) => {
+			fields[ id ] = locationField( 'settlement', 0 === id.indexOf( 'shipping_' ) ? 'shipping' : 'billing' );
+		} );
+
+		window[ CONFIG_GLOBAL ] = {
+			fields,
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	it( 'checkbox CHECKED (shipping is the active address section): shipping_city wins the settlement level, not billing_city', () => {
+		// billing_city inserted FIRST — the pre-fix "first key wins" rule would pick
+		// billing_city here, which is the WRONG answer once "ship to a different address" is
+		// checked. This ordering is what makes the assertion below fail without the
+		// section-aware tie-break (verified by reverting buildChain() and re-running).
+		bootWithBothSectionsInOneEntry( true, 'billing_city' );
+
+		expect( callFor( 'shipping_city' ) ).toBeDefined();
+		expect( callFor( 'billing_city' ) ).toBeUndefined();
+	} );
+
+	it( 'checkbox UNCHECKED (billing is the active address section): billing_city wins the settlement level, not shipping_city', () => {
+		// shipping_city inserted FIRST — the pre-fix "first key wins" rule would pick
+		// shipping_city here, which is the WRONG answer once "ship to a different address" is
+		// unchecked. This ordering is what makes the assertion below fail without the
+		// section-aware tie-break (verified by reverting buildChain() and re-running).
+		bootWithBothSectionsInOneEntry( false, 'shipping_city' );
+
+		expect( callFor( 'billing_city' ) ).toBeDefined();
+		expect( callFor( 'shipping_city' ) ).toBeUndefined();
+	} );
+
+	/**
+	 * Round 3 (Codex critic, HIGH blocker): the two tests above only ever check the winner
+	 * picked ONCE, at boot. `buildChain()`'s own tie-break is re-evaluated live only if
+	 * something re-derives `entry.chain` after the "ship to a different address" checkbox
+	 * changes ({@see rebuildChainForActiveSection}) — before that existed, `entry.chain` stayed
+	 * frozen at whatever `buildEntry()` picked at boot, so `applyCountryArbitration()` (which
+	 * only ever walks `entry.chain`) detached the now-inactive column's widget (still in the
+	 * frozen chain) while the newly-active column's field was never in the chain to begin with,
+	 * and so was never attached either — after ONE toggle, NEITHER address column had a live
+	 * cascade. These two tests pin BOTH halves in one assertion set each (the new column's
+	 * attach AND the old column's detach, plus a call-count check for no-double-attach) so a
+	 * partial fix — attach without detach, or vice versa — fails them too.
+	 */
+	it( 'unchecking the toggle after boot MOVES the live widget from shipping_city to billing_city, not just detaches it (issue #458 round 3)', () => {
+		bootWithBothSectionsInOneEntry( true, 'billing_city' );
+
+		var shippingCall = callFor( 'shipping_city' );
+		expect( shippingCall ).toBeDefined();
+		expect( callFor( 'billing_city' ) ).toBeUndefined();
+
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = false;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// billing_city — now the active column — must have gained a widget…
+		var billingCalls = attachCalls.filter( function( c ) {
+			return 'billing_city' === c.el.id;
+		} );
+		expect( billingCalls.length ).toBe( 1 );
+
+		// …and shipping_city's widget — no longer the active column — must have been detached,
+		// not left dangling: the "neither column" bug this pins.
+		expect( shippingCall.detach ).toHaveBeenCalled();
+
+		// shipping_city must not have been re-attached (no double-attach).
+		var shippingCalls = attachCalls.filter( function( c ) {
+			return 'shipping_city' === c.el.id;
+		} );
+		expect( shippingCalls.length ).toBe( 1 );
+	} );
+
+	it( 'checking the toggle after boot MOVES the live widget from billing_city to shipping_city, not just detaches it (issue #458 round 3)', () => {
+		bootWithBothSectionsInOneEntry( false, 'shipping_city' );
+
+		var billingCall = callFor( 'billing_city' );
+		expect( billingCall ).toBeDefined();
+		expect( callFor( 'shipping_city' ) ).toBeUndefined();
+
+		var checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = true;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		var shippingCalls = attachCalls.filter( function( c ) {
+			return 'shipping_city' === c.el.id;
+		} );
+		expect( shippingCalls.length ).toBe( 1 );
+
+		expect( billingCall.detach ).toHaveBeenCalled();
+
+		var billingCalls = attachCalls.filter( function( c ) {
+			return 'billing_city' === c.el.id;
+		} );
+		expect( billingCalls.length ).toBe( 1 );
+	} );
+} );
+
+/**
+ * Round 4 (issue #458, AGENT-RULES.md Rule 7c): "the chain's RECORDS must move with it, not just
+ * the widget. Move the widget without moving the records and the customer gets filled fields plus
+ * a re-locked address field: exactly the failure #337 and #459 were about."
+ *
+ * Round 3 moved the widget only. `entry.records` keys by LEVEL, so it survived the swap on its own
+ * and it LOOKED sufficient — but `entry.resolved` keys by FIELD id, and the incoming column's field
+ * was never seeded. The next `change` on it (WooCommerce fires plenty of programmatic churn; this
+ * module's own `prefill()` exists to defuse exactly that at boot) compared its text against
+ * `undefined`, read as a real customer edit, and dropped the level's record — re-locking the
+ * address field.
+ *
+ * Verified against WooCommerce's own source rather than assumed: `checkout.js` binds the toggle to
+ * `trigger_update_checkout` and to `ship_to_different_address`, which only slides the shipping
+ * fieldset; `update_order_review` returns the order-review and payment fragments and never the
+ * address fieldsets. WooCommerce does NOT copy one column's address text into the other in the DOM
+ * — the copy Rule 7c refers to is `WC_Checkout::get_posted_address_data()`, server-side at submit.
+ * So carrying is ours to do, and the incoming column is usually empty.
+ */
+describe( 'a column swap carries the chain RECORDS, not just the widget (issue #458 round 4)', () => {
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		value: 'Москва',
+		record: {
+			key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' }, label: 'г Москва', postcode: '101000',
+		},
+	};
+
+	const ADDRESS_ITEM = {
+		key: 'dadata:addr1', label: 'г Москва, ул Тверская, д 1', level: 'address',
+		value: 'ул Тверская, 1',
+		record: {
+			key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+			settlement: { name: 'Москва', type: 'г' },
+			street: { name: 'Тверская', type: 'ул' }, house: '1',
+			label: 'г Москва, ул Тверская, д 1', postcode: '101000',
+		},
+	};
+
+	/**
+	 * One entry whose `config.fields` carries the settlement AND address levels fanned across
+	 * BOTH columns — the shape `Checkout_Handler::effective_fields()` produces under every
+	 * `woocommerce_ship_to_destination` value except `billing_only`. The address level is what
+	 * makes the failure observable: its lock is driven by `entry.records.settlement`, so "the
+	 * record was dropped by the swap" and "the address re-locked" are the same fact.
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @returns {void}
+	 */
+	function bootBothColumns( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+				<input type="text" id="billing_address_1" name="billing_address_1" value="" />
+				<input type="text" id="shipping_address_1" name="shipping_address_1" value="" />
+				<input type="text" id="billing_postcode" name="billing_postcode" value="" />
+				<input type="text" id="shipping_postcode" name="shipping_postcode" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = {
+			fields: {
+				billing_city: locationField( 'settlement', 'billing' ),
+				shipping_city: locationField( 'settlement', 'shipping' ),
+				billing_address_1: locationField( 'address', 'billing' ),
+				shipping_address_1: locationField( 'address', 'shipping' ),
+			},
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * @param {boolean} checked
+	 * @returns {void}
+	 */
+	function toggleShipToDifferentAddress( checked ) {
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = checked;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * WooCommerce's own programmatic churn on a field it just revealed — the same event
+	 * `prefill()` exists to defuse at boot. Carries whatever is currently in the field, so it is
+	 * a no-op for a correctly seeded change-gate and a "real transition" for an unseeded one.
+	 *
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function fireProgrammaticChange( fieldId ) {
+		document.getElementById( fieldId ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	it( 'checking the toggle carries the picked settlement TEXT onto the shipping column', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( '' );
+
+		toggleShipToDifferentAddress( true );
+
+		// Without the carry, the customer's newly-live column is blank while the chain still
+		// claims a picked locality — an identity that lies about the text.
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
+	} );
+
+	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+
+		toggleShipToDifferentAddress( true );
+		fireProgrammaticChange( 'shipping_city' );
+
+		// THE regression this round is about: an unseeded `entry.resolved['shipping_city']` makes
+		// this change read as a real edit, drops `records.settlement`, and re-locks the address —
+		// "filled fields plus a re-locked address field" (Rule 7c, #337, #459).
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+	} );
+
+	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', () => {
+		bootBothColumns( true );
+		selectViaFake( callFor( 'shipping_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
+
+		toggleShipToDifferentAddress( false );
+		fireProgrammaticChange( 'billing_city' );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Москва' );
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+	} );
+
+	it( 'never overwrites an address the customer typed into the incoming column themselves', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		// The customer checks "ship to a different address" BECAUSE it is a different address,
+		// and has already typed one. Carrying billing's locality over it would destroy that.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Жуковский' );
+
+		// …and because the text no longer matches the carried identity, the record is dropped
+		// rather than left lying about it — the module's own standing invariant
+		// (`handleFieldChanged`: "the field's own record no longer matches its text"), applied at
+		// swap time instead of left to whichever change happens to fire first.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	/**
+	 * Round 4 critic, HIGH blocker. Dropping only the CONTRADICTED level's own record leaves its
+	 * descendants describing a locality the customer has just disowned — and branch 1 then WRITES
+	 * one in, because the address node still sees `records.address` and finds its incoming field
+	 * empty. The customer ends up with the city they chose and a street from a different city,
+	 * and since `resolved` is now seeded, no later change event runs clearDescendants() to repair
+	 * it.
+	 *
+	 * Against the pre-fix implementation this fails on the FIRST assertion (shipping_address_1
+	 * carries 'ул Тверская, 1' instead of staying empty) — the right reason, not an incidental one.
+	 */
+	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', () => {
+		bootBothColumns( false );
+
+		// A full billing chain: settlement Москва, then an address inside it.
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
+
+		// The customer types a DIFFERENT settlement into the shipping column and leaves the
+		// shipping address empty, then switches the delivery column to it.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+
+		toggleShipToDifferentAddress( true );
+
+		// The address of Москва must NOT be written into a column whose city is Жуковский.
+		expect( document.getElementById( 'shipping_address_1' ).value ).toBe( '' );
+
+		// …and the orphaned address identity must be gone, not merely unused: with it retained
+		// the address field would read as "a locality is picked" and stay unlocked over an
+		// address that no longer exists.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'a blocked carry withholds the postcode too — it belongs to the disowned locality', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '' );
+	} );
+
+	it( 'blocking drops IDENTITY, never text the customer can already see', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		// This time the customer has typed BOTH halves of their own shipping address.
+		document.getElementById( 'shipping_city' ).value = 'Жуковский';
+		document.getElementById( 'shipping_address_1' ).value = 'ул Гагарина, 5';
+
+		toggleShipToDifferentAddress( true );
+
+		// Their own text survives untouched — the same rule clearDescendants() follows for an
+		// unresolvable parent (#350 follow-up, operator decision 17.08.2026).
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Жуковский' );
+		expect( document.getElementById( 'shipping_address_1' ).value ).toBe( 'ул Гагарина, 5' );
+	} );
+
+	it( 'releases the OUTGOING address lock — a required field must not stay disabled', () => {
+		// Measured on the rig 24.08.2026: refreshAddressLock() only ever walks the chain's CURRENT
+		// address node, so the field a column swap leaves behind kept `disabled` and the locked
+		// class forever. billing_address_1 is a REQUIRED billing field, and a disabled input is not
+		// submitted at all — the customer could no longer complete checkout.
+		bootBothColumns( false );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+		expect(
+			document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' )
+		).toBe( false );
+
+		// …and the lock moved to the column that is now active, rather than simply vanishing.
+		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'carries the postcode onto the incoming column as well', () => {
+		bootBothColumns( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '101000' );
+	} );
+} );

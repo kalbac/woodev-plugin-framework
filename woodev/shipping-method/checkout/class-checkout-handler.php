@@ -237,7 +237,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return $value;
 			}
 
-			$fields = $this->fields->get_fields();
+			$fields = $this->effective_fields();
 
 			if ( ! isset( $fields[ $input ] ) ) {
 				return $value;
@@ -507,6 +507,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              `related-list`/`ajax-select2` renderer registry — same guard, declared
 		 *              as a dependency of `woodev-location-cascade` so it always registers
 		 *              before the cascade's own boot pass reads it.
+		 * @since 2.0.2 Builds the localized config from {@see self::effective_fields()}
+		 *              rather than the raw {@see Checkout_Fields} instance, so a
+		 *              Location-Provider field's Rule 7b fan-out reaches the browser
+		 *              config under the same id(s)/section(s) it attaches to server-side
+		 *              (issue #458).
 		 *
 		 * @return void
 		 */
@@ -550,7 +555,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				// must not be computed twice with a different answer than the «Поля»
 				// section itself uses.
 				\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->get_field_settings()
-			) )->build( $this->fields );
+			) )->build( Checkout_Fields::from_array( array_values( $this->effective_fields() ) ) );
 			// No `required` string here any more (#274): the client no longer renders an
 			// inline «Заполните обязательное поле.» under the field or under the pickup
 			// trigger — none of СДЭК/Яндекс/Почта does, and a blocked control needs no
@@ -728,7 +733,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		protected function guard_native_field_conflicts(): void {
 
-			foreach ( array_keys( $this->fields->get_fields() ) as $id ) {
+			foreach ( array_keys( $this->effective_fields() ) as $id ) {
 				if ( ! $this->is_native_wc_field( $id ) ) {
 					continue;
 				}
@@ -892,6 +897,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * receive their options dynamically via the field-source REST endpoint and
 		 * are left without a static `options` key.
 		 *
+		 * A Location-Provider field ({@see Field::source_location()}) is expanded by
+		 * {@see self::effective_fields()} into the section(s) Rule 7b attaches it to
+		 * (`docs-internal/AGENT-RULES.md`) BEFORE this loop ever runs, so this method
+		 * itself stays unaware of that fan-out: it still just places one descriptor
+		 * per iteration under `$field['section']`, only now iterating the expanded id
+		 * set instead of the host plugin's raw declarations.
+		 *
 		 * The fully-merged result is passed through the forward `..._checkout_fields`
 		 * filter so the host plugin can refine field args further.
 		 *
@@ -899,6 +911,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Fields are grouped by their own `section`; existing WC args
 		 *              are preserved (conservative merge); options-kind root fields
 		 *              have their source() called to pre-fill the options map.
+		 * @since 2.0.2 Iterates {@see self::effective_fields()} instead of
+		 *              {@see Checkout_Fields::get_fields()} directly, so a
+		 *              Location-Provider field's Rule 7b fan-out reaches WooCommerce's
+		 *              checkout array under the right section(s)/id(s) (issue #458).
 		 *
 		 * @param array<string, mixed> $checkout_fields WC checkout fields, keyed by section
 		 * @param string               $section         unused override kept for BC; per-field
@@ -909,7 +925,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function inject( array $checkout_fields, string $section = 'order' ): array {
 			$country = $this->current_country();
 
-			foreach ( $this->fields->get_fields() as $id => $field ) {
+			foreach ( $this->effective_fields() as $id => $field ) {
 				$field_section = '' !== ( $field['section'] ?? '' ) ? (string) $field['section'] : $section;
 
 				if ( ! isset( $checkout_fields[ $field_section ] ) || ! is_array( $checkout_fields[ $field_section ] ) ) {
@@ -1098,6 +1114,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * absent from the post resolve to `''`.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Iterates {@see self::effective_fields()} so a Location-Provider
+		 *              field's Rule 7b fan-out reads posted data under the ids
+		 *              WooCommerce/the browser actually used (issue #458).
 		 *
 		 * @param array<string, mixed> $posted raw posted data (e.g. `$_POST`)
 		 *
@@ -1106,7 +1125,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		public function sanitize_posted_data( array $posted ): array {
 			$clean = [];
 
-			foreach ( $this->fields->get_fields() as $id => $field ) {
+			foreach ( $this->effective_fields() as $id => $field ) {
 				$raw      = $posted[ $id ] ?? '';
 				$callback = $field['sanitize_callback'] ?? null;
 
@@ -1162,6 +1181,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              same field id blank-and-required (#299, #134).
 		 * @since 2.0.2 Backstop enforces EVERY declared pickup slot instead of only the first
 		 *              one found (#325).
+		 * @since 2.0.2 Iterates {@see self::effective_fields()} instead of
+		 *              {@see Checkout_Fields::get_fields()} directly, so a Location-Provider
+		 *              field's Rule 7b fan-out is validated under the ids it actually attaches
+		 *              to (issue #458).
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
 		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
@@ -1173,7 +1196,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$valid              = true;
 			$blank_required_ids = [];
 
-			foreach ( $this->fields->get_fields() as $id => $field ) {
+			foreach ( $this->effective_fields() as $id => $field ) {
 				$value    = $values[ $id ] ?? '';
 				$required = Checkout_Condition::is_required( $field['required'], $state );
 
@@ -1364,6 +1387,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Native WC address fields (`billing_*` / `shipping_*`) are skipped.
+		 * @since 2.0.2 Iterates {@see self::effective_fields()} instead of
+		 *              {@see Checkout_Fields::get_fields()} directly. A Location-Provider
+		 *              field's Rule 7b fan-out only ever produces `billing_*`/`shipping_*`
+		 *              ids, so {@see self::is_native_wc_field()} still skips every variant
+		 *              here — this loop never persists plugin meta for one (issue #458).
 		 *
 		 * @param \WC_Order|int        $order  order object or id to save onto
 		 * @param array<string, mixed> $values clean values keyed by field id
@@ -1371,7 +1399,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function save( $order, array $values ): void {
-			foreach ( $this->fields->get_fields() as $id => $field ) {
+			foreach ( $this->effective_fields() as $id => $field ) {
 				if ( ! array_key_exists( $id, $values ) ) {
 					continue;
 				}
@@ -1701,6 +1729,172 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 */
 		protected function is_native_wc_field( string $id ): bool {
 			return 0 === strpos( $id, 'billing_' ) || 0 === strpos( $id, 'shipping_' );
+		}
+
+
+		/**
+		 * The checkout section(s) a Location-Provider field's cascade attaches to (Rule
+		 * 7b, `docs-internal/AGENT-RULES.md`): a store forcing shipping to the billing
+		 * address (`woocommerce_ship_to_destination === 'billing_only'`) attaches ONLY to
+		 * `billing` — WooCommerce drops the shipping fieldset from the checkout form
+		 * entirely in that mode ({@see \WC_Checkout::maybe_skip_fieldset()}), so a field
+		 * left on `shipping` alone would never render. Every other store configuration
+		 * attaches to BOTH `billing` and `shipping` — not "whichever one determines
+		 * delivery" — because WooCommerce still renders both fieldsets and lets the
+		 * customer type two genuinely different addresses into them.
+		 *
+		 * Deliberately reads `wc_ship_to_billing_address_only()` rather than
+		 * reimplementing its `'billing_only' === get_option( 'woocommerce_ship_to_destination' )`
+		 * check — the same reasoning
+		 * {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()} documents for
+		 * its own, narrower question (WHERE to write one chosen address, versus this
+		 * method's WHICH section(s) a field belongs to at all — do not derive this method
+		 * from that one; see that class's own docblock for why the two never fully agree).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] `[ 'billing' ]` or `[ 'billing', 'shipping' ]`.
+		 */
+		protected static function location_target_sections(): array {
+			return wc_ship_to_billing_address_only() ? [ 'billing' ] : [ 'billing', 'shipping' ];
+		}
+
+		/**
+		 * Derives a Location-Provider field's WooCommerce-convention suffix by stripping a
+		 * leading `billing_`/`shipping_` prefix, or returns the id unchanged when neither
+		 * prefix is present.
+		 *
+		 * Used to reconstruct the sibling id for the OTHER address section: `shipping_city`
+		 * and a bare `city` both yield the same `city` suffix, so
+		 * {@see self::location_field_variants()} builds the same `billing_city` /
+		 * `shipping_city` pair regardless of which convention the host plugin declared the
+		 * field id with.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id field id as declared via {@see Field::source_location()}.
+		 *
+		 * @return string
+		 */
+		protected static function strip_address_prefix( string $id ): string {
+			foreach ( [ 'billing_', 'shipping_' ] as $prefix ) {
+				if ( 0 === strpos( $id, $prefix ) ) {
+					return substr( $id, strlen( $prefix ) );
+				}
+			}
+
+			return $id;
+		}
+
+		/**
+		 * Expands one Location-Provider field descriptor into the WC-keyed variant(s) it
+		 * actually attaches to ({@see self::location_target_sections()}), each carrying its
+		 * own derived `id` and `section`. Every other descriptor key (`type`, `label`,
+		 * `required`, callables, …) is carried through unchanged onto every variant.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string               $id    the field's declared id.
+		 * @param array<string, mixed> $field its normalized descriptor.
+		 *
+		 * @return array<string, array<string, mixed>> one or two descriptors keyed by their
+		 *         derived id.
+		 */
+		protected static function location_field_variants( string $id, array $field ): array {
+			$suffix   = self::strip_address_prefix( $id );
+			$variants = [];
+
+			foreach ( self::location_target_sections() as $section ) {
+				$variant_id              = $section . '_' . $suffix;
+				$variant                 = $field;
+				$variant['id']           = $variant_id;
+				$variant['section']      = $section;
+				$variants[ $variant_id ] = $variant;
+			}
+
+			return $variants;
+		}
+
+		/**
+		 * The managed field descriptors keyed by the id WooCommerce actually keys checkout
+		 * data with.
+		 *
+		 * A Location-Provider field ({@see Field::source_location()}) is fanned across the
+		 * section(s) Rule 7b attaches it to ({@see self::location_target_sections()});
+		 * every other field passes through unchanged, keyed by its own declared id.
+		 * {@see self::inject()}, {@see self::sanitize_posted_data()}, {@see self::validate()},
+		 * {@see self::save()}, {@see self::handle_checkout_get_value()} and
+		 * {@see self::guard_native_field_conflicts()} all key off this rather than
+		 * {@see Checkout_Fields::get_fields()} directly, so WooCommerce's checkout array,
+		 * posted-data handling and native-field bookkeeping agree on the SAME ids the
+		 * browser actually submits.
+		 *
+		 * ID PRECEDENCE (issue #458 round 4). Two descriptors can claim the SAME id, and the
+		 * ordinary case is not an author error at all: the §8 demo declares `billing_state`
+		 * directly while a `source_location( 'region' )` field declared as `shipping_state`
+		 * is fanned by Rule 7b into a `billing_state` variant too. The FRAMEWORK creates that
+		 * collision — the plugin never asked for the second claim — so it is resolved by a
+		 * documented rule and reported nowhere. It was briefly a `_doing_it_wrong()` (round 3);
+		 * that was wrong twice over: the notice fired on a legitimate configuration, and
+		 * `_doing_it_wrong()` states "the developer called this incorrectly", which nobody did.
+		 * It also broke five integration tests, which is how the mistake surfaced.
+		 *
+		 * The rule, in order:
+		 *
+		 * 1. **A directly declared descriptor beats a Rule 7b fan-out variant**, whatever the
+		 *    registration order. A direct declaration names that exact id on purpose; a
+		 *    fan-out variant is derived by the framework, and deriving a claim must never
+		 *    silently displace one an author actually wrote. This is also the behaviour that
+		 *    shipped before round 3 (a direct descriptor won via unconditional assignment) —
+		 *    it is now order-independent rather than incidental.
+		 * 2. **Between two claims of the same kind, the FIRST registration wins**, matching
+		 *    the order `Checkout_Fields::get_fields()` preserves and the tie-break precedent in
+		 *    {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::collect_all_provider_fields()}.
+		 *    Two fan-out variants can only collide when two `source_location()` fields carry
+		 *    the same address-prefix-stripped suffix (e.g. `billing_city` and `shipping_city`
+		 *    both declared with `source_location()`), which Rule 7b makes redundant by
+		 *    definition.
+		 *
+		 * The losing claim keeps the WINNER's position in the returned array, so the checkout
+		 * field ORDER never depends on which descriptor won.
+		 *
+		 * KNOWN CONSEQUENCE, deliberately not worked around here: when a direct declaration
+		 * takes the id the CURRENTLY ACTIVE address column would have used, the location
+		 * cascade's only surviving variant is the other column's, so `location-cascade.js`
+		 * puts the one live cascade there (Rule 7c). That is a configuration the plugin
+		 * created by claiming one id twice, and the cure is to stop double-claiming it — not
+		 * for the framework to overrule an explicit declaration.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array<string, mixed>>
+		 */
+		protected function effective_fields(): array {
+			$effective   = [];
+			$declared_by = [];
+
+			foreach ( $this->fields->get_fields() as $id => $field ) {
+				$is_location = 'location' === ( $field['source_kind'] ?? null );
+				$variants    = $is_location
+					? self::location_field_variants( $id, $field )
+					: [ $id => $field ];
+
+				foreach ( $variants as $variant_id => $variant ) {
+					// Rule 1: a fan-out variant never displaces an existing claim, and a direct
+					// declaration never displaces another DIRECT one (rule 2, first wins).
+					if ( isset( $effective[ $variant_id ] ) && ( $is_location || 'direct' === $declared_by[ $variant_id ] ) ) {
+						continue;
+					}
+
+					// Assigning over an existing key keeps that key's original position, so a
+					// direct declaration arriving after the fan-out variant it displaces
+					// inherits its slot rather than moving to the end.
+					$effective[ $variant_id ]   = $variant;
+					$declared_by[ $variant_id ] = $is_location ? 'fan-out' : 'direct';
+				}
+			}
+
+			return $effective;
 		}
 
 		/**

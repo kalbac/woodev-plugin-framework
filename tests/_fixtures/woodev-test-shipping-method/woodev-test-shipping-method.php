@@ -1060,20 +1060,45 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 * Returns a Checkout_Handler configured with a small demo field set.
 			 *
 			 * Fields are wired to exercise every major branch of the layer:
-			 *  1. `billing_state`        — root select with static regions, RU/BY/KZ/UZ takeover.
-			 *  2. `billing_city`         — dependent suggest filtered by region + query string.
+			 *  1. `billing_company`      — root select with static options, BY/KZ/UZ takeover.
+			 *  2. `billing_address_2`    — dependent suggest filtered by parent + query string.
 			 *  3. `carrier_pickup_point` — hidden pickup-slot required when the fixture
 			 *                              shipping method is chosen.
 			 *  4-6. `shipping_state`/`shipping_city`/`shipping_address_1` — Location Provider
 			 *       layer, block PR-C rig-visibility pull-forward (spec §4.4): region/settlement/
 			 *       address declared via {@see \Woodev\Framework\Shipping\Checkout\Field::source_location()}.
-			 *       Deliberately the SHIPPING section, not billing — `billing_state`/`billing_city`
-			 *       above already exercise the pre-existing static demo (source/takeover_condition)
-			 *       that `CheckoutFieldsFixtureTest` asserts on byte-for-byte; the location fields
-			 *       get their own, never-before-used native WC field ids so neither demo disturbs
-			 *       the other. The three ids follow WooCommerce's own `_state`/`_city`/`_address_1`
-			 *       naming convention on purpose — `location-cascade.js` derives the postcode
-			 *       field id from it (see that file's own docblock).
+			 *       The ACTUAL section(s) these three attach to are NOT pinned here —
+			 *       `Checkout_Handler::effective_fields()` derives them from
+			 *       `woocommerce_ship_to_destination` (AGENT-RULES.md Rule 7b, issue #458): a
+			 *       `billing_*` sibling id joins these `shipping_*` ones under every store
+			 *       configuration except "force shipping to billing", where only the derived
+			 *       `billing_*` id survives. The three ids follow WooCommerce's own
+			 *       `_state`/`_city`/`_address_1` naming convention on purpose — the fan-out
+			 *       derives the sibling id by swapping that prefix, and `location-cascade.js`
+			 *       derives the postcode field id from it too (see that file's own docblock).
+			 *
+			 * WHY THE §8 DEMO SITS ON `billing_company`/`billing_address_2` AND NOT ON
+			 * `billing_state`/`billing_city` (issue #481, operator decision 24.08.2026):
+			 * it used to hold exactly the two ids Rule 7b's fan-out needs. A direct declaration
+			 * beats a fan-out variant (`Checkout_Handler::effective_fields()`), so the location
+			 * layer never got a `billing_*` variant for its region and settlement levels —
+			 * MEASURED on the rig: the surviving location fields were `shipping_state`,
+			 * `shipping_city`, `billing_address_1`, `shipping_address_1`. With the "ship to a
+			 * different address" box unchecked, `isNodeActive()` refuses to attach a widget to a
+			 * shipping-section field, so region and settlement had NO live cascade at all on the
+			 * default checkout view, and only the address level worked. Rule 7c ("one live
+			 * cascade, on the ACTIVE column") was therefore unobservable on the very rig meant to
+			 * demonstrate it. These two ids are native WooCommerce billing fields that no location
+			 * level ever claims, so §8 keeps demonstrating takeover of a native field while the
+			 * cascade gets the active column whole. Data (the option lists) is deliberately
+			 * unchanged — only the ids and labels moved, so every source assertion in
+			 * `CheckoutFieldsFixtureTest` still means what it meant.
+			 *
+			 * A side effect worth keeping: `inject_states()` only considers ids ending in
+			 * `_state`, so with the demo off that suffix the fixture can no longer register
+			 * WooCommerce states for ANY country — structurally, not by the careful RU exclusion
+			 * #294 needed. That exclusion stays below, because the takeover condition is still
+			 * what the takeover tests assert on.
 			 *
 			 * Domain data (regions, cities, method ids) lives here in the fixture;
 			 * the framework stays generic.
@@ -1090,10 +1115,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 
 				$fields = \Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array(
 					[
-						// 1. Root region select — takes over `billing_state` for CIS countries.
-						\Woodev\Framework\Shipping\Checkout\Field::create( 'billing_state' )
+						// 1. Root static select — takes over `billing_company` for CIS countries.
+						\Woodev\Framework\Shipping\Checkout\Field::create( 'billing_company' )
 							->set_type( 'select' )
-							->set_label( 'Регион' )
+							->set_label( 'Демо §8: корневой список' )
 							->set_section( 'billing' )
 							->set_required( true )
 							->set_source(
@@ -1113,11 +1138,15 @@ function woodev_test_shipping_method_plugin_init(): void {
 							 * RU is deliberately EXCLUDED (issue #294, operator decision s70).
 							 *
 							 * `inject_states()` hooks `woocommerce_states`, which is keyed by
-							 * COUNTRY and not by field — so this §8 demo taking over RU registered
-							 * its three hardcoded regions as RU's states, and WooCommerce then
-							 * rendered EVERY `*_state` field for RU as a `<select>` of those three,
-							 * including `shipping_state` below, which the location-provider layer
-							 * declares as a `text` typeahead. The layer's whole region level was
+							 * COUNTRY and not by field — so when this demo still lived on
+							 * `billing_state` and took over RU, it registered its three hardcoded
+							 * options as RU's states, and WooCommerce then rendered EVERY
+							 * `*_state` field for RU as a `<select>` of those three, including
+							 * `shipping_state` below, which the location-provider layer declares
+							 * as a `text` typeahead. Since #481 moved the demo to
+							 * `billing_company` this can no longer happen at all — but the
+							 * exclusion stays, because the condition is what the takeover tests
+							 * assert on. The layer's whole region level was
 							 * therefore unobservable on the rig, and backwards fill had nowhere to
 							 * write.
 							 *
@@ -1126,11 +1155,11 @@ function woodev_test_shipping_method_plugin_init(): void {
 							 * RU — the entire list came from this fixture.
 							 *
 							 * Note what this costs: the source callable below only ever returns
-							 * options for RU, so dropping RU here leaves the STATE-takeover half of
-							 * the §8 demo dormant on the rig (the `billing_city` Dependent_Select
-							 * half is untouched and still demonstrates §8). That is the intended
-							 * trade until #294 decides how the region level and WooCommerce's own
-							 * states concept are meant to coexist.
+							 * options for RU, so dropping RU here leaves the ROOT-takeover half of
+							 * the §8 demo dormant on the rig (the `billing_address_2`
+							 * Dependent_Select half is untouched and still demonstrates §8). That
+							 * is the intended trade until #294 decides how the region level and
+							 * WooCommerce's own states concept are meant to coexist.
 							 */
 							->set_takeover_condition(
 								static function ( array $context ): bool {
@@ -1138,9 +1167,9 @@ function woodev_test_shipping_method_plugin_init(): void {
 								}
 							),
 
-						// 2. Dependent city suggest — driven by parent region + free-text query.
-						\Woodev\Framework\Shipping\Checkout\Presets\Dependent_Select::create( 'billing_city', 'billing_state' )
-							->set_label( 'Город' )
+						// 2. Dependent suggest — driven by the parent select above + free-text query.
+						\Woodev\Framework\Shipping\Checkout\Presets\Dependent_Select::create( 'billing_address_2', 'billing_company' )
+							->set_label( 'Демо §8: зависимый список' )
 							->set_section( 'billing' )
 							->set_required( true )
 							->set_source(
@@ -1197,30 +1226,36 @@ function woodev_test_shipping_method_plugin_init(): void {
 						),
 
 						// 4-6. Location Provider layer fields (block PR-C rig-visibility
-						// pull-forward) — shipping-section region/settlement/address, each
-						// backed by the store-level Location Provider layer rather than a
-						// plugin-supplied source callable. Type stays 'text': spec D7 says
-						// text+typeahead is the one mode available regardless of provider
-						// capability, and `Checkout_Handler::inject()` would otherwise force
-						// an empty-placeholder-only <select> for a 'select'-type field with
-						// no static options (this field's options come from the client-side
-						// cascade + REST suggest endpoint, never a static list).
+						// pull-forward) — region/settlement/address, each backed by the
+						// store-level Location Provider layer rather than a plugin-supplied
+						// source callable. NOT pinned to a `shipping` section (AGENT-RULES.md
+						// Rule 7b, issue #458): a `source_location()` field's section is owned
+						// by the framework, derived from `woocommerce_ship_to_destination` —
+						// `Checkout_Handler::effective_fields()` fans each of these into
+						// `billing_*` alone (force-shipping-to-billing stores) or into BOTH
+						// `billing_*` AND `shipping_*` (every other store), so a plugin author
+						// declaring `set_section()` here would be overridden anyway. The `_state`/
+						// `_city`/`_address_1` suffix stays WC-convention so the fan-out can
+						// derive the sibling id by swapping the address-section prefix. Type
+						// stays 'text': spec D7 says text+typeahead is the one mode available
+						// regardless of provider capability, and `Checkout_Handler::inject()`
+						// would otherwise force an empty-placeholder-only <select> for a
+						// 'select'-type field with no static options (this field's options come
+						// from the client-side cascade + REST suggest endpoint, never a static
+						// list).
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_state' )
 							->set_type( 'text' )
 							->set_label( 'Регион (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'region' ),
 
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_city' )
 							->set_type( 'text' )
 							->set_label( 'Город (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'settlement' ),
 
 						\Woodev\Framework\Shipping\Checkout\Field::create( 'shipping_address_1' )
 							->set_type( 'text' )
 							->set_label( 'Адрес (Location Provider)' )
-							->set_section( 'shipping' )
 							->source_location( 'address' ),
 					]
 				);
