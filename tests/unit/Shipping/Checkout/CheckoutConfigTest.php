@@ -1504,6 +1504,18 @@ class CheckoutConfigTest extends TestCase {
 		// still be told "region" is not a typeahead target here — WC already
 		// renders a native <select> — but WITHOUT the conflict warning.
 		$this->assertFalse( $config['location']['levels']['RU']['region'] );
+
+		// …and the OWNER must survive that (issue #484). `owners` and `levels` answer two
+		// different questions, and in related-list mode they legitimately diverge: this
+		// layer owns the level AND renders it as a <select>. Blanking the owner here
+		// disarmed `location-cascade.js`'s cross-provider guard in `backwardsFill()`,
+		// which is falsy-guarded (`if ( owner && owner !== record.provider_id )`), so a
+		// DaData address record silently overwrote the CDEK region field on the rig.
+		$this->assertSame(
+			'fake-provider-should-never-leak',
+			$config['location']['owners']['RU']['region'],
+			'our own related-list injection must not make us disown the region level'
+		);
 	}
 
 	/**
