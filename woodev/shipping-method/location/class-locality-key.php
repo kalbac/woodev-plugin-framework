@@ -94,26 +94,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 				throw new \InvalidArgumentException( 'Locality_Key::compose() requires a non-empty native_id.' );
 			}
 
-			// The marker is RESERVED, not merely conventional. A provider's own native id
-			// may legitimately contain colons — `relation:59195` and `way:1247091839` are
-			// measured DaData values — so without this guard a native id that happened to
-			// begin with the marker would make {@see self::is_derived()} answer "derived"
-			// about a key the provider really did issue, and the by-key lookup that record
-			// depends on would be refused. Refusing to MINT such a key is what makes the
-			// marker a fact rather than one more prediction about what a native id looks
-			// like — which is the entire point of marking derivation at its source
-			// (Codex critic, final pass on #488 slice 1).
-			if ( 0 === strpos( $native_id, self::DERIVED_MARKER ) ) {
-				throw new \InvalidArgumentException(
-					sprintf(
-						'Locality_Key::compose(): native_id "%s" starts with the reserved "%s" prefix, which only ' .
-						'Locality_Key::derive() may mint.',
-						$native_id,
-						self::DERIVED_MARKER
-					)
-				);
-			}
-
+			// KNOWN GAP, tracked as its own card — see {@see self::DERIVED_MARKER}. A provider
+			// native id that itself began with the marker would be misread as derived. It is NOT
+			// closed by refusing to compose such a key: that was tried and reverted, because it
+			// makes the id UNREPRESENTABLE — DaData's own mapper composes every record it maps,
+			// so the refusal degrades a real locality into an unmappable one, trading a
+			// misclassification for data loss on ingest. Closing it properly needs an escaping
+			// scheme that preserves EVERY native id, which changes what `parse()` returns and so
+			// belongs in its own reviewed change rather than here.
 			return self::join( $provider_id, $native_id );
 		}
 

@@ -226,22 +226,17 @@ final class LocalityKeyTest extends TestCase {
 		$this->assertStringStartsWith( 'noid:', $key );
 	}
 	/**
-	 * The derived marker is RESERVED, not merely conventional. A native id may legitimately
-	 * contain colons (`relation:59195`, `way:1247091839` are measured DaData values), so a
-	 * provider-issued id beginning with the marker would otherwise be misread as derived and
-	 * its by-key lookup refused. `compose()` refuses to mint one; only `derive()` may
-	 * (Codex critic, final pass on #488 slice 1).
+	 * `derive()` mints the marker through a private `join()` rather than through `compose()`.
+	 * Regression cover for the reverted reservation guard: `compose()` deliberately does NOT
+	 * refuse the marker (refusing it made a provider-issued id starting with the marker
+	 * unrepresentable), so this pins that derivation still works and reads back as derived.
+	 * The remaining ambiguity is tracked as its own card.
 	 */
-	public function test_compose_refuses_a_native_id_that_starts_with_the_reserved_derived_marker(): void {
-		$this->expectException( \InvalidArgumentException::class );
-
-		Locality_Key::compose( 'dadata', 'derived:provider-id' );
-	}
-
-	public function test_derive_may_still_mint_the_reserved_marker_that_compose_refuses(): void {
+	public function test_derive_mints_a_key_that_reads_back_as_derived(): void {
 		$key = Locality_Key::derive( 'dadata', [ 'city' => 'Пенза', 'region' => 'Пензенская' ] );
 
 		$this->assertTrue( Locality_Key::is_derived( $key ) );
 		$this->assertSame( 'dadata', Locality_Key::parse( $key )[0] );
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', 'relation:59195' ) ) );
 	}
 }
