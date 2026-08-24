@@ -66,6 +66,21 @@
 		}
 	}
 
+	/**
+	 * Whether `error` is the rejection reason a self-aborted `fetch()` produces
+	 * (`AbortController.abort()`'s own contract: the pending `fetch()` promise rejects with a
+	 * `DOMException`/`Error` named `AbortError`). issue #449 (second half): this is the ONLY
+	 * thing that tells a request WE cancelled apart from a genuine network failure — neither may
+	 * ever paint "search failed" for the customer (see `selectConfigFor()`'s transport), but
+	 * only a genuine failure is worth a `console.error`.
+	 *
+	 * @param {*} error
+	 * @returns {boolean}
+	 */
+	function isAbortError( error ) {
+		return !! ( error && 'AbortError' === error.name );
+	}
+
 	/** @type {Object.<string, function>} the registry `location-cascade.js` reads from. */
 	var registry = window.WoodevLocationRenderers = window.WoodevLocationRenderers || {};
 
@@ -248,13 +263,19 @@
 	 * Builds the config object for `strategy` — the exact object `ensureSelect2()` passes to
 	 * `.select2()`.
 	 *
-	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
-	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array}} seed
+	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
+	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array, onRequestStart?: function(function(): void): void}} seed
 	 *   `applyEntries` is called with `(entries, false)` on every successful ajax response —
 	 *   the SAME merge-only call `ensureSelect2()`'s own transport made before this extraction —
 	 *   and now RETURNS the subset of `entries` it actually accepted (see `applyEntries()`'s own
 	 *   docblock), so the results reported to select2 and the records resolvable via `dataByKey`
 	 *   can never diverge (issue #461 BLOCKING 1/2).
+	 *   `onRequestStart`, when supplied, is called SYNCHRONOUSLY every time the transport issues a
+	 *   new request, with that request's own cancel function — issue #449 (teardown gap, round 2):
+	 *   `buildSelectField()`'s `detach()` has no other way to reach the CURRENT in-flight request,
+	 *   since each transport call builds its own `AbortController` in a closure private to that one
+	 *   call. See that function's own `activeAbort` docblock for why a single overwritten reference
+	 *   is enough (never an array of every request ever made).
 	 * @returns {Object}
 	 */
 	function selectConfigFor( strategy, seed ) {
@@ -274,23 +295,65 @@
 			config.minimumInputLength = minimumInputLengthFor( seed.level );
 			config.ajax = {
 				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
+				// issue #449 (teardown gap, round 2 — the `ajax.delay` question): a `detach()` that
+				// lands WHILE a keystroke is still sitting in this 250ms window has nothing to
+				// cancel — `this._queryTimeout` is select2's own PRIVATE `AjaxAdapter` field, set
+				// and cleared entirely inside its `query()`/the timer callback that invokes
+				// `transport()` above; there is no documented public hook to clear it, and
+				// `$select.select2('destroy')` does not touch it either (same "no destroy override"
+				// gap `activeAbort`'s own docblock already establishes for `_request`). Reaching for
+				// it anyway (`$select.data('select2')._queryTimeout`) would mean depending on an
+				// undocumented, version-coupled private field purely to shave 250ms off an already-
+				// bounded window — worse than the leak it would close. Left deliberately OUT OF
+				// SCOPE: a debounced call that fires after teardown still runs through this same
+				// transport (a live closure, unaffected by the DOM/select2 teardown that already
+				// happened), sets `activeAbort` to ITS OWN controller, and nothing ever cancels that
+				// one specific request — a bounded, at-most-one-extra-call residual gap, not the
+				// unbounded "every keystroke" cost #449 opened with.
 				transport: function( params, success, failure ) {
 					var term = params && params.data && params.data.term ? params.data.term : '';
 
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
 					// and aborts it (only if it looks abortable) before starting the NEXT query —
-					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. Our own
-					// `strategy.fetchEntries()` wraps `fetch()`, not `$.ajax()`, so there is no real
-					// in-flight request object to hand back (threading an AbortController through
-					// `options.fetch()` is a `location-cascade.js` change, out of scope here) — but
-					// an `abort()` that marks THIS call's own eventual result stale is enough to stop
-					// a superseded response from repainting the list, which is the actual symptom
-					// (the "last-arrived-wins" flicker, §2.4). #449's cancellation half (actually
-					// aborting the in-flight `fetch()`) is deliberately NOT done — see the PR
-					// description.
+					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. issue #449
+					// (second half): a real `AbortController` is now threaded through
+					// `strategy.fetchEntries()` -> `options.fetch()` (`location-cascade.js`'s
+					// `fetchFor()`) into the underlying `fetch()` call's own `init.signal`, so
+					// `abort()` below cancels the actual in-flight HTTP request, not merely this
+					// call's own eventual result. Feature-detected: `window.AbortController` is
+					// missing only in ancient browsers this store's own support matrix already
+					// excludes elsewhere, and the `stale` flag below still guarantees correctness
+					// even then.
+					//
+					// The guarantee this must hold is on the last REQUESTED term, never the last
+					// ARRIVED response (§2.4's "last-arrived-wins" flicker) — `stale` stays as
+					// belt-and-braces alongside real cancellation, not redundant to it: an aborted
+					// `fetch()` rejects ASYNCHRONOUSLY (never synchronously inside `abort()`), so a
+					// response whose `.then()` callback is already scheduled by the time `abort()`
+					// runs still needs a synchronous guard against repainting the list.
+					var controller = 'function' === typeof window.AbortController ? new window.AbortController() : null;
 					var stale = false;
 
-					strategy.fetchEntries( term ).then( function( entries ) {
+					// issue #449 (teardown gap, round 2): the SAME cancel function select2 gets
+					// back below is also handed to `seed.onRequestStart()`, so `buildSelectField()`'s
+					// `detach()` can cancel THIS exact request too — select2's own `destroy()` never
+					// does (its AjaxAdapter has no destroy override that touches `_request`, and the
+					// base `Adapter.prototype.destroy()` is a no-op), so without this a request still
+					// in flight when `updated_checkout` tears the widget down would otherwise run to
+					// completion regardless of anything select2 itself does at teardown.
+					var abortRequest = function() {
+						stale = true;
+
+						if ( controller ) {
+							controller.abort();
+						}
+					};
+
+					if ( 'function' === typeof seed.onRequestStart ) {
+						seed.onRequestStart( abortRequest );
+					}
+
+					strategy.fetchEntries( term, { signal: controller ? controller.signal : undefined } ).then( function( entries ) {
 						if ( stale ) {
 							return;
 						}
@@ -319,7 +382,12 @@
 							} ),
 						} );
 					}, function( error ) {
-						if ( stale ) {
+						// `isAbortError()`: a request WE cancelled must never paint "search
+						// failed" for the customer (issue #449). `stale` alone already guards
+						// this in practice (see the block comment above), but the explicit check
+						// keeps this branch correct even if a future caller reuses this transport
+						// without wiring the `stale` flag the same way.
+						if ( stale || isAbortError( error ) ) {
 							return;
 						}
 
@@ -327,9 +395,7 @@
 					} );
 
 					return {
-						abort: function() {
-							stale = true;
-						},
+						abort: abortRequest,
 					};
 				},
 			};
@@ -356,7 +422,7 @@
 	 *
 	 * @param {HTMLInputElement} input
 	 * @param {Object}           options   See the file docblock's shared contract.
-	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
 	 *   `ajax: false` — `fetchEntries()` is called ONCE (a static, region-scoped full list —
 	 *   `related-list` settlement); the `<select>` is populated with real `<option>` elements
 	 *   up front, and select2 (when present) gets NO `ajax` config at all — it search-filters
@@ -435,6 +501,22 @@
 		/** @type {Object.<string, Object>} the entry's STABLE identity (`entry.key`) -> the record it resolves to. */
 		var dataByKey = {};
 		var lastHandledKey = null;
+
+		/**
+		 * @type {function(): void|null} cancels the MOST RECENTLY started `ajax-select2` request,
+		 * or `null` when none has ever started (or the last one already settled/was cancelled).
+		 * issue #449 (teardown gap, round 2): `selectConfigFor()`'s transport overwrites this on
+		 * EVERY new request it issues via `seed.onRequestStart()` — a single reference, never an
+		 * array of every request this field has ever made, since select2's own store-then-abort
+		 * sequence (`AjaxAdapter.prototype.query`) already guarantees at most one of our requests
+		 * is genuinely "current" at a time; anything earlier was already cancelled BY SELECT2
+		 * before the next one started. `detach()` below is the one caller select2 itself cannot
+		 * reach on our behalf — its own `destroy()` never touches `_request`. A plain closure
+		 * variable survives regardless of whether select2's own jQuery `.data('select2')` has
+		 * already been purged by an ancestor `cleanData()` (issue #457's own trap), so this stays
+		 * reachable even when `detach()` runs on an already half-torn-down widget.
+		 */
+		var activeAbort = null;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -599,6 +681,10 @@
 				placeholder: placeholder,
 				applyEntries: applyEntries,
 				level: options.node && options.node.level,
+				// issue #449 (teardown gap, round 2): see `activeAbort`'s own docblock above.
+				onRequestStart: function( abortFn ) {
+					activeAbort = abortFn;
+				},
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -650,6 +736,22 @@
 		return {
 			el: select,
 			detach: function() {
+				// issue #449 (teardown gap, round 2): cancels whatever `ajax-select2` request is
+				// still in flight FIRST — before anything below touches select2's own instance data
+				// or the DOM. select2's own `destroy()` (just below) never does this itself (no
+				// `AjaxAdapter` destroy override touches `_request`; the base `Adapter.prototype.
+				// destroy()` is a no-op), and it is exactly the same "runs to completion, still
+				// billing DaData/CDEK" cost #449 already fixed for a superseded KEYSTROKE — this is
+				// that same leak on the teardown trigger instead (`updated_checkout` tears this
+				// widget down on every re-render, not a rare path). Works unconditionally, even when
+				// select2's own jQuery data was already purged by an ancestor `cleanData()` (see the
+				// #457 comment right below) — `activeAbort` is a plain closure variable, not
+				// anything select2 owns or clears.
+				if ( activeAbort ) {
+					activeAbort();
+					activeAbort = null;
+				}
+
 				unbind();
 
 				if ( $select ) {
@@ -750,8 +852,18 @@
 
 		return buildSelectField( el, options, {
 			ajax: true,
-			fetchEntries: function( term ) {
-				return Promise.resolve( options.fetch( term ) ).then( null, function( error ) {
+			fetchEntries: function( term, opts ) {
+				return Promise.resolve( options.fetch( term, opts ) ).then( null, function( error ) {
+					// issue #449 (second half): a request THIS module aborted (via
+					// `selectConfigFor()`'s transport) must reach `selectConfigFor()`'s own
+					// `stale`/`isAbortError()` guard untouched, never get folded into the
+					// "results: []" success path a genuine fetch failure gets below — that would
+					// mean select2 briefly shows "nothing found" for a term the customer has
+					// already moved on from.
+					if ( isAbortError( error ) ) {
+						throw error;
+					}
+
 					logError( error );
 
 					return [];

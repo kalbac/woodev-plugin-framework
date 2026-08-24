@@ -187,7 +187,11 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		config.ajax.transport( { data: { term: 'Твер' } }, success, failure );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( fetchEntries ).toHaveBeenCalledWith( 'Твер' );
+		// issue #449 (second half): the transport now hands fetchEntries() a second argument
+		// carrying a real AbortSignal (feature-detected via window.AbortController, present in
+		// jsdom) — see the dedicated abort-propagation test below for the cancellation contract
+		// itself; this assertion only pins the call SHAPE.
+		expect( fetchEntries ).toHaveBeenCalledWith( 'Твер', { signal: expect.any( AbortSignal ) } );
 		expect( applyEntries ).toHaveBeenCalledWith(
 			[ { key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } } ],
 			false
@@ -594,7 +598,9 @@ describe( 'ajax-select2 renderer', () => {
 		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, success, failure );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
+		// issue #449 (second half): options.fetch now also receives an AbortSignal — see the
+		// dedicated abort-propagation test for the cancellation contract itself.
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер', { signal: expect.any( AbortSignal ) } );
 		expect( success ).toHaveBeenCalledTimes( 1 );
 		// issue #455: the reported id is entry.value (the location VALUE space every other
 		// renderer in this layer submits), never entry.key (the raw provider key). issue #461
@@ -972,7 +978,7 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		expect( atFloor ).not.toBeNull();
-		expect( fetchSpy ).toHaveBeenCalledWith( 'Тв' );
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Тв', { signal: expect.any( AbortSignal ) } );
 	} );
 
 	it( 'FIXED (issue #449): ajax.transport returns an abortable handle, and abort() suppresses that call\'s own eventual success() — no more last-arrived-wins flicker', async () => {
@@ -1030,6 +1036,43 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		const request = instances[ 0 ].config.ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
 
 		expect( Boolean( request && 'function' === typeof request.abort ) ).toBe( true );
+	} );
+
+	it( 'FIXED (issue #449, second half): abort() actually reaches fetch — the AbortSignal handed to options.fetch on the superseded call is aborted once a newer query starts, the still-current call\'s is not', () => {
+		// This is the cancellation half #461 deliberately left undone (see that PR's own
+		// comment, now removed): a `stale` flag alone stops a superseded response from
+		// REPAINTING the list, but the underlying `fetch()` kept running to completion —
+		// costing DaData/CDEK a paid call per keystroke regardless. Real cancellation means the
+		// SIGNAL options.fetch receives is the one selectWoo's own store-then-abort sequence
+		// (mirrored by the #450 fake) actually aborts, not merely a closure flag this file
+		// alone can see.
+		const seenSignals = [];
+		const fetchSpy = jest.fn( ( term, opts ) => {
+			seenSignals.push( opts && opts.signal );
+
+			// Never settles — only the signal's own `aborted` state matters to this test, never
+			// what the promise resolves/rejects with.
+			return new Promise( () => {} );
+		} );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		instances[ 0 ].query( 'Мо' );
+		// The fake's own store-then-abort sequence calls the FIRST call's returned `abort()`
+		// before issuing this second query — the exact selectWoo AjaxAdapter behaviour this
+		// transport is built to cooperate with.
+		instances[ 0 ].query( 'Моск' );
+
+		expect( seenSignals ).toHaveLength( 2 );
+		expect( seenSignals[ 0 ] ).toBeInstanceOf( AbortSignal );
+		expect( seenSignals[ 1 ] ).toBeInstanceOf( AbortSignal );
+		expect( seenSignals[ 0 ].aborted ).toBe( true );
+		expect( seenSignals[ 1 ].aborted ).toBe( false );
 	} );
 } );
 
@@ -1538,5 +1581,143 @@ describe( 'ajax-select2 renderer — issue #457: detach() gates on the node\'s a
 		api.detach();
 
 		expect( window.jQuery( select ).data( 'select2' ) ).toBeUndefined();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// issue #449 (teardown gap, round 2) — a Codex critic finding: detach() never cancelled a
+// request still in flight when the widget is torn down (WooCommerce's own `updated_checkout`
+// does this on every re-render, not a rare path) — the SAME per-keystroke cost #449 already
+// fixed, on a different trigger. See `location-select-modes.js`'s own `activeAbort` docblock.
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #449 (teardown gap, round 2): detach() cancels an in-flight request', () => {
+	let mod;
+
+	/**
+	 * A select2 stub that captures the config passed to `.select2(config)` — so a test can drive
+	 * `config.ajax.transport` directly, exactly as the real adapter would on a keystroke — AND
+	 * reproduces the `$element.data('select2', ...)`/`removeData('select2')` bookkeeping
+	 * `detach()`'s own issue #457 guard reads, needed here because that guard decides whether
+	 * `.select2('destroy')` runs at all, and this suite needs both: select2 data genuinely
+	 * present, and already purged out from under the node (the exact #457 trap).
+	 *
+	 * @param {Object} $ jQuery.
+	 * @returns {Array<Object>} captured `.select2(config)` calls, in call order.
+	 */
+	function installCapturingSelect2Stub( $ ) {
+		var calls = [];
+
+		$.fn.select2 = jest.fn( function( methodOrConfig ) {
+			var $el = this;
+
+			if ( 'string' === typeof methodOrConfig ) {
+				var instance = $el.data( 'select2' );
+
+				return instance ? instance[ methodOrConfig ].apply( instance, [] ) : undefined;
+			}
+
+			calls.push( methodOrConfig );
+			$el.data( 'select2', {
+				destroy: function() {
+					$el.removeData( 'select2' );
+				},
+			} );
+
+			return $el;
+		} );
+
+		return calls;
+	}
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="" />';
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'FAILS without the fix: detach() aborts the AbortSignal handed to options.fetch for a request still in flight', () => {
+		// Never settles — proves the cancellation is real (the signal itself flips to aborted),
+		// not merely that the pending promise happens to resolve before detach() runs.
+		let seenSignal;
+		const fetchSpy = jest.fn( ( term, opts ) => {
+			seenSignal = opts && opts.signal;
+
+			return new Promise( () => {} );
+		} );
+		const options = buildOptions( { fetch: fetchSpy, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+
+		expect( seenSignal ).toBeInstanceOf( AbortSignal );
+		expect( seenSignal.aborted ).toBe( false );
+
+		api.detach();
+
+		expect( seenSignal.aborted ).toBe( true );
+	} );
+
+	it( 'still cancels the in-flight request when select2\'s own data was already purged out from under the node (issue #457 interaction)', () => {
+		let seenSignal;
+		const fetchSpy = jest.fn( ( term, opts ) => {
+			seenSignal = opts && opts.signal;
+
+			return new Promise( () => {} );
+		} );
+		const options = buildOptions( { fetch: fetchSpy, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+
+		// Mirrors WooCommerce's own update_checkout: jQuery's cleanData() purges this exact
+		// node's select2 instance data WITHOUT ever calling OUR detach() — the node itself
+		// survives (this closure still holds it), only the data is gone.
+		window.jQuery( api.el ).removeData( 'select2' );
+
+		expect( () => api.detach() ).not.toThrow();
+		expect( seenSignal.aborted ).toBe( true );
+	} );
+
+	it( 'a second, later request started AFTER an earlier one already settled is unaffected by detach() aborting the (already gone) earlier reference', async () => {
+		// Pins that `activeAbort` tracks the CURRENT request, not a stale one — the earlier
+		// request's own settling naturally leaves `activeAbort` pointed at whatever request
+		// select2 issues next, exactly mirroring its own store-then-abort sequencing.
+		const signals = [];
+		const fetchSpy = jest.fn()
+			.mockImplementationOnce( ( term, opts ) => {
+				signals.push( opts.signal );
+
+				return Promise.resolve( [] );
+			} )
+			.mockImplementationOnce( ( term, opts ) => {
+				signals.push( opts.signal );
+
+				return new Promise( () => {} );
+			} );
+		const options = buildOptions( { fetch: fetchSpy, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Тв' } }, jest.fn(), jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
+
+		api.detach();
+
+		expect( signals[ 0 ].aborted ).toBe( false );
+		expect( signals[ 1 ].aborted ).toBe( true );
 	} );
 } );

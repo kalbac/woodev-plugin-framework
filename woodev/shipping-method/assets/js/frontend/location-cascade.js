@@ -1182,7 +1182,7 @@
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Builds the `fetch(query)` callback handed to the Task 10 widget for one chain node —
+	 * Builds the `fetch(query, opts)` callback handed to the Task 10 widget for one chain node —
 	 * scope is read LIVE at call time (never captured at attach time), so a parent selection
 	 * made after attach is honoured on the very next keystroke.
 	 *
@@ -1193,12 +1193,21 @@
 	 * directly: it is freshly parsed JSON owned by this closure, and `record` — the only part
 	 * that round-trips back to `/select` — is left untouched.
 	 *
+	 * issue #449 (second half): `opts.signal`, when supplied, is forwarded verbatim onto the
+	 * underlying `fetch()`'s own `init.signal` — the Fetch API's own idiom for a caller-owned
+	 * `AbortController` (the smallest change to this transport, and the shape both consumers of
+	 * this callback already wrap in a promise rather than a jqXHR-like abortable object). The
+	 * baseline typeahead ({@see location-typeahead.js}'s `attachTypeahead()`) does not pass one —
+	 * it already discards a superseded response via its own generation counter (that file's own
+	 * STALE-RESPONSE DISCARD section) rather than aborting the request, so `opts` is genuinely
+	 * OPTIONAL here, never assumed present.
+	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string}} node
-	 * @returns {function(string): Promise<Array>}
+	 * @returns {function(string, {signal?: AbortSignal}=): Promise<Array>}
 	 */
 	function fetchFor( entry, node ) {
-		return function( query ) {
+		return function( query, opts ) {
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
 				level: node.level,
@@ -1206,7 +1215,13 @@
 				within: scopeKeyFor( entry, node.level ),
 			} );
 
-			return fetchJson( url, { method: 'GET', headers: nonceHeader( entry ) } ).then( function( body ) {
+			var init = { method: 'GET', headers: nonceHeader( entry ) };
+
+			if ( opts && opts.signal ) {
+				init.signal = opts.signal;
+			}
+
+			return fetchJson( url, init ).then( function( body ) {
 				var suggestions = body && Array.isArray( body.suggestions ) ? body.suggestions : [];
 
 				suggestions.forEach( function( suggestion ) {
@@ -1231,6 +1246,13 @@
 	 * `.value` at all, so `buildSelectField()`'s own `applyEntries()` fell back to `entry.key` —
 	 * the raw provider key — exactly the #455 disease on the `ajax-select2` branch that PR already
 	 * closed).
+	 *
+	 * issue #449 (second half): deliberately does NOT accept an `opts.signal` the way
+	 * {@see fetchFor} now does. `attachRelatedListSettlement()` calls this ONCE, on attach/country
+	 * change — never per keystroke — so there is no rapid-fire supersession to cancel: by the time
+	 * a second call could ever happen, the field (and any renderer watching it) has already been
+	 * torn down and rebuilt for the new country. Revisit only if a caller starts invoking this
+	 * more than once per attach.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string}} node

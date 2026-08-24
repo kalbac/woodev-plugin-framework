@@ -473,6 +473,38 @@ describe( 'suggestion scoping', () => {
 		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:city1' ) );
 		expect( req.url ).toContain( 'level=address' );
 	} );
+
+	it( 'issue #449 (second half): a signal passed as the second fetch() argument reaches the underlying fetch() call\'s own init.signal', () => {
+		// This is the seam location-select-modes.js's ajax-select2 transport now uses for real
+		// cancellation (see that file's own selectConfigFor() test suite for the transport-side
+		// half of this contract) — this test pins the OTHER half: fetchFor()'s returned function
+		// actually forwards whatever signal it is given onto the real fetch() call, rather than
+		// swallowing it.
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+		const controller = new AbortController();
+
+		settlementCall.fetch( 'Мос', { signal: controller.signal } );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.init.signal ).toBe( controller.signal );
+
+		controller.abort();
+
+		expect( req.init.signal.aborted ).toBe( true );
+	} );
+
+	it( 'issue #449 (second half): omitting opts (the baseline typeahead\'s own call shape) leaves init.signal unset — never a TypeError', () => {
+		boot( { settlement: true } );
+
+		const settlementCall = callFor( 'billing_city' );
+
+		expect( () => settlementCall.fetch( 'Мос' ) ).not.toThrow();
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.init.signal ).toBeUndefined();
+	} );
 } );
 
 // -----------------------------------------------------------------------
