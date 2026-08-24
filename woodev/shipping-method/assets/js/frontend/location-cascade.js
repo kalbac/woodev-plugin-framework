@@ -874,6 +874,29 @@
 	 * alone. It is still never the destructive cascade {@see clearDescendants} runs for an actual
 	 * edit (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
 	 *
+	 * ISSUE #490 ROUND 2: the OUTGOING node's per-level TEXT is captured into `outgoingLevelText`
+	 * HERE, BEFORE the `detachOne()` loop below runs — never read live inside
+	 * {@see carryChainStateToIncomingNodes} itself, which is why that function takes the map as a
+	 * plain argument instead of reading the DOM on its own. `document.getElementById( fieldId )`
+	 * after `detachOne()` has run is safe ONLY for a widget whose `detach()` leaves the SAME
+	 * element in the DOM (the baseline typeahead, and {@see attachRelatedListRegion}'s native-
+	 * `<select>` watcher — both only unbind listeners). It is NOT safe for a `buildSelectField()`-
+	 * based renderer (`ajax-select2`, `related-list:settlement` — `location-select-modes.js`):
+	 * that widget REPLACES the field's original `<input>` with a fresh `<select>` on attach and,
+	 * on `detach()`, swaps the ORIGINAL `<input>` back in VERBATIM — its own docblock is explicit
+	 * that this restore is never synced with whatever the customer picked in the `<select>`. So a
+	 * read taken after `detachOne()` for one of these levels finds the stale pre-attach `<input>`
+	 * — typically empty — never the picked text, regardless of what {@see applyValueToElement}'s
+	 * value-space understands. Measured on the rig (issue #490 round 2): this is exactly why
+	 * settlement (always `ajax-select2` or `related-list:settlement` in production) carried in
+	 * NEITHER direction even after round 1's fix, while region (always
+	 * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
+	 * `entry.widgets[ fieldId ].el` is read here instead of `document.getElementById()` for
+	 * exactly this reason — {@see attachOne}'s own docblock already tracks it as "the LIVE
+	 * element" specifically because a DOM-replacing renderer's `el` and the field's own id can
+	 * diverge; reading it while the widget is STILL attached (i.e., before this loop's own
+	 * `detachOne()` call) always gets the picked value, uniformly across every renderer.
+	 *
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
@@ -894,8 +917,19 @@
 			return node.fieldId;
 		} );
 
+		// Issue #490 round 2 — see this function's own docblock for why this is captured from
+		// the STILL-ATTACHED widget, before detachOne() below can lose it.
+		var outgoingLevelText = {};
+
 		entry.allNodes.forEach( function( node ) {
 			if ( keptFieldIds.indexOf( node.fieldId ) === -1 ) {
+				if ( node.level ) {
+					var widget = entry.widgets[ node.fieldId ];
+					var liveEl = widget ? widget.el : document.getElementById( node.fieldId );
+
+					outgoingLevelText[ node.level ] = liveEl ? cascadeKey( liveEl.value ) : '';
+				}
+
 				detachOne( entry, node.fieldId );
 				releaseAddressLockOn( node.fieldId );
 			}
@@ -907,7 +941,7 @@
 		entry.allNodes = newAllNodes;
 		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
 
-		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes );
+		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText );
 	}
 
 	/**
@@ -927,10 +961,12 @@
 	 * Per incoming node, exactly one of three things happens:
 	 *
 	 * 1. **Empty field, carried record** — write the carried text in silently
-	 *    ({@see previousLevelText}, falling back to {@see fieldValueFor} — see that function's own
-	 *    docblock for why the OUTGOING field's live DOM value is preferred, not the record's own
-	 *    components). {@see writeSilently} seeds `entry.resolved` as part of the write, which is
-	 *    what makes the following `change` harmless.
+	 *    ({@see writeSilently}, fed from `outgoingLevelText` — the per-level text
+	 *    {@see rebuildChainForActiveSection} captured from the outgoing node's LIVE element
+	 *    BEFORE detaching its widget, falling back to {@see fieldValueFor} only when that level
+	 *    had no outgoing node at all — see that function's own docblock for why the capture
+	 *    cannot happen here, after the fact). {@see writeSilently} seeds `entry.resolved` as part
+	 *    of the write, which is what makes the following `change` harmless.
 	 * 2. **Field already carrying the customer's own text** — leave the text alone (checking
 	 *    "ship to a different address" after typing a genuinely different shipping address must
 	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
@@ -958,67 +994,22 @@
 	 * unresolvable. This stays a rebind, never a destructive cascade.
 	 *
 	 * The postcode node has no record of its own, so it carries the OUTGOING postcode field's
-	 * live value instead — the same string {@see backwardsFill} would have written there. A
-	 * blocked carry withholds it too: that postcode belongs to the disowned locality.
+	 * live value instead — the same string {@see backwardsFill} would have written there, read
+	 * directly off `document.getElementById( previousPostcodeId )` here (never captured into
+	 * `outgoingLevelText`): postcode is never a `buildSelectField()`-swapped field — no renderer
+	 * in `location-select-modes.js` targets it — so it carries none of the level nodes' restore
+	 * hazard and a post-detach DOM read is safe exactly as it always was. A blocked carry
+	 * withholds it too: that postcode belongs to the disowned locality.
 	 *
 	 * @param {Object} entry
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} previousAllNodes
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} newAllNodes
+	 * @param {Object.<string, string>} outgoingLevelText Per-LEVEL text
+	 *   {@see rebuildChainForActiveSection} captured from the outgoing node's live element before
+	 *   detaching it; absent for a level that had no outgoing node.
 	 * @returns {void}
 	 */
-
-	/**
-	 * The OUTGOING field's own live DOM value for `level`, or `''` when that level had no node in
-	 * `previousAllNodes` (a plugin declaring some but not all three levels) or no element was
-	 * found — issue #490's fix.
-	 *
-	 * {@see carryChainStateToIncomingNodes} used to derive the carried text purely from
-	 * {@see fieldValueFor}`( entry.records[level], level )` — the SAME derivation a direct pick
-	 * gets. That is correct only while `entry.records[level]` still holds the FULL record `onSelectFor()`
-	 * wrote. It does not, by the time a real customer gets around to toggling "ship to a different
-	 * address": {@see adoptChain} — called from EVERY successful `/select` round trip, not just at
-	 * boot — deliberately narrows `entry.records[level]` down to `{ key, confirmed: true }` once the
-	 * server confirms it (see that function's own docblock: "confirmed marks PROVENANCE, not
-	 * validity"). The narrowed shape has no `record[level].name`/`record.label` left for
-	 * `fieldValueFor()` to read, so it silently returns `''` — a record that is fully genuine and
-	 * confirmed reads as nothing to carry. Measured on the rig (issue #490): the region level is
-	 * always picked first and is therefore always narrowed well before a toggle, so it never carried
-	 * in either direction; the settlement level's carry was a bare race between its own `/select`
-	 * response landing and the toggle, which is exactly why it carried in some runs and not others.
-	 *
-	 * The fix reads the OUTGOING node's live element instead: `previousAllNodes` still names it (its
-	 * widget is detached by {@see rebuildChainForActiveSection} before this function runs, but
-	 * `detachOne()` only removes the widget's own event bindings — it never touches `.value`, so the
-	 * DOM keeps showing exactly the text a direct pick would have written there, in the SAME
-	 * value-space {@see applyValueToElement} already understands for whichever widget mode is live —
-	 * a `related-list` `<select>`'s own WC-canonical option value, an `ajax-select2` field's
-	 * synthetic option text, or a plain typeahead `<input>`'s text). This needs no per-mode
-	 * knowledge and cannot go stale the way the record can, so it is tried FIRST; {@see fieldValueFor}
-	 * only remains as a fallback for the case this function returns `''` (no outgoing node for this
-	 * level at all) — the mirror of what the postcode branch just below already does, which never
-	 * had this bug because it always read the outgoing field's value directly.
-	 *
-	 * @param {Array<{level: ?string, fieldId: string}>} previousAllNodes
-	 * @param {string} level
-	 * @returns {string}
-	 */
-	function previousLevelText( previousAllNodes, level ) {
-		var i, node, el;
-
-		for ( i = 0; i < previousAllNodes.length; i++ ) {
-			node = previousAllNodes[ i ];
-
-			if ( node.level === level ) {
-				el = document.getElementById( node.fieldId );
-
-				return el ? cascadeKey( el.value ) : '';
-			}
-		}
-
-		return '';
-	}
-
-	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes ) {
+	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText ) {
 		var previousIds = previousAllNodes.map( function( node ) {
 			return node.fieldId;
 		} );
@@ -1066,7 +1057,7 @@
 			var carried;
 
 			if ( node.level ) {
-				carried = record ? ( previousLevelText( previousAllNodes, node.level ) || fieldValueFor( record, node.level ) ) : '';
+				carried = record ? ( outgoingLevelText[ node.level ] || fieldValueFor( record, node.level ) ) : '';
 			} else {
 				var previousEl = previousPostcodeId ? document.getElementById( previousPostcodeId ) : null;
 				carried = previousEl ? cascadeKey( previousEl.value ) : '';

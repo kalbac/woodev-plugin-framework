@@ -5054,3 +5054,215 @@ describe( 'a column swap carries the record even after its /select round trip ha
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
 	} );
 } );
+
+/**
+ * Issue #490 round 2: the round-1 tests above all run under `mode: 'typeahead'`, whose widget
+ * ({@see window.WoodevLocationTypeahead}, faked by {@see fakeTypeahead}) attaches directly to the
+ * field's own `<input>` and never replaces it — so `document.getElementById( fieldId )`, read
+ * AFTER `detachOne()` has already run, still finds the same element the pick was written onto.
+ * Production settlement/address fields are never `typeahead` when a `related-list`/`ajax-select2`
+ * axis is configured (`location-select-modes.js`'s `buildSelectField()`): that widget swaps the
+ * `<input>` for a fresh `<select>` on attach and, on `detach()`, restores the ORIGINAL `<input>`
+ * VERBATIM — never synced with whatever the customer picked in the `<select>` (its own docblock:
+ * "`detach()` restores it verbatim ... never left in place under the SAME id" — restores the
+ * ORIGINAL node, not a copy carrying the pick). Measured on the rig (issue #490 round 2): this is
+ * exactly why settlement — always `ajax-select2` or `related-list:settlement` in production —
+ * still did not carry in either direction even after round 1's fix, while region (always
+ * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
+ *
+ * This stub reproduces the swap-then-stale-restore shape closely enough to exercise
+ * `location-cascade.js`'s REAL attach/detach/reconcile path against it, registered under the SAME
+ * `'ajax-select2'` registry key `resolveModeRenderer()` looks up — only the widget's own select2
+ * guts are faked, never the cascade code under test.
+ */
+describe( 'a column swap carries the settlement even when its widget SWAPS the DOM element on attach (issue #490 round 2)', () => {
+	const SETTLEMENT_ITEM = {
+		label: 'г Омск',
+		value: 'Омск',
+		record: {
+			key: 'test-cdek:s1', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+			settlement: { name: 'Омск', type: 'г' }, label: 'г Омск',
+		},
+	};
+
+	/**
+	 * Mimics `location-select-modes.js`'s own `buildSelectField()` just closely enough to
+	 * reproduce the defect: swaps the plain `<input>` for a fresh `<select>` on attach — seeded
+	 * from `el.value` (issue #447's own "Preselect option in AJAX Select2" pattern, captured
+	 * BEFORE the `<input>` is replaced, exactly the real `buildSelectField()`) when carrying
+	 * ALREADY wrote something there, else a bare placeholder `<option>` (`ajax-select2`'s real
+	 * empty-field shape) — and on `detach()` swaps the SAME original `<input>` back in, never
+	 * writing the picked text onto it first, mirroring the real widget's own stale restore
+	 * exactly.
+	 *
+	 * @returns {{renderer: Function, pick: function(string, Object, string): void}}
+	 */
+	function stubAjaxSelect2() {
+		var picks = {};
+
+		function renderer( el, options ) {
+			if ( ! el || 'INPUT' !== el.tagName ) {
+				return null;
+			}
+
+			var originalInput = el;
+			var initialValue = el.value || '';
+			var select = document.createElement( 'select' );
+			select.id = el.id;
+			select.name = el.name || '';
+
+			if ( initialValue ) {
+				var seeded = document.createElement( 'option' );
+				seeded.value = initialValue;
+				seeded.textContent = initialValue;
+				seeded.selected = true;
+				select.appendChild( seeded );
+			} else {
+				select.appendChild( document.createElement( 'option' ) ); // placeholder only, matching #490's rig measurement.
+			}
+
+			el.parentNode.replaceChild( select, el );
+
+			picks[ select.id ] = function( record, value ) {
+				var option = document.createElement( 'option' );
+				option.value = value;
+				option.textContent = value;
+				select.appendChild( option );
+				select.value = value;
+				options.onSelect( { record: record } );
+			};
+
+			return {
+				el: select,
+				detach: function() {
+					if ( select.parentNode ) {
+						select.parentNode.insertBefore( originalInput, select );
+						select.parentNode.removeChild( select );
+					}
+				},
+			};
+		}
+
+		return {
+			renderer: renderer,
+			pick: function( fieldId, record, value ) {
+				picks[ fieldId ]( record, value );
+			},
+		};
+	}
+
+	/**
+	 * @param {boolean} shipToDifferentAddress
+	 * @returns {{renderer: Function, pick: function(string, Object, string): void}}
+	 */
+	function bootBothColumnsSettlementAjaxSelect2( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		mockFetch();
+
+		var stub = stubAjaxSelect2();
+		window.WoodevLocationRenderers = { 'ajax-select2': stub.renderer };
+
+		window[ CONFIG_GLOBAL ] = {
+			fields: {
+				billing_city: locationField( 'settlement', 'billing' ),
+				shipping_city: locationField( 'settlement', 'shipping' ),
+			},
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'ajax-select2' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return stub;
+	}
+
+	/**
+	 * @param {boolean} checked
+	 * @returns {void}
+	 */
+	function toggleShipToDifferentAddress( checked ) {
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = checked;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	it( 'carries the settlement onto the incoming column even though the outgoing widget restores a stale <input> on detach', async () => {
+		var stub = bootBothColumnsSettlementAjaxSelect2( false );
+
+		// Sanity: this really does exercise the DOM-swapping renderer path.
+		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
+
+		stub.pick( 'billing_city', SETTLEMENT_ITEM.record, SETTLEMENT_ITEM.value );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( selectReq.url ).toBe( SELECT_URL );
+		selectReq.resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( true );
+
+		// Against the pre-fix implementation this reads '' — carryChainStateToIncomingNodes()
+		// read document.getElementById('billing_city') AFTER detachOne() had already restored
+		// the ORIGINAL, placeholder-only <input> the widget swapped out at attach time, which
+		// never received the picked text.
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+
+	it( 'carries the settlement back the OTHER way too', async () => {
+		var stub = bootBothColumnsSettlementAjaxSelect2( true );
+
+		stub.pick( 'shipping_city', SETTLEMENT_ITEM.record, SETTLEMENT_ITEM.value );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		selectReq.resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( false );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Омск' );
+	} );
+} );
