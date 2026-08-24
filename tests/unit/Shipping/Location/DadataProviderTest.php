@@ -1184,6 +1184,62 @@ final class DadataProviderTest extends TestCase {
 		( new Dadata_Provider() )->resolve_key( 'test-cdek:44' );
 	}
 
+	// ---- HIGH 1 (round 2 critic): `null` must mean ONLY "confirmed gone" —
+	// a malformed-but-200 response must THROW, never silently signal "gone"
+	// and let a later slice delete a perfectly good popular settlement.
+
+	public function test_resolve_key_throws_rather_than_returns_null_when_the_response_carries_no_data_object(): void {
+		$this->set_token( 'tok' );
+		// A `200` suggestion row with no `data` object at all — DaData answered,
+		// but not with anything this method can read. Not "gone".
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ [ 'value' => 'Some Value' ] ] ] ) );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_row_that_fails_record_validation(): void {
+		$this->set_token( 'tok' );
+		// A row with no country of any kind — record_from_dadata_fields() cannot
+		// build a valid Location_Record from this (Location_Record::from_array()
+		// requires a non-empty "country") and returns null; resolve_key() must
+		// not let that null pass through as its own "gone" signal.
+		$this->stub_http_response(
+			200,
+			(string) json_encode(
+				[
+					'suggestions' => [
+						[
+							'value' => 'Некая местность',
+							'data'  => [
+								'fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+								'city'    => 'Некая местность',
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	// ---- HIGH 2 (round 2 critic): a DERIVED key (no native fias_id was ever
+	// available) can never be looked up via findById — the no-match that
+	// produces must not be read as "gone" either.
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_derived_key(): void {
+		$this->set_token( 'tok' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$fields      = self::suggestion_without_its_own_fias_id()['suggestions'][0]['data'];
+		$derived_key = Locality_Key::derive( Dadata_Provider::PROVIDER_ID, $fields );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( $derived_key );
+	}
+
 	// -------------------------------------------------------------------------
 	// Registry integration — an OBSERVABLE end-to-end assertion, not reflection.
 	// -------------------------------------------------------------------------

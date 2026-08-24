@@ -65,6 +65,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		public const PROVIDER_ID = 'dadata';
 
+
+		/**
+		 * The exact shape {@see Locality_Key::derive()} produces for this provider:
+		 * a 20-lowercase-hex-character truncated SHA-1
+		 * ({@see Locality_Key}'s own `DERIVED_ID_LENGTH`), with none of the
+		 * separators every REAL DaData `fias_id` measured in this codebase carries —
+		 * a ФИАС UUID's dashes, or an OSM `relation:`/`way:` prefix (see
+		 * {@see self::record_from_dadata_fields()}'s own measurement note). Used
+		 * ONLY by {@see self::resolve_key()} to recognise a key it structurally
+		 * cannot look up — see that method's own docblock for why a wrong guess
+		 * here must never read as "gone".
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const DERIVED_NATIVE_ID_PATTERN = '/^[0-9a-f]{20}$/';
+
 		/**
 		 * Store-setting field id for the required DaData API token.
 		 *
@@ -482,7 +499,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			return $this->record_from_dadata_fields( $raw, $scope->level(), (string) $raw['result'], $country );
 		}
 
-
 		/**
 		 * {@inheritDoc}
 		 *
@@ -496,17 +512,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * rather than passed in — this method has no {@see Location_Scope}, per the
 		 * interface's own "no Location_Scope parameter" rationale.
 		 *
-		 * Throws — never degrades to `null` — when unconfigured or on an HTTP/network
-		 * failure: {@see Location_Provider::resolve_key()}'s own docblock requires
-		 * `null` to mean "DaData was asked and confirmed this key is gone", which a
-		 * request that could not be MADE at all must never be confused with.
+		 * `null` is reachable from EXACTLY ONE path: DaData was asked and answered
+		 * ZERO matches for the fias_id ({@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client::find_by_id_address()}
+		 * returning `null`) — the one outcome spec D6 is allowed to read as "gone"
+		 * and delete the stored row for. Every OTHER outcome THROWS
+		 * {@see Location_Provider_Exception} instead, never `null` — unconfigured, an
+		 * HTTP/network failure, a `200` whose `data` object is missing/empty, and a
+		 * `data` object that fails {@see Location_Record::from_array()} validation
+		 * (via {@see self::record_from_dadata_fields()}) all mean "this could not be
+		 * verified", which is a materially different fact from "confirmed gone" and
+		 * must never collapse into it (critic finding, round 2: a malformed-but-200
+		 * response is OUR mapping failing, not DaData's answer).
+		 *
+		 * A DERIVED key (see {@see Locality_Key::derive()}) ALSO throws, before any
+		 * network call: {@see self::record_from_dadata_fields()} derives a key only
+		 * when a suggestion carried no `fias_id` of its own, and `find_by_id_address()`
+		 * is a lookup defined for a real fias_id — handing it a derived hash cannot
+		 * match anything, so a no-match there would be indistinguishable from "gone"
+		 * even though the record was never confirmed gone at all (critic finding,
+		 * round 2). {@see self::DERIVED_NATIVE_ID_PATTERN} recognises this
+		 * structurally (the exact shape {@see Locality_Key::derive()} produces) so
+		 * the request is never even attempted for a key it could never resolve.
+		 * **Left open, deliberately not decided here:** what a LATER slice (the
+		 * popular-settlements storage/verification layer, out of scope for this
+		 * capability slice) should do with a row that can never be verified this way
+		 * — exclude it from the freshness clock entirely, never enroll it, or
+		 * something else — is a product decision for the operator, not an
+		 * implementation detail of this provider.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @throws \InvalidArgumentException When `$key` is not namespaced to this
 		 *                                    provider.
-		 * @throws Location_Provider_Exception When unconfigured, or the DaData
-		 *                                      request itself fails.
+		 * @throws Location_Provider_Exception When unconfigured, `$key` was derived
+		 *                                      (see above), the DaData request itself
+		 *                                      fails, or the response could not be
+		 *                                      mapped to a valid record.
 		 */
 		public function resolve_key( string $key ): ?Location_Record {
 			[ $key_provider_id, $native_id ] = Locality_Key::parse( $key );
@@ -518,6 +559,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 						$key,
 						$key_provider_id,
 						self::PROVIDER_ID
+					)
+				);
+			}
+
+			if ( 1 === preg_match( self::DERIVED_NATIVE_ID_PATTERN, $native_id ) ) {
+				throw new Location_Provider_Exception(
+					sprintf(
+						'DaData resolve_key(): key "%s" was DERIVED — this locality never carried a real fias_id, ' .
+						'so DaData\'s findById lookup has nothing to ask for. This record cannot be verified by ' .
+						'key; it is NOT thereby confirmed gone.',
+						$key
 					)
 				);
 			}
@@ -535,16 +587,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			}
 
 			if ( null === $raw ) {
+				// DaData was asked and answered ZERO matches for this fias_id — the
+				// one case allowed to mean "gone" (spec D6).
 				return null;
 			}
 
 			$data = (array) ( $raw['data'] ?? [] );
 
 			if ( [] === $data ) {
-				return null;
+				// A row came back with no `data` object at all — a malformed/
+				// unexpected shape, never "gone" (HIGH 1): a 200 we cannot read is
+				// OUR mapping failing, not DaData confirming the locality is gone.
+				throw new Location_Provider_Exception(
+					sprintf( 'DaData resolve_key(): response for key "%s" carried no usable data.', $key )
+				);
 			}
 
-			return $this->record_from_dadata_fields( $data, self::level_from_dadata_fields( $data ), (string) ( $raw['value'] ?? '' ), '' );
+			$record = $this->record_from_dadata_fields( $data, self::level_from_dadata_fields( $data ), (string) ( $raw['value'] ?? '' ), '' );
+
+			if ( null === $record ) {
+				// record_from_dadata_fields() returns null only on a mapping/
+				// validation failure (HIGH 1, same reasoning as above) — never let
+				// that pass through as this method's own "gone" signal.
+				throw new Location_Provider_Exception(
+					sprintf( 'DaData resolve_key(): response for key "%s" could not be mapped to a valid record.', $key )
+				);
+			}
+
+			return $record;
 		}
 
 		/**

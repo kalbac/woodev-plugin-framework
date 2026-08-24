@@ -203,22 +203,65 @@ class CdekFixtureProviderTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * The path and query args {@see self::stub_settlement_suggest_transport()}'s
+	 * `add_query_arg` stub most recently captured — `[ $path, $params ]`, where
+	 * `$path` is CDEK's API base with the endpoint path appended (e.g.
+	 * `https://api.edu.cdek.ru/v2/location/cities`) and `$params` is the
+	 * rawurlencode()'d query args {@see \Woodev_Test_Cdek_Location_Provider::request()}
+	 * built. `null` until a request is made.
+	 *
+	 * @var array{0: string, 1: array<string, mixed>}|null
+	 */
+	private ?array $last_request = null;
+
+	/**
 	 * Stubs a cached OAuth token (bypassing credential()/is_configured() entirely —
 	 * {@see \Woodev_Test_Cdek_Location_Provider::token()} returns it straight from
 	 * {@see get_transient()} before ever touching the carrier's own Integration
 	 * settings) and a GET response carrying `$body` as its raw response body.
+	 *
+	 * Captures the actual `add_query_arg( $params, $path )` call into
+	 * {@see self::$last_request} — a stub that only ever returns a FIXED URL
+	 * regardless of what was asked would let a test pass even if the caller hit
+	 * the wrong CDEK endpoint or sent the wrong filter param (critic finding,
+	 * round 2), so every resolve_key() test below asserts against this.
 	 *
 	 * @param string $body Raw (un-decoded) HTTP response body.
 	 *
 	 * @return void
 	 */
 	private function stub_settlement_suggest_transport( string $body ): void {
+		$this->last_request = null;
+
 		Functions\when( 'get_transient' )->justReturn( 'fake-cached-token' );
-		Functions\when( 'add_query_arg' )->justReturn( 'https://api.edu.cdek.ru/v2/location/suggest/cities' );
+		Functions\when( 'add_query_arg' )->alias(
+			function ( $params, $path ) {
+				$this->last_request = [ $path, $params ];
+
+				return 'https://api.edu.cdek.ru/v2/location/suggest/cities';
+			}
+		);
 		Functions\when( 'wp_safe_remote_get' )->justReturn( [ 'fake' => 'response' ] );
 		Functions\when( 'is_wp_error' )->justReturn( false );
 		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
 		Functions\when( 'wp_remote_retrieve_body' )->justReturn( $body );
+	}
+
+	/**
+	 * Asserts the endpoint {@see self::$last_request} captured matches
+	 * `$expected_path`, and that its query args contain `$expected_params`
+	 * (exact key/value match, rawurlencode()'d the same way `request()` encodes
+	 * them — every value here is a plain digit string, so encoding is a no-op).
+	 *
+	 * @param string                $expected_path   Full expected URL.
+	 * @param array<string, string> $expected_params Expected (already-encoded) query args.
+	 *
+	 * @return void
+	 */
+	private function assert_last_request( string $expected_path, array $expected_params ): void {
+		$this->assertNotNull( $this->last_request, 'no request was captured' );
+		$this->assertSame( $expected_path, $this->last_request[0] );
+		$this->assertSame( $expected_params, $this->last_request[1] );
 	}
 
 	/**
@@ -290,6 +333,15 @@ class CdekFixtureProviderTest extends TestCase {
 		$provider = new \Woodev_Test_Cdek_Location_Provider();
 		$record   = $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
 
+		// Tightened per round-2 critic finding: the previous stub returned the
+		// same fixed URL/body no matter what request() actually sent, so this
+		// test would have passed even against the WRONG endpoint or the WRONG
+		// filter param.
+		$this->assert_last_request(
+			'https://api.edu.cdek.ru/v2/location/cities',
+			[ 'code' => '44' ]
+		);
+
 		$this->assertNotNull( $record );
 		$this->assertSame( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44', $record->key() );
 		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $record->level() );
@@ -313,6 +365,11 @@ class CdekFixtureProviderTest extends TestCase {
 		$provider = new \Woodev_Test_Cdek_Location_Provider();
 		$record   = $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81' );
 
+		$this->assert_last_request(
+			'https://api.edu.cdek.ru/v2/location/regions',
+			[ 'region_code' => '81' ]
+		);
+
 		$this->assertNotNull( $record );
 		$this->assertSame( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81', $record->key() );
 		$this->assertSame( Location_Record::LEVEL_REGION, $record->level() );
@@ -328,6 +385,14 @@ class CdekFixtureProviderTest extends TestCase {
 		$this->assertNull( $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':999999' ) );
 	}
 
+	public function test_resolve_key_region_returns_null_when_cdek_returns_no_rows(): void {
+		$this->stub_settlement_suggest_transport( '[]' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->assertNull( $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r999999' ) );
+	}
+
 	public function test_resolve_key_rejects_a_key_belonging_to_another_provider(): void {
 		Functions\expect( 'wp_safe_remote_get' )->never();
 
@@ -337,6 +402,15 @@ class CdekFixtureProviderTest extends TestCase {
 		$provider->resolve_key( 'dadata:some-fias-id' );
 	}
 
+	public function test_resolve_key_rejects_a_native_id_shape_this_provider_never_produces(): void {
+		Functions\expect( 'wp_safe_remote_get' )->never();
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( \InvalidArgumentException::class );
+		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':not-a-code' );
+	}
+
 	public function test_resolve_key_throws_rather_than_returns_null_on_a_malformed_response(): void {
 		$this->stub_settlement_suggest_transport( '{not-json' );
 
@@ -344,5 +418,34 @@ class CdekFixtureProviderTest extends TestCase {
 
 		$this->expectException( Location_Provider_Exception::class );
 		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
+	}
+
+	// ---- HIGH 1 (round 2 critic): a non-empty but UNMAPPABLE row must not
+	// read as "gone" either — a `200` we cannot map is our own mapping failing,
+	// not CDEK confirming the settlement/region no longer exists.
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_an_unmappable_settlement_row(): void {
+		$this->stub_settlement_suggest_transport(
+			// A row present, but missing the fields record_from_city_row() requires
+			// (`code`/`country_code`) — CDEK answered, just not usably.
+			(string) json_encode( [ [ 'city' => 'Москва' ] ] )
+		);
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( Location_Provider_Exception::class );
+		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_an_unmappable_region_row(): void {
+		$this->stub_settlement_suggest_transport(
+			// Missing `region`/`country_code` — record_from_region()'s own required fields.
+			(string) json_encode( [ [ 'region_code' => 81 ] ] )
+		);
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( Location_Provider_Exception::class );
+		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81' );
 	}
 }

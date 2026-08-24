@@ -320,20 +320,33 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * region — see {@see self::record_from_region()} — a bare settlement `code`
 		 * otherwise).
 		 *
-		 * `null` means CDEK answered with zero rows for the id — the key is gone.
-		 * Unconfigured, or a transport/malformed-payload failure, THROWS instead —
-		 * {@see self::request()} degrades an unconfigured provider to `[]` for every
-		 * OTHER method here (an empty answer is a valid "nothing to ask" for those),
-		 * but that would be indistinguishable from "gone" for `resolve_key()`. This
-		 * method therefore reads {@see self::token()} itself first — same as
+		 * `null` is reachable from EXACTLY ONE path: CDEK was asked and answered
+		 * ZERO rows for the id ({@see self::request()} returning `[]`) — the one
+		 * outcome spec D6 is allowed to read as "gone" and delete the stored row
+		 * for. Every OTHER outcome THROWS
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception}
+		 * instead, never `null` — an unconfigured provider, a transport/malformed-
+		 * payload failure ({@see self::request()}'s own #405 discipline), a
+		 * malformed KEY this provider could not have produced, and a non-empty row
+		 * that {@see self::record_from_city_row()}/{@see self::record_from_region()}
+		 * cannot map all mean "this could not be verified", which is a materially
+		 * different fact from "confirmed gone" and must never collapse into it
+		 * (critic finding, round 2: a row we cannot read is OUR mapping failing,
+		 * not CDEK confirming the locality is gone). This is why `resolve_key()`
+		 * and {@see self::resolve_region()} inspect the raw row count THEMSELVES —
+		 * {@see self::record_from_city_row()} is ALSO called from
+		 * {@see self::list_localities()}, where "skip one bad row while enumerating
+		 * many" is the correct, unrelated behaviour, so its own `null`-for-
+		 * malformed contract must not change.
+		 *
+		 * This method reads {@see self::token()} itself first — same as
 		 * {@see self::request()} does internally — so an unconfigured provider (an
 		 * empty token, never thrown) is told apart from a configured-but-failing one
 		 * (a thrown {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception},
 		 * propagated as-is) BEFORE `request()` ever gets the chance to collapse either
-		 * into a silent `[]` — see {@see \Woodev\Framework\Shipping\Location\Location_Provider::resolve_key()}'s
-		 * own "null means asked and told no" contract. Reading `token()` rather than
-		 * {@see self::is_configured()} also keeps the cached-transient-token shortcut
-		 * every other method here already relies on for testability.
+		 * into a silent `[]`. Reading `token()` rather than {@see self::is_configured()}
+		 * also keeps the cached-transient-token shortcut every other method here
+		 * already relies on for testability.
 		 */
 		public function resolve_key( string $key ): ?\Woodev\Framework\Shipping\Location\Location_Record {
 			[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $key );
@@ -349,40 +362,80 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 				);
 			}
 
+			if ( 'r' === substr( $native_id, 0, 1 ) && ctype_digit( substr( $native_id, 1 ) ) ) {
+				return $this->resolve_region( (int) substr( $native_id, 1 ) );
+			}
+
+			if ( ! ctype_digit( $native_id ) ) {
+				// Not a shape this provider ever produces (see resolve_region()'s
+				// 'r<digits>' branch above and record_from_suggest_row()/
+				// record_from_city_row()'s own plain-int `code`) — a malformed KEY,
+				// never "gone".
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Woodev_Test_Cdek_Location_Provider::resolve_key(): "%s" is not a well-formed CDEK native id.',
+						$key
+					)
+				);
+			}
+
 			if ( '' === $this->token() ) {
 				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
 					'CDEK test contour resolve_key request failed: provider is not configured.'
 				);
 			}
 
-			if ( 'r' === substr( $native_id, 0, 1 ) && ctype_digit( substr( $native_id, 1 ) ) ) {
-				return $this->resolve_region( (int) substr( $native_id, 1 ) );
-			}
+			$rows = $this->request( '/location/cities', [ 'code' => (int) $native_id ] );
 
-			if ( ! ctype_digit( $native_id ) ) {
+			if ( [] === $rows ) {
 				return null;
 			}
 
-			$rows = $this->request( '/location/cities', [ 'code' => (int) $native_id ] );
+			$record = $this->record_from_city_row( $rows[0] );
 
-			return $this->record_from_city_row( $rows[0] ?? null );
+			if ( null === $record ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour resolve_key(): the row for code "%s" could not be mapped.', $native_id )
+				);
+			}
+
+			return $record;
 		}
 
 		/**
-		 * Resolves a single region by its CDEK `region_code`, or `null` when CDEK
-		 * returns no matching row.
+		 * Resolves a single region by its CDEK `region_code`.
+		 *
+		 * `null` only when CDEK answered ZERO rows for the code — see
+		 * {@see self::resolve_key()}'s own docblock for why every other outcome
+		 * (including a non-empty but unmappable row) throws instead.
 		 *
 		 * @param int $region_code CDEK region code (the `r`-prefixed native id, minus
 		 *                         the prefix).
 		 *
 		 * @return \Woodev\Framework\Shipping\Location\Location_Record|null
+		 *
+		 * @throws \Woodev\Framework\Shipping\Location\Location_Provider_Exception
+		 *         When unconfigured, the request fails, or CDEK's row cannot be mapped.
 		 */
 		private function resolve_region( int $region_code ): ?\Woodev\Framework\Shipping\Location\Location_Record {
+			if ( '' === $this->token() ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK test contour resolve_key request failed: provider is not configured.'
+				);
+			}
+
 			$rows = $this->request( '/location/regions', [ 'region_code' => $region_code ] );
-			$row  = $rows[0] ?? null;
+
+			if ( [] === $rows ) {
+				return null;
+			}
+
+			$row = $rows[0];
 
 			if ( ! is_array( $row ) || empty( $row['region_code'] ) || empty( $row['region'] ) || empty( $row['country_code'] ) ) {
-				return null;
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour resolve_key(): the region row for code "%d" could not be mapped.', $region_code )
+				);
 			}
 
 			return $this->record_from_region( (int) $row['region_code'], (string) $row['region'], (string) $row['country_code'] );
