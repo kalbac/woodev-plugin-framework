@@ -898,6 +898,36 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
 	} );
 
+	// The wrapper WooCommerce puts around a checkout field is `display: inline`, so the spinner's
+	// `top: 0; bottom: 0` resolve against a LINE box sized by line-height, not against the field.
+	// Measured on the rig, s90: wrapper 388-418 (30px), the control 382-432 (50px) — centres 403
+	// vs 407, and the ring sat 4px high. jsdom has no layout, so the boxes are mocked here; what
+	// is pinned is the arithmetic and the guard, not the browser's own numbers.
+	it( 'sizes the spinner to the CONTROL it sits on, not to the inline wrapper around it', () => {
+		boot( { settlement: true } );
+
+		const field = document.getElementById( 'billing_city' );
+
+		field.parentNode.getBoundingClientRect = () => ( { top: 388, bottom: 418, height: 30 } );
+		field.getBoundingClientRect = () => ( { top: 382, bottom: 432, height: 50 } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( spinner().style.top ).toBe( '-6px' );
+		expect( spinner().style.height ).toBe( '50px' );
+		expect( spinner().style.bottom ).toBe( 'auto' );
+	} );
+
+	it( 'leaves the CSS fallback alone when there is no box to measure — a ring pinned to a zero-height nothing is worse', () => {
+		boot( { settlement: true } );
+
+		// jsdom's own default: every rect is zero. The guard must read that as "not laid out".
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( spinner().style.top ).toBe( '' );
+		expect( spinner().style.height ).toBe( '' );
+	} );
+
 	it( 'never uses the disabled ATTRIBUTE — measured: a disabled control leaves the serialized checkout form entirely', () => {
 		boot( { settlement: true } );
 

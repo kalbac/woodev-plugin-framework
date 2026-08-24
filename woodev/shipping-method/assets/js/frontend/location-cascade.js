@@ -2433,6 +2433,7 @@
 		spinner.setAttribute( 'aria-hidden', 'true' );
 
 		host.appendChild( spinner );
+		centreSpinnerOnControl( host, el, spinner );
 
 		if ( host.classList ) {
 			host.classList.add( BUSY_HOST_CLASS );
@@ -2461,6 +2462,52 @@
 		}
 
 		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable };
+	}
+
+	/**
+	 * Sizes `spinner` to the box of the control the customer can actually SEE, so the ring lands
+	 * on that control's centre rather than the wrapper's.
+	 *
+	 * WHY THIS CANNOT BE CSS ALONE. The spinner is absolutely positioned inside WooCommerce's own
+	 * `.woocommerce-input-wrapper`, whose `display` is `inline` — so `top: 0; bottom: 0` resolve
+	 * against a LINE box sized by `line-height`, not against the field. Measured on the rig, s90:
+	 * wrapper 388-418 (30px, line-height 30.8px), the select2 control 382-432 (50px). Their
+	 * centres are 403 and 407, and the ring sat 4px high — visible enough that the operator named
+	 * it on sight. Nothing in CSS can bridge that: the two boxes differ by an amount that comes
+	 * from the theme's line-height and the widget's own padding, neither of which is a constant
+	 * this stylesheet could encode.
+	 *
+	 * The CSS `top: 0; bottom: 0` stays as the fallback for when there is nothing to measure, and
+	 * for the typeahead's own spinner, which this function does not touch.
+	 *
+	 * `.select2-selection` rather than `.select2-container`: the selection is the box that
+	 * actually carries the border the customer reads as "the field" (and the one
+	 * `.woodev-location-field-error` outlines). Measured, it is 4px taller than its own container.
+	 *
+	 * @param {Element} host    The field's parent — the spinner's positioning context.
+	 * @param {Element} field   The field element itself, used when no widget wraps it.
+	 * @param {Element} spinner The just-inserted spinner.
+	 * @returns {void}
+	 */
+	function centreSpinnerOnControl( host, field, spinner ) {
+		var control = host.querySelector( '.select2-selection' ) || field;
+
+		if ( ! control || 'function' !== typeof control.getBoundingClientRect ) {
+			return;
+		}
+
+		var hostBox = host.getBoundingClientRect();
+		var controlBox = control.getBoundingClientRect();
+
+		// A collapsed box means the widget has not laid out yet (or is hidden); leaving the CSS
+		// fallback in place is better than pinning the ring to a zero-height nothing.
+		if ( ! controlBox.height ) {
+			return;
+		}
+
+		spinner.style.top = ( controlBox.top - hostBox.top ) + 'px';
+		spinner.style.height = controlBox.height + 'px';
+		spinner.style.bottom = 'auto';
 	}
 
 	/**
