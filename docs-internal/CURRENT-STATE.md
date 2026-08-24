@@ -7,19 +7,20 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-24 (s88).** **Three PRs merged this session — #472, #485, #487 — and `main` carries
-all of them.** No PR is open. Cards closed: **#458, #481, #484, #486**. Cards filed: **#483**
-(Инбокс, needs the operator), **#488** (popular settlements, spec ready).
+**As of 2026-08-24 (s89, overnight).** **Three PRs merged this session — #489, #492, #493 — and
+`main` carries all of them.** No PR is open. Cards closed: **#469, #449, #488 slice 1**. Cards filed:
+**#490** (Бэклог, Rule 7c defect), **#491** (Инбокс, needs the operator), **#494** (Бэклог, key-format
+hygiene). A negative result was recorded on **#473** rather than a fix.
 
-**The checkout location layer finally does on the rig what Rule 7 says it should.** #472 closed #458
-on its fourth round — licensed by the operator settling Rule 7c, not by another try — and #481 moved
-the §8 demo off `billing_state`/`billing_city`, which is what let the cascade own the ACTIVE column
-at all three levels. Verified live, both toggle directions.
+**The lesson of s89, and it repeated three times: a card's proposed fix is a hypothesis.** #469's
+proposal could not work at all (WooCommerce strips empty-string `custom_attributes`), #473's premise
+did not reproduce in four driven scenarios, and #488 D4's "a provider either can or cannot resolve by
+key" turned out to be per-RECORD for DaData. Each was only visible by executing, never by reading.
 
 **Codex is a full worker again (operator, 24.08.2026)** — see the Orca section of `CLAUDE.md`. The
-two caps from the 21.08 decision are NOT repealed with it: **2–3 concurrent agents** (RAM, not
-quota) and **2–3 rounds per card** (process; s88 is the worked example — the fourth round on #458
-was unlocked by a decision, not by spare allowance).
+two caps from the 21.08 decision are NOT repealed with it: **2–3 concurrent agents** (RAM, not quota)
+and **2–3 rounds per card** (process). s89 ran two Sonnet workers in their own worktrees with Codex
+as critic across five passes, and #488 used all three of its rounds.
 
 ## ⚠ The checkout location layer
 
@@ -35,11 +36,11 @@ FIRST `update_order_review`. The region survived only because `isWcManagedField(
 
 | Card | State |
 |---|---|
-| **#437** | **The next big one, and its first open question is now closed.** Spec `specs/2026-08-21-settlement-search-design.md`; the popular-settlements half is settled and split out into `specs/2026-08-24-popular-settlements-design.md` + card **#488**. Neither is started. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, which is what disproved #404's premise and killed the settlement `related-list` mode (#486). |
-| **#488** | Popular settlements. Design fully settled with the operator (D1–D8); only TTLs and the list cap are left, and those are calibration. Needs a new `CAPABILITY_RESOLVE_KEY` — **no method in the provider contract today accepts a key**. |
-| **#469** | Our fields lose `data-input-classes`, so WC stamps a literal `undefined` class (verified against WC source). It was held back from #472 on purpose; **#472 is merged, so this is now unblocked and small.** |
-| **#449** | Half closed; real `AbortController` through `options.fetch` remains. |
-| **#473** | Same disease as #466 in the same file's `updated_checkout` subscriber. The sink was **driven to fire**; the live WooCommerce path that empties the select is what is unproven. Reproduce on the rig first. |
+| **#437** | **The next big one, and its first open question is now closed.** Spec `specs/2026-08-21-settlement-search-design.md`; the popular-settlements half is settled and split out into `specs/2026-08-24-popular-settlements-design.md` + card **#488**, whose first slice is now merged. #437 itself is not started. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, which is what disproved #404's premise and killed the settlement `related-list` mode (#486). |
+| **#488** | Popular settlements. **Slice 1 is MERGED (#493): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. Left: the table (D3), the two clocks (D2), lazy verification at `/select` (D5–D7), the two merchant actions (D8). TTLs and the list cap remain calibration. |
+| **#490** | **NEW, and the most valuable find of s89.** Toggling «Ship to a different address» loses the picked locality in BOTH directions — the widget moves columns, the RECORDS do not, so the column that determines delivery goes empty. Rule 7c says both directions must work and that carrying the records is part of the rule. Reproduced from a clean isolated browser context with a real mouse click. |
+| **#494** | The derived-key marker is a bare `derived:` prefix, so a provider native id beginning with it would be misread as derived. Reserving the prefix was tried and REVERTED — it makes such a native id unrepresentable. Needs an escaping scheme that preserves every native id; cheap now, expensive after release. |
+| **#473** | **Did NOT reproduce in s89** — `jQuery.fn.val` was wrapped from before page scripts and caught zero writes across four driven scenarios (`update_checkout` with the field filled, page load with a session-restored value, and both toggle directions). The gate `! $field.val()` never opened. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed, with the `isLocationOwnedField()` guard already in that file. Measurement is on the issue. |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
 | **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
 
@@ -79,7 +80,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **192**.
+Gotchas: **195**.
 
 ## Program status (high level)
 
@@ -139,19 +140,27 @@ oversight.
 
 **Ничего не ждёт кнопки — открытых PR нет.** Автономно можно брать всё, кроме отмеченного 🙋.
 
-1. **#469** — `data-input-classes` в PHP. Разблокирована мержем #472, маленькая. Начинать с неё.
-2. **#488 + #437** — популярные НП и поиск НП. Спеки готовы, развилки закрыты, числа выставить с
-   запасом. Самый крупный кусок; естественно режется на «контракт поиска» и «популярный список».
-3. **#473** — сток из `updated_checkout`. Сток доведён до срабатывания; воспроизвести живой путь
-   WooCommerce на риге, потом чинить.
-4. **#449, вторая половина** — настоящая отмена через `AbortController` в `options.fetch`.
+1. **#490** — потеря локальности при переключении колонки. Нарушение Rule 7c, воспроизведено в
+   чистом контексте настоящим кликом, шаги в карточке. Самое дорогое из открытого: ломает оформление
+   заказа, а не косметику.
+2. **#488, слайс 2** — хранилище популярных НП поверх уже смерженного `CAPABILITY_RESOLVE_KEY`:
+   таблица (D3), двое часов (D2), ленивая проверка на `/select` (D5–D7), две кнопки в админке (D8).
+   Контракт готов и честен: `null` означает ровно «провайдер подтвердил, что ключа нет», всё
+   остальное бросает. **Перед стартом прочитать #491** — он про то, заводить ли вообще записи с
+   производным ключом.
+3. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`,
+   развилки закрыты. Не начат.
+4. **#473** — чинить достижимую половину (второй `maybe_init_select2` на чужом поле) через
+   `isLocationOwnedField()`; про недостижимую половину честно записать, что живого пути не нашли.
 5. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-6. **#405 — долг по проверке.** Сперва найти условие, при котором фикстура СДЭК реально падает.
-7. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-8. 🙋 **Требуют оператора, НЕ брать автономно:** **#474** (развилка по публичному контракту),
-   **#483** (вопрос в Инбоксе — задумано так или дефект), **#331**, **#332**, **#374** (его прямая
-   просьба не начинать без него). **#379** — низкий приоритет. **Отложено до релиза:** #285, #247.
-   **Старое:** #289, #270, #310, #318, #321, #322.
+6. **#494** — схема экранирования для метки производного ключа. Дёшево сейчас, дорого после релиза.
+7. **#405** — долг по проверке; сперва найти условие, при котором фикстура СДЭК реально падает.
+8. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+9. 🙋 **Требуют оператора, НЕ брать автономно:** **#474** (развилка по публичному контракту),
+   **#483** (вопрос в Инбоксе), **#491** (продуктовый выбор: заводить ли в популярные записи, чей
+   ключ невозможно ревалидировать), **#331**, **#332**, **#374** (его прямая просьба не начинать без
+   него). **#379** — низкий приоритет. **Отложено до релиза:** #285, #247. **Старое:** #289, #270,
+   #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -165,7 +174,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `rig/s86-checkout-fixes` (s86), НЕ на `main`.** Ветка = `main` + #461 + #462, запушена; риг уже отдаёт обе починки. Вернуть дерево на `main` после риг-прохода. `rig/s85-select2-verify` тоже не удалена.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `main` (s89, возвращено после риг-прохода).** Временные ветки s89 удалены; ворктри Orca сняты через `orca worktree rm`.
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 - **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
   (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and

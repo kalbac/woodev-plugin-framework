@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 193 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 195 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -295,6 +295,8 @@
 - [tooling/git-checkout] **`git checkout <file>` reverts a deliberate-regression mutation by deleting the uncommitted implementation with it.** → [git-checkout-destroys-uncommitted-mutation-revert](gotchas/git-checkout-destroys-uncommitted-mutation-revert.md) (s52)
 - [tooling/git-merge] **GitHub squash-merge onto a stale origin/main leaves local main "diverged but content-complete".** → [git-squash-onto-stale-origin-main-diverge](gotchas/git-squash-onto-stale-origin-main-diverge.md) (s33)
 - [tooling/git-merge] **Stacked PRs: GitHub CLOSES (never retargets) a downstream PR when its base branch is deleted; `ci.yml` never runs on a PR whose base isn't `main`.** → [stacked-pr-github-mechanics](gotchas/stacked-pr-github-mechanics.md) (s80)
+- [tooling/git-checkout] **`git checkout <ref> -- .` overwrites the whole working tree and silently reverts newer merges — use `git show <ref>:<path>`.** → [git-checkout-ref-dot-overwrites-the-primary-checkout](gotchas/git-checkout-ref-dot-overwrites-the-primary-checkout.md) (s89)
+- [tooling/orca] **Reusing a worker's terminal for a follow-up task needs `--worktree` too, or `worker-start` rejects it as a mismatch.** → [reusing-a-worker-terminal-needs-its-worktree-too](gotchas/reusing-a-worker-terminal-needs-its-worktree-too.md) (s89)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
