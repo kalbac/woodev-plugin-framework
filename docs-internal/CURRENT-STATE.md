@@ -7,20 +7,20 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-24 (s89, overnight).** **Three PRs merged this session — #489, #492, #493 — and
-`main` carries all of them.** No PR is open. Cards closed: **#469, #449, #488 slice 1**. Cards filed:
-**#490** (Бэклог, Rule 7c defect), **#491** (Инбокс, needs the operator), **#494** (Бэклог, key-format
-hygiene). A negative result was recorded on **#473** rather than a fix.
+**As of 2026-08-24 (s89).** **Five PRs merged — #489, #492, #493, #495, #496 — and `main` carries all
+of them.** No PR is open. Cards closed: **#469, #449, #488 slice 1, #490, #491**. Cards filed:
+**#494** (Бэклог, key-format hygiene) and **#497** (Бэклог, missing constructor-default coverage). A
+negative result was recorded on **#473** rather than a fix.
 
-**The lesson of s89, and it repeated three times: a card's proposed fix is a hypothesis.** #469's
-proposal could not work at all (WooCommerce strips empty-string `custom_attributes`), #473's premise
-did not reproduce in four driven scenarios, and #488 D4's "a provider either can or cannot resolve by
-key" turned out to be per-RECORD for DaData. Each was only visible by executing, never by reading.
+**Two standing lessons from s89, both cheap to re-learn the hard way.** A card's proposed fix is a
+HYPOTHESIS — four of them were wrong this session in ways only execution showed. And **a partial
+improvement in a flaky measurement means more than one cause**: #490 needed three separate fixes, and
+the first two each moved the failure rate (0/2 → 4/5) without closing it. Detail: `sessions/s89.md`.
 
-**Codex is a full worker again (operator, 24.08.2026)** — see the Orca section of `CLAUDE.md`. The
-two caps from the 21.08 decision are NOT repealed with it: **2–3 concurrent agents** (RAM, not quota)
-and **2–3 rounds per card** (process). s89 ran two Sonnet workers in their own worktrees with Codex
-as critic across five passes, and #488 used all three of its rounds.
+**Codex is a full worker again (operator, 24.08.2026)** — see the Orca section of `CLAUDE.md`. The two
+caps from the 21.08 decision are NOT repealed with it: **2–3 concurrent agents** and **2–3 rounds per
+card**. s89 confirmed the first the hard way — free RAM hit **0.8 GB** with two workers plus Codex and
+the next dispatch failed outright. Two workers plus a critic is the practical ceiling.
 
 ## ⚠ The checkout location layer
 
@@ -37,8 +37,8 @@ FIRST `update_order_review`. The region survived only because `isWcManagedField(
 | Card | State |
 |---|---|
 | **#437** | **The next big one, and its first open question is now closed.** Spec `specs/2026-08-21-settlement-search-design.md`; the popular-settlements half is settled and split out into `specs/2026-08-24-popular-settlements-design.md` + card **#488**, whose first slice is now merged. #437 itself is not started. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, which is what disproved #404's premise and killed the settlement `related-list` mode (#486). |
-| **#488** | Popular settlements. **Slice 1 is MERGED (#493): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. Left: the table (D3), the two clocks (D2), lazy verification at `/select` (D5–D7), the two merchant actions (D8). TTLs and the list cap remain calibration. |
-| **#490** | **NEW, and the most valuable find of s89.** Toggling «Ship to a different address» loses the picked locality in BOTH directions — the widget moves columns, the RECORDS do not, so the column that determines delivery goes empty. Rule 7c says both directions must work and that carrying the records is part of the rule. Reproduced from a clean isolated browser context with a real mouse click. |
+| **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path** (`woocommerce_checkout_order_processed` → order meta → `Shipping_Admin_Order`'s export → `enroll()`), with TTL 2 months and a 30-row cap behind filters — calibration, not design. Left: lazy verification at `/select` (D5–D7) and the two merchant actions (D8). |
+| **#497** | The store default on `Shipping_Admin_Order`'s constructor is what makes popular-settlements enrolment reachable at all, and no test pins it — removing it would silently switch the feature off, which already happened twice during #488 slice 2. The equivalent default on `Abstract_Shipment_Handler` IS covered. |
 | **#494** | The derived-key marker is a bare `derived:` prefix, so a provider native id beginning with it would be misread as derived. Reserving the prefix was tried and REVERTED — it makes such a native id unrepresentable. Needs an escaping scheme that preserves every native id; cheap now, expensive after release. |
 | **#473** | **Did NOT reproduce in s89** — `jQuery.fn.val` was wrapped from before page scripts and caught zero writes across four driven scenarios (`update_checkout` with the field filled, page load with a session-restored value, and both toggle directions). The gate `! $field.val()` never opened. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed, with the `isLocationOwnedField()` guard already in that file. Measurement is on the issue. |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
@@ -80,7 +80,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **195**.
+Gotchas: **196**.
 
 ## Program status (high level)
 
@@ -140,25 +140,21 @@ oversight.
 
 **Ничего не ждёт кнопки — открытых PR нет.** Автономно можно брать всё, кроме отмеченного 🙋.
 
-1. **#490** — потеря локальности при переключении колонки. Нарушение Rule 7c, воспроизведено в
-   чистом контексте настоящим кликом, шаги в карточке. Самое дорогое из открытого: ломает оформление
-   заказа, а не косметику.
-2. **#488, слайс 2** — хранилище популярных НП поверх уже смерженного `CAPABILITY_RESOLVE_KEY`:
-   таблица (D3), двое часов (D2), ленивая проверка на `/select` (D5–D7), две кнопки в админке (D8).
-   Контракт готов и честен: `null` означает ровно «провайдер подтвердил, что ключа нет», всё
-   остальное бросает. **Перед стартом прочитать #491** — он про то, заводить ли вообще записи с
-   производным ключом.
-3. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`,
-   развилки закрыты. Не начат.
-4. **#473** — чинить достижимую половину (второй `maybe_init_select2` на чужом поле) через
-   `isLocationOwnedField()`; про недостижимую половину честно записать, что живого пути не нашли.
-5. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-6. **#494** — схема экранирования для метки производного ключа. Дёшево сейчас, дорого после релиза.
-7. **#405** — долг по проверке; сперва найти условие, при котором фикстура СДЭК реально падает.
-8. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-9. 🙋 **Требуют оператора, НЕ брать автономно:** **#474** (развилка по публичному контракту),
-   **#483** (вопрос в Инбоксе), **#491** (продуктовый выбор: заводить ли в популярные записи, чей
-   ключ невозможно ревалидировать), **#331**, **#332**, **#374** (его прямая просьба не начинать без
+1. **#488, слайс 3** — то, ради чего слой строился: ленивая проверка на `/select` (D5–D7) и две
+   кнопки в админке (D8). Фундамент готов и проверен четырьмя проходами критика: таблица есть,
+   заведение работает от оформления заказа до экспорта, `null` от `resolve_key()` означает ровно
+   «провайдер подтвердил, что ключа нет» — по D6 это УДАЛЯЕТ строку, так что не ослаблять.
+2. **#437** — окружающий редизайн поиска НП. Спека готова, развилки закрыты, не начат. Самый
+   крупный оставшийся кусок.
+3. **#473** — чинить достижимую половину (безусловный `maybeInitSelect2()` на чужом поле) через
+   `isLocationOwnedField()`; замер уже в комментарии к карточке.
+4. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
+5. **#494** — схема экранирования для метки производного ключа. **#497** — тест на дефолт стора.
+   Оба дёшевы сейчас и дороги после релиза.
+6. **#405** — долг по проверке; сперва найти условие, при котором фикстура СДЭК реально падает.
+7. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+8. 🙋 **Требуют оператора, НЕ брать автономно:** **#474** (развилка по публичному контракту),
+   **#483** (вопрос в Инбоксе), **#331**, **#332**, **#374** (его прямая просьба не начинать без
    него). **#379** — низкий приоритет. **Отложено до релиза:** #285, #247. **Старое:** #289, #270,
    #310, #318, #321, #322.
 
