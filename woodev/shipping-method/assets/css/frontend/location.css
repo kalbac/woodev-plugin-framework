@@ -492,3 +492,74 @@
 .woodev-field--hidden {
 	display: none !important;
 }
+
+/* -------------------------------------------------------------------------
+ * THE FIELD NOTICE (issue #488 slice 3, D7) — and a THIRD deliberate exception to this file's own
+ * "the input itself is never styled here" rule, for the same reason the locked-address rule above
+ * is one: the whole point of this state is that the field must NOT look ordinary.
+ *
+ * `location-cascade.js` renders the notice ({@see showFieldNotice}) as the LAST child of the
+ * field's own parent, and puts `.woodev-location-field-error` on that same parent; neither is ever
+ * rendered server-side. The message itself is server-supplied and translated — nothing here
+ * generates text.
+ *
+ * WHY THIS FILE HAS TO STATE THE FONT AT ALL. Nothing styled `.woodev-location-notice` before, so
+ * it inherited whatever the theme gives a `<p>` inside the checkout form. Measured by the operator
+ * on the rig, s90: the message rendered at the theme's own body size, large enough to read as a
+ * heading rather than as a field error. Font size, colour and spacing are therefore stated
+ * outright, exactly like the layout properties elsewhere in this file.
+ *
+ * `#d63638` is WordPress core's own error red (`--wp--preset--color--vivid-red` / the admin
+ * `notice-error` accent), not a colour invented here — same discipline as the rest of this file:
+ * match the platform's visual language rather than introduce a palette.
+ *
+ * THREE OUTLINE TARGETS, ONE PER RENDERER, because the element the customer actually sees differs:
+ * the native `<select>` for `related-list`, select2's own `.select2-selection` for `ajax-select2`
+ * (the real `<select>` is hidden there, so outlining it would be invisible), and the `<input>` for
+ * the baseline typeahead. Direct children except for select2's, which sits one level deeper inside
+ * its own container.
+ *
+ * `!important` IS LOAD-BEARING ON THE OUTLINE, and the adversary is WooCommerce itself — the same
+ * situation, and the same justification, as the field-policy rule at the very bottom of this file.
+ * Measured on the rig, s90, with the class applied live to each of the three:
+ *
+ *     select2   → rgb(0, 117, 24)      (WooCommerce's own `--wc-green`)
+ *     <input>   → rgba(32, 7, 7, 0.8)  (the theme's)
+ *     <select>  → rgb(0, 0, 0)         (the theme's)
+ *
+ * — our red reached none of them. The select2 winner is
+ * `.woocommerce form .form-row.woocommerce-validated .select2-container:not(.select2-container--open) .select2-selection`,
+ * six classes deep against this rule's two. Note what that selector says: WooCommerce has marked
+ * the row **validated** and painted it green. That is not merely more specific, it is the OPPOSITE
+ * assertion to the one this class exists to make — the pick was rejected — so losing the cascade
+ * here does not degrade to "no outline", it degrades to "a green, valid-looking field with an
+ * error message under it". Raising specificity instead was considered and rejected: matching six
+ * classes would leave the two rules tied and the outcome decided by stylesheet load order, which
+ * this plugin does not control.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin: 6px 0 0;
+	padding: 0;
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.4;
+	color: #d63638;
+}
+
+.woodev-location-notice__icon {
+	flex: 0 0 auto;
+	width: 16px;
+	height: 16px;
+	margin-top: 1px;
+	fill: currentColor;
+}
+
+.woodev-location-field-error > input,
+.woodev-location-field-error > select,
+.woodev-location-field-error .select2-selection {
+	border-color: #d63638 !important;
+}

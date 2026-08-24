@@ -752,7 +752,7 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		return document.querySelector( '.woodev-location-notice' );
 	}
 
-	it( 'shows the server-supplied notPersisted string right after the field, anchored past it in the DOM', async () => {
+	it( 'shows the server-supplied notPersisted string BELOW the field — last child of the field\'s own parent', async () => {
 		boot( { settlement: true } );
 
 		const settlementCall = callFor( 'billing_city' );
@@ -770,7 +770,14 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		expect( notice() ).not.toBeNull();
 		expect( notice().textContent ).toBe( 'Не удалось сохранить выбор — попробуйте ещё раз.' );
 		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
-		expect( document.getElementById( 'billing_city' ).nextElementSibling ).toBe( notice() );
+
+		// Operator rig pass, s90: anchored immediately AFTER the field, the notice renders ABOVE
+		// the visible control for `ajax-select2` — select2 leaves the real <select> hidden in
+		// place and draws its own container as the next sibling. Last-child of the field's own
+		// parent is after every node any renderer drew.
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.lastElementChild ).toBe( notice() );
 	} );
 
 	it( 'does NOT show a notice for a network/transport failure — only an honest persisted: false is consumed', async () => {
@@ -893,7 +900,59 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 		expect( notice() ).not.toBeNull();
 		expect( notice().textContent ).toBe( MESSAGE );
 		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
-		expect( document.getElementById( 'billing_city' ).nextElementSibling ).toBe( notice() );
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.lastElementChild ).toBe( notice() );
+	} );
+
+	// Operator rig pass, s90. The message alone was not enough: it rendered above the settlement
+	// field (so it read as belonging to the region), at the theme's own body size, with nothing
+	// marking it as an error and nothing marking the field. These three assertions pin the shape
+	// the fix gives it — placement is pinned by the test above.
+	it( 'presents the cancel as an ERROR: a warning mark, an error class on the field\'s host, and the message in its own text node', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( true );
+		expect( notice().querySelector( '.woodev-location-notice__icon' ) ).not.toBeNull();
+		expect( notice().querySelector( '.woodev-location-notice__icon' ).getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+
+		// The server-supplied string goes in as text, never as markup — the icon is the only
+		// thing this module authors as HTML.
+		const label = notice().querySelector( '.woodev-location-notice__text' );
+
+		expect( label ).not.toBeNull();
+		expect( label.textContent ).toBe( MESSAGE );
+	} );
+
+	it( 'takes the error outline off the field when the notice goes, not just the text', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( true );
+
+		// The recovery the message asks for: pick again, and this time the server persists it.
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ selectRequests().length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( notice() ).toBeNull();
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( false );
 	} );
 
 	it( 're-locks the address field on top of the cleared settlement, exactly like an ordinary drop (#337)', async () => {

@@ -190,6 +190,33 @@
 	 */
 	var SYNTHETIC_OPTION_ATTR = 'data-woodev-location-synthetic';
 
+	/**
+	 * The class {@see showFieldNotice} puts on the notice's HOST — the element that already
+	 * contains the field (WooCommerce's own `.woocommerce-input-wrapper`, but this module never
+	 * names that class: it takes the field's `parentNode`, whatever it is, so the rule survives
+	 * a theme, a different WooCommerce version, or a renderer that wraps differently).
+	 *
+	 * It exists so `location.css` can put the error outline on the control the customer can
+	 * actually SEE. Which element that is depends on the renderer — the native `<select>` for
+	 * `related-list`, select2's own `.select2-selection` for `ajax-select2`, the `<input>` for
+	 * the baseline typeahead — and the host is the one node all three have in common.
+	 *
+	 * @type {string}
+	 */
+	var NOTICE_HOST_ERROR_CLASS = 'woodev-location-field-error';
+
+	/**
+	 * The warning mark that opens a notice. Inline SVG rather than a font glyph or a background
+	 * image: it inherits `currentColor`, so the mark and the text can never drift apart, and it
+	 * needs no additional HTTP request and no icon font this plugin does not otherwise ship.
+	 *
+	 * `aria-hidden` + `focusable="false"`: the notice already carries `role="alert"` and the
+	 * message states the problem in words, so announcing the mark as well would only repeat it.
+	 *
+	 * @type {string}
+	 */
+	var NOTICE_ICON_SVG = '<svg class="woodev-location-notice__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 1.6 19 18H1L10 1.6Zm0 4.1L4.1 16.5h11.8L10 5.7Zm-.85 3.4h1.7v4.2h-1.7V9.1Zm0 5.1h1.7v1.7h-1.7v-1.7Z"/></svg>';
+
 	var factory = window.WoodevCheckoutFieldStore;
 
 	if ( ! factory || 'function' !== typeof factory.createStore ) {
@@ -2207,6 +2234,20 @@
 	 * down between the request and this response landing) or blank `text` is a silent no-op:
 	 * there is nowhere left to put the message, or nothing to say.
 	 *
+	 * BELOW THE CONTROL, NOT AFTER THE ELEMENT (operator rig pass, s90). The obvious placement —
+	 * `insertBefore( notice, anchor.nextSibling )` — is right in the DOM and wrong on screen for
+	 * `ajax-select2`: select2 leaves the original `<select>` in place, hidden, and draws its own
+	 * `.select2-container` as the NEXT sibling, so a notice anchored immediately after the field
+	 * renders ABOVE the visible control. Measured on the rig, that put the message between the
+	 * region field and the settlement field, where it read as belonging to the region. Appending
+	 * to the field's own parent puts it after every node the renderer drew, whichever renderer
+	 * that was, without this module having to know any of their markup.
+	 *
+	 * THE HOST GETS {@see NOTICE_HOST_ERROR_CLASS} TOO, so `location.css` can outline the
+	 * control the customer can see. Words alone were not enough: the field simply emptied, and
+	 * an emptied field with no other signal reads as the form having broken rather than as an
+	 * answer about the data.
+	 *
 	 * @param {Object} entry
 	 * @param {?string} fieldId
 	 * @param {string} text
@@ -2221,15 +2262,30 @@
 			return;
 		}
 
+		var host = anchor.parentNode;
 		var notice = document.createElement( 'p' );
 
 		notice.className = 'woodev-location-notice';
 		notice.setAttribute( 'role', 'alert' );
-		notice.textContent = text;
 
-		anchor.parentNode.insertBefore( notice, anchor.nextSibling );
+		// Static markup, authored here — never the message, which is server-supplied and goes in
+		// as `textContent` below.
+		notice.innerHTML = NOTICE_ICON_SVG;
+
+		var label = document.createElement( 'span' );
+
+		label.className = 'woodev-location-notice__text';
+		label.textContent = text;
+
+		notice.appendChild( label );
+		host.appendChild( notice );
+
+		if ( host.classList ) {
+			host.classList.add( NOTICE_HOST_ERROR_CLASS );
+		}
 
 		entry.notPersistedNotice = notice;
+		entry.notPersistedNoticeHost = host;
 	}
 
 	/**
@@ -2288,12 +2344,22 @@
 	 */
 	function clearNotPersistedNotice( entry ) {
 		var notice = entry.notPersistedNotice;
+		var host = entry.notPersistedNoticeHost;
 
 		if ( notice && notice.parentNode ) {
 			notice.parentNode.removeChild( notice );
 		}
 
+		// The outline goes with the message, always — they are one signal. Cleared from the
+		// REMEMBERED host rather than by re-resolving the field, because by now the field may
+		// be gone (a country switch tore the section down) while the class would otherwise
+		// survive on a node WooCommerce re-renders rather than rebuilds.
+		if ( host && host.classList ) {
+			host.classList.remove( NOTICE_HOST_ERROR_CLASS );
+		}
+
 		entry.notPersistedNotice = null;
+		entry.notPersistedNoticeHost = null;
 	}
 
 	/**
