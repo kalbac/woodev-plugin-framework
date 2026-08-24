@@ -1694,6 +1694,120 @@
 	}
 
 	/**
+	 * Returns a NEW object equal to `record` except for `key`, which becomes `key` — never a
+	 * bare `.value =` reassignment on the caller's own object, so `entry.pendingRecord` (which
+	 * may alias the SAME object a caller still holds a reference to elsewhere) is never mutated
+	 * out from under it. A hand-rolled loop rather than `Object.assign()`, matching this
+	 * layer's own convention (`pickup-mount.js`'s `shallowMerge()`).
+	 *
+	 * @param {Object} record
+	 * @param {string} key
+	 * @returns {Object}
+	 */
+	function withAdoptedKey( record, key ) {
+		var copy = {};
+		var prop;
+
+		for ( prop in record ) {
+			if ( Object.prototype.hasOwnProperty.call( record, prop ) ) {
+				copy[ prop ] = record[ prop ];
+			}
+		}
+
+		copy.key = key;
+
+		return copy;
+	}
+
+	/**
+	 * Clears ONE chain level's own field — DOM value, store value, the remembered-value gate,
+	 * and the confirmed record itself — for the D7 cancel path ({@see handleCancelledSelect}).
+	 *
+	 * Deliberately NOT {@see clearDescendants}: that function clears everything STRICTLY AFTER
+	 * a given index and snapshots the wiped TEXT under `entry.clearedByEdit[editedLevel]` for a
+	 * possible {@see restoreClearedDescendants} — semantics for a CUSTOMER EDIT the widget can
+	 * still resolve. A cancelled pick is the server's own verdict on data that no longer exists;
+	 * nothing about it is eligible for that restore, and reusing `clearDescendants` here (e.g.
+	 * by pointing `fromIndex` at the level ABOVE this one) would misattribute the snapshot to
+	 * that unrelated parent level, letting some LATER, genuinely unrelated abandon on the parent
+	 * field resurrect this dead settlement's stale address text. This function therefore touches
+	 * ONLY the named level; deeper levels are left to {@see adoptChain}'s own handling of the
+	 * response's `chain` (D7 Seam D: "leave the deeper chain levels exactly as the response's
+	 * chain says").
+	 *
+	 * Routes the DOM write through {@see applyValueToElement} (issue #462/#465), never a bare
+	 * `.value = ''`, so a stale synthetic `<option>` a prior fill left behind is REUSED (emptied
+	 * in place), not multiplied — the ONE synthetic option this module ever owns per `<select>`.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {void}
+	 */
+	function clearChainField( entry, level ) {
+		var node = chainNodeForLevel( entry, level );
+
+		if ( ! node ) {
+			return;
+		}
+
+		var el = document.getElementById( node.fieldId );
+
+		entry.records[ level ] = null;
+		entry.store.setValue( node.fieldId, '' );
+		entry.resolved[ node.fieldId ] = '';
+
+		if ( el ) {
+			applyValueToElement( el, '' );
+		}
+	}
+
+	/**
+	 * D7 (spec + plan Seam D, issue #488 slice 3): handles a `/select` response answering
+	 * `cancelled: true` — the posted record named a popular-settlement entry whose provider key
+	 * has died, and the server's own adopt search (Seam C) found no unambiguous rename to fall
+	 * back to silently. NEVER a transport error — no retry, no silent swallow — a genuine, if
+	 * unwelcome, answer about the data (HTTP 200 by design, per the response contract).
+	 *
+	 * PROTECTED LEVEL, NOT "anything queued" (gotcha
+	 * `a-shared-select-queue-narrows-a-level-its-response-never-named`): the single-flight queue
+	 * is per ENTRY, not per level, so a DIFFERENT level's pick (e.g. an address chosen while
+	 * settlement's own `/select` was still in flight) may already be queued when this cancelled
+	 * response lands. That queued pick has nothing to do with THIS answer — settlement really
+	 * is stale, and clearing it, showing the message, and re-locking the address field are all
+	 * still correct and immediate. Only a NEWER pick for the SAME level as `record` (the level
+	 * this response is actually about) makes this response stale FOR THAT LEVEL, exactly the
+	 * gotcha's own fix: `adoptChain()` gets `protectedLevel` for the same reason the ordinary
+	 * path already passes it, and the field-clear/notice/trigger below are skipped in that one
+	 * case so they never stomp the newer pick's already-optimistic write moments before
+	 * {@see settleSelect} dequeues and sends it.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The record THIS response answered for (already dequeued by the
+	 *                         caller — {@see sendNextSelect}).
+	 * @param {Object} body   The parsed response body (`cancelled: true`).
+	 * @returns {void}
+	 */
+	function handleCancelledSelect( entry, record, body ) {
+		var pending = entry.pendingRecord;
+		var protectedLevel = pending ? pending.level : null;
+		var level = record && 'string' === typeof record.level ? record.level : null;
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+
+		adoptChain( entry, body && body.chain, protectedLevel );
+
+		if ( node && level !== protectedLevel ) {
+			clearChainField( entry, level );
+			refreshAddressLock( entry );
+
+			showCancelledNotice( entry, node.fieldId, body && body.message );
+			fireLocationApplied( entry, null, false );
+			triggerCheckoutUpdate();
+		}
+
+		settleSelect( entry, false, false, record );
+	}
+
+	/**
 	 * Dequeues `entry.pendingRecord` (if any) and sends it — the sole place that actually
 	 * issues a `/select` POST. A no-op when nothing is queued (the single-flight slot simply
 	 * stays free until the next {@see enqueueSelect} call).
@@ -1718,12 +1832,37 @@
 
 		fetchJson( url, { method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) } ).then(
 			function( body ) {
+				// D7 (spec + plan Seam D): a cancelled response is a wholly different outcome
+				// from an ordinary persisted/not-persisted one — see handleCancelledSelect()'s
+				// own docblock. `cancelled` is ABSENT (never `false`) on every ordinary
+				// response (the server's own contract), so this check never misfires against
+				// an older server or a persisted:false response.
+				if ( body && true === body.cancelled ) {
+					handleCancelledSelect( entry, record, body );
+					return;
+				}
+
 				// `persisted` is always present on a successful response (Location_Controller::
 				// handle_select_request()'s own return type — never ambiguous), so `!shouldTrigger`
 				// here means exactly one thing: the server answered, honestly, that it could not
 				// write the record (#295 finding 1 — typically a guest whose session/cart cookie
 				// has not initialized yet, gotcha `guest-session-write-needs-the-cart-cookie`).
 				var persisted = !! ( body && false !== body.persisted );
+
+				// D7 Seam D, last paragraph: the server's `current` is now authoritative for the
+				// KEY as well as the chain (D6 "updated" — a renamed popular settlement — and D7
+				// step 2's silent adopt both persist a DIFFERENT record than the one posted).
+				// `entry.records[level]` already gets the corrected key below via adoptChain()
+				// (the chain and `current` are built from the SAME persisted record server-side);
+				// this is the one place that DOESN'T flow through adoptChain — the local `record`
+				// var `fireLocationApplied()` publishes in `settleSelect()` below, which until now
+				// always echoed back exactly what the client posted.
+				var adoptedRecord = record;
+
+				if ( body && body.current && 'string' === typeof body.current.key && body.current.key
+					&& body.current.key !== record.key ) {
+					adoptedRecord = withAdoptedKey( record, body.current.key );
+				}
 
 				// Issue #330 (spec §7): the response carries the server's own rebuilt `chain`
 				// alongside `current`/`persisted` — adopting it here (whether or not THIS
@@ -1747,7 +1886,7 @@
 				// optimistic pick above already unlocked.
 				refreshAddressLock( entry );
 
-				settleSelect( entry, persisted, ! persisted, record );
+				settleSelect( entry, persisted, ! persisted, adoptedRecord );
 			},
 			function( error ) {
 				logError( error );
@@ -1943,39 +2082,41 @@
 	}
 
 	/**
-	 * Shows the "your choice was not saved" notice for `entry` — Task 13 / #295 finding 1: the
-	 * server has always answered `persisted: false` honestly, but until now nothing on the
-	 * client read it beyond skipping `update_checkout` (see this file's own D8 section above).
-	 * Anchored right after the field the customer's MOST RECENT selection came from
-	 * ({@see entry.lastSelectedFieldId}) — persistence is an ENTRY-level outcome (the
-	 * single-flight `/select` queue in {@see enqueueSelect} is per entry, not per node), so
-	 * there is no field this is MORE specifically about than "whichever one the customer just
-	 * used". A missing anchor (the field no longer in the document — a country switch tore
-	 * the section down between the select and this response landing) is a silent no-op: there
-	 * is nowhere left to put the message, and the field itself is gone anyway.
+	 * Inserts a customer-facing notice right after `fieldId`'s own element — the shared DOM
+	 * mechanism behind both {@see showNotPersistedNotice} (Task 13 / #295) and
+	 * {@see showCancelledNotice} (D7, issue #488 slice 3). ONE slot per entry
+	 * (`entry.notPersistedNotice`): showing either kind clears whatever the other last left
+	 * behind first, so the two — mutually exclusive per `/select` response, never both true at
+	 * once — can never stack.
 	 *
-	 * Text comes from `entry.location.i18n.notPersisted` — server-supplied, translated,
-	 * filterable via `woodev_location_i18n` (`class-checkout-config.php::build_location_block()`),
-	 * same convention as `noResults`/`noResultsAddress`: this string reaches the customer, so
-	 * it is never a literal here. An older config without the key (or a filter that cleared
-	 * it) degrades to silence rather than inventing a string client-side.
+	 * RENDERER-AGNOSTIC ON PURPOSE. The empty-suggestions row (`location-typeahead.js`'s own
+	 * `emptyText`/`renderItems()`) looks like the obvious "existing precedent" to reuse for D7,
+	 * but it lives entirely inside the baseline typeahead widget and is NOT surfaced by either
+	 * Task 13 renderer this file's own `resolveModeRenderer()` can attach instead
+	 * (`location-select-modes.js`'s `attachRelatedListSettlement()`/`attachAjaxSelect2()` —
+	 * neither wires an empty/no-results message of any kind, `related-list:settlement` being a
+	 * plain pre-populated `<select>` and `ajax-select2` never reading `options.emptyText` at
+	 * all). Since the settlement level a D7 cancel targets can be rendered by ANY of the three,
+	 * a message tied to the typeahead's own listbox would silently vanish for two of them. This
+	 * DOM-anchor notice already existed for exactly this purpose — telling the customer why a
+	 * control just changed — and works identically regardless of which renderer (or none) is
+	 * attached, so D7 reuses IT rather than the typeahead-only row the plan named.
+	 *
+	 * A missing anchor (the field no longer in the document — a country switch tore the section
+	 * down between the request and this response landing) or blank `text` is a silent no-op:
+	 * there is nowhere left to put the message, or nothing to say.
 	 *
 	 * @param {Object} entry
+	 * @param {?string} fieldId
+	 * @param {string} text
 	 * @returns {void}
 	 */
-	function showNotPersistedNotice( entry ) {
+	function showFieldNotice( entry, fieldId, text ) {
 		clearNotPersistedNotice( entry );
 
-		var anchor = entry.lastSelectedFieldId && document.getElementById( entry.lastSelectedFieldId );
+		var anchor = fieldId && document.getElementById( fieldId );
 
-		if ( ! anchor || ! anchor.parentNode ) {
-			return;
-		}
-
-		var i18n = entry.location.i18n || {};
-		var text = 'string' === typeof i18n.notPersisted ? i18n.notPersisted : '';
-
-		if ( '' === text ) {
+		if ( ! anchor || ! anchor.parentNode || 'string' !== typeof text || '' === text ) {
 			return;
 		}
 
@@ -1988,6 +2129,53 @@
 		anchor.parentNode.insertBefore( notice, anchor.nextSibling );
 
 		entry.notPersistedNotice = notice;
+	}
+
+	/**
+	 * Shows the "your choice was not saved" notice for `entry` — Task 13 / #295 finding 1: the
+	 * server has always answered `persisted: false` honestly, but until now nothing on the
+	 * client read it beyond skipping `update_checkout` (see this file's own D8 section above).
+	 * Anchored right after the field the customer's MOST RECENT selection came from
+	 * ({@see entry.lastSelectedFieldId}) — persistence is an ENTRY-level outcome (the
+	 * single-flight `/select` queue in {@see enqueueSelect} is per entry, not per node), so
+	 * there is no field this is MORE specifically about than "whichever one the customer just
+	 * used".
+	 *
+	 * Text comes from `entry.location.i18n.notPersisted` — server-supplied, translated,
+	 * filterable via `woodev_location_i18n` (`class-checkout-config.php::build_location_block()`),
+	 * same convention as `noResults`/`noResultsAddress`: this string reaches the customer, so
+	 * it is never a literal here. An older config without the key (or a filter that cleared
+	 * it) degrades to silence rather than inventing a string client-side.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function showNotPersistedNotice( entry ) {
+		var i18n = entry.location.i18n || {};
+
+		showFieldNotice( entry, entry.lastSelectedFieldId, 'string' === typeof i18n.notPersisted ? i18n.notPersisted : '' );
+	}
+
+	/**
+	 * Shows the D7 "stale pick" notice — spec D7 / plan Seam D (issue #488 slice 3): a `/select`
+	 * response answering `cancelled: true` because the posted popular-settlement entry's
+	 * provider key had died and the server's own adopt search (Seam C) found no unambiguous
+	 * rename to fall back to silently. Anchored right after the field the cancelled record
+	 * belonged to — see {@see showFieldNotice}'s own docblock for why this DOM-anchor mechanism,
+	 * not the typeahead's empty-suggestions row, is the surface D7 actually reuses.
+	 *
+	 * `message` is `response.message` VERBATIM — server-supplied, translated, filterable
+	 * (`Location_Controller::handle_select_request()`'s own D7 branch), never a literal here;
+	 * an absent/non-string message degrades to silence rather than inventing wording
+	 * client-side, same convention {@see showNotPersistedNotice} already follows.
+	 *
+	 * @param {Object} entry
+	 * @param {?string} fieldId
+	 * @param {*} message
+	 * @returns {void}
+	 */
+	function showCancelledNotice( entry, fieldId, message ) {
+		showFieldNotice( entry, fieldId, 'string' === typeof message ? message : '' );
 	}
 
 	/**
