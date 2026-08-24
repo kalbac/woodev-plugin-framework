@@ -16,8 +16,11 @@ defined( 'ABSPATH' ) || exit;
  * three handlers (location / checkout fields / pickup map), each keeping its own option
  * namespace. This class routes every call `Field_Schema` and the settings REST controller make
  * to the child that registered the setting id. It deliberately implements neither
- * `Woodev_Settings_Connection_Test` nor `Woodev_Settings_Connection_Status` — none of the
- * children needs them today; add delegation when one does.
+ * `Woodev_Settings_Connection_Status` (no child needs it yet) nor a MULTI-child
+ * `Woodev_Settings_Connection_Test` router — {@see self::test_connection()} delegates to
+ * the single child that implements it (#488 D8: `Location_Settings` is the first real
+ * connection-test consumer this class ever had), and throws rather than guessing when
+ * zero or more than one child does.
  *
  * `get_value()` / `update_value()` throw `\Woodev_Plugin_Exception` on an unknown id, mirroring
  * `Woodev_Abstract_Settings` exactly, so this class is behaviourally substitutable for a real
@@ -35,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 2.0.2
  */
-final class Composite_Settings_Handler {
+final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Test {
 
 	/** @var string */
 	private string $id;
@@ -116,6 +119,47 @@ final class Composite_Settings_Handler {
 		}
 
 		return $ordered;
+	}
+
+	/**
+	 * Delegates to the single child that implements `Woodev_Settings_Connection_Test`
+	 * (#488 D8).
+	 *
+	 * There is no id->child map because nothing needs one yet: exactly one child
+	 * (`Location_Settings`, as of #488) implements the interface at a time. Throws
+	 * rather than guessing when zero or more than one child does — a REST request
+	 * only ever reaches this method for a `$connection_id` the tab's own
+	 * `Settings_Section::is_connection()` list already proved exists (see
+	 * class-rest-api-settings-page.php's `test_connection()`), so ambiguity here
+	 * means a NEW child started implementing the interface without this class
+	 * being taught how to route between them — extend with an explicit
+	 * id-to-child map when that day comes.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string              $connection_id connection section id.
+	 * @param array<string,mixed> $values        merged field values (POSTed ∪ stored).
+	 * @return \Woodev_Connection_Result
+	 * @throws \Woodev_Plugin_Exception When no child, or more than one, implements
+	 *                                   `Woodev_Settings_Connection_Test`.
+	 */
+	public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+		$delegate = null;
+
+		foreach ( $this->children as $child ) {
+			if ( $child instanceof \Woodev_Settings_Connection_Test ) {
+				if ( null !== $delegate ) {
+					throw new \Woodev_Plugin_Exception( 'More than one child handler implements Woodev_Settings_Connection_Test; Composite_Settings_Handler::test_connection() needs an explicit id-to-child map to disambiguate.' );
+				}
+				$delegate = $child;
+			}
+		}
+
+		if ( null === $delegate ) {
+			throw new \Woodev_Plugin_Exception( "No child handler implements Woodev_Settings_Connection_Test for connection \"{$connection_id}\"." );
+		}
+
+		return $delegate->test_connection( $connection_id, $values );
 	}
 
 	/**
