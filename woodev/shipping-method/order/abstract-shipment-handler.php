@@ -33,6 +33,9 @@
 
 namespace Woodev\Framework\Shipping\Order;
 
+use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Shipping_API;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -69,20 +72,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		protected string $hook_prefix;
 
 		/**
+		 * Popular-settlements store (#488) used to bump usage on a successful
+		 * export. Null when the plugin does not pass one — enrolment then never
+		 * runs, so exporting a shipment behaves exactly as before this feature
+		 * existed.
+		 *
+		 * @var Popular_Settlement_Store|null
+		 */
+		protected ?Popular_Settlement_Store $popular_settlement_store;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Added `$popular_settlement_store` (#488 slice 2) — optional,
+		 *              defaults to null so an existing call site's behaviour is unchanged.
 		 *
-		 * @param Shipping_API                   $api           carrier API used to create/cancel orders
-		 * @param Shipping_Order_Handler         $order_handler order-meta accessor that persists the carrier id under the plugin's key
-		 * @param \Woodev_Background_Job_Handler $retry_handler plugin's background-job queue used to retry a failed export
-		 * @param string                         $hook_prefix   plugin-supplied token (e.g. the plugin id) that namespaces forward hooks; defaults to none
+		 * @param Shipping_API                   $api                      carrier API used to create/cancel orders
+		 * @param Shipping_Order_Handler         $order_handler            order-meta accessor that persists the carrier id under the plugin's key
+		 * @param \Woodev_Background_Job_Handler $retry_handler            plugin's background-job queue used to retry a failed export
+		 * @param string                         $hook_prefix              plugin-supplied token (e.g. the plugin id) that namespaces forward hooks; defaults to none
+		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store used to bump usage on a successful export; null disables enrolment entirely
 		 */
-		public function __construct( Shipping_API $api, Shipping_Order_Handler $order_handler, \Woodev_Background_Job_Handler $retry_handler, string $hook_prefix = '' ) {
-			$this->api           = $api;
-			$this->order_handler = $order_handler;
-			$this->retry_handler = $retry_handler;
-			$this->hook_prefix   = $hook_prefix;
+		public function __construct(
+			Shipping_API $api,
+			Shipping_Order_Handler $order_handler,
+			\Woodev_Background_Job_Handler $retry_handler,
+			string $hook_prefix = '',
+			?Popular_Settlement_Store $popular_settlement_store = null
+		) {
+			$this->api                      = $api;
+			$this->order_handler            = $order_handler;
+			$this->retry_handler            = $retry_handler;
+			$this->hook_prefix              = $hook_prefix;
+			$this->popular_settlement_store = $popular_settlement_store;
 		}
 
 		/**
@@ -94,12 +117,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * is not lost: the export is re-queued via {@see self::schedule_retry()} and an
 		 * empty id is returned, so the caller can tell the export did not complete now.
 		 *
-		 * @since 1.5.0
+		 * A successful export is also "an order shipped to this settlement" (#488
+		 * popular-settlements spec D2) — the strongest available signal that the shop
+		 * is genuinely committed to shipping there, stronger than merely placing the
+		 * order (which can still be cancelled/refunded before ever reaching a carrier).
+		 * When both `$settlement` and `$provider` are given (and a store was supplied
+		 * to the constructor), {@see self::enroll_popular_settlement()} bumps it after
+		 * the `shipment_exported` hook fires. Both default to null: an existing call
+		 * site that does not pass them sees no behaviour change.
 		 *
-		 * @param \WC_Order $order the order to export to the carrier
+		 * @since 1.5.0
+		 * @since 2.0.2 Added `$settlement` / `$provider` (#488 slice 2) to enrol the
+		 *              order's settlement into the popular-settlements list.
+		 *
+		 * @param \WC_Order              $order      the order to export to the carrier
+		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
+		 * @param Location_Provider|null $provider the provider that produced `$settlement`, if known; null skips enrolment
 		 * @return string the carrier-assigned order id, or '' when the export failed and was queued for retry
 		 */
-		public function export( \WC_Order $order ): string {
+		public function export( \WC_Order $order, ?Location_Record $settlement = null, ?Location_Provider $provider = null ): string {
 
 			try {
 				$response = $this->api->create_order( $order );
@@ -134,7 +170,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 */
 			do_action( $this->hook( 'shipment_exported' ), $order, $carrier_order_id );
 
+			$this->enroll_popular_settlement( $settlement, $provider );
+
 			return $carrier_order_id;
+		}
+
+		/**
+		 * Bumps the popular-settlements list (#488) for a successfully exported
+		 * order's settlement.
+		 *
+		 * A silent no-op — never throws — whenever any prerequisite is missing: no
+		 * store was supplied to the constructor, the caller does not know the
+		 * settlement, or the caller does not know which provider produced it. The
+		 * D4/D4a gates themselves ({@see Popular_Settlement_Store::CAPABILITY_RESOLVE_KEY}
+		 * capability, {@see \Woodev\Framework\Shipping\Location\Locality_Key::is_derived()})
+		 * live in {@see Popular_Settlement_Store::enroll()}, not here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record|null   $settlement the settlement this order ships to, if known
+		 * @param Location_Provider|null $provider   the provider that produced `$settlement`, if known
+		 *
+		 * @return void
+		 */
+		protected function enroll_popular_settlement( ?Location_Record $settlement, ?Location_Provider $provider ): void {
+			if ( null === $this->popular_settlement_store || null === $settlement || null === $provider ) {
+				return;
+			}
+
+			$this->popular_settlement_store->enroll( $provider, $settlement );
 		}
 
 		/**
