@@ -225,4 +225,23 @@ final class LocalityKeyTest extends TestCase {
 
 		$this->assertStringStartsWith( 'noid:', $key );
 	}
+	/**
+	 * The derived marker is RESERVED, not merely conventional. A native id may legitimately
+	 * contain colons (`relation:59195`, `way:1247091839` are measured DaData values), so a
+	 * provider-issued id beginning with the marker would otherwise be misread as derived and
+	 * its by-key lookup refused. `compose()` refuses to mint one; only `derive()` may
+	 * (Codex critic, final pass on #488 slice 1).
+	 */
+	public function test_compose_refuses_a_native_id_that_starts_with_the_reserved_derived_marker(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		Locality_Key::compose( 'dadata', 'derived:provider-id' );
+	}
+
+	public function test_derive_may_still_mint_the_reserved_marker_that_compose_refuses(): void {
+		$key = Locality_Key::derive( 'dadata', [ 'city' => 'Пенза', 'region' => 'Пензенская' ] );
+
+		$this->assertTrue( Locality_Key::is_derived( $key ) );
+		$this->assertSame( 'dadata', Locality_Key::parse( $key )[0] );
+	}
 }

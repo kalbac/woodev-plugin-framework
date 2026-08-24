@@ -1155,6 +1155,21 @@ final class DadataProviderTest extends TestCase {
 		$this->assertNull( ( new Dadata_Provider() )->resolve_key( 'dadata:no-such-fias-id' ) );
 	}
 
+	/**
+	 * A NON-EMPTY suggestion set whose first entry is not an object is malformed, not
+	 * empty — and only "empty" means the locality is gone. `find_by_id_address()` used to
+	 * collapse both into `null` through `$suggestions[0] ?? null`, so a single malformed
+	 * response would have deleted a valid stored row under spec D6 (Codex critic, final
+	 * pass on #488 slice 1).
+	 */
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_non_empty_but_unreadable_suggestion_set(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{"suggestions":[null]}' );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
 	public function test_resolve_key_throws_rather_than_returns_null_when_unconfigured(): void {
 		$this->set_token( '' );
 		Functions\expect( 'wp_safe_remote_request' )->never();

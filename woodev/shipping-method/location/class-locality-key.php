@@ -94,6 +94,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 				throw new \InvalidArgumentException( 'Locality_Key::compose() requires a non-empty native_id.' );
 			}
 
+			// The marker is RESERVED, not merely conventional. A provider's own native id
+			// may legitimately contain colons — `relation:59195` and `way:1247091839` are
+			// measured DaData values — so without this guard a native id that happened to
+			// begin with the marker would make {@see self::is_derived()} answer "derived"
+			// about a key the provider really did issue, and the by-key lookup that record
+			// depends on would be refused. Refusing to MINT such a key is what makes the
+			// marker a fact rather than one more prediction about what a native id looks
+			// like — which is the entire point of marking derivation at its source
+			// (Codex critic, final pass on #488 slice 1).
+			if ( 0 === strpos( $native_id, self::DERIVED_MARKER ) ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Locality_Key::compose(): native_id "%s" starts with the reserved "%s" prefix, which only ' .
+						'Locality_Key::derive() may mint.',
+						$native_id,
+						self::DERIVED_MARKER
+					)
+				);
+			}
+
+			return self::join( $provider_id, $native_id );
+		}
+
+		/**
+		 * Concatenates the two segments with the separator, and validates nothing.
+		 *
+		 * Exists so {@see self::derive()} can mint the one native-id shape
+		 * {@see self::compose()} is required to refuse — the reserved
+		 * {@see self::DERIVED_MARKER} prefix — without either method having to duplicate
+		 * the other's separator, and without `compose()`'s reservation growing an
+		 * exception that a future caller could reach.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id Unique id of the owning provider.
+		 * @param string $native_id   The native-id segment, already validated by the caller.
+		 *
+		 * @return string
+		 */
+		private static function join( string $provider_id, string $native_id ): string {
 			return $provider_id . ':' . $native_id;
 		}
 
@@ -221,7 +261,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 			$canonical = self::canonicalize( $components );
 
-			return self::compose( $provider_id, self::DERIVED_MARKER . substr( sha1( $canonical ), 0, self::DERIVED_ID_LENGTH ) );
+			// `join()`, not `compose()`: this is the ONE place allowed to mint the reserved
+			// marker, and `compose()` refuses it precisely so nothing else can.
+			return self::join( $provider_id, self::DERIVED_MARKER . substr( sha1( $canonical ), 0, self::DERIVED_ID_LENGTH ) );
 		}
 
 		/**

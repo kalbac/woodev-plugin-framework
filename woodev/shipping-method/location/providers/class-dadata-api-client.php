@@ -305,11 +305,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 *
 		 * @param string $fias_id A DaData FIAS id (`data.fias_id` from an earlier suggestion).
 		 *
+		 * `null` means ONE thing and nothing else: DaData answered with an EMPTY
+		 * suggestion set, i.e. it does not know this id. That is the only answer
+		 * {@see Dadata_Provider::resolve_key()} is allowed to read as "this locality is
+		 * gone", and spec D6 DELETES the stored row on it — so a response we merely
+		 * failed to understand must never collapse into the same value. A non-empty set
+		 * whose first entry is not an object is exactly that case: malformed, not empty
+		 * (Codex critic, final pass on #488 slice 1).
+		 *
 		 * @return array<string, mixed>|null The raw `{ value, unrestricted_value, data }`
 		 *                                   object for the first match, or null when
-		 *                                   DaData returned no match.
+		 *                                   DaData returned no match at all.
 		 *
-		 * @throws \Woodev_API_Exception On a network failure or a non-2xx response.
+		 * @throws \Woodev_API_Exception On a network failure, a non-2xx response, or a
+		 *                                successful response whose suggestion set is
+		 *                                non-empty but unreadable.
 		 */
 		public function find_by_id_address( string $fias_id ): ?array {
 			$request = $this->get_new_request( 'suggestions' );
@@ -320,7 +330,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 
 			$suggestions = $response->get_suggestions();
 
-			return $suggestions[0] ?? null;
+			if ( [] === $suggestions ) {
+				return null;
+			}
+
+			if ( ! is_array( $suggestions[0] ?? null ) ) {
+				throw new \Woodev_API_Exception(
+					sprintf(
+						'DaData findById/address returned a non-empty suggestion set whose first entry is not an object (id "%s").',
+						$fias_id
+					)
+				);
+			}
+
+			return $suggestions[0];
 		}
 
 		/**
