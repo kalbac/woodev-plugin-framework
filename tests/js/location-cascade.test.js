@@ -304,6 +304,27 @@ function selectViaFake( call, item, viaJquery = false ) {
 }
 
 /**
+ * Resolves the most recent `/select` as an ordinary persisted success, and flushes.
+ *
+ * Since s90 the address level unlocks on the SERVER's confirmation rather than on the click
+ * (operator decision reversing #337 — the reasoning is in `isAddressLocked()`'s own docblock),
+ * so any flow that goes on to touch a DEEPER level has to get past the round trip first.
+ *
+ * @param {Object} record The record just picked — its key/level are echoed back as `current`.
+ * @returns {Promise<void>}
+ */
+function settleLastSelect( record ) {
+	fetchCalls[ fetchCalls.length - 1 ].resolve( {
+		current: { key: record.key, level: record.level },
+		persisted: true,
+		chain: { [ record.level ]: { key: record.key, level: record.level } },
+	} );
+
+	return flushMicrotasks();
+}
+
+
+/**
  * Simulates a customer typing `query` into the field behind `call` and abandoning it — leaving
  * WITHOUT ever picking a suggestion, with a COMPLETED search that resolved to zero results
  * (issue #350). Reproduces the real timing this module's own `handleFieldChanged()` docblock and
@@ -962,6 +983,25 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
 	} );
 
+	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request
+	// rather than on "the parent has no record yet": with no region picked, the customer is free
+	// to fill the settlement directly and let backwardsFill() write the region for them. Locking
+	// on absence would break that ordinary path outright. `enqueueSelect()` has exactly one call
+	// site — a real pick in `onSelectFor()` — so nothing else can ever raise this lock.
+	it( 'does NOT lock the settlement when no region was picked — the customer may fill it directly and let the region backfill', () => {
+		boot( { region: true, settlement: true } );
+
+		const settlement = document.getElementById( 'billing_city' );
+
+		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+
+		// Typing in it is what the customer does next, and nothing here may stand in the way:
+		// the region field is still empty and stays that way until backwardsFill() writes it.
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+		expect( settlement.disabled ).toBe( false );
+	} );
+
 	it( 'releases a child lock even when the parent\'s request FAILS — a lock outliving its cause is worse than no lock', async () => {
 		boot( { region: true, settlement: true } );
 
@@ -1162,7 +1202,12 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 		boot( { settlement: true, address: true } );
 
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
-		expect( document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' ) ).toBe( false );
+
+		// s90: the address stays locked for the length of the round trip — and this is exactly
+		// the case that reversed #337. Under the old rule the customer could have been typing a
+		// street here for 2.4-4.5 seconds, into a field about to be re-locked underneath them by
+		// the very answer this test then delivers.
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
 
 		selectRequests()[ 0 ].resolve( cancelledBody() );
 		await flushMicrotasks();
@@ -2767,7 +2812,7 @@ describe( 'issue #352 — refusing to post a foreign-provider record into the se
 		expect( seen ).toHaveLength( 0 );
 	} );
 
-	it( 'the LOCAL record and the address lock still update for a refused, foreign-provider pick', () => {
+	it( 'the LOCAL record and the address lock still update for a refused, foreign-provider pick', async () => {
 		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
 
 		// The address field starts locked (issue #337: a settlement/address chain with the
@@ -2780,6 +2825,15 @@ describe( 'issue #352 — refusing to post a foreign-provider record into the se
 			key: 'test-cdek:msk', label: 'г Москва', level: 'settlement',
 			record: { key: 'test-cdek:msk', provider_id: 'test-cdek', level: 'settlement', country: 'RU', label: 'г Москва' },
 		} );
+
+		// s90: the address unlocks when the SERVER confirms the settlement, not on the click —
+		// so this flow has to get past the round trip before the lock lifts.
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'test-cdek:msk', level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: 'test-cdek:msk', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
 		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 
 		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
@@ -4984,20 +5038,43 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		return document.getElementById( 'billing_address_1' );
 	}
 
+	/**
+	 * Picks the settlement AND lets its `/select` answer.
+	 *
+	 * Since s90 the address unlocks on the SERVER's confirmation, not on the click (operator
+	 * decision reversing #337's original rule — the reasoning, and what overturned it, is in
+	 * `isAddressLocked()`'s own docblock). A test about the lock RULE therefore has to get past
+	 * the round trip before it can see the lock lift; a test about the TIMING asserts the
+	 * in-flight state directly instead.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	function pickSettlementAndSettle() {
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+
+		return flushMicrotasks();
+	}
+
 	it( 'locks it on boot when settlement and address are linked and the provider serves address', () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		expect( addressField().disabled ).toBe( true );
 	} );
 
-	it( 'marks the locked field for the stylesheet, and unmarks it again', () => {
+	it( 'marks the locked field for the stylesheet, and unmarks it again', async () => {
 		// `disabled` alone is invisible — the theme's own `input` rule overrides the browser's
 		// greying (measured on the rig), so the class is what location.css can actually see.
 		boot( { region: true, settlement: true, address: true } );
 
 		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 
 		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
 	} );
@@ -5032,20 +5109,36 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'unlocks on the settlement pick ITSELF, before /select has answered', () => {
+	// REVERSED BY THE OPERATOR, s90. This test used to assert the opposite — "the /select round
+	// trip is still in flight, the customer must be able to type now" — and that was #337's own
+	// rule. What changed is a measurement: the round trip is 2.4-4.5 seconds on the rig, not the
+	// instant #337 assumed, and the optimistic record it unlocked off can still be REFUSED (a D7
+	// `cancelled` wipes the settlement and re-locks the address underneath whatever was typed in
+	// the meantime), while the address's own `/suggest` would carry a `within` the server never
+	// accepted. The cost — no typing for the length of the round trip — is why the busy state
+	// exists: the field says it is working rather than sitting inert.
+	it( 'stays locked while the settlement pick is still unconfirmed, and lifts when /select answers', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
 
-		// The /select round trip is still in flight — the customer must be able to type now.
 		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( SELECT_URL );
+		expect( addressField().disabled ).toBe( true );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 're-locks when the settlement text is edited without picking a suggestion', () => {
+	it( 're-locks when the settlement text is edited without picking a suggestion', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		expect( addressField().disabled ).toBe( false );
 
 		const city = document.getElementById( 'billing_city' );
@@ -5101,13 +5194,13 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 're-locks after a country change wipes a settlement that HAD been picked', () => {
+	it( 're-locks after a country change wipes a settlement that HAD been picked', async () => {
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ], levels: {
 			RU: { region: true, settlement: true, address: true },
 			US: { region: true, settlement: true, address: true },
 		} } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		expect( addressField().disabled ).toBe( false );
 
 		const country = document.getElementById( 'billing_country' );
@@ -5242,7 +5335,7 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		},
 	};
 
-	it( 'restores the address TEXT (never the record) after a zero-results settlement abandon (#350 follow-up)', () => {
+	it( 'restores the address TEXT (never the record) after a zero-results settlement abandon (#350 follow-up)', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		const region = document.getElementById( 'billing_state' );
@@ -5250,7 +5343,7 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		region.value = 'Московская область';
 		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( addressField().value ).toBe( 'ул Тверская, 1' );
@@ -5267,10 +5360,10 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'restores the address TEXT after a below-minChars settlement abandon too', () => {
+	it( 'restores the address TEXT after a below-minChars settlement abandon too', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		const call = callFor( 'billing_city' );
@@ -5283,10 +5376,10 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'never overwrites address text the customer typed themselves while the abandon was resolving', () => {
+	it( 'never overwrites address text the customer typed themselves while the abandon was resolving', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		const settlementCall = callFor( 'billing_city' );
@@ -5309,11 +5402,11 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'does NOT restore the old address after the settlement is re-typed and then a REAL suggestion is adopted', () => {
+	it( 'does NOT restore the old address after the settlement is re-typed and then a REAL suggestion is adopted', async () => {
 		// The regression guard: the snapshot must never leak into the ordinary cascade path.
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( addressField().value ).toBe( 'ул Тверская, 1' );
@@ -5652,9 +5745,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
 	} );
 
-	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', () => {
+	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', async () => {
 		bootBothColumns( false );
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 
 		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 
@@ -5667,9 +5761,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
 	} );
 
-	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', () => {
+	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', async () => {
 		bootBothColumns( true );
 		selectViaFake( callFor( 'shipping_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
 
@@ -5710,11 +5805,12 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 	 * Against the pre-fix implementation this fails on the FIRST assertion (shipping_address_1
 	 * carries 'ул Тверская, 1' instead of staying empty) — the right reason, not an incidental one.
 	 */
-	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', () => {
+	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', async () => {
 		bootBothColumns( false );
 
 		// A full billing chain: settlement Москва, then an address inside it.
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
@@ -5746,9 +5842,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '' );
 	} );
 
-	it( 'blocking drops IDENTITY, never text the customer can already see', () => {
+	it( 'blocking drops IDENTITY, never text the customer can already see', async () => {
 		bootBothColumns( false );
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		// This time the customer has typed BOTH halves of their own shipping address.

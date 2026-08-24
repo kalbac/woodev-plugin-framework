@@ -2739,10 +2739,12 @@
 
 			backwardsFill( entry, node, record );
 
-			// Issue #337: a settlement pick unlocks the address field on the SPOT, off the
-			// optimistic record above — never only once `/select` comes back. Waiting for the
-			// round trip would leave the customer looking at a field that stays blocked for as
-			// long as the network takes, right after doing the one thing that unblocks it.
+			// Issue #337 as AMENDED by the operator in s90: the address lock is refreshed on the
+			// spot off the optimistic record above — but {@see isAddressLocked} now also holds
+			// the lock while this level's own `/select` is unanswered, so in practice the field
+			// unlocks when the SERVER confirms rather than when the customer clicks. #337's
+			// original reasoning (never make them wait for the round trip) is recorded, and
+			// overturned, in that function's own docblock.
 			refreshAddressLock( entry );
 
 			if ( isActiveAddressSection( node.section ) ) {
@@ -3217,6 +3219,21 @@
 	function isAddressLocked( entry, node ) {
 		if ( ! chainNodeForLevel( entry, 'settlement' ) || ! isNodeActive( entry, node ) ) {
 			return false;
+		}
+
+		// OPERATOR DECISION, s90 — this REVERSES the #337 rule that used to sit at the pick site
+		// in `onSelectFor()` ("a settlement pick unlocks the address on the SPOT, never only once
+		// /select comes back"). What changed is a measurement, not a preference: that round trip
+		// is 2.4-4.5 seconds on the rig, not the moment #337 assumed, and the optimistic record it
+		// unlocks off may still be REFUSED — a D7 `cancelled` wipes the settlement and re-locks
+		// the address underneath whatever the customer typed in the meantime. The address field's
+		// own `/suggest` would meanwhile carry a `within` the server never accepted.
+		//
+		// The cost is real and was weighed: the customer cannot start typing their street for the
+		// length of the round trip, right after doing the thing that unblocks it. That is why the
+		// busy state exists — the field says it is working rather than sitting inert.
+		if ( hasUnconfirmedParent( entry, node.level ) ) {
+			return true;
 		}
 
 		if ( null === scopeKeyFor( entry, 'address' ) ) {
