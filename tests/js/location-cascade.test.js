@@ -839,6 +839,296 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 } );
 
 // -----------------------------------------------------------------------
+// D7 (spec + plan Seam D, issue #488 slice 3) — the client half of a stale popular-settlement
+// pick: `/select` answers HTTP 200 with `cancelled: true` when the posted record named a
+// popular-settlement entry whose provider key has died and the server's own adopt search found
+// no unambiguous rename to fall back to silently.
+// -----------------------------------------------------------------------
+
+describe( 'D7 — a cancelled /select response (stale popular-settlement pick, issue #488 slice 3)', () => {
+	const MESSAGE = 'Данные не актуальны, выберите заново';
+
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:dead', label: 'Старое Место', level: 'settlement',
+		record: {
+			key: 'dadata:dead', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Старое Место', type: 'дер' }, label: 'Старое Место',
+		},
+	};
+
+	function notice() {
+		return document.querySelector( '.woodev-location-notice' );
+	}
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	function cancelledBody( chain ) {
+		return {
+			cancelled: true, reason: 'stale_record', message: MESSAGE,
+			current: null, persisted: false, chain: chain || {},
+		};
+	}
+
+	it( 'clears the field\'s value, leaving it genuinely empty (not a stale label)', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Старое Место' );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+
+	it( 'shows response.message in the SAME reusable notice surface #295\'s not-persisted case uses — the rendered DOM text, not a captured variable', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( notice() ).not.toBeNull();
+		expect( notice().textContent ).toBe( MESSAGE );
+		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
+		expect( document.getElementById( 'billing_city' ).nextElementSibling ).toBe( notice() );
+	} );
+
+	it( 're-locks the address field on top of the cleared settlement, exactly like an ordinary drop (#337)', async () => {
+		boot( { settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		expect( document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' ) ).toBe( false );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' ) ).toBe( true );
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'is NOT a transport error — no retry is ever sent for a cancelled response', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( selectRequests().length ).toBe( 1 );
+	} );
+
+	it( 'does not silently swallow the outcome — update_checkout still fires, and woodev_location_applied fires with the empty/unknown sentinel', async () => {
+		boot( { settlement: true } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
+
+		triggerSpy.mockRestore();
+	} );
+
+	it( 'still adopts the response\'s own chain for a level the cancel never touched — deeper/other levels follow the chain exactly as an ordinary response would', async () => {
+		boot( { region: true, settlement: true } );
+
+		selectViaFake( callFor( 'billing_state' ), {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		} );
+		selectRequests()[ 0 ].resolve( { current: { key: 'dadata:r1', level: 'region' }, persisted: true, chain: { region: { key: 'dadata:r1', level: 'region' } } } );
+		await flushMicrotasks();
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		// "the server's chain as it stands — unchanged by this request" (D7): region survives,
+		// named exactly as it stood before this failed settlement pick.
+		selectRequests()[ 1 ].resolve( cancelledBody( { region: { key: 'dadata:r1', level: 'region' } } ) );
+		await flushMicrotasks();
+
+		// scopeKeyFor() reads entry.records.region for the NEXT settlement suggest call — this
+		// only stays 'dadata:r1' if adoptChain() ran for the cancelled response exactly as it
+		// would for any other one.
+		callFor( 'billing_city' ).fetch( 'Балаш' );
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:r1' ) );
+	} );
+
+	it( 'clears a select2/related-list-enhanced settlement field through the ONE reusable synthetic option, never leaving a duplicate behind', async () => {
+		// Simulates a Task 13 renderer swap (location-select-modes.js, not this module) — same
+		// technique the existing #460/#462 region tests already use: swap the live element for
+		// a <select> carrying the SAME id, then drive the pick through the ORIGINAL fake
+		// typeahead call (matching how backwardsFill() already writes into a swapped sibling
+		// field without ever needing its OWN widget re-attached).
+		boot( { settlement: true } );
+
+		const input = document.getElementById( 'billing_city' );
+		const select = document.createElement( 'select' );
+
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+
+		const settlementCall = callFor( 'billing_city' );
+
+		// The fake typeahead call still targets the ORIGINAL (now-detached) input; only the
+		// eventual DOM write on cancel — routed through document.getElementById() — needs to
+		// see the swapped <select>. selectViaFake() itself would dispatch events nothing is
+		// listening for on a detached node, so the pick is driven directly here instead,
+		// exactly like onSelectFor()'s own contract (record in, nothing about the DOM node it
+		// arrived through).
+		settlementCall.onSelect( SETTLEMENT_ITEM );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		const settlementEl = document.getElementById( 'billing_city' );
+
+		expect( settlementEl.tagName ).toBe( 'SELECT' );
+		expect( settlementEl.value ).toBe( '' );
+		// Exactly ONE option total — the ONE synthetic option applyValueToElement() may own,
+		// reused for the empty write, never a second stray one appended alongside it.
+		expect( settlementEl.options.length ).toBe( 1 );
+	} );
+
+	describe( 'single-flight queue interaction (gotcha a-shared-select-queue-narrows-a-level-its-response-never-named)', () => {
+		it( 'a cancelled response for one level still clears/notices THAT level even while a DIFFERENT level is already queued behind it', async () => {
+			boot( { region: true, settlement: true } );
+
+			const regionItem = {
+				key: 'dadata:r1', label: 'Московская область', level: 'region',
+				record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+			};
+
+			selectViaFake( callFor( 'billing_state' ), regionItem );
+			expect( selectRequests().length ).toBe( 1 );
+
+			// Settlement is picked right behind it — region's own /select has not resolved yet,
+			// so this queues behind the single-flight slot instead of racing it.
+			selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+			expect( selectRequests().length ).toBe( 1 ); // still just region's request
+
+			// Region's own pick turns out stale.
+			selectRequests()[ 0 ].resolve( cancelledBody() );
+			await flushMicrotasks();
+
+			// Region — the level THIS response actually answered for — is cleared and noticed,
+			// even though something else (settlement) was already queued.
+			expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+			expect( notice() ).not.toBeNull();
+			expect( notice().textContent ).toBe( MESSAGE );
+
+			// Settlement's own optimistic write survives untouched — it is a DIFFERENT level,
+			// never in this response's scope.
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Старое Место' );
+
+			// settleSelect() dequeues the pending settlement record and sends it automatically.
+			expect( selectRequests().length ).toBe( 2 );
+			expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: SETTLEMENT_ITEM.record } );
+		} );
+
+		it( 'a cancelled response is skipped entirely for its OWN level when a NEWER pick for that SAME level is already queued', async () => {
+			boot( { settlement: true } );
+
+			const first = SETTLEMENT_ITEM;
+			const second = {
+				key: 'dadata:alive', label: 'Новое Место', level: 'settlement',
+				record: { key: 'dadata:alive', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Новое Место', type: 'дер' }, label: 'Новое Место' },
+			};
+
+			selectViaFake( callFor( 'billing_city' ), first );
+			selectViaFake( callFor( 'billing_city' ), second ); // queued — first's /select is still in flight
+			expect( selectRequests().length ).toBe( 1 );
+
+			selectRequests()[ 0 ].resolve( cancelledBody() );
+			await flushMicrotasks();
+
+			// second's own optimistic write must survive — first's cancellation must not touch
+			// the SAME level a newer, not-yet-sent pick already owns.
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Новое Место' );
+			expect( notice() ).toBeNull(); // nothing shown for a response superseded before it landed
+
+			// second is dequeued and sent automatically.
+			expect( selectRequests().length ).toBe( 2 );
+			expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: second.record } );
+
+			// second settles ordinarily — nothing about the cancelled first pick lingers.
+			selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: second.record.key, level: 'settlement' } } } );
+			await flushMicrotasks();
+
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Новое Место' );
+		} );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// D7 Seam D, last paragraph — the client adopts the SERVER's key when an ordinary (non-
+// cancelled) response's `current.key` differs from what it posted (D6 "updated" / D7's own
+// silent adopt both persist a DIFFERENT record than the one the customer picked).
+// -----------------------------------------------------------------------
+
+describe( 'an ordinary /select response whose current.key differs from the posted key (D6/D7 adopt)', () => {
+	it( 'publishes the SERVER\'s key on woodev_location_applied, not the client\'s own posted one', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const item = {
+			key: 'dadata:old', label: 'Старое Название', level: 'settlement',
+			record: { key: 'dadata:old', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Старое Название', type: 'дер' }, label: 'Старое Название' },
+		};
+
+		selectViaFake( callFor( 'billing_city' ), item );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		// The server persisted a DIFFERENT record than the one posted — a renamed popular
+		// settlement (D6 "updated") or a D7 step 2 silent adopt.
+		selectReq.resolve( {
+			current: { key: 'dadata:new', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: 'dadata:new', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:new', level: 'settlement', settlementKey: 'dadata:new', implicit: false } ] );
+	} );
+
+	it( 'keeps the client\'s own posted key when current.key matches it (the ordinary, overwhelmingly common case)', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( callFor( 'billing_city' ), item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:city1', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: 'dadata:city1', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: false } ] );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // Single-flight /select queue (Finding 2, PR-C review): a second selection made before the
 // first POST /select resolves must not race it — the server persists exactly ONE customer
 // record slot (Location_Controller::handle_select_request() → set_customer_record()), so
