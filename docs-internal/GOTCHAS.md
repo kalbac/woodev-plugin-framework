@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 195 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 196 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -80,6 +80,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **One `/select` response narrows EVERY level — including a still-queued pick it could not have named — wiping its optimistic record.** → [a-shared-select-queue-narrows-a-level-its-response-never-named](gotchas/a-shared-select-queue-narrows-a-level-its-response-never-named.md) (s89)
 - [shipping/location] **An empty `owners[country][level]` DISARMS the cross-provider guard that reads it — falsy is an open gate, not a closed one.** → [an-empty-level-owner-silently-disarms-the-cross-provider-guard](gotchas/an-empty-level-owner-silently-disarms-the-cross-provider-guard.md) (s88)
 - [shipping/location] **«Список с поиском» is `ajax-select2`, NOT `related-list` — and DaData can never offer «Предустановленный список» at all.** → [the-three-location-field-modes-and-their-russian-labels](gotchas/the-three-location-field-modes-and-their-russian-labels.md) (s87)
 - [shipping/location] **`within_applied` reports what the scope BUILDER decided, not what the provider honoured — the one field that could detect a dropped scope cannot.** → [within-applied-reports-the-scope-builder-not-the-provider](gotchas/within-applied-reports-the-scope-builder-not-the-provider.md) (s78)
