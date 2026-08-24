@@ -304,6 +304,27 @@ function selectViaFake( call, item, viaJquery = false ) {
 }
 
 /**
+ * Resolves the most recent `/select` as an ordinary persisted success, and flushes.
+ *
+ * Since s90 the address level unlocks on the SERVER's confirmation rather than on the click
+ * (operator decision reversing #337 — the reasoning is in `isAddressLocked()`'s own docblock),
+ * so any flow that goes on to touch a DEEPER level has to get past the round trip first.
+ *
+ * @param {Object} record The record just picked — its key/level are echoed back as `current`.
+ * @returns {Promise<void>}
+ */
+function settleLastSelect( record ) {
+	fetchCalls[ fetchCalls.length - 1 ].resolve( {
+		current: { key: record.key, level: record.level },
+		persisted: true,
+		chain: { [ record.level ]: { key: record.key, level: record.level } },
+	} );
+
+	return flushMicrotasks();
+}
+
+
+/**
  * Simulates a customer typing `query` into the field behind `call` and abandoning it — leaving
  * WITHOUT ever picking a suggestion, with a COMPLETED search that resolved to zero results
  * (issue #350). Reproduces the real timing this module's own `handleFieldChanged()` docblock and
@@ -752,7 +773,7 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		return document.querySelector( '.woodev-location-notice' );
 	}
 
-	it( 'shows the server-supplied notPersisted string right after the field, anchored past it in the DOM', async () => {
+	it( 'shows the server-supplied notPersisted string BELOW the field — last child of the field\'s own parent', async () => {
 		boot( { settlement: true } );
 
 		const settlementCall = callFor( 'billing_city' );
@@ -770,7 +791,14 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		expect( notice() ).not.toBeNull();
 		expect( notice().textContent ).toBe( 'Не удалось сохранить выбор — попробуйте ещё раз.' );
 		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
-		expect( document.getElementById( 'billing_city' ).nextElementSibling ).toBe( notice() );
+
+		// Operator rig pass, s90: anchored immediately AFTER the field, the notice renders ABOVE
+		// the visible control for `ajax-select2` — select2 leaves the real <select> hidden in
+		// place and draws its own container as the next sibling. Last-child of the field's own
+		// parent is after every node any renderer drew.
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.lastElementChild ).toBe( notice() );
 	} );
 
 	it( 'does NOT show a notice for a network/transport failure — only an honest persisted: false is consumed', async () => {
@@ -835,6 +863,933 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 		await flushMicrotasks();
 
 		expect( notice() ).toBeNull();
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// D7 (spec + plan Seam D, issue #488 slice 3) — the client half of a stale popular-settlement
+// pick: `/select` answers HTTP 200 with `cancelled: true` when the posted record named a
+// popular-settlement entry whose provider key has died and the server's own adopt search found
+// no unambiguous rename to fall back to silently.
+// -----------------------------------------------------------------------
+
+// Operator rig pass, s90. A `/select` round trip is 2.4-4.5 SECONDS on the rig (measured: region
+// 4527 ms, an ordinary settlement 2391 ms, one needing the D7 provider check 3493 ms) — so the
+// field sat showing the customer's pick and then, on the D7 path, emptied itself with an error
+// several seconds later. Nothing in between said the form was working: "я уже даже подумал, что
+// перестало работать". The busy state is therefore immediate and unconditional; there is no fast
+// path here worth protecting from a flicker.
+describe( 'the /select busy state (operator rig pass, s90)', () => {
+	const ITEM = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+	};
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	function spinner() {
+		return document.querySelector( '.woodev-location-select-spinner' );
+	}
+
+	function host() {
+		return document.getElementById( 'billing_city' ).parentNode;
+	}
+
+	it( 'marks the field busy the moment the request goes out — spinner, aria-busy and the host class', () => {
+		boot( { settlement: true } );
+
+		expect( spinner() ).toBeNull();
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( selectRequests().length ).toBe( 1 );
+
+		// The rendered, customer-visible state: a spinner is actually in the document, inside the
+		// same host the field lives in.
+		expect( spinner() ).not.toBeNull();
+		expect( host().contains( spinner() ) ).toBe( true );
+		expect( spinner().getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+
+		const field = document.getElementById( 'billing_city' );
+
+		expect( field.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		expect( field.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+	} );
+
+	// The wrapper WooCommerce puts around a checkout field is `display: inline`, so the spinner's
+	// `top: 0; bottom: 0` resolve against a LINE box sized by line-height, not against the field.
+	// Measured on the rig, s90: wrapper 388-418 (30px), the control 382-432 (50px) — centres 403
+	// vs 407, and the ring sat 4px high. jsdom has no layout, so the boxes are mocked here; what
+	// is pinned is the arithmetic and the guard, not the browser's own numbers.
+	it( 'sizes the spinner to the CONTROL it sits on, not to the inline wrapper around it', () => {
+		boot( { settlement: true } );
+
+		const field = document.getElementById( 'billing_city' );
+
+		field.parentNode.getBoundingClientRect = () => ( { top: 388, bottom: 418, height: 30 } );
+		field.getBoundingClientRect = () => ( { top: 382, bottom: 432, height: 50 } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( spinner().style.top ).toBe( '-6px' );
+		expect( spinner().style.height ).toBe( '50px' );
+		expect( spinner().style.bottom ).toBe( 'auto' );
+	} );
+
+	it( 'leaves the CSS fallback alone when there is no box to measure — a ring pinned to a zero-height nothing is worse', () => {
+		boot( { settlement: true } );
+
+		// jsdom's own default: every rect is zero. The guard must read that as "not laid out".
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( spinner().style.top ).toBe( '' );
+		expect( spinner().style.height ).toBe( '' );
+	} );
+
+	// Operator, s90. Picking a region clears the settlement field (it depends on the region), and
+	// the client writes the region optimistically — so until this, the settlement field was free
+	// to be searched, scoped by a region key the SERVER had not accepted yet. If that /select then
+	// answers `cancelled` (D7) or `persisted: false`, the search was scoped by a key that never
+	// existed as far as the server is concerned.
+	it( 'locks a level whose PARENT is still in flight, and releases it when the parent answers', async () => {
+		boot( { region: true, settlement: true } );
+
+		const regionItem = {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		};
+
+		selectViaFake( callFor( 'billing_state' ), regionItem );
+
+		const settlement = document.getElementById( 'billing_city' );
+
+		expect( settlement.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+
+		// The child is blocked, not emptied of whatever it posts — a disabled control leaves the
+		// serialized checkout form, and this one may still hold text the customer typed.
+		expect( settlement.disabled ).toBe( false );
+
+		selectRequests()[ 0 ].resolve( {
+			current: { key: regionItem.record.key, level: 'region' }, persisted: true,
+			chain: { region: { key: regionItem.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request
+	// rather than on "the parent has no record yet": with no region picked, the customer is free
+	// to fill the settlement directly and let backwardsFill() write the region for them. Locking
+	// on absence would break that ordinary path outright. `enqueueSelect()` has exactly one call
+	// site — a real pick in `onSelectFor()` — so nothing else can ever raise this lock.
+	it( 'does NOT lock the settlement when no region was picked — the customer may fill it directly and let the region backfill', () => {
+		boot( { region: true, settlement: true } );
+
+		const settlement = document.getElementById( 'billing_city' );
+
+		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+
+		// Typing in it is what the customer does next, and nothing here may stand in the way:
+		// the region field is still empty and stays that way until backwardsFill() writes it.
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+		expect( settlement.disabled ).toBe( false );
+	} );
+
+	it( 'releases a child lock even when the parent\'s request FAILS — a lock outliving its cause is worse than no lock', async () => {
+		boot( { region: true, settlement: true } );
+
+		const regionItem = {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		};
+
+		const logged = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		selectViaFake( callFor( 'billing_state' ), regionItem );
+		expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+		logged.mockRestore();
+
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-disabled' ) ).toBe( false );
+	} );
+
+	it( 'never uses the disabled ATTRIBUTE — measured: a disabled control leaves the serialized checkout form entirely', () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( document.getElementById( 'billing_city' ).disabled ).toBe( false );
+	} );
+
+	it( 'applies readonly where the element actually supports it, and takes it back off', () => {
+		boot( { settlement: true } );
+
+		const field = document.getElementById( 'billing_city' );
+		const supportsReadOnly = 'readOnly' in field;
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		if ( supportsReadOnly ) {
+			expect( field.readOnly ).toBe( true );
+		}
+
+		selectRequests()[ 0 ].resolve( { current: { key: ITEM.record.key, level: 'settlement' }, persisted: true } );
+
+		return flushMicrotasks().then( () => {
+			expect( field.readOnly ).toBe( false );
+		} );
+	} );
+
+	it( 'clears the busy state on a PERSISTED response', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].resolve( { current: { key: ITEM.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( spinner() ).toBeNull();
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-busy' ) ).toBe( false );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	it( 'clears the busy state on a CANCELLED response — the field must not be left spinning under the error', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].resolve( {
+			cancelled: true, reason: 'stale_record', message: 'Данные не актуальны, выберите заново',
+			current: null, persisted: false, chain: {},
+		} );
+		await flushMicrotasks();
+
+		expect( spinner() ).toBeNull();
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	it( 'clears the busy state when the request FAILS outright — a spinner surviving a transport error would spin forever', async () => {
+		boot( { settlement: true } );
+
+		// The module logs the transport failure by design (logError); silenced so a genuinely
+		// unexpected console.error elsewhere in this suite still stands out.
+		const logged = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( logged ).toHaveBeenCalled();
+		logged.mockRestore();
+
+		expect( spinner() ).toBeNull();
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-busy' ) ).toBe( false );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+} );
+
+describe( 'D7 — a cancelled /select response (stale popular-settlement pick, issue #488 slice 3)', () => {
+	const MESSAGE = 'Данные не актуальны, выберите заново';
+
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:dead', label: 'Старое Место', level: 'settlement',
+		record: {
+			key: 'dadata:dead', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Старое Место', type: 'дер' }, label: 'Старое Место',
+		},
+	};
+
+	function notice() {
+		return document.querySelector( '.woodev-location-notice' );
+	}
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	function cancelledBody( chain ) {
+		return {
+			cancelled: true, reason: 'stale_record', message: MESSAGE,
+			current: null, persisted: false, chain: chain || {},
+		};
+	}
+
+	it( 'clears the field\'s value, leaving it genuinely empty (not a stale label)', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Старое Место' );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+
+	it( 'shows response.message in the SAME reusable notice surface #295\'s not-persisted case uses — the rendered DOM text, not a captured variable', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( notice() ).not.toBeNull();
+		expect( notice().textContent ).toBe( MESSAGE );
+		expect( notice().getAttribute( 'role' ) ).toBe( 'alert' );
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.lastElementChild ).toBe( notice() );
+	} );
+
+	// Operator rig pass, s90. The message alone was not enough: it rendered above the settlement
+	// field (so it read as belonging to the region), at the theme's own body size, with nothing
+	// marking it as an error and nothing marking the field. These three assertions pin the shape
+	// the fix gives it — placement is pinned by the test above.
+	it( 'presents the cancel as an ERROR: a warning mark, an error class on the field\'s host, and the message in its own text node', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( true );
+		expect( notice().querySelector( '.woodev-location-notice__icon' ) ).not.toBeNull();
+		expect( notice().querySelector( '.woodev-location-notice__icon' ).getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+
+		// The server-supplied string goes in as text, never as markup — the icon is the only
+		// thing this module authors as HTML.
+		const label = notice().querySelector( '.woodev-location-notice__text' );
+
+		expect( label ).not.toBeNull();
+		expect( label.textContent ).toBe( MESSAGE );
+	} );
+
+	it( 'takes the error outline off the field when the notice goes, not just the text', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		const host = document.getElementById( 'billing_city' ).parentNode;
+
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( true );
+
+		// The recovery the message asks for: pick again, and this time the server persists it.
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ selectRequests().length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( notice() ).toBeNull();
+		expect( host.classList.contains( 'woodev-location-field-error' ) ).toBe( false );
+	} );
+
+	it( 're-locks the address field on top of the cleared settlement, exactly like an ordinary drop (#337)', async () => {
+		boot( { settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		// s90: the address stays locked for the length of the round trip — and this is exactly
+		// the case that reversed #337. Under the old rule the customer could have been typing a
+		// street here for 2.4-4.5 seconds, into a field about to be re-locked underneath them by
+		// the very answer this test then delivers.
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( document.getElementById( 'billing_address_1' ).classList.contains( 'woodev-location-locked' ) ).toBe( true );
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( true );
+	} );
+
+	it( 'is NOT a transport error — no retry is ever sent for a cancelled response', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( selectRequests().length ).toBe( 1 );
+	} );
+
+	it( 'does not silently swallow the outcome — update_checkout still fires, and woodev_location_applied fires with the empty/unknown sentinel', async () => {
+		boot( { settlement: true } );
+
+		const triggerSpy = jest.spyOn( window.jQuery.fn, 'trigger' );
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( triggerSpy.mock.calls.some( ( args ) => args[ 0 ] === 'update_checkout' ) ).toBe( true );
+		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
+
+		triggerSpy.mockRestore();
+	} );
+
+	it( 'still adopts the response\'s own chain for a level the cancel never touched — deeper/other levels follow the chain exactly as an ordinary response would', async () => {
+		boot( { region: true, settlement: true } );
+
+		selectViaFake( callFor( 'billing_state' ), {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		} );
+		selectRequests()[ 0 ].resolve( { current: { key: 'dadata:r1', level: 'region' }, persisted: true, chain: { region: { key: 'dadata:r1', level: 'region' } } } );
+		await flushMicrotasks();
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		// "the server's chain as it stands — unchanged by this request" (D7): region survives,
+		// named exactly as it stood before this failed settlement pick.
+		selectRequests()[ 1 ].resolve( cancelledBody( { region: { key: 'dadata:r1', level: 'region' } } ) );
+		await flushMicrotasks();
+
+		// scopeKeyFor() reads entry.records.region for the NEXT settlement suggest call — this
+		// only stays 'dadata:r1' if adoptChain() ran for the cancelled response exactly as it
+		// would for any other one.
+		callFor( 'billing_city' ).fetch( 'Балаш' );
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:r1' ) );
+	} );
+
+	// -------------------------------------------------------------------
+	// Codex round 2: the two tests this replaced drove a HAND-SWAPPED bare <select> through the
+	// DETACHED fake typeahead call (`settlementCall.onSelect(...)` bypassing DOM entirely) and
+	// asserted `.value`/`options.length` on it — a shape no real renderer ever produces, which is
+	// exactly why it never caught either defect below. These boot the REAL Task 13 renderer
+	// (`location-select-modes.js`, not `fakeTypeahead()`'s stand-in) and drive picks through its
+	// OWN native `change` wiring, so both are exercised for real:
+	//
+	//  - applyValueToElement()'s synthetic-option branch, which used to REUSE (never remove) a
+	//    synthetic `<option>` for an EMPTY clear, permanently leaving one behind — see this
+	//    function's own docblock in location-cascade.js.
+	//  - resolveAndSelect()'s `lastHandledKey` guard (location-select-modes.js), which never
+	//    expired on its own — so re-picking the SAME still-rendered entry after this exact clear
+	//    resolved to a no-op and never re-fired `/select` at all, the worst version of the D7
+	//    cancel bug: the notice tells the customer to pick again, and picking the same entry again
+	//    is precisely the path that did nothing.
+	// -------------------------------------------------------------------
+
+	/**
+	 * Boots `location-cascade.js` against the REAL `location-select-modes.js` `related-list`
+	 * settlement renderer — deliberately NOT `boot()`'s `fakeTypeahead()` stand-in, and
+	 * deliberately without a fake select2 installed: `location-select-modes.js`'s own docblock
+	 * ("SELECT2 IS OPTIONAL AT RUNTIME") means `ensureSelect2()` simply no-ops here, and the
+	 * widget runs its real native-`<select>` fallback path — the exact path `resolveAndSelect()`'s
+	 * `lastHandledKey` guard exists for (a real user pick there fires BOTH the native
+	 * `addEventListener` and jQuery `.on('change')` halves of `bindChangeBothWorlds()` for ONE
+	 * dispatched event, so a single `pickByKey()` call below already exercises the guard's
+	 * original double-fire protection, not just this fix).
+	 *
+	 * @returns {void}
+	 */
+	function bootRealRelatedListSettlement() {
+		installMarkup( { settlement: true }, 'RU' );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, mode: 'related-list' } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
+	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 *
+	 * @returns {Object}
+	 */
+	function listRequest() {
+		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
+	}
+
+	/**
+	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
+	 * setting `selectedIndex` then dispatching one real native `change` event, exactly like this
+	 * file's own `selectViaFake()` does for the baseline typeahead's `<input>`.
+	 *
+	 * @param {Element} select
+	 * @param {string}  key
+	 * @returns {void}
+	 */
+	function pickByKey( select, key ) {
+		var options = select.options;
+		var idx = -1;
+
+		for ( var i = 0; i < options.length; i++ ) {
+			if ( options[ i ].dataset.woodevKey === key ) {
+				idx = i;
+				break;
+			}
+		}
+
+		expect( idx ).not.toBe( -1 );
+
+		select.selectedIndex = idx;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
+	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry.
+	 *
+	 * @returns {Promise<Element>}
+	 */
+	async function attachAndPopulateRelatedList() {
+		bootRealRelatedListSettlement();
+
+		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		return document.getElementById( 'billing_city' );
+	}
+
+	it( 'clears a REAL related-list <select> to no selection, leaving no synthetic empty option behind', async () => {
+		const select = await attachAndPopulateRelatedList();
+
+		expect( select.tagName ).toBe( 'SELECT' );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		// Exactly ONE /select request for ONE dispatched `change` event — the native+jQuery
+		// double-fire `resolveAndSelect()`'s guard exists for was already exercised here.
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		// The rendered, customer-visible state: nothing selected, and the ONE real entry the
+		// /location/list response supplied is still the only option — no phantom empty row a
+		// customer opening this dropdown (or select2, had it initialized) would ever have to
+		// explain, and nothing this layer itself could ever have produced another way.
+		expect( select.selectedIndex ).toBe( -1 );
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].dataset.woodevKey ).toBe( SETTLEMENT_ITEM.key );
+		expect( select.options[ 0 ].hasAttribute( 'data-woodev-location-synthetic' ) ).toBe( false );
+	} );
+
+	it( 'lets the customer re-pick the SAME still-rendered entry after a cancel — /select fires again, not a silent no-op', async () => {
+		const select = await attachAndPopulateRelatedList();
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The exact recovery the cancel notice instructs the customer to take: click the SAME
+		// still-rendered entry again. Before this fix, resolveAndSelect()'s lastHandledKey guard
+		// silently ate this — no second /select request ever went out, and the field stayed
+		// empty forever no matter how many times the customer repeated the instruction.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	describe( 'single-flight queue interaction (gotcha a-shared-select-queue-narrows-a-level-its-response-never-named)', () => {
+		it( 'a cancelled response for one level still clears/notices THAT level even while a DIFFERENT level is already queued behind it', async () => {
+			boot( { region: true, settlement: true } );
+
+			const regionItem = {
+				key: 'dadata:r1', label: 'Московская область', level: 'region',
+				record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+			};
+
+			selectViaFake( callFor( 'billing_state' ), regionItem );
+			expect( selectRequests().length ).toBe( 1 );
+
+			// Settlement is picked right behind it — region's own /select has not resolved yet,
+			// so this queues behind the single-flight slot instead of racing it.
+			selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+			expect( selectRequests().length ).toBe( 1 ); // still just region's request
+
+			// Region's own pick turns out stale.
+			selectRequests()[ 0 ].resolve( cancelledBody() );
+			await flushMicrotasks();
+
+			// Region — the level THIS response actually answered for — is cleared and noticed,
+			// even though something else (settlement) was already queued.
+			expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+			expect( notice() ).not.toBeNull();
+			expect( notice().textContent ).toBe( MESSAGE );
+
+			// Settlement's own optimistic write survives untouched — it is a DIFFERENT level,
+			// never in this response's scope.
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Старое Место' );
+
+			// settleSelect() dequeues the pending settlement record and sends it automatically.
+			expect( selectRequests().length ).toBe( 2 );
+			expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: SETTLEMENT_ITEM.record } );
+		} );
+
+		it( 'a cancelled response is skipped entirely for its OWN level when a NEWER pick for that SAME level is already queued', async () => {
+			boot( { settlement: true } );
+
+			const first = SETTLEMENT_ITEM;
+			const second = {
+				key: 'dadata:alive', label: 'Новое Место', level: 'settlement',
+				record: { key: 'dadata:alive', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Новое Место', type: 'дер' }, label: 'Новое Место' },
+			};
+
+			selectViaFake( callFor( 'billing_city' ), first );
+			selectViaFake( callFor( 'billing_city' ), second ); // queued — first's /select is still in flight
+			expect( selectRequests().length ).toBe( 1 );
+
+			selectRequests()[ 0 ].resolve( cancelledBody() );
+			await flushMicrotasks();
+
+			// second's own optimistic write must survive — first's cancellation must not touch
+			// the SAME level a newer, not-yet-sent pick already owns.
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Новое Место' );
+			expect( notice() ).toBeNull(); // nothing shown for a response superseded before it landed
+
+			// second is dequeued and sent automatically.
+			expect( selectRequests().length ).toBe( 2 );
+			expect( JSON.parse( selectRequests()[ 1 ].init.body ) ).toEqual( { record: second.record } );
+
+			// second settles ordinarily — nothing about the cancelled first pick lingers.
+			selectRequests()[ 1 ].resolve( { current: { key: second.record.key, level: 'settlement' }, persisted: true, chain: { settlement: { key: second.record.key, level: 'settlement' } } } );
+			await flushMicrotasks();
+
+			expect( document.getElementById( 'billing_city' ).value ).toBe( 'Новое Место' );
+		} );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #488 slice 3 round 3 (Codex re-review): resetWidgetGuard() must run on EVERY route that
+// overwrites a select2/related-list widget's DOM value out from under it — not only the D7
+// cancel path clearChainField() already covers above. Enumerated by grepping this file for every
+// literal `applyValueToElement( el, '' )` call: clearChainField() (already covered by the D7
+// suite above), clearDescendants() (an ordinary ANCESTOR text edit — no country involved), and
+// clearCountryScope() (a country change). Both of the latter two are exercised here, each through
+// the REAL Task 13 related-list renderer, never a hand-rolled stand-in — same standard as the D7
+// suite's own round-2 rewrite.
+//
+// Falsified first, per the operator's own instruction, rather than assumed: `applyCountryArbitration()`
+// (:2689-2700) only calls `detachOne()` when a node's `isNodeActive()` flips to false — a country
+// change that leaves a level served under the NEW country too leaves `attached && active` both
+// true, so NEITHER branch fires and the SAME widget instance (and its stale `lastHandledKey`
+// closure) stays attached. And `clearDescendants()`'s only caller, `handleFieldChanged()`'s
+// ordinary (non-country) branch (:3293-3332), never calls `attachOne()`/`detachOne()`/
+// `applyCountryArbitration()` at all. Neither route gets a fresh widget for free.
+// -----------------------------------------------------------------------
+
+describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL Task 13 widget (issue #488 slice 3 round 3)', () => {
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:dead', label: 'Старое Место', level: 'settlement',
+		record: {
+			key: 'dadata:dead', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Старое Место', type: 'дер' }, label: 'Старое Место',
+		},
+	};
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	/**
+	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
+	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 *
+	 * @returns {Object}
+	 */
+	function listRequest() {
+		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
+	}
+
+	/**
+	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
+	 * same technique as `location-cascade.test.js`'s own D7 suite above.
+	 *
+	 * @param {Element} select
+	 * @param {string}  key
+	 * @returns {void}
+	 */
+	function pickByKey( select, key ) {
+		var options = select.options;
+		var idx = -1;
+
+		for ( var i = 0; i < options.length; i++ ) {
+			if ( options[ i ].dataset.woodevKey === key ) {
+				idx = i;
+				break;
+			}
+		}
+
+		expect( idx ).not.toBe( -1 );
+
+		select.selectedIndex = idx;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * Boots the REAL `location-select-modes.js` `related-list` settlement renderer — deliberately
+	 * not `boot()`'s `fakeTypeahead()` stand-in, and deliberately without a fake select2 (SELECT2
+	 * IS OPTIONAL AT RUNTIME, per that file's own docblock — `ensureSelect2()` no-ops and the
+	 * widget runs its real native-`<select>` fallback, exactly the path `resolveAndSelect()`'s
+	 * guard exists for).
+	 *
+	 * @param {Object} configOpts merged into `buildConfig()` — a test opts into `region: true`
+	 *   or a multi-country `levels` map as its own scenario needs.
+	 * @returns {void}
+	 */
+	function bootRealRelatedListSettlement( configOpts ) {
+		installMarkup( Object.assign( { settlement: true }, configOpts ), 'RU' );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( Object.assign(
+			{ settlement: true, mode: { settlement: 'related-list' } },
+			configOpts
+		) );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
+	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry, then picks it once and
+	 * lets that first `/select` succeed ordinarily — the baseline state both tests below start
+	 * their OWN clearing route from.
+	 *
+	 * @param {Object} configOpts
+	 * @returns {Promise<Element>}
+	 */
+	async function attachPopulateAndPick( configOpts ) {
+		bootRealRelatedListSettlement( configOpts );
+
+		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.tagName ).toBe( 'SELECT' );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.key, level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		return select;
+	}
+
+	it( 'an ancestor (region) text edit — clearDescendants() — lets the SAME still-rendered settlement entry be re-picked', async () => {
+		const select = await attachPopulateAndPick( { region: true } );
+
+		// An ORDINARY customer edit on the ANCESTOR level — never a pick — which
+		// handleFieldChanged() routes straight to clearDescendants(), never through
+		// applyCountryArbitration()/attachOne()/detachOne() at all.
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Татарстан';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The rendered, customer-visible state: nothing selected any more.
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The exact recovery: re-pick the SAME still-rendered settlement entry. Before this fix,
+		// resolveAndSelect()'s lastHandledKey guard — never reset by clearDescendants() — silently
+		// ate this: no second /select request, the field stayed empty forever.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	it( 'a country change to another country that ALSO serves this level — clearCountryScope() — lets the SAME still-rendered entry be re-picked', async () => {
+		// levels for BOTH countries — isNodeActive() stays true across the switch, so
+		// applyCountryArbitration() neither detaches nor re-attaches: the SAME widget instance
+		// (and its own lastHandledKey closure) survives, exactly the falsification this test
+		// pins per the operator's own instruction.
+		const select = await attachPopulateAndPick( {
+			countries: [ 'RU', 'US' ],
+			levels: { RU: { settlement: true }, US: { settlement: true } },
+		} );
+
+		const country = document.getElementById( 'billing_country' );
+
+		country.value = 'US';
+		country.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( select.selectedIndex ).toBe( -1 );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	// The fourth clearing route, and the one the round-3 enumeration missed: it does not go
+	// through `applyValueToElement( el, '' )` at all, so grepping for that literal could never
+	// find it. `pickup-mount.js`'s `applyAddressReplacement()` coerces an absent
+	// `point.locality` to `''` and announces it as `{target}_city` one synchronous event before
+	// writing (issue #339), and `handlePickupAddressReplacing()` puts that blank through
+	// `writeSilently()`. Hence the fix sits in `writeSilently()` itself rather than at a fourth
+	// call site.
+	it( 'a pickup point with NO locality — an EMPTY silent write — lets the SAME still-rendered entry be re-picked', async () => {
+		const select = await attachPopulateAndPick();
+
+		// Exactly what applyAddressReplacement() sends for a point whose `locality` is absent:
+		// `'' === point.locality ? ... : ''` reaches the announcement as a real empty string.
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: '' } },
+			bubbles: true,
+		} ) );
+
+		// The rendered, customer-visible state: the field shows nothing selected.
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The recovery a customer would actually attempt. Before the writeSilently() fix,
+		// resolveAndSelect()'s lastHandledKey still held this exact key and ate the re-pick:
+		// one /select total, the settlement record gone, the address field locked.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	// Round 4 (Codex): an empty write is NOT the only way a silent write can strand the guard,
+	// and this is the case that disproved the first attempt at this fix. The SAME pickup path
+	// deliberately writes a DIFFERENT non-empty spelling when it has one — the carrier answers
+	// «Москва» where the provider said «Moscow» (gotcha
+	// `a-locality-display-name-is-not-an-identifier`), and a point may legitimately stand in a
+	// neighbouring settlement, which is exactly why `applyAddressReplacement()` re-seeds rather
+	// than suppresses. `resolveAndSelect()` compares only the provider KEY, so a changed
+	// spelling leaves it just as stale as a blank does.
+	it( 'a pickup point with a DIFFERENT locality spelling — a non-empty silent write — also lets the SAME entry be re-picked', async () => {
+		const select = await attachPopulateAndPick();
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: 'Москва' } },
+			bubbles: true,
+		} ) );
+
+		// The field now carries the point's own locality, not the picked entry's.
+		expect( select.value ).toBe( 'Москва' );
+
+		// The customer puts their own settlement back. Under an empty-only release this was
+		// swallowed: no second /select, and handleFieldChanged() then read the text change as a
+		// manual edit and dropped the confirmed record, re-locking the address.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	// The other half of the rule, so a later change cannot "simplify" it into resetting on EVERY
+	// silent write: a write that does not CHANGE the field must leave the guard alone. It still
+	// tells the truth about what is on screen, and re-picking that entry really is the duplicate
+	// delivery the guard exists to eat (issue #461 BLOCKING 2 — one pick must not fire across
+	// both the select2 and the native path).
+	it( 'a silent write of the SAME text leaves the guard alone — the entry is still treated as already handled', async () => {
+		const select = await attachPopulateAndPick();
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: 'Старое Место' } },
+			bubbles: true,
+		} ) );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 1 );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// D7 Seam D, last paragraph — the client adopts the SERVER's key when an ordinary (non-
+// cancelled) response's `current.key` differs from what it posted (D6 "updated" / D7's own
+// silent adopt both persist a DIFFERENT record than the one the customer picked).
+// -----------------------------------------------------------------------
+
+describe( 'an ordinary /select response whose current.key differs from the posted key (D6/D7 adopt)', () => {
+	it( 'publishes the SERVER\'s key on woodev_location_applied, not the client\'s own posted one', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const item = {
+			key: 'dadata:old', label: 'Старое Название', level: 'settlement',
+			record: { key: 'dadata:old', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Старое Название', type: 'дер' }, label: 'Старое Название' },
+		};
+
+		selectViaFake( callFor( 'billing_city' ), item );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		// The server persisted a DIFFERENT record than the one posted — a renamed popular
+		// settlement (D6 "updated") or a D7 step 2 silent adopt.
+		selectReq.resolve( {
+			current: { key: 'dadata:new', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: 'dadata:new', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:new', level: 'settlement', settlementKey: 'dadata:new', implicit: false } ] );
+	} );
+
+	it( 'keeps the client\'s own posted key when current.key matches it (the ordinary, overwhelmingly common case)', async () => {
+		boot( { settlement: true } );
+
+		const seen = [];
+
+		document.body.addEventListener( 'woodev_location_applied', ( event ) => seen.push( event.detail ) );
+
+		const item = {
+			key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+			record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+		};
+
+		selectViaFake( callFor( 'billing_city' ), item );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:city1', level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: 'dadata:city1', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		expect( seen ).toEqual( [ { key: 'dadata:city1', level: 'settlement', settlementKey: 'dadata:city1', implicit: false } ] );
 	} );
 } );
 
@@ -1857,7 +2812,7 @@ describe( 'issue #352 — refusing to post a foreign-provider record into the se
 		expect( seen ).toHaveLength( 0 );
 	} );
 
-	it( 'the LOCAL record and the address lock still update for a refused, foreign-provider pick', () => {
+	it( 'the LOCAL record and the address lock still update for a refused, foreign-provider pick', async () => {
 		boot( { region: true, settlement: true, address: true, owners: OWNERS_MIXED_CHAIN } );
 
 		// The address field starts locked (issue #337: a settlement/address chain with the
@@ -1870,6 +2825,15 @@ describe( 'issue #352 — refusing to post a foreign-provider record into the se
 			key: 'test-cdek:msk', label: 'г Москва', level: 'settlement',
 			record: { key: 'test-cdek:msk', provider_id: 'test-cdek', level: 'settlement', country: 'RU', label: 'г Москва' },
 		} );
+
+		// s90: the address unlocks when the SERVER confirms the settlement, not on the click —
+		// so this flow has to get past the round trip before the lock lifts.
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'test-cdek:msk', level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: 'test-cdek:msk', level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
 		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 
 		selectViaFake( callFor( 'billing_address_1' ), foreignAddressItem() );
@@ -4074,20 +5038,43 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		return document.getElementById( 'billing_address_1' );
 	}
 
+	/**
+	 * Picks the settlement AND lets its `/select` answer.
+	 *
+	 * Since s90 the address unlocks on the SERVER's confirmation, not on the click (operator
+	 * decision reversing #337's original rule — the reasoning, and what overturned it, is in
+	 * `isAddressLocked()`'s own docblock). A test about the lock RULE therefore has to get past
+	 * the round trip before it can see the lock lift; a test about the TIMING asserts the
+	 * in-flight state directly instead.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	function pickSettlementAndSettle() {
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+
+		return flushMicrotasks();
+	}
+
 	it( 'locks it on boot when settlement and address are linked and the provider serves address', () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		expect( addressField().disabled ).toBe( true );
 	} );
 
-	it( 'marks the locked field for the stylesheet, and unmarks it again', () => {
+	it( 'marks the locked field for the stylesheet, and unmarks it again', async () => {
 		// `disabled` alone is invisible — the theme's own `input` rule overrides the browser's
 		// greying (measured on the rig), so the class is what location.css can actually see.
 		boot( { region: true, settlement: true, address: true } );
 
 		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 
 		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
 	} );
@@ -4122,20 +5109,36 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'unlocks on the settlement pick ITSELF, before /select has answered', () => {
+	// REVERSED BY THE OPERATOR, s90. This test used to assert the opposite — "the /select round
+	// trip is still in flight, the customer must be able to type now" — and that was #337's own
+	// rule. What changed is a measurement: the round trip is 2.4-4.5 seconds on the rig, not the
+	// instant #337 assumed, and the optimistic record it unlocked off can still be REFUSED (a D7
+	// `cancelled` wipes the settlement and re-locks the address underneath whatever was typed in
+	// the meantime), while the address's own `/suggest` would carry a `within` the server never
+	// accepted. The cost — no typing for the length of the round trip — is why the busy state
+	// exists: the field says it is working rather than sitting inert.
+	it( 'stays locked while the settlement pick is still unconfirmed, and lifts when /select answers', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
 
-		// The /select round trip is still in flight — the customer must be able to type now.
 		expect( fetchCalls[ fetchCalls.length - 1 ].url ).toContain( SELECT_URL );
+		expect( addressField().disabled ).toBe( true );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 're-locks when the settlement text is edited without picking a suggestion', () => {
+	it( 're-locks when the settlement text is edited without picking a suggestion', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		expect( addressField().disabled ).toBe( false );
 
 		const city = document.getElementById( 'billing_city' );
@@ -4191,13 +5194,13 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 're-locks after a country change wipes a settlement that HAD been picked', () => {
+	it( 're-locks after a country change wipes a settlement that HAD been picked', async () => {
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ], levels: {
 			RU: { region: true, settlement: true, address: true },
 			US: { region: true, settlement: true, address: true },
 		} } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		expect( addressField().disabled ).toBe( false );
 
 		const country = document.getElementById( 'billing_country' );
@@ -4332,7 +5335,7 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		},
 	};
 
-	it( 'restores the address TEXT (never the record) after a zero-results settlement abandon (#350 follow-up)', () => {
+	it( 'restores the address TEXT (never the record) after a zero-results settlement abandon (#350 follow-up)', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
 		const region = document.getElementById( 'billing_state' );
@@ -4340,7 +5343,7 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		region.value = 'Московская область';
 		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( addressField().value ).toBe( 'ул Тверская, 1' );
@@ -4357,10 +5360,10 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'restores the address TEXT after a below-minChars settlement abandon too', () => {
+	it( 'restores the address TEXT after a below-minChars settlement abandon too', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		const call = callFor( 'billing_city' );
@@ -4373,10 +5376,10 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'never overwrites address text the customer typed themselves while the abandon was resolving', () => {
+	it( 'never overwrites address text the customer typed themselves while the abandon was resolving', async () => {
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		const settlementCall = callFor( 'billing_city' );
@@ -4399,11 +5402,11 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
-	it( 'does NOT restore the old address after the settlement is re-typed and then a REAL suggestion is adopted', () => {
+	it( 'does NOT restore the old address after the settlement is re-typed and then a REAL suggestion is adopted', async () => {
 		// The regression guard: the snapshot must never leak into the ordinary cascade path.
 		boot( { region: true, settlement: true, address: true } );
 
-		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await pickSettlementAndSettle();
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( addressField().value ).toBe( 'ул Тверская, 1' );
@@ -4742,9 +5745,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
 	} );
 
-	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', () => {
+	it( 'the carried field survives WooCommerce\'s own change churn — the address does NOT re-lock', async () => {
 		bootBothColumns( false );
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 
 		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 
@@ -4757,9 +5761,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
 	} );
 
-	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', () => {
+	it( 'unchecking the toggle carries the record back the other way too (Rule 7c: BOTH directions)', async () => {
 		bootBothColumns( true );
 		selectViaFake( callFor( 'shipping_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 
 		expect( document.getElementById( 'shipping_address_1' ).disabled ).toBe( false );
 
@@ -4800,11 +5805,12 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 	 * Against the pre-fix implementation this fails on the FIRST assertion (shipping_address_1
 	 * carries 'ул Тверская, 1' instead of staying empty) — the right reason, not an incidental one.
 	 */
-	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', () => {
+	it( 'a contradicted parent invalidates the levels BELOW it, and carries none of them', async () => {
 		bootBothColumns( false );
 
 		// A full billing chain: settlement Москва, then an address inside it.
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Тверская, 1' );
@@ -4836,9 +5842,10 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '' );
 	} );
 
-	it( 'blocking drops IDENTITY, never text the customer can already see', () => {
+	it( 'blocking drops IDENTITY, never text the customer can already see', async () => {
 		bootBothColumns( false );
 		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+		await settleLastSelect( SETTLEMENT_ITEM.record );
 		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
 
 		// This time the customer has typed BOTH halves of their own shipping address.

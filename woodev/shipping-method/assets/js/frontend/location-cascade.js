@@ -190,6 +190,51 @@
 	 */
 	var SYNTHETIC_OPTION_ATTR = 'data-woodev-location-synthetic';
 
+	/**
+	 * The class {@see showFieldNotice} puts on the notice's HOST — the element that already
+	 * contains the field (WooCommerce's own `.woocommerce-input-wrapper`, but this module never
+	 * names that class: it takes the field's `parentNode`, whatever it is, so the rule survives
+	 * a theme, a different WooCommerce version, or a renderer that wraps differently).
+	 *
+	 * It exists so `location.css` can put the error outline on the control the customer can
+	 * actually SEE. Which element that is depends on the renderer — the native `<select>` for
+	 * `related-list`, select2's own `.select2-selection` for `ajax-select2`, the `<input>` for
+	 * the baseline typeahead — and the host is the one node all three have in common.
+	 *
+	 * @type {string}
+	 */
+	var NOTICE_HOST_ERROR_CLASS = 'woodev-location-field-error';
+
+	/**
+	 * The class {@see markSelectBusy} puts on the host while a `/select` is in flight for that
+	 * field — the same host, resolved the same way, as {@see NOTICE_HOST_ERROR_CLASS}.
+	 *
+	 * WHY THIS EXISTS AT ALL, and why it is not conditional: measured on the rig, s90, a single
+	 * `/select` round trip takes 2.4-4.5 SECONDS — region 4527 ms, an ordinary settlement
+	 * 2391 ms, a settlement whose popular-list entry needed the D7 provider check 3493 ms. The
+	 * verification is not what makes it slow; the round trip is. Until this class existed the
+	 * field simply sat there showing the customer's pick, and on the D7 path it then emptied
+	 * itself several seconds later with no warning — the operator's own words on the rig pass:
+	 * "я уже даже подумал, что перестало работать". So the busy state is immediate and
+	 * unconditional; a delay threshold would only mean the slow path shows nothing for its first
+	 * fraction, and there is no fast path here to protect from flicker.
+	 *
+	 * @type {string}
+	 */
+	var BUSY_HOST_CLASS = 'woodev-location-field-busy';
+
+	/**
+	 * The warning mark that opens a notice. Inline SVG rather than a font glyph or a background
+	 * image: it inherits `currentColor`, so the mark and the text can never drift apart, and it
+	 * needs no additional HTTP request and no icon font this plugin does not otherwise ship.
+	 *
+	 * `aria-hidden` + `focusable="false"`: the notice already carries `role="alert"` and the
+	 * message states the problem in words, so announcing the mark as well would only repeat it.
+	 *
+	 * @type {string}
+	 */
+	var NOTICE_ICON_SVG = '<svg class="woodev-location-notice__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 1.6 19 18H1L10 1.6Zm0 4.1L4.1 16.5h11.8L10 5.7Zm-.85 3.4h1.7v4.2h-1.7V9.1Zm0 5.1h1.7v1.7h-1.7v-1.7Z"/></svg>';
+
 	var factory = window.WoodevCheckoutFieldStore;
 
 	if ( ! factory || 'function' !== typeof factory.createStore ) {
@@ -1149,6 +1194,10 @@
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
+			// { el, host, spinner, level } while a /select is in flight — see markSelectBusy().
+			selectBusy: null,
+			// Field ids this module locked because an ANCESTOR's /select had not answered yet.
+			dependentLocked: [],
 			// Task 13 / #295 finding 1: the fieldId the MOST RECENT selection came from (any
 			// level — the /select queue is per ENTRY, not per node) and the currently-shown
 			// "your choice was not saved" notice element, if any — see
@@ -1425,6 +1474,22 @@
 
 		for ( i = 0; i < options.length; i++ ) {
 			if ( options[ i ].hasAttribute( SYNTHETIC_OPTION_ATTR ) ) {
+				// Issue #488 slice 3 (D7 Seam D, Codex round 2 MEDIUM): clearing to `''` must not
+				// REUSE the synthetic option the way every non-empty value below does — a related-
+				// list `<select>` guarantees NO empty option once real entries are populated
+				// (`location-select-modes.js`'s own `applyEntries()`), and this is the one write
+				// path that could otherwise leave one behind permanently (this function's own
+				// widget-attach populates entries only ONCE, at attach — there is no later
+				// `applyEntries()` pass that would prune it back out). Removing the node outright,
+				// same as the "no synthetic option exists yet" branch below does by never creating
+				// one, keeps both branches converging on the same empty-select shape.
+				if ( '' === value ) {
+					el.removeChild( options[ i ] );
+					el.selectedIndex = -1;
+					refreshSelectWooWidget( el );
+					return;
+				}
+
 				options[ i ].value = value;
 				options[ i ].textContent = value;
 
@@ -1441,6 +1506,14 @@
 				refreshSelectWooWidget( el );
 				return;
 			}
+		}
+
+		if ( '' === value ) {
+			// No synthetic option to reuse and nothing to create — an empty select simply has
+			// nothing selected, same shape as the removal branch above.
+			el.selectedIndex = -1;
+			refreshSelectWooWidget( el );
+			return;
 		}
 
 		var option = document.createElement( 'option' );
@@ -1509,19 +1582,56 @@
 	 * bare `.value =` — see that function's own docblock for why a `<select>` needs more than
 	 * that to actually submit what this call intends.
 	 *
+	 * A SILENT WRITE THAT CHANGES THE FIELD RELEASES THE RENDERER'S PICK GUARD (issue #488
+	 * slice 3, rounds 3-4 of review). `resolveAndSelect()` in `location-select-modes.js` keeps a
+	 * `lastHandledKey` so ONE pick cannot fire across both the select2 and the native path
+	 * (issue #461 BLOCKING 2). That guard describes the field's CURRENT state — and a silent
+	 * write is, by definition, not a pick: it moves the field underneath the widget without the
+	 * widget ever hearing about it. Once the two disagree, re-picking the SAME still-rendered
+	 * entry is swallowed — no `/select`, {@see handleFieldChanged} then reads the text as a
+	 * manual edit and drops the confirmed record, and the address field re-locks with nothing on
+	 * screen explaining why.
+	 *
+	 * BOTH DIRECTIONS OF THAT DISAGREEMENT ARE REAL, and the second one is why this is not a
+	 * plain empty-check. `pickup-mount.js`'s `applyAddressReplacement()` coerces an absent
+	 * `point.locality` to `''` and announces it as `{target}_city`
+	 * (`woodev_pickup_address_replacing`, {@see handlePickupAddressReplacing}) — the empty case.
+	 * But that same path deliberately writes a DIFFERENT non-empty spelling of the locality when
+	 * it has one: the carrier answers «Москва» where the provider said «Moscow» (gotcha
+	 * `a-locality-display-name-is-not-an-identifier`), and a point may legitimately stand in a
+	 * neighbouring settlement. The guard compares only the provider KEY, so a changed spelling
+	 * leaves it just as stale as a blank does.
+	 *
+	 * An UNCHANGED write releases nothing. A re-seed that writes back the same text leaves the
+	 * guard telling the truth, and re-picking that entry really is the duplicate delivery the
+	 * guard exists to eat. The comparison is against `entry.resolved[ fieldId ]` — this module's
+	 * own notion of "did this field's text change", the same basis its change-gate uses.
+	 *
+	 * The release lives HERE, at the single write choke point, rather than at each caller: the
+	 * three literal `applyValueToElement( el, '' )` clear sites were wired one by one and the
+	 * enumeration still missed this path, which arrives through a call site that does not look
+	 * like a clear at all. A choke point covers every present caller and every future one.
+	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
 	 * @param {string} value
 	 * @returns {void}
 	 */
 	function writeSilently( entry, fieldId, value ) {
+		var previous = entry.resolved[ fieldId ];
+		var next = cascadeKey( value );
+
 		entry.store.setValue( fieldId, value );
-		entry.resolved[ fieldId ] = cascadeKey( value );
+		entry.resolved[ fieldId ] = next;
 
 		var el = document.getElementById( fieldId );
 
 		if ( el ) {
 			applyValueToElement( el, value );
+		}
+
+		if ( previous !== next ) {
+			resetWidgetGuard( entry, fieldId );
 		}
 	}
 
@@ -1694,6 +1804,160 @@
 	}
 
 	/**
+	 * Returns a NEW object equal to `record` except for `key`, which becomes `key` — never a
+	 * bare `.value =` reassignment on the caller's own object, so `entry.pendingRecord` (which
+	 * may alias the SAME object a caller still holds a reference to elsewhere) is never mutated
+	 * out from under it. A hand-rolled loop rather than `Object.assign()`, matching this
+	 * layer's own convention (`pickup-mount.js`'s `shallowMerge()`).
+	 *
+	 * @param {Object} record
+	 * @param {string} key
+	 * @returns {Object}
+	 */
+	function withAdoptedKey( record, key ) {
+		var copy = {};
+		var prop;
+
+		for ( prop in record ) {
+			if ( Object.prototype.hasOwnProperty.call( record, prop ) ) {
+				copy[ prop ] = record[ prop ];
+			}
+		}
+
+		copy.key = key;
+
+		return copy;
+	}
+
+	/**
+	 * Tells `fieldId`'s own widget (if any) to forget its "last handled" pick
+	 * ({@see location-select-modes.js}'s `resolveAndSelect()`/`forgetLastHandled()`) — issue #488
+	 * slice 3 round 3: EVERY call site that overwrites a select2/related-list widget's DOM value
+	 * out from under it (the D7 cancel path below, plus the two ordinary clearing routes
+	 * {@see clearDescendants} and {@see clearCountryScope}) must call this, or that widget's own
+	 * guard is left remembering a pick the DOM no longer shows — the customer's most natural
+	 * recovery, re-picking the SAME still-rendered entry, then resolves to a no-op and never
+	 * re-fires `/select`. Confirmed this actually reaches all three: `applyCountryArbitration()`
+	 * only detaches a node whose `isNodeActive()` flipped false, so a country change that leaves a
+	 * level served under the new country too (the `clearCountryScope()` case) keeps the SAME
+	 * widget instance — and its stale `lastHandledKey` closure — attached; `clearDescendants()`'s
+	 * own caller ({@see handleFieldChanged}, an ordinary text edit on an ancestor level) never
+	 * calls `attachOne()`/`detachOne()` at all. Neither route re-attaches on its own, so neither
+	 * gets a fresh widget (and a fresh guard) for free.
+	 *
+	 * A no-op for a level with no widget at all (the baseline typeahead's `<input>` never exposes
+	 * `.reset()` — nothing here to forget) or one a caller has already detached.
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function resetWidgetGuard( entry, fieldId ) {
+		var widget = entry.widgets[ fieldId ];
+
+		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
+			widget.api.reset();
+		}
+	}
+
+	/**
+	 * Clears ONE chain level's own field — DOM value, store value, the remembered-value gate,
+	 * and the confirmed record itself — for the D7 cancel path ({@see handleCancelledSelect}).
+	 *
+	 * Deliberately NOT {@see clearDescendants}: that function clears everything STRICTLY AFTER
+	 * a given index and snapshots the wiped TEXT under `entry.clearedByEdit[editedLevel]` for a
+	 * possible {@see restoreClearedDescendants} — semantics for a CUSTOMER EDIT the widget can
+	 * still resolve. A cancelled pick is the server's own verdict on data that no longer exists;
+	 * nothing about it is eligible for that restore, and reusing `clearDescendants` here (e.g.
+	 * by pointing `fromIndex` at the level ABOVE this one) would misattribute the snapshot to
+	 * that unrelated parent level, letting some LATER, genuinely unrelated abandon on the parent
+	 * field resurrect this dead settlement's stale address text. This function therefore touches
+	 * ONLY the named level; deeper levels are left to {@see adoptChain}'s own handling of the
+	 * response's `chain` (D7 Seam D: "leave the deeper chain levels exactly as the response's
+	 * chain says").
+	 *
+	 * Routes the DOM write through {@see applyValueToElement} (issue #462/#465), never a bare
+	 * `.value = ''`, so a stale synthetic `<option>` a prior fill left behind is REUSED (emptied
+	 * in place), not multiplied — the ONE synthetic option this module ever owns per `<select>`.
+	 *
+	 * Also tells this level's own widget (if any) to forget its "last handled" pick
+	 * ({@see location-select-modes.js}'s `resolveAndSelect()`/`forgetLastHandled()`) — this
+	 * function is the one place that overwrites a select2/related-list widget's DOM value out
+	 * from under it, so without this the most natural recovery from a cancelled pick — the
+	 * customer re-picking the SAME still-rendered entry — would resolve to a no-op there and never
+	 * re-fire `/select`.
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {void}
+	 */
+	function clearChainField( entry, level ) {
+		var node = chainNodeForLevel( entry, level );
+
+		if ( ! node ) {
+			return;
+		}
+
+		var el = document.getElementById( node.fieldId );
+
+		entry.records[ level ] = null;
+		entry.store.setValue( node.fieldId, '' );
+		entry.resolved[ node.fieldId ] = '';
+
+		if ( el ) {
+			applyValueToElement( el, '' );
+		}
+
+		resetWidgetGuard( entry, node.fieldId );
+	}
+
+	/**
+	 * D7 (spec + plan Seam D, issue #488 slice 3): handles a `/select` response answering
+	 * `cancelled: true` — the posted record named a popular-settlement entry whose provider key
+	 * has died, and the server's own adopt search (Seam C) found no unambiguous rename to fall
+	 * back to silently. NEVER a transport error — no retry, no silent swallow — a genuine, if
+	 * unwelcome, answer about the data (HTTP 200 by design, per the response contract).
+	 *
+	 * PROTECTED LEVEL, NOT "anything queued" (gotcha
+	 * `a-shared-select-queue-narrows-a-level-its-response-never-named`): the single-flight queue
+	 * is per ENTRY, not per level, so a DIFFERENT level's pick (e.g. an address chosen while
+	 * settlement's own `/select` was still in flight) may already be queued when this cancelled
+	 * response lands. That queued pick has nothing to do with THIS answer — settlement really
+	 * is stale, and clearing it, showing the message, and re-locking the address field are all
+	 * still correct and immediate. Only a NEWER pick for the SAME level as `record` (the level
+	 * this response is actually about) makes this response stale FOR THAT LEVEL, exactly the
+	 * gotcha's own fix: `adoptChain()` gets `protectedLevel` for the same reason the ordinary
+	 * path already passes it, and the field-clear/notice/trigger below are skipped in that one
+	 * case so they never stomp the newer pick's already-optimistic write moments before
+	 * {@see settleSelect} dequeues and sends it.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The record THIS response answered for (already dequeued by the
+	 *                         caller — {@see sendNextSelect}).
+	 * @param {Object} body   The parsed response body (`cancelled: true`).
+	 * @returns {void}
+	 */
+	function handleCancelledSelect( entry, record, body ) {
+		var pending = entry.pendingRecord;
+		var protectedLevel = pending ? pending.level : null;
+		var level = record && 'string' === typeof record.level ? record.level : null;
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+
+		adoptChain( entry, body && body.chain, protectedLevel );
+
+		if ( node && level !== protectedLevel ) {
+			clearChainField( entry, level );
+			refreshAddressLock( entry );
+
+			showCancelledNotice( entry, node.fieldId, body && body.message );
+			fireLocationApplied( entry, null, false );
+			triggerCheckoutUpdate();
+		}
+
+		settleSelect( entry, false, false, record );
+	}
+
+	/**
 	 * Dequeues `entry.pendingRecord` (if any) and sends it — the sole place that actually
 	 * issues a `/select` POST. A no-op when nothing is queued (the single-flight slot simply
 	 * stays free until the next {@see enqueueSelect} call).
@@ -1711,6 +1975,8 @@
 		entry.pendingRecord = null;
 		entry.selectInFlight = true;
 
+		markSelectBusy( entry, record );
+
 		var url = entry.location.endpoints.select;
 		var headers = nonceHeader( entry );
 
@@ -1718,12 +1984,37 @@
 
 		fetchJson( url, { method: 'POST', headers: headers, body: JSON.stringify( { record: record } ) } ).then(
 			function( body ) {
+				// D7 (spec + plan Seam D): a cancelled response is a wholly different outcome
+				// from an ordinary persisted/not-persisted one — see handleCancelledSelect()'s
+				// own docblock. `cancelled` is ABSENT (never `false`) on every ordinary
+				// response (the server's own contract), so this check never misfires against
+				// an older server or a persisted:false response.
+				if ( body && true === body.cancelled ) {
+					handleCancelledSelect( entry, record, body );
+					return;
+				}
+
 				// `persisted` is always present on a successful response (Location_Controller::
 				// handle_select_request()'s own return type — never ambiguous), so `!shouldTrigger`
 				// here means exactly one thing: the server answered, honestly, that it could not
 				// write the record (#295 finding 1 — typically a guest whose session/cart cookie
 				// has not initialized yet, gotcha `guest-session-write-needs-the-cart-cookie`).
 				var persisted = !! ( body && false !== body.persisted );
+
+				// D7 Seam D, last paragraph: the server's `current` is now authoritative for the
+				// KEY as well as the chain (D6 "updated" — a renamed popular settlement — and D7
+				// step 2's silent adopt both persist a DIFFERENT record than the one posted).
+				// `entry.records[level]` already gets the corrected key below via adoptChain()
+				// (the chain and `current` are built from the SAME persisted record server-side);
+				// this is the one place that DOESN'T flow through adoptChain — the local `record`
+				// var `fireLocationApplied()` publishes in `settleSelect()` below, which until now
+				// always echoed back exactly what the client posted.
+				var adoptedRecord = record;
+
+				if ( body && body.current && 'string' === typeof body.current.key && body.current.key
+					&& body.current.key !== record.key ) {
+					adoptedRecord = withAdoptedKey( record, body.current.key );
+				}
 
 				// Issue #330 (spec §7): the response carries the server's own rebuilt `chain`
 				// alongside `current`/`persisted` — adopting it here (whether or not THIS
@@ -1747,7 +2038,7 @@
 				// optimistic pick above already unlocked.
 				refreshAddressLock( entry );
 
-				settleSelect( entry, persisted, ! persisted, record );
+				settleSelect( entry, persisted, ! persisted, adoptedRecord );
 			},
 			function( error ) {
 				logError( error );
@@ -1834,6 +2125,10 @@
 	 */
 	function settleSelect( entry, shouldTrigger, notPersisted, record ) {
 		entry.selectInFlight = false;
+
+		// Before the possible forward below, never after: a queued record is about to make its
+		// OWN field busy, and a stale marker left on the previous one would never be cleared.
+		clearSelectBusy( entry );
 
 		if ( entry.pendingRecord ) {
 			sendNextSelect( entry );
@@ -1943,6 +2238,86 @@
 	}
 
 	/**
+	 * Inserts a customer-facing notice right after `fieldId`'s own element — the shared DOM
+	 * mechanism behind both {@see showNotPersistedNotice} (Task 13 / #295) and
+	 * {@see showCancelledNotice} (D7, issue #488 slice 3). ONE slot per entry
+	 * (`entry.notPersistedNotice`): showing either kind clears whatever the other last left
+	 * behind first, so the two — mutually exclusive per `/select` response, never both true at
+	 * once — can never stack.
+	 *
+	 * RENDERER-AGNOSTIC ON PURPOSE. The empty-suggestions row (`location-typeahead.js`'s own
+	 * `emptyText`/`renderItems()`) looks like the obvious "existing precedent" to reuse for D7,
+	 * but it lives entirely inside the baseline typeahead widget and is NOT surfaced by either
+	 * Task 13 renderer this file's own `resolveModeRenderer()` can attach instead
+	 * (`location-select-modes.js`'s `attachRelatedListSettlement()`/`attachAjaxSelect2()` —
+	 * neither wires an empty/no-results message of any kind, `related-list:settlement` being a
+	 * plain pre-populated `<select>` and `ajax-select2` never reading `options.emptyText` at
+	 * all). Since the settlement level a D7 cancel targets can be rendered by ANY of the three,
+	 * a message tied to the typeahead's own listbox would silently vanish for two of them. This
+	 * DOM-anchor notice already existed for exactly this purpose — telling the customer why a
+	 * control just changed — and works identically regardless of which renderer (or none) is
+	 * attached, so D7 reuses IT rather than the typeahead-only row the plan named.
+	 *
+	 * A missing anchor (the field no longer in the document — a country switch tore the section
+	 * down between the request and this response landing) or blank `text` is a silent no-op:
+	 * there is nowhere left to put the message, or nothing to say.
+	 *
+	 * BELOW THE CONTROL, NOT AFTER THE ELEMENT (operator rig pass, s90). The obvious placement —
+	 * `insertBefore( notice, anchor.nextSibling )` — is right in the DOM and wrong on screen for
+	 * `ajax-select2`: select2 leaves the original `<select>` in place, hidden, and draws its own
+	 * `.select2-container` as the NEXT sibling, so a notice anchored immediately after the field
+	 * renders ABOVE the visible control. Measured on the rig, that put the message between the
+	 * region field and the settlement field, where it read as belonging to the region. Appending
+	 * to the field's own parent puts it after every node the renderer drew, whichever renderer
+	 * that was, without this module having to know any of their markup.
+	 *
+	 * THE HOST GETS {@see NOTICE_HOST_ERROR_CLASS} TOO, so `location.css` can outline the
+	 * control the customer can see. Words alone were not enough: the field simply emptied, and
+	 * an emptied field with no other signal reads as the form having broken rather than as an
+	 * answer about the data.
+	 *
+	 * @param {Object} entry
+	 * @param {?string} fieldId
+	 * @param {string} text
+	 * @returns {void}
+	 */
+	function showFieldNotice( entry, fieldId, text ) {
+		clearNotPersistedNotice( entry );
+
+		var anchor = fieldId && document.getElementById( fieldId );
+
+		if ( ! anchor || ! anchor.parentNode || 'string' !== typeof text || '' === text ) {
+			return;
+		}
+
+		var host = anchor.parentNode;
+		var notice = document.createElement( 'p' );
+
+		notice.className = 'woodev-location-notice';
+		notice.setAttribute( 'role', 'alert' );
+
+		// Static markup, authored here — never the message, which is server-supplied and goes in
+		// as `textContent` below.
+		notice.innerHTML = NOTICE_ICON_SVG;
+
+		var label = document.createElement( 'span' );
+
+		label.className = 'woodev-location-notice__text';
+		label.textContent = text;
+
+		notice.appendChild( label );
+		host.appendChild( notice );
+
+		if ( host.classList ) {
+			host.classList.add( NOTICE_HOST_ERROR_CLASS );
+		}
+
+		entry.notPersistedNotice = notice;
+		entry.notPersistedNoticeHost = host;
+		entry.notPersistedNoticeFieldId = fieldId;
+	}
+
+	/**
 	 * Shows the "your choice was not saved" notice for `entry` — Task 13 / #295 finding 1: the
 	 * server has always answered `persisted: false` honestly, but until now nothing on the
 	 * client read it beyond skipping `update_checkout` (see this file's own D8 section above).
@@ -1950,9 +2325,7 @@
 	 * ({@see entry.lastSelectedFieldId}) — persistence is an ENTRY-level outcome (the
 	 * single-flight `/select` queue in {@see enqueueSelect} is per entry, not per node), so
 	 * there is no field this is MORE specifically about than "whichever one the customer just
-	 * used". A missing anchor (the field no longer in the document — a country switch tore
-	 * the section down between the select and this response landing) is a silent no-op: there
-	 * is nowhere left to put the message, and the field itself is gone anyway.
+	 * used".
 	 *
 	 * Text comes from `entry.location.i18n.notPersisted` — server-supplied, translated,
 	 * filterable via `woodev_location_i18n` (`class-checkout-config.php::build_location_block()`),
@@ -1964,30 +2337,31 @@
 	 * @returns {void}
 	 */
 	function showNotPersistedNotice( entry ) {
-		clearNotPersistedNotice( entry );
-
-		var anchor = entry.lastSelectedFieldId && document.getElementById( entry.lastSelectedFieldId );
-
-		if ( ! anchor || ! anchor.parentNode ) {
-			return;
-		}
-
 		var i18n = entry.location.i18n || {};
-		var text = 'string' === typeof i18n.notPersisted ? i18n.notPersisted : '';
 
-		if ( '' === text ) {
-			return;
-		}
+		showFieldNotice( entry, entry.lastSelectedFieldId, 'string' === typeof i18n.notPersisted ? i18n.notPersisted : '' );
+	}
 
-		var notice = document.createElement( 'p' );
-
-		notice.className = 'woodev-location-notice';
-		notice.setAttribute( 'role', 'alert' );
-		notice.textContent = text;
-
-		anchor.parentNode.insertBefore( notice, anchor.nextSibling );
-
-		entry.notPersistedNotice = notice;
+	/**
+	 * Shows the D7 "stale pick" notice — spec D7 / plan Seam D (issue #488 slice 3): a `/select`
+	 * response answering `cancelled: true` because the posted popular-settlement entry's
+	 * provider key had died and the server's own adopt search (Seam C) found no unambiguous
+	 * rename to fall back to silently. Anchored right after the field the cancelled record
+	 * belonged to — see {@see showFieldNotice}'s own docblock for why this DOM-anchor mechanism,
+	 * not the typeahead's empty-suggestions row, is the surface D7 actually reuses.
+	 *
+	 * `message` is `response.message` VERBATIM — server-supplied, translated, filterable
+	 * (`Location_Controller::handle_select_request()`'s own D7 branch), never a literal here;
+	 * an absent/non-string message degrades to silence rather than inventing wording
+	 * client-side, same convention {@see showNotPersistedNotice} already follows.
+	 *
+	 * @param {Object} entry
+	 * @param {?string} fieldId
+	 * @param {*} message
+	 * @returns {void}
+	 */
+	function showCancelledNotice( entry, fieldId, message ) {
+		showFieldNotice( entry, fieldId, 'string' === typeof message ? message : '' );
 	}
 
 	/**
@@ -1997,14 +2371,310 @@
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
+	/**
+	 * Marks the field a `/select` is in flight FOR as busy — a spinner, `aria-busy`, and a host
+	 * class the stylesheet uses to grey the control and stop it taking a click.
+	 *
+	 * Reuses `location-typeahead.js`'s own `.woodev-location-spinner` rather than inventing a
+	 * second indicator: the customer has already seen that exact ring while their search ran,
+	 * and this is the same statement — the field is working. The extra
+	 * `.woodev-location-select-spinner` class is the stylesheet's hook for THIS spinner
+	 * specifically (and the tests'); it needs no offset of its own, because the stylesheet hides
+	 * the select2 arrow for the duration and the ring lands exactly where the arrow was.
+	 *
+	 * IT IS NOT THE `disabled` ATTRIBUTE, deliberately, and this is a measurement rather than a
+	 * preference. WooCommerce builds `update_order_review` from `$( 'form.checkout' ).serialize()`,
+	 * and a disabled control is not serialized — measured on the rig, s90: with `shipping_city`
+	 * disabled, the field vanished from the serialized form entirely. Over a 2.4-4.5 second
+	 * window that is a real chance for an unrelated `update_checkout` to reprice the order with
+	 * no city at all. `pointer-events` + `aria-disabled` give the customer the same "you cannot
+	 * touch this right now", and cost nothing on the wire.
+	 *
+	 * A second pick landing during the window is not a correctness problem in any case — the
+	 * single-flight queue ({@see enqueueSelect}) already supersedes it — so this is feedback,
+	 * not a lock.
+	 *
+	 * A notice on THIS field is cleared here — the customer has moved past the outcome it
+	 * described, and leaving it would also stretch the spinner's positioning context over it. A
+	 * notice on a DIFFERENT field is left strictly alone: the single-flight queue is per ENTRY,
+	 * not per level, so the very next thing to go out after a cancelled region pick may be a
+	 * settlement pick that was already queued behind it, and erasing the region's message on its
+	 * way past would take away the only thing on screen explaining why the region emptied.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The record whose `/select` is being sent.
+	 * @returns {void}
+	 */
+	function markSelectBusy( entry, record ) {
+		clearSelectBusy( entry );
+
+		var level = record && 'string' === typeof record.level ? record.level : null;
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+		var el = node && document.getElementById( node.fieldId );
+
+		if ( ! el || ! el.parentNode ) {
+			return;
+		}
+
+		var host = el.parentNode;
+
+		// Keyed on the FIELD, not on the host element: WooCommerce gives every field its own
+		// `.woocommerce-input-wrapper`, but nothing in this module may assume that — a flatter
+		// markup would make two levels share one host and silently turn this into "clear any
+		// notice", which is exactly what must not happen here.
+		if ( entry.notPersistedNoticeFieldId === node.fieldId ) {
+			clearNotPersistedNotice( entry );
+		}
+
+		var spinner = document.createElement( 'span' );
+
+		spinner.className = 'woodev-location-spinner woodev-location-select-spinner';
+
+		// Decoration for a state `aria-busy` already announces on the field itself — same
+		// reasoning, and the same attribute, as the typeahead's own spinner.
+		spinner.setAttribute( 'aria-hidden', 'true' );
+
+		host.appendChild( spinner );
+		centreSpinnerOnControl( host, el, spinner );
+
+		if ( host.classList ) {
+			host.classList.add( BUSY_HOST_CLASS );
+		}
+
+		el.setAttribute( 'aria-busy', 'true' );
+		el.setAttribute( 'aria-disabled', 'true' );
+
+		// `readonly` WHERE IT EXISTS, and only there. Measured on the rig, s90: on an `<input>`
+		// it blocks typing and the value still serializes (unlike `disabled`, which drops it) —
+		// so it is strictly better than nothing for the baseline typeahead renderer. On a
+		// `<select>` it is inert: the element has no `readOnly` property at all and the option
+		// still changes. Both `<select>` renderers therefore rely on the host class alone, which
+		// is why that class exists rather than this attribute being the whole mechanism.
+		//
+		// SELECT2'S OWN API DOES NOT HELP, and this was measured rather than assumed (s90): the
+		// build WooCommerce ships still answers `$( el ).select2( 'enable', false )` — the v3-era
+		// string commands `'readonly'` and `'disable'` throw outright — but `enable` is
+		// implemented ON TOP of the native attribute. After it, `el.disabled` was `true` and
+		// `shipping_city` had left `$( 'form.checkout' ).serialize()` entirely. Same cost, so no
+		// reason to reach for it.
+		var readOnlyCapable = 'readOnly' in el;
+
+		if ( readOnlyCapable ) {
+			el.readOnly = true;
+		}
+
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level };
+
+		// Everything DEEPER than the level being confirmed is now waiting on an answer that has
+		// not arrived — see refreshDependentLocks().
+		refreshDependentLocks( entry );
+		refreshAddressLock( entry );
+	}
+
+	/**
+	 * Sizes `spinner` to the box of the control the customer can actually SEE, so the ring lands
+	 * on that control's centre rather than the wrapper's.
+	 *
+	 * WHY THIS CANNOT BE CSS ALONE. The spinner is absolutely positioned inside WooCommerce's own
+	 * `.woocommerce-input-wrapper`, whose `display` is `inline` — so `top: 0; bottom: 0` resolve
+	 * against a LINE box sized by `line-height`, not against the field. Measured on the rig, s90:
+	 * wrapper 388-418 (30px, line-height 30.8px), the select2 control 382-432 (50px). Their
+	 * centres are 403 and 407, and the ring sat 4px high — visible enough that the operator named
+	 * it on sight. Nothing in CSS can bridge that: the two boxes differ by an amount that comes
+	 * from the theme's line-height and the widget's own padding, neither of which is a constant
+	 * this stylesheet could encode.
+	 *
+	 * The CSS `top: 0; bottom: 0` stays as the fallback for when there is nothing to measure, and
+	 * for the typeahead's own spinner, which this function does not touch.
+	 *
+	 * `.select2-selection` rather than `.select2-container`: the selection is the box that
+	 * actually carries the border the customer reads as "the field" (and the one
+	 * `.woodev-location-field-error` outlines). Measured, it is 4px taller than its own container.
+	 *
+	 * @param {Element} host    The field's parent — the spinner's positioning context.
+	 * @param {Element} field   The field element itself, used when no widget wraps it.
+	 * @param {Element} spinner The just-inserted spinner.
+	 * @returns {void}
+	 */
+	function centreSpinnerOnControl( host, field, spinner ) {
+		var control = host.querySelector( '.select2-selection' ) || field;
+
+		if ( ! control || 'function' !== typeof control.getBoundingClientRect ) {
+			return;
+		}
+
+		var hostBox = host.getBoundingClientRect();
+		var controlBox = control.getBoundingClientRect();
+
+		// A collapsed box means the widget has not laid out yet (or is hidden); leaving the CSS
+		// fallback in place is better than pinning the ring to a zero-height nothing.
+		if ( ! controlBox.height ) {
+			return;
+		}
+
+		spinner.style.top = ( controlBox.top - hostBox.top ) + 'px';
+		spinner.style.height = controlBox.height + 'px';
+		spinner.style.bottom = 'auto';
+	}
+
+	/**
+	 * Whether a `/select` is in flight for a level SHALLOWER than `level` — i.e. this level's own
+	 * parent key is one the SERVER has not accepted yet.
+	 *
+	 * This is a correctness question, not a cosmetic one (operator, s90). The client writes the
+	 * pick optimistically, so the moment a region is chosen the settlement field would happily
+	 * search scoped by that region's key — and if the answer then comes back `cancelled` (D7) or
+	 * `persisted: false`, that search was scoped by a key the server never accepted. Same for the
+	 * address field under a settlement pick, which is the case the operator actually saw: the
+	 * address unlocked immediately and stayed unlocked for the whole 2.4-4.5 second round trip.
+	 *
+	 * @param {Object} entry
+	 * @param {?string} level
+	 * @returns {boolean}
+	 */
+	function hasUnconfirmedParent( entry, level ) {
+		var busyLevel = entry.selectBusy ? entry.selectBusy.level : null;
+
+		if ( ! busyLevel || ! level ) {
+			return false;
+		}
+
+		var busyIndex = LEVELS.indexOf( busyLevel );
+		var levelIndex = LEVELS.indexOf( level );
+
+		return busyIndex > -1 && levelIndex > busyIndex;
+	}
+
+	/**
+	 * Locks every chain level whose parent is still unconfirmed, and releases the ones this
+	 * module locked for that reason once the answer lands.
+	 *
+	 * `address` is deliberately NOT handled here: it has its own authority
+	 * ({@see refreshAddressLock}/{@see isAddressLocked}), which now consults
+	 * {@see hasUnconfirmedParent} itself. Two mechanisms writing the same field's `disabled` from
+	 * different rules is how a lock ends up stuck.
+	 *
+	 * NO `disabled` ATTRIBUTE HERE, unlike the address lock — and the difference is not an
+	 * inconsistency. A locked address field is empty by construction (that is the whole premise
+	 * of the lock), so dropping it from `form.checkout.serialize()` costs nothing. A settlement
+	 * field under an in-flight region pick may still hold text the customer typed, and the
+	 * measurement behind {@see markSelectBusy} applies unchanged: a disabled control leaves the
+	 * serialized checkout form entirely. The host class blocks the pointer and `aria-disabled`
+	 * states it; neither touches what posts.
+	 *
+	 * Releases from the REMEMBERED id list rather than by re-deriving it, so a chain that changed
+	 * shape mid-request (a country switch) cannot strand a lock on a node the new chain no longer
+	 * knows about.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function refreshDependentLocks( entry ) {
+		var previous = entry.dependentLocked || [];
+		var locked = [];
+
+		entry.chain.forEach( function( node ) {
+			if ( ! node.level || 'address' === node.level || ! hasUnconfirmedParent( entry, node.level ) ) {
+				return;
+			}
+
+			var el = document.getElementById( node.fieldId );
+
+			if ( ! el || ! el.parentNode ) {
+				return;
+			}
+
+			if ( el.parentNode.classList ) {
+				el.parentNode.classList.add( BUSY_HOST_CLASS );
+			}
+
+			el.setAttribute( 'aria-disabled', 'true' );
+			locked.push( node.fieldId );
+		} );
+
+		previous.forEach( function( fieldId ) {
+			if ( locked.indexOf( fieldId ) > -1 ) {
+				return;
+			}
+
+			var el = document.getElementById( fieldId );
+
+			if ( ! el ) {
+				return;
+			}
+
+			el.removeAttribute( 'aria-disabled' );
+
+			// Only when this field is not ITSELF the one whose request is in flight — that one
+			// owns the class for its own reason and clears it in clearSelectBusy().
+			var ownsItsOwnBusy = entry.selectBusy && entry.selectBusy.el === el;
+
+			if ( el.parentNode && el.parentNode.classList && ! ownsItsOwnBusy ) {
+				el.parentNode.classList.remove( BUSY_HOST_CLASS );
+			}
+		} );
+
+		entry.dependentLocked = locked;
+	}
+
+	/**
+	 * Clears whatever {@see markSelectBusy} last set, from the REMEMBERED nodes rather than by
+	 * re-resolving the field: by the time a response settles the field may be gone (a country
+	 * switch tore the section down mid-request), and a spinner left in a section WooCommerce
+	 * re-renders rather than rebuilds would spin forever.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function clearSelectBusy( entry ) {
+		var busy = entry.selectBusy;
+
+		if ( ! busy ) {
+			return;
+		}
+
+		if ( busy.spinner && busy.spinner.parentNode ) {
+			busy.spinner.parentNode.removeChild( busy.spinner );
+		}
+
+		if ( busy.host && busy.host.classList ) {
+			busy.host.classList.remove( BUSY_HOST_CLASS );
+		}
+
+		if ( busy.el ) {
+			busy.el.removeAttribute( 'aria-busy' );
+			busy.el.removeAttribute( 'aria-disabled' );
+
+			if ( busy.readOnlyApplied ) {
+				busy.el.readOnly = false;
+			}
+		}
+
+		entry.selectBusy = null;
+
+		refreshDependentLocks( entry );
+		refreshAddressLock( entry );
+	}
+
 	function clearNotPersistedNotice( entry ) {
 		var notice = entry.notPersistedNotice;
+		var host = entry.notPersistedNoticeHost;
 
 		if ( notice && notice.parentNode ) {
 			notice.parentNode.removeChild( notice );
 		}
 
+		// The outline goes with the message, always — they are one signal. Cleared from the
+		// REMEMBERED host rather than by re-resolving the field, because by now the field may
+		// be gone (a country switch tore the section down) while the class would otherwise
+		// survive on a node WooCommerce re-renders rather than rebuilds.
+		if ( host && host.classList ) {
+			host.classList.remove( NOTICE_HOST_ERROR_CLASS );
+		}
+
 		entry.notPersistedNotice = null;
+		entry.notPersistedNoticeHost = null;
+		entry.notPersistedNoticeFieldId = null;
 	}
 
 	/**
@@ -2069,10 +2739,12 @@
 
 			backwardsFill( entry, node, record );
 
-			// Issue #337: a settlement pick unlocks the address field on the SPOT, off the
-			// optimistic record above — never only once `/select` comes back. Waiting for the
-			// round trip would leave the customer looking at a field that stays blocked for as
-			// long as the network takes, right after doing the one thing that unblocks it.
+			// Issue #337 as AMENDED by the operator in s90: the address lock is refreshed on the
+			// spot off the optimistic record above — but {@see isAddressLocked} now also holds
+			// the lock while this level's own `/select` is unanswered, so in practice the field
+			// unlocks when the SERVER confirms rather than when the customer clicks. #337's
+			// original reasoning (never make them wait for the round trip) is recorded, and
+			// overturned, in that function's own docblock.
 			refreshAddressLock( entry );
 
 			if ( isActiveAddressSection( node.section ) ) {
@@ -2549,6 +3221,21 @@
 			return false;
 		}
 
+		// OPERATOR DECISION, s90 — this REVERSES the #337 rule that used to sit at the pick site
+		// in `onSelectFor()` ("a settlement pick unlocks the address on the SPOT, never only once
+		// /select comes back"). What changed is a measurement, not a preference: that round trip
+		// is 2.4-4.5 seconds on the rig, not the moment #337 assumed, and the optimistic record it
+		// unlocks off may still be REFUSED — a D7 `cancelled` wipes the settlement and re-locks
+		// the address underneath whatever the customer typed in the meantime. The address field's
+		// own `/suggest` would meanwhile carry a `within` the server never accepted.
+		//
+		// The cost is real and was weighed: the customer cannot start typing their street for the
+		// length of the round trip, right after doing the thing that unblocks it. That is why the
+		// busy state exists — the field says it is working rather than sitting inert.
+		if ( hasUnconfirmedParent( entry, node.level ) ) {
+			return true;
+		}
+
 		if ( null === scopeKeyFor( entry, 'address' ) ) {
 			return ! settlementTextIsKnownUnresolved( entry );
 		}
@@ -2855,6 +3542,11 @@
 				// `change.select2` refresh never trips this module's OWN change-gate).
 				applyValueToElement( el, '' );
 			}
+
+			// Issue #488 slice 3 round 3: this level's own widget, if any, must forget its
+			// "last handled" pick too — see {@see resetWidgetGuard}'s own docblock for why an
+			// ordinary ancestor-edit clear needs this exactly as much as the D7 cancel path does.
+			resetWidgetGuard( entry, node.fieldId );
 		}
 
 		if ( editedLevel ) {
@@ -2976,6 +3668,12 @@
 				// Issue #465, symptom B — same reasoning as {@see clearDescendants}'s own fix.
 				applyValueToElement( el, '' );
 			}
+
+			// Issue #488 slice 3 round 3 — see {@see resetWidgetGuard}'s own docblock: a country
+			// change that leaves this level served under the NEW country too keeps the same
+			// widget instance attached (`applyCountryArbitration()` only detaches a node whose
+			// `isNodeActive()` flipped false), so its guard needs the same explicit reset.
+			resetWidgetGuard( entry, node.fieldId );
 		} );
 
 		if ( cleared && isActiveAddressSection( section ) ) {
