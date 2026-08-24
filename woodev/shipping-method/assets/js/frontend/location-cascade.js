@@ -1744,6 +1744,37 @@
 	}
 
 	/**
+	 * Tells `fieldId`'s own widget (if any) to forget its "last handled" pick
+	 * ({@see location-select-modes.js}'s `resolveAndSelect()`/`forgetLastHandled()`) — issue #488
+	 * slice 3 round 3: EVERY call site that overwrites a select2/related-list widget's DOM value
+	 * out from under it (the D7 cancel path below, plus the two ordinary clearing routes
+	 * {@see clearDescendants} and {@see clearCountryScope}) must call this, or that widget's own
+	 * guard is left remembering a pick the DOM no longer shows — the customer's most natural
+	 * recovery, re-picking the SAME still-rendered entry, then resolves to a no-op and never
+	 * re-fires `/select`. Confirmed this actually reaches all three: `applyCountryArbitration()`
+	 * only detaches a node whose `isNodeActive()` flipped false, so a country change that leaves a
+	 * level served under the new country too (the `clearCountryScope()` case) keeps the SAME
+	 * widget instance — and its stale `lastHandledKey` closure — attached; `clearDescendants()`'s
+	 * own caller ({@see handleFieldChanged}, an ordinary text edit on an ancestor level) never
+	 * calls `attachOne()`/`detachOne()` at all. Neither route re-attaches on its own, so neither
+	 * gets a fresh widget (and a fresh guard) for free.
+	 *
+	 * A no-op for a level with no widget at all (the baseline typeahead's `<input>` never exposes
+	 * `.reset()` — nothing here to forget) or one a caller has already detached.
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {void}
+	 */
+	function resetWidgetGuard( entry, fieldId ) {
+		var widget = entry.widgets[ fieldId ];
+
+		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
+			widget.api.reset();
+		}
+	}
+
+	/**
 	 * Clears ONE chain level's own field — DOM value, store value, the remembered-value gate,
 	 * and the confirmed record itself — for the D7 cancel path ({@see handleCancelledSelect}).
 	 *
@@ -1791,11 +1822,7 @@
 			applyValueToElement( el, '' );
 		}
 
-		var widget = entry.widgets[ node.fieldId ];
-
-		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
-			widget.api.reset();
-		}
+		resetWidgetGuard( entry, node.fieldId );
 	}
 
 	/**
@@ -3080,6 +3107,11 @@
 				// `change.select2` refresh never trips this module's OWN change-gate).
 				applyValueToElement( el, '' );
 			}
+
+			// Issue #488 slice 3 round 3: this level's own widget, if any, must forget its
+			// "last handled" pick too — see {@see resetWidgetGuard}'s own docblock for why an
+			// ordinary ancestor-edit clear needs this exactly as much as the D7 cancel path does.
+			resetWidgetGuard( entry, node.fieldId );
 		}
 
 		if ( editedLevel ) {
@@ -3201,6 +3233,12 @@
 				// Issue #465, symptom B — same reasoning as {@see clearDescendants}'s own fix.
 				applyValueToElement( el, '' );
 			}
+
+			// Issue #488 slice 3 round 3 — see {@see resetWidgetGuard}'s own docblock: a country
+			// change that leaves this level served under the NEW country too keeps the same
+			// widget instance attached (`applyCountryArbitration()` only detaches a node whose
+			// `isNodeActive()` flipped false), so its guard needs the same explicit reset.
+			resetWidgetGuard( entry, node.fieldId );
 		} );
 
 		if ( cleared && isActiveAddressSection( section ) ) {

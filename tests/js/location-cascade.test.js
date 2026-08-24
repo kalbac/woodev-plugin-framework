@@ -1178,6 +1178,183 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 } );
 
 // -----------------------------------------------------------------------
+// Issue #488 slice 3 round 3 (Codex re-review): resetWidgetGuard() must run on EVERY route that
+// overwrites a select2/related-list widget's DOM value out from under it — not only the D7
+// cancel path clearChainField() already covers above. Enumerated by grepping this file for every
+// literal `applyValueToElement( el, '' )` call: clearChainField() (already covered by the D7
+// suite above), clearDescendants() (an ordinary ANCESTOR text edit — no country involved), and
+// clearCountryScope() (a country change). Both of the latter two are exercised here, each through
+// the REAL Task 13 related-list renderer, never a hand-rolled stand-in — same standard as the D7
+// suite's own round-2 rewrite.
+//
+// Falsified first, per the operator's own instruction, rather than assumed: `applyCountryArbitration()`
+// (:2689-2700) only calls `detachOne()` when a node's `isNodeActive()` flips to false — a country
+// change that leaves a level served under the NEW country too leaves `attached && active` both
+// true, so NEITHER branch fires and the SAME widget instance (and its stale `lastHandledKey`
+// closure) stays attached. And `clearDescendants()`'s only caller, `handleFieldChanged()`'s
+// ordinary (non-country) branch (:3293-3332), never calls `attachOne()`/`detachOne()`/
+// `applyCountryArbitration()` at all. Neither route gets a fresh widget for free.
+// -----------------------------------------------------------------------
+
+describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL Task 13 widget (issue #488 slice 3 round 3)', () => {
+	const SETTLEMENT_ITEM = {
+		key: 'dadata:dead', label: 'Старое Место', level: 'settlement',
+		record: {
+			key: 'dadata:dead', provider_id: 'dadata', level: 'settlement', country: 'RU',
+			settlement: { name: 'Старое Место', type: 'дер' }, label: 'Старое Место',
+		},
+	};
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	/**
+	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
+	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 *
+	 * @returns {Object}
+	 */
+	function listRequest() {
+		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
+	}
+
+	/**
+	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
+	 * same technique as `location-cascade.test.js`'s own D7 suite above.
+	 *
+	 * @param {Element} select
+	 * @param {string}  key
+	 * @returns {void}
+	 */
+	function pickByKey( select, key ) {
+		var options = select.options;
+		var idx = -1;
+
+		for ( var i = 0; i < options.length; i++ ) {
+			if ( options[ i ].dataset.woodevKey === key ) {
+				idx = i;
+				break;
+			}
+		}
+
+		expect( idx ).not.toBe( -1 );
+
+		select.selectedIndex = idx;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * Boots the REAL `location-select-modes.js` `related-list` settlement renderer — deliberately
+	 * not `boot()`'s `fakeTypeahead()` stand-in, and deliberately without a fake select2 (SELECT2
+	 * IS OPTIONAL AT RUNTIME, per that file's own docblock — `ensureSelect2()` no-ops and the
+	 * widget runs its real native-`<select>` fallback, exactly the path `resolveAndSelect()`'s
+	 * guard exists for).
+	 *
+	 * @param {Object} configOpts merged into `buildConfig()` — a test opts into `region: true`
+	 *   or a multi-country `levels` map as its own scenario needs.
+	 * @returns {void}
+	 */
+	function bootRealRelatedListSettlement( configOpts ) {
+		installMarkup( Object.assign( { settlement: true }, configOpts ), 'RU' );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( Object.assign(
+			{ settlement: true, mode: { settlement: 'related-list' } },
+			configOpts
+		) );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
+	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry, then picks it once and
+	 * lets that first `/select` succeed ordinarily — the baseline state both tests below start
+	 * their OWN clearing route from.
+	 *
+	 * @param {Object} configOpts
+	 * @returns {Promise<Element>}
+	 */
+	async function attachPopulateAndPick( configOpts ) {
+		bootRealRelatedListSettlement( configOpts );
+
+		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.tagName ).toBe( 'SELECT' );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.key, level: 'settlement' }, persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		return select;
+	}
+
+	it( 'an ancestor (region) text edit — clearDescendants() — lets the SAME still-rendered settlement entry be re-picked', async () => {
+		const select = await attachPopulateAndPick( { region: true } );
+
+		// An ORDINARY customer edit on the ANCESTOR level — never a pick — which
+		// handleFieldChanged() routes straight to clearDescendants(), never through
+		// applyCountryArbitration()/attachOne()/detachOne() at all.
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Татарстан';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The rendered, customer-visible state: nothing selected any more.
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The exact recovery: re-pick the SAME still-rendered settlement entry. Before this fix,
+		// resolveAndSelect()'s lastHandledKey guard — never reset by clearDescendants() — silently
+		// ate this: no second /select request, the field stayed empty forever.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	it( 'a country change to another country that ALSO serves this level — clearCountryScope() — lets the SAME still-rendered entry be re-picked', async () => {
+		// levels for BOTH countries — isNodeActive() stays true across the switch, so
+		// applyCountryArbitration() neither detaches nor re-attaches: the SAME widget instance
+		// (and its own lastHandledKey closure) survives, exactly the falsification this test
+		// pins per the operator's own instruction.
+		const select = await attachPopulateAndPick( {
+			countries: [ 'RU', 'US' ],
+			levels: { RU: { settlement: true }, US: { settlement: true } },
+		} );
+
+		const country = document.getElementById( 'billing_country' );
+
+		country.value = 'US';
+		country.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( select.selectedIndex ).toBe( -1 );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+} );
+
+// -----------------------------------------------------------------------
 // D7 Seam D, last paragraph — the client adopts the SERVER's key when an ordinary (non-
 // cancelled) response's `current.key` differs from what it posted (D6 "updated" / D7's own
 // silent adopt both persist a DIFFERENT record than the one the customer picked).
