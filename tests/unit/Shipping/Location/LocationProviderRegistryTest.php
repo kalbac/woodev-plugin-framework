@@ -19,6 +19,7 @@ use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Location\Location_Settings;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Tests\Unit\TestCase;
 
@@ -38,6 +39,12 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/interface-connection-test.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-connection-result.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-verification.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-verifier.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
@@ -267,6 +274,47 @@ class Fake_Country_Scoped_Location_Provider extends Abstract_Location_Provider {
 
 	public function suggest( string $query, Location_Scope $scope ): array {
 		return [];
+	}
+}
+
+/**
+ * A `resolve_key()`-capable fake provider (#488 D8) — {@see Fake_Location_Provider}
+ * never overrides `resolve_key()`, so its reflection-derived capability set never
+ * contains `CAPABILITY_RESOLVE_KEY`; this fixture exists specifically to exercise
+ * the D8 popular-settlements connection-section gate on `Shipping_Settings_Tab`.
+ */
+class Fake_Resolving_Location_Provider extends Abstract_Location_Provider {
+
+	private string $id;
+	private string $name;
+
+	public function __construct( string $id, string $name ) {
+		$this->id   = $id;
+		$this->name = $name;
+	}
+
+	public function get_id(): string {
+		return $this->id;
+	}
+
+	public function get_name(): string {
+		return $this->name;
+	}
+
+	public function get_countries(): array {
+		return [ 'RU' ];
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_REGION ];
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function resolve_key( string $key ): ?Location_Record {
+		return null;
 	}
 }
 
@@ -3427,5 +3475,80 @@ final class LocationProviderRegistryTest extends TestCase {
 			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
 			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// #488 D8: the two popular-settlements merchant actions — ABSENT, not
+	// present-and-disabled, unless the ACTIVE provider declares
+	// CAPABILITY_RESOLVE_KEY (spec D4). End-to-end through the real
+	// register_settings() -> Shipping_Settings_Tab::set_location_section() wiring.
+	// -------------------------------------------------------------------------
+
+	public function test_popular_settlements_sections_appear_when_the_active_provider_can_resolve_keys(): void {
+		$resolving     = new Fake_Resolving_Location_Provider( 'resolving', 'Resolving' );
+		$non_resolving = new Fake_Location_Provider( 'non-resolving', 'Non-Resolving' );
+
+		$this->stub_providers_filter( [ $resolving, $non_resolving ] );
+		$this->stub_active_provider_option( 'resolving' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		Shipping_Settings_Tab::instance()->declare_shipping_plugin();
+		$ids = array_map(
+			static function ( $s ) { return $s->get_id(); },
+			Shipping_Settings_Tab::instance()->build_sections()
+		);
+
+		$this->assertContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY, $ids );
+		$this->assertContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR, $ids );
+	}
+
+	public function test_popular_settlements_sections_are_absent_when_the_active_provider_cannot_resolve_keys(): void {
+		$non_resolving = new Fake_Location_Provider( 'non-resolving', 'Non-Resolving' );
+
+		$this->stub_providers_filter( [ $non_resolving ] );
+		$this->stub_active_provider_option( 'non-resolving' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		Shipping_Settings_Tab::instance()->declare_shipping_plugin();
+		$ids = array_map(
+			static function ( $s ) { return $s->get_id(); },
+			Shipping_Settings_Tab::instance()->build_sections()
+		);
+
+		$this->assertNotContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY, $ids );
+		$this->assertNotContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR, $ids );
+	}
+
+	/**
+	 * With zero test-injected providers, the BUNDLED default provider (real
+	 * `Dadata_Provider`, always registered by `collect()` when its class
+	 * exists — see {@see Location_Provider_Registry::bundled_provider_classes()})
+	 * becomes active, and it DOES declare `CAPABILITY_RESOLVE_KEY` — this is
+	 * the whole reason #488 could be built on it. "Zero providers" is
+	 * therefore not the same as "no active provider"; the true absence case is
+	 * covered by {@see self::test_popular_settlements_sections_are_absent_when_the_active_provider_cannot_resolve_keys()}
+	 * and directly by `LocationSettingsTest::test_no_active_provider_fails_both_actions_without_touching_the_store()`.
+	 */
+	public function test_popular_settlements_sections_appear_via_the_bundled_default_provider_with_zero_test_providers(): void {
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		Shipping_Settings_Tab::instance()->declare_shipping_plugin();
+		$ids = array_map(
+			static function ( $s ) { return $s->get_id(); },
+			Shipping_Settings_Tab::instance()->build_sections()
+		);
+
+		$this->assertContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY, $ids );
+		$this->assertContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR, $ids );
 	}
 }

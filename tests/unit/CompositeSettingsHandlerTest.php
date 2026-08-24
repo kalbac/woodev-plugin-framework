@@ -8,6 +8,8 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-composite-settings-handler.php';
 
 /**
@@ -280,5 +282,109 @@ class CompositeSettingsHandlerTest extends TestCase {
 
 		$this->expectException( \Woodev_Plugin_Exception::class );
 		$composite->update_value( 'nope', true );
+	}
+
+	/**
+	 * Builds an anonymous handler that ALSO implements `Woodev_Settings_Connection_Test`,
+	 * recording every `test_connection()` call it receives (#488 D8: the composite must
+	 * delegate to whichever child actually implements the interface).
+	 *
+	 * @param string                    $id     handler ID.
+	 * @param \Woodev_Connection_Result $result what `test_connection()` should return.
+	 * @param array<int, array{0: string, 1: array<string, mixed>}> &$calls captures every
+	 *                                                                       `[connection_id, values]` call.
+	 * @return \Woodev_Abstract_Settings
+	 */
+	private function make_connection_handler( string $id, \Woodev_Connection_Result $result, array &$calls ) {
+		Functions\when( 'get_option' )->justReturn( null );
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+
+		return new class( $id, $result, $calls ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+
+			private \Woodev_Connection_Result $result;
+			private array $calls;
+
+			public function __construct( string $id, \Woodev_Connection_Result $result, array &$calls ) {
+				$this->result = $result;
+				$this->calls  = &$calls;
+				parent::__construct( $id );
+			}
+
+			protected function register_settings() {}
+
+			public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+				$this->calls[] = [ $connection_id, $values ];
+
+				return $this->result;
+			}
+		};
+	}
+
+	/**
+	 * #488 D8: exactly one child implementing `Woodev_Settings_Connection_Test`
+	 * (the only shape this class needs today, per its own docblock) — the
+	 * composite must delegate the connection_id/values through unchanged and
+	 * hand back that child's own result.
+	 */
+	public function test_delegates_test_connection_to_the_single_implementing_child(): void {
+		$calls    = [];
+		$expected = \Woodev_Connection_Result::success( 'ok' );
+		$location = $this->make_connection_handler( 'location', $expected, $calls );
+		$fields   = $this->make_handler(
+			'fields',
+			function ( $h ) {
+				$h->register_setting( 'field_order_preset', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Order' ] );
+			}
+		);
+
+		$composite = new Composite_Settings_Handler( 'shipping', [ $fields, $location ] );
+
+		$this->assertInstanceOf( \Woodev_Settings_Connection_Test::class, $composite );
+
+		$result = $composite->test_connection( 'popular_settlements_clear', [ 'x' => 'y' ] );
+
+		$this->assertSame( $expected, $result );
+		$this->assertSame( [ [ 'popular_settlements_clear', [ 'x' => 'y' ] ] ], $calls );
+	}
+
+	/**
+	 * Zero children implementing the interface — a REST request only ever
+	 * reaches this method for a `$connection_id` the tab's own
+	 * `Settings_Section::is_connection()` list already proved exists, so
+	 * reaching it with no delegate is a programming error, not a user-facing
+	 * "unsupported" case; throw rather than guess.
+	 */
+	public function test_throws_when_no_child_implements_connection_test(): void {
+		$a = $this->make_handler(
+			'alpha',
+			function ( $h ) {
+				$h->register_setting( 'one', \Woodev_Setting::TYPE_BOOLEAN, [ 'name' => 'One', 'default' => false ] );
+			}
+		);
+		$composite = new Composite_Settings_Handler( 'shipping', [ $a ] );
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$composite->test_connection( 'whatever', [] );
+	}
+
+	/**
+	 * More than one child implementing the interface is ambiguous — this class
+	 * has no id-to-child map, so it must fail loudly rather than silently pick
+	 * one (see class docblock).
+	 */
+	public function test_throws_when_more_than_one_child_implements_connection_test(): void {
+		$calls_a = [];
+		$calls_b = [];
+		$a       = $this->make_connection_handler( 'alpha', \Woodev_Connection_Result::success( 'a' ), $calls_a );
+		$b       = $this->make_connection_handler( 'beta', \Woodev_Connection_Result::success( 'b' ), $calls_b );
+
+		$composite = new Composite_Settings_Handler( 'shipping', [ $a, $b ] );
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+		$composite->test_connection( 'whatever', [] );
 	}
 }

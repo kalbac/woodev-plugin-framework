@@ -59,6 +59,8 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/interface-connection-test.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';

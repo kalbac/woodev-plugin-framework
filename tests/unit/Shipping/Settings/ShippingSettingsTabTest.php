@@ -15,6 +15,7 @@ use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Composite_Settings_Handler;
 use Woodev\Framework\Settings\Settings_Page_Registry;
+use Woodev\Framework\Shipping\Location\Location_Settings;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
 use Woodev\Tests\Unit\TestCase;
 
@@ -25,6 +26,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settin
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/interface-connection-test.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
@@ -110,6 +112,55 @@ class ShippingSettingsTabTest extends TestCase {
 			[ 'location', 'fields', 'map' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
 		);
+	}
+
+	/**
+	 * #488 D8: the two popular-settlements connection sections are ABSENT — not
+	 * present-and-disabled — by default (the 3rd `set_location_section()` arg
+	 * defaults to `false`), matching spec D4/D8.
+	 */
+	public function test_popular_settlements_sections_are_absent_by_default(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
+
+		$ids = array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() );
+
+		$this->assertNotContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY, $ids );
+		$this->assertNotContains( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR, $ids );
+	}
+
+	/**
+	 * #488 D8: when the active provider supports it, the two connection sections
+	 * appear — fields-less (the connection-test seam's "vacuously satisfied"
+	 * shape), `is_connection() === true`, and carrying the exact spec-quoted
+	 * action-button labels.
+	 */
+	public function test_popular_settlements_sections_appear_when_declared_supported(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ], true );
+
+		$sections = $tab->build_sections();
+		$by_id    = [];
+		foreach ( $sections as $section ) {
+			$by_id[ $section->get_id() ] = $section;
+		}
+
+		$this->assertArrayHasKey( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY, $by_id );
+		$this->assertArrayHasKey( Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR, $by_id );
+
+		$verify = $by_id[ Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY ];
+		$this->assertTrue( $verify->is_connection() );
+		$this->assertSame( [], $verify->get_setting_ids() );
+		$this->assertSame( 'Проверить актуальность популярных городов', $verify->get_action_label() );
+
+		$clear = $by_id[ Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR ];
+		$this->assertTrue( $clear->is_connection() );
+		$this->assertSame( [], $clear->get_setting_ids() );
+		$this->assertSame( 'Очистить список популярных городов', $clear->get_action_label() );
 	}
 
 	/**
