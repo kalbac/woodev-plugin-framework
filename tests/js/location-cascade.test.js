@@ -1352,6 +1352,51 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
+
+	// The fourth clearing route, and the one the round-3 enumeration missed: it does not go
+	// through `applyValueToElement( el, '' )` at all, so grepping for that literal could never
+	// find it. `pickup-mount.js`'s `applyAddressReplacement()` coerces an absent
+	// `point.locality` to `''` and announces it as `{target}_city` one synchronous event before
+	// writing (issue #339), and `handlePickupAddressReplacing()` puts that blank through
+	// `writeSilently()`. Hence the fix sits in `writeSilently()` itself rather than at a fourth
+	// call site.
+	it( 'a pickup point with NO locality — an EMPTY silent write — lets the SAME still-rendered entry be re-picked', async () => {
+		const select = await attachPopulateAndPick();
+
+		// Exactly what applyAddressReplacement() sends for a point whose `locality` is absent:
+		// `'' === point.locality ? ... : ''` reaches the announcement as a real empty string.
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: '' } },
+			bubbles: true,
+		} ) );
+
+		// The rendered, customer-visible state: the field shows nothing selected.
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The recovery a customer would actually attempt. Before the writeSilently() fix,
+		// resolveAndSelect()'s lastHandledKey still held this exact key and ate the re-pick:
+		// one /select total, the settlement record gone, the address field locked.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	// The other half of the rule, so a later change cannot "simplify" it into resetting on every
+	// silent write: a NON-empty silent write must leave the guard alone. It re-seeds a field that
+	// still shows a real value, and the guard's own purpose (issue #461 BLOCKING 2 — one pick
+	// must not fire across both the select2 and the native path) depends on it surviving.
+	it( 'a NON-empty silent write leaves the guard alone — the same entry is still treated as already handled', async () => {
+		const select = await attachPopulateAndPick();
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: 'Старое Место' } },
+			bubbles: true,
+		} ) );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 1 );
+	} );
 } );
 
 // -----------------------------------------------------------------------

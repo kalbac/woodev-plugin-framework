@@ -1533,6 +1533,24 @@
 	 * bare `.value =` — see that function's own docblock for why a `<select>` needs more than
 	 * that to actually submit what this call intends.
 	 *
+	 * AN EMPTY `value` RELEASES THE RENDERER'S PICK GUARD (issue #488 slice 3, round 3 review).
+	 * A silent write can legitimately be empty — `pickup-mount.js`'s `applyAddressReplacement()`
+	 * coerces an absent `point.locality` to `''` and announces it as `{target}_city`
+	 * (`woodev_pickup_address_replacing`, {@see handlePickupAddressReplacing}), and a backwards
+	 * fill can derive one from a record whose components are optional. Left alone, that blank
+	 * write clears the field while `resolveAndSelect()`'s own `lastHandledKey` in
+	 * `location-select-modes.js` still holds the key it last delivered, so re-picking the SAME
+	 * still-rendered entry is silently swallowed: no `/select`, no record, and the address field
+	 * stays locked with nothing on screen explaining why.
+	 *
+	 * The reset lives HERE, at the single write choke point, rather than at each caller: the
+	 * three literal `applyValueToElement( el, '' )` clear sites were wired one by one in the
+	 * same round and the enumeration still missed this path, which arrives through a call site
+	 * that does not look like a clear at all. Guarding the choke point covers every present
+	 * caller and every future one. Only an EMPTY write needs it — a silent write of a DIFFERENT
+	 * non-empty value leaves the guard holding a key that no longer matches the field, which
+	 * correctly still permits the next pick.
+	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
 	 * @param {string} value
@@ -1546,6 +1564,10 @@
 
 		if ( el ) {
 			applyValueToElement( el, value );
+		}
+
+		if ( '' === value ) {
+			resetWidgetGuard( entry, fieldId );
 		}
 	}
 
