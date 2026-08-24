@@ -4884,3 +4884,173 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 		expect( document.getElementById( 'shipping_postcode' ).value ).toBe( '101000' );
 	} );
 } );
+
+/**
+ * Issue #490: the round-4 tests above all carry an entry.records[level] that is still the FULL
+ * optimistic record selectViaFake() just wrote — none of them let the pick's own `/select` round
+ * trip resolve before toggling. A real customer always takes longer than that: {@see adoptChain}
+ * — called from EVERY successful `/select` response, not only at boot — deliberately narrows
+ * `entry.records[level]` down to `{ key, confirmed: true }` once the server confirms it
+ * ("confirmed marks PROVENANCE, not validity", adoptChain()'s own docblock). The narrowed shape
+ * has no `record[level].name`/`record.label` left for `fieldValueFor()` to read, so a carry
+ * attempted AFTER that round trip silently writes nothing — measured on the rig: the region level
+ * is always picked and persisted first, so it is reliably narrowed well before any later toggle
+ * and never carries; a level picked closer to the toggle (settlement, address) merely RACES the
+ * narrowing and carries or not depending on timing, which is why #490's own rig measurement saw it
+ * carry in one run and not in an otherwise identical one.
+ */
+describe( 'a column swap carries the record even after its /select round trip has already resolved (issue #490)', () => {
+	const REGION_ITEM = {
+		key: 'test-cdek:r15', label: 'Омская область', level: 'region',
+		value: 'Омская область',
+		record: {
+			key: 'test-cdek:r15', provider_id: 'test-cdek', level: 'region', country: 'RU',
+			region: { name: 'Омская область', type: 'обл' }, label: 'Омская область',
+		},
+	};
+
+	const SETTLEMENT_ITEM = {
+		key: 'test-cdek:s1', label: 'г Омск', level: 'settlement',
+		value: 'Омск',
+		record: {
+			key: 'test-cdek:s1', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+			settlement: { name: 'Омск', type: 'г' }, label: 'г Омск',
+		},
+	};
+
+	/**
+	 * Mirrors the round-4 `bootBothColumns()` above, with a region field fanned across both
+	 * columns as well — issue #490 is specifically about the region level, which that helper
+	 * never declared.
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @returns {void}
+	 */
+	function bootBothColumnsWithRegion( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_state" name="billing_state" value="" />
+				<input type="text" id="shipping_state" name="shipping_state" value="" />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = {
+			fields: {
+				billing_state: locationField( 'region', 'billing' ),
+				shipping_state: locationField( 'region', 'shipping' ),
+				billing_city: locationField( 'settlement', 'billing' ),
+				shipping_city: locationField( 'settlement', 'shipping' ),
+			},
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'typeahead', settlement: 'typeahead' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * @param {boolean} checked
+	 * @returns {void}
+	 */
+	function toggleShipToDifferentAddress( checked ) {
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = checked;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	it( 'carries the region onto the incoming column after its own /select round trip already resolved', async () => {
+		bootBothColumnsWithRegion( false );
+		selectViaFake( callFor( 'billing_state' ), REGION_ITEM );
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Омская область' );
+
+		// The pick's own persist round trip completes, narrowing entry.records.region to
+		// { key, confirmed: true } — see adoptChain()'s own docblock — BEFORE the toggle.
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( selectReq.url ).toBe( SELECT_URL );
+		selectReq.resolve( {
+			current: { key: REGION_ITEM.record.key, level: 'region' },
+			persisted: true,
+			chain: { region: { key: REGION_ITEM.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( true );
+
+		// Against the pre-fix implementation this stays '' — fieldValueFor() has nothing left
+		// to read off the narrowed record.
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
+	} );
+
+	it( 'carries the region back the OTHER way too, after its /select round trip already resolved', async () => {
+		bootBothColumnsWithRegion( true );
+		selectViaFake( callFor( 'shipping_state' ), REGION_ITEM );
+
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		selectReq.resolve( {
+			current: { key: REGION_ITEM.record.key, level: 'region' },
+			persisted: true,
+			chain: { region: { key: REGION_ITEM.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( false );
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Омская область' );
+	} );
+
+	it( 'carries the settlement too once its /select round trip has already resolved — not just an optimistic pick', async () => {
+		bootBothColumnsWithRegion( false );
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		const selectReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( selectReq.url ).toBe( SELECT_URL );
+		selectReq.resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+} );

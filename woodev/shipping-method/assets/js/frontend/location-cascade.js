@@ -926,11 +926,11 @@
 	 *
 	 * Per incoming node, exactly one of three things happens:
 	 *
-	 * 1. **Empty field, carried record** — write the record's own derived value in silently
-	 *    ({@see fieldValueFor}, the SAME derivation a direct pick at that level gets, so a
-	 *    carried field and a picked one never read differently). {@see writeSilently} seeds
-	 *    `entry.resolved` as part of the write, which is what makes the following `change`
-	 *    harmless.
+	 * 1. **Empty field, carried record** — write the carried text in silently
+	 *    ({@see previousLevelText}, falling back to {@see fieldValueFor} — see that function's own
+	 *    docblock for why the OUTGOING field's live DOM value is preferred, not the record's own
+	 *    components). {@see writeSilently} seeds `entry.resolved` as part of the write, which is
+	 *    what makes the following `change` harmless.
 	 * 2. **Field already carrying the customer's own text** — leave the text alone (checking
 	 *    "ship to a different address" after typing a genuinely different shipping address must
 	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
@@ -966,6 +966,58 @@
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} newAllNodes
 	 * @returns {void}
 	 */
+
+	/**
+	 * The OUTGOING field's own live DOM value for `level`, or `''` when that level had no node in
+	 * `previousAllNodes` (a plugin declaring some but not all three levels) or no element was
+	 * found — issue #490's fix.
+	 *
+	 * {@see carryChainStateToIncomingNodes} used to derive the carried text purely from
+	 * {@see fieldValueFor}`( entry.records[level], level )` — the SAME derivation a direct pick
+	 * gets. That is correct only while `entry.records[level]` still holds the FULL record `onSelectFor()`
+	 * wrote. It does not, by the time a real customer gets around to toggling "ship to a different
+	 * address": {@see adoptChain} — called from EVERY successful `/select` round trip, not just at
+	 * boot — deliberately narrows `entry.records[level]` down to `{ key, confirmed: true }` once the
+	 * server confirms it (see that function's own docblock: "confirmed marks PROVENANCE, not
+	 * validity"). The narrowed shape has no `record[level].name`/`record.label` left for
+	 * `fieldValueFor()` to read, so it silently returns `''` — a record that is fully genuine and
+	 * confirmed reads as nothing to carry. Measured on the rig (issue #490): the region level is
+	 * always picked first and is therefore always narrowed well before a toggle, so it never carried
+	 * in either direction; the settlement level's carry was a bare race between its own `/select`
+	 * response landing and the toggle, which is exactly why it carried in some runs and not others.
+	 *
+	 * The fix reads the OUTGOING node's live element instead: `previousAllNodes` still names it (its
+	 * widget is detached by {@see rebuildChainForActiveSection} before this function runs, but
+	 * `detachOne()` only removes the widget's own event bindings — it never touches `.value`, so the
+	 * DOM keeps showing exactly the text a direct pick would have written there, in the SAME
+	 * value-space {@see applyValueToElement} already understands for whichever widget mode is live —
+	 * a `related-list` `<select>`'s own WC-canonical option value, an `ajax-select2` field's
+	 * synthetic option text, or a plain typeahead `<input>`'s text). This needs no per-mode
+	 * knowledge and cannot go stale the way the record can, so it is tried FIRST; {@see fieldValueFor}
+	 * only remains as a fallback for the case this function returns `''` (no outgoing node for this
+	 * level at all) — the mirror of what the postcode branch just below already does, which never
+	 * had this bug because it always read the outgoing field's value directly.
+	 *
+	 * @param {Array<{level: ?string, fieldId: string}>} previousAllNodes
+	 * @param {string} level
+	 * @returns {string}
+	 */
+	function previousLevelText( previousAllNodes, level ) {
+		var i, node, el;
+
+		for ( i = 0; i < previousAllNodes.length; i++ ) {
+			node = previousAllNodes[ i ];
+
+			if ( node.level === level ) {
+				el = document.getElementById( node.fieldId );
+
+				return el ? cascadeKey( el.value ) : '';
+			}
+		}
+
+		return '';
+	}
+
 	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes ) {
 		var previousIds = previousAllNodes.map( function( node ) {
 			return node.fieldId;
@@ -1014,7 +1066,7 @@
 			var carried;
 
 			if ( node.level ) {
-				carried = fieldValueFor( record, node.level );
+				carried = record ? ( previousLevelText( previousAllNodes, node.level ) || fieldValueFor( record, node.level ) ) : '';
 			} else {
 				var previousEl = previousPostcodeId ? document.getElementById( previousPostcodeId ) : null;
 				carried = previousEl ? cascadeKey( previousEl.value ) : '';
