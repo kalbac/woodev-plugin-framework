@@ -331,7 +331,7 @@ jobs:
           tools: composer:v2
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@v2.85.13
+        uses: taiki-e/install-action@v2.86.5
         with:
           tool: git-cliff
 
