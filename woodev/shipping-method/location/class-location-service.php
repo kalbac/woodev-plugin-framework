@@ -1589,6 +1589,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			return $this->registry->has_provider( $provider_id );
 		}
 
+
+		/**
+		 * Gets ONE registered provider by its raw id, with NO eligibility gating
+		 * (#488 slice 3, D5) — unlike {@see self::provider_by_id()}, which
+		 * additionally checks `is_configured()` and per-level/country service.
+		 *
+		 * The D5 lazy-verification step needs the OPPOSITE of that gating: it must
+		 * always attempt `resolve_key()` on the SAME provider that produced a
+		 * stored key, so an "unconfigured" or "does not serve this level right
+		 * now" condition surfaces as a THROWN, caught, `failed`
+		 * {@see Popular_Settlement_Verification} outcome — never a silent skip
+		 * that would leave a stale row unverified with nothing logged (spec D6:
+		 * "failed" is not "gone", and a provider outage must never block a
+		 * purchase, but it must still be OBSERVABLE).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id The provider's own {@see Location_Provider::get_id()}.
+		 *
+		 * @return Location_Provider|null Null only when no such provider is registered at all.
+		 */
+		public function get_registered_provider( string $provider_id ): ?Location_Provider {
+			return $this->registry->get_providers()[ $provider_id ] ?? null;
+		}
+
+		/**
+		 * Gets the shared {@see Popular_Settlement_Store} instance (#488 slice 3)
+		 * — a thin delegate to {@see Location_Provider_Registry::popular_settlement_store()}
+		 * so {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller} (which
+		 * only ever holds a {@see self} instance, never the registry directly —
+		 * see this façade's own constructor docblock) can reach the SAME store
+		 * instance enrolment already writes to.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Popular_Settlement_Store
+		 */
+		public function popular_settlement_store(): Popular_Settlement_Store {
+			return $this->registry->popular_settlement_store();
+		}
+
 		/**
 		 * Resolves ONE SPECIFIC registered provider for a suggest level — the
 		 * admin-override counterpart to {@see self::provider_for_level()}'s D15

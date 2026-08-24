@@ -56,9 +56,13 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Verification;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Verifier;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -1165,10 +1169,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              the server's own rebuilt chain wholesale and can never end
 		 *              up scoping a later `within` by a key the server itself
 		 *              would refuse to resolve.
+		 * @since 2.0.2 Gained the D5 lazy-verification step
+		 *              (popular-settlements spec D5/D6/D7,
+		 *              `docs-internal/specs/2026-08-24-popular-settlements-design.md`):
+		 *              a popular-list pick whose `last_verified_at` is stale is
+		 *              re-checked against the owning provider INSIDE this same
+		 *              request, before the customer's posted record is
+		 *              persisted. Not found, or found and fresh, behaves EXACTLY
+		 *              as before this step existed. Response MAY now carry
+		 *              `cancelled: true` instead of the ordinary shape (D7) —
+		 *              see {@see self::cancelled_stale_record_response()}.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{current: array{key: string, level: string}, persisted: bool, chain: array<string, array{key: string, level: string}>}
+		 * @return \WP_REST_Response|\WP_Error|array{current: array{key: string, level: string}, persisted: bool, chain: array<string, array{key: string, level: string}>}|array{cancelled: bool, reason: string, message: string, current: null, persisted: bool, chain: array<string, array{key: string, level: string}>}
 		 */
 		public function handle_select_request( $request ) {
 
@@ -1225,6 +1239,78 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				);
 			}
 
+			/*
+			 * D5 (popular-settlements spec): a stale popular-list pick is verified
+			 * INLINE, in this same request, before the write below. "Not found, or
+			 * found and fresh" (the overwhelmingly common path) falls straight
+			 * through this block unchanged — one extra indexed store lookup, no
+			 * provider call, no changed response.
+			 */
+			$record_to_persist = $record;
+
+			$popular_store = $this->service->popular_settlement_store();
+			$entry         = $popular_store->find_entry_by_key( $record->provider_id(), $record->key() );
+
+			if ( null !== $entry && $popular_store->is_stale( $entry ) ) {
+				$provider = $this->service->get_registered_provider( $record->provider_id() );
+
+				if ( null === $provider ) {
+					// No such provider registered at all right now — cannot verify.
+					// Never block the purchase over it (spec D6: a "failed" row is
+					// left completely untouched, exactly like a caught provider
+					// exception would leave it).
+					$this->log_failure(
+						$record->provider_id(),
+						'verify_key',
+						new \RuntimeException(
+							sprintf( 'Popular_Settlement_Verifier: no provider registered for id "%s".', $record->provider_id() )
+						)
+					);
+				} else {
+					$verification = ( new Popular_Settlement_Verifier( $popular_store ) )->verify_entry( $provider, $entry );
+
+					switch ( $verification->outcome() ) {
+						case Popular_Settlement_Verification::OUTCOME_UPDATED:
+							// The provider's fresh record, not the posted one (D1
+							// equivalence: search would have returned the new one).
+							$fresh = $verification->record();
+
+							if ( null !== $fresh ) {
+								$record_to_persist = $fresh;
+							}
+							break;
+
+						case Popular_Settlement_Verification::OUTCOME_FAILED:
+							// The customer's record, as today — a provider outage
+							// must never block a purchase.
+							$error = $verification->error();
+
+							if ( null !== $error ) {
+								$this->log_failure( $record->provider_id(), 'verify_key', $error );
+							}
+							break;
+
+						case Popular_Settlement_Verification::OUTCOME_GONE:
+							// The row is already deleted by now (D6). D7 decides
+							// whether to silently adopt a search match or cancel
+							// the pick outright.
+							$adopted = $this->resolve_stale_pick_replacement( $provider, $entry );
+
+							if ( null !== $adopted ) {
+								$record_to_persist = $adopted;
+							} else {
+								return rest_ensure_response( $this->cancelled_stale_record_response() );
+							}
+							break;
+
+						// OUTCOME_UNCHANGED: $record_to_persist stays $record — the
+						// customer's own posted record, exactly as today.
+					}
+				}
+			}
+
+			$record = $record_to_persist;
+
 			// Always EXPLICIT (spec D11): a customer's own selection through this
 			// route is never an implicit/default guess — only
 			// Location_Service::resolve_default() (a later task) writes implicit
@@ -1252,11 +1338,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * {@see Location_Service::get_customer_chain()} — the server's own
 			 * rebuilt chain, not a client-side guess reconstructed from `$record`
 			 * alone (a client cannot know which shallower levels
-			 * {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::set()}
+			 * {@see \\Woodev\\Framework\\Shipping\\Location\\Customer_Location_Store::set()}
 			 * kept or dropped). When the write failed (`persisted: false`) this is
 			 * simply whatever chain the store already held — still the honest,
 			 * current server-side answer.
 			 */
+			return rest_ensure_response(
+				[
+					'current'   => [
+						'key'   => $record->key(),
+						'level' => $record->level(),
+					],
+					'persisted' => $persisted,
+					'chain'     => $this->customer_chain_response(),
+				]
+			);
+		}
+
+
+		/**
+		 * Builds the `chain` response block {@see self::handle_select_request()}
+		 * returns on every shape (ordinary and D7-cancelled) — every level in the
+		 * customer's CURRENT chain, `{ key, level }` each, keyed by level. Reads
+		 * straight from {@see Location_Service::get_customer_chain()}, so calling
+		 * this WITHOUT an intervening write (the D7 cancel path) honestly reports
+		 * "the server's chain as it stands — unchanged by this request" (spec D7),
+		 * and calling it AFTER {@see Location_Service::set_customer_record()}
+		 * reports the freshly-written state — same accessor, whichever is true at
+		 * the moment it is called.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, array{key: string, level: string}>
+		 */
+		private function customer_chain_response(): array {
 			$chain = [];
 
 			$customer_chain = $this->service->get_customer_chain();
@@ -1270,16 +1385,117 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				}
 			}
 
-			return rest_ensure_response(
-				[
-					'current'   => [
-						'key'   => $record->key(),
-						'level' => $record->level(),
-					],
-					'persisted' => $persisted,
-					'chain'     => $chain,
-				]
+			return $chain;
+		}
+
+		/**
+		 * Builds the D7 "cancel the pick" response (popular-settlements spec D7,
+		 * point 3): nothing is written to the customer store — `chain` is
+		 * therefore read UNCHANGED, before any write this request might otherwise
+		 * have made. `cancelled` is present (and `true`) ONLY on this shape — every
+		 * ordinary response omits the key entirely, so a client that has not been
+		 * updated for D7 keeps working unchanged (spec: "`cancelled` is absent,
+		 * not `false`, on every ordinary response").
+		 *
+		 * HTTP status stays 200 (the caller still wraps this in
+		 * `rest_ensure_response()`): this is a real answer about the data, not a
+		 * transport failure.
+		 *
+		 * The message is NOT optional (spec D7 — the project default is to explain
+		 * a blocked/changed control): the customer clicks, the field empties and
+		 * the address field re-locks on top of it; silence would read as two
+		 * breakages in a row.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{cancelled: bool, reason: string, message: string, current: null, persisted: bool, chain: array<string, array{key: string, level: string}>}
+		 */
+		private function cancelled_stale_record_response(): array {
+			return [
+				'cancelled' => true,
+				'reason'    => 'stale_record',
+				'message'   => __( 'Данные не актуальны, выберите заново', 'woodev-plugin-framework' ),
+				'current'   => null,
+				'persisted' => false,
+				'chain'     => $this->customer_chain_response(),
+			];
+		}
+
+		/**
+		 * D7: when `resolve_key()` confirms a popular entry is gone, decides
+		 * whether the customer's pick can be silently carried forward onto a fresh
+		 * record, or must be cancelled instead.
+		 *
+		 * Runs the ordinary search for the STORED settlement name, scoped to the
+		 * stored region (both read from `$entry`'s OWN record — the one that was
+		 * just deleted, still held here in memory — never from anything the
+		 * provider returned, since a `gone` verification carries no record at
+		 * all). An exact, unambiguous match on BOTH settlement name and region
+		 * (trimmed, `mb_strtolower`-ed) is adopted; anything else — two
+		 * candidates, zero, a mismatched region, or a `suggest()` that throws — is
+		 * refused. Never substitutes a near match: a locality display name is not
+		 * an identifier (gotcha `a-locality-display-name-is-not-an-identifier`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider        $provider The provider that just confirmed `$entry` is gone.
+		 * @param Popular_Settlement_Entry $entry    The (already-deleted) entry the customer picked.
+		 *
+		 * @return Location_Record|null The record to silently adopt, or null to cancel the pick.
+		 */
+		private function resolve_stale_pick_replacement( Location_Provider $provider, Popular_Settlement_Entry $entry ): ?Location_Record {
+			$stored = $entry->record();
+
+			$settlement_name = null !== $stored->settlement() ? $stored->settlement()['name'] : '';
+			$region          = $stored->region();
+
+			try {
+				$scope = Location_Scope::within_components(
+					$entry->country(),
+					Location_Record::LEVEL_SETTLEMENT,
+					null !== $region ? [ 'region' => $region ] : []
+				);
+
+				$matches = $provider->suggest( $settlement_name, $scope );
+			} catch ( \Throwable $exception ) {
+				return null; // A suggest() that throws is not a match (spec D7).
+			}
+
+			$target_settlement = $this->normalize_for_stale_pick_comparison( $settlement_name );
+			$target_region     = $this->normalize_for_stale_pick_comparison( null !== $region ? $region['name'] : '' );
+
+			$candidates = array_values(
+				array_filter(
+					$matches,
+					function ( Location_Record $candidate ) use ( $target_settlement, $target_region ): bool {
+						$candidate_settlement = $this->normalize_for_stale_pick_comparison(
+							null !== $candidate->settlement() ? $candidate->settlement()['name'] : ''
+						);
+						$candidate_region     = $this->normalize_for_stale_pick_comparison(
+							null !== $candidate->region() ? $candidate->region()['name'] : ''
+						);
+
+						return $candidate_settlement === $target_settlement && $candidate_region === $target_region;
+					}
+				)
 			);
+
+			return 1 === count( $candidates ) ? $candidates[0] : null;
+		}
+
+		/**
+		 * Normalizes a display name for the D7 exact-match comparison: trimmed,
+		 * `mb_strtolower`-ed — never a near/fuzzy match (gotcha
+		 * `a-locality-display-name-is-not-an-identifier`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value Raw display name.
+		 *
+		 * @return string
+		 */
+		private function normalize_for_stale_pick_comparison( string $value ): string {
+			return mb_strtolower( trim( $value ) );
 		}
 
 		/**
