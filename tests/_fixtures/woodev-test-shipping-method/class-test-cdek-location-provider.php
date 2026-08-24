@@ -309,6 +309,138 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 			return $records;
 		}
 
+		/**
+		 * {@inheritDoc}
+		 *
+		 * DECLARES {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
+		 * — both `/location/regions?region_code=` and `/location/cities?code=` are
+		 * exact single-row lookups by CDEK's own dictionary identity (see the file
+		 * docblock's endpoint table), so no scope/country hint is needed to resolve
+		 * either half of this provider's own key namespace (`r<region_code>` for a
+		 * region — see {@see self::record_from_region()} — a bare settlement `code`
+		 * otherwise).
+		 *
+		 * `null` is reachable from EXACTLY ONE path: CDEK was asked and answered
+		 * ZERO rows for the id ({@see self::request()} returning `[]`) — the one
+		 * outcome spec D6 is allowed to read as "gone" and delete the stored row
+		 * for. Every OTHER outcome THROWS
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception}
+		 * instead, never `null` — an unconfigured provider, a transport/malformed-
+		 * payload failure ({@see self::request()}'s own #405 discipline), a
+		 * malformed KEY this provider could not have produced, and a non-empty row
+		 * that {@see self::record_from_city_row()}/{@see self::record_from_region()}
+		 * cannot map all mean "this could not be verified", which is a materially
+		 * different fact from "confirmed gone" and must never collapse into it
+		 * (critic finding, round 2: a row we cannot read is OUR mapping failing,
+		 * not CDEK confirming the locality is gone). This is why `resolve_key()`
+		 * and {@see self::resolve_region()} inspect the raw row count THEMSELVES —
+		 * {@see self::record_from_city_row()} is ALSO called from
+		 * {@see self::list_localities()}, where "skip one bad row while enumerating
+		 * many" is the correct, unrelated behaviour, so its own `null`-for-
+		 * malformed contract must not change.
+		 *
+		 * This method reads {@see self::token()} itself first — same as
+		 * {@see self::request()} does internally — so an unconfigured provider (an
+		 * empty token, never thrown) is told apart from a configured-but-failing one
+		 * (a thrown {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception},
+		 * propagated as-is) BEFORE `request()` ever gets the chance to collapse either
+		 * into a silent `[]`. Reading `token()` rather than {@see self::is_configured()}
+		 * also keeps the cached-transient-token shortcut every other method here
+		 * already relies on for testability.
+		 */
+		public function resolve_key( string $key ): ?\Woodev\Framework\Shipping\Location\Location_Record {
+			[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $key );
+
+			if ( self::PROVIDER_ID !== $provider_id ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Woodev_Test_Cdek_Location_Provider::resolve_key(): key "%s" belongs to provider "%s", not "%s".',
+						$key,
+						$provider_id,
+						self::PROVIDER_ID
+					)
+				);
+			}
+
+			if ( 'r' === substr( $native_id, 0, 1 ) && ctype_digit( substr( $native_id, 1 ) ) ) {
+				return $this->resolve_region( (int) substr( $native_id, 1 ) );
+			}
+
+			if ( ! ctype_digit( $native_id ) ) {
+				// Not a shape this provider ever produces (see resolve_region()'s
+				// 'r<digits>' branch above and record_from_suggest_row()/
+				// record_from_city_row()'s own plain-int `code`) — a malformed KEY,
+				// never "gone".
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Woodev_Test_Cdek_Location_Provider::resolve_key(): "%s" is not a well-formed CDEK native id.',
+						$key
+					)
+				);
+			}
+
+			if ( '' === $this->token() ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK test contour resolve_key request failed: provider is not configured.'
+				);
+			}
+
+			$rows = $this->request( '/location/cities', [ 'code' => (int) $native_id ] );
+
+			if ( [] === $rows ) {
+				return null;
+			}
+
+			$record = $this->record_from_city_row( $rows[0] );
+
+			if ( null === $record ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour resolve_key(): the row for code "%s" could not be mapped.', $native_id )
+				);
+			}
+
+			return $record;
+		}
+
+		/**
+		 * Resolves a single region by its CDEK `region_code`.
+		 *
+		 * `null` only when CDEK answered ZERO rows for the code — see
+		 * {@see self::resolve_key()}'s own docblock for why every other outcome
+		 * (including a non-empty but unmappable row) throws instead.
+		 *
+		 * @param int $region_code CDEK region code (the `r`-prefixed native id, minus
+		 *                         the prefix).
+		 *
+		 * @return \Woodev\Framework\Shipping\Location\Location_Record|null
+		 *
+		 * @throws \Woodev\Framework\Shipping\Location\Location_Provider_Exception
+		 *         When unconfigured, the request fails, or CDEK's row cannot be mapped.
+		 */
+		private function resolve_region( int $region_code ): ?\Woodev\Framework\Shipping\Location\Location_Record {
+			if ( '' === $this->token() ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK test contour resolve_key request failed: provider is not configured.'
+				);
+			}
+
+			$rows = $this->request( '/location/regions', [ 'region_code' => $region_code ] );
+
+			if ( [] === $rows ) {
+				return null;
+			}
+
+			$row = $rows[0];
+
+			if ( ! is_array( $row ) || empty( $row['region_code'] ) || empty( $row['region'] ) || empty( $row['country_code'] ) ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					sprintf( 'CDEK test contour resolve_key(): the region row for code "%d" could not be mapped.', $region_code )
+				);
+			}
+
+			return $this->record_from_region( (int) $row['region_code'], (string) $row['region'], (string) $row['country_code'] );
+		}
+
 		// -----------------------------------------------------------------
 		// Suggestion building
 		// -----------------------------------------------------------------

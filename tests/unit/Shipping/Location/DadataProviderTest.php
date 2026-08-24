@@ -1115,6 +1115,172 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// resolve_key() — popular-settlements spec D4.
+	// -------------------------------------------------------------------------
+
+	public function test_capabilities_include_resolve_key_regardless_of_secret(): void {
+		$this->set_token( 'tok', '' );
+		$this->assertContains( 'resolve_key', ( new Dadata_Provider() )->get_capabilities() );
+	}
+
+	public function test_resolve_key_maps_a_settlement_record(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
+
+		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f', $record->key() );
+		$this->assertSame( 'dadata', $record->provider_id() );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $record->level() );
+		$this->assertSame( 'RU', $record->country() );
+		$this->assertSame( [ 'name' => 'Краснодар', 'type' => 'г' ], $record->settlement() );
+		$this->assertSame( 'г Краснодар', $record->label() );
+	}
+
+	public function test_resolve_key_derives_region_level_when_no_finer_field_is_filled(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
+
+		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( Location_Record::LEVEL_REGION, $record->level() );
+	}
+
+	public function test_resolve_key_returns_null_when_dadata_no_longer_recognises_the_id(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		$this->assertNull( ( new Dadata_Provider() )->resolve_key( 'dadata:no-such-fias-id' ) );
+	}
+
+	/**
+	 * A NON-EMPTY suggestion set whose first entry is not an object is malformed, not
+	 * empty — and only "empty" means the locality is gone. `find_by_id_address()` used to
+	 * collapse both into `null` through `$suggestions[0] ?? null`, so a single malformed
+	 * response would have deleted a valid stored row under spec D6 (Codex critic, final
+	 * pass on #488 slice 1).
+	 */
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_non_empty_but_unreadable_suggestion_set(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{"suggestions":[null]}' );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_when_unconfigured(): void {
+		$this->set_token( '' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_on_an_http_failure(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 500, '' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		try {
+			( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		} finally {
+			$this->assertTrue( $this->failure_was_logged( 'resolve_key' ) );
+		}
+	}
+
+	public function test_resolve_key_rejects_a_key_belonging_to_another_provider(): void {
+		$this->set_token( 'tok' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$this->expectException( \InvalidArgumentException::class );
+		( new Dadata_Provider() )->resolve_key( 'test-cdek:44' );
+	}
+
+	// ---- HIGH 1 (round 2 critic): `null` must mean ONLY "confirmed gone" —
+	// a malformed-but-200 response must THROW, never silently signal "gone"
+	// and let a later slice delete a perfectly good popular settlement.
+
+	public function test_resolve_key_throws_rather_than_returns_null_when_the_response_carries_no_data_object(): void {
+		$this->set_token( 'tok' );
+		// A `200` suggestion row with no `data` object at all — DaData answered,
+		// but not with anything this method can read. Not "gone".
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ [ 'value' => 'Some Value' ] ] ] ) );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_row_that_fails_record_validation(): void {
+		$this->set_token( 'tok' );
+		// A row with no country of any kind — record_from_dadata_fields() cannot
+		// build a valid Location_Record from this (Location_Record::from_array()
+		// requires a non-empty "country") and returns null; resolve_key() must
+		// not let that null pass through as its own "gone" signal.
+		$this->stub_http_response(
+			200,
+			(string) json_encode(
+				[
+					'suggestions' => [
+						[
+							'value' => 'Некая местность',
+							'data'  => [
+								'fias_id' => '0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+								'city'    => 'Некая местность',
+							],
+						],
+					],
+				]
+			)
+		);
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	// ---- HIGH 2 (round 2 critic): a DERIVED key (no native fias_id was ever
+	// available) can never be looked up via findById — the no-match that
+	// produces must not be read as "gone" either. Round 3: recognised via
+	// Locality_Key::is_derived()'s marker fact, not a shape guess — see that
+	// method's own docblock and LocalityKeyTest for the marker-level coverage
+	// (including the regression pin for round 2's specific failure mode: a real
+	// id that happens to be shaped like a derived hash).
+
+	public function test_resolve_key_throws_rather_than_returns_null_for_a_derived_key(): void {
+		$this->set_token( 'tok' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$fields      = self::suggestion_without_its_own_fias_id()['suggestions'][0]['data'];
+		$derived_key = Locality_Key::derive( Dadata_Provider::PROVIDER_ID, $fields );
+
+		$this->assertTrue( Locality_Key::is_derived( $derived_key ), 'sanity: this fixture must actually produce a derived key' );
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( $derived_key );
+	}
+
+	public function test_resolve_key_resolves_a_real_fias_id_that_happens_to_be_twenty_hex_characters(): void {
+		// Regression pin for round 2's exact bug: the old shape regex ('/^[0-9a-f]{20}$/')
+		// would have wrongly refused this — a COMPOSED (not derived) key whose native
+		// id happens to match the shape a derived hash takes. Locality_Key::is_derived()
+		// answers from the marker instead, so this must resolve normally.
+		$this->set_token( 'tok' );
+		$fixture = self::settlement_suggestion( '4' );
+		$fixture['data']['fias_id'] = '0123456789abcdef0123';
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $fixture ] ] ) );
+
+		$key = Locality_Key::compose( Dadata_Provider::PROVIDER_ID, '0123456789abcdef0123' );
+		$this->assertFalse( Locality_Key::is_derived( $key ), 'sanity: a composed key is never derived, regardless of its shape' );
+
+		$record = ( new Dadata_Provider() )->resolve_key( $key );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( $key, $record->key() );
+	}
+
+	// -------------------------------------------------------------------------
 	// Registry integration — an OBSERVABLE end-to-end assertion, not reflection.
 	// -------------------------------------------------------------------------
 

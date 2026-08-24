@@ -67,6 +67,21 @@ class Locate_Only_Fixture_Provider extends Bare_Fixture_Provider {
 }
 
 /**
+ * Overrides ONLY resolve_key() — used to prove get_capabilities() reports exactly
+ * the overridden method and that calling it does not throw.
+ */
+class Resolve_Key_Only_Fixture_Provider extends Bare_Fixture_Provider {
+
+	public function get_id(): string {
+		return 'resolve-key-only';
+	}
+
+	public function resolve_key( string $key ): ?Location_Record {
+		return null;
+	}
+}
+
+/**
  * Direct child of Abstract_Location_Provider that overrides list_localities() —
  * paired with Grandchild_Fixture_Provider below, which extends THIS class and
  * overrides nothing itself. Proves the reflection comparison uses `self::class`
@@ -266,6 +281,11 @@ final class AbstractLocationProviderTest extends TestCase {
 		( new Bare_Fixture_Provider() )->normalize( 'Москва, Тверская 1', Location_Scope::for_country( 'RU', 'address' ) );
 	}
 
+	public function test_a_bare_subclass_throws_on_resolve_key(): void {
+		$this->expectException( \BadMethodCallException::class );
+		( new Bare_Fixture_Provider() )->resolve_key( 'bare:1' );
+	}
+
 	public function test_the_bad_method_call_exception_names_the_provider_and_the_missing_capability(): void {
 		try {
 			( new Bare_Fixture_Provider() )->locate( '1.2.3.4' );
@@ -288,6 +308,24 @@ final class AbstractLocationProviderTest extends TestCase {
 
 	public function test_a_subclass_overriding_locate_still_throws_on_the_other_two(): void {
 		$provider = new Locate_Only_Fixture_Provider();
+
+		$this->expectException( \BadMethodCallException::class );
+		$provider->list_localities( Location_Scope::for_country( 'RU', 'region' ) );
+	}
+
+	public function test_a_subclass_overriding_resolve_key_reports_exactly_resolve_key(): void {
+		$this->assertSame(
+			[ Location_Provider::CAPABILITY_RESOLVE_KEY ],
+			( new Resolve_Key_Only_Fixture_Provider() )->get_capabilities()
+		);
+	}
+
+	public function test_a_subclass_overriding_resolve_key_does_not_throw_when_called(): void {
+		$this->assertNull( ( new Resolve_Key_Only_Fixture_Provider() )->resolve_key( 'resolve-key-only:1' ) );
+	}
+
+	public function test_a_subclass_overriding_resolve_key_still_throws_on_the_other_three(): void {
+		$provider = new Resolve_Key_Only_Fixture_Provider();
 
 		$this->expectException( \BadMethodCallException::class );
 		$provider->list_localities( Location_Scope::for_country( 'RU', 'region' ) );

@@ -162,11 +162,44 @@ final class LocalityKeyTest extends TestCase {
 		$this->assertNotSame( $nested, $flat );
 	}
 
-	public function test_derive_produces_a_twenty_character_hash_segment(): void {
+	public function test_derive_produces_a_twenty_character_hash_segment_after_the_derived_marker(): void {
 		$key = Locality_Key::derive( 'noid', [ 'settlement' => 'Тюмень' ] );
 		[ , $native_id ] = Locality_Key::parse( $key );
 
-		$this->assertSame( 20, strlen( $native_id ) );
+		$this->assertStringStartsWith( 'derived:', $native_id );
+		$this->assertSame( 20, strlen( $native_id ) - strlen( 'derived:' ) );
+	}
+
+	// ---- Round 3 (#488): "was this key derived, or issued by the provider" must
+	// be a FACT readable off the key itself, never a guess about what a derived
+	// key's native-id segment happens to look like — see Locality_Key::DERIVED_MARKER's
+	// own docblock and docs-internal/gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md
+	// for why a shape heuristic (round 2's approach) is exactly the mistake this
+	// replaces. ----
+
+	public function test_is_derived_is_true_for_a_derived_key(): void {
+		$key = Locality_Key::derive( 'dadata', [ 'settlement' => 'Тюмень' ] );
+
+		$this->assertTrue( Locality_Key::is_derived( $key ) );
+	}
+
+	public function test_is_derived_is_false_for_a_composed_key(): void {
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ) ) );
+	}
+
+	public function test_is_derived_is_false_for_a_composed_key_that_coincidentally_has_a_twenty_hex_character_native_id(): void {
+		// Pins the exact failure mode the round-2 shape regex had: a REAL native id
+		// happening to be shaped like a derived hash must still resolve, never be
+		// mistaken for derived, because derivation is now a marker, not a shape.
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', '0123456789abcdef0123' ) ) );
+	}
+
+	public function test_is_derived_is_false_for_a_composed_key_whose_native_id_starts_with_the_word_derived(): void {
+		// A native id a provider genuinely issued could coincidentally start with
+		// the literal word "derived" — that must never be misread either, because
+		// is_derived() checks for the marker's OWN exact prefix ("derived:"), not a
+		// looser substring/word match.
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', 'derived-by-the-carrier-42' ) ) );
 	}
 
 	// ---- P2 finding: derive() must refuse to run without mbstring rather than
@@ -191,5 +224,19 @@ final class LocalityKeyTest extends TestCase {
 		$key = Locality_Key::derive( 'noid', [ 'settlement' => 'Тюмень' ] );
 
 		$this->assertStringStartsWith( 'noid:', $key );
+	}
+	/**
+	 * `derive()` mints the marker through a private `join()` rather than through `compose()`.
+	 * Regression cover for the reverted reservation guard: `compose()` deliberately does NOT
+	 * refuse the marker (refusing it made a provider-issued id starting with the marker
+	 * unrepresentable), so this pins that derivation still works and reads back as derived.
+	 * The remaining ambiguity is tracked as its own card.
+	 */
+	public function test_derive_mints_a_key_that_reads_back_as_derived(): void {
+		$key = Locality_Key::derive( 'dadata', [ 'city' => 'Пенза', 'region' => 'Пензенская' ] );
+
+		$this->assertTrue( Locality_Key::is_derived( $key ) );
+		$this->assertSame( 'dadata', Locality_Key::parse( $key )[0] );
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', 'relation:59195' ) ) );
 	}
 }

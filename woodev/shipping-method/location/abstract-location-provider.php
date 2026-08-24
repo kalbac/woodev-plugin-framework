@@ -68,9 +68,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 		 * @var array<string, string>
 		 */
 		private const CAPABILITY_METHODS = [
-			self::CAPABILITY_LIST     => 'list_localities',
-			self::CAPABILITY_LOCATE   => 'locate',
-			self::CAPABILITY_NORMALIZE => 'normalize',
+			self::CAPABILITY_LIST        => 'list_localities',
+			self::CAPABILITY_LOCATE      => 'locate',
+			self::CAPABILITY_NORMALIZE   => 'normalize',
+			self::CAPABILITY_RESOLVE_KEY => 'resolve_key',
 		];
 
 		/**
@@ -253,6 +254,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 					'Location provider "%s" does not implement the "%s" capability (normalize()).',
 					$this->get_id(),
 					self::CAPABILITY_NORMALIZE
+				)
+			);
+		}
+
+
+		/**
+		 * {@inheritDoc}
+		 *
+		 * Default: not implemented. Overridden by a provider that declares
+		 * {@see Location_Provider::CAPABILITY_RESOLVE_KEY}.
+		 *
+		 * @since 2.0.2
+		 */
+		public function resolve_key( string $key ): ?Location_Record {
+			throw new \BadMethodCallException(
+				sprintf(
+					'Location provider "%s" does not implement the "%s" capability (resolve_key()).',
+					$this->get_id(),
+					self::CAPABILITY_RESOLVE_KEY
 				)
 			);
 		}
