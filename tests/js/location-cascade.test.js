@@ -962,41 +962,149 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:r1' ) );
 	} );
 
-	it( 'clears a select2/related-list-enhanced settlement field through the ONE reusable synthetic option, never leaving a duplicate behind', async () => {
-		// Simulates a Task 13 renderer swap (location-select-modes.js, not this module) — same
-		// technique the existing #460/#462 region tests already use: swap the live element for
-		// a <select> carrying the SAME id, then drive the pick through the ORIGINAL fake
-		// typeahead call (matching how backwardsFill() already writes into a swapped sibling
-		// field without ever needing its OWN widget re-attached).
-		boot( { settlement: true } );
+	// -------------------------------------------------------------------
+	// Codex round 2: the two tests this replaced drove a HAND-SWAPPED bare <select> through the
+	// DETACHED fake typeahead call (`settlementCall.onSelect(...)` bypassing DOM entirely) and
+	// asserted `.value`/`options.length` on it — a shape no real renderer ever produces, which is
+	// exactly why it never caught either defect below. These boot the REAL Task 13 renderer
+	// (`location-select-modes.js`, not `fakeTypeahead()`'s stand-in) and drive picks through its
+	// OWN native `change` wiring, so both are exercised for real:
+	//
+	//  - applyValueToElement()'s synthetic-option branch, which used to REUSE (never remove) a
+	//    synthetic `<option>` for an EMPTY clear, permanently leaving one behind — see this
+	//    function's own docblock in location-cascade.js.
+	//  - resolveAndSelect()'s `lastHandledKey` guard (location-select-modes.js), which never
+	//    expired on its own — so re-picking the SAME still-rendered entry after this exact clear
+	//    resolved to a no-op and never re-fired `/select` at all, the worst version of the D7
+	//    cancel bug: the notice tells the customer to pick again, and picking the same entry again
+	//    is precisely the path that did nothing.
+	// -------------------------------------------------------------------
 
-		const input = document.getElementById( 'billing_city' );
-		const select = document.createElement( 'select' );
+	/**
+	 * Boots `location-cascade.js` against the REAL `location-select-modes.js` `related-list`
+	 * settlement renderer — deliberately NOT `boot()`'s `fakeTypeahead()` stand-in, and
+	 * deliberately without a fake select2 installed: `location-select-modes.js`'s own docblock
+	 * ("SELECT2 IS OPTIONAL AT RUNTIME") means `ensureSelect2()` simply no-ops here, and the
+	 * widget runs its real native-`<select>` fallback path — the exact path `resolveAndSelect()`'s
+	 * `lastHandledKey` guard exists for (a real user pick there fires BOTH the native
+	 * `addEventListener` and jQuery `.on('change')` halves of `bindChangeBothWorlds()` for ONE
+	 * dispatched event, so a single `pickByKey()` call below already exercises the guard's
+	 * original double-fire protection, not just this fix).
+	 *
+	 * @returns {void}
+	 */
+	function bootRealRelatedListSettlement() {
+		installMarkup( { settlement: true }, 'RU' );
 
-		select.id = input.id;
-		select.name = input.name;
-		input.parentNode.replaceChild( select, input );
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
 
-		const settlementCall = callFor( 'billing_city' );
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
 
-		// The fake typeahead call still targets the ORIGINAL (now-detached) input; only the
-		// eventual DOM write on cancel — routed through document.getElementById() — needs to
-		// see the swapped <select>. selectViaFake() itself would dispatch events nothing is
-		// listening for on a detached node, so the pick is driven directly here instead,
-		// exactly like onSelectFor()'s own contract (record in, nothing about the DOM node it
-		// arrived through).
-		settlementCall.onSelect( SETTLEMENT_ITEM );
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		mockFetch();
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, mode: 'related-list' } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	/**
+	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
+	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 *
+	 * @returns {Object}
+	 */
+	function listRequest() {
+		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
+	}
+
+	/**
+	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
+	 * setting `selectedIndex` then dispatching one real native `change` event, exactly like this
+	 * file's own `selectViaFake()` does for the baseline typeahead's `<input>`.
+	 *
+	 * @param {Element} select
+	 * @param {string}  key
+	 * @returns {void}
+	 */
+	function pickByKey( select, key ) {
+		var options = select.options;
+		var idx = -1;
+
+		for ( var i = 0; i < options.length; i++ ) {
+			if ( options[ i ].dataset.woodevKey === key ) {
+				idx = i;
+				break;
+			}
+		}
+
+		expect( idx ).not.toBe( -1 );
+
+		select.selectedIndex = idx;
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	/**
+	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
+	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry.
+	 *
+	 * @returns {Promise<Element>}
+	 */
+	async function attachAndPopulateRelatedList() {
+		bootRealRelatedListSettlement();
+
+		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		return document.getElementById( 'billing_city' );
+	}
+
+	it( 'clears a REAL related-list <select> to no selection, leaving no synthetic empty option behind', async () => {
+		const select = await attachAndPopulateRelatedList();
+
+		expect( select.tagName ).toBe( 'SELECT' );
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		// Exactly ONE /select request for ONE dispatched `change` event — the native+jQuery
+		// double-fire `resolveAndSelect()`'s guard exists for was already exercised here.
+		expect( selectRequests().length ).toBe( 1 );
 
 		selectRequests()[ 0 ].resolve( cancelledBody() );
 		await flushMicrotasks();
 
-		const settlementEl = document.getElementById( 'billing_city' );
+		// The rendered, customer-visible state: nothing selected, and the ONE real entry the
+		// /location/list response supplied is still the only option — no phantom empty row a
+		// customer opening this dropdown (or select2, had it initialized) would ever have to
+		// explain, and nothing this layer itself could ever have produced another way.
+		expect( select.selectedIndex ).toBe( -1 );
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].dataset.woodevKey ).toBe( SETTLEMENT_ITEM.key );
+		expect( select.options[ 0 ].hasAttribute( 'data-woodev-location-synthetic' ) ).toBe( false );
+	} );
 
-		expect( settlementEl.tagName ).toBe( 'SELECT' );
-		expect( settlementEl.value ).toBe( '' );
-		// Exactly ONE option total — the ONE synthetic option applyValueToElement() may own,
-		// reused for the empty write, never a second stray one appended alongside it.
-		expect( settlementEl.options.length ).toBe( 1 );
+	it( 'lets the customer re-pick the SAME still-rendered entry after a cancel — /select fires again, not a silent no-op', async () => {
+		const select = await attachAndPopulateRelatedList();
+
+		pickByKey( select, SETTLEMENT_ITEM.key );
+		expect( selectRequests().length ).toBe( 1 );
+
+		selectRequests()[ 0 ].resolve( cancelledBody() );
+		await flushMicrotasks();
+
+		expect( select.selectedIndex ).toBe( -1 );
+
+		// The exact recovery the cancel notice instructs the customer to take: click the SAME
+		// still-rendered entry again. Before this fix, resolveAndSelect()'s lastHandledKey guard
+		// silently ate this — no second /select request ever went out, and the field stayed
+		// empty forever no matter how many times the customer repeated the instruction.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
 	} );
 
 	describe( 'single-flight queue interaction (gotcha a-shared-select-queue-narrows-a-level-its-response-never-named)', () => {

@@ -601,6 +601,16 @@
 		 * "last handled" guard is enough to make either path idempotent without double-firing
 		 * across the other.
 		 *
+		 * Issue #488 slice 3 (D7 Seam D): `lastHandledKey` deliberately never expires on its own —
+		 * that is what makes it a same-pick guard rather than a debounce. But that means an owner
+		 * that clears this field's value OUT FROM UNDER the widget (a D7 cancelled `/select`
+		 * re-locking a stale pick — {@see location-cascade.js}'s `clearChainField()`) leaves this
+		 * closure still remembering the dead key, so the most natural recovery — the customer
+		 * re-picking the SAME still-rendered entry — resolves to a no-op here and never re-fires
+		 * `/select` at all. `forgetLastHandled()` below exists so that owner can explicitly say "the
+		 * field's value is no longer this widget's own doing" and make the next pick of that same
+		 * key live again, without weakening the idempotency guard itself for an ordinary double-fire.
+		 *
 		 * @param {string|null|undefined} key
 		 * @returns {void}
 		 */
@@ -614,6 +624,18 @@
 			lastHandledKey = key;
 
 			options.onSelect( { record: record } );
+		}
+
+		/**
+		 * Forgets `lastHandledKey` — see {@see resolveAndSelect}'s own docblock for why this
+		 * exists and when it is safe to call: only when the caller has ALREADY overwritten this
+		 * field's DOM value out from under the widget, so the next select2/native pick is genuinely
+		 * a fresh user action, not a double-fire of the one `resolveAndSelect()` already handled.
+		 *
+		 * @returns {void}
+		 */
+		function forgetLastHandled() {
+			lastHandledKey = null;
 		}
 
 		/**
@@ -735,6 +757,10 @@
 
 		return {
 			el: select,
+			// Issue #488 slice 3 (D7 Seam D): {@see forgetLastHandled}'s own docblock — the one
+			// hook `location-cascade.js`'s D7 cancel path uses to make a same-entry re-pick live
+			// again after it clears this field's value out from under the widget.
+			reset: forgetLastHandled,
 			detach: function() {
 				// issue #449 (teardown gap, round 2): cancels whatever `ajax-select2` request is
 				// still in flight FIRST — before anything below touches select2's own instance data

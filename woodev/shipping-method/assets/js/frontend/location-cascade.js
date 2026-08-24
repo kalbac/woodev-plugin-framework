@@ -1425,6 +1425,22 @@
 
 		for ( i = 0; i < options.length; i++ ) {
 			if ( options[ i ].hasAttribute( SYNTHETIC_OPTION_ATTR ) ) {
+				// Issue #488 slice 3 (D7 Seam D, Codex round 2 MEDIUM): clearing to `''` must not
+				// REUSE the synthetic option the way every non-empty value below does — a related-
+				// list `<select>` guarantees NO empty option once real entries are populated
+				// (`location-select-modes.js`'s own `applyEntries()`), and this is the one write
+				// path that could otherwise leave one behind permanently (this function's own
+				// widget-attach populates entries only ONCE, at attach — there is no later
+				// `applyEntries()` pass that would prune it back out). Removing the node outright,
+				// same as the "no synthetic option exists yet" branch below does by never creating
+				// one, keeps both branches converging on the same empty-select shape.
+				if ( '' === value ) {
+					el.removeChild( options[ i ] );
+					el.selectedIndex = -1;
+					refreshSelectWooWidget( el );
+					return;
+				}
+
 				options[ i ].value = value;
 				options[ i ].textContent = value;
 
@@ -1441,6 +1457,14 @@
 				refreshSelectWooWidget( el );
 				return;
 			}
+		}
+
+		if ( '' === value ) {
+			// No synthetic option to reuse and nothing to create — an empty select simply has
+			// nothing selected, same shape as the removal branch above.
+			el.selectedIndex = -1;
+			refreshSelectWooWidget( el );
+			return;
 		}
 
 		var option = document.createElement( 'option' );
@@ -1739,6 +1763,13 @@
 	 * `.value = ''`, so a stale synthetic `<option>` a prior fill left behind is REUSED (emptied
 	 * in place), not multiplied — the ONE synthetic option this module ever owns per `<select>`.
 	 *
+	 * Also tells this level's own widget (if any) to forget its "last handled" pick
+	 * ({@see location-select-modes.js}'s `resolveAndSelect()`/`forgetLastHandled()`) — this
+	 * function is the one place that overwrites a select2/related-list widget's DOM value out
+	 * from under it, so without this the most natural recovery from a cancelled pick — the
+	 * customer re-picking the SAME still-rendered entry — would resolve to a no-op there and never
+	 * re-fire `/select`.
+	 *
 	 * @param {Object} entry
 	 * @param {string} level
 	 * @returns {void}
@@ -1758,6 +1789,12 @@
 
 		if ( el ) {
 			applyValueToElement( el, '' );
+		}
+
+		var widget = entry.widgets[ node.fieldId ];
+
+		if ( widget && widget.api && 'function' === typeof widget.api.reset ) {
+			widget.api.reset();
 		}
 	}
 
