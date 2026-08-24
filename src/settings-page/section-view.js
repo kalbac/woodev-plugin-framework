@@ -44,7 +44,6 @@ export default function SectionView( { providerId, section, tabFields, values, c
 						schema={ { ...section.fields[ settingId ], serverError: ( serverErrors || {} )[ settingId ] } }
 						value={ values[ settingId ] ?? section.fields[ settingId ].value }
 						conditionValues={ conditionValues || values }
-						fieldModeRegionOptions={ tabFields && tabFields.field_mode_region && tabFields.field_mode_region.options }
 						providerMismatchBaseline={ tabFields && tabFields.active_provider && tabFields.active_provider.value }
 						onChange={ ( next ) => onFieldChange( settingId, next ) }
 						hasEdit={ Object.prototype.hasOwnProperty.call( values, settingId ) }
