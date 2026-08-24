@@ -64,6 +64,20 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 */
 		public const CAPABILITY_NORMALIZE = 'normalize';
 
+
+		/**
+		 * Capability name: locality key → the provider's CURRENT record for it, or
+		 * `null` when the provider no longer recognises the key (popular-settlements
+		 * spec D4). Feeds the `last_verified_at` freshness clock — none of the other
+		 * four contract methods accept a bare key (`suggest()` takes a query,
+		 * `list_localities()` a scope, `locate()` an IP, `normalize()` free-form
+		 * text), so a dead key would otherwise have nothing to re-check it against.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const CAPABILITY_RESOLVE_KEY = 'resolve_key';
+
 		/**
 		 * All valid capability names — the full vocabulary
 		 * {@see self::get_capabilities()} may return a subset of.
@@ -71,7 +85,7 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 * @since 2.0.2
 		 * @var string[]
 		 */
-		public const CAPABILITIES = [ self::CAPABILITY_LIST, self::CAPABILITY_LOCATE, self::CAPABILITY_NORMALIZE ];
+		public const CAPABILITIES = [ self::CAPABILITY_LIST, self::CAPABILITY_LOCATE, self::CAPABILITY_NORMALIZE, self::CAPABILITY_RESOLVE_KEY ];
 
 		/**
 		 * Gets the provider's unique identifier.
@@ -383,6 +397,51 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 *                                  {@see self::CAPABILITY_NORMALIZE}.
 		 */
 		public function normalize( string $free_form, Location_Scope $scope ): ?Location_Record;
+
+
+		/**
+		 * By-key resolution — OPTIONAL, only when {@see self::get_capabilities()}
+		 * contains {@see self::CAPABILITY_RESOLVE_KEY}.
+		 *
+		 * Given a {@see Locality_Key} previously produced by this SAME provider (e.g.
+		 * carried on a stored {@see Location_Record}), returns the provider's CURRENT
+		 * record for it — re-fetched, not cached — or `null` when the provider no
+		 * longer recognises the key at all (popular-settlements spec D4).
+		 *
+		 * **`null` means "asked and told no", not "could not ask".** A request that
+		 * could not be COMPLETED — wrong credentials, a network failure, a malformed
+		 * upstream payload — MUST throw rather than return `null`, exactly the
+		 * "EMPTY VS. FAILED" discipline {@see self::suggest()} documents (#405): a
+		 * caller re-verifying a stored record (spec D5/D6) needs to tell "the provider
+		 * confirms this locality is gone, delete the row" apart from "the provider
+		 * could not be reached this time, try again later" — collapsing the two would
+		 * turn a transient outage into silent data loss on precisely the most-ordered
+		 * settlements, the opposite of what the freshness clock exists to prevent.
+		 *
+		 * No `Location_Scope` parameter: `$key`'s own namespaced native id already
+		 * identifies one exact locality for this provider — the same `provider_id`
+		 * that produced the key can always look it back up without a country/level
+		 * hint, and the returned record carries its own `country`/`level` (a caller
+		 * needing to confirm the level did not change compares the returned record's
+		 * `level()` against what it already had).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key A namespaced locality key ({@see Locality_Key}) this
+		 *                    SAME provider previously produced.
+		 *
+		 * @return Location_Record|null The provider's current record for `$key`, or
+		 *                              null when the provider no longer recognises it.
+		 *
+		 * @throws \InvalidArgumentException When `$key` is malformed, or namespaced to
+		 *                                    a different provider (see
+		 *                                    {@see Locality_Key::parse()}).
+		 * @throws \BadMethodCallException When this provider does not declare
+		 *                                  {@see self::CAPABILITY_RESOLVE_KEY}.
+		 * @throws \Throwable When the request itself could not be completed — see the
+		 *                    "null means asked and told no" section above.
+		 */
+		public function resolve_key( string $key ): ?Location_Record;
 	}
 
 endif;

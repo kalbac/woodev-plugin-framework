@@ -79,13 +79,17 @@ class CdekFixtureProviderTest extends TestCase {
 	}
 
 	/**
-	 * The `list` capability is declared (by overriding `list_localities()`), and the two
-	 * capabilities this provider does NOT implement are not.
+	 * The `list` and `resolve_key` capabilities are declared (by overriding
+	 * `list_localities()`/`resolve_key()`), and the two capabilities this provider
+	 * does NOT implement (`locate`, `normalize`) are not.
 	 */
-	public function test_it_declares_only_the_list_capability(): void {
+	public function test_it_declares_only_the_list_and_resolve_key_capabilities(): void {
 		$provider = new \Woodev_Test_Cdek_Location_Provider();
 
-		$this->assertSame( [ Location_Provider::CAPABILITY_LIST ], $provider->get_capabilities() );
+		$this->assertSame(
+			[ Location_Provider::CAPABILITY_LIST, Location_Provider::CAPABILITY_RESOLVE_KEY ],
+			$provider->get_capabilities()
+		);
 	}
 
 	/**
@@ -260,5 +264,85 @@ class CdekFixtureProviderTest extends TestCase {
 			[],
 			$provider->suggest( 'Заброшенный', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) )
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// resolve_key() — popular-settlements spec D4. Uses the same cached-token
+	// transport shortcut as the #405 block above ({@see self::stub_settlement_suggest_transport()})
+	// so none of these need the carrier's own Integration/plugin bootstrap.
+	// -------------------------------------------------------------------------
+
+	public function test_resolve_key_resolves_a_settlement_by_code(): void {
+		$this->stub_settlement_suggest_transport(
+			(string) json_encode(
+				[
+					[
+						'code'         => 44,
+						'city'         => 'Москва',
+						'country_code' => 'RU',
+						'region'       => 'Москва',
+						'region_code'  => 81,
+					],
+				]
+			)
+		);
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+		$record   = $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44', $record->key() );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $record->level() );
+		$this->assertSame( 'RU', $record->country() );
+		$this->assertSame( [ 'name' => 'Москва', 'type' => '' ], $record->settlement() );
+	}
+
+	public function test_resolve_key_resolves_a_region_by_code(): void {
+		$this->stub_settlement_suggest_transport(
+			(string) json_encode(
+				[
+					[
+						'region_code'  => 81,
+						'region'       => 'Москва',
+						'country_code' => 'RU',
+					],
+				]
+			)
+		);
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+		$record   = $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81', $record->key() );
+		$this->assertSame( Location_Record::LEVEL_REGION, $record->level() );
+		$this->assertSame( 'RU', $record->country() );
+		$this->assertSame( [ 'name' => 'Москва', 'type' => '' ], $record->region() );
+	}
+
+	public function test_resolve_key_returns_null_when_cdek_returns_no_rows(): void {
+		$this->stub_settlement_suggest_transport( '[]' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->assertNull( $provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':999999' ) );
+	}
+
+	public function test_resolve_key_rejects_a_key_belonging_to_another_provider(): void {
+		Functions\expect( 'wp_safe_remote_get' )->never();
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( \InvalidArgumentException::class );
+		$provider->resolve_key( 'dadata:some-fias-id' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_on_a_malformed_response(): void {
+		$this->stub_settlement_suggest_transport( '{not-json' );
+
+		$provider = new \Woodev_Test_Cdek_Location_Provider();
+
+		$this->expectException( Location_Provider_Exception::class );
+		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
 	}
 }

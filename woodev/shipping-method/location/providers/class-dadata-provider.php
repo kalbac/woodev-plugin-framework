@@ -482,6 +482,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			return $this->record_from_dadata_fields( $raw, $scope->level(), (string) $raw['result'], $country );
 		}
 
+
+		/**
+		 * {@inheritDoc}
+		 *
+		 * DECLARES {@see Location_Provider::CAPABILITY_RESOLVE_KEY} — `POST
+		 * findById/address` needs only the token (the free tier), never the paid
+		 * "clean" secret {@see self::normalize()} needs, so unlike `normalize` this
+		 * capability is never narrowed away by {@see self::narrow_capabilities()}.
+		 *
+		 * Level and country are DERIVED from the response (see
+		 * {@see self::level_from_dadata_fields()}, {@see self::extract_country()})
+		 * rather than passed in — this method has no {@see Location_Scope}, per the
+		 * interface's own "no Location_Scope parameter" rationale.
+		 *
+		 * Throws — never degrades to `null` — when unconfigured or on an HTTP/network
+		 * failure: {@see Location_Provider::resolve_key()}'s own docblock requires
+		 * `null` to mean "DaData was asked and confirmed this key is gone", which a
+		 * request that could not be MADE at all must never be confused with.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @throws \InvalidArgumentException When `$key` is not namespaced to this
+		 *                                    provider.
+		 * @throws Location_Provider_Exception When unconfigured, or the DaData
+		 *                                      request itself fails.
+		 */
+		public function resolve_key( string $key ): ?Location_Record {
+			[ $key_provider_id, $native_id ] = Locality_Key::parse( $key );
+
+			if ( self::PROVIDER_ID !== $key_provider_id ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Dadata_Provider::resolve_key(): key "%s" belongs to provider "%s", not "%s".',
+						$key,
+						$key_provider_id,
+						self::PROVIDER_ID
+					)
+				);
+			}
+
+			if ( ! $this->is_configured() ) {
+				throw new Location_Provider_Exception( 'DaData resolve_key request failed: provider is not configured.' );
+			}
+
+			try {
+				$raw = $this->client()->find_by_id_address( $native_id );
+			} catch ( \Throwable $exception ) {
+				$this->log_failure( 'resolve_key', $exception );
+
+				throw new Location_Provider_Exception( 'DaData resolve_key request failed.', 0, $exception );
+			}
+
+			if ( null === $raw ) {
+				return null;
+			}
+
+			$data = (array) ( $raw['data'] ?? [] );
+
+			if ( [] === $data ) {
+				return null;
+			}
+
+			return $this->record_from_dadata_fields( $data, self::level_from_dadata_fields( $data ), (string) ( $raw['value'] ?? '' ), '' );
+		}
+
 		/**
 		 * Builds the `suggest/address` request body for one scope: the D15
 		 * level→bounds mapping (`region`→`area`, `settlement`→`city`→`settlement`,
@@ -733,6 +798,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			}
 
 			return true;
+		}
+
+
+		/**
+		 * Derives a {@see Location_Record::LEVELS} value from a flat DaData field set,
+		 * for a lookup that (unlike `suggest()`/`normalize()`) carries no
+		 * {@see Location_Scope} to read the intended level off of —
+		 * {@see self::resolve_key()}'s own case.
+		 *
+		 * Structural, not from `fias_level`: `fias_level` is meaningless outside ФИАС
+		 * (see {@see self::should_reject_settlement_row()}'s own `FIAS_LEVEL_FOREIGN_OR_EMPTY`
+		 * handling), so this reuses the SAME country-agnostic granularity signal that
+		 * method already trusts — `house`/`flat` present means an address, `city`/
+		 * `settlement` present (with neither of those) means a settlement, anything
+		 * else means a region.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $fields DaData field set.
+		 *
+		 * @return string One of {@see Location_Record::LEVELS}.
+		 */
+		private static function level_from_dadata_fields( array $fields ): string {
+			$has_address = '' !== trim( (string) ( $fields['house'] ?? '' ) )
+				|| '' !== trim( (string) ( $fields['flat'] ?? '' ) )
+				|| '' !== trim( (string) ( $fields['street'] ?? '' ) );
+
+			if ( $has_address ) {
+				return Location_Record::LEVEL_ADDRESS;
+			}
+
+			$has_settlement = '' !== trim( (string) ( $fields['city'] ?? '' ) ) || '' !== trim( (string) ( $fields['settlement'] ?? '' ) );
+
+			if ( $has_settlement ) {
+				return Location_Record::LEVEL_SETTLEMENT;
+			}
+
+			return Location_Record::LEVEL_REGION;
 		}
 
 		/**

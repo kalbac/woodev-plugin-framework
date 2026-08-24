@@ -1115,6 +1115,76 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// resolve_key() — popular-settlements spec D4.
+	// -------------------------------------------------------------------------
+
+	public function test_capabilities_include_resolve_key_regardless_of_secret(): void {
+		$this->set_token( 'tok', '' );
+		$this->assertContains( 'resolve_key', ( new Dadata_Provider() )->get_capabilities() );
+	}
+
+	public function test_resolve_key_maps_a_settlement_record(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
+
+		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f', $record->key() );
+		$this->assertSame( 'dadata', $record->provider_id() );
+		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $record->level() );
+		$this->assertSame( 'RU', $record->country() );
+		$this->assertSame( [ 'name' => 'Краснодар', 'type' => 'г' ], $record->settlement() );
+		$this->assertSame( 'г Краснодар', $record->label() );
+	}
+
+	public function test_resolve_key_derives_region_level_when_no_finer_field_is_filled(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
+
+		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( Location_Record::LEVEL_REGION, $record->level() );
+	}
+
+	public function test_resolve_key_returns_null_when_dadata_no_longer_recognises_the_id(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+
+		$this->assertNull( ( new Dadata_Provider() )->resolve_key( 'dadata:no-such-fias-id' ) );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_when_unconfigured(): void {
+		$this->set_token( '' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$this->expectException( Location_Provider_Exception::class );
+		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+	}
+
+	public function test_resolve_key_throws_rather_than_returns_null_on_an_http_failure(): void {
+		$this->set_token( 'tok' );
+		$this->stub_http_response( 500, '' );
+
+		$this->expectException( Location_Provider_Exception::class );
+
+		try {
+			( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		} finally {
+			$this->assertTrue( $this->failure_was_logged( 'resolve_key' ) );
+		}
+	}
+
+	public function test_resolve_key_rejects_a_key_belonging_to_another_provider(): void {
+		$this->set_token( 'tok' );
+		Functions\expect( 'wp_safe_remote_request' )->never();
+
+		$this->expectException( \InvalidArgumentException::class );
+		( new Dadata_Provider() )->resolve_key( 'test-cdek:44' );
+	}
+
+	// -------------------------------------------------------------------------
 	// Registry integration — an OBSERVABLE end-to-end assertion, not reflection.
 	// -------------------------------------------------------------------------
 

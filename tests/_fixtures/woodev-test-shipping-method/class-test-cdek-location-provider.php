@@ -309,6 +309,85 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 			return $records;
 		}
 
+		/**
+		 * {@inheritDoc}
+		 *
+		 * DECLARES {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
+		 * — both `/location/regions?region_code=` and `/location/cities?code=` are
+		 * exact single-row lookups by CDEK's own dictionary identity (see the file
+		 * docblock's endpoint table), so no scope/country hint is needed to resolve
+		 * either half of this provider's own key namespace (`r<region_code>` for a
+		 * region — see {@see self::record_from_region()} — a bare settlement `code`
+		 * otherwise).
+		 *
+		 * `null` means CDEK answered with zero rows for the id — the key is gone.
+		 * Unconfigured, or a transport/malformed-payload failure, THROWS instead —
+		 * {@see self::request()} degrades an unconfigured provider to `[]` for every
+		 * OTHER method here (an empty answer is a valid "nothing to ask" for those),
+		 * but that would be indistinguishable from "gone" for `resolve_key()`. This
+		 * method therefore reads {@see self::token()} itself first — same as
+		 * {@see self::request()} does internally — so an unconfigured provider (an
+		 * empty token, never thrown) is told apart from a configured-but-failing one
+		 * (a thrown {@see \Woodev\Framework\Shipping\Location\Location_Provider_Exception},
+		 * propagated as-is) BEFORE `request()` ever gets the chance to collapse either
+		 * into a silent `[]` — see {@see \Woodev\Framework\Shipping\Location\Location_Provider::resolve_key()}'s
+		 * own "null means asked and told no" contract. Reading `token()` rather than
+		 * {@see self::is_configured()} also keeps the cached-transient-token shortcut
+		 * every other method here already relies on for testability.
+		 */
+		public function resolve_key( string $key ): ?\Woodev\Framework\Shipping\Location\Location_Record {
+			[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $key );
+
+			if ( self::PROVIDER_ID !== $provider_id ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Woodev_Test_Cdek_Location_Provider::resolve_key(): key "%s" belongs to provider "%s", not "%s".',
+						$key,
+						$provider_id,
+						self::PROVIDER_ID
+					)
+				);
+			}
+
+			if ( '' === $this->token() ) {
+				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
+					'CDEK test contour resolve_key request failed: provider is not configured.'
+				);
+			}
+
+			if ( 'r' === substr( $native_id, 0, 1 ) && ctype_digit( substr( $native_id, 1 ) ) ) {
+				return $this->resolve_region( (int) substr( $native_id, 1 ) );
+			}
+
+			if ( ! ctype_digit( $native_id ) ) {
+				return null;
+			}
+
+			$rows = $this->request( '/location/cities', [ 'code' => (int) $native_id ] );
+
+			return $this->record_from_city_row( $rows[0] ?? null );
+		}
+
+		/**
+		 * Resolves a single region by its CDEK `region_code`, or `null` when CDEK
+		 * returns no matching row.
+		 *
+		 * @param int $region_code CDEK region code (the `r`-prefixed native id, minus
+		 *                         the prefix).
+		 *
+		 * @return \Woodev\Framework\Shipping\Location\Location_Record|null
+		 */
+		private function resolve_region( int $region_code ): ?\Woodev\Framework\Shipping\Location\Location_Record {
+			$rows = $this->request( '/location/regions', [ 'region_code' => $region_code ] );
+			$row  = $rows[0] ?? null;
+
+			if ( ! is_array( $row ) || empty( $row['region_code'] ) || empty( $row['region'] ) || empty( $row['country_code'] ) ) {
+				return null;
+			}
+
+			return $this->record_from_region( (int) $row['region_code'], (string) $row['region'], (string) $row['country_code'] );
+		}
+
 		// -----------------------------------------------------------------
 		// Suggestion building
 		// -----------------------------------------------------------------
