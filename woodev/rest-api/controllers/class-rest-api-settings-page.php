@@ -208,24 +208,33 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 		/**
 		 * Runs a connection block's test/connect action through the plugin callback.
 		 *
-		 * Merges the POSTed (unsaved) values with the stored values for the TAB's
-		 * declared setting ids (every section the target provider exposes, not
-		 * only the matched connection block's own — mirrors {@see self::save()}'s
-		 * own allow-list, for the same reason: a crafted request must never reach
-		 * a setting the tab does not expose, but a connection block legitimately
-		 * needs to see a SIBLING section's field. #488 D8 critic HIGH: the two
-		 * popular-settlements actions need the tab's `active_provider` select —
-		 * itself owned by a sibling, fields-less-by-design section — to detect an
-		 * unsaved staged change before running a destructive action), so an
-		 * untouched (masked) secret still reaches the plugin's test. The plugin
-		 * owns all auth behavior; the framework only transports the
-		 * Woodev_Connection_Result.
+		 * Merges the POSTed (unsaved) values with the stored values, so an untouched
+		 * (masked) secret still reaches the plugin's test. The plugin owns all auth
+		 * behavior; the framework only transports the Woodev_Connection_Result.
+		 *
+		 * TWO SCOPES, DELIBERATELY DIFFERENT. The POSTed allow-list is the TAB's ids
+		 * (every section the target provider exposes) — mirroring {@see self::save()}
+		 * for the same reason: a crafted request must never reach a setting the tab
+		 * does not expose, but a connection block legitimately needs to see a SIBLING
+		 * section's STAGED field. #488 D8 needs exactly that: the two
+		 * popular-settlements actions read the tab's `active_provider` select — owned
+		 * by a sibling, fields-less-by-design section — to detect an unsaved change
+		 * before running a destructive action.
+		 *
+		 * The STORED-value fallback is narrower: the matched block's OWN ids only.
+		 * Applying it tab-wide would hand every connection callback in the framework
+		 * the tab's other credentials (#488 D8 round 2 critic, MEDIUM) — a boundary no
+		 * caller asked to cross, and one this feature never needed: an unstaged
+		 * sibling is simply absent from `$values`, which is what "unchanged" already
+		 * means to the consumer.
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Values merge widened from the matched section's own ids to
-		 *              every section the provider declares (#488 D8 critic HIGH).
+		 * @since 2.0.2 POSTed allow-list widened from the matched section's own ids
+		 *              to every section the provider declares (#488 D8 critic HIGH);
+		 *              the STORED fallback deliberately stayed on the block's own ids
+		 *              (#488 D8 round 2 critic, MEDIUM — credential boundary).
 		 *
 		 * @param \WP_REST_Request $request request.
 		 * @return \WP_REST_Response|\WP_Error
@@ -253,17 +262,20 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				);
 			}
 
-			// Find the connection section, and (mirroring save()'s own allow-list)
-			// the union of every section's declared setting ids the tab exposes.
-			$connection_found = false;
-			$allowed_ids      = [];
+			// Find the connection section's OWN setting ids, and (mirroring save()'s
+			// own allow-list) the union of every id the tab exposes. The two are
+			// deliberately different scopes — see the merge below.
+			$section_ids = null;
+			$allowed_ids = [];
 			foreach ( $provider->get_sections() as $section ) {
 				$allowed_ids = array_merge( $allowed_ids, $section->get_setting_ids() );
 
 				if ( $section->get_id() === $connection_id && $section->is_connection() ) {
-					$connection_found = true;
+					$section_ids = $section->get_setting_ids();
 				}
 			}
+
+			$connection_found = null !== $section_ids;
 
 			if ( ! $connection_found ) {
 				return new WP_Error(
@@ -282,10 +294,22 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			// A non-secret field always uses its POSTed value when present — even
 			// '', 0, or false are valid, intentional inputs and must not be
 			// silently replaced by the stored value.
+			//
+			// TWO SCOPES, AND THE DIFFERENCE IS A CREDENTIAL BOUNDARY (#488 D8 round 2
+			// critic, MEDIUM). The block's OWN ids get the stored fallback, exactly as
+			// before. A SIBLING section's id contributes its POSTED value only, and
+			// never a stored one — least of all a stored SECRET. Walking the whole tab
+			// with the fallback would hand every connection callback in the framework
+			// the tab's other credentials, which is a boundary no caller asked to cross
+			// and this feature never needed: what D8 needs from a sibling is the tab's
+			// `active_provider` select, and only when the merchant has STAGED a change
+			// to it. An unstaged sibling is simply absent, which is what "unchanged"
+			// already means to the consumer.
 			$merged = [];
 			foreach ( $allowed_ids as $setting_id ) {
-				$setting   = $handler->get_setting( $setting_id );
-				$is_secret = $setting instanceof \Woodev_Setting
+				$owned_by_block = in_array( $setting_id, $section_ids, true );
+				$setting        = $handler->get_setting( $setting_id );
+				$is_secret      = $setting instanceof \Woodev_Setting
 					&& ( $setting->is_sensitive() || null !== $setting->get_constant_name() );
 
 				$use_posted = array_key_exists( $setting_id, $posted )
@@ -293,12 +317,17 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 
 				if ( $use_posted ) {
 					$merged[ $setting_id ] = $posted[ $setting_id ];
-				} else {
-					try {
-						$merged[ $setting_id ] = $handler->get_value( $setting_id );
-					} catch ( \Woodev_Plugin_Exception $e ) {
-						$merged[ $setting_id ] = null;
-					}
+					continue;
+				}
+
+				if ( ! $owned_by_block ) {
+					continue;
+				}
+
+				try {
+					$merged[ $setting_id ] = $handler->get_value( $setting_id );
+				} catch ( \Woodev_Plugin_Exception $e ) {
+					$merged[ $setting_id ] = null;
 				}
 			}
 

@@ -354,4 +354,120 @@ class SettingsPageRestTest extends TestCase {
 		$GLOBALS['wp_rest_server'] = null;
 		rest_get_server();
 	}
+	/**
+	 * #488 D8 round 2 critic, MEDIUM — the credential boundary.
+	 *
+	 * A connection block's callback must never be handed a SIBLING section's stored
+	 * secret. The POSTed allow-list is tab-wide on purpose (D8 needs a sibling's
+	 * STAGED value), but the stored-value fallback is the block's own ids only —
+	 * otherwise every connection callback in the framework receives the tab's other
+	 * credentials, which no caller asked for and D8 never needed.
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_never_receives_a_sibling_sections_stored_secret(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->seed_provider_with_sibling_section();
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_body_params( [ 'values' => [] ] );
+
+		rest_get_server()->dispatch( $request );
+
+		$seen = get_option( 'woodev_test_seen_values', [] );
+
+		$this->assertArrayHasKey( 'token', $seen, "the block's OWN stored secret must still be recovered" );
+		$this->assertSame( 'own-secret', $seen['token'] );
+
+		$this->assertArrayNotHasKey( 'sibling_secret', $seen, "a sibling section's stored secret must never cross into this callback" );
+		$this->assertArrayNotHasKey( 'mode', $seen, 'an unstaged sibling field is simply absent, never filled from storage' );
+	}
+
+	/**
+	 * The other half of the same rule: a sibling field the merchant has STAGED does
+	 * reach the callback — that is the whole reason the POSTed allow-list is
+	 * tab-wide, and what D8's staged-provider guard depends on.
+	 *
+	 * @return void
+	 */
+	public function test_test_connection_does_receive_a_sibling_sections_STAGED_value(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->seed_provider_with_sibling_section();
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/settings/carrier/connection/api/test' );
+		$request->set_body_params( [ 'values' => [ 'mode' => 'staged' ] ] );
+
+		rest_get_server()->dispatch( $request );
+
+		$seen = get_option( 'woodev_test_seen_values', [] );
+
+		$this->assertSame( 'staged', $seen['mode'] ?? null );
+		$this->assertArrayNotHasKey( 'sibling_secret', $seen, 'staging one sibling field must not drag the rest of the tab along' );
+	}
+
+	/**
+	 * Registers a `carrier` provider with TWO sections: the connection block `api`
+	 * (its own sensitive `token`) and a sibling `general` carrying a sensitive
+	 * `sibling_secret` plus a non-secret `mode`. The handler records the `$values`
+	 * it was handed into an option, so a test can assert on what crossed the
+	 * boundary rather than on the result string.
+	 *
+	 * @return void
+	 */
+	private function seed_provider_with_sibling_section(): void {
+		delete_option( 'woodev_test_seen_values' );
+
+		$handler = new class( 'carrier' ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+
+			/**
+			 * @return void
+			 */
+			protected function register_settings() {
+				$this->register_setting( 'token', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Token', 'sensitive' => true, 'default' => '' ] );
+				$this->register_setting( 'sibling_secret', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Sibling', 'sensitive' => true, 'default' => '' ] );
+				$this->register_setting( 'mode', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Mode', 'default' => '' ] );
+			}
+
+			/**
+			 * Records what it was handed, then answers unconditionally.
+			 *
+			 * @param string              $connection_id connection section id.
+			 * @param array<string,mixed> $values        merged field values.
+			 * @return \Woodev_Connection_Result
+			 */
+			public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+				update_option( 'woodev_test_seen_values', $values );
+
+				return \Woodev_Connection_Result::success( 'OK' );
+			}
+
+			/**
+			 * @return string[]
+			 */
+			public function get_connection_ids(): array {
+				return [ 'api' ];
+			}
+		};
+
+		$handler->update_value( 'token', 'own-secret' );
+		$handler->update_value( 'sibling_secret', 'sibling-secret' );
+		$handler->update_value( 'mode', 'stored-mode' );
+
+		$provider = Settings_Provider::create(
+			'carrier',
+			'Carrier',
+			$handler,
+			[
+				Settings_Section::create( 'general', 'General', [ 'sibling_secret', 'mode' ] ),
+				Settings_Section::create( 'api', 'API', [ 'token' ], '', true, 'Проверить' ),
+			]
+		);
+
+		Settings_Page_Registry::instance()->register_service( $provider );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+	}
 }
