@@ -741,10 +741,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		}
 
 		/**
+		 * The two D8 connection ids this handler owns (#488 D8 critic MEDIUM) —
+		 * lets {@see \Woodev\Framework\Settings\Composite_Settings_Handler} route
+		 * `test_connection()` by ownership instead of "the single implementing
+		 * child".
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		public function get_connection_ids(): array {
+			return [
+				self::CONNECTION_POPULAR_SETTLEMENTS_VERIFY,
+				self::CONNECTION_POPULAR_SETTLEMENTS_CLEAR,
+			];
+		}
+
+		/**
 		 * The two D8 popular-settlements merchant actions, switched on
-		 * `$connection_id` (#488). `$values` is always empty in practice — the
-		 * two `Settings_Section`s these actions render behind declare no setting
-		 * ids (spec D8: "neither needs a new control type") — and is unused here.
+		 * `$connection_id` (#488). `$values` carries POSTed ∪ stored for
+		 * {@see Location_Provider_Registry::SETTING_ACTIVE_PROVIDER} (merged by
+		 * {@see \Woodev_REST_API_Settings_Page::test_connection()} across the
+		 * whole provider, not just this fields-less section's own empty id list)
+		 * — every other id is unused here, since these two `Settings_Section`s
+		 * declare no setting ids of their own (spec D8: "neither needs a new
+		 * control type").
+		 *
+		 * Staged-vs-persisted guard (critic HIGH, #488 D8 round 2): the two
+		 * sections these actions render behind are ABSENT/PRESENT purely from
+		 * the PERSISTED active provider at page-load time (see this class's own
+		 * docblock and {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}).
+		 * A merchant who switches the `active_provider` select WITHOUT saving
+		 * still sees the same (now stale) buttons; acting on {@see self::$active_provider}
+		 * (persisted) regardless would silently sweep/clear a provider's list the
+		 * merchant is no longer looking at — a destructive action must never
+		 * operate on a provider the merchant is not currently looking at. When
+		 * `$values` carries a DIFFERENT staged id than the persisted one, this
+		 * refuses outright — even when the persisted provider IS capable — rather
+		 * than reaching for the capability-gate message below, since "you have
+		 * unsaved changes" is the accurate, actionable cause here.
 		 *
 		 * Re-checks the D4 capability gate defensively even though
 		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}
@@ -754,10 +788,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * fatal `\BadMethodCallException` out of `resolve_key()`.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added the staged-vs-persisted active-provider guard
+		 *              (#488 D8 round 2 critic HIGH).
 		 *
 		 * @param string               $connection_id one of {@see self::CONNECTION_POPULAR_SETTLEMENTS_VERIFY}
 		 *                                              / {@see self::CONNECTION_POPULAR_SETTLEMENTS_CLEAR}.
-		 * @param array<string, mixed> $values         unused — see above.
+		 * @param array<string, mixed> $values         see above.
 		 *
 		 * @return \Woodev_Connection_Result
 		 *
@@ -766,6 +802,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *                                   docblock.
 		 */
 		public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+			$provider_setting_id = Location_Provider_Registry::SETTING_ACTIVE_PROVIDER;
+
+			if ( array_key_exists( $provider_setting_id, $values ) ) {
+				$staged_provider_id    = ( $this->resolve_active_provider_id )( (string) $values[ $provider_setting_id ] );
+				$persisted_provider_id = null !== $this->active_provider ? $this->active_provider->get_id() : '';
+
+				if ( $staged_provider_id !== $persisted_provider_id ) {
+					return \Woodev_Connection_Result::failure(
+						__( 'Сохраните изменения, прежде чем выполнять это действие.', 'woodev-plugin-framework' )
+					);
+				}
+			}
+
 			if ( null === $this->active_provider
 				|| ! in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $this->active_provider->get_capabilities(), true )
 			) {

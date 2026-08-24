@@ -16,11 +16,15 @@ defined( 'ABSPATH' ) || exit;
  * three handlers (location / checkout fields / pickup map), each keeping its own option
  * namespace. This class routes every call `Field_Schema` and the settings REST controller make
  * to the child that registered the setting id. It deliberately implements neither
- * `Woodev_Settings_Connection_Status` (no child needs it yet) nor a MULTI-child
- * `Woodev_Settings_Connection_Test` router — {@see self::test_connection()} delegates to
- * the single child that implements it (#488 D8: `Location_Settings` is the first real
- * connection-test consumer this class ever had), and throws rather than guessing when
- * zero or more than one child does.
+ * `Woodev_Settings_Connection_Status` (no child needs it yet) — {@see self::test_connection()}
+ * routes by OWNERSHIP of `$connection_id` (round 2, #488 D8 critic MEDIUM: routing by "the
+ * single child that implements the interface" made every OTHER connection action in the
+ * framework fail closed — a generic REST 500 — the day a second child ever implemented
+ * `Woodev_Settings_Connection_Test`), via the map built in the constructor from each
+ * implementing child's own {@see \Woodev_Settings_Connection_Test::get_connection_ids()}.
+ * Throws only on a genuine configuration error: no child owns the id (a REST request only
+ * ever reaches this method for a `$connection_id` the tab's own `Settings_Section::is_connection()`
+ * list already proved exists), or two children claim the SAME id.
  *
  * `get_value()` / `update_value()` throw `\Woodev_Plugin_Exception` on an unknown id, mirroring
  * `Woodev_Abstract_Settings` exactly, so this class is behaviourally substitutable for a real
@@ -46,14 +50,25 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	/** @var \Woodev_Abstract_Settings[] setting id => owning child. */
 	private array $owner_by_id = [];
 
+	/**
+	 * Connection id => owning child, built from every connection-test-implementing
+	 * child's own `get_connection_ids()` (#488 D8 critic MEDIUM).
+	 *
+	 * @var array<string, \Woodev_Abstract_Settings&\Woodev_Settings_Connection_Test>
+	 */
+	private array $connection_owner_by_id = [];
+
 	/** @var \Woodev_Abstract_Settings[] */
 	private array $children;
 
 	/**
 	 * @since 2.0.2
+	 * @since 2.0.2 Also builds the connection-id ownership map (#488 D8 critic
+	 *              MEDIUM) — see {@see self::$connection_owner_by_id}.
 	 * @param string                      $id       tab-level id (NOT an option namespace — children own those).
 	 * @param \Woodev_Abstract_Settings[] $children handlers, in section order.
-	 * @throws \InvalidArgumentException when two children register the same setting id.
+	 * @throws \InvalidArgumentException when two children register the same setting id,
+	 *                                    or two children own the same connection id.
 	 */
 	public function __construct( string $id, array $children ) {
 		$this->id       = $id;
@@ -66,6 +81,15 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 					throw new \InvalidArgumentException( sprintf( 'Setting id "%s" is registered by two handlers.', $sid ) );
 				}
 				$this->owner_by_id[ $sid ] = $child;
+			}
+
+			if ( $child instanceof \Woodev_Settings_Connection_Test ) {
+				foreach ( $child->get_connection_ids() as $cid ) {
+					if ( isset( $this->connection_owner_by_id[ $cid ] ) ) {
+						throw new \InvalidArgumentException( sprintf( 'Connection id "%s" is owned by two handlers.', $cid ) );
+					}
+					$this->connection_owner_by_id[ $cid ] = $child;
+				}
 			}
 		}
 	}
@@ -122,44 +146,39 @@ final class Composite_Settings_Handler implements \Woodev_Settings_Connection_Te
 	}
 
 	/**
-	 * Delegates to the single child that implements `Woodev_Settings_Connection_Test`
-	 * (#488 D8).
-	 *
-	 * There is no id->child map because nothing needs one yet: exactly one child
-	 * (`Location_Settings`, as of #488) implements the interface at a time. Throws
-	 * rather than guessing when zero or more than one child does — a REST request
-	 * only ever reaches this method for a `$connection_id` the tab's own
-	 * `Settings_Section::is_connection()` list already proved exists (see
-	 * class-rest-api-settings-page.php's `test_connection()`), so ambiguity here
-	 * means a NEW child started implementing the interface without this class
-	 * being taught how to route between them — extend with an explicit
-	 * id-to-child map when that day comes.
+	 * Routes to the child that OWNS `$connection_id` (#488 D8 critic MEDIUM,
+	 * round 2) — see the ownership map built in the constructor and this
+	 * class's own docblock for why this replaced the earlier
+	 * "the single implementing child" rule.
 	 *
 	 * @since 2.0.2
+	 * @since 2.0.2 Routes by section ownership instead of "the single
+	 *              implementing child" (#488 D8 critic MEDIUM).
 	 *
 	 * @param string              $connection_id connection section id.
 	 * @param array<string,mixed> $values        merged field values (POSTed ∪ stored).
 	 * @return \Woodev_Connection_Result
-	 * @throws \Woodev_Plugin_Exception When no child, or more than one, implements
-	 *                                   `Woodev_Settings_Connection_Test`.
+	 * @throws \Woodev_Plugin_Exception When no child owns `$connection_id`.
 	 */
 	public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
-		$delegate = null;
-
-		foreach ( $this->children as $child ) {
-			if ( $child instanceof \Woodev_Settings_Connection_Test ) {
-				if ( null !== $delegate ) {
-					throw new \Woodev_Plugin_Exception( 'More than one child handler implements Woodev_Settings_Connection_Test; Composite_Settings_Handler::test_connection() needs an explicit id-to-child map to disambiguate.' );
-				}
-				$delegate = $child;
-			}
-		}
+		$delegate = $this->connection_owner_by_id[ $connection_id ] ?? null;
 
 		if ( null === $delegate ) {
-			throw new \Woodev_Plugin_Exception( "No child handler implements Woodev_Settings_Connection_Test for connection \"{$connection_id}\"." );
+			throw new \Woodev_Plugin_Exception( "No child handler owns connection \"{$connection_id}\"." );
 		}
 
 		return $delegate->test_connection( $connection_id, $values );
+	}
+
+	/**
+	 * The connection ids EVERY connection-test-implementing child owns,
+	 * combined.
+	 *
+	 * @since 2.0.2
+	 * @return string[]
+	 */
+	public function get_connection_ids(): array {
+		return array_keys( $this->connection_owner_by_id );
 	}
 
 	/**

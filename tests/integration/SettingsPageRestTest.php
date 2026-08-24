@@ -255,6 +255,13 @@ class SettingsPageRestTest extends TestCase {
 					? \Woodev_Connection_Result::success( 'OK' )
 					: \Woodev_Connection_Result::failure( 'Нет.' );
 			}
+
+			/**
+			 * @return string[]
+			 */
+			public function get_connection_ids(): array {
+				return [ 'api' ];
+			}
 		};
 
 		$handler->update_value( 'mode', 'stored-mode' );
@@ -318,6 +325,13 @@ class SettingsPageRestTest extends TestCase {
 				return ( isset( $values['token'] ) && 'good' === $values['token'] )
 					? \Woodev_Connection_Result::success( 'OK' )
 					: \Woodev_Connection_Result::failure( 'Неверный токен.' );
+			}
+
+			/**
+			 * @return string[]
+			 */
+			public function get_connection_ids(): array {
+				return [ 'api' ];
 			}
 		};
 

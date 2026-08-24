@@ -208,14 +208,24 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 		/**
 		 * Runs a connection block's test/connect action through the plugin callback.
 		 *
-		 * Merges the POSTed (unsaved) values with the stored values for the block's
-		 * declared setting ids, so an untouched (masked) secret still reaches the
-		 * plugin's test. The plugin owns all auth behavior; the framework only
-		 * transports the Woodev_Connection_Result.
+		 * Merges the POSTed (unsaved) values with the stored values for the TAB's
+		 * declared setting ids (every section the target provider exposes, not
+		 * only the matched connection block's own — mirrors {@see self::save()}'s
+		 * own allow-list, for the same reason: a crafted request must never reach
+		 * a setting the tab does not expose, but a connection block legitimately
+		 * needs to see a SIBLING section's field. #488 D8 critic HIGH: the two
+		 * popular-settlements actions need the tab's `active_provider` select —
+		 * itself owned by a sibling, fields-less-by-design section — to detect an
+		 * unsaved staged change before running a destructive action), so an
+		 * untouched (masked) secret still reaches the plugin's test. The plugin
+		 * owns all auth behavior; the framework only transports the
+		 * Woodev_Connection_Result.
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Values merge widened from the matched section's own ids to
+		 *              every section the provider declares (#488 D8 critic HIGH).
 		 *
 		 * @param \WP_REST_Request $request request.
 		 * @return \WP_REST_Response|\WP_Error
@@ -243,16 +253,19 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				);
 			}
 
-			// Find the connection section and its declared setting ids.
-			$section_ids = null;
+			// Find the connection section, and (mirroring save()'s own allow-list)
+			// the union of every section's declared setting ids the tab exposes.
+			$connection_found = false;
+			$allowed_ids      = [];
 			foreach ( $provider->get_sections() as $section ) {
+				$allowed_ids = array_merge( $allowed_ids, $section->get_setting_ids() );
+
 				if ( $section->get_id() === $connection_id && $section->is_connection() ) {
-					$section_ids = $section->get_setting_ids();
-					break;
+					$connection_found = true;
 				}
 			}
 
-			if ( null === $section_ids ) {
+			if ( ! $connection_found ) {
 				return new WP_Error(
 					'woodev_settings_unknown_connection',
 					__( 'Неизвестный блок подключения.', 'woodev-plugin-framework' ),
@@ -260,8 +273,8 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				);
 			}
 
-			// Scope POSTed values to the block's declared setting ids (allow-list).
-			$posted = array_intersect_key( (array) $request->get_param( 'values' ), array_flip( $section_ids ) );
+			// Scope POSTed values to the tab's declared setting ids (allow-list).
+			$posted = array_intersect_key( (array) $request->get_param( 'values' ), array_flip( $allowed_ids ) );
 
 			// Merge per field. The stored-value fallback exists ONLY to recover a
 			// masked secret the browser never held: it applies to a secret field
@@ -270,7 +283,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			// '', 0, or false are valid, intentional inputs and must not be
 			// silently replaced by the stored value.
 			$merged = [];
-			foreach ( $section_ids as $setting_id ) {
+			foreach ( $allowed_ids as $setting_id ) {
 				$setting   = $handler->get_setting( $setting_id );
 				$is_secret = $setting instanceof \Woodev_Setting
 					&& ( $setting->is_sensitive() || null !== $setting->get_constant_name() );

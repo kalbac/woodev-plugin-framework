@@ -28,6 +28,20 @@ if ( ! interface_exists( 'Woodev_Settings_Connection_Test' ) ) :
 		 * @return \Woodev_Connection_Result
 		 */
 		public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result;
+
+
+		/**
+		 * The connection section ids this handler owns.
+		 *
+		 * A composite over several handlers (#488 D8 critic MEDIUM) uses this to
+		 * route `test_connection()` by OWNERSHIP of `$connection_id` rather than by
+		 * "is there exactly one handler implementing this interface" — a second
+		 * implementer is then an ordinary day, not an ambiguity.
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		public function get_connection_ids(): array;
 	}
 
 endif;

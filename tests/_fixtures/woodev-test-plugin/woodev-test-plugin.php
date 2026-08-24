@@ -295,6 +295,16 @@ function woodev_test_plugin_init() {
 		}
 
 		/**
+		 * Connection ids this fixture owns — «api» and «widget».
+		 *
+		 * @since 2.0.2
+		 * @return string[]
+		 */
+		public function get_connection_ids(): array {
+			return [ 'api', 'widget' ];
+		}
+
+		/**
 		 * Current known status for one block (demo: nothing persisted).
 		 *
 		 * @since 2.0.2

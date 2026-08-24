@@ -286,16 +286,18 @@ class CompositeSettingsHandlerTest extends TestCase {
 
 	/**
 	 * Builds an anonymous handler that ALSO implements `Woodev_Settings_Connection_Test`,
-	 * recording every `test_connection()` call it receives (#488 D8: the composite must
-	 * delegate to whichever child actually implements the interface).
+	 * recording every `test_connection()` call it receives, and owning the given
+	 * connection ids (#488 D8 round 2 critic MEDIUM: the composite routes by
+	 * OWNERSHIP of a connection id, not by "the single implementing child").
 	 *
-	 * @param string                    $id     handler ID.
-	 * @param \Woodev_Connection_Result $result what `test_connection()` should return.
+	 * @param string                    $id              handler ID.
+	 * @param \Woodev_Connection_Result $result          what `test_connection()` should return.
 	 * @param array<int, array{0: string, 1: array<string, mixed>}> &$calls captures every
 	 *                                                                       `[connection_id, values]` call.
+	 * @param string[]                  $connection_ids  connection ids this handler owns.
 	 * @return \Woodev_Abstract_Settings
 	 */
-	private function make_connection_handler( string $id, \Woodev_Connection_Result $result, array &$calls ) {
+	private function make_connection_handler( string $id, \Woodev_Connection_Result $result, array &$calls, array $connection_ids ) {
 		Functions\when( 'get_option' )->justReturn( null );
 		Functions\when( 'wp_parse_args' )->alias(
 			static function ( $args, $defaults = [] ) {
@@ -303,14 +305,16 @@ class CompositeSettingsHandlerTest extends TestCase {
 			}
 		);
 
-		return new class( $id, $result, $calls ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+		return new class( $id, $result, $calls, $connection_ids ) extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
 
 			private \Woodev_Connection_Result $result;
 			private array $calls;
+			private array $connection_ids;
 
-			public function __construct( string $id, \Woodev_Connection_Result $result, array &$calls ) {
-				$this->result = $result;
-				$this->calls  = &$calls;
+			public function __construct( string $id, \Woodev_Connection_Result $result, array &$calls, array $connection_ids ) {
+				$this->result         = $result;
+				$this->calls          = &$calls;
+				$this->connection_ids = $connection_ids;
 				parent::__construct( $id );
 			}
 
@@ -321,19 +325,22 @@ class CompositeSettingsHandlerTest extends TestCase {
 
 				return $this->result;
 			}
+
+			public function get_connection_ids(): array {
+				return $this->connection_ids;
+			}
 		};
 	}
 
 	/**
-	 * #488 D8: exactly one child implementing `Woodev_Settings_Connection_Test`
-	 * (the only shape this class needs today, per its own docblock) — the
-	 * composite must delegate the connection_id/values through unchanged and
-	 * hand back that child's own result.
+	 * #488 D8: a single child implementing `Woodev_Settings_Connection_Test` —
+	 * the composite must delegate the connection_id/values through unchanged
+	 * and hand back that child's own result.
 	 */
-	public function test_delegates_test_connection_to_the_single_implementing_child(): void {
+	public function test_delegates_test_connection_to_the_owning_child(): void {
 		$calls    = [];
 		$expected = \Woodev_Connection_Result::success( 'ok' );
-		$location = $this->make_connection_handler( 'location', $expected, $calls );
+		$location = $this->make_connection_handler( 'location', $expected, $calls, [ 'popular_settlements_clear' ] );
 		$fields   = $this->make_handler(
 			'fields',
 			function ( $h ) {
@@ -372,19 +379,61 @@ class CompositeSettingsHandlerTest extends TestCase {
 	}
 
 	/**
-	 * More than one child implementing the interface is ambiguous — this class
-	 * has no id-to-child map, so it must fail loudly rather than silently pick
-	 * one (see class docblock).
+	 * #488 D8 round 2 critic MEDIUM: a second child implementing the interface
+	 * must be an ORDINARY day, not a fatal — as long as the two own DIFFERENT
+	 * connection ids, each id routes to its own owner. Reproduces the critic's
+	 * exact scenario: two connection-test children coexisting, each answering
+	 * only for its own section.
 	 */
-	public function test_throws_when_more_than_one_child_implements_connection_test(): void {
+	public function test_routes_by_connection_id_ownership_when_two_children_implement_the_interface(): void {
 		$calls_a = [];
 		$calls_b = [];
-		$a       = $this->make_connection_handler( 'alpha', \Woodev_Connection_Result::success( 'a' ), $calls_a );
-		$b       = $this->make_connection_handler( 'beta', \Woodev_Connection_Result::success( 'b' ), $calls_b );
+		$a       = $this->make_connection_handler( 'alpha', \Woodev_Connection_Result::success( 'a' ), $calls_a, [ 'connection_a' ] );
+		$b       = $this->make_connection_handler( 'beta', \Woodev_Connection_Result::success( 'b' ), $calls_b, [ 'connection_b' ] );
 
 		$composite = new Composite_Settings_Handler( 'shipping', [ $a, $b ] );
 
+		$this->assertSame( [ 'connection_a', 'connection_b' ], $composite->get_connection_ids() );
+
+		$result_a = $composite->test_connection( 'connection_a', [ 'x' => 1 ] );
+		$this->assertTrue( $result_a->is_success() );
+		$this->assertSame( 'a', $result_a->get_message() );
+		$this->assertSame( [ [ 'connection_a', [ 'x' => 1 ] ] ], $calls_a );
+		$this->assertSame( [], $calls_b );
+
+		$result_b = $composite->test_connection( 'connection_b', [ 'y' => 2 ] );
+		$this->assertTrue( $result_b->is_success() );
+		$this->assertSame( 'b', $result_b->get_message() );
+		$this->assertSame( [ [ 'connection_b', [ 'y' => 2 ] ] ], $calls_b );
+	}
+
+	/**
+	 * A connection id neither child owns still throws, even though other
+	 * children DO implement the interface — only actual ownership resolves
+	 * the delegate now, never "any implementer will do".
+	 */
+	public function test_throws_when_no_child_owns_the_connection_id_even_though_others_implement_the_interface(): void {
+		$calls = [];
+		$a     = $this->make_connection_handler( 'alpha', \Woodev_Connection_Result::success( 'a' ), $calls, [ 'connection_a' ] );
+
+		$composite = new Composite_Settings_Handler( 'shipping', [ $a ] );
+
 		$this->expectException( \Woodev_Plugin_Exception::class );
-		$composite->test_connection( 'whatever', [] );
+		$composite->test_connection( 'nobody_owns_this', [] );
+	}
+
+	/**
+	 * Two children claiming the SAME connection id is a genuine configuration
+	 * error (mirrors the existing duplicate-setting-id collision check) — must
+	 * fail loudly at construction time, not silently pick one.
+	 */
+	public function test_construction_throws_when_two_children_own_the_same_connection_id(): void {
+		$calls_a = [];
+		$calls_b = [];
+		$a       = $this->make_connection_handler( 'alpha', \Woodev_Connection_Result::success( 'a' ), $calls_a, [ 'dup' ] );
+		$b       = $this->make_connection_handler( 'beta', \Woodev_Connection_Result::success( 'b' ), $calls_b, [ 'dup' ] );
+
+		$this->expectException( \InvalidArgumentException::class );
+		new Composite_Settings_Handler( 'shipping', [ $a, $b ] );
 	}
 }

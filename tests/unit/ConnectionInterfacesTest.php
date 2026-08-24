@@ -28,6 +28,10 @@ class ConnectionInterfacesTest extends TestCase {
 					? \Woodev_Connection_Result::success( 'ok' )
 					: \Woodev_Connection_Result::failure( 'bad' );
 			}
+
+			public function get_connection_ids(): array {
+				return [ 'api' ];
+			}
 		};
 
 		$this->assertTrue( interface_exists( 'Woodev_Settings_Connection_Test' ) );

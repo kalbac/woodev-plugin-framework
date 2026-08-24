@@ -271,4 +271,58 @@ final class LocationSettingsTest extends TestCase {
 		$this->assertTrue( $result->is_success() );
 		$this->assertStringContainsString( 'Удалено записей: 7', $result->get_message() );
 	}
+
+	/**
+	 * #488 D8 round 2 critic HIGH: the merchant switched the `active_provider`
+	 * select to a DIFFERENT provider without saving — the two connection
+	 * sections were rendered from the PERSISTED provider and stay visible, but
+	 * acting on the persisted provider now would silently touch a list the
+	 * merchant is no longer looking at. `$values` carries the STAGED
+	 * (unsaved) `active_provider` id; a mismatch against the persisted one
+	 * must refuse BOTH actions without touching the store at all — even
+	 * though the persisted provider ('dadata') IS capable.
+	 */
+	public function test_staged_active_provider_mismatch_refuses_both_actions_without_touching_the_store(): void {
+		$provider = new Location_Settings_Test_Resolving_Provider( 'dadata' );
+		$store    = Mockery::mock( Popular_Settlement_Store::class );
+		$store->shouldNotReceive( 'all_for_provider' );
+		$store->shouldNotReceive( 'clear_provider' );
+
+		$handler = $this->handler( $provider, $store );
+
+		$verify = $handler->test_connection(
+			Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY,
+			[ 'active_provider' => 'some_other_provider' ]
+		);
+		$this->assertFalse( $verify->is_success() );
+		$this->assertStringContainsString( 'сохран', mb_strtolower( $verify->get_message() ) );
+
+		$clear = $handler->test_connection(
+			Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR,
+			[ 'active_provider' => 'some_other_provider' ]
+		);
+		$this->assertFalse( $clear->is_success() );
+		$this->assertStringContainsString( 'сохран', mb_strtolower( $clear->get_message() ) );
+	}
+
+	/**
+	 * A staged `active_provider` that matches the persisted one (the common
+	 * case — the merchant hasn't touched the select, or re-selected the same
+	 * value) is NOT a mismatch and must not block the action.
+	 */
+	public function test_staged_active_provider_matching_the_persisted_one_does_not_block_clear(): void {
+		$provider = new Location_Settings_Test_Resolving_Provider( 'dadata' );
+
+		$store = Mockery::mock( Popular_Settlement_Store::class );
+		$store->shouldReceive( 'clear_provider' )->once()->with( 'dadata' )->andReturn( 3 );
+
+		$handler = $this->handler( $provider, $store );
+
+		$result = $handler->test_connection(
+			Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR,
+			[ 'active_provider' => 'dadata' ]
+		);
+
+		$this->assertTrue( $result->is_success() );
+	}
 }
