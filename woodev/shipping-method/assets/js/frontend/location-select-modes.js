@@ -264,12 +264,18 @@
 	 * `.select2()`.
 	 *
 	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
-	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array}} seed
+	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array, onRequestStart?: function(function(): void): void}} seed
 	 *   `applyEntries` is called with `(entries, false)` on every successful ajax response —
 	 *   the SAME merge-only call `ensureSelect2()`'s own transport made before this extraction —
 	 *   and now RETURNS the subset of `entries` it actually accepted (see `applyEntries()`'s own
 	 *   docblock), so the results reported to select2 and the records resolvable via `dataByKey`
 	 *   can never diverge (issue #461 BLOCKING 1/2).
+	 *   `onRequestStart`, when supplied, is called SYNCHRONOUSLY every time the transport issues a
+	 *   new request, with that request's own cancel function — issue #449 (teardown gap, round 2):
+	 *   `buildSelectField()`'s `detach()` has no other way to reach the CURRENT in-flight request,
+	 *   since each transport call builds its own `AbortController` in a closure private to that one
+	 *   call. See that function's own `activeAbort` docblock for why a single overwritten reference
+	 *   is enough (never an array of every request ever made).
 	 * @returns {Object}
 	 */
 	function selectConfigFor( strategy, seed ) {
@@ -289,6 +295,21 @@
 			config.minimumInputLength = minimumInputLengthFor( seed.level );
 			config.ajax = {
 				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
+				// issue #449 (teardown gap, round 2 — the `ajax.delay` question): a `detach()` that
+				// lands WHILE a keystroke is still sitting in this 250ms window has nothing to
+				// cancel — `this._queryTimeout` is select2's own PRIVATE `AjaxAdapter` field, set
+				// and cleared entirely inside its `query()`/the timer callback that invokes
+				// `transport()` above; there is no documented public hook to clear it, and
+				// `$select.select2('destroy')` does not touch it either (same "no destroy override"
+				// gap `activeAbort`'s own docblock already establishes for `_request`). Reaching for
+				// it anyway (`$select.data('select2')._queryTimeout`) would mean depending on an
+				// undocumented, version-coupled private field purely to shave 250ms off an already-
+				// bounded window — worse than the leak it would close. Left deliberately OUT OF
+				// SCOPE: a debounced call that fires after teardown still runs through this same
+				// transport (a live closure, unaffected by the DOM/select2 teardown that already
+				// happened), sets `activeAbort` to ITS OWN controller, and nothing ever cancels that
+				// one specific request — a bounded, at-most-one-extra-call residual gap, not the
+				// unbounded "every keystroke" cost #449 opened with.
 				transport: function( params, success, failure ) {
 					var term = params && params.data && params.data.term ? params.data.term : '';
 
@@ -312,6 +333,25 @@
 					// runs still needs a synchronous guard against repainting the list.
 					var controller = 'function' === typeof window.AbortController ? new window.AbortController() : null;
 					var stale = false;
+
+					// issue #449 (teardown gap, round 2): the SAME cancel function select2 gets
+					// back below is also handed to `seed.onRequestStart()`, so `buildSelectField()`'s
+					// `detach()` can cancel THIS exact request too — select2's own `destroy()` never
+					// does (its AjaxAdapter has no destroy override that touches `_request`, and the
+					// base `Adapter.prototype.destroy()` is a no-op), so without this a request still
+					// in flight when `updated_checkout` tears the widget down would otherwise run to
+					// completion regardless of anything select2 itself does at teardown.
+					var abortRequest = function() {
+						stale = true;
+
+						if ( controller ) {
+							controller.abort();
+						}
+					};
+
+					if ( 'function' === typeof seed.onRequestStart ) {
+						seed.onRequestStart( abortRequest );
+					}
 
 					strategy.fetchEntries( term, { signal: controller ? controller.signal : undefined } ).then( function( entries ) {
 						if ( stale ) {
@@ -355,13 +395,7 @@
 					} );
 
 					return {
-						abort: function() {
-							stale = true;
-
-							if ( controller ) {
-								controller.abort();
-							}
-						},
+						abort: abortRequest,
 					};
 				},
 			};
@@ -467,6 +501,22 @@
 		/** @type {Object.<string, Object>} the entry's STABLE identity (`entry.key`) -> the record it resolves to. */
 		var dataByKey = {};
 		var lastHandledKey = null;
+
+		/**
+		 * @type {function(): void|null} cancels the MOST RECENTLY started `ajax-select2` request,
+		 * or `null` when none has ever started (or the last one already settled/was cancelled).
+		 * issue #449 (teardown gap, round 2): `selectConfigFor()`'s transport overwrites this on
+		 * EVERY new request it issues via `seed.onRequestStart()` — a single reference, never an
+		 * array of every request this field has ever made, since select2's own store-then-abort
+		 * sequence (`AjaxAdapter.prototype.query`) already guarantees at most one of our requests
+		 * is genuinely "current" at a time; anything earlier was already cancelled BY SELECT2
+		 * before the next one started. `detach()` below is the one caller select2 itself cannot
+		 * reach on our behalf — its own `destroy()` never touches `_request`. A plain closure
+		 * variable survives regardless of whether select2's own jQuery `.data('select2')` has
+		 * already been purged by an ancestor `cleanData()` (issue #457's own trap), so this stays
+		 * reachable even when `detach()` runs on an already half-torn-down widget.
+		 */
+		var activeAbort = null;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -631,6 +681,10 @@
 				placeholder: placeholder,
 				applyEntries: applyEntries,
 				level: options.node && options.node.level,
+				// issue #449 (teardown gap, round 2): see `activeAbort`'s own docblock above.
+				onRequestStart: function( abortFn ) {
+					activeAbort = abortFn;
+				},
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -682,6 +736,22 @@
 		return {
 			el: select,
 			detach: function() {
+				// issue #449 (teardown gap, round 2): cancels whatever `ajax-select2` request is
+				// still in flight FIRST — before anything below touches select2's own instance data
+				// or the DOM. select2's own `destroy()` (just below) never does this itself (no
+				// `AjaxAdapter` destroy override touches `_request`; the base `Adapter.prototype.
+				// destroy()` is a no-op), and it is exactly the same "runs to completion, still
+				// billing DaData/CDEK" cost #449 already fixed for a superseded KEYSTROKE — this is
+				// that same leak on the teardown trigger instead (`updated_checkout` tears this
+				// widget down on every re-render, not a rare path). Works unconditionally, even when
+				// select2's own jQuery data was already purged by an ancestor `cleanData()` (see the
+				// #457 comment right below) — `activeAbort` is a plain closure variable, not
+				// anything select2 owns or clears.
+				if ( activeAbort ) {
+					activeAbort();
+					activeAbort = null;
+				}
+
 				unbind();
 
 				if ( $select ) {
