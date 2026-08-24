@@ -96,6 +96,39 @@ key gets **no popular list at all**: nothing is stored for it and nothing is off
 same discipline `related-list` already follows behind `CAPABILITY_LIST` — absent capability means
 the feature is simply absent, never a degraded imitation of it.
 
+### D4a. A record whose key cannot be resolved is never enrolled — per RECORD, not per provider
+
+**Decided by the operator, 24.08.2026 (#491): "Не заводить в популярные вовсе если запись без FIAS."**
+
+The capability gate above is per PROVIDER, and that turned out not to be the whole story. DaData is
+capable in general, but **individual records are not**: when a suggestion carries no `fias_id`,
+`Locality_Key::derive()` mints a key from a hash of the locality's own fields. DaData has never seen
+that value, so `resolve_key()` can never ask about it — the freshness clock (D2's
+`last_verified_at`) could never tick for such a row.
+
+So the rule is: **if `Locality_Key::is_derived( $key )`, the record is not enrolled in the popular
+list.** Not enrolled-and-exempted, not enrolled-and-aged-out by `last_ordered_at` alone — simply
+never written.
+
+**Why this and not the alternatives** (both were offered and rejected): enrolling such a record
+while exempting it from the freshness clock creates a class of rows that live forever and are
+confirmed by nobody, which is exactly what D2 exists to prevent; and evicting them by
+`last_ordered_at` alone still leaves a dead key reachable for the length of the usage window. The
+invariant of #437 decision 3 — *store only what has a real revalidation path* — is what makes this
+table permissible at all, so it holds literally rather than approximately.
+
+**The cost is accepted and small:** a settlement with no FIAS id never appears in the popular list
+even if the shop really does ship there. The list is ranking and empty state, not coverage
+(#437 decision 4), and search still finds the settlement normally. Nothing is broken for the
+customer; the list is merely one entry shorter.
+
+**Implementation consequence.** The enrolment path (the one that bumps `order_count` /
+`last_ordered_at` when an order ships somewhere) is where this is enforced — it checks the key and
+returns without writing. `Dadata_Provider::resolve_key()` already throws for a derived key rather
+than answering `null`, and with this decision that throw becomes a **defensive guard on an
+unreachable path** rather than a live branch: nothing derived should ever be in the table to verify.
+Keep the throw — a guard that never fires is what proves the rule held.
+
 ## D5. Verification is lazy, at the point of use — there is no validating cron
 
 **Decision:**
@@ -181,6 +214,8 @@ floated ~2 months for the usage clock as a starting point.
   is ~20–30 rows with a real revalidation path, which is the entire reason it is allowed to exist.
 - It does not run a validating cron (D5).
 - It does not exist at all for a provider without `CAPABILITY_RESOLVE_KEY` (D4).
+- It does not enrol a record whose key was DERIVED rather than issued by the provider — such a
+  record has no revalidation path, so it is never written to the table at all (D4a).
 
 ## Related
 

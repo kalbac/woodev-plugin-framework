@@ -40,6 +40,33 @@ This is the same lesson as `input-accepted-is-not-proof-a-worker-started`, point
 there the receipt claimed success that had not happened, here it claims failure that had. **Neither
 direction of the receipt is evidence.** The terminal buffer is the only thing that is.
 
+## There is a THIRD state, and it is the one that looks like a dead worker (s89)
+
+`worker-start` can fail with `last_error: agent_prompt_stalled` at `stage: dispatch_input`. Read the
+terminal and you find the agent up, healthy, and the **entire brief sitting unsubmitted in its
+prompt box** — delivered, never sent. Enter did not arrive within the 60 s dispatch timeout.
+
+So the buffer has three readings, not two:
+
+| Terminal shows | Meaning | Do |
+|---|---|---|
+| activity — reading files, `Working (Ns…)` | dispatch landed | nothing; ignore the receipt |
+| unchanged, no paste | dispatch really did not land | retry |
+| **the brief pasted, agent idle** | delivered but never submitted | **send Enter, do not retry** |
+
+```bash
+orca terminal send --terminal <handle> --text "" --enter --json
+```
+
+Retrying instead would mint a second dispatch, revoke the first, and leave the worker holding a
+revoked capability — the exact damage this file's main section is about. In s89 one of two workers
+landed in this state and the Enter recovered it with the brief intact; the other self-submitted from
+the identical command, so the state is intermittent rather than deterministic.
+
+**The dispatch row stays `failed` after this recovery.** The process is live and will do the work,
+but its eventual `worker_done` may be rejected, so plan to read the result from the pushed branch and
+close the task by hand.
+
 ## If you already retried
 
 ```bash
