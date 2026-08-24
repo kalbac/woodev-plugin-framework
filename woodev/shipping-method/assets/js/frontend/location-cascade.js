@@ -1194,8 +1194,10 @@
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
-			// { el, host, spinner } while a /select is in flight — see markSelectBusy().
+			// { el, host, spinner, level } while a /select is in flight — see markSelectBusy().
 			selectBusy: null,
+			// Field ids this module locked because an ANCESTOR's /select had not answered yet.
+			dependentLocked: [],
 			// Task 13 / #295 finding 1: the fieldId the MOST RECENT selection came from (any
 			// level — the /select queue is per ENTRY, not per node) and the currently-shown
 			// "your choice was not saved" notice element, if any — see
@@ -2461,7 +2463,12 @@
 			el.readOnly = true;
 		}
 
-		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable };
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level };
+
+		// Everything DEEPER than the level being confirmed is now waiting on an answer that has
+		// not arrived — see refreshDependentLocks().
+		refreshDependentLocks( entry );
+		refreshAddressLock( entry );
 	}
 
 	/**
@@ -2511,6 +2518,106 @@
 	}
 
 	/**
+	 * Whether a `/select` is in flight for a level SHALLOWER than `level` — i.e. this level's own
+	 * parent key is one the SERVER has not accepted yet.
+	 *
+	 * This is a correctness question, not a cosmetic one (operator, s90). The client writes the
+	 * pick optimistically, so the moment a region is chosen the settlement field would happily
+	 * search scoped by that region's key — and if the answer then comes back `cancelled` (D7) or
+	 * `persisted: false`, that search was scoped by a key the server never accepted. Same for the
+	 * address field under a settlement pick, which is the case the operator actually saw: the
+	 * address unlocked immediately and stayed unlocked for the whole 2.4-4.5 second round trip.
+	 *
+	 * @param {Object} entry
+	 * @param {?string} level
+	 * @returns {boolean}
+	 */
+	function hasUnconfirmedParent( entry, level ) {
+		var busyLevel = entry.selectBusy ? entry.selectBusy.level : null;
+
+		if ( ! busyLevel || ! level ) {
+			return false;
+		}
+
+		var busyIndex = LEVELS.indexOf( busyLevel );
+		var levelIndex = LEVELS.indexOf( level );
+
+		return busyIndex > -1 && levelIndex > busyIndex;
+	}
+
+	/**
+	 * Locks every chain level whose parent is still unconfirmed, and releases the ones this
+	 * module locked for that reason once the answer lands.
+	 *
+	 * `address` is deliberately NOT handled here: it has its own authority
+	 * ({@see refreshAddressLock}/{@see isAddressLocked}), which now consults
+	 * {@see hasUnconfirmedParent} itself. Two mechanisms writing the same field's `disabled` from
+	 * different rules is how a lock ends up stuck.
+	 *
+	 * NO `disabled` ATTRIBUTE HERE, unlike the address lock — and the difference is not an
+	 * inconsistency. A locked address field is empty by construction (that is the whole premise
+	 * of the lock), so dropping it from `form.checkout.serialize()` costs nothing. A settlement
+	 * field under an in-flight region pick may still hold text the customer typed, and the
+	 * measurement behind {@see markSelectBusy} applies unchanged: a disabled control leaves the
+	 * serialized checkout form entirely. The host class blocks the pointer and `aria-disabled`
+	 * states it; neither touches what posts.
+	 *
+	 * Releases from the REMEMBERED id list rather than by re-deriving it, so a chain that changed
+	 * shape mid-request (a country switch) cannot strand a lock on a node the new chain no longer
+	 * knows about.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function refreshDependentLocks( entry ) {
+		var previous = entry.dependentLocked || [];
+		var locked = [];
+
+		entry.chain.forEach( function( node ) {
+			if ( ! node.level || 'address' === node.level || ! hasUnconfirmedParent( entry, node.level ) ) {
+				return;
+			}
+
+			var el = document.getElementById( node.fieldId );
+
+			if ( ! el || ! el.parentNode ) {
+				return;
+			}
+
+			if ( el.parentNode.classList ) {
+				el.parentNode.classList.add( BUSY_HOST_CLASS );
+			}
+
+			el.setAttribute( 'aria-disabled', 'true' );
+			locked.push( node.fieldId );
+		} );
+
+		previous.forEach( function( fieldId ) {
+			if ( locked.indexOf( fieldId ) > -1 ) {
+				return;
+			}
+
+			var el = document.getElementById( fieldId );
+
+			if ( ! el ) {
+				return;
+			}
+
+			el.removeAttribute( 'aria-disabled' );
+
+			// Only when this field is not ITSELF the one whose request is in flight — that one
+			// owns the class for its own reason and clears it in clearSelectBusy().
+			var ownsItsOwnBusy = entry.selectBusy && entry.selectBusy.el === el;
+
+			if ( el.parentNode && el.parentNode.classList && ! ownsItsOwnBusy ) {
+				el.parentNode.classList.remove( BUSY_HOST_CLASS );
+			}
+		} );
+
+		entry.dependentLocked = locked;
+	}
+
+	/**
 	 * Clears whatever {@see markSelectBusy} last set, from the REMEMBERED nodes rather than by
 	 * re-resolving the field: by the time a response settles the field may be gone (a country
 	 * switch tore the section down mid-request), and a spinner left in a section WooCommerce
@@ -2544,6 +2651,9 @@
 		}
 
 		entry.selectBusy = null;
+
+		refreshDependentLocks( entry );
+		refreshAddressLock( entry );
 	}
 
 	function clearNotPersistedNotice( entry ) {

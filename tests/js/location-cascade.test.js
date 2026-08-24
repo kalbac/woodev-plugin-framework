@@ -928,6 +928,60 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 		expect( spinner().style.height ).toBe( '' );
 	} );
 
+	// Operator, s90. Picking a region clears the settlement field (it depends on the region), and
+	// the client writes the region optimistically — so until this, the settlement field was free
+	// to be searched, scoped by a region key the SERVER had not accepted yet. If that /select then
+	// answers `cancelled` (D7) or `persisted: false`, the search was scoped by a key that never
+	// existed as far as the server is concerned.
+	it( 'locks a level whose PARENT is still in flight, and releases it when the parent answers', async () => {
+		boot( { region: true, settlement: true } );
+
+		const regionItem = {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		};
+
+		selectViaFake( callFor( 'billing_state' ), regionItem );
+
+		const settlement = document.getElementById( 'billing_city' );
+
+		expect( settlement.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+
+		// The child is blocked, not emptied of whatever it posts — a disabled control leaves the
+		// serialized checkout form, and this one may still hold text the customer typed.
+		expect( settlement.disabled ).toBe( false );
+
+		selectRequests()[ 0 ].resolve( {
+			current: { key: regionItem.record.key, level: 'region' }, persisted: true,
+			chain: { region: { key: regionItem.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	it( 'releases a child lock even when the parent\'s request FAILS — a lock outliving its cause is worse than no lock', async () => {
+		boot( { region: true, settlement: true } );
+
+		const regionItem = {
+			key: 'dadata:r1', label: 'Московская область', level: 'region',
+			record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+		};
+
+		const logged = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		selectViaFake( callFor( 'billing_state' ), regionItem );
+		expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+		logged.mockRestore();
+
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-disabled' ) ).toBe( false );
+	} );
+
 	it( 'never uses the disabled ATTRIBUTE — measured: a disabled control leaves the serialized checkout form entirely', () => {
 		boot( { settlement: true } );
 
