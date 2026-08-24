@@ -53,6 +53,8 @@ return [
 	'Woodev\\Framework\\Shipping\\Location\\Location_Settings' => 'woodev/shipping-method/location/class-location-settings.php',
 	'Woodev\\Framework\\Shipping\\Location\\Popular_Settlement_Entry' => 'woodev/shipping-method/location/class-popular-settlement-entry.php',
 	'Woodev\\Framework\\Shipping\\Location\\Popular_Settlement_Store' => 'woodev/shipping-method/location/class-popular-settlement-store.php',
+	'Woodev\\Framework\\Shipping\\Location\\Popular_Settlement_Verification' => 'woodev/shipping-method/location/class-popular-settlement-verification.php',
+	'Woodev\\Framework\\Shipping\\Location\\Popular_Settlement_Verifier' => 'woodev/shipping-method/location/class-popular-settlement-verifier.php',
 	'Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata_Api_Client' => 'woodev/shipping-method/location/providers/class-dadata-api-client.php',
 	'Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata_Api_Request' => 'woodev/shipping-method/location/providers/class-dadata-api-request.php',
 	'Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata_Api_Response' => 'woodev/shipping-method/location/providers/class-dadata-api-response.php',
