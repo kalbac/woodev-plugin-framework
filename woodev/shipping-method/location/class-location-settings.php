@@ -49,6 +49,16 @@
  * unit-testable `Woodev_Abstract_Settings` definition (the same shape as
  * `Woodev_Test_Settings` in the test fixtures).
  *
+ * This class ALSO implements `Woodev_Settings_Connection_Test` (#488 D8) for the
+ * two popular-settlements merchant actions — «Проверить актуальность популярных
+ * городов» and «Очистить список популярных городов». They follow the settings
+ * page's existing connection-test seam (fields-less `Settings_Section`s, a
+ * `test_connection()` switch on `$connection_id`) rather than owning any setting
+ * id of their own; {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}
+ * adds those two sections only when the ACTIVE provider declares
+ * {@see Location_Provider::CAPABILITY_RESOLVE_KEY} (spec D4/D8: absent, not
+ * present-and-disabled, when it does not).
+ *
  * @since 2.0.2
  */
 
@@ -65,7 +75,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 	 *
 	 * @since 2.0.2
 	 */
-	class Location_Settings extends \Woodev_Abstract_Settings {
+	class Location_Settings extends \Woodev_Abstract_Settings implements \Woodev_Settings_Connection_Test {
+
+		/**
+		 * Connection id for «Проверить актуальность популярных городов» (#488 D8).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const CONNECTION_POPULAR_SETTLEMENTS_VERIFY = 'popular_settlements_verify';
+
+		/**
+		 * Connection id for «Очистить список популярных городов» (#488 D8).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const CONNECTION_POPULAR_SETTLEMENTS_CLEAR = 'popular_settlements_clear';
 
 		/**
 		 * Registered provider options for the `active_provider` select, `id => name`.
@@ -148,6 +174,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		private \Closure $resolve_active_provider_id;
 
 		/**
+		 * The shared popular-settlements store (#488 D8) — the SAME instance
+		 * {@see Location_Provider_Registry::popular_settlement_store()} hands to every
+		 * other caller (the `/select` route's D5 step, the checkout-order-processed
+		 * enrolment listener), so a sweep/clear performed here is never out of step
+		 * with what those see.
+		 *
+		 * @since 2.0.2
+		 * @var Popular_Settlement_Store
+		 */
+		private Popular_Settlement_Store $popular_settlement_store;
+
+		/**
+		 * The RUNTIME-active provider, resolved by the caller
+		 * ({@see Location_Provider_Registry::register_settings()}) exactly like
+		 * {@see self::$provider_options} is — `null` when nothing is active (no
+		 * provider registered under the resolved id at all). {@see self::test_connection()}
+		 * reads this rather than re-resolving, since it always runs within the SAME
+		 * request `register_settings()` built this handler for (#488 D8).
+		 *
+		 * @since 2.0.2
+		 * @var Location_Provider|null
+		 */
+		private ?Location_Provider $active_provider;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -164,6 +215,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *              (including the {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER}
 		 *              filter) a stored one already did, not a raw string
 		 *              compare.
+		 * @since 2.0.2 Added `$popular_settlement_store` and `$active_provider`
+		 *              (#488 D8) — the two merchant popular-settlements actions.
 		 *
 		 * @param string                              $id                              settings id (the option-name namespace).
 		 * @param array<string, string>               $provider_options                registered provider `id => name` pairs.
@@ -191,6 +244,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 *                                                                              `null` (the default) is the
 		 *                                                                              identity function — returns
 		 *                                                                              the raw id unchanged.
+		 * @param Popular_Settlement_Store|null       $popular_settlement_store        shared popular-settlements store (#488 D8);
+		 *                                                                              `null` (the default) builds a fresh one.
+		 * @param Location_Provider|null              $active_provider                 the runtime-active provider, or `null`
+		 *                                                                              when none is active (#488 D8).
 		 */
 		public function __construct(
 			string $id,
@@ -199,8 +256,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			array $field_mode_region_options = [],
 			array $field_mode_settlement_options = [],
 			array $default_locality_policy_options = [],
-			?\Closure $resolve_active_provider_id = null
+			?\Closure $resolve_active_provider_id = null,
+			?Popular_Settlement_Store $popular_settlement_store = null,
+			?Location_Provider $active_provider = null
 		) {
+			$this->popular_settlement_store        = $popular_settlement_store ?? new Popular_Settlement_Store();
+			$this->active_provider                 = $active_provider;
 			$this->provider_options                = $provider_options;
 			$this->provider_fields                 = $provider_fields;
 			$this->field_mode_region_options       = $field_mode_region_options;
@@ -677,6 +738,103 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			}
 
 			$this->register_control( $field_id, $control_type, $control_args );
+		}
+
+		/**
+		 * The two D8 popular-settlements merchant actions, switched on
+		 * `$connection_id` (#488). `$values` is always empty in practice — the
+		 * two `Settings_Section`s these actions render behind declare no setting
+		 * ids (spec D8: "neither needs a new control type") — and is unused here.
+		 *
+		 * Re-checks the D4 capability gate defensively even though
+		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::build_sections()}
+		 * already keeps a capability-less provider from ever exposing a
+		 * `$connection_id` a client could send here: a stale client tab, or a
+		 * hand-crafted request, must still get a clean failure instead of a
+		 * fatal `\BadMethodCallException` out of `resolve_key()`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string               $connection_id one of {@see self::CONNECTION_POPULAR_SETTLEMENTS_VERIFY}
+		 *                                              / {@see self::CONNECTION_POPULAR_SETTLEMENTS_CLEAR}.
+		 * @param array<string, mixed> $values         unused — see above.
+		 *
+		 * @return \Woodev_Connection_Result
+		 *
+		 * @throws \Woodev_Plugin_Exception When `$connection_id` names neither known action —
+		 *                                   never expected in practice; see this method's own
+		 *                                   docblock.
+		 */
+		public function test_connection( string $connection_id, array $values ): \Woodev_Connection_Result {
+			if ( null === $this->active_provider
+				|| ! in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $this->active_provider->get_capabilities(), true )
+			) {
+				return \Woodev_Connection_Result::failure(
+					__( 'Текущий провайдер локаций не поддерживает работу со списком популярных городов.', 'woodev-plugin-framework' )
+				);
+			}
+
+			switch ( $connection_id ) {
+				case self::CONNECTION_POPULAR_SETTLEMENTS_VERIFY:
+					return $this->sweep_popular_settlements( $this->active_provider );
+
+				case self::CONNECTION_POPULAR_SETTLEMENTS_CLEAR:
+					return $this->clear_popular_settlements( $this->active_provider );
+
+				default:
+					throw new \Woodev_Plugin_Exception( "Unknown connection id \"{$connection_id}\"." );
+			}
+		}
+
+		/**
+		 * «Проверить актуальность популярных городов» — sweeps every row of the
+		 * active provider through {@see Popular_Settlement_Verifier::sweep()}
+		 * (spec D6) and reports the counts it returns.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider the active provider.
+		 *
+		 * @return \Woodev_Connection_Result Always a success — a per-row failure is
+		 *                                    reported IN the message (`sweep()` itself
+		 *                                    never throws), never as an overall failure.
+		 */
+		private function sweep_popular_settlements( Location_Provider $provider ): \Woodev_Connection_Result {
+			$counts = ( new Popular_Settlement_Verifier( $this->popular_settlement_store ) )->sweep( $provider );
+
+			return \Woodev_Connection_Result::success(
+				sprintf(
+					/* translators: 1: checked count, 2: unchanged count, 3: updated count, 4: deleted count, 5: failed count */
+					__( 'Проверено записей: %1$d. Без изменений: %2$d. Обновлено: %3$d. Удалено: %4$d. Ошибок: %5$d.', 'woodev-plugin-framework' ),
+					$counts['checked'],
+					$counts['unchanged'],
+					$counts['updated'],
+					$counts['deleted'],
+					$counts['failed']
+				)
+			);
+		}
+
+		/**
+		 * «Очистить список популярных городов» — drops every row of the active
+		 * provider via {@see Popular_Settlement_Store::clear_provider()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider the active provider.
+		 *
+		 * @return \Woodev_Connection_Result
+		 */
+		private function clear_popular_settlements( Location_Provider $provider ): \Woodev_Connection_Result {
+			$deleted = $this->popular_settlement_store->clear_provider( $provider->get_id() );
+
+			return \Woodev_Connection_Result::success(
+				sprintf(
+					/* translators: %d: number of rows deleted */
+					__( 'Удалено записей: %d.', 'woodev-plugin-framework' ),
+					$deleted
+				)
+			);
 		}
 	}
 

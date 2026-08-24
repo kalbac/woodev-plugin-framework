@@ -2009,6 +2009,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              {@see self::FILTER_ACTIVE_PROVIDER}) for BOTH a
 		 *              submitted id and a stored one, never a raw string
 		 *              compare against either.
+		 * @since 2.0.2 Hands `Location_Settings` the shared popular-settlements
+		 *              store and the resolved active provider, and tells
+		 *              `Shipping_Settings_Tab` whether the active provider
+		 *              supports the two D8 merchant actions (#488 D8) — gated
+		 *              exactly like every other capability-based OFFERED-value
+		 *              computation above.
 		 *
 		 * @return void
 		 */
@@ -2054,11 +2060,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 					$provider = $this->resolve_active_provider_for_id( $id );
 
 					return null !== $provider ? $provider->get_id() : '';
-				}
+				},
+				// #488 D8: the SAME shared store instance every other caller of
+				// popular_settlement_store() gets, and the runtime-active provider
+				// this SAME request already resolved above — both feed
+				// Location_Settings::test_connection()'s two merchant actions.
+				$this->popular_settlement_store(),
+				$active_provider
 			);
 
 			$this->apply_default_locality_status_note();
 			$this->apply_address_suggestions_availability_gate();
+
+			// #488 D8: the two popular-settlements connection sections are ABSENT —
+			// not present-and-disabled — unless the ACTIVE provider declares
+			// CAPABILITY_RESOLVE_KEY (spec D4/D8), the same capability-gate idiom
+			// used elsewhere in this method (e.g. offered_field_mode_options()).
+			$supports_popular_settlements = null !== $active_provider
+				&& in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $active_provider->get_capabilities(), true );
 
 			// Hand the handler over to Shipping_Settings_Tab (issue #362; design S1/S9)
 			// instead of registering a tab of its own — «Локация» is now that tab's first
@@ -2070,7 +2089,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			// installed-site option-name namespace (ADR-005) and stays exactly as-is.
 			\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->set_location_section(
 				$this->settings_handler,
-				$this->settings_handler->get_owned_setting_ids()
+				$this->settings_handler->get_owned_setting_ids(),
+				$supports_popular_settlements
 			);
 		}
 

@@ -28,6 +28,7 @@ use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Location_Settings;
 use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -72,6 +73,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		 * @var string[]
 		 */
 		private $location_setting_ids = [];
+
+		/**
+		 * Whether the active provider supports the two D8 popular-settlements
+		 * merchant actions (#488) — handed over alongside `$location_handler` by
+		 * {@see self::set_location_section()}. Gates whether the two connection
+		 * sections are added at all in {@see self::build_sections()}: ABSENT, not
+		 * present-and-disabled, when `false` (spec D4/D8).
+		 *
+		 * @var bool
+		 */
+		private $location_supports_popular_settlements = false;
 
 		/** @var Checkout_Field_Settings|null lazily built so tests can read it without WP. */
 		private $field_settings = null;
@@ -203,14 +215,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \Woodev_Abstract_Settings $handler the Location_Settings handler.
-		 * @param string[]                  $ids     its owned setting ids, in display order.
+		 * @since 2.0.2 Added `$supports_popular_settlements` (#488 D8).
+		 *
+		 * @param \Woodev_Abstract_Settings $handler                        the Location_Settings handler.
+		 * @param string[]                  $ids                            its owned setting ids, in display order.
+		 * @param bool                      $supports_popular_settlements   whether the active provider declares
+		 *                                                                   `Location_Provider::CAPABILITY_RESOLVE_KEY`
+		 *                                                                   (spec D4/D8) — gates the two popular-
+		 *                                                                   settlements connection sections in
+		 *                                                                   {@see self::build_sections()}.
 		 *
 		 * @return void
 		 */
-		public function set_location_section( $handler, array $ids ): void {
-			$this->location_handler     = $handler;
-			$this->location_setting_ids = $ids;
+		public function set_location_section( $handler, array $ids, bool $supports_popular_settlements = false ): void {
+			$this->location_handler                      = $handler;
+			$this->location_setting_ids                  = $ids;
+			$this->location_supports_popular_settlements = $supports_popular_settlements;
 		}
 
 		/**
@@ -271,6 +291,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					// ADDRESS lives; it is actually the SOURCE of the city/address
 					// suggestions the checkout shows.
 					__( 'Управляет тем, откуда на чекауте берутся подсказки городов, регионов и адресов, и что подставляется покупателю по умолчанию, пока он ничего не ввёл.', 'woodev-plugin-framework' )
+				);
+			}
+
+			// #488 D8: the two popular-settlements merchant actions — ABSENT, not
+			// present-and-disabled, unless the active provider declares
+			// CAPABILITY_RESOLVE_KEY (spec D4). Fields-less connection blocks
+			// (empty setting_ids — the connection-test seam's own "vacuously
+			// satisfied" shape, see Settings_Section::create()'s own docblock);
+			// Location_Settings::test_connection() switches on the section id.
+			if ( $this->location_supports_popular_settlements ) {
+				$sections[] = Settings_Section::create(
+					Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_VERIFY,
+					__( 'Проверка популярных городов', 'woodev-plugin-framework' ),
+					[],
+					__( 'Проверяет каждую запись из списка популярных городов через провайдера и обновляет или удаляет устаревшие. Список используется как подсказка на чекауте до того, как покупатель начал вводить адрес — эта проверка на него не влияет напрямую, только на его точность.', 'woodev-plugin-framework' ),
+					true,
+					__( 'Проверить актуальность популярных городов', 'woodev-plugin-framework' )
+				);
+
+				$sections[] = Settings_Section::create(
+					Location_Settings::CONNECTION_POPULAR_SETTLEMENTS_CLEAR,
+					__( 'Список популярных городов', 'woodev-plugin-framework' ),
+					[],
+					__( 'Полностью очищает список популярных городов текущего провайдера. Поиск на чекауте продолжит работать как обычно — список будет постепенно наполняться заново по мере новых заказов.', 'woodev-plugin-framework' ),
+					true,
+					__( 'Очистить список популярных городов', 'woodev-plugin-framework' )
 				);
 			}
 
