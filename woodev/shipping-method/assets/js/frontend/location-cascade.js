@@ -874,6 +874,29 @@
 	 * alone. It is still never the destructive cascade {@see clearDescendants} runs for an actual
 	 * edit (gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`).
 	 *
+	 * ISSUE #490 ROUND 2: the OUTGOING node's per-level TEXT is captured into `outgoingLevelText`
+	 * HERE, BEFORE the `detachOne()` loop below runs — never read live inside
+	 * {@see carryChainStateToIncomingNodes} itself, which is why that function takes the map as a
+	 * plain argument instead of reading the DOM on its own. `document.getElementById( fieldId )`
+	 * after `detachOne()` has run is safe ONLY for a widget whose `detach()` leaves the SAME
+	 * element in the DOM (the baseline typeahead, and {@see attachRelatedListRegion}'s native-
+	 * `<select>` watcher — both only unbind listeners). It is NOT safe for a `buildSelectField()`-
+	 * based renderer (`ajax-select2`, `related-list:settlement` — `location-select-modes.js`):
+	 * that widget REPLACES the field's original `<input>` with a fresh `<select>` on attach and,
+	 * on `detach()`, swaps the ORIGINAL `<input>` back in VERBATIM — its own docblock is explicit
+	 * that this restore is never synced with whatever the customer picked in the `<select>`. So a
+	 * read taken after `detachOne()` for one of these levels finds the stale pre-attach `<input>`
+	 * — typically empty — never the picked text, regardless of what {@see applyValueToElement}'s
+	 * value-space understands. Measured on the rig (issue #490 round 2): this is exactly why
+	 * settlement (always `ajax-select2` or `related-list:settlement` in production) carried in
+	 * NEITHER direction even after round 1's fix, while region (always
+	 * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
+	 * `entry.widgets[ fieldId ].el` is read here instead of `document.getElementById()` for
+	 * exactly this reason — {@see attachOne}'s own docblock already tracks it as "the LIVE
+	 * element" specifically because a DOM-replacing renderer's `el` and the field's own id can
+	 * diverge; reading it while the widget is STILL attached (i.e., before this loop's own
+	 * `detachOne()` call) always gets the picked value, uniformly across every renderer.
+	 *
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
@@ -894,8 +917,19 @@
 			return node.fieldId;
 		} );
 
+		// Issue #490 round 2 — see this function's own docblock for why this is captured from
+		// the STILL-ATTACHED widget, before detachOne() below can lose it.
+		var outgoingLevelText = {};
+
 		entry.allNodes.forEach( function( node ) {
 			if ( keptFieldIds.indexOf( node.fieldId ) === -1 ) {
+				if ( node.level ) {
+					var widget = entry.widgets[ node.fieldId ];
+					var liveEl = widget ? widget.el : document.getElementById( node.fieldId );
+
+					outgoingLevelText[ node.level ] = liveEl ? cascadeKey( liveEl.value ) : '';
+				}
+
 				detachOne( entry, node.fieldId );
 				releaseAddressLockOn( node.fieldId );
 			}
@@ -907,7 +941,7 @@
 		entry.allNodes = newAllNodes;
 		entry.postcodeFieldId = newPostcodeNode ? newPostcodeNode.fieldId : null;
 
-		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes );
+		carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText );
 	}
 
 	/**
@@ -926,11 +960,13 @@
 	 *
 	 * Per incoming node, exactly one of three things happens:
 	 *
-	 * 1. **Empty field, carried record** — write the record's own derived value in silently
-	 *    ({@see fieldValueFor}, the SAME derivation a direct pick at that level gets, so a
-	 *    carried field and a picked one never read differently). {@see writeSilently} seeds
-	 *    `entry.resolved` as part of the write, which is what makes the following `change`
-	 *    harmless.
+	 * 1. **Empty field, carried record** — write the carried text in silently
+	 *    ({@see writeSilently}, fed from `outgoingLevelText` — the per-level text
+	 *    {@see rebuildChainForActiveSection} captured from the outgoing node's LIVE element
+	 *    BEFORE detaching its widget, falling back to {@see fieldValueFor} only when that level
+	 *    had no outgoing node at all — see that function's own docblock for why the capture
+	 *    cannot happen here, after the fact). {@see writeSilently} seeds `entry.resolved` as part
+	 *    of the write, which is what makes the following `change` harmless.
 	 * 2. **Field already carrying the customer's own text** — leave the text alone (checking
 	 *    "ship to a different address" after typing a genuinely different shipping address must
 	 *    not overwrite it) and seed `entry.resolved`/the store from that live value, exactly like
@@ -958,15 +994,22 @@
 	 * unresolvable. This stays a rebind, never a destructive cascade.
 	 *
 	 * The postcode node has no record of its own, so it carries the OUTGOING postcode field's
-	 * live value instead — the same string {@see backwardsFill} would have written there. A
-	 * blocked carry withholds it too: that postcode belongs to the disowned locality.
+	 * live value instead — the same string {@see backwardsFill} would have written there, read
+	 * directly off `document.getElementById( previousPostcodeId )` here (never captured into
+	 * `outgoingLevelText`): postcode is never a `buildSelectField()`-swapped field — no renderer
+	 * in `location-select-modes.js` targets it — so it carries none of the level nodes' restore
+	 * hazard and a post-detach DOM read is safe exactly as it always was. A blocked carry
+	 * withholds it too: that postcode belongs to the disowned locality.
 	 *
 	 * @param {Object} entry
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} previousAllNodes
 	 * @param {Array<{level: ?string, fieldId: string, section: string}>} newAllNodes
+	 * @param {Object.<string, string>} outgoingLevelText Per-LEVEL text
+	 *   {@see rebuildChainForActiveSection} captured from the outgoing node's live element before
+	 *   detaching it; absent for a level that had no outgoing node.
 	 * @returns {void}
 	 */
-	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes ) {
+	function carryChainStateToIncomingNodes( entry, previousAllNodes, newAllNodes, outgoingLevelText ) {
 		var previousIds = previousAllNodes.map( function( node ) {
 			return node.fieldId;
 		} );
@@ -1014,7 +1057,7 @@
 			var carried;
 
 			if ( node.level ) {
-				carried = fieldValueFor( record, node.level );
+				carried = record ? ( outgoingLevelText[ node.level ] || fieldValueFor( record, node.level ) ) : '';
 			} else {
 				var previousEl = previousPostcodeId ? document.getElementById( previousPostcodeId ) : null;
 				carried = previousEl ? cascadeKey( previousEl.value ) : '';
@@ -1689,7 +1732,15 @@
 				// Runs before settleSelect() so nothing downstream of it (a stale-response
 				// forward to the next queued send, or this response's own final trigger/event)
 				// can run against records this adoption was about to overwrite anyway.
-				adoptChain( entry, body && body.chain );
+				//
+				// Issue #490 round 3: `entry.pendingRecord` — read HERE, before settleSelect()
+				// below can dequeue and clear it — may already hold a NEWER pick for a DIFFERENT
+				// level than `record`'s own (the single-flight queue is per ENTRY, not per
+				// level). This response's `chain` was built before that pick ever reached the
+				// server, so it cannot honestly speak to that level at all; adopting it as
+				// "dropped" would null out the optimistic write onSelectFor() already made. See
+				// adoptChain()'s own docblock for the full reasoning.
+				adoptChain( entry, body && body.chain, entry.pendingRecord ? entry.pendingRecord.level : null );
 
 				// Issue #337: the server's own chain is authoritative ({@see adoptChain}), so a
 				// repair that DROPPED the settlement level must re-lock the address field the
@@ -3267,11 +3318,30 @@
 	 * `entry.records[level]` would still make that level LOOK confirmed to a future caller that
 	 * only checks presence, not shape.
 	 *
-	 * @param {Object} entry
-	 * @param {*}      chain `{ [level]: { key, level } }` per spec §7, or anything else.
+	 * `protectedLevel` (issue #490 round 3) EXEMPTS one level from the "absent = dropped"
+	 * narrowing below — {@see sendNextSelect}'s own call site passes the level of
+	 * `entry.pendingRecord`, if any, at the moment ITS response lands. The single-flight queue
+	 * is per ENTRY, not per level (see {@see enqueueSelect}'s own docblock): a region pick and a
+	 * settlement pick made close together share ONE `/select` slot, so region's own response can
+	 * land — and, unprotected, get adopted — BEFORE settlement's already-queued pick has even
+	 * been POSTED. That response's `chain` cannot possibly name settlement; not because the
+	 * server dropped it, but because the server was never ASKED about it yet. Narrowing
+	 * `entry.records.settlement` to `null` off that silence would wipe the optimistic record
+	 * {@see onSelectFor} already wrote for it — measured on the rig (issue #490) as an
+	 * intermittent, timing-dependent loss of exactly the level whose pick landed last, in
+	 * whichever direction the "ship to a different address" toggle carried it. Skipping the
+	 * protected level here changes nothing for it: its OWN response, resolved right after this
+	 * one via {@see settleSelect}'s dequeue, adopts a chain that (by then) genuinely does cover
+	 * it.
+	 *
+	 * @param {Object}      entry
+	 * @param {*}           chain          `{ [level]: { key, level } }` per spec §7, or anything else.
+	 * @param {?string}     [protectedLevel] A level to leave untouched regardless of whether
+	 *                                       `chain` names it — see this docblock's own section
+	 *                                       above.
 	 * @returns {void}
 	 */
-	function adoptChain( entry, chain ) {
+	function adoptChain( entry, chain, protectedLevel ) {
 		if ( ! chain || 'object' !== typeof chain ) {
 			return;
 		}
@@ -3311,6 +3381,10 @@
 		// back to a country-wide search — the very seam this whole change exists to
 		// close.
 		LEVELS.forEach( function( level ) {
+			if ( level === protectedLevel ) {
+				return; // see this function's own docblock, issue #490 round 3.
+			}
+
 			entry.records[ level ] = adopted[ level ] || null;
 		} );
 	}
