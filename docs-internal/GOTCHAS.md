@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 192 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 193 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -194,6 +194,7 @@
 - [box-packer/virtual-box-null-best-inf-overflow] **`$best=null;.** → [virtual-box-null-best-inf-overflow](gotchas/virtual-box-null-best-inf-overflow.md)
 
 ### [shipping/checkout] — Checkout field layer (§8)
+- [shipping/checkout] **WooCommerce strips empty-string `custom_attributes`, so an empty attribute cannot be declared through them.** → [woocommerce-strips-empty-string-custom-attributes](gotchas/woocommerce-strips-empty-string-custom-attributes.md) (s89)
 - [shipping/checkout] **The §8 takeover reverts a `<select>` the location cascade owns — and it was guarded by a NAME suffix, not by ownership.** → [the-classic-adapter-reverts-a-select-the-location-cascade-owns](gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md) (s87)
 - [shipping/checkout] **WooCommerce re-shows every locale field with an INLINE `display:block`, so a class-based hide must be `!important`.** → [wc-address-i18n-reshows-fields-with-an-inline-display-block](gotchas/wc-address-i18n-reshows-fields-with-an-inline-display-block.md) (s81)
 - [shipping/checkout] **Hiding a field in JS does not stop WooCommerce requiring it — the order fails on a field the customer cannot see.** → [js-hidden-checkout-field-is-still-required-server-side](gotchas/js-hidden-checkout-field-is-still-required-server-side.md) (s81)

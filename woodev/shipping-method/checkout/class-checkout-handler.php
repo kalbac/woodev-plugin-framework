@@ -915,6 +915,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              {@see Checkout_Fields::get_fields()} directly, so a
 		 *              Location-Provider field's Rule 7b fan-out reaches WooCommerce's
 		 *              checkout array under the right section(s)/id(s) (issue #458).
+		 * @since 2.0.2 Re-declares a non-empty `data-input-classes` through `custom_attributes`
+		 *              for a field WooCommerce would otherwise have rendered through its `state`
+		 *              branch, the only branch that emits the attribute (issue #469).
 		 *
 		 * @param array<string, mixed> $checkout_fields WC checkout fields, keyed by section
 		 * @param string               $section         unused override kept for BC; per-field
@@ -998,9 +1001,54 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 				// Conservative merge: start from whatever WC already has for this field,
 				// then overlay only our keys — preserving validate, class, priority, etc.
-				$existing_wc_args                         = $checkout_fields[ $field_section ][ $id ] ?? [];
+				$existing_wc_args = $checkout_fields[ $field_section ][ $id ] ?? [];
+				$existing_wc_args = is_array( $existing_wc_args ) ? $existing_wc_args : [];
+
+				// WooCommerce emits `data-input-classes` ONLY from the three sub-branches of
+				// `case 'state':` in `woocommerce_form_field()`. Overriding `type` moves the field
+				// out of that branch, so a theme's `input_class` silently stops reaching the
+				// markup — and `country-select.js:103` reads that attribute off the statebox
+				// before rebuilding it. Re-declare it through `custom_attributes`, which every
+				// render branch interpolates (issue #469).
+				//
+				// An EMPTY class list is declared as a single SPACE, not as an empty string, and
+				// that is WooCommerce's constraint rather than a preference: before rendering,
+				// `woocommerce_form_field()` runs
+				// `array_filter( (array) $args['custom_attributes'], 'strlen' )`
+				// (`wc-template-functions.php:3367`, WooCommerce 11.0.1), which DROPS an
+				// empty-string attribute outright. WooCommerce's own `state` branch can emit
+				// `data-input-classes=""` only because it writes the attribute literally, outside
+				// `custom_attributes`. A stock install always hits the empty case — WC core sets
+				// no `input_class` on any address field — so declaring nothing there would leave
+				// the defect exactly as it was.
+				//
+				// A space is equivalent to an empty string for every consumer of a class-list
+				// attribute, and that was measured on the rig rather than reasoned about: with
+				// `data-input-classes=" "` WooCommerce's rebuild produced `class="state_select"`,
+				// byte-identical to the `""` control, and round-tripped the attribute onto the
+				// element it built.
+				if ( 'state' === ( $existing_wc_args['type'] ?? '' ) && 'state' !== $our_overrides['type'] ) {
+					$input_classes = implode( ' ', (array) ( $existing_wc_args['input_class'] ?? [] ) );
+					$wc_attributes = $existing_wc_args['custom_attributes'] ?? [];
+					$wc_attributes = is_array( $wc_attributes ) ? $wc_attributes : [];
+
+					// An attribute somebody ELSE declared wins, because that is what WooCommerce's
+					// own renderer does: the `state` select branch interpolates
+					// `implode( ' ', $custom_attributes )` BEFORE its literal
+					// `data-input-classes="…"`, and an HTML parser keeps the FIRST of two
+					// identical attributes. Overwriting here would invert that precedence for
+					// every field we take over. An empty declared value is treated as absent —
+					// `array_filter( …, 'strlen' )` would drop it anyway, which is the whole
+					// reason this branch exists (Codex critic, PR #489).
+					if ( '' === (string) ( $wc_attributes['data-input-classes'] ?? '' ) ) {
+						$wc_attributes['data-input-classes'] = '' === $input_classes ? ' ' : $input_classes;
+					}
+
+					$our_overrides['custom_attributes'] = $wc_attributes;
+				}
+
 				$checkout_fields[ $field_section ][ $id ] = array_merge(
-					is_array( $existing_wc_args ) ? $existing_wc_args : [],
+					$existing_wc_args,
 					$our_overrides
 				);
 			}
