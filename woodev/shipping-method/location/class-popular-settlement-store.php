@@ -554,16 +554,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 * not become less popular because it was renamed. The row keeps its
 		 * surrogate `id` (spec D3/D6) — its identity survives the key change.
 		 *
+		 * The write can fail even though the caller already resolved a fresh
+		 * record: the table's `UNIQUE (provider_id, locality_key)` (see
+		 * {@see self::get_schema()}) rejects it when the new key converges onto a
+		 * DIFFERENT row that already holds it — two historical popular rows the
+		 * provider has since merged into one settlement. This method does not
+		 * attempt to reconcile that; it only reports whether the write landed so
+		 * the caller (@see Popular_Settlement_Verifier::verify_entry()) never
+		 * mistakes a rejected write for a successful one.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param int             $id        The row's surrogate id.
 		 * @param Location_Record $record    The provider's fresh record.
 		 * @param int|null        $timestamp Verification time override, in seconds; defaults to now.
 		 *
-		 * @return void
+		 * @return bool Whether the write actually landed.
 		 */
-		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): void {
-			$this->wpdb()->update(
+		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): bool {
+			$result = $this->wpdb()->update(
 				$this->get_table_name(),
 				[
 					'locality_key'     => $record->key(),
@@ -575,6 +584,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 				[ '%s', '%s', '%s', '%s' ],
 				[ '%d' ]
 			);
+
+			return false !== $result;
 		}
 
 		/**

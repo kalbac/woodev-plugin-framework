@@ -117,6 +117,13 @@ final class Popular_Settlement_Verifier_Store_Spy extends Popular_Settlement_Sto
 	public array $delete_entry_calls = [];
 
 	/**
+	 * @var bool What replace_record() returns — set false to model a
+	 *           `(provider_id, locality_key)` unique-key collision (two
+	 *           historical popular rows the provider merged into one).
+	 */
+	public bool $replace_record_result = true;
+
+	/**
 	 * @param Popular_Settlement_Entry[] $entries What all_for_provider() answers (sweep() tests only).
 	 */
 	public function __construct( array $entries = [] ) {
@@ -131,8 +138,10 @@ final class Popular_Settlement_Verifier_Store_Spy extends Popular_Settlement_Sto
 		$this->touch_verified_calls[] = $id;
 	}
 
-	public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): void {
+	public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): bool {
 		$this->replace_record_calls[] = [ $id, $record ];
+
+		return $this->replace_record_result;
 	}
 
 	public function delete_entry( int $id ): void {
@@ -222,6 +231,40 @@ final class PopularSettlementVerifierTest extends TestCase {
 		$this->assertSame( Popular_Settlement_Verification::OUTCOME_UPDATED, $verification->outcome() );
 		$this->assertSame( $fresh->key(), $verification->record()->key() );
 		$this->assertCount( 0, $store->delete_entry_calls, 'A key change must never be read as gone.' );
+	}
+
+	/**
+	 * The write half of a "changed" outcome can be REJECTED even though
+	 * resolve_key() succeeded: the store's `(provider_id, locality_key)`
+	 * unique key rejects the new key when it converges onto a DIFFERENT row
+	 * that already holds it — two historical popular rows the provider has
+	 * since merged into one settlement (round 2 critic HIGH finding, #488
+	 * slice 3). This must be reported as `failed`, never `updated` — a caller
+	 * (the `/select` route's D5 step) that trusted `updated` here would
+	 * persist the NEW key back to the customer while the row it thinks it
+	 * updated is still carrying the OLD, stale one.
+	 */
+	public function test_a_rejected_write_reports_failed_not_updated(): void {
+		$stored   = $this->record( 'dadata', 'old-native-id' );
+		$fresh    = $this->record( 'dadata', 'new-native-id' );
+		$provider = new Popular_Settlement_Verifier_Fixture_Provider( 'dadata', $fresh );
+		$store    = new Popular_Settlement_Verifier_Store_Spy();
+		$verifier = new Popular_Settlement_Verifier( $store );
+
+		$store->replace_record_result = false;
+
+		$verification = $verifier->verify_entry( $provider, $this->entry( $stored, 7 ) );
+
+		$this->assertSame(
+			Popular_Settlement_Verification::OUTCOME_FAILED,
+			$verification->outcome(),
+			'A rejected write must never be reported as updated — the row was NOT actually overwritten.'
+		);
+		$this->assertNotNull( $verification->error() );
+		$this->assertNull( $verification->record() );
+		$this->assertCount( 1, $store->replace_record_calls, 'The write must still have been attempted.' );
+		$this->assertCount( 0, $store->touch_verified_calls, 'A failed write must never bump the clock either.' );
+		$this->assertCount( 0, $store->delete_entry_calls, 'A failed write must NEVER delete — failed is not gone.' );
 	}
 
 	/**

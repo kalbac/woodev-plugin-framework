@@ -212,8 +212,10 @@ if ( ! class_exists( __NAMESPACE__ . '\\Location_Controller_Fake_Popular_Store',
 			$this->touch_verified_calls[] = $id;
 		}
 
-		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): void {
+		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): bool {
 			$this->replace_record_calls[] = [ $id, $record ];
+
+			return true;
 		}
 
 		public function delete_entry( int $id ): void {

@@ -95,7 +95,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			// order_count/last_ordered_at are separate clocks (spec D2), untouched
 			// here — replace_record() only ever overwrites record/locality_key/
 			// country/last_verified_at.
-			$this->store->replace_record( $entry->id(), $fresh );
+			if ( ! $this->store->replace_record( $entry->id(), $fresh ) ) {
+				// The write itself can be rejected even though resolve_key()
+				// succeeded: the table's `UNIQUE (provider_id, locality_key)`
+				// rejects a changed key that converges onto a DIFFERENT row
+				// already holding it — two historical popular rows the provider
+				// has since merged into one settlement. Reconciling that merge is
+				// deliberately out of scope for this slice (spec D6: "it should
+				// cost one UPDATE, not a subsystem") — open question tracked at
+				// https://github.com/kalbac/woodev-plugin-framework/issues/499.
+				// Report `failed`, never `updated`: the row was NOT actually
+				// overwritten, so returning `updated` would be a lie a caller
+				// (the `/select` route's D5 step) would persist as fact.
+				return Popular_Settlement_Verification::failed(
+					new \RuntimeException(
+						sprintf(
+							'Popular_Settlement_Store::replace_record() failed for entry id %d — likely a (provider_id, locality_key) unique-key collision (a merged settlement).',
+							$entry->id()
+						)
+					)
+				);
+			}
 
 			return Popular_Settlement_Verification::updated( $fresh );
 		}

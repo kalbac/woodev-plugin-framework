@@ -218,12 +218,21 @@ namespace {
 		 * mirrors {@see self::delete()}'s own "genuinely apply the $where" fix
 		 * (round 2 critic finding) rather than a no-op spy.
 		 *
+		 * Round 4 (critic HIGH finding on `replace_record()`): a `locality_key`
+		 * write that would violate the real `UNIQUE (provider_id, locality_key)`
+		 * key — because it converges onto a DIFFERENT row that already holds that
+		 * key, i.e. the provider merged two settlements into one — now genuinely
+		 * fails and returns `false`, exactly like `$wpdb->update()` does against a
+		 * real duplicate-key error. The round-1/2/3 fakes could never fail an
+		 * update() call at all, which is precisely why 24 green tests never caught
+		 * `replace_record()` silently swallowing that failure.
+		 *
 		 * @param string               $table        table name (ignored)
 		 * @param array<string,mixed>  $data         column => new value
 		 * @param array<string,mixed>  $where        column => value, ALL of which must match
 		 * @param array<int,string>|null $format     column formats (ignored)
 		 * @param array<int,string>|null $where_format where-clause formats (ignored)
-		 * @return int number of rows updated
+		 * @return int|false number of rows updated, or false on a simulated unique-key collision
 		 */
 		public function update( $table, $data, $where, $format = null, $where_format = null ) {
 			$this->updates[] = [
@@ -232,13 +241,36 @@ namespace {
 				'where' => $where,
 			];
 
+			if ( array_key_exists( 'locality_key', $data ) ) {
+				$target = null;
+
+				foreach ( $this->rows as $row ) {
+					if ( $this->row_matches_where( $row, $where ) ) {
+						$target = $row;
+						break;
+					}
+				}
+
+				if ( null !== $target ) {
+					foreach ( $this->rows as $row ) {
+						if ( (string) $row['id'] === (string) $target['id'] ) {
+							continue;
+						}
+
+						if ( ( $row['provider_id'] ?? null ) === $target['provider_id']
+							&& ( $row['locality_key'] ?? null ) === $data['locality_key']
+						) {
+							return false; // UNIQUE (provider_id, locality_key) collision — real MySQL behaviour.
+						}
+					}
+				}
+			}
+
 			$updated = 0;
 
 			foreach ( $this->rows as &$row ) {
-				foreach ( $where as $column => $value ) {
-					if ( (string) ( $row[ $column ] ?? null ) !== (string) $value ) {
-						continue 2;
-					}
+				if ( ! $this->row_matches_where( $row, $where ) ) {
+					continue;
 				}
 
 				foreach ( $data as $column => $value ) {
@@ -250,6 +282,21 @@ namespace {
 			unset( $row );
 
 			return $updated;
+		}
+
+		/**
+		 * @param array<string,mixed> $row
+		 * @param array<string,mixed> $where column => value, ALL of which must match
+		 * @return bool
+		 */
+		private function row_matches_where( array $row, array $where ): bool {
+			foreach ( $where as $column => $value ) {
+				if ( (string) ( $row[ $column ] ?? null ) !== (string) $value ) {
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		/**
@@ -898,6 +945,51 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( '9', $wpdb->rows[0]['order_count'], 'order_count must be untouched.' );
 			$this->assertSame( '2026-08-01 00:00:00', $wpdb->rows[0]['last_ordered_at'], 'last_ordered_at must be untouched.' );
 			$this->assertSame( '7', $wpdb->rows[0]['id'], 'The surrogate id must survive the key change (D3/D6).' );
+		}
+
+		/**
+		 * replace_record() (round 2 critic HIGH finding, #488 slice 3): when the
+		 * fresh key converges onto a DIFFERENT row that already holds it — the
+		 * table's `UNIQUE (provider_id, locality_key)` (two historical popular
+		 * rows the provider has since merged into one settlement) — the write is
+		 * REJECTED by the database. replace_record() must report that (`false`),
+		 * not silently swallow it, and the LOSING row must be left exactly as it
+		 * was: no key change, no clock bump.
+		 */
+		public function test_replace_record_reports_false_and_leaves_the_row_untouched_on_a_unique_key_collision(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$staying = $this->record( $provider->get_id(), 'already-there' );
+			$losing  = $this->record( $provider->get_id(), 'old-native-id' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $staying, 3, '2026-08-01 00:00:00', 1 ),
+				$this->row( $losing, 9, '2026-08-02 00:00:00', 7 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			// The provider now resolves the losing row's OLD key to the SAME
+			// record the staying row already holds — a merge.
+			$merged = $staying->to_array();
+
+			$fresh = Location_Record::from_array( $merged );
+
+			$result = $store->replace_record( 7, $fresh, 1787572800 );
+
+			$this->assertFalse( $result, 'A write that violates the unique key must report false, not silently succeed.' );
+			$this->assertSame(
+				$losing->key(),
+				$wpdb->rows[1]['locality_key'],
+				'The losing row must keep its OLD key — the rejected write must never land.'
+			);
+			$this->assertSame(
+				json_encode( $losing->to_array() ),
+				$wpdb->rows[1]['record'],
+				'The losing row must keep its OLD record — no partial write.'
+			);
+			$this->assertNull( $wpdb->rows[1]['last_verified_at'], 'A rejected write must never bump last_verified_at either.' );
+			$this->assertSame( '9', $wpdb->rows[1]['order_count'], 'The usage clock must be untouched by a rejected write.' );
 		}
 
 		/**
