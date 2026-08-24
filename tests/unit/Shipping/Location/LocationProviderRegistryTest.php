@@ -1494,12 +1494,19 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
-	 * The positive case — the ONE configuration card #404 calls «Связанный
-	 * поиск»: region ALSO `related-list` offers `related-list` to the
-	 * settlement axis too. The region axis's own options are UNAFFECTED
-	 * either way — issue #404 is a settlement-only condition.
+	 * The settlement axis offers exactly TWO modes and never a third (operator
+	 * decision, 24.08.2026) — not even in the one configuration issue #404 used
+	 * to allow it in, «Связанный поиск» (region ALSO `related-list`). #404's
+	 * premise was that a region-SCOPED settlement list is likely to be the whole
+	 * set; measured 24.08.2026, a scoped list came back at exactly 500 =
+	 * `Location_Controller::LIST_HARD_CAP`, i.e. silently truncated with no way
+	 * for the customer to reach the rest. A mode whose one promise cannot be kept
+	 * is not a mode.
+	 *
+	 * The REGION axis is unaffected and still offers all three — that is the
+	 * control here: without it, deleting `related-list` outright would pass too.
 	 */
-	public function test_field_mode_settlement_options_include_related_list_when_region_is_related_list(): void {
+	public function test_field_mode_settlement_never_offers_related_list_even_when_region_does(): void {
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -1524,8 +1531,21 @@ final class LocationProviderRegistryTest extends TestCase {
 		$region_options     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION )->get_options();
 		$settlement_options = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT )->get_options();
 
-		$this->assertArrayHasKey( Location_Provider_Registry::MODE_RELATED_LIST, $region_options );
-		$this->assertArrayHasKey( Location_Provider_Registry::MODE_RELATED_LIST, $settlement_options );
+		$this->assertArrayHasKey(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			$region_options,
+			'the REGION axis still offers related-list — the control for the assertion below'
+		);
+		$this->assertArrayNotHasKey(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			$settlement_options,
+			'the settlement axis must never offer related-list, whatever the region axis is set to'
+		);
+		$this->assertSame(
+			[ Location_Provider_Registry::MODE_TYPEAHEAD, Location_Provider_Registry::MODE_AJAX_SELECT2 ],
+			array_keys( $settlement_options ),
+			'the settlement axis offers exactly two modes, in this order'
+		);
 	}
 
 	/**
@@ -1570,11 +1590,13 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	/**
-	 * The «Связанный поиск» configuration itself (card #404's own name for
-	 * it): BOTH axes `related-list` — the stored settlement value survives
-	 * the clamp.
+	 * The read-side clamp is UNCONDITIONAL: even in «Связанный поиск» — both axes
+	 * stored as `related-list`, the one configuration issue #404 allowed — the
+	 * settlement axis degrades to `typeahead`. The region axis keeps its own
+	 * stored `related-list`, which is the control: a clamp that flattened BOTH
+	 * axes would pass the settlement assertion for the wrong reason.
 	 */
-	public function test_field_mode_settlement_related_list_survives_when_region_is_also_related_list(): void {
+	public function test_field_mode_settlement_clamps_related_list_away_even_when_region_is_related_list(): void {
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
 
 		Functions\when( 'add_action' )->justReturn( true );
@@ -1596,20 +1618,28 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_region() );
-		$this->assertSame( Location_Provider_Registry::MODE_RELATED_LIST, $registry->get_field_mode_settlement() );
+		$this->assertSame(
+			Location_Provider_Registry::MODE_RELATED_LIST,
+			$registry->get_field_mode_region(),
+			'the region axis is untouched — the control'
+		);
+		$this->assertSame(
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			$registry->get_field_mode_settlement(),
+			'a stored related-list settlement value degrades to typeahead unconditionally'
+		);
 	}
 
 	/**
-	 * Design §7's "clamp on read, never rewrite" discipline: the settlement
-	 * axis's #404 clamp must NEVER touch the stored option — the value
-	 * comes back on its own the moment the region axis returns to
-	 * `related-list`, without this class ever calling `update_option()` for
-	 * either axis along the way. Mirrors
+	 * Design §7's "clamp on read, never rewrite" discipline, with the outcome the
+	 * operator's 24.08.2026 decision changed: the clamp must still NEVER call
+	 * `update_option()` for either axis — a store's stored value is its own — but
+	 * the value no longer comes BACK when the region axis returns to
+	 * `related-list`. It is inert for good, on every page load. Mirrors
 	 * {@see self::test_address_suggestions_read_never_writes_the_stored_option()}'s
 	 * own discipline for a different setting.
 	 */
-	public function test_field_mode_settlement_clamp_never_rewrites_and_the_value_returns_once_region_is_related_list_again(): void {
+	public function test_field_mode_settlement_clamp_never_rewrites_and_the_stored_value_stays_inert(): void {
 		Functions\expect( 'update_option' )->never();
 
 		$list_provider = new Fake_List_Location_Provider( 'list-fixture', 'List Fixture', [ 'RU' ] );
@@ -1642,8 +1672,9 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $registry->get_field_mode_settlement() );
 
 		// Phase 2: a later page load — region back to `related-list`, the
-		// settlement OPTION never having been touched in between (same raw
-		// `related-list` value; `update_option()` still never called).
+		// settlement OPTION never having been touched in between. Under issue
+		// #404 this was the phase that brought the stored value back to life;
+		// it must NOT any more.
 		$registry->reset_for_tests();
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) {
@@ -1663,9 +1694,9 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->collect();
 
 		$this->assertSame(
-			Location_Provider_Registry::MODE_RELATED_LIST,
+			Location_Provider_Registry::MODE_TYPEAHEAD,
 			$registry->get_field_mode_settlement(),
-			'the same stored related-list value must take effect again once the region axis is related-list, having never been rewritten'
+			'the stored related-list value stays inert on every later load — it must never come back, and `update_option()` was never called to remove it either'
 		);
 	}
 

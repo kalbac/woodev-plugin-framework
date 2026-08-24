@@ -942,42 +942,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
-		 * Shared `related-list` gate for both axes (provider capability),
-		 * with an ADDITIONAL cross-axis condition the settlement axis alone
-		 * opts into (issue #404): an unscoped, country-wide settlement
-		 * request DOES work — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
-		 * `/location/list` serves one with no `within` param (issue #407) —
-		 * but it is not a guaranteed-COMPLETE one, since that route caps
-		 * every response at `Location_Controller::LIST_HARD_CAP` records
-		 * and flags `truncated: true` past that, a flag this axis's own
-		 * client currently drops. `related-list` ("Предустановленный
-		 * список") promises a list loaded ONCE and searched locally
-		 * end-to-end; a possibly-truncated country-wide list can silently
-		 * break that promise, while a region-scoped one is far more likely
-		 * to genuinely be the whole set. So `related-list` only reliably
-		 * keeps its promise for the settlement axis when it is scoped to a
-		 * region that is ITSELF a preset list, so the caller for the
-		 * settlement axis passes `$requires_region_list = true` and the
-		 * region axis's own current effective mode.
+		 * The `related-list` gate. It is a REGION-AXIS-ONLY mode.
+		 *
+		 * **The settlement axis has exactly two modes and never a third**
+		 * (operator decision, 24.08.2026): `typeahead` ("Текст с
+		 * подсказками") and `ajax-select2` ("Список с поиском").
+		 * `related-list` ("Предустановленный список") is not offered for
+		 * settlements under any provider or any region-axis setting.
+		 *
+		 * Issue #404 previously offered it, gated on the region axis being
+		 * `related-list` itself, on the reasoning that a region-SCOPED
+		 * settlement list "is far more likely to genuinely be the whole
+		 * set" than a country-wide one — `related-list` promises a list
+		 * loaded ONCE and searched locally, and
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}
+		 * caps every `/location/list` response at `LIST_HARD_CAP` and flags
+		 * `truncated: true`, a flag this axis's client drops. That premise
+		 * was DISPROVEN by measurement on 24.08.2026: a region-scoped
+		 * settlement list came back at exactly 500 = `LIST_HARD_CAP`, i.e.
+		 * silently truncated, with the customer given no way to reach the
+		 * rest. A mode whose one promise cannot be kept is not a mode, so
+		 * the gate is gone rather than tightened — the same conclusion
+		 * `specs/2026-08-21-settlement-search-design.md` (#437) reaches for
+		 * its own reasons.
+		 *
+		 * A store that had already stored `related-list` for settlements is
+		 * not rewritten; {@see self::get_field_mode_settlement()} clamps it
+		 * away on READ against this very list (design §7's "clamp on read"),
+		 * so it degrades to `typeahead` and the stored option stays inert.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Added `$requires_region_list`/`$region_mode` (issue #404).
+		 * @since 2.0.2 Added the settlement-axis condition (issue #404).
+		 * @since 2.0.2 The settlement axis no longer offers `related-list` at
+		 *              all; `$region_mode` is gone with it (operator decision,
+		 *              24.08.2026).
 		 *
-		 * @param Location_Provider|null $provider            The provider to gate `related-list` against.
-		 * @param bool                   $requires_region_list Issue #404: true for the SETTLEMENT axis only —
-		 *                                                      the region axis carries no such cross-axis
-		 *                                                      condition of its own.
-		 * @param string                 $region_mode          The region axis's CURRENT effective mode; only
-		 *                                                      consulted when `$requires_region_list` is true.
+		 * @param Location_Provider|null $provider           The provider to gate `related-list` against.
+		 * @param bool                   $is_settlement_axis True for the SETTLEMENT axis, which never
+		 *                                                   offers `related-list`.
 		 *
 		 * @return string[]
 		 */
-		private static function offered_field_modes_for( ?Location_Provider $provider, bool $requires_region_list = false, string $region_mode = self::MODE_TYPEAHEAD ): array {
+		private static function offered_field_modes_for( ?Location_Provider $provider, bool $is_settlement_axis = false ): array {
 			$modes = [ self::MODE_TYPEAHEAD ];
 
 			$provider_has_list = null !== $provider && in_array( Location_Provider::CAPABILITY_LIST, $provider->get_capabilities(), true );
 
-			if ( $provider_has_list && ( ! $requires_region_list || self::MODE_RELATED_LIST === $region_mode ) ) {
+			if ( $provider_has_list && ! $is_settlement_axis ) {
 				$modes[] = self::MODE_RELATED_LIST;
 			}
 
@@ -1011,26 +1022,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		/**
 		 * Builds an `id => label` options map for a field-mode select (issue
 		 * #380 — both axes started out offering the same three values from
-		 * this one builder; issue #404 lets the SETTLEMENT caller narrow
-		 * further via `$requires_region_list`/`$region_mode`, forwarded
-		 * verbatim to {@see self::offered_field_modes_for()}).
+		 * this one builder). The SETTLEMENT caller passes
+		 * `$is_settlement_axis = true`, which drops `related-list` entirely —
+		 * see {@see self::offered_field_modes_for()} for why.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Added `$requires_region_list`/`$region_mode` (issue #404).
+		 * @since 2.0.2 Added the settlement-axis narrowing (issue #404).
 		 *
-		 * @param Location_Provider|null $provider            The provider to gate against.
-		 * @param bool                   $requires_region_list Issue #404: true for the SETTLEMENT axis only.
-		 * @param string                 $region_mode          The region axis's CURRENT effective mode; only
-		 *                                                      consulted when `$requires_region_list` is true.
+		 * @param Location_Provider|null $provider           The provider to gate against.
+		 * @param bool                   $is_settlement_axis True for the SETTLEMENT axis.
 		 *
 		 * @return array<string, string>
 		 */
-		private static function offered_field_mode_options( ?Location_Provider $provider, bool $requires_region_list = false, string $region_mode = self::MODE_TYPEAHEAD ): array {
+		private static function offered_field_mode_options( ?Location_Provider $provider, bool $is_settlement_axis = false ): array {
 			$labels = self::field_mode_labels();
 
 			$options = [];
 
-			foreach ( self::offered_field_modes_for( $provider, $requires_region_list, $region_mode ) as $mode ) {
+			foreach ( self::offered_field_modes_for( $provider, $is_settlement_axis ) as $mode ) {
 				$options[ $mode ] = $labels[ $mode ];
 			}
 
@@ -1096,33 +1105,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * `region_field` clamp: the settlement level has no analogous "field
 		 * removed" state of its own.
 		 *
-		 * ALSO clamps `related-list` away once the REGION axis is itself not
-		 * `related-list` (issue #404 — the operator's own correction to the
-		 * #380 brainstorm): an unscoped, country-wide settlement list DOES
-		 * work (issue #407 — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
-		 * `/location/list` serves one with no `within`), but not a
-		 * guaranteed-COMPLETE one — that route caps every response at
-		 * `Location_Controller::LIST_HARD_CAP` records, silently truncated
-		 * from this axis's own client. `related-list`'s "load once, search
-		 * locally" promise only reliably holds scoped to a region, so this
-		 * value only ever made sense scoped to a region that is ITSELF a
-		 * preset list. A stored value is NOT rewritten when the condition
-		 * stops holding — it comes
-		 * back the moment the region axis returns to `related-list` (design
-		 * §7's "clamp on read" pattern, the same discipline
-		 * {@see self::get_field_mode_region()} already applies for
-		 * `region_field=remove`). Deliberately a READ-side clamp, not a
-		 * `show_if` alone: unlike the cross-handler `region_field` case, both
-		 * axes DO live in the same handler here, so a same-handler `show_if`
-		 * would actually carry server-side enforcement — but narrowing the
-		 * OFFERED values (this method, and {@see self::register_settings()}
-		 * for the select's own options) is the mechanism already established
-		 * in this file for the provider-capability gate, and one mechanism
-		 * per concern beats two that must agree.
+		 * ALSO clamps `related-list` away UNCONDITIONALLY: the settlement axis
+		 * has exactly two modes, `typeahead` and `ajax-select2`, and never a
+		 * third (operator decision, 24.08.2026 — see
+		 * {@see self::offered_field_modes_for()} for the measurement that
+		 * settled it). A store that had already stored `related-list` is NOT
+		 * rewritten; it degrades to `typeahead` here and the stored option
+		 * stays inert (design §7's "clamp on read" pattern, the same
+		 * discipline {@see self::get_field_mode_region()} already applies for
+		 * `region_field=remove`). Deliberately a READ-side clamp rather than a
+		 * migration: narrowing the OFFERED values (this method, and
+		 * {@see self::register_settings()} for the select's own options) is the
+		 * mechanism already established in this file for the
+		 * provider-capability gate, and one mechanism per concern beats two
+		 * that must agree.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Also clamps against the region axis's own effective
+		 * @since 2.0.2 Also clamped against the region axis's own effective
 		 *              mode (issue #404).
+		 * @since 2.0.2 That cross-axis condition is gone — `related-list` is now
+		 *              clamped away unconditionally (operator decision, 24.08.2026).
 		 *
 		 * @return string
 		 */
@@ -1132,7 +1134,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			}
 
 			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
-			$offered = self::offered_field_modes_for( $this->get_active_provider(), true, $this->get_field_mode_region() );
+			$offered = self::offered_field_modes_for( $this->get_active_provider(), true );
 
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}
@@ -1160,43 +1162,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				->effective( 'region_field' );
 		}
 
-		/**
-		 * Reads the store's raw `field_mode_region` option value and applies
-		 * the SAME two clamps {@see self::get_field_mode_region()} applies
-		 * once {@see self::$settings_handler} exists — the `region_field=remove`
-		 * gate (issue #369) and the offered-modes gate — without going
-		 * through that handler, mirroring
-		 * {@see self::resolve_stored_active_provider_id()}'s own "handler
-		 * does not exist yet" pattern.
-		 *
-		 * Needed ONLY at BUILD time ({@see self::register_settings()}, issue
-		 * #404): the settlement axis's OFFERED options must be computed
-		 * against the region axis's effective value, but the handler that
-		 * would normally answer that (through
-		 * {@see self::get_field_mode_region()}) is what this method's caller
-		 * is in the middle of constructing. Once the handler exists,
-		 * {@see self::get_field_mode_settlement()} calls
-		 * {@see self::get_field_mode_region()} directly instead — this raw
-		 * reader is never used for the READ-side clamp, only the build-time
-		 * options list.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param Location_Provider|null $provider The active provider, gating the region axis's own offered modes.
-		 *
-		 * @return string
-		 */
-		private function resolve_stored_field_mode_region( ?Location_Provider $provider ): string {
-			if ( 'remove' === $this->region_field_effective_value() ) {
-				return self::MODE_TYPEAHEAD;
-			}
-
-			$option_name = 'woodev_' . self::SETTINGS_SERVICE_ID . '_' . self::SETTING_FIELD_MODE_REGION;
-			$stored      = (string) get_option( $option_name, self::MODE_TYPEAHEAD );
-			$offered     = self::offered_field_modes_for( $provider );
-
-			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
-		}
 
 
 		/**
@@ -1846,10 +1811,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              issue #380 split the single `field_mode` option into
 		 *              two axes; an untagged vendored snapshot may already
 		 *              hold the legacy value.
-		 * @since 2.0.2 The settlement axis's OFFERED options are now built
-		 *              separately from the region axis's own (issue #404),
-		 *              narrowed by the region axis's raw effective value via
-		 *              {@see self::resolve_stored_field_mode_region()}.
+		 * @since 2.0.2 The settlement axis's OFFERED options are built
+		 *              separately from the region axis's own (issue #404), and
+		 *              since 24.08.2026 simply never include `related-list` —
+		 *              see {@see self::offered_field_modes_for()}.
 		 * @since 2.0.2 Also hands `Location_Settings` a resolver CALLABLE
 		 *              wrapping {@see self::resolve_active_provider_for_id()}
 		 *              (issue #406 follow-up) — its `validate_values()`
@@ -1878,14 +1843,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				$provider_options[ $id ] = $provider->get_name();
 			}
 
-			// Issue #404: the settlement axis's `related-list` option is only
-			// offered when the region axis is ITSELF `related-list` — read the
-			// region axis's raw effective value (the handler that would
-			// normally answer this does not exist until a few lines below).
-			$region_mode = $this->resolve_stored_field_mode_region( $active_provider );
-
+			// The settlement axis never offers `related-list` (operator decision,
+			// 24.08.2026) — see offered_field_modes_for()'s own docblock.
 			$field_mode_region_options        = self::offered_field_mode_options( $active_provider );
-			$field_mode_settlement_options    = self::offered_field_mode_options( $active_provider, true, $region_mode );
+			$field_mode_settlement_options    = self::offered_field_mode_options( $active_provider, true );
 			$default_locality_policy_options  = self::offered_default_locality_policy_options_for( $active_provider );
 
 			$this->settings_handler = new Location_Settings(
