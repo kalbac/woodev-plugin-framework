@@ -293,14 +293,23 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
 
 ## Open questions
 
-- Where the popular list lives and how it is revalidated (schedule, batch size, what happens to an
-  ID the provider no longer recognises).
+- ~~Where the popular list lives and how it is revalidated (schedule, batch size, what happens to
+  an ID the provider no longer recognises).~~ **CLOSED 24.08.2026** — settled with the operator and
+  written up separately: [2026-08-24-popular-settlements-design.md](2026-08-24-popular-settlements-design.md).
+  Short version: a stored table of whole `Location_Record`s with TWO clocks
+  (`last_ordered_at` / `last_verified_at`), a new `CAPABILITY_RESOLVE_KEY`, verification LAZY at
+  the moment of pick rather than on a schedule, and cron reduced to deleting expired rows without
+  ever calling a provider.
 - Whether `search_settlements_within` and `search_settlements_countrywide` are one contract method
   with an optional scope or two, given decision 7 collapses the difference to one bit.
 - What the settlement field offers when a provider declares neither settlement-search capability.
-- **Is `WC()->checkout` reachable in wp-admin at all?** The operator doubts it, and that is the
-  sharper form of the question — not "does an admin-time read match what the shopper gets", but
-  "does the read work". `WC()->checkout()` instantiates lazily and the checkout object leans on
+- ~~**Is `WC()->checkout` reachable in wp-admin at all?**~~ **MEASURED 24.08.2026: it is.** Under
+  `WP_ADMIN` with `set_current_screen()`, `WC()->session` and `WC()->cart` both instantiate,
+  `WC()->checkout()` returns a `WC_Checkout`, and `get_checkout_fields( 'billing' )` returns the
+  full 9-field set including this layer's own. Caveat: measured through wp-cli with `WP_ADMIN`
+  defined, not a real admin HTTP request. So "does the read work" is answered; the SECOND question
+  below — whether the merged field config differs there — is not, and still needs its own
+  measurement. `WC()->checkout()` instantiates lazily and the checkout object leans on
   session and cart state that an admin request may not have. Measure that first; only if it IS
   reachable does the second question arise — whether the merged field config differs there, given
   that some third-party hooks register on the front end only. Neither affects correctness

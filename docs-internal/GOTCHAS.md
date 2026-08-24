@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 189 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 192 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -80,6 +80,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **An empty `owners[country][level]` DISARMS the cross-provider guard that reads it — falsy is an open gate, not a closed one.** → [an-empty-level-owner-silently-disarms-the-cross-provider-guard](gotchas/an-empty-level-owner-silently-disarms-the-cross-provider-guard.md) (s88)
 - [shipping/location] **«Список с поиском» is `ajax-select2`, NOT `related-list` — and DaData can never offer «Предустановленный список» at all.** → [the-three-location-field-modes-and-their-russian-labels](gotchas/the-three-location-field-modes-and-their-russian-labels.md) (s87)
 - [shipping/location] **`within_applied` reports what the scope BUILDER decided, not what the provider honoured — the one field that could detect a dropped scope cannot.** → [within-applied-reports-the-scope-builder-not-the-provider](gotchas/within-applied-reports-the-scope-builder-not-the-provider.md) (s78)
 - [shipping/location] **A served level can come from the FALLBACK provider, not the active one — "the active provider lacks X" and "X is unserved" are different statements.** → [a-level-served-can-come-from-the-fallback-not-the-active-provider](gotchas/a-level-served-can-come-from-the-fallback-not-the-active-provider.md) (s76)
@@ -138,6 +139,7 @@
 - [testing/result-cache] **`executionOrder="depends,defects"` + a stale `.phpunit.result.cache` makes the same tree report 45 errors on one run and 2 failures on the next.** → [phpunit-result-cache-makes-a-run-unreproducible](gotchas/phpunit-result-cache-makes-a-run-unreproducible.md) (s84)
 
 ### [testing/js] — JavaScript testing pitfalls
+- [testing/js] **A CLOSED custom select holds none of its options — a `queryByText(...).toBeNull()` against it passes whatever the option set is.** → [a-closed-custom-select-renders-no-options](gotchas/a-closed-custom-select-renders-no-options.md) (s88)
 - [testing/js] **PowerShell drops `--roots` from the documented jest command.** → [powershell-drops-the-roots-flag-from-the-jest-command](gotchas/powershell-drops-the-roots-flag-from-the-jest-command.md) (s73)
 - [testing/js] **`npx jest` is not how this project runs JS tests — it silently loses jsdom.** → [npx-jest-bypasses-wp-scripts-jsdom](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md)
 - [testing/js] **A local jest run counts every agent worktree nested inside the repo.** → [jest-scans-agent-worktrees-inside-the-repo](gotchas/jest-scans-agent-worktrees-inside-the-repo.md) (s55)
@@ -184,6 +186,7 @@
 - [admin-ui/modal] **a backdrop's `opacity` dims the dialog too when the dialog is its child.** → [modal-backdrop-opacity-dims-the-whole-dialog](gotchas/modal-backdrop-opacity-dims-the-whole-dialog.md) (s48)
 
 ### [admin-ui/react-state] — React component state
+- [admin-ui/react-state] **Narrowing an option list server-side is not enough — a `conditionValues`-driven client override can put the option straight back, and the REST payload will still look correct.** → [narrowing-a-server-option-list-has-a-client-half](gotchas/narrowing-a-server-option-list-has-a-client-half.md) (s88)
 - [admin-ui/react-state] **React: a stateful section component bleeds state across tabs without a `key`.** → [react-missing-key-state-bleed-across-tabs](gotchas/react-missing-key-state-bleed-across-tabs.md) (s38)
 
 ### [box-packer/*] — Box-packer algorithm (S2)

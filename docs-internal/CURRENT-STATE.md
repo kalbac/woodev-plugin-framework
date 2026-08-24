@@ -7,26 +7,19 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-24 (s87).** **The s86 stack is merged, and so are #470 and #471** — the operator
-verified #471 on the rig himself and #470 was verified live by measurement (see below). Cards closed
-this session: #448, #460, #455, #447, #450, #457, #465, #459, #463, #466, #475, and #478 as
-superseded. **#449 stays half open** — the real `AbortController` through `options.fetch`.
+**As of 2026-08-24 (s88).** **Three PRs merged this session — #472, #485, #487 — and `main` carries
+all of them.** No PR is open. Cards closed: **#458, #481, #484, #486**. Cards filed: **#483**
+(Инбокс, needs the operator), **#488** (popular settlements, spec ready).
 
-**ONE PR is open and it is RED: #472 (#458).** Round 3 closed both of the critic's HIGH blockers and
-then failed the INTEGRATION suite — 113 tests, 5 failures, all three matrix combinations. Its new
-`_doing_it_wrong()` for a field-id collision fires on a **legitimate** configuration: `billing_state`
-is claimed both by the §8 demo descriptor and by Rule 7b's own fan-out, and `_doing_it_wrong()` means
-"the developer called this wrong", which nobody did. Three rounds are spent; the operator's Rule 7c
-is the decision that unblocks a fourth. **The integration suite is in NEITHER `composer check` NOR
-jest** — it runs only in CI and in the container, which is exactly the hole this went through; every
-brief touching a server-side checkout seam must require it.
+**The checkout location layer finally does on the rig what Rule 7 says it should.** #472 closed #458
+on its fourth round — licensed by the operator settling Rule 7c, not by another try — and #481 moved
+the §8 demo off `billing_state`/`billing_city`, which is what let the cascade own the ACTIVE column
+at all three levels. Verified live, both toggle directions.
 
-**Codex is a full worker again (operator, 24.08.2026).** The critic-only restriction of 21.08 was a
-BUDGET measure after one overnight burned 45% of the weekly allowance; the operator spent one of his
-accumulated weekly-limit resets, so the allowance is back to 0% used. **The two caps from that same
-decision stay** — **2–3 concurrent agents** (a HARDWARE limit: at six, free RAM hit 0.4 GB of 15.3
-and Codex died on `VirtualAlloc`) and **2–3 rounds per card** (process discipline; a fourth round
-needs decomposition or an operator decision, which is exactly how #458 finally landed).
+**Codex is a full worker again (operator, 24.08.2026)** — see the Orca section of `CLAUDE.md`. The
+two caps from the 21.08 decision are NOT repealed with it: **2–3 concurrent agents** (RAM, not
+quota) and **2–3 rounds per card** (process; s88 is the worked example — the fourth round on #458
+was unlocked by a decision, not by spare allowance).
 
 ## ⚠ The checkout location layer
 
@@ -42,12 +35,13 @@ FIRST `update_order_review`. The region survived only because `isWcManagedField(
 
 | Card | State |
 |---|---|
-| **#472 / #458** | **RED, needs round 4 by Rule 7c**: replace the `_doing_it_wrong()` with a documented precedence (this is what fixes the 5 integration failures) and carry the chain's RECORDS across when the active column changes. Round 3's `rebuildChainForActiveSection()` stays. |
-| **#437** | **Next big one, and it now has live evidence.** Not started; spec `specs/2026-08-21-settlement-search-design.md` (absorbs #411). Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, i.e. silently truncated, and the client drops the `truncated` flag. Its decision 1 also DELETES the settlement `related-list` mode — anything fixed in `attachRelatedListSettlement()` has a delete date (that is why #478 was closed). The spec's "migrates to search" clause was **dropped** 24.08: `get_field_mode_settlement()` already clamps on read, so the empty field it guarded against cannot happen. |
+| **#437** | **The next big one, and its first open question is now closed.** Spec `specs/2026-08-21-settlement-search-design.md`; the popular-settlements half is settled and split out into `specs/2026-08-24-popular-settlements-design.md` + card **#488**. Neither is started. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP`, which is what disproved #404's premise and killed the settlement `related-list` mode (#486). |
+| **#488** | Popular settlements. Design fully settled with the operator (D1–D8); only TTLs and the list cap are left, and those are calibration. Needs a new `CAPABILITY_RESOLVE_KEY` — **no method in the provider contract today accepts a key**. |
+| **#469** | Our fields lose `data-input-classes`, so WC stamps a literal `undefined` class (verified against WC source). It was held back from #472 on purpose; **#472 is merged, so this is now unblocked and small.** |
 | **#449** | Half closed; real `AbortController` through `options.fetch` remains. |
-| **#469** | Our fields lose `data-input-classes`, so WC stamps a literal `undefined` class (verified against WC source). Touches `inject()`, held back from #472 on purpose; **do it first once #472 lands** — it is small. |
-| **#473** | Same disease as #466 in the same file's `updated_checkout` subscriber. The sink was **driven to fire**; the live WooCommerce path that empties the select is what is unproven. |
-| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. |
+| **#473** | Same disease as #466 in the same file's `updated_checkout` subscriber. The sink was **driven to fire**; the live WooCommerce path that empties the select is what is unproven. Reproduce on the rig first. |
+| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
+| **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
 
 **Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
 both columns, but exactly **one live cascade**, on the column that currently determines delivery,
@@ -85,7 +79,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **189**.
+Gotchas: **192**.
 
 ## Program status (high level)
 
@@ -143,26 +137,21 @@ oversight.
 
 ## Next Actions
 
-1. **#472 — четвёртый круг по Rule 7c.** Убрать `_doing_it_wrong()` в пользу задокументированного
-   приоритета (именно это чинит 5 падений интеграции) и добавить перенос записей цепочки при смене
-   активной колонки. Бриф ОБЯЗАН требовать прогон интеграционного сьюта в контейнере — через эту
-   дыру поломка и доехала до CI.
-2. **#469** — `data-input-classes` в PHP. Маленькая, трогает `inject()`, поэтому держалась отдельно
-   от #472. Делать сразу после его мержа.
-3. **#437** — поиск НП вместо предустановленного списка. Спека готова, поглощает #411, не начата.
-   Живое подтверждение получено 24.08: скоупленный список упирается ровно в 500 = `LIST_HARD_CAP`.
-   Учесть снятый пункт про миграцию и то, что режим `related-list` у НП удаляется целиком.
-4. **#473** — сток из `updated_checkout`. Сток доведён до срабатывания; осталось найти живой путь
-   WooCommerce, обнуляющий селект. Воспроизвести на риге и только потом чинить.
-5. **#449, вторая половина** — настоящая отмена через `AbortController` в `options.fetch`.
-6. **#474** — закрепить инвариант `source_location()` × `set_takeover_condition()` в билдере.
-   Развилка (исключение против `_doing_it_wrong()`) за оператором — публичный контракт.
-7. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-8. **#405 — долг по проверке.** Сперва найти условие, при котором фикстура СДЭК реально падает.
-9. **#374** — НЕ начинать без оператора, его прямая просьба. **#379** — низкий приоритет.
-10. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-11. **Постановки оператора:** #331, #332. **Отложено до релиза:** #285, #247.
-    **Старое:** #289, #270, #310, #318, #321, #322.
+**Ничего не ждёт кнопки — открытых PR нет.** Автономно можно брать всё, кроме отмеченного 🙋.
+
+1. **#469** — `data-input-classes` в PHP. Разблокирована мержем #472, маленькая. Начинать с неё.
+2. **#488 + #437** — популярные НП и поиск НП. Спеки готовы, развилки закрыты, числа выставить с
+   запасом. Самый крупный кусок; естественно режется на «контракт поиска» и «популярный список».
+3. **#473** — сток из `updated_checkout`. Сток доведён до срабатывания; воспроизвести живой путь
+   WooCommerce на риге, потом чинить.
+4. **#449, вторая половина** — настоящая отмена через `AbortController` в `options.fetch`.
+5. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
+6. **#405 — долг по проверке.** Сперва найти условие, при котором фикстура СДЭК реально падает.
+7. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+8. 🙋 **Требуют оператора, НЕ брать автономно:** **#474** (развилка по публичному контракту),
+   **#483** (вопрос в Инбоксе — задумано так или дефект), **#331**, **#332**, **#374** (его прямая
+   просьба не начинать без него). **#379** — низкий приоритет. **Отложено до релиза:** #285, #247.
+   **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
