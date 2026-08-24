@@ -75,6 +75,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 */
 		public const FILTER_TTL_SECONDS = 'woodev_location_popular_settlement_ttl_seconds';
 
+
+		/**
+		 * Default freshness-clock (verification) TTL, in seconds — spec D2's
+		 * SECOND clock, `last_verified_at`, driven by D5's lazy verification
+		 * rather than by orders. Deliberately calibrated SEPARATELY from
+		 * {@see self::DEFAULT_TTL_SECONDS} (the usage clock) — collapsing the two
+		 * into one number is exactly what D2 exists to prevent. The operator
+		 * floated ~2 weeks as a starting point (spec: "Numbers, deliberately not
+		 * invented here"). A site can override via {@see self::FILTER_VERIFY_TTL_SECONDS}.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		public const DEFAULT_VERIFY_TTL_SECONDS = 2 * WEEK_IN_SECONDS;
+
+		/**
+		 * Filter tag overriding {@see self::DEFAULT_VERIFY_TTL_SECONDS}.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const FILTER_VERIFY_TTL_SECONDS = 'woodev_location_popular_settlement_verify_ttl_seconds';
+
 		/**
 		 * Order-meta key a framework listener stamps with the settlement the
 		 * customer picked at checkout ({@see self::remember_candidate()}), read back
@@ -158,6 +181,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 */
 		public static function ttl_seconds(): int {
 			return (int) apply_filters( self::FILTER_TTL_SECONDS, self::DEFAULT_TTL_SECONDS );
+		}
+
+
+		/**
+		 * Gets the filtered freshness-clock (verification) TTL, in seconds (spec
+		 * D2's SECOND clock — mirrors the shape of {@see self::ttl_seconds()}, the
+		 * usage clock, but reads a SEPARATE filter/default so the two can be
+		 * calibrated independently).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int
+		 */
+		public static function verify_ttl_seconds(): int {
+			return (int) apply_filters( self::FILTER_VERIFY_TTL_SECONDS, self::DEFAULT_VERIFY_TTL_SECONDS );
+		}
+
+		/**
+		 * Whether an entry's freshness clock (spec D2) is stale — either never
+		 * verified (`last_verified_at === null`, spec: "nobody has confirmed this
+		 * row yet") or older than the verify TTL.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Popular_Settlement_Entry $entry       The entry to check.
+		 * @param int|null                 $ttl_seconds TTL override, in seconds; defaults to {@see self::verify_ttl_seconds()}.
+		 *
+		 * @return bool
+		 */
+		public function is_stale( Popular_Settlement_Entry $entry, ?int $ttl_seconds = null ): bool {
+			if ( null === $entry->last_verified_at() ) {
+				return true;
+			}
+
+			$threshold = current_time( 'timestamp' ) - ( $ttl_seconds ?? self::verify_ttl_seconds() );
+
+			return $entry->last_verified_at() < $threshold;
 		}
 
 		/**
@@ -439,6 +499,127 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			}
 
 			return $deleted;
+		}
+
+
+		/**
+		 * Finds a provider's stored entry by locality key, or null — the D5 lookup
+		 * the `/select` route's stale-pick check runs before persisting the
+		 * customer's posted record.
+		 *
+		 * A direct indexed lookup against the `(provider_id, locality_key)` unique
+		 * key, same as the private {@see self::find_row_by_key()} this wraps —
+		 * public because {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}
+		 * needs it and lives in a different namespace.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id The owning provider's id.
+		 * @param string $key         The locality key to find.
+		 *
+		 * @return Popular_Settlement_Entry|null
+		 */
+		public function find_entry_by_key( string $provider_id, string $key ): ?Popular_Settlement_Entry {
+			$row = $this->find_row_by_key( $provider_id, $key );
+
+			return null === $row ? null : $this->entry_from_row( $row );
+		}
+
+		/**
+		 * Bumps ONLY `last_verified_at` (spec D6: "alive, unchanged") — leaves
+		 * `record`, `locality_key`, `order_count` and `last_ordered_at` untouched.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int      $id        The row's surrogate id.
+		 * @param int|null $timestamp Verification time override, in seconds; defaults to now.
+		 *
+		 * @return void
+		 */
+		public function touch_verified( int $id, ?int $timestamp = null ): void {
+			$this->wpdb()->update(
+				$this->get_table_name(),
+				[ 'last_verified_at' => $this->to_mysql_datetime( $timestamp ) ],
+				[ 'id' => $id ],
+				[ '%s' ],
+				[ '%d' ]
+			);
+		}
+
+		/**
+		 * Overwrites the stored `record`/`locality_key`/`country` in place and
+		 * bumps `last_verified_at` (spec D6: "alive, changed" — incl. a changed
+		 * key). Deliberately leaves `order_count`/`last_ordered_at` untouched —
+		 * those are the usage clock (spec D2), a different axis; a settlement does
+		 * not become less popular because it was renamed. The row keeps its
+		 * surrogate `id` (spec D3/D6) — its identity survives the key change.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int             $id        The row's surrogate id.
+		 * @param Location_Record $record    The provider's fresh record.
+		 * @param int|null        $timestamp Verification time override, in seconds; defaults to now.
+		 *
+		 * @return void
+		 */
+		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): void {
+			$this->wpdb()->update(
+				$this->get_table_name(),
+				[
+					'locality_key'     => $record->key(),
+					'country'          => $record->country(),
+					'record'           => wp_json_encode( $record->to_array() ),
+					'last_verified_at' => $this->to_mysql_datetime( $timestamp ),
+				],
+				[ 'id' => $id ],
+				[ '%s', '%s', '%s', '%s' ],
+				[ '%d' ]
+			);
+		}
+
+		/**
+		 * Deletes one row by its surrogate id (spec D6: "gone" — the provider
+		 * confirmed it no longer recognises the key).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $id The row's surrogate id.
+		 *
+		 * @return void
+		 */
+		public function delete_entry( int $id ): void {
+			$this->wpdb()->delete( $this->get_table_name(), [ 'id' => $id ] );
+		}
+
+		/**
+		 * Deletes every row for a provider (D8's "Очистить список популярных
+		 * городов").
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id The provider whose rows to clear.
+		 *
+		 * @return int Number of rows deleted.
+		 */
+		public function clear_provider( string $provider_id ): int {
+			return (int) $this->wpdb()->delete( $this->get_table_name(), [ 'provider_id' => $provider_id ] );
+		}
+
+		/**
+		 * Formats a unix timestamp override (or, when omitted, "now") as the
+		 * MySQL `DATETIME` string every write to `last_verified_at` uses — the
+		 * override exists purely as a test seam (mirrors how every OTHER
+		 * timestamp this class writes, e.g. {@see self::enroll()}'s
+		 * `last_ordered_at`, is driven through {@see current_time()} for "now").
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|null $timestamp Unix timestamp override, or null for now.
+		 *
+		 * @return string
+		 */
+		private function to_mysql_datetime( ?int $timestamp ): string {
+			return null === $timestamp ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s', $timestamp );
 		}
 
 		/**
