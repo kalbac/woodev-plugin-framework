@@ -7,8 +7,14 @@
  * before this fix nothing in the repo ever supplied its settlement/provider params.
  * This proves the real call site now genuinely resolves both — via
  * {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store::recall_candidate()}
- * and {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_active_provider()}
- * — rather than merely accepting-but-never-populating them.
+ * and, since round 3 (HIGH 2), the SAME provider that produced the recalled
+ * settlement (looked up by the settlement's own `provider_id()` through
+ * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_providers()}),
+ * NOT {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_active_provider()}
+ * — a merchant switching the active provider between checkout and export must never
+ * hand `enroll()` a provider that disagrees with the record's own `provider_id()`
+ * (it throws `\InvalidArgumentException` when it does, AFTER the carrier order
+ * already exists).
  *
  * `handle_order_action()` itself ends in `exit` (a real WP admin-post handler), so it
  * is unsafe to invoke directly from a unit test; the resolution logic is exercised
@@ -33,6 +39,49 @@ namespace {
 	// Abstract_Shipment_Handler/Abstract_Tracking_Handler in its constructor, but
 	// resolve_popular_settlement_context() is reached WITHOUT running that
 	// constructor (see the reflection helper below), so none of those need loading.
+
+	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Scope;
+
+	/**
+	 * A minimal, configurable-id Location_Provider fixture — used to prove
+	 * resolve_popular_settlement_context() looks the provider up by the
+	 * settlement's own provider_id(), not by whichever provider happens to be
+	 * active (round 3, HIGH 2).
+	 */
+	class Shipping_Admin_Order_Fixture_Provider extends Abstract_Location_Provider {
+
+		private string $id;
+
+		public function __construct( string $id ) {
+			$this->id = $id;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return $this->id;
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_SETTLEMENT ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+
+		public function resolve_key( string $key ): ?Location_Record {
+			return null;
+		}
+	}
 }
 
 namespace Woodev\Tests\Unit\Shipping\Admin {
@@ -70,10 +119,10 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * unrelated to what this method resolves), and reflectively stamps the given
 		 * store onto it.
 		 *
-		 * @param Popular_Settlement_Store|null $store
+		 * @param Popular_Settlement_Store $store
 		 * @return Shipping_Admin_Order
 		 */
-		private function admin_order( ?Popular_Settlement_Store $store ): Shipping_Admin_Order {
+		private function admin_order( Popular_Settlement_Store $store ): Shipping_Admin_Order {
 			$reflection  = new \ReflectionClass( Shipping_Admin_Order::class );
 			$admin_order = $reflection->newInstanceWithoutConstructor();
 
@@ -101,12 +150,44 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
-		 * No store supplied: resolves to [null, null] WITHOUT touching either
-		 * collaborator — the export action still works, just without enrolment.
+		 * Stamps `$providers` directly onto the REAL registry singleton's backing
+		 * array, bypassing {@see Location_Provider_Registry::collect()} entirely
+		 * (its bundled-provider registration and `register_settings()` call are
+		 * unrelated to what {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()}
+		 * exercises — `get_providers()` only ever reads this array).
+		 *
+		 * @param array<int, \Woodev\Framework\Shipping\Location\Location_Provider> $providers
+		 * @return void
 		 */
-		public function test_resolves_to_null_null_when_no_store_was_supplied(): void {
-			$admin_order = $this->admin_order( null );
-			$order       = Mockery::mock( '\WC_Order' );
+		private function register_providers( array $providers ): void {
+			$registry = Location_Provider_Registry::instance();
+
+			$reflection = new \ReflectionClass( Location_Provider_Registry::class );
+			$property   = $reflection->getProperty( 'providers' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+
+			$indexed = [];
+			foreach ( $providers as $provider ) {
+				$indexed[ $provider->get_id() ] = $provider;
+			}
+
+			$property->setValue( $registry, $indexed );
+		}
+
+		/**
+		 * No candidate was recalled (e.g. no active provider at checkout, or the
+		 * customer's session already expired): resolves to [null, null] without
+		 * ever asking the registry for a provider.
+		 */
+		public function test_resolves_to_null_null_when_no_candidate_was_recalled(): void {
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( null );
+
+			$admin_order = $this->admin_order( $store );
 
 			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
 
@@ -115,23 +196,31 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
-		 * The core HIGH 2 regression proof: WITH a store, this genuinely calls
-		 * {@see Popular_Settlement_Store::recall_candidate()} (real settlement
-		 * resolution — this is the mechanism that makes the ONE real
-		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
-		 * call site in the framework reachable) and asks the REAL
-		 * {@see Location_Provider_Registry} singleton for the active provider (null
-		 * here — nothing declared/collected in this unit-test process, which
-		 * {@see Location_Provider_Registry::get_active_provider()}'s own docblock
-		 * documents as the correct closed-gate answer; wiring INTO the real registry
-		 * API, not what that API returns in an unconfigured process, is what this
-		 * test proves).
+		 * The core round-3 HIGH 2 regression proof: the provider returned is the
+		 * one registered under the RECALLED SETTLEMENT'S OWN `provider_id()`,
+		 * resolved purely via {@see Location_Provider_Registry::get_providers()} —
+		 * this test never configures (or even needs) an "active" provider at all,
+		 * which is exactly the point: the round-2 behaviour this replaces asked
+		 * {@see Location_Provider_Registry::get_active_provider()} for "whichever
+		 * provider is active now", a question with a completely different answer
+		 * that could hand `enroll()` a provider disagreeing with the record's own
+		 * `provider_id()` — which throws AFTER the carrier order already exists.
+		 * Two providers are registered (one is never even asked about) to prove the
+		 * lookup is genuinely keyed by id, not "whatever's first"/"whatever's
+		 * active".
 		 */
-		public function test_resolves_settlement_via_the_store_and_asks_the_real_registry_for_the_provider(): void {
+		public function test_resolves_the_provider_that_produced_the_settlement(): void {
+			$this->register_providers(
+				[
+					new \Shipping_Admin_Order_Fixture_Provider( 'acme' ),
+					new \Shipping_Admin_Order_Fixture_Provider( 'other-carrier' ),
+				]
+			);
+
 			$record = Location_Record::from_array(
 				[
-					'key'         => 'dadata:1',
-					'provider_id' => 'dadata',
+					'key'         => 'other-carrier:1',
+					'provider_id' => 'other-carrier',
 					'level'       => Location_Record::LEVEL_SETTLEMENT,
 					'country'     => 'RU',
 				]
@@ -147,7 +236,38 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
 
 			$this->assertSame( $record, $settlement );
-			$this->assertNull( $provider, 'get_active_provider() correctly returns null while the gate is closed (nothing declared need in this process).' );
+			$this->assertNotNull( $provider );
+			$this->assertSame( 'other-carrier', $provider->get_id(), 'The provider must be the one that produced the settlement, resolved by its own provider_id().' );
+		}
+
+		/**
+		 * The settlement's own provider is no longer registered (e.g. a carrier
+		 * plugin was deactivated between checkout and export): resolves to
+		 * [settlement, null] rather than falling back to any other provider.
+		 */
+		public function test_resolves_null_provider_when_the_settlements_own_provider_is_no_longer_registered(): void {
+			$this->register_providers( [ new \Shipping_Admin_Order_Fixture_Provider( 'acme' ) ] );
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => 'ghost:1',
+					'provider_id' => 'ghost',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'recall_candidate' )->once()->with( $order )->andReturn( $record );
+
+			$admin_order = $this->admin_order( $store );
+
+			[ $settlement, $provider ] = $this->invoke( $admin_order, $order );
+
+			$this->assertSame( $record, $settlement );
+			$this->assertNull( $provider );
 		}
 	}
 }

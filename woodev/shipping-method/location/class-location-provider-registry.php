@@ -753,10 +753,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * no settlement-level record — most orders under a non-address-cascade
 		 * shipping method, or a guest whose session already expired.
 		 *
+		 * Also gated by the SAME D4/D4a rules {@see Popular_Settlement_Store::enroll()}
+		 * enforces (round 3, MEDIUM 3): a provider without
+		 * {@see Location_Provider::CAPABILITY_RESOLVE_KEY} gets no popular list at
+		 * all, and a derived key (see {@see Locality_Key::is_derived()}) is never
+		 * enrolled. `remember_candidate()` is not itself a table write — the data
+		 * contract is not at stake either way — but stamping meta that can never
+		 * lead to a row contradicts the "gets nothing" rule this listener would
+		 * otherwise silently violate.
+		 *
 		 * @internal Hooked to `woocommerce_checkout_order_processed`; not part of the
 		 *           public consumption surface.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 3 (MEDIUM 3): gated by the same D4/D4a rules `enroll()`
+		 *              enforces, instead of stamping a candidate for every active
+		 *              provider unconditionally.
 		 *
 		 * @param int                  $order_id    the created order id (unused; the order object is used)
 		 * @param array<string, mixed> $posted_data the posted checkout data (unused)
@@ -771,13 +783,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return;
 			}
 
+			if ( ! in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $provider->get_capabilities(), true ) ) {
+				return; // D4: no popular list at all for a provider that cannot resolve by key.
+			}
+
 			$chain = ( new Customer_Location_Store() )->get_chain();
 
 			if ( null === $chain || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
 				return;
 			}
 
-			$this->popular_settlement_store()->remember_candidate( $order, $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] );
+			$record = $chain['records'][ Location_Record::LEVEL_SETTLEMENT ];
+
+			if ( Locality_Key::is_derived( $record->key() ) ) {
+				return; // D4a: a derived key can never be resolved again, so it is never enrolled.
+			}
+
+			$this->popular_settlement_store()->remember_candidate( $order, $record );
 		}
 
 		/**

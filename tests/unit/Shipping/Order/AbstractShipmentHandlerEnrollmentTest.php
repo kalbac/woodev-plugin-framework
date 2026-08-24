@@ -25,6 +25,8 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
@@ -86,6 +88,7 @@ namespace {
 namespace Woodev\Tests\Unit\Shipping\Order {
 
 	use Mockery;
+	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
@@ -96,6 +99,22 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	 * @covers \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::enroll_popular_settlement
 	 */
 	final class AbstractShipmentHandlerEnrollmentTest extends TestCase {
+
+		protected function setUp(): void {
+			parent::setUp();
+
+			// Location_Provider_Registry is a process-wide singleton; other test
+			// files configure it with declared providers/settings, so tests exercising
+			// the constructor's default-store resolution (round 3, HIGH 1) must not
+			// observe (or leave behind) that state.
+			Location_Provider_Registry::instance()->reset_for_tests();
+		}
+
+		protected function tearDown(): void {
+			Location_Provider_Registry::instance()->reset_for_tests();
+
+			parent::tearDown();
+		}
 
 		private function record(): Location_Record {
 			return Location_Record::from_array(
@@ -171,16 +190,53 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$this->assertSame( '', $result );
 		}
 
-		public function test_export_is_a_no_op_when_no_store_was_supplied(): void {
-			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
-
+		/**
+		 * Round 3, HIGH 1: no production construction site in this repo ever
+		 * supplies a store (see the class docblock on
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::$popular_settlement_store}),
+		 * so a null constructor argument must resolve the framework's OWN shared
+		 * instance — {@see Location_Provider_Registry::popular_settlement_store()} —
+		 * the SAME one {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order}
+		 * resolves against, rather than leaving enrolment permanently disabled.
+		 */
+		public function test_constructor_defaults_to_the_frameworks_shared_store_when_none_is_injected(): void {
 			$handler = $this->handler( null );
+
+			$property = ( new \ReflectionObject( $handler ) )->getProperty( 'popular_settlement_store' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+
+			$this->assertSame(
+				Location_Provider_Registry::instance()->popular_settlement_store(),
+				$property->getValue( $handler ),
+				'A handler constructed without an injected store must default to the framework\'s shared instance.'
+			);
+		}
+
+		/**
+		 * Round 3, HIGH 2 (part 2): enrolment is a ranking side-effect that runs
+		 * AFTER the carrier order already exists (the id is already persisted and
+		 * `shipment_exported` has already fired). A failure inside `enroll()` —
+		 * most notably the `\InvalidArgumentException` it throws on a
+		 * provider/record mismatch — must never undo or fail the export; it is
+		 * swallowed and logged, not propagated.
+		 */
+		public function test_export_still_completes_when_enrolment_throws(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'enroll' )->once()->with( $provider, $record )->andThrow(
+				new \InvalidArgumentException( 'record provider_id does not match the given provider' )
+			);
+
+			$handler = $this->handler( $store );
 			$order   = Mockery::mock( '\WC_Order' );
 
-			// No store to assert against — the point is that export() still completes.
-			$result = $handler->export( $order, $this->record(), $provider );
+			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertSame( 'CARRIER-1', $result, 'export() must still report success — enrolment failing must not undo a real export.' );
 		}
 
 		public function test_export_is_a_no_op_when_the_settlement_is_unknown(): void {

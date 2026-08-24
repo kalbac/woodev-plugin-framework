@@ -15,6 +15,14 @@
  * text entirely and so would have stayed green even if the production WHERE clause
  * were deleted.
  *
+ * Round 3 (MEDIUM 4): the upsert simulation now parses the `ON DUPLICATE KEY
+ * UPDATE` clause's own assignments (and the INSERT column list) instead of
+ * hard-coding "bump order_count/last_ordered_at only" — the round-2 fake got
+ * the WHERE clause right but still hard-coded the UPDATE semantics, so it would
+ * have stayed green even if production started also overwriting `record`,
+ * `created_at` or `last_verified_at` on a bump; see
+ * {@see \Popular_Settlement_Store_Fake_Wpdb::apply_upsert()}.
+ *
  * @package Woodev\Tests\Unit\Shipping\Location
  */
 
@@ -147,8 +155,9 @@ namespace {
 		 * Records a raw query() call and, when it is the atomic upsert (detected by
 		 * the `ON DUPLICATE KEY UPDATE` text it always carries), actually applies it
 		 * to the in-memory row set — matching a real `(provider_id, locality_key)`
-		 * unique key: an existing row bumps `order_count`/`last_ordered_at` only, a
-		 * new key inserts a fresh row.
+		 * unique key: an existing row is updated with EXACTLY the columns/expressions
+		 * the `ON DUPLICATE KEY UPDATE` clause TEXT names (round 3, MEDIUM 4 — see
+		 * {@see self::apply_upsert()}'s own docblock), a new key inserts a fresh row.
 		 *
 		 * @param string $query the prepared query (as returned by prepare(), i.e. unchanged)
 		 * @return int
@@ -232,40 +241,76 @@ namespace {
 		}
 
 		/**
-		 * Applies the atomic upsert to {@see self::$rows}: matches an existing row by
-		 * `(provider_id, locality_key)` and bumps ONLY `order_count`/`last_ordered_at`
-		 * (never `record`/`country` — real `ON DUPLICATE KEY UPDATE` only touches the
-		 * columns named in its own clause), or inserts a fresh row.
+		 * Applies the atomic upsert to {@see self::$rows}, GENUINELY driven by the
+		 * `ON DUPLICATE KEY UPDATE` clause TEXT (round 3, MEDIUM 4 — the round-2 fake
+		 * this replaces hard-coded "bump order_count/last_ordered_at only", so it
+		 * would have stayed green even if production started also overwriting
+		 * `record`/`created_at`/`last_verified_at` on a bump). On a match, this
+		 * parses each `` `col` = expr`` assignment out of the UPDATE clause and
+		 * applies EXACTLY that — an unrecognised expression fails loudly (via
+		 * `self::fail()`-worthy `RuntimeException`) rather than silently doing
+		 * nothing, so a new expression shape this fake does not yet understand is
+		 * caught, not masked. On no match, inserts a fresh row from the INSERT
+		 * clause's own column list + bound values, so adding/reordering a column
+		 * there is honoured too, not assumed by positional destructuring.
 		 *
 		 * @return void
 		 */
 		private function apply_upsert(): void {
-			// Bound arg order matches the store's own prepare() call exactly: provider_id,
-			// locality_key, country, record, last_ordered_at, created_at (order_count and
-			// last_verified_at are literals in the SQL, not placeholders).
-			[ $provider_id, $locality_key, $country, $record, $last_ordered_at, $created_at ] = $this->last_args;
+			$sql = (string) $this->last_query;
+
+			preg_match( '/INSERT INTO `[^`]+` \(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/is', $sql, $insert_matches );
+			$insert_columns = array_map(
+				static fn( string $col ): string => trim( $col, " `\t\n\r\0\x0B" ),
+				explode( ',', $insert_matches[1] )
+			);
+			$value_tokens = array_map( 'trim', explode( ',', $insert_matches[2] ) );
+
+			$arg_index     = 0;
+			$insert_values = [];
+			foreach ( $insert_columns as $i => $column ) {
+				$token = $value_tokens[ $i ];
+
+				if ( 'NULL' === strtoupper( $token ) ) {
+					$insert_values[ $column ] = null;
+				} elseif ( '%s' === $token || '%d' === $token ) {
+					$insert_values[ $column ] = $this->last_args[ $arg_index++ ];
+				} else {
+					$insert_values[ $column ] = is_numeric( $token ) ? $token : trim( $token, "'" );
+				}
+			}
 
 			foreach ( $this->rows as &$row ) {
-				if ( ( $row['provider_id'] ?? null ) === $provider_id && ( $row['locality_key'] ?? null ) === $locality_key ) {
-					$row['order_count']     = ( (int) $row['order_count'] ) + 1;
-					$row['last_ordered_at'] = $last_ordered_at;
-
-					return;
+				if ( ( $row['provider_id'] ?? null ) !== $insert_values['provider_id']
+					|| ( $row['locality_key'] ?? null ) !== $insert_values['locality_key']
+				) {
+					continue;
 				}
+
+				preg_match( '/ON DUPLICATE KEY UPDATE\s*(.+)$/is', $sql, $update_matches );
+
+				foreach ( explode( ',', $update_matches[1] ) as $assignment ) {
+					if ( ! preg_match( '/`(\w+)`\s*=\s*(.+)$/s', trim( $assignment ), $assignment_matches ) ) {
+						throw new \RuntimeException( 'Unrecognised ON DUPLICATE KEY UPDATE assignment: ' . $assignment );
+					}
+
+					[ , $target_column, $expr ] = $assignment_matches;
+					$expr                       = trim( $expr );
+
+					if ( preg_match( '/^`(\w+)`\s*\+\s*(\d+)$/', $expr, $increment_matches ) ) {
+						$row[ $target_column ] = ( (int) ( $row[ $increment_matches[1] ] ?? 0 ) ) + (int) $increment_matches[2];
+					} elseif ( preg_match( '/^VALUES\(`(\w+)`\)$/', $expr, $values_matches ) ) {
+						$row[ $target_column ] = $insert_values[ $values_matches[1] ];
+					} else {
+						throw new \RuntimeException( 'Unrecognised ON DUPLICATE KEY UPDATE expression: ' . $expr );
+					}
+				}
+
+				return;
 			}
 			unset( $row );
 
-			$this->rows[] = [
-				'id'                => (string) $this->next_id++,
-				'provider_id'       => $provider_id,
-				'locality_key'      => $locality_key,
-				'country'           => $country,
-				'record'            => $record,
-				'order_count'       => '1',
-				'last_ordered_at'   => $last_ordered_at,
-				'last_verified_at'  => null,
-				'created_at'        => $created_at,
-			];
+			$this->rows[] = array_merge( [ 'id' => (string) $this->next_id++ ], $insert_values );
 		}
 	}
 
@@ -506,6 +551,54 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertCount( 1, $entries, 'Two enrolments of the SAME settlement must never produce two rows.' );
 			$this->assertSame( 2, $entries[0]->order_count() );
 			$this->assertCount( 2, $wpdb->queries, 'Still two atomic statements — the convergence happens at the DB engine, not by PHP branching insert vs. update.' );
+		}
+
+		/**
+		 * Round 3 (MEDIUM 4): a bump must leave `record`, `country` and `created_at`
+		 * untouched — the real `ON DUPLICATE KEY UPDATE` clause only ever names
+		 * `order_count` and `last_ordered_at`. Driven through the fake's genuine SQL
+		 * parsing (see {@see \Popular_Settlement_Store_Fake_Wpdb::apply_upsert()}):
+		 * the SECOND enrolment carries a DIFFERENT record payload (same key) so this
+		 * would fail, not merely stay green, if production ever started applying
+		 * `VALUES(`record`)`/`VALUES(`created_at`)` on a bump.
+		 */
+		public function test_a_bump_leaves_record_and_created_at_untouched(): void {
+			$wpdb     = new \Popular_Settlement_Store_Fake_Wpdb();
+			$store    = new Popular_Settlement_Store( $wpdb );
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$original = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':1',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'label'       => 'Original',
+				]
+			);
+			$changed  = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':1',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'label'       => 'Changed',
+				]
+			);
+
+			$store->enroll( $provider, $original );
+			$created_at_after_first = $wpdb->rows[0]['created_at'];
+
+			$store->enroll( $provider, $changed );
+
+			$this->assertCount( 1, $wpdb->rows, 'A bump must never create a second row.' );
+			$this->assertSame(
+				$original->to_array(),
+				json_decode( (string) $wpdb->rows[0]['record'], true ),
+				'A bump must leave the stored record untouched — only verification (D5/D6) ever overwrites it in place.'
+			);
+			$this->assertSame( $created_at_after_first, $wpdb->rows[0]['created_at'], 'created_at must never change on a bump.' );
+			$this->assertNull( $wpdb->rows[0]['last_verified_at'], 'last_verified_at is only ever written by verification, never enrolment.' );
 		}
 
 		/**

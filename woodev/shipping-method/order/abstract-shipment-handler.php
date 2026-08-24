@@ -34,6 +34,7 @@
 namespace Woodev\Framework\Shipping\Order;
 
 use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Shipping_API;
@@ -73,13 +74,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 		/**
 		 * Popular-settlements store (#488) used to bump usage on a successful
-		 * export. Null when the plugin does not pass one — enrolment then never
-		 * runs, so exporting a shipment behaves exactly as before this feature
-		 * existed.
+		 * export.
 		 *
-		 * @var Popular_Settlement_Store|null
+		 * Always non-null after construction (round 3, HIGH 1): when the caller
+		 * does not inject one, the constructor defaults to the framework's own
+		 * shared instance — {@see Location_Provider_Registry::popular_settlement_store()}
+		 * — instead of `null`. No production construction site in this repo ever
+		 * supplies a store (a carrier plugin constructs both this class and
+		 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order}, and the
+		 * framework structurally cannot inject the store at that call site), so an
+		 * optional-but-null-means-off dependency left the feature permanently
+		 * unreachable. `$settlement`/`$provider` on {@see self::export()} remain
+		 * independently optional and default to null, so a caller that never
+		 * passes them still sees no behaviour change — only a caller that DOES
+		 * resolve them (the one real framework caller,
+		 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::handle_order_action()})
+		 * now enrols out of the box.
+		 *
+		 * @var Popular_Settlement_Store
 		 */
-		protected ?Popular_Settlement_Store $popular_settlement_store;
+		protected Popular_Settlement_Store $popular_settlement_store;
 
 		/**
 		 * Constructor.
@@ -87,12 +101,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$popular_settlement_store` (#488 slice 2) — optional,
 		 *              defaults to null so an existing call site's behaviour is unchanged.
+		 * @since 2.0.2 Round 3 (HIGH 1): a null/omitted `$popular_settlement_store`
+		 *              now defaults to the framework's shared instance
+		 *              ({@see Location_Provider_Registry::popular_settlement_store()})
+		 *              instead of leaving enrolment permanently disabled — an
+		 *              explicit instance remains a genuine override (tests, or a
+		 *              plugin that wants its own).
 		 *
 		 * @param Shipping_API                   $api                      carrier API used to create/cancel orders
 		 * @param Shipping_Order_Handler         $order_handler            order-meta accessor that persists the carrier id under the plugin's key
 		 * @param \Woodev_Background_Job_Handler $retry_handler            plugin's background-job queue used to retry a failed export
 		 * @param string                         $hook_prefix              plugin-supplied token (e.g. the plugin id) that namespaces forward hooks; defaults to none
-		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store used to bump usage on a successful export; null disables enrolment entirely
+		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store used to bump usage on a successful export; null resolves the framework's shared instance
 		 */
 		public function __construct(
 			Shipping_API $api,
@@ -105,7 +125,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			$this->order_handler            = $order_handler;
 			$this->retry_handler            = $retry_handler;
 			$this->hook_prefix              = $hook_prefix;
-			$this->popular_settlement_store = $popular_settlement_store;
+			$this->popular_settlement_store = $popular_settlement_store ?? Location_Provider_Registry::instance()->popular_settlement_store();
 		}
 
 		/**
@@ -122,10 +142,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * strongest available signal that the shop is genuinely committed to
 		 * shipping there, stronger than merely placing the order (which can still be
 		 * cancelled/refunded before ever reaching a carrier). When both `$settlement`
-		 * and `$provider` are given (and a store was supplied to the constructor),
-		 * {@see self::enroll_popular_settlement()} bumps it after the
-		 * `shipment_exported` hook fires. Both default to null: an existing call site
-		 * that does not pass them sees no behaviour change.
+		 * and `$provider` are given, {@see self::enroll_popular_settlement()} bumps it
+		 * (against the constructor's store — round 3, HIGH 1: a framework default
+		 * now, not an opt-in) after the `shipment_exported` hook fires. Both default
+		 * to null: an existing call site that does not pass them sees no behaviour
+		 * change.
 		 *
 		 * A response that does not throw but still yields an EMPTY carrier id
 		 * (round 2 critic finding, MEDIUM 3) is explicitly NOT evidence the shop
@@ -191,14 +212,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * Bumps the popular-settlements list (#488) for a successfully exported
 		 * order's settlement.
 		 *
-		 * A silent no-op — never throws — whenever any prerequisite is missing: no
-		 * store was supplied to the constructor, the caller does not know the
-		 * settlement, or the caller does not know which provider produced it. The
-		 * D4/D4a gates themselves ({@see Popular_Settlement_Store::CAPABILITY_RESOLVE_KEY}
-		 * capability, {@see \Woodev\Framework\Shipping\Location\Locality_Key::is_derived()})
+		 * A silent no-op — never throws — whenever any prerequisite is missing:
+		 * the caller does not know the settlement, or the caller does not know
+		 * which provider produced it. The D4/D4a gates themselves
+		 * ({@see Popular_Settlement_Store::CAPABILITY_RESOLVE_KEY} capability,
+		 * {@see \Woodev\Framework\Shipping\Location\Locality_Key::is_derived()})
 		 * live in {@see Popular_Settlement_Store::enroll()}, not here.
 		 *
+		 * `enroll()` itself can still throw — most notably when `$settlement`'s
+		 * own `provider_id()` disagrees with `$provider->get_id()`. This is caught
+		 * and logged, never left to propagate (round 3, HIGH 2): by the time this
+		 * runs the carrier order already exists (`export()` has already persisted
+		 * the carrier id and fired `shipment_exported`), so enrolment — a ranking
+		 * side-effect — must never undo or fail a real export over a popularity
+		 * row it could not write.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 3 (HIGH 2): swallow-and-log any `enroll()` failure
+		 *              instead of letting it propagate out of {@see self::export()}.
 		 *
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known
 		 * @param Location_Provider|null $provider   the provider that produced `$settlement`, if known
@@ -206,11 +237,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @return void
 		 */
 		protected function enroll_popular_settlement( ?Location_Record $settlement, ?Location_Provider $provider ): void {
-			if ( null === $this->popular_settlement_store || null === $settlement || null === $provider ) {
+			if ( null === $settlement || null === $provider ) {
 				return;
 			}
 
-			$this->popular_settlement_store->enroll( $provider, $settlement );
+			try {
+				$this->popular_settlement_store->enroll( $provider, $settlement );
+			} catch ( \Throwable $throwable ) {
+				error_log(
+					sprintf(
+						'[woodev] popular-settlements enrolment failed for provider "%s": %s',
+						$provider->get_id(),
+						$throwable->getMessage()
+					)
+				); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; enrolment is a ranking side-effect and must never undo/fail an export whose carrier order already exists.
+			}
 		}
 
 		/**

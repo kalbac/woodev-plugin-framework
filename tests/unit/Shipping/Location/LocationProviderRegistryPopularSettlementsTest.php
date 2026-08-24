@@ -19,6 +19,17 @@
 
 namespace {
 
+	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
@@ -26,20 +37,84 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-settings.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
+
+	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Scope;
+
+	/**
+	 * Declares CAPABILITY_RESOLVE_KEY — a D4-eligible provider (round 3, MEDIUM 3
+	 * checkout-listener gate tests).
+	 */
+	class Checkout_Listener_Resolving_Fixture_Provider extends Abstract_Location_Provider {
+		public function get_id(): string {
+			return 'listener-resolving';
+		}
+
+		public function get_name(): string {
+			return 'Resolving Fixture';
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_SETTLEMENT ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+
+		public function resolve_key( string $key ): ?Location_Record {
+			return null;
+		}
+	}
+
+	/**
+	 * Does NOT override resolve_key() — D4-ineligible (round 3, MEDIUM 3).
+	 */
+	class Checkout_Listener_Non_Resolving_Fixture_Provider extends Abstract_Location_Provider {
+		public function get_id(): string {
+			return 'listener-non-resolving';
+		}
+
+		public function get_name(): string {
+			return 'Non-Resolving Fixture';
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_SETTLEMENT ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+	}
 }
 
 namespace Woodev\Tests\Unit\Shipping\Location {
 
 	use Brain\Monkey\Functions;
 	use Mockery;
+	use Woodev\Framework\Shipping\Location\Locality_Key;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+	use Woodev\Framework\Shipping\Location\Location_Record;
+	use Woodev\Framework\Shipping\Location\Location_Settings;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Tests\Unit\TestCase;
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry::maybe_install_popular_settlements_table
+	 * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry::handle_checkout_order_processed_for_popular_settlements
 	 */
 	final class LocationProviderRegistryPopularSettlementsTest extends TestCase {
 
@@ -144,6 +219,169 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// The pre-existing 'init' registration for collect() must still be there too —
 			// this fix must not have replaced it.
 			$this->assertContains( [ 'hook' => 'init', 'method' => 'collect' ], $added );
+		}
+
+		// -------------------------------------------------------------------------
+		// Round 3, MEDIUM 3: handle_checkout_order_processed_for_popular_settlements()
+		// gated by the SAME D4/D4a rules Popular_Settlement_Store::enroll() enforces.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * Builds a registry instance WITHOUT going through the singleton, with the
+		 * activation gate open, the given providers registered, and an active
+		 * provider id resolvable — everything {@see Location_Provider_Registry::get_active_provider()}
+		 * needs, without running the real settings-registration machinery
+		 * ({@see Location_Settings} is stubbed via Mockery: {@see Location_Provider_Registry::collect()}
+		 * is never called, so no real `Woodev_Abstract_Settings` behaviour is
+		 * needed, only `get_value()`'s return value).
+		 *
+		 * @param array<int, \Woodev\Framework\Shipping\Location\Location_Provider> $providers
+		 * @param string                                                            $active_provider_id
+		 * @return Location_Provider_Registry
+		 */
+		private function registry_with( array $providers, string $active_provider_id ): Location_Provider_Registry {
+			$reflection = new \ReflectionClass( Location_Provider_Registry::class );
+			$registry   = $reflection->newInstanceWithoutConstructor();
+
+			$this->set_property( $reflection, $registry, 'needed', true );
+
+			$indexed = [];
+			foreach ( $providers as $provider ) {
+				$indexed[ $provider->get_id() ] = $provider;
+			}
+			$this->set_property( $reflection, $registry, 'providers', $indexed );
+
+			$settings = Mockery::mock( Location_Settings::class );
+			$settings->shouldReceive( 'get_value' )->with( Location_Provider_Registry::SETTING_ACTIVE_PROVIDER )->andReturn( $active_provider_id );
+			$this->set_property( $reflection, $registry, 'settings_handler', $settings );
+
+			return $registry;
+		}
+
+		private function set_property( \ReflectionClass $reflection, object $object, string $name, $value ): void {
+			$property = $reflection->getProperty( $name );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( $object, $value );
+		}
+
+		/**
+		 * Stubs the logged-in path of {@see \Woodev\Framework\Shipping\Location\Customer_Location_Store::get_chain()}
+		 * with `$raw_chain` via `get_user_meta()` — a plain WordPress function, safe
+		 * to stub (unlike `WC()`, which this codebase deliberately never mocks
+		 * globally — see CustomerLocationStoreTest.php's own docblock — because
+		 * Brain Monkey/Patchwork would leak `function_exists('WC') === true` to the
+		 * rest of the PHPUnit process). `Customer_Location_Store::session()` itself
+		 * safely returns null here since `WC()` genuinely does not exist anywhere in
+		 * this test process, so the logged-in path falls straight through to
+		 * `get_user_meta()`.
+		 *
+		 * @param array<string, mixed> $raw_chain
+		 * @return void
+		 */
+		private function stub_logged_in_chain( array $raw_chain ): void {
+			Functions\when( 'is_user_logged_in' )->justReturn( true );
+			Functions\when( 'get_current_user_id' )->justReturn( 42 );
+			Functions\when( 'get_user_meta' )->justReturn( $raw_chain );
+		}
+
+		/**
+		 * D4: a provider without CAPABILITY_RESOLVE_KEY gets no popular list at all
+		 * (same rule {@see Popular_Settlement_Store::enroll()} enforces) — the
+		 * listener must not even attempt to stamp a candidate, and must return
+		 * before ever touching `Customer_Location_Store` (no chain stub needed here
+		 * at all — proof that the capability check comes first).
+		 */
+		public function test_a_provider_without_the_capability_never_gets_a_candidate_stamped(): void {
+			$provider = new \Checkout_Listener_Non_Resolving_Fixture_Provider();
+			$registry = $this->registry_with( [ $provider ], $provider->get_id() );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'remember_candidate' );
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], $order );
+		}
+
+		/**
+		 * D4a: a derived key (never issued by the provider) is never enrolled — and,
+		 * as of round 3, never even STAMPED as a candidate, since the meta could
+		 * never lead to a row.
+		 */
+		public function test_a_derived_key_never_gets_a_candidate_stamped(): void {
+			$provider = new \Checkout_Listener_Resolving_Fixture_Provider();
+			$registry = $this->registry_with( [ $provider ], $provider->get_id() );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'remember_candidate' );
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$derived_key = Locality_Key::derive( $provider->get_id(), [ 'name' => 'Some Town' ] );
+			$record      = Location_Record::from_array(
+				[
+					'key'         => $derived_key,
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$this->stub_logged_in_chain(
+				[
+					'records' => [ $record->to_array() ],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], $order );
+		}
+
+		/**
+		 * The eligible path: a D4-capable provider and a genuine (non-derived) key
+		 * DOES get its candidate stamped — proving the round-3 gate does not
+		 * over-block the case it must still let through.
+		 */
+		public function test_an_eligible_settlement_still_gets_its_candidate_stamped(): void {
+			$provider = new \Checkout_Listener_Resolving_Fixture_Provider();
+			$registry = $this->registry_with( [ $provider ], $provider->get_id() );
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':1',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'remember_candidate' )->once()->with(
+				$order,
+				\Mockery::on( static fn( Location_Record $candidate ): bool => $candidate->key() === $record->key() )
+			);
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$this->stub_logged_in_chain(
+				[
+					'records' => [ $record->to_array() ],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
+
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], $order );
 		}
 	}
 }
