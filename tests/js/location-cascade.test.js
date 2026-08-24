@@ -5266,3 +5266,307 @@ describe( 'a column swap carries the settlement even when its widget SWAPS the D
 		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Омск' );
 	} );
 } );
+
+/**
+ * Round 3 (issue #490): every direction-B test above (round 4, round 2) boots ALREADY
+ * unchecked and drives exactly ONE toggle — but this rig's checkbox starts CHECKED by
+ * default (`installMarkup()`'s own `checked = false !== w.shipToDifferentAddress`, and
+ * WooCommerce's own classic-checkout markup agrees: "ship to a different address" defaults
+ * to on). So filling billing at all, on the real rig, is a TWO-toggle sequence: uncheck
+ * (shipping -> billing), pick region + settlement in billing, check again (billing ->
+ * shipping) — never a single toggle from a clean boot. This describe block drives that full
+ * sequence, plus the interleaving a synchronous single-tick jest test cannot otherwise
+ * reproduce: a REGION `/select` still in flight when SETTLEMENT is picked right behind it.
+ *
+ * THE RACE THIS FOUND: `sendNextSelect()`'s single-flight queue is per ENTRY, not per level
+ * (see that function's own docblock) — a region pick and a settlement pick made close
+ * together queue behind ONE `/select` slot. `adoptChain()` (called from every `/select`
+ * response) treats its `chain` argument as authoritative for EVERY level in `LEVELS`,
+ * unconditionally: `entry.records[level] = adopted[level] || null` — including a level the
+ * server was never ASKED about yet, not just one it genuinely dropped. So the moment the
+ * REGION response lands — before SETTLEMENT's own (already-queued) `/select` has even been
+ * sent — `adoptChain()` nulls `entry.records.settlement` right out from under the
+ * optimistic write `onSelectFor()` already made for it. `carryChainStateToIncomingNodes()`
+ * gates its ENTIRE carry (including the round-2 fix's own `outgoingLevelText` read) behind
+ * `record ? ... : ''` — so a toggle landing in this exact window carries nothing for
+ * settlement, even though the live DOM (and `outgoingLevelText`) still has the picked text
+ * sitting right there. This is a genuinely NEW defect, in `adoptChain()`/its interaction with
+ * the single-flight queue — round 1 and round 2's own fixes are both still necessary and
+ * both still correct; this is a third, independent gap in the same carry path.
+ */
+describe( 'the real rig sequence: starts CHECKED, uncheck, fill billing, check again (issue #490 round 3)', () => {
+	const REGION_ITEM = {
+		value: 'Омская область',
+		record: {
+			key: 'test-cdek:r15', provider_id: 'test-cdek', level: 'region', country: 'RU',
+			region: { name: 'Омская область', type: 'обл' }, label: 'Омская область',
+		},
+	};
+
+	const SETTLEMENT_ITEM = {
+		value: 'Омск',
+		record: {
+			key: 'test-cdek:s1', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+			settlement: { name: 'Омск', type: 'г' }, label: 'г Омск',
+		},
+	};
+
+	/**
+	 * Same shape as the round-2 `stubAjaxSelect2()` above (this describe block cannot reach
+	 * that one — scoped to its own `describe`) — reproduces `buildSelectField()`'s swap-on-
+	 * attach/stale-restore-on-detach contract closely enough to exercise the real cascade
+	 * attach/detach/carry path against it. Generic per field id, so ONE stub instance serves
+	 * both the region and the settlement node.
+	 *
+	 * @returns {{renderer: Function, pick: function(string, Object, string): void}}
+	 */
+	function stubAjaxSelect2() {
+		var picks = {};
+
+		function renderer( el, options ) {
+			if ( ! el || 'INPUT' !== el.tagName ) {
+				return null;
+			}
+
+			var originalInput = el;
+			var initialValue = el.value || '';
+			var select = document.createElement( 'select' );
+			select.id = el.id;
+			select.name = el.name || '';
+
+			if ( initialValue ) {
+				var seeded = document.createElement( 'option' );
+				seeded.value = initialValue;
+				seeded.textContent = initialValue;
+				seeded.selected = true;
+				select.appendChild( seeded );
+			} else {
+				select.appendChild( document.createElement( 'option' ) );
+			}
+
+			el.parentNode.replaceChild( select, el );
+
+			picks[ select.id ] = function( record, value ) {
+				var option = document.createElement( 'option' );
+				option.value = value;
+				option.textContent = value;
+				select.appendChild( option );
+				select.value = value;
+				options.onSelect( { record: record } );
+			};
+
+			return {
+				el: select,
+				detach: function() {
+					if ( select.parentNode ) {
+						select.parentNode.insertBefore( originalInput, select );
+						select.parentNode.removeChild( select );
+					}
+				},
+			};
+		}
+
+		return {
+			renderer: renderer,
+			pick: function( fieldId, record, value ) {
+				picks[ fieldId ]( record, value );
+			},
+		};
+	}
+
+	/**
+	 * Boots with BOTH region and settlement fanned across both sections, both axes
+	 * `ajax-select2` (production's real shape for these levels — never `typeahead`), and the
+	 * checkbox in whichever state the rig's own first screen shows it in.
+	 *
+	 * @param {boolean} shipToDifferentAddress
+	 * @returns {{renderer: Function, pick: function(string, Object, string): void}}
+	 */
+	function bootRealSequence( shipToDifferentAddress ) {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+				</select>
+				<select id="shipping_country" name="shipping_country">
+					<option value="RU">Россия</option>
+				</select>
+				<input type="checkbox" id="ship-to-different-address-checkbox"
+					name="ship_to_different_address" ${ shipToDifferentAddress ? 'checked' : '' } />
+				<input type="text" id="billing_state" name="billing_state" value="" />
+				<input type="text" id="shipping_state" name="shipping_state" value="" />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+				<input type="text" id="shipping_city" name="shipping_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+		document.getElementById( 'shipping_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		mockFetch();
+
+		var stub = stubAjaxSelect2();
+		window.WoodevLocationRenderers = { 'ajax-select2': stub.renderer };
+
+		window[ CONFIG_GLOBAL ] = {
+			fields: {
+				billing_state: locationField( 'region', 'billing' ),
+				shipping_state: locationField( 'region', 'shipping' ),
+				billing_city: locationField( 'settlement', 'billing' ),
+				shipping_city: locationField( 'settlement', 'shipping' ),
+			},
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: {
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				nonce: 'test-nonce',
+				countries: [ 'RU' ],
+				mode: { region: 'ajax-select2', settlement: 'ajax-select2' },
+				levels: { RU: { region: true, settlement: true, address: true } },
+				current: null,
+				implicit: false,
+				defaultCountry: 'RU',
+				i18n: {},
+			},
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return stub;
+	}
+
+	/**
+	 * @param {boolean} checked
+	 * @returns {void}
+	 */
+	function toggleShipToDifferentAddress( checked ) {
+		const checkbox = document.querySelector( '[name="ship_to_different_address"]' );
+		checkbox.checked = checked;
+		checkbox.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+	}
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	it( 'carries both region and settlement through the FULL two-toggle sequence when each /select is awaited before the next step (baseline — must stay green)', async () => {
+		var stub = bootRealSequence( true ); // starts CHECKED, like the real rig's first screen
+
+		toggleShipToDifferentAddress( false ); // uncheck — billing becomes the active column
+
+		stub.pick( 'billing_state', REGION_ITEM.record, REGION_ITEM.value );
+		selectRequests()[ 0 ].resolve( {
+			current: { key: REGION_ITEM.record.key, level: 'region' },
+			persisted: true,
+			chain: { region: { key: REGION_ITEM.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		stub.pick( 'billing_city', SETTLEMENT_ITEM.record, SETTLEMENT_ITEM.value );
+		selectRequests()[ 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: {
+				region: { key: REGION_ITEM.record.key, level: 'region' },
+				settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			},
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( true ); // check again — shipping becomes active
+
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+
+	it( 'DROPS the settlement (never the region) when it is picked while the region /select is still in flight, and the toggle lands before settlement\'s own /select resolves', async () => {
+		var stub = bootRealSequence( true );
+
+		toggleShipToDifferentAddress( false );
+
+		// Region is picked and its /select is sent immediately (nothing else in flight).
+		stub.pick( 'billing_state', REGION_ITEM.record, REGION_ITEM.value );
+		expect( selectRequests().length ).toBe( 1 );
+
+		// Settlement is picked right behind it — REGION's own /select has not resolved yet, so
+		// this one queues behind the single-flight slot rather than sending concurrently (same
+		// per-entry queue documented on enqueueSelect()'s own docblock).
+		stub.pick( 'billing_city', SETTLEMENT_ITEM.record, SETTLEMENT_ITEM.value );
+		expect( selectRequests().length ).toBe( 1 ); // still just region's request
+
+		// Region's /select now resolves. The server was never TOLD about settlement yet at the
+		// point it built this response, so its own chain can only ever report region — this is
+		// not a malformed response, it is the ordinary, honest shape of "settlement hasn't
+		// reached the server yet".
+		selectRequests()[ 0 ].resolve( {
+			current: { key: REGION_ITEM.record.key, level: 'region' },
+			persisted: true,
+			chain: { region: { key: REGION_ITEM.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		// settleSelect() dequeues the pending settlement record and sends it automatically.
+		expect( selectRequests().length ).toBe( 2 );
+
+		// The toggle lands NOW — settlement's own /select is in flight but has not resolved.
+		// The customer has already picked both; the DOM already shows both values.
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Омская область' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Омск' );
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
+		// This is the #490 rig's own 1-in-5 failure, reproduced deterministically: region's
+		// /select response narrowed entry.records EVERY level via adoptChain(), including
+		// settlement — which the server was never asked about yet — nulling out the
+		// optimistic record onSelectFor() had already written for it. carryChainStateTo
+		// IncomingNodes() gates its ENTIRE carry behind `entry.records[level]` being truthy
+		// BEFORE it ever consults outgoingLevelText, so the live DOM text captured by round
+		// 2's own fix is discarded unread.
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+
+	it( 'still drops the settlement even when BOTH /selects resolve before the toggle, as long as region resolved BEFORE settlement was picked... no — region resolving AFTER settlement was queued is the trigger, not the resolve order relative to the toggle', async () => {
+		// This test intentionally documents the boundary: awaiting settlement's OWN /select
+		// too (unlike the test above) lets its response re-adopt settlement (adoptChain()
+		// resolves it back to a narrowed-but-non-null record), so the carry recovers. The
+		// defect is specifically the WINDOW between region's response landing and settlement's
+		// own response landing — not the picks' order, not whether the toggle waits.
+		var stub = bootRealSequence( true );
+
+		toggleShipToDifferentAddress( false );
+
+		stub.pick( 'billing_state', REGION_ITEM.record, REGION_ITEM.value );
+		stub.pick( 'billing_city', SETTLEMENT_ITEM.record, SETTLEMENT_ITEM.value );
+
+		selectRequests()[ 0 ].resolve( {
+			current: { key: REGION_ITEM.record.key, level: 'region' },
+			persisted: true,
+			chain: { region: { key: REGION_ITEM.record.key, level: 'region' } },
+		} );
+		await flushMicrotasks();
+
+		selectRequests()[ 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: true,
+			chain: {
+				region: { key: REGION_ITEM.record.key, level: 'region' },
+				settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			},
+		} );
+		await flushMicrotasks();
+
+		toggleShipToDifferentAddress( true );
+
+		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
+		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+} );

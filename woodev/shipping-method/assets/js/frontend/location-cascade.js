@@ -1732,7 +1732,15 @@
 				// Runs before settleSelect() so nothing downstream of it (a stale-response
 				// forward to the next queued send, or this response's own final trigger/event)
 				// can run against records this adoption was about to overwrite anyway.
-				adoptChain( entry, body && body.chain );
+				//
+				// Issue #490 round 3: `entry.pendingRecord` — read HERE, before settleSelect()
+				// below can dequeue and clear it — may already hold a NEWER pick for a DIFFERENT
+				// level than `record`'s own (the single-flight queue is per ENTRY, not per
+				// level). This response's `chain` was built before that pick ever reached the
+				// server, so it cannot honestly speak to that level at all; adopting it as
+				// "dropped" would null out the optimistic write onSelectFor() already made. See
+				// adoptChain()'s own docblock for the full reasoning.
+				adoptChain( entry, body && body.chain, entry.pendingRecord ? entry.pendingRecord.level : null );
 
 				// Issue #337: the server's own chain is authoritative ({@see adoptChain}), so a
 				// repair that DROPPED the settlement level must re-lock the address field the
@@ -3310,11 +3318,30 @@
 	 * `entry.records[level]` would still make that level LOOK confirmed to a future caller that
 	 * only checks presence, not shape.
 	 *
-	 * @param {Object} entry
-	 * @param {*}      chain `{ [level]: { key, level } }` per spec §7, or anything else.
+	 * `protectedLevel` (issue #490 round 3) EXEMPTS one level from the "absent = dropped"
+	 * narrowing below — {@see sendNextSelect}'s own call site passes the level of
+	 * `entry.pendingRecord`, if any, at the moment ITS response lands. The single-flight queue
+	 * is per ENTRY, not per level (see {@see enqueueSelect}'s own docblock): a region pick and a
+	 * settlement pick made close together share ONE `/select` slot, so region's own response can
+	 * land — and, unprotected, get adopted — BEFORE settlement's already-queued pick has even
+	 * been POSTED. That response's `chain` cannot possibly name settlement; not because the
+	 * server dropped it, but because the server was never ASKED about it yet. Narrowing
+	 * `entry.records.settlement` to `null` off that silence would wipe the optimistic record
+	 * {@see onSelectFor} already wrote for it — measured on the rig (issue #490) as an
+	 * intermittent, timing-dependent loss of exactly the level whose pick landed last, in
+	 * whichever direction the "ship to a different address" toggle carried it. Skipping the
+	 * protected level here changes nothing for it: its OWN response, resolved right after this
+	 * one via {@see settleSelect}'s dequeue, adopts a chain that (by then) genuinely does cover
+	 * it.
+	 *
+	 * @param {Object}      entry
+	 * @param {*}           chain          `{ [level]: { key, level } }` per spec §7, or anything else.
+	 * @param {?string}     [protectedLevel] A level to leave untouched regardless of whether
+	 *                                       `chain` names it — see this docblock's own section
+	 *                                       above.
 	 * @returns {void}
 	 */
-	function adoptChain( entry, chain ) {
+	function adoptChain( entry, chain, protectedLevel ) {
 		if ( ! chain || 'object' !== typeof chain ) {
 			return;
 		}
@@ -3354,6 +3381,10 @@
 		// back to a country-wide search — the very seam this whole change exists to
 		// close.
 		LEVELS.forEach( function( level ) {
+			if ( level === protectedLevel ) {
+				return; // see this function's own docblock, issue #490 round 3.
+			}
+
 			entry.records[ level ] = adopted[ level ] || null;
 		} );
 	}
