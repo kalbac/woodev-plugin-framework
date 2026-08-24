@@ -23,6 +23,8 @@ use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Rest_Api\Location_Controller;
 use Woodev\Tests\Unit\TestCase;
 
@@ -32,6 +34,10 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-service.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-verification.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-verifier.php';
 
 if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
@@ -89,6 +95,132 @@ if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
 
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-location-controller.php';
+
+/**
+ * Popular-settlements (#488 slice 3) provider double: `resolve_key()` and
+ * `suggest()` answers are both fully controlled per test — a
+ * {@see Location_Record} (returned), `null` (returned), or a `\Throwable`
+ * (thrown) for `resolve_key()`; an array of records (returned) or a
+ * `\Throwable` (thrown) for `suggest()`.
+ */
+if ( ! class_exists( __NAMESPACE__ . '\\Location_Controller_Popular_Provider_Fixture', false ) ) {
+	class Location_Controller_Popular_Provider_Fixture extends Abstract_Location_Provider {
+
+		private string $id;
+
+		/** @var Location_Record|\Throwable|null */
+		private $resolve_key_answer;
+
+		/** @var Location_Record[]|\Throwable */
+		private $suggest_answer;
+
+		/** @var array<int, array{0: string, 1: Location_Scope}> */
+		public array $suggest_calls = [];
+
+		/**
+		 * @param string                        $id                 provider id.
+		 * @param Location_Record|\Throwable|null $resolve_key_answer what resolve_key() returns/throws.
+		 * @param Location_Record[]|\Throwable    $suggest_answer     what suggest() returns/throws.
+		 */
+		public function __construct( string $id, $resolve_key_answer, $suggest_answer = [] ) {
+			$this->id                 = $id;
+			$this->resolve_key_answer = $resolve_key_answer;
+			$this->suggest_answer     = $suggest_answer;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return 'Popular Provider Fixture';
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return [ Location_Record::LEVEL_SETTLEMENT ];
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			$this->suggest_calls[] = [ $query, $scope ];
+
+			if ( $this->suggest_answer instanceof \Throwable ) {
+				throw $this->suggest_answer;
+			}
+
+			return $this->suggest_answer;
+		}
+
+		public function resolve_key( string $key ): ?Location_Record {
+			if ( $this->resolve_key_answer instanceof \Throwable ) {
+				throw $this->resolve_key_answer;
+			}
+
+			return $this->resolve_key_answer;
+		}
+	}
+}
+
+/**
+ * Popular-settlements (#488 slice 3) store double: answers `find_entry_by_key()`
+ * / `is_stale()` from constructor-supplied fixed values (never a real `\wpdb`
+ * lookup — the real store's own constructor is always safe to build with none,
+ * see that class's docblock) and spies on every mutation
+ * {@see Popular_Settlement_Verifier} might make, so a controller-level test can
+ * assert exactly which one (if any) fired.
+ */
+if ( ! class_exists( __NAMESPACE__ . '\\Location_Controller_Fake_Popular_Store', false ) ) {
+	class Location_Controller_Fake_Popular_Store extends Popular_Settlement_Store {
+
+		private ?Popular_Settlement_Entry $entry;
+		private bool $stale;
+
+		/** @var array<int, int> */
+		public array $touch_verified_calls = [];
+
+		/** @var array<int, array{0: int, 1: Location_Record}> */
+		public array $replace_record_calls = [];
+
+		/** @var array<int, int> */
+		public array $delete_entry_calls = [];
+
+		public function __construct( ?Popular_Settlement_Entry $entry = null, bool $stale = true ) {
+			$this->entry = $entry;
+			$this->stale = $stale;
+		}
+
+		public function find_entry_by_key( string $provider_id, string $key ): ?Popular_Settlement_Entry {
+			if ( null === $this->entry ) {
+				return null;
+			}
+
+			if ( $this->entry->provider_id() !== $provider_id || $this->entry->record()->key() !== $key ) {
+				return null;
+			}
+
+			return $this->entry;
+		}
+
+		public function is_stale( Popular_Settlement_Entry $entry, ?int $ttl_seconds = null ): bool {
+			return $this->stale;
+		}
+
+		public function touch_verified( int $id, ?int $timestamp = null ): void {
+			$this->touch_verified_calls[] = $id;
+		}
+
+		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): void {
+			$this->replace_record_calls[] = [ $id, $record ];
+		}
+
+		public function delete_entry( int $id ): void {
+			$this->delete_entry_calls[] = $id;
+		}
+	}
+}
 
 /**
  * Lightweight {@see Location_Service} test double: overrides the constructor
@@ -225,6 +357,8 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	 * @param array<string, Location_Record>|null    $chain_records                         Issue #330: see {@see self::$chain_records}.
 	 * @param array<int, string>                     $registered_provider_ids               Issue #380: see {@see self::$registered_provider_ids}.
 	 * @param array<string, Location_Provider|null>  $providers_by_id                       Issue #380: see {@see self::$providers_by_id}.
+	 * @param Popular_Settlement_Store|null          $popular_store                         #488 slice 3: see {@see self::$popular_store}.
+	 * @param Location_Provider|null                 $popular_provider                      #488 slice 3: see {@see self::$popular_provider}.
 	 */
 	public function __construct(
 		bool $active = true,
@@ -239,7 +373,9 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		?Location_Record $locate_result = null,
 		?array $chain_records = null,
 		array $registered_provider_ids = [],
-		array $providers_by_id = []
+		array $providers_by_id = [],
+		?Popular_Settlement_Store $popular_store = null,
+		?Location_Provider $popular_provider = null
 	) {
 		$this->active                                = $active;
 		$this->provider                               = $provider;
@@ -254,6 +390,51 @@ final class Location_Controller_Fake_Service extends Location_Service {
 		$this->chain_records                          = $chain_records;
 		$this->registered_provider_ids                = $registered_provider_ids;
 		$this->providers_by_id                        = $providers_by_id;
+		$this->popular_store                          = $popular_store;
+		$this->popular_provider                       = $popular_provider;
+	}
+
+	/**
+	 * #488 slice 3 (D5): what {@see self::popular_settlement_store()} answers.
+	 * `null` (the default) makes that method fall back to a fresh, entry-less
+	 * {@see Location_Controller_Fake_Popular_Store} — i.e. `find_entry_by_key()`
+	 * always misses, so the D5 step is a complete no-op and every test in this
+	 * file predating #488 slice 3 is unaffected.
+	 *
+	 * @var Popular_Settlement_Store|null
+	 */
+	private ?Popular_Settlement_Store $popular_store;
+
+	/**
+	 * #488 slice 3 (D5): what {@see self::get_registered_provider()} answers —
+	 * `null` (the default) simulates "no such provider registered at all".
+	 *
+	 * @var Location_Provider|null
+	 */
+	private ?Location_Provider $popular_provider;
+
+	/**
+	 * #488 slice 3 (D5): thin proxy for {@see Location_Service::popular_settlement_store()}.
+	 * See {@see self::$popular_store}'s own docblock for the safe default.
+	 *
+	 * @return Popular_Settlement_Store
+	 */
+	public function popular_settlement_store(): Popular_Settlement_Store {
+		return $this->popular_store ?? new Location_Controller_Fake_Popular_Store();
+	}
+
+	/**
+	 * #488 slice 3 (D5): thin proxy for {@see Location_Service::get_registered_provider()}.
+	 *
+	 * @param string $provider_id Provider id (ignored — this fake answers the
+	 *                             SAME {@see self::$popular_provider} regardless
+	 *                             of which id was asked for; no existing/new
+	 *                             test in this file needs per-id branching here).
+	 *
+	 * @return Location_Provider|null
+	 */
+	public function get_registered_provider( string $provider_id ): ?Location_Provider {
+		return $this->popular_provider;
 	}
 
 	/**
@@ -1637,6 +1818,269 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertFalse( $result['persisted'] );
 		$this->assertSame( [], $result['chain'] );
+	}
+
+	// -------------------------------------------------------------------
+	// /select — #488 slice 3, D5/D6/D7: lazy verification of a popular-list
+	// pick. "Not found" is already proven by every /select test above this
+	// point (the default fake popular store always misses) — this section
+	// covers "found and fresh" plus every D6 outcome for "found and stale".
+	// -------------------------------------------------------------------
+
+	private function settlement_record( string $key, string $settlement_name = 'Москва', string $region_name = 'Московская область', string $label = '' ): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => $key,
+				'provider_id' => explode( ':', $key )[0],
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'region'      => [ 'name' => $region_name, 'type' => 'обл' ],
+				'settlement'  => [ 'name' => $settlement_name, 'type' => 'г' ],
+				'label'       => $label,
+			]
+		);
+	}
+
+	public function test_select_a_fresh_popular_entry_is_left_completely_untouched(): void {
+		$record = $this->record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 1, 'dadata', 'RU', $record, 5, time(), time(), time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, false ); // not stale
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', $record );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $record->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertArrayNotHasKey( 'cancelled', $result );
+		$this->assertSame( $record->key(), $result['current']['key'] );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( $record->key(), $service->set_calls[0][0]->key() );
+		$this->assertCount( 0, $popular_store->touch_verified_calls, 'A fresh entry must never even call the provider.' );
+		$this->assertCount( 0, $popular_store->replace_record_calls );
+		$this->assertCount( 0, $popular_store->delete_entry_calls );
+	}
+
+	public function test_select_unchanged_verification_bumps_the_clock_and_persists_the_posted_record(): void {
+		$record = $this->record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $record, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		// Same record back — spec D6 "alive, unchanged".
+		$provider = new Location_Controller_Popular_Provider_Fixture( 'dadata', $record );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $record->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $record->key(), $result['current']['key'] );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( $record->key(), $service->set_calls[0][0]->key(), 'D5 table: unchanged persists the CUSTOMER\'s record, as today.' );
+		$this->assertSame( [ 7 ], $popular_store->touch_verified_calls );
+		$this->assertCount( 0, $popular_store->replace_record_calls );
+		$this->assertCount( 0, $popular_store->delete_entry_calls );
+	}
+
+	public function test_select_updated_verification_persists_the_providers_fresh_record_not_the_posted_one(): void {
+		$posted = $this->record( 'dadata:fias-1' );
+		$fresh  = Location_Record::from_array(
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+				'label'       => 'Москва (переименовано)',
+			]
+		);
+		$entry = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $posted, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', $fresh );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $posted->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( 'Москва (переименовано)', $service->set_calls[0][0]->label(), 'D5 table: updated persists the PROVIDER\'s fresh record.' );
+		$this->assertCount( 1, $popular_store->replace_record_calls );
+		$this->assertCount( 0, $popular_store->touch_verified_calls );
+		$this->assertCount( 0, $popular_store->delete_entry_calls );
+	}
+
+	public function test_select_failed_verification_never_blocks_the_purchase_and_is_logged(): void {
+		$record    = $this->record( 'dadata:fias-1' );
+		$entry     = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $record, 5, time(), null, time() );
+		$exception = new \RuntimeException( 'DaData resolve_key request failed.' );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', $exception );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$logged = [];
+		Functions\when( 'do_action' )->alias(
+			static function ( ...$args ) use ( &$logged ) {
+				$logged[] = $args;
+			}
+		);
+
+		$request = new WP_REST_Request( [ 'record' => $record->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame(
+			$record->key(),
+			$service->set_calls[0][0]->key(),
+			'D5 table: failed persists the customer\'s record, as today — a provider outage must never block a purchase.'
+		);
+		$this->assertCount( 0, $popular_store->touch_verified_calls );
+		$this->assertCount( 0, $popular_store->replace_record_calls );
+		$this->assertCount( 0, $popular_store->delete_entry_calls, '"failed" is not "gone".' );
+		$this->assertCount( 1, $logged, 'The provider failure must be logged via log_failure().' );
+		$this->assertSame( 'woodev_location_provider_operation_failed', $logged[0][0] );
+		$this->assertSame( $exception, $logged[0][3] );
+	}
+
+	public function test_select_a_stale_entry_with_no_registered_provider_is_treated_like_failed(): void {
+		$record = $this->record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $record, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, null // no provider registered for this id any more
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $record->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( $record->key(), $service->set_calls[0][0]->key() );
+		$this->assertCount( 0, $popular_store->delete_entry_calls );
+	}
+
+	public function test_select_gone_verification_silently_adopts_an_unambiguous_search_match(): void {
+		$stored    = $this->settlement_record( 'dadata:fias-1' );
+		$candidate = $this->settlement_record( 'dadata:fias-2', ' МОСКВА ', ' московская область ' );
+
+		$entry = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $stored, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		// resolve_key() => null ("gone"); suggest() => exactly one exact match.
+		$provider = new Location_Controller_Popular_Provider_Fixture( 'dadata', null, [ $candidate ] );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $stored->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertArrayNotHasKey( 'cancelled', $result );
+		$this->assertSame( $candidate->key(), $result['current']['key'], 'D7: current must carry the ADOPTED key.' );
+		$this->assertCount( 1, $service->set_calls );
+		$this->assertSame( $candidate->key(), $service->set_calls[0][0]->key() );
+		$this->assertSame( [ 7 ], $popular_store->delete_entry_calls, 'D6: the row is deleted before D7 runs its own search.' );
+	}
+
+	public function test_select_gone_verification_cancels_the_pick_on_zero_matches(): void {
+		$stored = $this->settlement_record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $stored, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', null, [] );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $stored->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertTrue( $result['cancelled'] );
+		$this->assertSame( 'stale_record', $result['reason'] );
+		$this->assertNotSame( '', $result['message'], 'D7: the message is not optional.' );
+		$this->assertNull( $result['current'] );
+		$this->assertFalse( $result['persisted'] );
+		$this->assertSame( [], $result['chain'] );
+		$this->assertCount( 0, $service->set_calls, 'Nothing may be written to the customer store on cancel.' );
+	}
+
+	public function test_select_gone_verification_cancels_the_pick_on_two_ambiguous_matches(): void {
+		$stored      = $this->settlement_record( 'dadata:fias-1' );
+		$candidate_a = $this->settlement_record( 'dadata:fias-2' );
+		$candidate_b = $this->settlement_record( 'dadata:fias-3' );
+
+		$entry = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $stored, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', null, [ $candidate_a, $candidate_b ] );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $stored->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertTrue( $result['cancelled'], 'Two indistinguishable candidates must never be substituted (gotcha: a locality display name is not an identifier).' );
+		$this->assertCount( 0, $service->set_calls );
+	}
+
+	public function test_select_gone_verification_cancels_the_pick_when_the_replacement_search_throws(): void {
+		$stored = $this->settlement_record( 'dadata:fias-1' );
+		$entry  = new Popular_Settlement_Entry( 7, 'dadata', 'RU', $stored, 5, time(), null, time() );
+
+		$popular_store = new Location_Controller_Fake_Popular_Store( $entry, true );
+		$provider      = new Location_Controller_Popular_Provider_Fixture( 'dadata', null, new \RuntimeException( 'suggest boom' ) );
+
+		$service = new Location_Controller_Fake_Service(
+			true, null, null, true, true, null, null, null, false, null, null, [], [],
+			$popular_store, $provider
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $stored->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result, 'A suggest() failure during D7 must degrade to cancel, never a 500.' );
+		$this->assertTrue( $result['cancelled'] );
+		$this->assertCount( 0, $service->set_calls );
 	}
 
 	// -------------------------------------------------------------------

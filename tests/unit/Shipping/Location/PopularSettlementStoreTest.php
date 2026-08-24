@@ -95,6 +95,9 @@ namespace {
 		/** @var array<int,array<string,mixed>> recorded delete() calls */
 		public array $deletes = [];
 
+		/** @var array<int,array{table: string, data: array<string,mixed>, where: array<string,mixed>}> recorded update() calls */
+		public array $updates = [];
+
 		/** @var string|null the raw query TEXT the last prepare() call received */
 		private ?string $last_query = null;
 
@@ -190,6 +193,8 @@ namespace {
 				'where' => $where,
 			];
 
+			$before = count( $this->rows );
+
 			$this->rows = array_values(
 				array_filter(
 					$this->rows,
@@ -205,7 +210,46 @@ namespace {
 				)
 			);
 
-			return 1;
+			return $before - count( $this->rows );
+		}
+
+		/**
+		 * Records an update() call and actually applies it to every matching row —
+		 * mirrors {@see self::delete()}'s own "genuinely apply the $where" fix
+		 * (round 2 critic finding) rather than a no-op spy.
+		 *
+		 * @param string               $table        table name (ignored)
+		 * @param array<string,mixed>  $data         column => new value
+		 * @param array<string,mixed>  $where        column => value, ALL of which must match
+		 * @param array<int,string>|null $format     column formats (ignored)
+		 * @param array<int,string>|null $where_format where-clause formats (ignored)
+		 * @return int number of rows updated
+		 */
+		public function update( $table, $data, $where, $format = null, $where_format = null ) {
+			$this->updates[] = [
+				'table' => $table,
+				'data'  => $data,
+				'where' => $where,
+			];
+
+			$updated = 0;
+
+			foreach ( $this->rows as &$row ) {
+				foreach ( $where as $column => $value ) {
+					if ( (string) ( $row[ $column ] ?? null ) !== (string) $value ) {
+						continue 2;
+					}
+				}
+
+				foreach ( $data as $column => $value ) {
+					$row[ $column ] = $value;
+				}
+
+				++$updated;
+			}
+			unset( $row );
+
+			return $updated;
 		}
 
 		/**
@@ -767,6 +811,216 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertNotNull( $sql, 'install() must call dbDelta().' );
 			$this->assertStringContainsString( 'locality_key', $sql );
 			$this->assertStringContainsString( 'UNIQUE KEY provider_locality (provider_id, locality_key)', $sql );
+		}
+
+		/**
+		 * find_entry_by_key() (#488 slice 3, D5): the same indexed lookup
+		 * find_row_by_key() already performs, wrapped as a public Entry-returning
+		 * accessor. Absent for a foreign provider_id or an unknown key — never a
+		 * scan of every row for the provider.
+		 */
+		public function test_find_entry_by_key_finds_or_misses(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+			$record   = $this->record( $provider->get_id(), '1' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [ $this->row( $record, 5, '2026-08-24 12:00:00', 7 ) ];
+			$store      = new Popular_Settlement_Store( $wpdb );
+
+			$found = $store->find_entry_by_key( $provider->get_id(), $record->key() );
+			$this->assertNotNull( $found );
+			$this->assertSame( 7, $found->id() );
+			$this->assertSame( $record->key(), $found->record()->key() );
+
+			$this->assertNull( $store->find_entry_by_key( $provider->get_id(), 'no-such-key' ) );
+			$this->assertNull( $store->find_entry_by_key( 'some-other-provider', $record->key() ) );
+		}
+
+		/**
+		 * touch_verified() (spec D6 "alive, unchanged"): bumps ONLY
+		 * `last_verified_at` — `record`, `order_count` and `last_ordered_at` are
+		 * left completely untouched.
+		 */
+		public function test_touch_verified_bumps_only_last_verified_at(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+			$record   = $this->record( $provider->get_id(), '1' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [ $this->row( $record, 5, '2026-08-01 00:00:00', 7 ) ];
+			$store      = new Popular_Settlement_Store( $wpdb );
+
+			$store->touch_verified( 7, 1787572800 );
+
+			$this->assertCount( 1, $wpdb->rows );
+			$this->assertSame( '2026-08-24 12:00:00', $wpdb->rows[0]['last_verified_at'] );
+			$this->assertSame( '5', $wpdb->rows[0]['order_count'], 'order_count must be untouched.' );
+			$this->assertSame( '2026-08-01 00:00:00', $wpdb->rows[0]['last_ordered_at'], 'last_ordered_at must be untouched.' );
+			$this->assertSame(
+				json_encode( $record->to_array() ),
+				$wpdb->rows[0]['record'],
+				'record must be untouched.'
+			);
+		}
+
+		/**
+		 * replace_record() (spec D6 "alive, changed", incl. a changed key):
+		 * overwrites `record`/`locality_key`/`country`, bumps `last_verified_at`,
+		 * and leaves `order_count`/`last_ordered_at` — the usage clock (D2), a
+		 * different axis — completely untouched. The row keeps its surrogate id.
+		 */
+		public function test_replace_record_overwrites_record_and_key_leaves_usage_clock_alone(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+			$original = $this->record( $provider->get_id(), 'old-native-id' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [ $this->row( $original, 9, '2026-08-01 00:00:00', 7 ) ];
+			$store      = new Popular_Settlement_Store( $wpdb );
+
+			$fresh = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':new-native-id',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Renamed', 'type' => 'city' ],
+				]
+			);
+
+			$store->replace_record( 7, $fresh, 1787572800 );
+
+			$this->assertSame( $fresh->key(), $wpdb->rows[0]['locality_key'], 'The key change must land (D6).' );
+			$this->assertSame(
+				$fresh->to_array(),
+				json_decode( (string) $wpdb->rows[0]['record'], true ),
+				'The stored record must be overwritten with the fresh one.'
+			);
+			$this->assertSame( '2026-08-24 12:00:00', $wpdb->rows[0]['last_verified_at'] );
+			$this->assertSame( '9', $wpdb->rows[0]['order_count'], 'order_count must be untouched.' );
+			$this->assertSame( '2026-08-01 00:00:00', $wpdb->rows[0]['last_ordered_at'], 'last_ordered_at must be untouched.' );
+			$this->assertSame( '7', $wpdb->rows[0]['id'], 'The surrogate id must survive the key change (D3/D6).' );
+		}
+
+		/**
+		 * delete_entry() (spec D6 "gone"): removes exactly the one row by its
+		 * surrogate id.
+		 */
+		public function test_delete_entry_removes_the_row(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+			$a        = $this->record( $provider->get_id(), 'a' );
+			$b        = $this->record( $provider->get_id(), 'b' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $a, 1, '2026-08-24 12:00:00', 1 ),
+				$this->row( $b, 1, '2026-08-24 12:00:00', 2 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			$store->delete_entry( 1 );
+
+			$this->assertCount( 1, $wpdb->rows );
+			$this->assertSame( '2', $wpdb->rows[0]['id'] );
+		}
+
+		/**
+		 * clear_provider() (D8's "Очистить список популярных городов"): removes
+		 * every row for the given provider, leaves other providers' rows alone,
+		 * and returns the number of rows deleted.
+		 */
+		public function test_clear_provider_removes_only_that_providers_rows(): void {
+			$mine    = new \Popular_Settlement_Resolving_Fixture_Provider( 'dadata' );
+			$foreign = new \Popular_Settlement_Resolving_Fixture_Provider( 'cdek' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $this->record( $mine->get_id(), '1' ), 1, '2026-08-24 12:00:00', 1 ),
+				$this->row( $this->record( $mine->get_id(), '2' ), 1, '2026-08-24 12:00:00', 2 ),
+				$this->row( $this->record( $foreign->get_id(), '1' ), 1, '2026-08-24 12:00:00', 3 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			$deleted = $store->clear_provider( $mine->get_id() );
+
+			$this->assertSame( 2, $deleted );
+			$this->assertCount( 1, $wpdb->rows );
+			$this->assertSame( $foreign->get_id(), $wpdb->rows[0]['provider_id'] );
+		}
+
+		/**
+		 * is_stale() (spec D2): a never-verified entry (`last_verified_at ===
+		 * null`) is stale; a recently-verified one is not; one older than the TTL
+		 * is stale again.
+		 */
+		public function test_is_stale_reflects_the_freshness_clock(): void {
+			$store = new Popular_Settlement_Store( new \Popular_Settlement_Store_Fake_Wpdb() );
+
+			$record = $this->record( 'dadata', '1' );
+
+			$never_verified = new \Woodev\Framework\Shipping\Location\Popular_Settlement_Entry(
+				1,
+				'dadata',
+				'RU',
+				$record,
+				1,
+				1756036800,
+				null,
+				1756036800
+			);
+			$this->assertTrue( $store->is_stale( $never_verified ), 'last_verified_at === null must be stale.' );
+
+			$fresh = new \Woodev\Framework\Shipping\Location\Popular_Settlement_Entry(
+				1,
+				'dadata',
+				'RU',
+				$record,
+				1,
+				1756036800,
+				1756036800 - 100,
+				1756036800
+			);
+			$this->assertFalse(
+				$store->is_stale( $fresh, WEEK_IN_SECONDS ),
+				'A row verified 100 seconds ago must not be stale against a one-week TTL.'
+			);
+
+			$stale = new \Woodev\Framework\Shipping\Location\Popular_Settlement_Entry(
+				1,
+				'dadata',
+				'RU',
+				$record,
+				1,
+				1756036800,
+				1756036800 - ( 2 * WEEK_IN_SECONDS ),
+				1756036800
+			);
+			$this->assertTrue(
+				$store->is_stale( $stale, WEEK_IN_SECONDS ),
+				'A row verified two weeks ago must be stale against a one-week TTL.'
+			);
+		}
+
+		/**
+		 * verify_ttl_seconds() (D2's SECOND clock) is independently filterable
+		 * from ttl_seconds() (the usage clock) — the two must never collapse into
+		 * one number.
+		 */
+		public function test_verify_ttl_seconds_is_independently_filterable(): void {
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $tag, $value ) {
+					if ( Popular_Settlement_Store::FILTER_VERIFY_TTL_SECONDS === $tag ) {
+						return 12345;
+					}
+
+					return $value;
+				}
+			);
+
+			$this->assertSame( 12345, Popular_Settlement_Store::verify_ttl_seconds() );
+			$this->assertSame(
+				Popular_Settlement_Store::DEFAULT_TTL_SECONDS,
+				Popular_Settlement_Store::ttl_seconds(),
+				'The usage-clock TTL must be unaffected by a verify-clock filter override.'
+			);
 		}
 	}
 }
