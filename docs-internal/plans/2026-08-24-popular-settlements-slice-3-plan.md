@@ -93,7 +93,12 @@ record:
 
 1. Look the posted record up with `find_entry_by_key( $record->provider_id(), $record->key() )`.
    Not found, or found and fresh → **behave exactly as today**. This is the overwhelmingly common
-   path and it must not gain a provider call, a query it did not have, or a changed response.
+   path and it must not gain a **provider call** or a **changed response shape**. It does gain that
+   one indexed lookup, unavoidably — deciding "not in the table" *is* what the lookup does, so there
+   is no version of D5 without it. (An earlier draft of this line said "a query it did not have",
+   which is unsatisfiable as written; both the implementer and the critic flagged it, the critic as
+   a defect. The guarantee that matters is the network call and the response shape, and 81
+   pre-existing controller tests passing byte-identical is what proves it held.)
 2. Found and stale → `verify_entry()`, then:
 
 | `outcome` | What `/select` persists | Response |
