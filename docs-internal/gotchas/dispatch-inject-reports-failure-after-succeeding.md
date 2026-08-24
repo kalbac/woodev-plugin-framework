@@ -102,6 +102,24 @@ Practical consequence — plan for it rather than being surprised by it:
 A second Codex launched the same way in the same session got `ok:true` from the inject and ran
 without any of this, so the failure is per-attempt, not a property of Codex.
 
+## s90: pressing Enter saves the WORK, never the dispatch
+
+Two of four `worker-start --agent claude` launches in s90 landed in the third state — the brief
+sitting unsent in the composer. Enter got both workers running and both delivered, so the
+recommended recovery holds. What Enter does NOT do is revive the dispatch:
+
+```
+status: failed   last_failure: agent_prompt_stalled   capability_revoked_at: <30s after dispatch>
+```
+
+The runtime gives up ~30 seconds after dispatching and revokes the capability. By the time a human
+notices the stall and presses Enter, the worker's `worker_done` is already doomed — it arrives as
+`Rejected worker_done: … capability is revoked`, with the original body quoted inside the rejection.
+
+So plan for it: **the report still reaches you, wrapped in a rejection; the branch is the real
+deliverable; the task has to be closed by hand** (`orchestration task-update --status completed`).
+Do not re-dispatch to recover the channel — the work is already running.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the receipt lying in the opposite direction
