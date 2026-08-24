@@ -783,7 +783,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// own region spelling into a <select> whose options come from the CDEK preset
 				// list, and select2 invented a second, foreign option for it. The settlement
 				// level was untouched in the same session precisely because its owner was set.
-				if ( $states_present && ! $region_states_are_ours ) {
+				// Narrowed to exactly one exception, and no wider (push-review finding):
+				// the #352 coherence rule still blanks the owner for EVERY level this
+				// layer does not render — a foreign state list, and equally a chain that
+				// serves no region at all — and stands down only for our own list.
+				if ( ! $country_levels['region'] && ! $region_states_are_ours ) {
 					$country_owners['region'] = '';
 				}
 
