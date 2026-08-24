@@ -1533,23 +1533,35 @@
 	 * bare `.value =` — see that function's own docblock for why a `<select>` needs more than
 	 * that to actually submit what this call intends.
 	 *
-	 * AN EMPTY `value` RELEASES THE RENDERER'S PICK GUARD (issue #488 slice 3, round 3 review).
-	 * A silent write can legitimately be empty — `pickup-mount.js`'s `applyAddressReplacement()`
-	 * coerces an absent `point.locality` to `''` and announces it as `{target}_city`
-	 * (`woodev_pickup_address_replacing`, {@see handlePickupAddressReplacing}), and a backwards
-	 * fill can derive one from a record whose components are optional. Left alone, that blank
-	 * write clears the field while `resolveAndSelect()`'s own `lastHandledKey` in
-	 * `location-select-modes.js` still holds the key it last delivered, so re-picking the SAME
-	 * still-rendered entry is silently swallowed: no `/select`, no record, and the address field
-	 * stays locked with nothing on screen explaining why.
+	 * A SILENT WRITE THAT CHANGES THE FIELD RELEASES THE RENDERER'S PICK GUARD (issue #488
+	 * slice 3, rounds 3-4 of review). `resolveAndSelect()` in `location-select-modes.js` keeps a
+	 * `lastHandledKey` so ONE pick cannot fire across both the select2 and the native path
+	 * (issue #461 BLOCKING 2). That guard describes the field's CURRENT state — and a silent
+	 * write is, by definition, not a pick: it moves the field underneath the widget without the
+	 * widget ever hearing about it. Once the two disagree, re-picking the SAME still-rendered
+	 * entry is swallowed — no `/select`, {@see handleFieldChanged} then reads the text as a
+	 * manual edit and drops the confirmed record, and the address field re-locks with nothing on
+	 * screen explaining why.
 	 *
-	 * The reset lives HERE, at the single write choke point, rather than at each caller: the
-	 * three literal `applyValueToElement( el, '' )` clear sites were wired one by one in the
-	 * same round and the enumeration still missed this path, which arrives through a call site
-	 * that does not look like a clear at all. Guarding the choke point covers every present
-	 * caller and every future one. Only an EMPTY write needs it — a silent write of a DIFFERENT
-	 * non-empty value leaves the guard holding a key that no longer matches the field, which
-	 * correctly still permits the next pick.
+	 * BOTH DIRECTIONS OF THAT DISAGREEMENT ARE REAL, and the second one is why this is not a
+	 * plain empty-check. `pickup-mount.js`'s `applyAddressReplacement()` coerces an absent
+	 * `point.locality` to `''` and announces it as `{target}_city`
+	 * (`woodev_pickup_address_replacing`, {@see handlePickupAddressReplacing}) — the empty case.
+	 * But that same path deliberately writes a DIFFERENT non-empty spelling of the locality when
+	 * it has one: the carrier answers «Москва» where the provider said «Moscow» (gotcha
+	 * `a-locality-display-name-is-not-an-identifier`), and a point may legitimately stand in a
+	 * neighbouring settlement. The guard compares only the provider KEY, so a changed spelling
+	 * leaves it just as stale as a blank does.
+	 *
+	 * An UNCHANGED write releases nothing. A re-seed that writes back the same text leaves the
+	 * guard telling the truth, and re-picking that entry really is the duplicate delivery the
+	 * guard exists to eat. The comparison is against `entry.resolved[ fieldId ]` — this module's
+	 * own notion of "did this field's text change", the same basis its change-gate uses.
+	 *
+	 * The release lives HERE, at the single write choke point, rather than at each caller: the
+	 * three literal `applyValueToElement( el, '' )` clear sites were wired one by one and the
+	 * enumeration still missed this path, which arrives through a call site that does not look
+	 * like a clear at all. A choke point covers every present caller and every future one.
 	 *
 	 * @param {Object} entry
 	 * @param {string} fieldId
@@ -1557,8 +1569,11 @@
 	 * @returns {void}
 	 */
 	function writeSilently( entry, fieldId, value ) {
+		var previous = entry.resolved[ fieldId ];
+		var next = cascadeKey( value );
+
 		entry.store.setValue( fieldId, value );
-		entry.resolved[ fieldId ] = cascadeKey( value );
+		entry.resolved[ fieldId ] = next;
 
 		var el = document.getElementById( fieldId );
 
@@ -1566,7 +1581,7 @@
 			applyValueToElement( el, value );
 		}
 
-		if ( '' === value ) {
+		if ( previous !== next ) {
 			resetWidgetGuard( entry, fieldId );
 		}
 	}

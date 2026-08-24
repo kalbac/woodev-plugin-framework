@@ -1381,11 +1381,39 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		expect( selectRequests().length ).toBe( 2 );
 	} );
 
-	// The other half of the rule, so a later change cannot "simplify" it into resetting on every
-	// silent write: a NON-empty silent write must leave the guard alone. It re-seeds a field that
-	// still shows a real value, and the guard's own purpose (issue #461 BLOCKING 2 — one pick
-	// must not fire across both the select2 and the native path) depends on it surviving.
-	it( 'a NON-empty silent write leaves the guard alone — the same entry is still treated as already handled', async () => {
+	// Round 4 (Codex): an empty write is NOT the only way a silent write can strand the guard,
+	// and this is the case that disproved the first attempt at this fix. The SAME pickup path
+	// deliberately writes a DIFFERENT non-empty spelling when it has one — the carrier answers
+	// «Москва» where the provider said «Moscow» (gotcha
+	// `a-locality-display-name-is-not-an-identifier`), and a point may legitimately stand in a
+	// neighbouring settlement, which is exactly why `applyAddressReplacement()` re-seeds rather
+	// than suppresses. `resolveAndSelect()` compares only the provider KEY, so a changed
+	// spelling leaves it just as stale as a blank does.
+	it( 'a pickup point with a DIFFERENT locality spelling — a non-empty silent write — also lets the SAME entry be re-picked', async () => {
+		const select = await attachPopulateAndPick();
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: { billing_city: 'Москва' } },
+			bubbles: true,
+		} ) );
+
+		// The field now carries the point's own locality, not the picked entry's.
+		expect( select.value ).toBe( 'Москва' );
+
+		// The customer puts their own settlement back. Under an empty-only release this was
+		// swallowed: no second /select, and handleFieldChanged() then read the text change as a
+		// manual edit and dropped the confirmed record, re-locking the address.
+		pickByKey( select, SETTLEMENT_ITEM.key );
+
+		expect( selectRequests().length ).toBe( 2 );
+	} );
+
+	// The other half of the rule, so a later change cannot "simplify" it into resetting on EVERY
+	// silent write: a write that does not CHANGE the field must leave the guard alone. It still
+	// tells the truth about what is on screen, and re-picking that entry really is the duplicate
+	// delivery the guard exists to eat (issue #461 BLOCKING 2 — one pick must not fire across
+	// both the select2 and the native path).
+	it( 'a silent write of the SAME text leaves the guard alone — the entry is still treated as already handled', async () => {
 		const select = await attachPopulateAndPick();
 
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
