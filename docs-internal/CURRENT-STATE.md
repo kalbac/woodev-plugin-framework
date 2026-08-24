@@ -9,8 +9,9 @@
 
 **As of 2026-08-24 (s89).** **Five PRs merged — #489, #492, #493, #495, #496 — and `main` carries all
 of them.** No PR is open. Cards closed: **#469, #449, #488 slice 1, #490, #491**. Cards filed:
-**#494** (Бэклог, key-format hygiene) and **#497** (Бэклог, missing constructor-default coverage). A
-negative result was recorded on **#473** rather than a fix.
+**#494** (key-format hygiene), **#497** (missing constructor-default coverage) and **#498** (the new
+table has no integration test), all Бэклог. A negative result was recorded on **#473** rather than a
+fix.
 
 **Two standing lessons from s89, both cheap to re-learn the hard way.** A card's proposed fix is a
 HYPOTHESIS — four of them were wrong this session in ways only execution showed. And **a partial
