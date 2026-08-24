@@ -1227,7 +1227,11 @@ final class DadataProviderTest extends TestCase {
 
 	// ---- HIGH 2 (round 2 critic): a DERIVED key (no native fias_id was ever
 	// available) can never be looked up via findById — the no-match that
-	// produces must not be read as "gone" either.
+	// produces must not be read as "gone" either. Round 3: recognised via
+	// Locality_Key::is_derived()'s marker fact, not a shape guess — see that
+	// method's own docblock and LocalityKeyTest for the marker-level coverage
+	// (including the regression pin for round 2's specific failure mode: a real
+	// id that happens to be shaped like a derived hash).
 
 	public function test_resolve_key_throws_rather_than_returns_null_for_a_derived_key(): void {
 		$this->set_token( 'tok' );
@@ -1236,8 +1240,29 @@ final class DadataProviderTest extends TestCase {
 		$fields      = self::suggestion_without_its_own_fias_id()['suggestions'][0]['data'];
 		$derived_key = Locality_Key::derive( Dadata_Provider::PROVIDER_ID, $fields );
 
+		$this->assertTrue( Locality_Key::is_derived( $derived_key ), 'sanity: this fixture must actually produce a derived key' );
+
 		$this->expectException( Location_Provider_Exception::class );
 		( new Dadata_Provider() )->resolve_key( $derived_key );
+	}
+
+	public function test_resolve_key_resolves_a_real_fias_id_that_happens_to_be_twenty_hex_characters(): void {
+		// Regression pin for round 2's exact bug: the old shape regex ('/^[0-9a-f]{20}$/')
+		// would have wrongly refused this — a COMPOSED (not derived) key whose native
+		// id happens to match the shape a derived hash takes. Locality_Key::is_derived()
+		// answers from the marker instead, so this must resolve normally.
+		$this->set_token( 'tok' );
+		$fixture = self::settlement_suggestion( '4' );
+		$fixture['data']['fias_id'] = '0123456789abcdef0123';
+		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $fixture ] ] ) );
+
+		$key = Locality_Key::compose( Dadata_Provider::PROVIDER_ID, '0123456789abcdef0123' );
+		$this->assertFalse( Locality_Key::is_derived( $key ), 'sanity: a composed key is never derived, regardless of its shape' );
+
+		$record = ( new Dadata_Provider() )->resolve_key( $key );
+
+		$this->assertNotNull( $record );
+		$this->assertSame( $key, $record->key() );
 	}
 
 	// -------------------------------------------------------------------------

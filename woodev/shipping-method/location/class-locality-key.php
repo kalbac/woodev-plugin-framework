@@ -38,6 +38,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		private const DERIVED_ID_LENGTH = 20;
 
 		/**
+		 * Marks the native-id segment of a key {@see self::derive()} minted, so
+		 * "this key was derived, not issued by the provider" is a FACT readable off
+		 * the key itself — never something a caller has to infer from the segment's
+		 * shape.
+		 *
+		 * This exists because a shape guess was tried first and was wrong: recognising
+		 * a derived key by "20 lowercase hex characters" (round 2 of #488) is the same
+		 * class of mistake `docs-internal/gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md`
+		 * already cost this project a session over — "a name heuristic, not an
+		 * ownership fact." A real native id happening to be shaped exactly like a
+		 * derived hash would have been wrongly refused; a derivation change (a length
+		 * change, a second derive() call site, an encoding change) would have made the
+		 * shape check silently stop matching and the wrongly-"verified" key would fall
+		 * straight back to being read as "gone" — the very bug the check existed to
+		 * prevent. Marking at the ONE point a derived key is ever minted removes the
+		 * guess entirely: {@see self::is_derived()} answers from the marker, not a
+		 * prediction about what the marker looks like.
+		 *
+		 * Safe under {@see self::parse()}'s existing "split on the FIRST colon only"
+		 * contract without any change to `parse()` — a real DaData native id already
+		 * legitimately contains colons of its own (`relation:59195`, `way:1247091839`,
+		 * measured OSM ids), so a marker segment containing one more is nothing new to
+		 * that contract, and this marker's OWN colon is likewise inert to it.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const DERIVED_MARKER = 'derived:';
+
+		/**
 		 * Composes a namespaced key from a provider id and that provider's native id.
 		 *
 		 * Both parts are refused when empty or whitespace-only — an empty domain key is
@@ -119,9 +149,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 		/**
 		 * Deterministically derives a key for a provider whose payload carries no native
-		 * id of its own — the native-id segment is a truncated SHA-1 of the locality's
-		 * own components, so the same locality always derives the same key regardless of
-		 * request order or provider implementation.
+		 * id of its own — the native-id segment is {@see self::DERIVED_MARKER} followed
+		 * by a truncated SHA-1 of the locality's own components, so the same locality
+		 * always derives the same key regardless of request order or provider
+		 * implementation, and {@see self::is_derived()} can always tell this key apart
+		 * from one a provider actually issued.
 		 *
 		 * Determinism rules (all load-bearing, all covered by
 		 * {@see \Woodev\Tests\Unit\Shipping\Location\LocalityKeyTest}):
@@ -152,11 +184,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * MIS-KEY, the outcome D5 exists to prevent. Refusing loudly is the only option that
 		 * keeps derivation deterministic across hosts.
 		 *
-		 * This path is reachable only for a provider whose payload carries no native id of
-		 * its own — the bundled DaData provider carries FIAS ids and calls
-		 * {@see self::compose()} directly, so it never reaches `derive()` and this guard
-		 * never fires for it. A future native-id-less provider (e.g. one keyed purely by a
-		 * region/settlement name pair) is the actual caller this guard protects.
+		 * Reachable whenever a provider's payload carries no native id of its own — the
+		 * bundled DaData provider carries a real `fias_id` for most localities and calls
+		 * {@see self::compose()} directly, but genuinely falls through to `derive()` for
+		 * the GeoNames tier, where a suggestion's own `fias_id` is empty
+		 * ({@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider::record_from_dadata_fields()}'s
+		 * own ternary; pinned by `DadataProviderTest::test_a_suggestion_missing_a_fias_id_derives_the_key_deterministically()`).
+		 * A future native-id-less provider (e.g. one keyed purely by a region/settlement
+		 * name pair) would reach it unconditionally.
 		 *
 		 * @since 2.0.2
 		 *
@@ -186,7 +221,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 			$canonical = self::canonicalize( $components );
 
-			return self::compose( $provider_id, substr( sha1( $canonical ), 0, self::DERIVED_ID_LENGTH ) );
+			return self::compose( $provider_id, self::DERIVED_MARKER . substr( sha1( $canonical ), 0, self::DERIVED_ID_LENGTH ) );
+		}
+
+		/**
+		 * Whether `$key` was DERIVED (see {@see self::derive()}) rather than issued by
+		 * its owning provider — a FACT read off the key's own {@see self::DERIVED_MARKER}
+		 * marker, never a guess about what a derived key's native-id segment happens to
+		 * look like. See {@see self::DERIVED_MARKER}'s own docblock for why the earlier
+		 * shape-guessing approach was wrong and this replaced it.
+		 *
+		 * A caller that needs to know whether a stored key can ever be looked up again
+		 * by a provider's own by-id lookup (e.g.
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider::resolve_key()})
+		 * asks this — a derived key was never issued by the provider in the first place,
+		 * so no by-id lookup can ever match it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key A key produced by {@see self::compose()} or {@see self::derive()}.
+		 *
+		 * @return bool
+		 *
+		 * @throws \InvalidArgumentException When `$key` is malformed — see {@see self::parse()}.
+		 */
+		public static function is_derived( string $key ): bool {
+			[ , $native_id ] = self::parse( $key );
+
+			return 0 === strpos( $native_id, self::DERIVED_MARKER );
 		}
 
 		/**

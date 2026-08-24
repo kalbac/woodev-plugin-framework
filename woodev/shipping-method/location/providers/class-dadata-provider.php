@@ -65,23 +65,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 */
 		public const PROVIDER_ID = 'dadata';
 
-
-		/**
-		 * The exact shape {@see Locality_Key::derive()} produces for this provider:
-		 * a 20-lowercase-hex-character truncated SHA-1
-		 * ({@see Locality_Key}'s own `DERIVED_ID_LENGTH`), with none of the
-		 * separators every REAL DaData `fias_id` measured in this codebase carries —
-		 * a ФИАС UUID's dashes, or an OSM `relation:`/`way:` prefix (see
-		 * {@see self::record_from_dadata_fields()}'s own measurement note). Used
-		 * ONLY by {@see self::resolve_key()} to recognise a key it structurally
-		 * cannot look up — see that method's own docblock for why a wrong guess
-		 * here must never read as "gone".
-		 *
-		 * @since 2.0.2
-		 * @var string
-		 */
-		private const DERIVED_NATIVE_ID_PATTERN = '/^[0-9a-f]{20}$/';
-
 		/**
 		 * Store-setting field id for the required DaData API token.
 		 *
@@ -524,15 +507,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * must never collapse into it (critic finding, round 2: a malformed-but-200
 		 * response is OUR mapping failing, not DaData's answer).
 		 *
-		 * A DERIVED key (see {@see Locality_Key::derive()}) ALSO throws, before any
-		 * network call: {@see self::record_from_dadata_fields()} derives a key only
-		 * when a suggestion carried no `fias_id` of its own, and `find_by_id_address()`
-		 * is a lookup defined for a real fias_id — handing it a derived hash cannot
-		 * match anything, so a no-match there would be indistinguishable from "gone"
-		 * even though the record was never confirmed gone at all (critic finding,
-		 * round 2). {@see self::DERIVED_NATIVE_ID_PATTERN} recognises this
-		 * structurally (the exact shape {@see Locality_Key::derive()} produces) so
-		 * the request is never even attempted for a key it could never resolve.
+		 * A DERIVED key ALSO throws, before any network call — {@see self::record_from_dadata_fields()}
+		 * derives a key only when a suggestion carried no `fias_id` of its own, and
+		 * `find_by_id_address()` is a lookup defined for a real fias_id, so handing it
+		 * a derived hash can never match anything: a guaranteed no-match that would be
+		 * indistinguishable from "gone" even though the record was never confirmed
+		 * gone at all (critic finding, round 2). {@see Locality_Key::is_derived()}
+		 * answers this from the key's own marker — a FACT {@see Locality_Key::derive()}
+		 * stamped onto the key at the moment it minted it — never a guess about what a
+		 * derived key happens to look like (round 3: the earlier shape-regex approach
+		 * was exactly the "name heuristic, not an ownership fact" mistake
+		 * `docs-internal/gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md`
+		 * already cost this project a session over, and it had the SAME two failure
+		 * modes here: a real fias_id that happened to match the shape would have been
+		 * wrongly refused, and a derivation change the shape check silently stopped
+		 * matching would have sent the request through anyway, straight back to
+		 * reading a real no-match as "gone").
+		 *
 		 * **Left open, deliberately not decided here:** what a LATER slice (the
 		 * popular-settlements storage/verification layer, out of scope for this
 		 * capability slice) should do with a row that can never be verified this way
@@ -563,7 +554,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				);
 			}
 
-			if ( 1 === preg_match( self::DERIVED_NATIVE_ID_PATTERN, $native_id ) ) {
+			if ( Locality_Key::is_derived( $key ) ) {
 				throw new Location_Provider_Exception(
 					sprintf(
 						'DaData resolve_key(): key "%s" was DERIVED — this locality never carried a real fias_id, ' .
