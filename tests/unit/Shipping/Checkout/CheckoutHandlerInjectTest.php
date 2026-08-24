@@ -432,6 +432,58 @@ class CheckoutHandlerInjectTest extends TestCase {
 	}
 
 	/**
+	 * An attribute somebody else declared WINS. WooCommerce's own `state` select branch
+	 * interpolates `implode( ' ', $custom_attributes )` before its literal
+	 * `data-input-classes="…"`, and an HTML parser keeps the first of two identical attributes —
+	 * so on WooCommerce's own render a theme-declared value already beats the `input_class` one.
+	 * Overwriting it here would invert that precedence for every field this layer takes over.
+	 */
+	public function test_inject_does_not_overwrite_a_declared_data_input_classes(): void {
+		$fields  = Checkout_Fields::from_array( [ Field::create( 'billing_state' )->set_type( 'select' )->set_section( 'billing' )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$wc = [
+			'billing' => [
+				'billing_state' => [
+					'type'              => 'state',
+					'input_class'       => [ 'from-input-class' ],
+					'custom_attributes' => [ 'data-input-classes' => 'declared-by-a-theme' ],
+				],
+			],
+		];
+
+		$this->assertSame(
+			'declared-by-a-theme',
+			$handler->inject( $wc )['billing']['billing_state']['custom_attributes']['data-input-classes']
+		);
+	}
+
+	/**
+	 * A declared EMPTY value is treated as absent, because `woocommerce_form_field()` would drop
+	 * it through `array_filter( …, 'strlen' )` anyway — deferring to it would silently restore
+	 * the defect.
+	 */
+	public function test_inject_treats_a_declared_empty_data_input_classes_as_absent(): void {
+		$fields  = Checkout_Fields::from_array( [ Field::create( 'billing_state' )->set_type( 'select' )->set_section( 'billing' )->to_array() ] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+
+		$wc = [
+			'billing' => [
+				'billing_state' => [
+					'type'              => 'state',
+					'input_class'       => [ 'from-input-class' ],
+					'custom_attributes' => [ 'data-input-classes' => '' ],
+				],
+			],
+		];
+
+		$this->assertSame(
+			'from-input-class',
+			$handler->inject( $wc )['billing']['billing_state']['custom_attributes']['data-input-classes']
+		);
+	}
+
+	/**
 	 * A field WooCommerce does NOT render through its `state` branch never carried the attribute
 	 * in the first place — adding it there would be noise, not a fix.
 	 */

@@ -1032,7 +1032,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					$wc_attributes = $existing_wc_args['custom_attributes'] ?? [];
 					$wc_attributes = is_array( $wc_attributes ) ? $wc_attributes : [];
 
-					$wc_attributes['data-input-classes'] = '' === $input_classes ? ' ' : $input_classes;
+					// An attribute somebody ELSE declared wins, because that is what WooCommerce's
+					// own renderer does: the `state` select branch interpolates
+					// `implode( ' ', $custom_attributes )` BEFORE its literal
+					// `data-input-classes="…"`, and an HTML parser keeps the FIRST of two
+					// identical attributes. Overwriting here would invert that precedence for
+					// every field we take over. An empty declared value is treated as absent —
+					// `array_filter( …, 'strlen' )` would drop it anyway, which is the whole
+					// reason this branch exists (Codex critic, PR #489).
+					if ( '' === (string) ( $wc_attributes['data-input-classes'] ?? '' ) ) {
+						$wc_attributes['data-input-classes'] = '' === $input_classes ? ' ' : $input_classes;
+					}
 
 					$our_overrides['custom_attributes'] = $wc_attributes;
 				}
