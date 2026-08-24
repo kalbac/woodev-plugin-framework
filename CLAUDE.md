@@ -55,11 +55,21 @@ Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and mu
 coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
 Codex, nobody accepts their own work.**
 
-**⛔ Until 27.08.2026, Codex is CRITIC-ONLY** — not a worker, not a planner, not a scout. One
-overnight session burned 45% of the weekly Codex allowance running it in every role at once
-(operator decision, 21.08.2026). Cap the wave at **2–3 agents** and **2–3 rounds per card**; a card
-still REJECTed after the third verdict needs decomposition or an operator decision, not a fourth
-round.
+**The critic-only restriction on Codex is LIFTED (operator, 24.08.2026).** It was a BUDGET
+measure — one overnight session burned 45% of the weekly Codex allowance by running it as worker,
+planner and critic at once (21.08.2026), and Codex was capped to the critic role until 27.08. That
+premise is gone: the operator spent one of his accumulated weekly-limit resets and the allowance is
+back to 0% used. Codex may be a worker again.
+
+**Two caps from that same decision STAY, because they were never about the budget:**
+
+- **2–3 concurrent agents.** This is a HARDWARE limit, not a quota one. At six agents free RAM hit
+  0.4 GB of 15.3 and a starting Codex died on `VirtualAlloc`; even at three, `phpcs` failed in ways
+  that read as code defects and jest OOM'd (gotcha
+  `three-agents-is-the-concurrency-cap-on-this-machine`). A reset allowance buys no RAM.
+- **2–3 rounds per card**, after which a card needs decomposition or an operator decision rather
+  than a fourth blind round. This is process discipline. s88 is the worked example: three rounds on
+  #458 failed, the fourth was licensed only by the operator settling Rule 7c, and it landed.
 
 The `orchestration` and `orca-cli` skills are installed globally, so they surface on their own —
 invoke them rather than recalling a flag. Their guides are version-matched to the binary; a flag

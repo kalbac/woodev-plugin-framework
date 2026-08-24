@@ -21,8 +21,12 @@ is the decision that unblocks a fourth. **The integration suite is in NEITHER `c
 jest** — it runs only in CI and in the container, which is exactly the hole this went through; every
 brief touching a server-side checkout seam must require it.
 
-**⛔ Codex is CRITIC-ONLY until 27.08.2026** (operator, 21.08.2026 — one overnight burned 45% of the
-weekly allowance). Caps: **2–3 concurrent agents**, **2–3 rounds per card**.
+**Codex is a full worker again (operator, 24.08.2026).** The critic-only restriction of 21.08 was a
+BUDGET measure after one overnight burned 45% of the weekly allowance; the operator spent one of his
+accumulated weekly-limit resets, so the allowance is back to 0% used. **The two caps from that same
+decision stay** — **2–3 concurrent agents** (a HARDWARE limit: at six, free RAM hit 0.4 GB of 15.3
+and Codex died on `VirtualAlloc`) and **2–3 rounds per card** (process discipline; a fourth round
+needs decomposition or an operator decision, which is exactly how #458 finally landed).
 
 ## ⚠ The checkout location layer
 
