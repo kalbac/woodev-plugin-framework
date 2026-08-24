@@ -318,6 +318,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		public const FILTER_ACTIVE_PROVIDER = 'woodev_location_active_provider';
 
+		/**
+		 * Option name storing the popular-settlements table's installed schema
+		 * version (#488) — the gate {@see self::maybe_install_popular_settlements_table()}
+		 * checks so `dbDelta()` runs once per version change, not on every request.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const POPULAR_SETTLEMENTS_SCHEMA_VERSION_OPTION = 'woodev_popular_settlements_schema_version';
+
+		/**
+		 * Current popular-settlements table schema version. Bump when
+		 * {@see Popular_Settlement_Store::get_schema()} changes.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const POPULAR_SETTLEMENTS_SCHEMA_VERSION = '2';
+
 		/** @var self|null singleton. */
 		private static ?self $instance = null;
 
@@ -410,6 +429,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @var array<string, true>
 		 */
 		private array $claimed_notice_ids = [];
+
+		/**
+		 * Lazily-constructed shared {@see Popular_Settlement_Store} instance (#488) —
+		 * see {@see self::popular_settlement_store()}. Null until first requested.
+		 *
+		 * @since 2.0.2
+		 * @var Popular_Settlement_Store|null
+		 */
+		private ?Popular_Settlement_Store $popular_settlement_store = null;
 
 		/**
 		 * Use {@see self::instance()}.
@@ -617,6 +645,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @since 2.0.2
 		 * @since 2.0.2 Also hooks {@see self::inject_related_list_states()} onto
 		 *              `woocommerce_states` (Task 13, issue #294).
+		 * @since 2.0.2 Round 2 (#488 slice 2, HIGH 1/HIGH 2): also hooks
+		 *              {@see self::maybe_install_popular_settlements_table()} onto
+		 *              `init` (deferred, same as {@see self::collect()} — NOT called
+		 *              synchronously here, which is exactly what broke ~150 unrelated
+		 *              unit tests in round 1 by touching a possibly-polluted global
+		 *              `$wpdb` mid-`add_hooks()`) and
+		 *              {@see self::handle_checkout_order_processed_for_popular_settlements()}
+		 *              onto `woocommerce_checkout_order_processed`.
 		 *
 		 * @return void
 		 */
@@ -627,9 +663,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$this->hooked = true;
 
 			add_action( 'init', [ $this, 'collect' ], 20 );
+			add_action( 'init', [ $this, 'maybe_install_popular_settlements_table' ], 20 );
 			add_action( 'wp_login', [ new Customer_Location_Store(), 'handle_wp_login' ], 10, 2 );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_related_list_states' ] );
+			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed_for_popular_settlements' ], 20, 3 );
+		}
+
+		/**
+		 * Gets the lazily-constructed, shared {@see Popular_Settlement_Store}
+		 * instance (#488).
+		 *
+		 * Public: {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order} (the
+		 * one real framework caller of
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()})
+		 * is expected to be constructed with this SAME instance, so a settlement
+		 * stamped here via {@see self::handle_checkout_order_processed_for_popular_settlements()}
+		 * and one recalled there refer to the same store.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Popular_Settlement_Store
+		 */
+		public function popular_settlement_store(): Popular_Settlement_Store {
+			if ( null === $this->popular_settlement_store ) {
+				$this->popular_settlement_store = new Popular_Settlement_Store();
+			}
+
+			return $this->popular_settlement_store;
+		}
+
+		/**
+		 * Ensures the popular-settlements table (#488) exists, once per schema
+		 * version.
+		 *
+		 * Hooked onto `init` at priority 20 (round 2, HIGH 1) — deferred, exactly
+		 * like {@see self::collect()} — NOT called synchronously from
+		 * {@see self::add_hooks()} itself. That distinction is load-bearing: dozens
+		 * of unit tests call `declare_needed()` → `add_hooks()` directly (to reach
+		 * {@see self::collect()} without a real WP request), and a synchronous call
+		 * here would run this method — and therefore touch `$wpdb` — in every one of
+		 * them; `add_action()` merely REGISTERS the callback, so those same tests
+		 * stay unaffected unless something actually fires `init`.
+		 *
+		 * `dbDelta()` itself is not cheap enough to run on every real request either,
+		 * so the option-stored schema version is the real gate; the cheap
+		 * `get_option()` check running every request (while the table itself is only
+		 * ever created/migrated once per version bump) is the same "hook is cheap,
+		 * the callback itself gates" discipline this class already follows elsewhere
+		 * (see this method's own docblock on `woocommerce_states`).
+		 *
+		 * @internal Hooked to `init`; not part of the public consumption surface.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function maybe_install_popular_settlements_table(): void {
+			if ( self::POPULAR_SETTLEMENTS_SCHEMA_VERSION === get_option( self::POPULAR_SETTLEMENTS_SCHEMA_VERSION_OPTION ) ) {
+				return;
+			}
+
+			$this->popular_settlement_store()->install();
+
+			update_option( self::POPULAR_SETTLEMENTS_SCHEMA_VERSION_OPTION, self::POPULAR_SETTLEMENTS_SCHEMA_VERSION );
+		}
+
+		/**
+		 * Stamps the settlement the customer picked at checkout onto the just-saved
+		 * order, for {@see Popular_Settlement_Store::recall_candidate()} to read
+		 * back later (#488 slice 2, round 2, HIGH 2).
+		 *
+		 * This is the ONLY place in the framework that genuinely knows the picked
+		 * settlement without any carrier-plugin cooperation: `Customer_Location_Store`
+		 * holds it in the LIVE session/user-meta, which is only reliably available
+		 * during THIS synchronous request — an async retry of a failed carrier export
+		 * (see {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::schedule_retry()})
+		 * runs later, with no customer session at all. Stamping the record onto the
+		 * order NOW, while the session is live, is what makes it recoverable then.
+		 *
+		 * Deliberately does NOT enrol anything itself — see
+		 * {@see Popular_Settlement_Store::remember_candidate()}'s own docblock. Only
+		 * a REAL, successful carrier export
+		 * ({@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()})
+		 * ever calls {@see Popular_Settlement_Store::enroll()} — this avoids double
+		 * counting the same order from two independent triggers.
+		 *
+		 * A silent no-op when there is no active provider, or the customer's chain has
+		 * no settlement-level record — most orders under a non-address-cascade
+		 * shipping method, or a guest whose session already expired.
+		 *
+		 * @internal Hooked to `woocommerce_checkout_order_processed`; not part of the
+		 *           public consumption surface.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int                  $order_id    the created order id (unused; the order object is used)
+		 * @param array<string, mixed> $posted_data the posted checkout data (unused)
+		 * @param \WC_Order            $order       the created, saved order
+		 *
+		 * @return void
+		 */
+		public function handle_checkout_order_processed_for_popular_settlements( int $order_id, array $posted_data, \WC_Order $order ): void {
+			$provider = $this->get_active_provider();
+
+			if ( null === $provider ) {
+				return;
+			}
+
+			$chain = ( new Customer_Location_Store() )->get_chain();
+
+			if ( null === $chain || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
+				return;
+			}
+
+			$this->popular_settlement_store()->remember_candidate( $order, $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] );
 		}
 
 		/**

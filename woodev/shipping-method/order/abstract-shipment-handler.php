@@ -117,18 +117,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * is not lost: the export is re-queued via {@see self::schedule_retry()} and an
 		 * empty id is returned, so the caller can tell the export did not complete now.
 		 *
-		 * A successful export is also "an order shipped to this settlement" (#488
-		 * popular-settlements spec D2) — the strongest available signal that the shop
-		 * is genuinely committed to shipping there, stronger than merely placing the
-		 * order (which can still be cancelled/refunded before ever reaching a carrier).
-		 * When both `$settlement` and `$provider` are given (and a store was supplied
-		 * to the constructor), {@see self::enroll_popular_settlement()} bumps it after
-		 * the `shipment_exported` hook fires. Both default to null: an existing call
-		 * site that does not pass them sees no behaviour change.
+		 * A successful export with a NON-EMPTY carrier order id is also "an order
+		 * shipped to this settlement" (#488 popular-settlements spec D2) — the
+		 * strongest available signal that the shop is genuinely committed to
+		 * shipping there, stronger than merely placing the order (which can still be
+		 * cancelled/refunded before ever reaching a carrier). When both `$settlement`
+		 * and `$provider` are given (and a store was supplied to the constructor),
+		 * {@see self::enroll_popular_settlement()} bumps it after the
+		 * `shipment_exported` hook fires. Both default to null: an existing call site
+		 * that does not pass them sees no behaviour change.
+		 *
+		 * A response that does not throw but still yields an EMPTY carrier id
+		 * (round 2 critic finding, MEDIUM 3) is explicitly NOT evidence the shop
+		 * shipped anywhere — an order-meta write and the `shipment_exported` hook
+		 * still both fire as before (that is existing, unrelated behaviour this fix
+		 * does not touch), but enrolment is skipped.
 		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `$settlement` / `$provider` (#488 slice 2) to enrol the
 		 *              order's settlement into the popular-settlements list.
+		 * @since 2.0.2 Round 2 (MEDIUM 3): enrolment additionally requires a
+		 *              non-empty `$carrier_order_id` — a non-throwing response with
+		 *              no id is not evidence of a real export.
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
@@ -170,7 +180,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 */
 			do_action( $this->hook( 'shipment_exported' ), $order, $carrier_order_id );
 
-			$this->enroll_popular_settlement( $settlement, $provider );
+			if ( '' !== $carrier_order_id ) {
+				$this->enroll_popular_settlement( $settlement, $provider );
+			}
 
 			return $carrier_order_id;
 		}

@@ -1,19 +1,17 @@
 <?php
 /**
  * Unit tests for Abstract_Shipment_Handler's popular-settlements enrolment seam
- * (#488 slice 2): a successful export bumps the popular list when the caller
- * supplies both a settlement and its producing provider, and is a strict no-op
- * whenever the store, the settlement, or the provider is missing.
+ * (#488 slice 2), driven through the REAL export() method (round 2, MEDIUM 4: the
+ * round-1 version of this file bypassed export() entirely via reflection and
+ * invoked the protected helper directly, so it would have stayed green even if the
+ * call to enroll_popular_settlement() were deleted from export()). Also covers the
+ * round-2 MEDIUM 3 fix: an export whose extractor returns an empty carrier id must
+ * NOT enrol, even though it neither threw nor was otherwise rejected.
  *
- * Constructed via reflection (`newInstanceWithoutConstructor()` + a reflected
- * property/method) rather than the real constructor — Abstract_Shipment_Handler's
- * constructor type-hints Shipping_API / Shipping_Order_Handler /
- * Woodev_Background_Job_Handler, none of which this seam touches, so pulling in
- * their full dependency chains (a real WC_Order double, Woodev_Async_Request, …)
- * would test infrastructure this change never exercises. The D4/D4a gates, the two
- * clocks, ranking, eviction, and the foreign-provider_id exclusion are already
- * covered directly on {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store}
- * in PopularSettlementStoreTest.php; this file only proves the wiring.
+ * The D4/D4a gates, the two clocks, ranking, eviction, and the foreign-provider_id
+ * exclusion are covered directly on
+ * {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store} in
+ * PopularSettlementStoreTest.php; this file only proves export()'s own wiring.
  *
  * @package Woodev\Tests\Unit\Shipping\Order
  */
@@ -27,12 +25,18 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/abstract-location-provider.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-entry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
 
 	use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Location\Location_Scope;
+	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 
 	/**
 	 * Minimal concrete Location_Provider fixture declaring CAPABILITY_RESOLVE_KEY.
@@ -64,12 +68,17 @@ namespace {
 	}
 
 	/**
-	 * Minimal concrete subclass — only implements the one abstract method so the
-	 * class can be instantiated (via reflection, bypassing __construct()).
+	 * Minimal concrete subclass. `$next_carrier_order_id` is a test-controlled seam
+	 * so a single fixture can drive both "export produced a real id" and "export
+	 * produced no id" (MEDIUM 3) without needing a real carrier response shape.
 	 */
 	class Test_Shipment_Handler extends Abstract_Shipment_Handler {
+
+		/** @var string what extract_carrier_order_id() returns for the next call */
+		public string $next_carrier_order_id = 'CARRIER-1';
+
 		protected function extract_carrier_order_id( \Woodev_API_Response $response ): string {
-			return '';
+			return $this->next_carrier_order_id;
 		}
 	}
 }
@@ -79,48 +88,14 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	use Mockery;
 	use Woodev\Framework\Shipping\Location\Location_Record;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
+	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
 	use Woodev\Tests\Unit\TestCase;
 
 	/**
+	 * @covers \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export
 	 * @covers \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::enroll_popular_settlement
 	 */
 	final class AbstractShipmentHandlerEnrollmentTest extends TestCase {
-
-		/**
-		 * Builds a Test_Shipment_Handler without running its real constructor, and
-		 * reflectively stamps the given popular-settlements store onto it.
-		 *
-		 * @param Popular_Settlement_Store|null $store
-		 * @return \Test_Shipment_Handler
-		 */
-		private function handler_with_store( ?Popular_Settlement_Store $store ): \Test_Shipment_Handler {
-			$reflection = new \ReflectionClass( \Test_Shipment_Handler::class );
-			$handler    = $reflection->newInstanceWithoutConstructor();
-
-			$property = $reflection->getProperty( 'popular_settlement_store' );
-			if ( PHP_VERSION_ID < 80100 ) {
-				$property->setAccessible( true );
-			}
-			$property->setValue( $handler, $store );
-
-			return $handler;
-		}
-
-		/**
-		 * Invokes the protected enroll_popular_settlement() seam via reflection.
-		 *
-		 * @param \Test_Shipment_Handler $handler
-		 * @param Location_Record|null   $settlement
-		 * @param mixed                  $provider
-		 * @return void
-		 */
-		private function invoke_enroll( \Test_Shipment_Handler $handler, ?Location_Record $settlement, $provider ): void {
-			$method = ( new \ReflectionClass( $handler ) )->getMethod( 'enroll_popular_settlement' );
-			if ( PHP_VERSION_ID < 80100 ) {
-				$method->setAccessible( true );
-			}
-			$method->invoke( $handler, $settlement, $provider );
-		}
 
 		private function record(): Location_Record {
 			return Location_Record::from_array(
@@ -133,47 +108,101 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			);
 		}
 
-		public function test_enrolls_when_store_settlement_and_provider_are_all_present(): void {
+		/**
+		 * Builds a Test_Shipment_Handler through its REAL constructor.
+		 *
+		 * @param Popular_Settlement_Store|null $store
+		 * @param mixed                         $api           A Shipping_API mock; a default success double is built when null.
+		 * @return \Test_Shipment_Handler
+		 */
+		private function handler( ?Popular_Settlement_Store $store, $api = null ): \Test_Shipment_Handler {
+			if ( null === $api ) {
+				$response = Mockery::mock( '\Woodev_API_Response' );
+				$api      = Mockery::mock( '\Woodev\Framework\Shipping\Shipping_API' );
+				$api->shouldReceive( 'create_order' )->andReturn( $response );
+			}
+
+			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'set' )->withAnyArgs();
+
+			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
+
+			return new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', $store );
+		}
+
+		/**
+		 * A real export() call, with a non-empty carrier id, DOES enrol — driven
+		 * end-to-end through export(), not via reflection (round 2, MEDIUM 4).
+		 */
+		public function test_export_enrolls_when_the_carrier_id_is_non_empty(): void {
 			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
 			$record   = $this->record();
 
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldReceive( 'enroll' )->once()->with( $provider, $record );
 
-			$handler = $this->handler_with_store( $store );
+			$handler                        = $this->handler( $store );
+			$handler->next_carrier_order_id = 'CARRIER-1';
 
-			$this->invoke_enroll( $handler, $record, $provider );
+			$order  = Mockery::mock( '\WC_Order' );
+			$result = $handler->export( $order, $record, $provider );
+
+			$this->assertSame( 'CARRIER-1', $result );
 		}
 
-		public function test_is_a_no_op_when_no_store_was_supplied(): void {
+		/**
+		 * MEDIUM 3: a non-throwing response whose extractor yields an EMPTY carrier
+		 * id must NOT enrol — an export that produced no tracking id is not evidence
+		 * the shop shipped to that settlement.
+		 */
+		public function test_export_does_not_enroll_when_the_carrier_id_is_empty(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'enroll' );
+
+			$handler                        = $this->handler( $store );
+			$handler->next_carrier_order_id = '';
+
+			$order  = Mockery::mock( '\WC_Order' );
+			$result = $handler->export( $order, $record, $provider );
+
+			$this->assertSame( '', $result );
+		}
+
+		public function test_export_is_a_no_op_when_no_store_was_supplied(): void {
 			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
 
-			$handler = $this->handler_with_store( null );
+			$handler = $this->handler( null );
+			$order   = Mockery::mock( '\WC_Order' );
 
-			// No store to assert against — the point is that this does not fatal.
-			$this->invoke_enroll( $handler, $this->record(), $provider );
+			// No store to assert against — the point is that export() still completes.
+			$result = $handler->export( $order, $this->record(), $provider );
 
-			$this->addToAssertionCount( 1 );
+			$this->assertSame( 'CARRIER-1', $result );
 		}
 
-		public function test_is_a_no_op_when_the_settlement_is_unknown(): void {
+		public function test_export_is_a_no_op_when_the_settlement_is_unknown(): void {
 			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
 
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldNotReceive( 'enroll' );
 
-			$handler = $this->handler_with_store( $store );
+			$handler = $this->handler( $store );
+			$order   = Mockery::mock( '\WC_Order' );
 
-			$this->invoke_enroll( $handler, null, $provider );
+			$handler->export( $order, null, $provider );
 		}
 
-		public function test_is_a_no_op_when_the_provider_is_unknown(): void {
+		public function test_export_is_a_no_op_when_the_provider_is_unknown(): void {
 			$store = Mockery::mock( Popular_Settlement_Store::class );
 			$store->shouldNotReceive( 'enroll' );
 
-			$handler = $this->handler_with_store( $store );
+			$handler = $this->handler( $store );
+			$order   = Mockery::mock( '\WC_Order' );
 
-			$this->invoke_enroll( $handler, $this->record(), null );
+			$handler->export( $order, $this->record(), null );
 		}
 	}
 }

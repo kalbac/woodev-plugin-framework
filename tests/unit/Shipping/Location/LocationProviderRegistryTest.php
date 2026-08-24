@@ -438,7 +438,13 @@ final class LocationProviderRegistryTest extends TestCase {
 		$registry->declare_needed();
 		$registry->declare_needed();
 
-		$this->assertSame( 1, $hook_calls, 'a second/third declaration must not re-hook init' );
+		// Two DISTINCT callbacks are registered on 'init' by a single add_hooks() run
+		// (collect() at priority 20, and — #488 slice 2, round 2 — the popular-
+		// settlements install gate, also at priority 20). The idempotency this test
+		// actually protects is "a second/third declare_needed() must not re-run
+		// add_hooks() at all", so the count to pin is "however many init hooks ONE
+		// add_hooks() run registers", not a literal 1.
+		$this->assertSame( 2, $hook_calls, 'a second/third declaration must not re-hook init' );
 	}
 
 	// -------------------------------------------------------------------------

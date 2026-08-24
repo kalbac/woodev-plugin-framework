@@ -11,7 +11,11 @@
  * A NEW framework mechanism, not an existing data contract — see
  * {@see \Woodev\Framework\Shipping\Pickup\Abstract_Warehouse_Store}, the precedent
  * this mirrors (dbDelta-backed table, own install path). Unlike that class this one
- * is concrete, not abstract: the schema is fixed by spec D3, not plugin-owned.
+ * is concrete, not abstract: the schema is fixed by spec D3, not plugin-owned. Unlike
+ * that class, this one also does NOT bind `$wpdb` eagerly in its constructor (round 2
+ * critic finding, HIGH 1) — `new self()` is always cheap/safe (e.g. to register a
+ * lazy accessor on {@see Location_Provider_Registry} at hook-registration time); the
+ * global is only ever touched by {@see self::wpdb()}, lazily, on first real DB access.
  *
  * This slice stores D1-D3 and enforces the D4/D4a enrolment gates. Lazy verification
  * (D5/D6), the customer-facing miss (D7) and the two merchant admin actions (D8) are
@@ -71,22 +75,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 */
 		public const FILTER_TTL_SECONDS = 'woodev_location_popular_settlement_ttl_seconds';
 
-		/** @var \wpdb WordPress database access layer */
-		protected \wpdb $wpdb;
+		/**
+		 * Order-meta key a framework listener stamps with the settlement the
+		 * customer picked at checkout ({@see self::remember_candidate()}), read back
+		 * by an enrolment caller via {@see self::recall_candidate()} when it does not
+		 * already know the settlement. A framework-owned key (not per-plugin) — this
+		 * is the SAME breadcrumb regardless of which carrier plugin later exports the
+		 * order, so it is written once, by the framework, not by each carrier.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const ORDER_META_KEY = '_woodev_popular_settlement_candidate';
+
+		/**
+		 * Injected or lazily-resolved database layer. Deliberately nullable and
+		 * touched by nothing but {@see self::wpdb()} — see the class docblock.
+		 *
+		 * @var \wpdb|null
+		 */
+		private ?\wpdb $wpdb;
 
 		/**
 		 * Constructor.
 		 *
+		 * Does NOT touch the global `$wpdb` when `$wpdb` is omitted — construction is
+		 * always cheap and safe; {@see self::wpdb()} resolves the global lazily, on
+		 * first real use.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @param \wpdb|null $wpdb database layer; defaults to the global `$wpdb`
+		 * @param \wpdb|null $wpdb database layer; when omitted, resolved lazily from the global on first use
 		 */
 		public function __construct( ?\wpdb $wpdb = null ) {
-			if ( null === $wpdb ) {
+			$this->wpdb = $wpdb;
+		}
+
+		/**
+		 * Resolves the database layer, lazily binding the global `$wpdb` on first
+		 * call when none was injected.
+		 *
+		 * This is the ONLY place the global is touched (round 2 critic finding,
+		 * HIGH 1: a constructor that grabs `global $wpdb` eagerly makes the class
+		 * unconstructable wherever the global is absent or the wrong type — which is
+		 * exactly what broke ~150 unrelated unit tests when installation was wired
+		 * synchronously into a widely-shared hook in round 1). Deferring the touch to
+		 * here means `new self()` is always safe, and only actual DB-touching calls
+		 * (`install()`, `enroll()`, `all_for_provider()`, …) ever require a real
+		 * `\wpdb`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \wpdb
+		 */
+		private function wpdb(): \wpdb {
+			if ( null === $this->wpdb ) {
 				global $wpdb;
+
+				$this->wpdb = $wpdb;
 			}
 
-			$this->wpdb = $wpdb;
+			return $this->wpdb;
 		}
 
 		/**
@@ -119,7 +168,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 * @return string
 		 */
 		protected function get_table_name(): string {
-			return $this->wpdb->prefix . 'woodev_popular_settlements';
+			return $this->wpdb()->prefix . 'woodev_popular_settlements';
 		}
 
 		/**
@@ -127,23 +176,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 *
 		 * `id` is a surrogate primary key, deliberately NOT the provider's locality
 		 * key (spec D3/D6: the provider key can change under a row without losing its
-		 * identity). `record` carries the whole serialized {@see Location_Record}
-		 * (spec D1). `last_ordered_at` and `last_verified_at` are separate columns
-		 * driven by different events (spec D2) — this slice only ever writes the
-		 * former; the latter's column exists but its writer arrives with lazy
-		 * verification (D5/D6).
+		 * identity). `locality_key` is a SECONDARY, indexed column carrying the
+		 * CURRENT key — added in round 2 (critic finding, MEDIUM 5) so `(provider_id,
+		 * locality_key)` can be a durable UNIQUE constraint: two concurrent orders for
+		 * the same settlement must converge to ONE row with a correctly summed
+		 * `order_count`, not two rows or a lost increment. A surrogate `id` primary
+		 * key and a secondary unique key are compatible — D6 (a later slice) updates
+		 * `locality_key` in place when verification learns the provider's key changed,
+		 * exactly like it already updates `record`.
+		 *
+		 * `record` carries the whole serialized {@see Location_Record} (spec D1).
+		 * `last_ordered_at` and `last_verified_at` are separate columns driven by
+		 * different events (spec D2) — this slice only ever writes the former; the
+		 * latter's column exists but its writer arrives with lazy verification (D5/D6).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `locality_key` + a `(provider_id, locality_key)` unique
+		 *              key (round 2, MEDIUM 5) so a concurrent enrolment race cannot
+		 *              duplicate a settlement or lose a count.
 		 *
 		 * @return string
 		 */
 		protected function get_schema(): string {
 			$table           = $this->get_table_name();
-			$charset_collate = $this->wpdb->get_charset_collate();
+			$charset_collate = $this->wpdb()->get_charset_collate();
 
 			return "CREATE TABLE `{$table}` (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   provider_id VARCHAR(191) NOT NULL,
+  locality_key VARCHAR(191) NOT NULL,
   country VARCHAR(2) NOT NULL,
   record LONGTEXT NOT NULL,
   order_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -151,7 +212,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
   last_verified_at DATETIME NULL DEFAULT NULL,
   created_at DATETIME NOT NULL,
   PRIMARY KEY  (id),
-  KEY provider_id (provider_id),
+  UNIQUE KEY provider_locality (provider_id, locality_key),
   KEY last_ordered_at (last_ordered_at)
 ) {$charset_collate};";
 		}
@@ -163,8 +224,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 * {@see \Woodev\Framework\Shipping\Pickup\Abstract_Warehouse_Store::install()},
 		 * the precedent this mirrors. Idempotent (`dbDelta()`); callers are expected
 		 * to gate how often this actually runs (see
-		 * {@see Location_Provider_Registry::add_hooks()}), not to call it on every
-		 * request.
+		 * {@see Location_Provider_Registry::maybe_install_popular_settlements_table()}),
+		 * not to call it on every request.
 		 *
 		 * @since 2.0.2
 		 *
@@ -176,6 +237,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			}
 
 			dbDelta( $this->get_schema() );
+		}
+
+		/**
+		 * Stamps the order with the settlement the customer picked at checkout, so a
+		 * later enrolment caller (e.g. {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * via its caller) can find it without needing a live customer session — see
+		 * {@see self::ORDER_META_KEY}.
+		 *
+		 * This does NOT enrol anything by itself — it is a cheap breadcrumb write,
+		 * not a table write, and is safe to call for every order regardless of
+		 * whether the active provider even has the D4 capability (that gate lives in
+		 * {@see self::enroll()}, checked once, at the point of an actual table write).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order       $order  The order to stamp.
+		 * @param Location_Record $record The settlement the customer picked.
+		 *
+		 * @return void
+		 */
+		public function remember_candidate( \WC_Order $order, Location_Record $record ): void {
+			\Woodev_Order_Compatibility::update_order_meta( $order, self::ORDER_META_KEY, wp_json_encode( $record->to_array() ) );
+		}
+
+		/**
+		 * Reads back the settlement {@see self::remember_candidate()} stamped onto an
+		 * order, or null when none was stamped or the stored value is unusable.
+		 *
+		 * Deliberately tolerant: a missing, non-JSON, or now-invalid (e.g. an older
+		 * shape) stored value degrades to null rather than throwing — a caller
+		 * resolving this as a default for enrolment must never be able to crash an
+		 * otherwise-successful export over stale breadcrumb data.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order The order to read from.
+		 *
+		 * @return Location_Record|null
+		 */
+		public function recall_candidate( \WC_Order $order ): ?Location_Record {
+			$raw = \Woodev_Order_Compatibility::get_order_meta( $order, self::ORDER_META_KEY );
+
+			if ( ! is_string( $raw ) || '' === $raw ) {
+				return null;
+			}
+
+			$decoded = json_decode( $raw, true );
+
+			if ( ! is_array( $decoded ) ) {
+				return null;
+			}
+
+			try {
+				return Location_Record::from_array( $decoded );
+			} catch ( \InvalidArgumentException $exception ) {
+				return null;
+			}
 		}
 
 		/**
@@ -194,16 +312,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 *   again, so the freshness clock could never tick for it — such a record is
 		 *   never enrolled, not enrolled-and-exempted.
 		 *
-		 * An already-enrolled settlement (same `provider_id` + key) only has its
-		 * `order_count`/`last_ordered_at` bumped — the stored `record` is left
-		 * untouched here; only verification (D5/D6, a later slice) ever overwrites it
-		 * in place. A genuinely new settlement past the per-provider cap
-		 * (spec: ~20-30 rows, {@see self::FILTER_LIST_CAP}) evicts the least
-		 * recently ordered row first (ranking and eviction are deliberately
-		 * different axes: `order_count` orders the list, `last_ordered_at`
-		 * decides who leaves it).
+		 * The actual write is a SINGLE atomic `INSERT … ON DUPLICATE KEY UPDATE`
+		 * against the `(provider_id, locality_key)` unique key (round 2, MEDIUM 5) —
+		 * not a read-then-branch. Two concurrent orders for the same settlement race
+		 * at the database engine, not in PHP: MySQL serializes them onto one row and
+		 * `order_count` still ends up correctly incremented by both, because the
+		 * increment is expressed as `order_count = order_count + 1` inside the SAME
+		 * statement the engine already serializes, not as a value computed from a
+		 * PHP-side read that could go stale between read and write. The stored
+		 * `record` is left untouched on a bump — only verification (D5/D6, a later
+		 * slice) ever overwrites it in place.
+		 *
+		 * A genuinely new settlement (checked via a plain read — see
+		 * {@see self::find_row_by_key()}) past the per-provider cap (spec: ~20-30
+		 * rows, {@see self::FILTER_LIST_CAP}) evicts the least recently ordered row
+		 * first (ranking and eviction are deliberately different axes: `order_count`
+		 * orders the list, `last_ordered_at` decides who leaves it). That read-based
+		 * cap check is NOT itself race-free — under heavy concurrency the cap can be
+		 * exceeded by a row or two before the next enrolment/sweep corrects it — but
+		 * this is a soft bound on the calibration number, not the correctness the
+		 * unique key protects (no duplicate settlement row, no lost count).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (MEDIUM 5): replaced the read-then-insert-or-update
+		 *              pair with a single atomic upsert against a new
+		 *              `(provider_id, locality_key)` unique key.
 		 *
 		 * @param Location_Provider $provider The provider that produced `$record` — checked for D4.
 		 * @param Location_Record   $record   The settlement to enrol.
@@ -231,35 +364,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 				return; // D4a: a derived key can never be resolved again, so it is never enrolled.
 			}
 
-			$now      = current_time( 'mysql' );
-			$existing = $this->find_row_by_key( $record->provider_id(), $record->key() );
-
-			if ( null !== $existing ) {
-				$this->wpdb->update(
-					$this->get_table_name(),
-					[
-						'order_count'     => ( (int) $existing['order_count'] ) + 1,
-						'last_ordered_at' => $now,
-					],
-					[ 'id' => (int) $existing['id'] ]
-				);
-
-				return;
+			if ( null === $this->find_row_by_key( $record->provider_id(), $record->key() ) ) {
+				$this->evict_if_over_cap( $record->provider_id() );
 			}
 
-			$this->evict_if_over_cap( $record->provider_id() );
+			$now   = current_time( 'mysql' );
+			$table = $this->get_table_name();
 
-			$this->wpdb->insert(
-				$this->get_table_name(),
-				[
-					'provider_id'      => $record->provider_id(),
-					'country'          => $record->country(),
-					'record'           => wp_json_encode( $record->to_array() ),
-					'order_count'      => 1,
-					'last_ordered_at'  => $now,
-					'last_verified_at' => null,
-					'created_at'       => $now,
-				]
+			$this->wpdb()->query(
+				$this->wpdb()->prepare(
+					"INSERT INTO `{$table}` (`provider_id`, `locality_key`, `country`, `record`, `order_count`, `last_ordered_at`, `last_verified_at`, `created_at`)
+					 VALUES (%s, %s, %s, %s, 1, %s, NULL, %s)
+					 ON DUPLICATE KEY UPDATE `order_count` = `order_count` + 1, `last_ordered_at` = VALUES(`last_ordered_at`)",
+					$record->provider_id(),
+					$record->key(),
+					$record->country(),
+					wp_json_encode( $record->to_array() ),
+					$now,
+					$now
+				)
 			);
 		}
 
@@ -310,7 +433,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 				$last_ordered_at = $this->to_timestamp( $row['last_ordered_at'] ?? null );
 
 				if ( null === $last_ordered_at || $last_ordered_at < $threshold ) {
-					$this->wpdb->delete( $this->get_table_name(), [ 'id' => (int) $row['id'] ] );
+					$this->wpdb()->delete( $this->get_table_name(), [ 'id' => (int) $row['id'] ] );
 					++$deleted;
 				}
 			}
@@ -321,11 +444,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		/**
 		 * Finds the raw row for a provider's settlement by locality key, or null.
 		 *
-		 * A provider's live row count is bounded by {@see self::list_cap()}
-		 * (~20-30), so scanning + decoding every row for the provider on each
-		 * enrolment is cheap; no extra indexed key column is needed for this.
+		 * A direct indexed lookup against the `(provider_id, locality_key)` unique key
+		 * (round 2 — previously a full scan+decode of every row for the provider).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2: indexed lookup instead of scan+decode, now that
+		 *              `locality_key` is a real column.
 		 *
 		 * @param string $provider_id The owning provider's id.
 		 * @param string $key         The locality key to find.
@@ -333,15 +457,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 * @return array<string, mixed>|null
 		 */
 		private function find_row_by_key( string $provider_id, string $key ): ?array {
-			foreach ( $this->raw_rows_for_provider( $provider_id ) as $row ) {
-				$record = Location_Record::from_array( json_decode( (string) $row['record'], true ) );
+			$row = $this->wpdb()->get_row(
+				$this->wpdb()->prepare(
+					'SELECT * FROM `' . $this->get_table_name() . '` WHERE `provider_id` = %s AND `locality_key` = %s',
+					$provider_id,
+					$key
+				),
+				ARRAY_A
+			);
 
-				if ( $record->key() === $key ) {
-					return $row;
-				}
-			}
-
-			return null;
+			return is_array( $row ) ? $row : null;
 		}
 
 		/**
@@ -376,7 +501,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 
 			$victim = $rows[0];
 
-			$this->wpdb->delete( $this->get_table_name(), [ 'id' => (int) $victim['id'] ] );
+			$this->wpdb()->delete( $this->get_table_name(), [ 'id' => (int) $victim['id'] ] );
 		}
 
 		/**
@@ -389,8 +514,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		 * @return array<int, array<string, mixed>>
 		 */
 		private function raw_rows_for_provider( string $provider_id ): array {
-			$rows = $this->wpdb->get_results(
-				$this->wpdb->prepare( 'SELECT * FROM `' . $this->get_table_name() . '` WHERE `provider_id` = %s', $provider_id ),
+			$rows = $this->wpdb()->get_results(
+				$this->wpdb()->prepare( 'SELECT * FROM `' . $this->get_table_name() . '` WHERE `provider_id` = %s', $provider_id ),
 				ARRAY_A
 			);
 
