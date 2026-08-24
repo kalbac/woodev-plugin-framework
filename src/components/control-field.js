@@ -46,8 +46,6 @@ export const ACTIVE_PROVIDER_SETTING_ID = 'active_provider';
  *
  * @type {string}
  */
-export const FIELD_MODE_REGION_SETTING_ID = 'field_mode_region';
-export const FIELD_MODE_SETTLEMENT_SETTING_ID = 'field_mode_settlement';
 
 /**
  * Password input with a show/hide eye toggle.
@@ -211,36 +209,6 @@ function normalizeOptions( options ) {
 }
 
 /**
- * Gets the options a select should display from the current form state.
- *
- * The server remains authoritative: it clamps unsupported stored field-mode
- * values on read. This only reflects the region axis's unsaved choice in the
- * settlement chooser, so a merchant sees the option the server will offer
- * after saving without requiring a reload.
- *
- * @since 2.0.2
- * @param {string} settingId               current field id.
- * @param {Object} schema                  current field schema.
- * @param {Object} [conditionValues]       tab-wide effective form values.
- * @param {Object} [fieldModeRegionOptions] region field's server-offered options.
- * @return {Object|Array} options to render.
- */
-export function getLiveSelectOptions( settingId, schema, conditionValues, fieldModeRegionOptions ) {
-	if ( FIELD_MODE_SETTLEMENT_SETTING_ID !== settingId || ! fieldModeRegionOptions ) {
-		return schema.options;
-	}
-
-	if ( 'related-list' === ( conditionValues && conditionValues[ FIELD_MODE_REGION_SETTING_ID ] ) ) {
-		return fieldModeRegionOptions;
-	}
-
-	const options = { ...( schema.options || {} ) };
-	delete options[ 'related-list' ];
-
-	return options;
-}
-
-/**
  * Resolves which control to render from controlType, then legacy inference.
  *
  * @param {Object} schema field schema slice.
@@ -317,15 +285,13 @@ function withAnatomy( schema, control, error ) {
  *                                            (issue #380) so a control can react to a SIBLING
  *                                            field's live, unsaved value; currently only the
  *                                            `location-picker` control reads it.
- * @param {Object}   [props.fieldModeRegionOptions] server-offered region-mode options, used
- *                                                   only to refresh the settlement choice set.
  * @param {string}   [props.providerMismatchBaseline] raw provider value loaded with the form;
  *                                                    makes mismatches that may be server-side
  *                                                    substitutions fail open.
  * @return {Object} React element.
  * @since 2.0.2
  */
-export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, fieldModeRegionOptions, providerMismatchBaseline } ) {
+export default function ControlField( { schema, value, onChange, showErrors, hasEdit, onRevert, conditionValues, settingId, providerMismatchBaseline } ) {
 	// Must be called unconditionally before any early return (React hook rules).
 	const [ touched, setTouched ] = useState( false );
 
@@ -437,7 +403,7 @@ export default function ControlField( { schema, value, onChange, showErrors, has
 				schema,
 				createElement( SelectField, {
 					value: value ?? schema.value ?? '',
-					options: normalizeOptions( getLiveSelectOptions( settingId, schema, conditionValues, fieldModeRegionOptions ) ),
+					options: normalizeOptions( schema.options ),
 					disabled,
 					onChange: ( next ) => { setTouched( true ); onChange( next ?? '' ); },
 				} ),

@@ -12,51 +12,62 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createElement } from '@wordpress/element';
-import ControlField, { getLiveSelectOptions } from '../../src/components/control-field';
+import ControlField from '../../src/components/control-field';
 
-describe( 'getLiveSelectOptions', () => {
-	const regionOptions = {
-		typeahead: 'Текст с подсказками',
-		'related-list': 'Предустановленный список',
-		'ajax-select2': 'Список с поиском',
-	};
+/**
+ * The settlement axis renders exactly what the SERVER offered it, and nothing else.
+ *
+ * There used to be a `getLiveSelectOptions()` here: issue #404 let the settlement axis
+ * borrow the REGION axis's option set the moment the region chooser was set to
+ * `related-list`, so a merchant saw «Предустановленный список» appear for НП before
+ * saving. That whole rule is gone (operator decision, 24.08.2026) — the settlement axis
+ * has exactly two modes and never a third.
+ *
+ * Removing the server half alone was NOT enough, which is why this test exists: the
+ * server correctly sent two options while this client special case put the region's
+ * three on screen, so the admin still offered «Предустановленный список» for НП. The
+ * REST payload and the rendered control disagreed, and only the rendered control is what
+ * anyone can see.
+ *
+ * The dropdown must be OPENED before asserting — its options live in a popover portal and
+ * are simply absent from the DOM while it is closed, so an assertion against the closed
+ * control passes whatever the option set is.
+ */
+test( 'the settlement chooser offers only the options the server sent, whatever the region axis is', async () => {
+	const { container } = render(
+		createElement( ControlField, {
+			settingId: 'field_mode_settlement',
+			schema: {
+				type: 'string',
+				name: 'Тип поля НП',
+				controlType: 'select',
+				options: {
+					typeahead: 'Текст с подсказками',
+					'ajax-select2': 'Список с поиском',
+				},
+			},
+			value: 'ajax-select2',
+			// The region axis sits at `related-list` — the exact state that used to inject
+			// a third option into this control.
+			conditionValues: { field_mode_region: 'related-list' },
+			onChange: () => {},
+			showErrors: false,
+		} )
+	);
 
-	test( 'adds the preset-list choice to settlement immediately when the unsaved region mode selects it', () => {
-		expect(
-			getLiveSelectOptions(
-				'field_mode_settlement',
-				{ options: { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] } },
-				{ field_mode_region: 'related-list' },
-				regionOptions
-			)
-		).toEqual( regionOptions );
+	fireEvent.click( container.querySelector( '.woodev-select__trigger' ) );
+
+	// The popover positions itself asynchronously — await it, or its state update lands
+	// outside act() and @wordpress/jest-console fails the NEXT test in this file instead.
+	await waitFor( () => {
+		// Both real options are on screen, which is what makes the negative assertion
+		// below meaningful rather than vacuous.
+		expect( screen.getByText( 'Текст с подсказками' ) ).toBeTruthy();
 	} );
 
-	test( 'removes the preset-list choice from settlement immediately when the unsaved region mode leaves it', () => {
-		expect(
-			getLiveSelectOptions(
-				'field_mode_settlement',
-				{ options: regionOptions },
-				{ field_mode_region: 'typeahead' },
-				regionOptions
-			)
-		).toEqual( { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] } );
-	} );
-
-	test( 'does not invent a preset-list choice when the provider did not offer one for the region either', () => {
-		const noListOptions = { typeahead: regionOptions.typeahead, 'ajax-select2': regionOptions[ 'ajax-select2' ] };
-
-		expect(
-			getLiveSelectOptions(
-				'field_mode_settlement',
-				{ options: noListOptions },
-				{ field_mode_region: 'related-list' },
-				noListOptions
-			)
-		).toEqual( noListOptions );
-	} );
+	expect( screen.queryByText( 'Предустановленный список' ) ).toBeNull();
 } );
 
 /**
