@@ -66,6 +66,21 @@
 		}
 	}
 
+	/**
+	 * Whether `error` is the rejection reason a self-aborted `fetch()` produces
+	 * (`AbortController.abort()`'s own contract: the pending `fetch()` promise rejects with a
+	 * `DOMException`/`Error` named `AbortError`). issue #449 (second half): this is the ONLY
+	 * thing that tells a request WE cancelled apart from a genuine network failure — neither may
+	 * ever paint "search failed" for the customer (see `selectConfigFor()`'s transport), but
+	 * only a genuine failure is worth a `console.error`.
+	 *
+	 * @param {*} error
+	 * @returns {boolean}
+	 */
+	function isAbortError( error ) {
+		return !! ( error && 'AbortError' === error.name );
+	}
+
 	/** @type {Object.<string, function>} the registry `location-cascade.js` reads from. */
 	var registry = window.WoodevLocationRenderers = window.WoodevLocationRenderers || {};
 
@@ -248,7 +263,7 @@
 	 * Builds the config object for `strategy` — the exact object `ensureSelect2()` passes to
 	 * `.select2()`.
 	 *
-	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
 	 * @param {{initialValue: string, placeholder: string, level: string, applyEntries: function(Array, boolean): Array}} seed
 	 *   `applyEntries` is called with `(entries, false)` on every successful ajax response —
 	 *   the SAME merge-only call `ensureSelect2()`'s own transport made before this extraction —
@@ -279,18 +294,26 @@
 
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
 					// and aborts it (only if it looks abortable) before starting the NEXT query —
-					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. Our own
-					// `strategy.fetchEntries()` wraps `fetch()`, not `$.ajax()`, so there is no real
-					// in-flight request object to hand back (threading an AbortController through
-					// `options.fetch()` is a `location-cascade.js` change, out of scope here) — but
-					// an `abort()` that marks THIS call's own eventual result stale is enough to stop
-					// a superseded response from repainting the list, which is the actual symptom
-					// (the "last-arrived-wins" flicker, §2.4). #449's cancellation half (actually
-					// aborting the in-flight `fetch()`) is deliberately NOT done — see the PR
-					// description.
+					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. issue #449
+					// (second half): a real `AbortController` is now threaded through
+					// `strategy.fetchEntries()` -> `options.fetch()` (`location-cascade.js`'s
+					// `fetchFor()`) into the underlying `fetch()` call's own `init.signal`, so
+					// `abort()` below cancels the actual in-flight HTTP request, not merely this
+					// call's own eventual result. Feature-detected: `window.AbortController` is
+					// missing only in ancient browsers this store's own support matrix already
+					// excludes elsewhere, and the `stale` flag below still guarantees correctness
+					// even then.
+					//
+					// The guarantee this must hold is on the last REQUESTED term, never the last
+					// ARRIVED response (§2.4's "last-arrived-wins" flicker) — `stale` stays as
+					// belt-and-braces alongside real cancellation, not redundant to it: an aborted
+					// `fetch()` rejects ASYNCHRONOUSLY (never synchronously inside `abort()`), so a
+					// response whose `.then()` callback is already scheduled by the time `abort()`
+					// runs still needs a synchronous guard against repainting the list.
+					var controller = 'function' === typeof window.AbortController ? new window.AbortController() : null;
 					var stale = false;
 
-					strategy.fetchEntries( term ).then( function( entries ) {
+					strategy.fetchEntries( term, { signal: controller ? controller.signal : undefined } ).then( function( entries ) {
 						if ( stale ) {
 							return;
 						}
@@ -319,7 +342,12 @@
 							} ),
 						} );
 					}, function( error ) {
-						if ( stale ) {
+						// `isAbortError()`: a request WE cancelled must never paint "search
+						// failed" for the customer (issue #449). `stale` alone already guards
+						// this in practice (see the block comment above), but the explicit check
+						// keeps this branch correct even if a future caller reuses this transport
+						// without wiring the `stale` flag the same way.
+						if ( stale || isAbortError( error ) ) {
 							return;
 						}
 
@@ -329,6 +357,10 @@
 					return {
 						abort: function() {
 							stale = true;
+
+							if ( controller ) {
+								controller.abort();
+							}
 						},
 					};
 				},
@@ -356,7 +388,7 @@
 	 *
 	 * @param {HTMLInputElement} input
 	 * @param {Object}           options   See the file docblock's shared contract.
-	 * @param {{ajax: boolean, fetchEntries: function(string): Promise<Array>}} strategy
+	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
 	 *   `ajax: false` — `fetchEntries()` is called ONCE (a static, region-scoped full list —
 	 *   `related-list` settlement); the `<select>` is populated with real `<option>` elements
 	 *   up front, and select2 (when present) gets NO `ajax` config at all — it search-filters
@@ -750,8 +782,18 @@
 
 		return buildSelectField( el, options, {
 			ajax: true,
-			fetchEntries: function( term ) {
-				return Promise.resolve( options.fetch( term ) ).then( null, function( error ) {
+			fetchEntries: function( term, opts ) {
+				return Promise.resolve( options.fetch( term, opts ) ).then( null, function( error ) {
+					// issue #449 (second half): a request THIS module aborted (via
+					// `selectConfigFor()`'s transport) must reach `selectConfigFor()`'s own
+					// `stale`/`isAbortError()` guard untouched, never get folded into the
+					// "results: []" success path a genuine fetch failure gets below — that would
+					// mean select2 briefly shows "nothing found" for a term the customer has
+					// already moved on from.
+					if ( isAbortError( error ) ) {
+						throw error;
+					}
+
 					logError( error );
 
 					return [];

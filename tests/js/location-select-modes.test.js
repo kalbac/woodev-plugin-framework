@@ -187,7 +187,11 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		config.ajax.transport( { data: { term: 'Твер' } }, success, failure );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( fetchEntries ).toHaveBeenCalledWith( 'Твер' );
+		// issue #449 (second half): the transport now hands fetchEntries() a second argument
+		// carrying a real AbortSignal (feature-detected via window.AbortController, present in
+		// jsdom) — see the dedicated abort-propagation test below for the cancellation contract
+		// itself; this assertion only pins the call SHAPE.
+		expect( fetchEntries ).toHaveBeenCalledWith( 'Твер', { signal: expect.any( AbortSignal ) } );
 		expect( applyEntries ).toHaveBeenCalledWith(
 			[ { key: 'dadata:tv', label: 'ул Тверская', record: { key: 'dadata:tv', label: 'ул Тверская' } } ],
 			false
@@ -594,7 +598,9 @@ describe( 'ajax-select2 renderer', () => {
 		select2Calls[ 0 ].ajax.transport( { data: { term: 'Твер' } }, success, failure );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер' );
+		// issue #449 (second half): options.fetch now also receives an AbortSignal — see the
+		// dedicated abort-propagation test for the cancellation contract itself.
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Твер', { signal: expect.any( AbortSignal ) } );
 		expect( success ).toHaveBeenCalledTimes( 1 );
 		// issue #455: the reported id is entry.value (the location VALUE space every other
 		// renderer in this layer submits), never entry.key (the raw provider key). issue #461
@@ -972,7 +978,7 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		expect( atFloor ).not.toBeNull();
-		expect( fetchSpy ).toHaveBeenCalledWith( 'Тв' );
+		expect( fetchSpy ).toHaveBeenCalledWith( 'Тв', { signal: expect.any( AbortSignal ) } );
 	} );
 
 	it( 'FIXED (issue #449): ajax.transport returns an abortable handle, and abort() suppresses that call\'s own eventual success() — no more last-arrived-wins flicker', async () => {
@@ -1030,6 +1036,43 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		const request = instances[ 0 ].config.ajax.transport( { data: { term: 'Твер' } }, jest.fn(), jest.fn() );
 
 		expect( Boolean( request && 'function' === typeof request.abort ) ).toBe( true );
+	} );
+
+	it( 'FIXED (issue #449, second half): abort() actually reaches fetch — the AbortSignal handed to options.fetch on the superseded call is aborted once a newer query starts, the still-current call\'s is not', () => {
+		// This is the cancellation half #461 deliberately left undone (see that PR's own
+		// comment, now removed): a `stale` flag alone stops a superseded response from
+		// REPAINTING the list, but the underlying `fetch()` kept running to completion —
+		// costing DaData/CDEK a paid call per keystroke regardless. Real cancellation means the
+		// SIGNAL options.fetch receives is the one selectWoo's own store-then-abort sequence
+		// (mirrored by the #450 fake) actually aborts, not merely a closure flag this file
+		// alone can see.
+		const seenSignals = [];
+		const fetchSpy = jest.fn( ( term, opts ) => {
+			seenSignals.push( opts && opts.signal );
+
+			// Never settles — only the signal's own `aborted` state matters to this test, never
+			// what the promise resolves/rejects with.
+			return new Promise( () => {} );
+		} );
+		const options = buildOptions( { fetch: fetchSpy } );
+
+		document.body.innerHTML = '<input type="text" id="billing_address_1" name="billing_address_1" value="" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_address_1' ), options );
+
+		instances[ 0 ].query( 'Мо' );
+		// The fake's own store-then-abort sequence calls the FIRST call's returned `abort()`
+		// before issuing this second query — the exact selectWoo AjaxAdapter behaviour this
+		// transport is built to cooperate with.
+		instances[ 0 ].query( 'Моск' );
+
+		expect( seenSignals ).toHaveLength( 2 );
+		expect( seenSignals[ 0 ] ).toBeInstanceOf( AbortSignal );
+		expect( seenSignals[ 1 ] ).toBeInstanceOf( AbortSignal );
+		expect( seenSignals[ 0 ].aborted ).toBe( true );
+		expect( seenSignals[ 1 ].aborted ).toBe( false );
 	} );
 } );
 
