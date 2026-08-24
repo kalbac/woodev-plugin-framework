@@ -32,6 +32,8 @@
 
 namespace Woodev\Framework\Shipping\Admin;
 
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
@@ -67,6 +69,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 		/** @var Abstract_Tracking_Handler|null carrier tracking handler used by track (optional) */
 		private ?Abstract_Tracking_Handler $tracking_handler;
+
+		/**
+		 * Popular-settlements store (#488) used to resolve the settlement + the
+		 * provider that produced it before the export action calls
+		 * {@see Abstract_Shipment_Handler::export()} — see {@see self::handle_order_action()}.
+		 *
+		 * Always non-null after construction (round 3, HIGH 1): a null/omitted
+		 * constructor argument defaults to the framework's shared instance
+		 * ({@see Location_Provider_Registry::popular_settlement_store()}) instead of
+		 * disabling enrolment — no production construction site in this repo ever
+		 * supplies a store, so an opt-in-only dependency left the feature
+		 * permanently unreachable. An explicit instance remains a genuine override
+		 * (tests, or a plugin that wants its own).
+		 *
+		 * @var Popular_Settlement_Store
+		 */
+		private Popular_Settlement_Store $popular_settlement_store;
 
 		/** @var array<string, string> metabox fields to display: logical order-meta field => label */
 		private array $metabox_fields;
@@ -104,9 +123,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * @param Shipping_Plugin                $plugin           the plugin instance
 		 * @param Shipping_Order_Handler         $order_handler    order-meta accessor keyed by the plugin's logical-field map
 		 * @param Abstract_Shipment_Handler      $shipment_handler shipment handler invoked by the export and cancel actions
-		 * @param Abstract_Tracking_Handler|null $tracking_handler tracking handler invoked by the track action; null disables track
+		 * @param Abstract_Tracking_Handler|null $tracking_handler         tracking handler invoked by the track action; null disables track
 		 * @param array<string, mixed>           $args {
-		 *     Optional display/wiring overrides.
+		 *   Optional display/wiring overrides.
 		 *
 		 *     @type array<string, string> $metabox_fields logical order-meta field => label to display in the metabox
 		 *     @type string                $tracking_field logical order-meta field holding the tracking number
@@ -114,13 +133,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *     @type string                $column_label   order-list column label
 		 *     @type string                $metabox_title  metabox title
 		 * }
+		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store (#488); null resolves the framework's shared instance
 		 */
-		public function __construct( Shipping_Plugin $plugin, Shipping_Order_Handler $order_handler, Abstract_Shipment_Handler $shipment_handler, ?Abstract_Tracking_Handler $tracking_handler = null, array $args = [] ) {
+		public function __construct( Shipping_Plugin $plugin, Shipping_Order_Handler $order_handler, Abstract_Shipment_Handler $shipment_handler, ?Abstract_Tracking_Handler $tracking_handler = null, array $args = [], ?Popular_Settlement_Store $popular_settlement_store = null ) {
 
-			$this->plugin           = $plugin;
-			$this->order_handler    = $order_handler;
-			$this->shipment_handler = $shipment_handler;
-			$this->tracking_handler = $tracking_handler;
+			$this->plugin                   = $plugin;
+			$this->order_handler            = $order_handler;
+			$this->shipment_handler         = $shipment_handler;
+			$this->tracking_handler         = $tracking_handler;
+			$this->popular_settlement_store = $popular_settlement_store ?? Location_Provider_Registry::instance()->popular_settlement_store();
 
 			$this->metabox_fields = isset( $args['metabox_fields'] ) && is_array( $args['metabox_fields'] )
 				? $args['metabox_fields']
@@ -340,9 +361,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * carrier handlers — export/cancel to the shipment handler, track to the
 		 * tracking handler — and redirects back to the order-edit screen.
 		 *
+		 * The export action is the ONE real caller of
+		 * {@see Abstract_Shipment_Handler::export()} in this framework (round 2
+		 * critic finding, HIGH 2: the enrolment seam it takes optional params for was
+		 * otherwise unreachable — nothing in this repo ever supplied them). This
+		 * resolves the settlement the customer picked at checkout (stamped onto the
+		 * order by {@see Location_Provider_Registry::handle_checkout_order_processed_for_popular_settlements()})
+		 * and the SAME provider that produced it (round 3, HIGH 2 — see
+		 * {@see self::resolve_popular_settlement_context()}), and passes both
+		 * through — so a real export genuinely enrols, with no change required from
+		 * the carrier plugin wiring this class.
+		 *
 		 * @internal
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 The export action resolves and passes the settlement/provider
+		 *              to {@see Abstract_Shipment_Handler::export()} (#488 slice 2,
+		 *              round 2, HIGH 2).
 		 *
 		 * @return void
 		 */
@@ -362,7 +397,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 				switch ( $action ) {
 					case 'export':
-						$this->shipment_handler->export( $order );
+						[ $settlement, $provider ] = $this->resolve_popular_settlement_context( $order );
+
+						$this->shipment_handler->export( $order, $settlement, $provider );
 						break;
 					case 'cancel':
 						$this->shipment_handler->cancel( $order );
@@ -382,6 +419,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 			wp_safe_redirect( $redirect );
 			exit;
+		}
+
+
+		/**
+		 * Resolves the popular-settlements enrolment context for an order about to
+		 * be exported — the settlement the customer picked at checkout (via
+		 * {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store::recall_candidate()})
+		 * and the SAME provider that produced it.
+		 *
+		 * Round 3 (HIGH 2): the provider is resolved by the settlement's OWN
+		 * `provider_id()` — stamped onto the record at checkout time and preserved
+		 * through the `recall_candidate()` round-trip, the same "a record travels
+		 * whole" discipline D1 already applies to `Location_Record` — via
+		 * {@see Location_Provider_Registry::get_providers()}, NOT by re-resolving
+		 * {@see Location_Provider_Registry::get_active_provider()}. The merchant can
+		 * change the active provider between checkout and export; re-resolving
+		 * "whichever provider is active now" could hand `enroll()` a provider that
+		 * disagrees with the record's own `provider_id()`, which `enroll()` rejects
+		 * with an `\InvalidArgumentException` — thrown AFTER the carrier order
+		 * already exists. Looking the provider up by the record's own id instead
+		 * makes that mismatch structurally impossible from this call site; the
+		 * `catch` in {@see Abstract_Shipment_Handler::enroll_popular_settlement()}
+		 * is the remaining defense-in-depth for every other path into `enroll()`.
+		 *
+		 * Extracted as its own seam (round 2, HIGH 2) so it is directly testable
+		 * without running {@see self::handle_order_action()} itself, which ends in
+		 * `exit` (unsafe to invoke from a unit test). Returns `[ null, null ]` when
+		 * no candidate was recalled, or when the provider that produced it is no
+		 * longer registered — the export action still runs, just without
+		 * enrolment.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Round 3 (HIGH 2): resolves the provider by the settlement's
+		 *              own `provider_id()` instead of the currently active provider.
+		 *
+		 * @param \WC_Order $order the order about to be exported
+		 *
+		 * @return array{0: \Woodev\Framework\Shipping\Location\Location_Record|null, 1: \Woodev\Framework\Shipping\Location\Location_Provider|null}
+		 */
+		protected function resolve_popular_settlement_context( \WC_Order $order ): array {
+			$settlement = $this->popular_settlement_store->recall_candidate( $order );
+
+			if ( null === $settlement ) {
+				return [ null, null ];
+			}
+
+			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
+
+			return [ $settlement, $provider ];
 		}
 
 		/**
