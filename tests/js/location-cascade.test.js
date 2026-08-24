@@ -852,6 +852,125 @@ describe( '#295 finding 1 — the "not saved" notice consumes persisted: false',
 // no unambiguous rename to fall back to silently.
 // -----------------------------------------------------------------------
 
+// Operator rig pass, s90. A `/select` round trip is 2.4-4.5 SECONDS on the rig (measured: region
+// 4527 ms, an ordinary settlement 2391 ms, one needing the D7 provider check 3493 ms) — so the
+// field sat showing the customer's pick and then, on the D7 path, emptied itself with an error
+// several seconds later. Nothing in between said the form was working: "я уже даже подумал, что
+// перестало работать". The busy state is therefore immediate and unconditional; there is no fast
+// path here worth protecting from a flicker.
+describe( 'the /select busy state (operator rig pass, s90)', () => {
+	const ITEM = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+	};
+
+	function selectRequests() {
+		return fetchCalls.filter( ( c ) => c.url === SELECT_URL );
+	}
+
+	function spinner() {
+		return document.querySelector( '.woodev-location-select-spinner' );
+	}
+
+	function host() {
+		return document.getElementById( 'billing_city' ).parentNode;
+	}
+
+	it( 'marks the field busy the moment the request goes out — spinner, aria-busy and the host class', () => {
+		boot( { settlement: true } );
+
+		expect( spinner() ).toBeNull();
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( selectRequests().length ).toBe( 1 );
+
+		// The rendered, customer-visible state: a spinner is actually in the document, inside the
+		// same host the field lives in.
+		expect( spinner() ).not.toBeNull();
+		expect( host().contains( spinner() ) ).toBe( true );
+		expect( spinner().getAttribute( 'aria-hidden' ) ).toBe( 'true' );
+
+		const field = document.getElementById( 'billing_city' );
+
+		expect( field.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		expect( field.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+	} );
+
+	it( 'never uses the disabled ATTRIBUTE — measured: a disabled control leaves the serialized checkout form entirely', () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		expect( document.getElementById( 'billing_city' ).disabled ).toBe( false );
+	} );
+
+	it( 'applies readonly where the element actually supports it, and takes it back off', () => {
+		boot( { settlement: true } );
+
+		const field = document.getElementById( 'billing_city' );
+		const supportsReadOnly = 'readOnly' in field;
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+
+		if ( supportsReadOnly ) {
+			expect( field.readOnly ).toBe( true );
+		}
+
+		selectRequests()[ 0 ].resolve( { current: { key: ITEM.record.key, level: 'settlement' }, persisted: true } );
+
+		return flushMicrotasks().then( () => {
+			expect( field.readOnly ).toBe( false );
+		} );
+	} );
+
+	it( 'clears the busy state on a PERSISTED response', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].resolve( { current: { key: ITEM.record.key, level: 'settlement' }, persisted: true } );
+		await flushMicrotasks();
+
+		expect( spinner() ).toBeNull();
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-busy' ) ).toBe( false );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	it( 'clears the busy state on a CANCELLED response — the field must not be left spinning under the error', async () => {
+		boot( { settlement: true } );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].resolve( {
+			cancelled: true, reason: 'stale_record', message: 'Данные не актуальны, выберите заново',
+			current: null, persisted: false, chain: {},
+		} );
+		await flushMicrotasks();
+
+		expect( spinner() ).toBeNull();
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	it( 'clears the busy state when the request FAILS outright — a spinner surviving a transport error would spin forever', async () => {
+		boot( { settlement: true } );
+
+		// The module logs the transport failure by design (logError); silenced so a genuinely
+		// unexpected console.error elsewhere in this suite still stands out.
+		const logged = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		selectViaFake( callFor( 'billing_city' ), ITEM );
+		selectRequests()[ 0 ].reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( logged ).toHaveBeenCalled();
+		logged.mockRestore();
+
+		expect( spinner() ).toBeNull();
+		expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-busy' ) ).toBe( false );
+		expect( host().classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+} );
+
 describe( 'D7 — a cancelled /select response (stale popular-settlement pick, issue #488 slice 3)', () => {
 	const MESSAGE = 'Данные не актуальны, выберите заново';
 

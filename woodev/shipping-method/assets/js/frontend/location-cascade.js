@@ -206,6 +206,24 @@
 	var NOTICE_HOST_ERROR_CLASS = 'woodev-location-field-error';
 
 	/**
+	 * The class {@see markSelectBusy} puts on the host while a `/select` is in flight for that
+	 * field — the same host, resolved the same way, as {@see NOTICE_HOST_ERROR_CLASS}.
+	 *
+	 * WHY THIS EXISTS AT ALL, and why it is not conditional: measured on the rig, s90, a single
+	 * `/select` round trip takes 2.4-4.5 SECONDS — region 4527 ms, an ordinary settlement
+	 * 2391 ms, a settlement whose popular-list entry needed the D7 provider check 3493 ms. The
+	 * verification is not what makes it slow; the round trip is. Until this class existed the
+	 * field simply sat there showing the customer's pick, and on the D7 path it then emptied
+	 * itself several seconds later with no warning — the operator's own words on the rig pass:
+	 * "я уже даже подумал, что перестало работать". So the busy state is immediate and
+	 * unconditional; a delay threshold would only mean the slow path shows nothing for its first
+	 * fraction, and there is no fast path here to protect from flicker.
+	 *
+	 * @type {string}
+	 */
+	var BUSY_HOST_CLASS = 'woodev-location-field-busy';
+
+	/**
 	 * The warning mark that opens a notice. Inline SVG rather than a font glyph or a background
 	 * image: it inherits `currentColor`, so the mark and the text can never drift apart, and it
 	 * needs no additional HTTP request and no icon font this plugin does not otherwise ship.
@@ -1176,6 +1194,8 @@
 			// Single-flight /select queue state (Finding 2) — see enqueueSelect()/sendNextSelect().
 			pendingRecord: null,
 			selectInFlight: false,
+			// { el, host, spinner } while a /select is in flight — see markSelectBusy().
+			selectBusy: null,
 			// Task 13 / #295 finding 1: the fieldId the MOST RECENT selection came from (any
 			// level — the /select queue is per ENTRY, not per node) and the currently-shown
 			// "your choice was not saved" notice element, if any — see
@@ -1953,6 +1973,8 @@
 		entry.pendingRecord = null;
 		entry.selectInFlight = true;
 
+		markSelectBusy( entry, record );
+
 		var url = entry.location.endpoints.select;
 		var headers = nonceHeader( entry );
 
@@ -2101,6 +2123,10 @@
 	 */
 	function settleSelect( entry, shouldTrigger, notPersisted, record ) {
 		entry.selectInFlight = false;
+
+		// Before the possible forward below, never after: a queued record is about to make its
+		// OWN field busy, and a stale marker left on the previous one would never be cleared.
+		clearSelectBusy( entry );
 
 		if ( entry.pendingRecord ) {
 			sendNextSelect( entry );
@@ -2286,6 +2312,7 @@
 
 		entry.notPersistedNotice = notice;
 		entry.notPersistedNoticeHost = host;
+		entry.notPersistedNoticeFieldId = fieldId;
 	}
 
 	/**
@@ -2342,6 +2369,136 @@
 	 * @param {Object} entry
 	 * @returns {void}
 	 */
+	/**
+	 * Marks the field a `/select` is in flight FOR as busy — a spinner, `aria-busy`, and a host
+	 * class the stylesheet uses to grey the control and stop it taking a click.
+	 *
+	 * Reuses `location-typeahead.js`'s own `.woodev-location-spinner` rather than inventing a
+	 * second indicator: the customer has already seen that exact ring while their search ran,
+	 * and this is the same statement — the field is working. The extra
+	 * `.woodev-location-select-spinner` class is the stylesheet's hook for THIS spinner
+	 * specifically (and the tests'); it needs no offset of its own, because the stylesheet hides
+	 * the select2 arrow for the duration and the ring lands exactly where the arrow was.
+	 *
+	 * IT IS NOT THE `disabled` ATTRIBUTE, deliberately, and this is a measurement rather than a
+	 * preference. WooCommerce builds `update_order_review` from `$( 'form.checkout' ).serialize()`,
+	 * and a disabled control is not serialized — measured on the rig, s90: with `shipping_city`
+	 * disabled, the field vanished from the serialized form entirely. Over a 2.4-4.5 second
+	 * window that is a real chance for an unrelated `update_checkout` to reprice the order with
+	 * no city at all. `pointer-events` + `aria-disabled` give the customer the same "you cannot
+	 * touch this right now", and cost nothing on the wire.
+	 *
+	 * A second pick landing during the window is not a correctness problem in any case — the
+	 * single-flight queue ({@see enqueueSelect}) already supersedes it — so this is feedback,
+	 * not a lock.
+	 *
+	 * A notice on THIS field is cleared here — the customer has moved past the outcome it
+	 * described, and leaving it would also stretch the spinner's positioning context over it. A
+	 * notice on a DIFFERENT field is left strictly alone: the single-flight queue is per ENTRY,
+	 * not per level, so the very next thing to go out after a cancelled region pick may be a
+	 * settlement pick that was already queued behind it, and erasing the region's message on its
+	 * way past would take away the only thing on screen explaining why the region emptied.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} record The record whose `/select` is being sent.
+	 * @returns {void}
+	 */
+	function markSelectBusy( entry, record ) {
+		clearSelectBusy( entry );
+
+		var level = record && 'string' === typeof record.level ? record.level : null;
+		var node = level ? chainNodeForLevel( entry, level ) : null;
+		var el = node && document.getElementById( node.fieldId );
+
+		if ( ! el || ! el.parentNode ) {
+			return;
+		}
+
+		var host = el.parentNode;
+
+		// Keyed on the FIELD, not on the host element: WooCommerce gives every field its own
+		// `.woocommerce-input-wrapper`, but nothing in this module may assume that — a flatter
+		// markup would make two levels share one host and silently turn this into "clear any
+		// notice", which is exactly what must not happen here.
+		if ( entry.notPersistedNoticeFieldId === node.fieldId ) {
+			clearNotPersistedNotice( entry );
+		}
+
+		var spinner = document.createElement( 'span' );
+
+		spinner.className = 'woodev-location-spinner woodev-location-select-spinner';
+
+		// Decoration for a state `aria-busy` already announces on the field itself — same
+		// reasoning, and the same attribute, as the typeahead's own spinner.
+		spinner.setAttribute( 'aria-hidden', 'true' );
+
+		host.appendChild( spinner );
+
+		if ( host.classList ) {
+			host.classList.add( BUSY_HOST_CLASS );
+		}
+
+		el.setAttribute( 'aria-busy', 'true' );
+		el.setAttribute( 'aria-disabled', 'true' );
+
+		// `readonly` WHERE IT EXISTS, and only there. Measured on the rig, s90: on an `<input>`
+		// it blocks typing and the value still serializes (unlike `disabled`, which drops it) —
+		// so it is strictly better than nothing for the baseline typeahead renderer. On a
+		// `<select>` it is inert: the element has no `readOnly` property at all and the option
+		// still changes. Both `<select>` renderers therefore rely on the host class alone, which
+		// is why that class exists rather than this attribute being the whole mechanism.
+		//
+		// SELECT2'S OWN API DOES NOT HELP, and this was measured rather than assumed (s90): the
+		// build WooCommerce ships still answers `$( el ).select2( 'enable', false )` — the v3-era
+		// string commands `'readonly'` and `'disable'` throw outright — but `enable` is
+		// implemented ON TOP of the native attribute. After it, `el.disabled` was `true` and
+		// `shipping_city` had left `$( 'form.checkout' ).serialize()` entirely. Same cost, so no
+		// reason to reach for it.
+		var readOnlyCapable = 'readOnly' in el;
+
+		if ( readOnlyCapable ) {
+			el.readOnly = true;
+		}
+
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable };
+	}
+
+	/**
+	 * Clears whatever {@see markSelectBusy} last set, from the REMEMBERED nodes rather than by
+	 * re-resolving the field: by the time a response settles the field may be gone (a country
+	 * switch tore the section down mid-request), and a spinner left in a section WooCommerce
+	 * re-renders rather than rebuilds would spin forever.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function clearSelectBusy( entry ) {
+		var busy = entry.selectBusy;
+
+		if ( ! busy ) {
+			return;
+		}
+
+		if ( busy.spinner && busy.spinner.parentNode ) {
+			busy.spinner.parentNode.removeChild( busy.spinner );
+		}
+
+		if ( busy.host && busy.host.classList ) {
+			busy.host.classList.remove( BUSY_HOST_CLASS );
+		}
+
+		if ( busy.el ) {
+			busy.el.removeAttribute( 'aria-busy' );
+			busy.el.removeAttribute( 'aria-disabled' );
+
+			if ( busy.readOnlyApplied ) {
+				busy.el.readOnly = false;
+			}
+		}
+
+		entry.selectBusy = null;
+	}
+
 	function clearNotPersistedNotice( entry ) {
 		var notice = entry.notPersistedNotice;
 		var host = entry.notPersistedNoticeHost;
@@ -2360,6 +2517,7 @@
 
 		entry.notPersistedNotice = null;
 		entry.notPersistedNoticeHost = null;
+		entry.notPersistedNoticeFieldId = null;
 	}
 
 	/**

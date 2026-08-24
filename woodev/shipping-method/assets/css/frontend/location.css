@@ -563,3 +563,51 @@
 .woodev-location-field-error .select2-selection {
 	border-color: #d63638 !important;
 }
+
+/* -------------------------------------------------------------------------
+ * THE `/select` BUSY STATE (operator rig pass, s90) — `location-cascade.js` sets these from
+ * {@see markSelectBusy}/{@see clearSelectBusy}; neither is ever rendered server-side.
+ *
+ * WHY IT IS UNCONDITIONAL. Measured on the rig: one `/select` round trip is 2.4-4.5 seconds here
+ * (region 4527 ms, an ordinary settlement 2391 ms, a settlement needing the D7 provider check
+ * 3493 ms). The customer picked a city, the field showed it, and several seconds later — on the D7
+ * path — it emptied itself with an error. Nothing in between said the form was working. There is no
+ * fast path here worth protecting from a flicker, so there is no delay threshold either.
+ *
+ * NOT `[disabled]`, and that is a measurement: WooCommerce builds `update_order_review` from
+ * `$( 'form.checkout' ).serialize()`, which SKIPS a disabled control — with `shipping_city`
+ * disabled the field left the serialized form entirely. Over a multi-second window that is a real
+ * chance to reprice an order with no city. `pointer-events` says the same thing to the customer and
+ * costs nothing on the wire; `aria-disabled` says it to assistive tech.
+ *
+ * The spinner is the SAME `.woodev-location-spinner` the typeahead already shows during a search —
+ * the customer has seen that ring mean "this field is working" moments earlier, so it needs no
+ * offset of its own: the select2 dropdown arrow is hidden for the duration, and the spinner takes
+ * exactly the place the arrow just left. The arrow means "open me", which is precisely what the
+ * field is not doing right now.
+ *
+ * `touch-action` alongside `pointer-events` comes from the widely-circulated select2 read-only
+ * recipe (the one keyed on `select[readonly].select2-hidden-accessible + .select2-container`):
+ * `pointer-events` alone does not suppress every touch gesture. The HOOK is deliberately ours and
+ * not that recipe's — keying on select2's own internal class plus sibling adjacency would couple
+ * this rule to markup select2 owns and may re-shape, while `location-cascade.js` sets the host
+ * class itself and can guarantee it.
+ *
+ * That recipe's `background: #eee` is deliberately NOT taken: this file states its reason for
+ * preferring `opacity` in the locked-address rule above — it composes with whatever background,
+ * border and text colour the theme already gave the field, light or dark, so it needs no palette
+ * and cannot clash.
+ * ---------------------------------------------------------------------- */
+
+.woodev-location-field-busy > input,
+.woodev-location-field-busy > select,
+.woodev-location-field-busy .select2-container {
+	pointer-events: none;
+	touch-action: none;
+	opacity: 0.6;
+}
+
+.woodev-location-field-busy .select2-selection__arrow,
+.woodev-location-field-busy .select2-selection__clear {
+	display: none;
+}
