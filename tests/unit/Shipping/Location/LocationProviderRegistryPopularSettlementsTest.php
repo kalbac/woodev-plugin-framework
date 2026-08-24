@@ -288,12 +288,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		/**
 		 * D4: a provider without CAPABILITY_RESOLVE_KEY gets no popular list at all
-		 * (same rule {@see Popular_Settlement_Store::enroll()} enforces) — the
-		 * listener must not even attempt to stamp a candidate, and must return
-		 * before ever touching `Customer_Location_Store` (no chain stub needed here
-		 * at all — proof that the capability check comes first).
+		 * (the same rule {@see Popular_Settlement_Store::enroll()} enforces).
+		 *
+		 * The gate is keyed on the RECORD's own provider, so the record has to be
+		 * read before the capability can even be asked about — that ordering is the
+		 * point of the round-4 fix, not an accident.
 		 */
-		public function test_a_provider_without_the_capability_never_gets_a_candidate_stamped(): void {
+		public function test_a_record_whose_own_provider_cannot_resolve_never_gets_a_candidate_stamped(): void {
 			$provider = new \Checkout_Listener_Non_Resolving_Fixture_Provider();
 			$registry = $this->registry_with( [ $provider ], $provider->get_id() );
 
@@ -303,9 +304,99 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			Functions\when( 'apply_filters' )->returnArg( 2 );
 
-			$order = Mockery::mock( '\WC_Order' );
+			$this->stub_logged_in_chain(
+				[
+					'records' => [
+						Location_Record::from_array(
+							[
+								'key'         => Locality_Key::compose( $provider->get_id(), 'town-1' ),
+								'provider_id' => $provider->get_id(),
+								'level'       => Location_Record::LEVEL_SETTLEMENT,
+								'country'     => 'RU',
+							]
+						)->to_array(),
+					],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
 
-			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], $order );
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], Mockery::mock( '\WC_Order' ) );
+		}
+
+		/**
+		 * A level is resolved PER LEVEL with a bundled fallback, so with a
+		 * non-resolving provider ACTIVE the settlement record can legitimately
+		 * belong to another, resolving provider (gotcha
+		 * `a-level-served-can-come-from-the-fallback-not-the-active-provider`).
+		 *
+		 * Gating on the active provider dropped that perfectly enrollable record.
+		 * The gate belongs on the record's OWN provider — which is what
+		 * {@see Popular_Settlement_Store::enroll()} does, and the two must agree.
+		 */
+		public function test_a_fallback_owned_record_is_stamped_even_when_the_active_provider_cannot_resolve(): void {
+			$active   = new \Checkout_Listener_Non_Resolving_Fixture_Provider();
+			$fallback = new \Checkout_Listener_Resolving_Fixture_Provider();
+			$registry = $this->registry_with( [ $active, $fallback ], $active->get_id() );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'remember_candidate' )->once();
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$this->stub_logged_in_chain(
+				[
+					'records' => [
+						Location_Record::from_array(
+							[
+								'key'         => Locality_Key::compose( $fallback->get_id(), 'town-2' ),
+								'provider_id' => $fallback->get_id(),
+								'level'       => Location_Record::LEVEL_SETTLEMENT,
+								'country'     => 'RU',
+							]
+						)->to_array(),
+					],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
+
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], Mockery::mock( '\WC_Order' ) );
+		}
+
+		/**
+		 * The mirror of the case above: the ACTIVE provider can resolve, but the
+		 * record belongs to one that cannot. Stamping it would leave meta that
+		 * {@see Popular_Settlement_Store::enroll()} refuses — a candidate that can
+		 * never become a row.
+		 */
+		public function test_a_record_from_a_non_resolving_provider_is_not_stamped_even_when_the_active_one_can(): void {
+			$active        = new \Checkout_Listener_Resolving_Fixture_Provider();
+			$non_resolving = new \Checkout_Listener_Non_Resolving_Fixture_Provider();
+			$registry      = $this->registry_with( [ $active, $non_resolving ], $active->get_id() );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'remember_candidate' );
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$this->stub_logged_in_chain(
+				[
+					'records' => [
+						Location_Record::from_array(
+							[
+								'key'         => Locality_Key::compose( $non_resolving->get_id(), 'town-3' ),
+								'provider_id' => $non_resolving->get_id(),
+								'level'       => Location_Record::LEVEL_SETTLEMENT,
+								'country'     => 'RU',
+							]
+						)->to_array(),
+					],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
+
+			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], Mockery::mock( '\WC_Order' ) );
 		}
 
 		/**

@@ -506,6 +506,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			self::remove_hooked_instances( 'wp_login', Customer_Location_Store::class, 'handle_wp_login' );
 			self::remove_hooked_instances( 'woocommerce_states', self::class, 'inject_related_list_states' );
 
+			// The popular-settlements pair, added in #488 slice 2. Every callback `add_hooks()`
+			// registers must be removable here or an integration test keeps a stale registry
+			// instance alive across a reset (Codex critic, final pass on #488 slice 2).
+			self::remove_hooked_instances( 'init', self::class, 'maybe_install_popular_settlements_table' );
+			self::remove_hooked_instances( 'woocommerce_checkout_order_processed', self::class, 'handle_checkout_order_processed_for_popular_settlements' );
+
 			self::$instance = null;
 		}
 
@@ -777,7 +783,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return void
 		 */
 		public function handle_checkout_order_processed_for_popular_settlements( int $order_id, array $posted_data, \WC_Order $order ): void {
-			$provider = $this->get_active_provider();
+			$chain = ( new Customer_Location_Store() )->get_chain();
+
+			if ( null === $chain || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
+				return;
+			}
+
+			$record = $chain['records'][ Location_Record::LEVEL_SETTLEMENT ];
+
+			// The record is read BEFORE any capability check, and the provider is looked up by the
+			// record's OWN id — never by `get_active_provider()`. A level is resolved per level with
+			// a bundled fallback (gotcha
+			// `a-level-served-can-come-from-the-fallback-not-the-active-provider`), so with CDEK
+			// active and DaData configured a settlement record can legitimately belong to DaData.
+			// Gating on the ACTIVE provider therefore asks the wrong question in both directions:
+			// it drops a perfectly enrollable fallback-owned record when the active provider cannot
+			// resolve by key, and it stamps a candidate `enroll()` will later refuse when only the
+			// active one can. `enroll()` gates by `record->provider_id()`, and this must agree with
+			// it exactly (Codex critic, final pass on #488 slice 2).
+			$provider = $this->get_providers()[ $record->provider_id() ] ?? null;
 
 			if ( null === $provider ) {
 				return;
@@ -786,14 +810,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			if ( ! in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $provider->get_capabilities(), true ) ) {
 				return; // D4: no popular list at all for a provider that cannot resolve by key.
 			}
-
-			$chain = ( new Customer_Location_Store() )->get_chain();
-
-			if ( null === $chain || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
-				return;
-			}
-
-			$record = $chain['records'][ Location_Record::LEVEL_SETTLEMENT ];
 
 			if ( Locality_Key::is_derived( $record->key() ) ) {
 				return; // D4a: a derived key can never be resolved again, so it is never enrolled.
