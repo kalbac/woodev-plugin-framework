@@ -883,6 +883,27 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	/**
+	 * The #484 exception is exactly ONE case wide (push-review finding). A country the
+	 * chain serves no region for must STILL report no region owner, even though no state
+	 * list is present to stand the layer down — otherwise `owners` would name a provider
+	 * for a level nothing renders, which is the incoherence the #352 rule exists to stop.
+	 */
+	public function test_owners_region_stays_empty_when_the_chain_serves_no_region_at_all(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => false, 'settlement' => true, 'address' => true ], null, [ 'RU' ] );
+		$config  = $this->config_with_states( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service, [] )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['levels']['RU']['region'] );
+		$this->assertSame(
+			'',
+			$config['location']['owners']['RU']['region'],
+			'no state list is present, but the chain serves no region either — the owner must stay empty'
+		);
+	}
+
+	/**
 	 * The mixed-chain case issue #352 exists for, end-to-end through the REAL
 	 * {@see Location_Service} + provider registry (not the simplified fake above, which
 	 * cannot model two DIFFERENTLY-countried providers along the chain — same reasoning as
@@ -1504,6 +1525,18 @@ class CheckoutConfigTest extends TestCase {
 		// still be told "region" is not a typeahead target here — WC already
 		// renders a native <select> — but WITHOUT the conflict warning.
 		$this->assertFalse( $config['location']['levels']['RU']['region'] );
+
+		// …and the OWNER must survive that (issue #484). `owners` and `levels` answer two
+		// different questions, and in related-list mode they legitimately diverge: this
+		// layer owns the level AND renders it as a <select>. Blanking the owner here
+		// disarmed `location-cascade.js`'s cross-provider guard in `backwardsFill()`,
+		// which is falsy-guarded (`if ( owner && owner !== record.provider_id )`), so a
+		// DaData address record silently overwrote the CDEK region field on the rig.
+		$this->assertSame(
+			'fake-provider-should-never-leak',
+			$config['location']['owners']['RU']['region'],
+			'our own related-list injection must not make us disown the region level'
+		);
 	}
 
 	/**

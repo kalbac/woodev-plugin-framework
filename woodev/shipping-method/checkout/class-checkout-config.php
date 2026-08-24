@@ -742,19 +742,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$final_states   = $this->wc_states( $code );
 				$states_present = [] !== $final_states;
 
-				if ( $country_levels['region'] && $states_present && ! $service->owns_region_states( $code, $final_states ) ) {
+				// WHOSE list it is decides ownership (issue #484). A non-empty state list
+				// can come from WooCommerce's native list, a plugin's §8 carrier takeover,
+				// or THIS layer's own `related-list` region injector — and only the last
+				// one is not a conflict, because there is nobody to stand down FOR: the
+				// select on screen is ours, filled by us. `owns_region_states()` answers
+				// exactly that, and its own docblock states the rule.
+				$region_states_are_ours = $states_present && $service->owns_region_states( $code, $final_states );
+
+				if ( $country_levels['region'] && $states_present && ! $region_states_are_ours ) {
 					$region_conflict_countries[] = $code;
 				}
 
+				// `levels['region']` means "a TYPEAHEAD target", and it is correctly false
+				// whenever a state list exists — including our OWN related-list injection,
+				// which renders a native <select> rather than a typeahead. Deliberately
+				// unchanged by #484; `location-cascade.js` reaches the related-list region
+				// through `isRelatedListRegionNode()`, its own documented exception to the
+				// D15 level gate, not through this flag.
 				$country_levels['region'] = $country_levels['region'] && ! $states_present;
 
-				// `owners` MUST honour the SAME final answer as `levels` (issue #352):
-				// a provider that technically resolves for "region" is not the owner
-				// of a field the #294 arbitration just stood this layer down from —
-				// otherwise the client could see `levels[c].region === false` (native
-				// WC select) alongside a non-empty `owners[c].region` (a typeahead
-				// owner) for the same level, which is incoherent.
-				if ( ! $country_levels['region'] ) {
+				// `owners` normally honours the SAME final answer as `levels` (issue #352):
+				// a provider that technically resolves for "region" is not the owner of a
+				// field the #294 arbitration just stood this layer down from — otherwise the
+				// client could see a non-empty `owners[c].region` for a level
+				// `levels[c].region === false` already called someone else's.
+				//
+				// BUT ONLY WHEN IT REALLY IS SOMEONE ELSE'S (issue #484). `owners` and
+				// `levels` answer two different questions — "who owns this level" versus "is
+				// it a typeahead target" — and in `related-list` region mode those answers
+				// legitimately diverge: this layer owns the level AND renders it as a
+				// <select>. Blanking on `levels` alone therefore disowned our own field.
+				//
+				// The cost was not cosmetic, which is how #484 was found on the rig:
+				// `owners[c][level]` is the ONLY thing standing between a foreign provider's
+				// record and a level it does not own. `location-cascade.js`'s
+				// `backwardsFill()` guards with `if ( owner && owner !== record.provider_id )
+				// return;` — an EMPTY owner is falsy, so the guard did not run at all. With
+				// `owners.region` blanked, picking a DaData address suggestion wrote DaData's
+				// own region spelling into a <select> whose options come from the CDEK preset
+				// list, and select2 invented a second, foreign option for it. The settlement
+				// level was untouched in the same session precisely because its owner was set.
+				// Narrowed to exactly one exception, and no wider (push-review finding):
+				// the #352 coherence rule still blanks the owner for EVERY level this
+				// layer does not render — a foreign state list, and equally a chain that
+				// serves no region at all — and stands down only for our own list.
+				if ( ! $country_levels['region'] && ! $region_states_are_ours ) {
 					$country_owners['region'] = '';
 				}
 
