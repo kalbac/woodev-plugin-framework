@@ -406,15 +406,23 @@
 		// `undefined`/empty (measured on the rig: the field it left behind read
 		// `class="input-text undefined"`), same defect the CDEK reference
 		// (`plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:79-80`)
-		// already carries both of for exactly this reason. `data-input-classes` is carried
-		// verbatim (never fabricated) — an `<input>` WC never stamped one onto simply leaves
-		// this unset, same as before. `placeholder`, already resolved above with its own
-		// fallback chain, is written as BOTH attributes since WC's rebuild accepts either.
+		// already carries both of for exactly this reason. `placeholder`, already resolved above
+		// with its own fallback chain, is written as BOTH attributes since WC's rebuild accepts
+		// either.
+		//
+		// Issue #469: the attribute is carried VERBATIM when the input has one, and set to the
+		// EMPTY STRING when it does not — never left unset. Leaving it unset is what produced the
+		// `undefined` in the first place: `$statebox.attr()` yields `undefined` for a missing
+		// attribute, and `country-select.js:120` concatenates that straight into a class list
+		// (`.addClass( 'state_select ' + input_classes )`). The empty string is not a fabricated
+		// value — it is exactly what WooCommerce's own `state` branch emits for a field with no
+		// `input_class`, and a stock install always lands there because WC core sets none on
+		// address fields. The server cannot supply it: `woocommerce_form_field()` drops
+		// empty-string entries from `custom_attributes` via `array_filter( …, 'strlen' )`, which
+		// is why this half exists at all ({@see Checkout_Handler::inject()}).
 		var inputClasses = input.getAttribute( 'data-input-classes' );
 
-		if ( null !== inputClasses ) {
-			select.setAttribute( 'data-input-classes', inputClasses );
-		}
+		select.setAttribute( 'data-input-classes', null === inputClasses ? '' : inputClasses );
 
 		if ( placeholder ) {
 			select.setAttribute( 'placeholder', placeholder );

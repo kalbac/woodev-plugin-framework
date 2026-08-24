@@ -858,12 +858,42 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( document.getElementById( 'shipping_state' ).getAttribute( 'data-input-classes' ) ).toBe( 'input-text validate-required' );
 	} );
 
-	it( 'never fabricates data-input-classes when the input never carried one (issue #466)', () => {
+	/**
+	 * Issue #469, reversing the #466 decision to leave the attribute unset when the input
+	 * carried none. Leaving it unset IS the defect: `$statebox.attr( 'data-input-classes' )`
+	 * yields `undefined` for a missing attribute and `country-select.js:120` concatenates that
+	 * straight into a class list, which is the rig's `class="input-text  undefined"`
+	 * fingerprint. The empty string is not fabricated — it is exactly what WooCommerce's own
+	 * `state` branch emits for a field with no `input_class`, and a stock install always lands
+	 * there because WC core sets none on address fields. The server cannot supply it:
+	 * `woocommerce_form_field()` drops empty-string entries from `custom_attributes` via
+	 * `array_filter( …, 'strlen' )` (`wc-template-functions.php:3367`, WooCommerce 11.0.1).
+	 */
+	it( 'sets data-input-classes to the empty string when the input carried none (issue #469)', () => {
 		document.body.innerHTML = '<input type="text" id="shipping_state" name="shipping_state" value="" />';
 
 		mod.attachAjaxSelect2( document.getElementById( 'shipping_state' ), buildOptions( { node: { level: 'region', fieldId: 'shipping_state' } } ) );
 
-		expect( document.getElementById( 'shipping_state' ).hasAttribute( 'data-input-classes' ) ).toBe( false );
+		const select = document.getElementById( 'shipping_state' );
+
+		expect( select.hasAttribute( 'data-input-classes' ) ).toBe( true );
+		expect( select.getAttribute( 'data-input-classes' ) ).toBe( '' );
+	} );
+
+	/**
+	 * The value WooCommerce's rebuild actually reads back must be a string, not `undefined` —
+	 * assert through the same accessor `country-select.js` uses rather than through our own
+	 * attribute write, so the test fails if the element ever stops exposing it (issue #469).
+	 */
+	it( 'the generated <select> reads back a string, never undefined, for data-input-classes (issue #469)', () => {
+		document.body.innerHTML = '<input type="text" id="billing_state" name="billing_state" value="" />';
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_state' ), buildOptions( { node: { level: 'region', fieldId: 'billing_state' } } ) );
+
+		const readBack = document.getElementById( 'billing_state' ).getAttribute( 'data-input-classes' );
+
+		expect( typeof readBack ).toBe( 'string' );
+		expect( 'state_select ' + readBack ).toBe( 'state_select ' );
 	} );
 
 	it( 'writes the resolved placeholder onto BOTH placeholder and data-placeholder on the generated <select> — WC\'s rebuild reads either (issue #466)', () => {
