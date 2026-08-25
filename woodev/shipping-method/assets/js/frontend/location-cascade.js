@@ -4102,6 +4102,12 @@
 	 * @returns {void}
 	 */
 	function reconcileAfterCheckoutUpdate( entry ) {
+		// Issue #536 round 2: `country_to_state_changed` is ALSO the completion signal a
+		// deferred default-locality ancestor write is waiting on — see
+		// {@see applyPendingDefaultLocality}'s own docblock. A no-op whenever nothing is
+		// pending, or the target field is not promoted yet.
+		applyPendingDefaultLocality( entry );
+
 		entry.chain.forEach( function( node ) {
 			if ( ! isNodeActive( entry, node ) ) {
 				return;
@@ -4347,6 +4353,96 @@
 	}
 
 	/**
+	 * Retries the ANCESTOR half of the #536 default-locality seed (the settlement's own TEXT is
+	 * written unconditionally and immediately by {@see prefill}; only {@see backwardsFill}'s
+	 * ancestor writes — region, under `related-list` — go through here) — issue #536 round 2,
+	 * rig-measured (fresh guest, `fixed` policy): a region `related-list` field is very often
+	 * still a plain WooCommerce `<input>` at `prefill()` time (a fresh guest has no session
+	 * country/state yet, so PHP has nothing to render states FOR), and WooCommerce's OWN
+	 * `assets/js/frontend/country-select.js` promotes it to a real, state-populated `<select>`
+	 * client-side, ASYNCHRONOUSLY relative to this module's own `boot()` — triggered by
+	 * `wc_address_i18n_ready`, itself fired once by WC's `address-i18n.js` once it has loaded,
+	 * with no ordering guarantee relative to this file's `DOMContentLoaded` boot.
+	 *
+	 * Writing straight into that `<input>` (a plain `.value =`, `{@see applyValueToElement}`'s
+	 * non-`<select>` branch) is NOT itself the loss — the loss happens when WooCommerce's OWN
+	 * promotion runs LATER: `country-select.js` captures `value = $statebox.val()` off the
+	 * `<input>` BEFORE rebuilding it into a `<select>`, then tries `$statebox.val(value)` to
+	 * carry it across — but the freshly-registered `related-list` options carry
+	 * `wc_strtoupper(trim(label))` as their VALUE (`class-checkout-config.php`'s own "related-list
+	 * region seam" docblock), never the bare display text {@see fieldValueFor} writes. `.val()`
+	 * finds no match, selects nothing, and fires a REAL `change` with the now-empty value —
+	 * which this module's OWN {@see handleFieldChanged} then reads as a genuine parent edit
+	 * (`entry.resolved[fieldId]` still says the intended text), running {@see clearDescendants}
+	 * and wiping the settlement text {@see prefill} had ALREADY correctly seeded, as a pure side
+	 * effect. Measured on the rig (issue #536 round 2): `shipping_state` ends with 88 real
+	 * options, `Москва` among them, nothing selected; `shipping_city` keeps its single `Москва`
+	 * `<option>` but loses its selection the same tick.
+	 *
+	 * THE FIX IS ORDERING, NOT A TIMER (explicitly ruled out — a fixed delay cannot know when
+	 * WooCommerce's own async promotion actually finishes, and guessing wrong either fires too
+	 * early, same failure, or flashes an empty field too long): defer the ancestor write until
+	 * the field can actually hold it, using the completion signal WooCommerce's OWN promotion
+	 * already emits — `country_to_state_changed` — which {@see bindCountryToStateChangedWatcher}
+	 * (issue #460) already routes into {@see reconcileAfterCheckoutUpdate} for every entry, on
+	 * every fire. This function is a NO-OP until the REGION ancestor's own live element is
+	 * actually a `<select>` (the SAME gate {@see attachRelatedListRegion} itself uses to decide
+	 * whether it can attach at all) — so it harmlessly re-checks on a wrapper's OWN premature
+	 * fire (e.g. the billing wrapper's promotion firing before the shipping wrapper's, when
+	 * shipping is the active section) and only actually writes once ITS OWN region field has
+	 * been promoted. A chain with no region node, or a region under any mode OTHER than
+	 * `related-list`, has nothing to wait for and writes immediately (see below).
+	 *
+	 * DISARMS ITSELF the moment the customer's own action has moved past the implicit default —
+	 * a real pick ({@see onSelectFor}, whose record carries no `implicit` flag at all) or an
+	 * edit/clear ({@see handleFieldChanged}'s own destructive gate, which nulls
+	 * `entry.records[level]`) — so a customer who interacts with the settlement field BEFORE
+	 * WooCommerce's own promotion ever completes is never overwritten by a stale default on a
+	 * later `country_to_state_changed`. Checked by KEY, not merely presence, so a customer who
+	 * picks a DIFFERENT settlement and then somehow re-triggers this event never has THEIR pick
+	 * silently replaced by the merchant's default for the level it once occupied.
+	 *
+	 * A no-op (silently, every time) once `entry.pendingDefaultLocality` is falsy — the ordinary
+	 * case for every entry with no `fixed` default, and for one whose default already applied.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function applyPendingDefaultLocality( entry ) {
+		var pending = entry.pendingDefaultLocality;
+
+		if ( ! pending ) {
+			return;
+		}
+
+		var current = entry.records[ pending.level ];
+
+		if ( ! current || ! current.implicit || current.key !== pending.key ) {
+			// The customer's own action (a real pick, or an edit that dropped the record)
+			// already moved past the implicit default — never resurrect it from here.
+			entry.pendingDefaultLocality = null;
+			return;
+		}
+
+		// The only ancestor {@see backwardsFill} can lose to WooCommerce's own async promotion
+		// is a `related-list` region — see this function's own docblock. No region node, or a
+		// region under any OTHER mode, has nothing to wait for: WooCommerce never rebuilds those
+		// fields out from under this module.
+		var regionNode = chainNodeForLevel( entry, 'region' );
+
+		if ( regionNode && isRelatedListRegionNode( entry, regionNode ) ) {
+			var regionEl = document.getElementById( regionNode.fieldId );
+
+			if ( ! regionEl || 'SELECT' !== regionEl.tagName ) {
+				return; // WooCommerce has not promoted this field yet — retry on the next signal.
+			}
+		}
+
+		backwardsFill( entry, pending.node, pending.record );
+		entry.pendingDefaultLocality = null;
+	}
+
+	/**
 	 * Seeds `resolved[]` from each node's rendered DOM value (so WooCommerce's own init-time
 	 * programmatic `change` — carrying the value already there — is a no-op, not a destructive
 	 * clear) and, when `config.location.current` names an existing customer record, seeds a
@@ -4460,7 +4556,14 @@
 					var defaultRecord = entry.location.defaultLocality.record;
 
 					writeSilently( entry, defaultNode.fieldId, fieldValueFor( defaultRecord, current.level ) );
-					backwardsFill( entry, defaultNode, defaultRecord );
+
+					// Issue #536 round 2: the ancestor write (region, under `related-list`) is NOT
+					// done here directly — see {@see applyPendingDefaultLocality}'s own docblock for
+					// why an unconditional {@see backwardsFill} call at THIS point loses the region
+					// silently. `pendingDefaultLocality` is retried from {@see reconcileAfterCheckoutUpdate}
+					// once the ancestor field is actually able to hold it.
+					entry.pendingDefaultLocality = { node: defaultNode, record: defaultRecord, level: current.level, key: current.key };
+					applyPendingDefaultLocality( entry );
 				}
 			}
 
