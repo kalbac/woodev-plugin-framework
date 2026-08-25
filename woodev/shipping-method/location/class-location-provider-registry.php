@@ -148,6 +148,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		public const SETTING_FIELD_MODE_SETTLEMENT = 'field_mode_settlement';
 
 		/**
+		 * The store setting id holding the "allow a settlement not on the
+		 * provider's own list" opt-in (#528, closing the half of #517
+		 * `ajax-select2` left open: unlocking `address` is not enough when
+		 * the settlement field is a real `<select>` with nothing to hold the
+		 * customer's free-typed text, so an unlock-only fix submits an empty
+		 * required field). Default OFF — the operator's own reasoning
+		 * (25.08.2026): an unlisted settlement is rare (DaData covers nearly
+		 * everything), and every carrier needs an exact location value, so
+		 * turning this on is a deliberate merchant risk, not a safe default.
+		 *
+		 * Meaningful ONLY for {@see self::MODE_AJAX_SELECT2} — the settlement
+		 * axis's `related-list` mode does not exist (clamped away
+		 * unconditionally, see {@see self::get_field_mode_settlement()}) and
+		 * `typeahead` already carries free text in a plain `<input>`, needing
+		 * no opt-in at all. See {@see self::is_custom_settlement_allowed()}
+		 * for the read-side accessor and
+		 * `woodev/shipping-method/assets/js/frontend/location-select-modes.js`'s
+		 * `selectConfigFor()` ajax branch for the client-side gate this
+		 * setting drives (select2 `tags` + the abandon-recording gate
+		 * together).
+		 *
+		 * @since 2.0.3
+		 * @var string
+		 */
+		public const SETTING_ALLOW_CUSTOM_SETTLEMENT = 'allow_custom_settlement';
+
+		/**
 		 * The store setting id holding the `address_suggestions` switch (Task 10;
 		 * issue #362; design S3/§3.1/§3.2/§4.2/§7): whether the location layer
 		 * serves the `address` suggest level AT ALL. Registered right after
@@ -1334,6 +1361,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$offered = self::offered_field_modes_for( $this->get_active_provider(), true );
 
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
+		}
+
+		/**
+		 * Whether the merchant has opted in to letting the customer submit a
+		 * settlement value the active provider does not carry (#528).
+		 *
+		 * Deliberately UNCLAMPED against {@see self::get_field_mode_settlement()}:
+		 * the only reader of this flag is `ajax-select2`'s own
+		 * `selectConfigFor()` branch, which never runs for `typeahead`, so a
+		 * stale `true` left over from a mode switch is inert rather than
+		 * something this accessor needs to police — the same "narrow the
+		 * OFFERED surface, not every reader" split
+		 * {@see self::get_field_mode_settlement()}'s own docblock argues for
+		 * `related-list`. Mirrors {@see self::get_address_suggestions_raw()}'s
+		 * "no settings handler yet" shape: answers this setting's own
+		 * default (`false`) rather than throwing.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @return bool
+		 */
+		public function is_custom_settlement_allowed(): bool {
+			if ( null === $this->settings_handler ) {
+				return false;
+			}
+
+			return (bool) $this->settings_handler->get_value( self::SETTING_ALLOW_CUSTOM_SETTLEMENT );
 		}
 
 		/**

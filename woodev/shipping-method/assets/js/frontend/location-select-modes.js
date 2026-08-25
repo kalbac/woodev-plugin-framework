@@ -293,6 +293,45 @@
 			}
 
 			config.minimumInputLength = minimumInputLengthFor( seed.level );
+
+			// Issue #528: the merchant's own opt-in — off by default. `tags` is select2's
+			// own documented feature (select2/select2 docs, tags.md); `createTag`/`insertTag`
+			// follow the SAME shape as the CDEK reference
+			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:179-188).
+			if ( seed.allowCustomSettlement ) {
+				config.tags = true;
+
+				// Refuses an empty/whitespace term (returning `null` tells select2 there is
+				// nothing to offer) and stamps `newTag: true` so `handleSelect2Select()` can
+				// tell a tag pick apart from a real record pick — a tag has no locality key.
+				config.createTag = function( params ) {
+					var term = ( params && 'string' === typeof params.term ? params.term : '' ).trim();
+
+					if ( ! term ) {
+						return null;
+					}
+
+					return {
+						id: term,
+						text: term,
+						newTag: true,
+					};
+				};
+
+				// Gates the tag row to the ZERO-result case, exactly like the CDEK reference:
+				// a customer must never be able to free-type past a town the provider actually
+				// carries. `data` is the CURRENT rendered result set for this completed query
+				// (`success()`'s own `results` above) — non-empty only when the provider found
+				// something for this exact term.
+				config.insertTag = function( data, tag ) {
+					if ( ! data.filter( function( item ) {
+						return item !== tag;
+					} ).length ) {
+						data.push( tag );
+					}
+				};
+			}
+
 			config.ajax = {
 				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
 				// issue #449 (teardown gap, round 2 — the `ajax.delay` question): a `detach()` that
@@ -414,9 +453,15 @@
 						// through to `success()` below with an empty result list and no abandon
 						// recorded — no results shown, the address lock stands, exactly like an
 						// in-flight/never-completed search.
-						if ( entries && 0 === entries.length && term && 'function' === typeof seed.onAbandon ) {
+						// Issue #528: gates the WHOLE abandon-recording mechanism on the
+						// merchant's opt-in, not just the tag row above — when the option is
+						// OFF, unlocking `address` with nothing able to hold the customer's
+						// free-typed settlement text just moves the rejection from the client
+						// to the server (the card's own measured finding). No candidate
+						// recorded, no flush, the address lock stands.
+						if ( entries && 0 === entries.length && term && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
 							seed.onAbandon( { query: term, resolved: true } );
-						} else if ( entries && entries.length > 0 && 'function' === typeof seed.onAbandon ) {
+						} else if ( entries && entries.length > 0 && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
 							// Critic BL-2 (round 3, BLOCKER): a candidate recorded for an EARLIER,
 							// failed intermediate term (e.g. "Тве") otherwise survives a LATER
 							// completed search that the provider actually answered (e.g. "Тверь",
@@ -616,6 +661,17 @@
 		// DOM carries none — never a literal here.
 		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
 			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
+
+		// Issue #528: the merchant opt-in for letting the customer submit a settlement the
+		// active provider does not carry — meaningful ONLY for the `ajax-select2` strategy
+		// (the settlement axis's `related-list` mode is clamped away unconditionally, #486,
+		// and never reads this; `typeahead` already carries free text in a plain `<input>`
+		// and never reaches this function at all). See `selectConfigFor()`'s ajax branch for
+		// where this gates `tags`/`insertTag`/`createTag` AND the abandon-recording calls
+		// together — when this is `false`, #517's onAbandon must not fire at all here (the
+		// operator's own #528 reasoning: unlocking `address` with nothing able to hold the
+		// customer's free-typed text just moves the rejection from the client to the server).
+		var allowCustomSettlement = !! ( options.location && options.location.allowCustomSettlement );
 
 		// Issue #466: WooCommerce's own `country-select.js` rebuild reads `data-input-classes`
 		// and `placeholder`/`data-placeholder` straight off whatever CURRENTLY occupies the
@@ -859,7 +915,48 @@
 		function handleSelect2Select( event ) {
 			var data = event && event.params ? event.params.data : null;
 
+			// Issue #528: a tag has no locality key — it is NOT a record pick.
+			// `createTag()`'s own `newTag` stamp (see `selectConfigFor()`'s ajax
+			// branch) survives select2/selectWoo's relay verbatim (same EventRelay
+			// path `resolveAndSelect()`'s own docblock cites for `.key`), so it is
+			// safe to branch on here before ever touching `dataByKey`. Deliberately
+			// NEVER routed through `resolveAndSelect()`: no `/select` call, no
+			// `entry.records.settlement` write — only the #350/#517 unresolved
+			// marker `options.onAbandon` (== `location-cascade.js`'s own
+			// `onAbandonFor()`) already writes for a genuine zero-result search, and
+			// this pick is exactly that same evidence, just customer-confirmed
+			// rather than provider-proven.
+			if ( data && data.newTag ) {
+				handleTagSelect( data );
+
+				return;
+			}
+
 			resolveAndSelect( data ? data.key : null );
+		}
+
+		/**
+		 * Handles a `createTag()`-produced pick (#528) — the customer explicitly
+		 * chose to submit a settlement the active provider does not carry. Composes
+		 * with the SAME deferred-flush mechanism a real pick uses
+		 * ({@see resolveAndSelect}'s own docblock): the measured event order
+		 * (`change → closing → close → select`) means `handleSelect2Close()` has
+		 * already run and set `dropdownOpen = false` by the time this fires, so
+		 * `recordAbandonCandidate()` below fires IMMEDIATELY rather than waiting for
+		 * another close — there is no future close left to defer to. Cancelling any
+		 * already-SCHEDULED flush first (an earlier zero-result term recorded
+		 * during typing) prevents a stale term from double-firing after this one
+		 * already committed the customer's own text.
+		 *
+		 * @param {{id?: string, text?: string}} tag
+		 * @returns {void}
+		 */
+		function handleTagSelect( tag ) {
+			cancelScheduledAbandonFlush();
+
+			var term = tag && 'string' === typeof tag.id && tag.id ? tag.id : ( tag && tag.text ) || '';
+
+			recordAbandonCandidate( term ? { query: term, resolved: true } : null );
 		}
 
 		/**
@@ -1035,6 +1132,8 @@
 				// function's own docblock for why the actual fire is deferred to
 				// `select2:close`.
 				onAbandon: 'function' === typeof options.onAbandon ? recordAbandonCandidate : null,
+				// Issue #528: see the local `allowCustomSettlement` var's own docblock above.
+				allowCustomSettlement: allowCustomSettlement,
 				emptyText: 'string' === typeof options.emptyText ? options.emptyText : '',
 				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
 				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.

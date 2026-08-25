@@ -61,6 +61,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     // Two independent axes since issue #380 (each carries the same three
 	 *     // values — 'typeahead' | 'related-list' | 'ajax-select2', spec D7):
 	 *     'mode'      => [ 'region' => string, 'settlement' => string ],
+	 *     // #528: the merchant's "allow a settlement not on the provider's
+	 *     // list" opt-in — meaningful only while 'mode.settlement' is
+	 *     // 'ajax-select2'; see Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
+	 *     'allowCustomSettlement' => bool,
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
 	 *     'owners'    => [ country_code => [ 'region' => string, 'settlement' => string, 'address' => string ] ], // issue #352: provider id or '' — see build_location_block()'s own docblock
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
@@ -909,24 +913,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			);
 
 			return [
-				'endpoints'      => [
+				'endpoints'             => [
 					'suggest' => $this->rest_base . '/location/suggest',
 					'select'  => $this->rest_base . '/location/select',
 					'list'    => $this->rest_base . '/location/list',
 				],
-				'nonce'          => $this->nonce,
-				'countries'      => array_values( $countries ),
+				'nonce'                 => $this->nonce,
+				'countries'             => array_values( $countries ),
 				// Issue #380: two independent axes — see build_location_block()'s own
 				// docblock — instead of one shared mode string.
-				'mode'           => [
+				'mode'                  => [
 					'region'     => $service->get_field_mode_region(),
 					'settlement' => $service->get_field_mode_settlement(),
 				],
-				'levels'         => $levels,
-				'owners'         => $owners,
-				'current'        => $current,
-				'chain'          => $chain,
-				'implicit'       => $implicit,
+				// Issue #528: the merchant opt-in that lets `ajax-select2` submit a
+				// settlement the active provider does not carry — see
+				// Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
+				'allowCustomSettlement' => $service->is_custom_settlement_allowed(),
+				'levels'                => $levels,
+				'owners'                => $owners,
+				'current'               => $current,
+				'chain'                 => $chain,
+				'implicit'              => $implicit,
 				// Issue #296: steps 2+3 of the country fallback chain `checkout field ->
 				// WooCommerce store setting -> RU`, already merged into ONE value by
 				// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
@@ -935,8 +943,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// or empty (a single-country store that dropped the country field entirely used
 				// to leave the whole location layer silently dead — no widget ever attached,
 				// because the client had no country to arbitrate by).
-				'defaultCountry' => $service->resolve_default_country(),
-				'i18n'           => array_map( 'strval', (array) $strings ),
+				'defaultCountry'        => $service->resolve_default_country(),
+				'i18n'                  => array_map( 'strval', (array) $strings ),
 			];
 		}
 

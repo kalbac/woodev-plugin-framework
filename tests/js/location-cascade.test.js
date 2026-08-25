@@ -201,6 +201,9 @@ function buildConfig( opts ) {
 			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
 			// 'ajax-select2' — instead of one shared mode string (spec D7).
 			mode: modeAxes,
+			// Issue #528: the merchant opt-in for `ajax-select2` tags — default `false`,
+			// matching the store setting's own default (opt-in only).
+			allowCustomSettlement: o.allowCustomSettlement !== undefined ? o.allowCustomSettlement : false,
 			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
@@ -5459,7 +5462,13 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 	 *   populated synchronously by the time this returns, since `boot()` runs at require time.
 	 */
 	function bootWithRealSelectModes( configOpts ) {
-		installMarkup( configOpts, configOpts && configOpts.country );
+		// Issue #528: this whole describe block predates the merchant opt-in and exercises
+		// the #517 onAbandon/unlock mechanism on the assumption it just works — default it ON
+		// here so every existing test keeps pinning that mechanism unchanged. The dedicated
+		// #528 sub-block below overrides this to `false` to prove the gate itself.
+		const opts = Object.assign( { allowCustomSettlement: true }, configOpts );
+
+		installMarkup( opts, opts && opts.country );
 
 		global.jQuery = require( 'jquery' );
 		global.$ = global.jQuery;
@@ -5476,7 +5485,7 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 
 		const instances = installFakeSelect2( window.jQuery );
 
-		window[ CONFIG_GLOBAL ] = buildConfig( configOpts );
+		window[ CONFIG_GLOBAL ] = buildConfig( opts );
 
 		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
 
@@ -5649,6 +5658,85 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( addressField().disabled ).toBe( true );
+	} );
+
+	// -----------------------------------------------------------------------
+	// issue #528 — the merchant opt-in: gated abandon (address stays locked when off) and a
+	// tag pick unlocking through the SAME onAbandon route, at the full cascade+select-modes
+	// integration level (never reachable through location-select-modes.js's own tests alone,
+	// which know nothing of entry.records/refreshAddressLocks()).
+	// -----------------------------------------------------------------------
+
+	it( 'issue #528 option OFF: a completed, non-empty, zero-result settlement search does NOT unlock the address field, even after select2:close', async () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: false,
+		} );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+	} );
+
+	it( 'issue #528 option OFF: select2 receives no tags config at all', () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: false,
+		} );
+
+		expect( instances[ 0 ].config.tags ).toBeFalsy();
+	} );
+
+	it( 'issue #528 option ON (control): select2 receives tags: true', () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true,
+		} );
+
+		expect( instances[ 0 ].config.tags ).toBe( true );
+	} );
+
+	it( 'issue #528: a tag pick unlocks the address field, issues NO /select request, and writes no settlement record', async () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true,
+		} );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true ); // still open, nothing fired yet
+
+		const selectCallsBefore = fetchCalls.filter( ( c ) => c.url === SELECT_URL ).length;
+
+		// The customer picks the "add tag" row — select2's own createTag() shape, no `key`.
+		// Asserted SYNCHRONOUSLY, with NO `await tick()` first: the tag branch fires
+		// immediately (dropdownOpen is already false by the time select2:select runs, per the
+		// measured close-before-select order), never through the deferred close-flush macrotask
+		// — a version that fell through to the ordinary scheduled flush instead would still
+		// unlock eventually (the flush carries this same term), but not yet at this instant.
+		instances[ 0 ].pick( { id: 'Тьмутаракань', text: 'Тьмутаракань', newTag: true } );
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( selectCallsBefore );
+
+		// Composes with the already-scheduled close-flush — must not double-fire on its tick.
+		await tick();
+		expect( addressField().disabled ).toBe( false );
+		// The submitted DOM VALUE for a picked tag is select2's own responsibility (it manages
+		// the underlying <select>'s <option> elements for every result it renders, tag rows
+		// included — the same mechanism a normal ajax pick already relies on); this fake's
+		// pick() never models that DOM management for ANY pick, so asserting `.value` here
+		// would pin the fake's own limitation, not this module's contract. What IS this
+		// module's contract — no /select, no record, address unlocked — is asserted above.
 	} );
 
 	// -----------------------------------------------------------------------

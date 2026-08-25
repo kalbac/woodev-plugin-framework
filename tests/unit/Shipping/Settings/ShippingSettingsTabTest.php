@@ -117,6 +117,49 @@ class ShippingSettingsTabTest extends TestCase {
 	}
 
 	/**
+	 * Issue #528: `allow_custom_settlement` sits directly under the settlement
+	 * field-mode select it gates — same "field type controls sit next to the
+	 * field they describe" ordering issue #380 established for the two axes.
+	 */
+	public function test_fields_section_places_allow_custom_settlement_right_after_field_mode_settlement(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
+
+		$fields_section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+		);
+
+		$ids = $fields_section->get_setting_ids();
+
+		$settlement_index = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, $ids, true );
+		$allow_index       = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT, $ids, true );
+
+		$this->assertNotFalse( $settlement_index, '"field_mode_settlement" is missing from the «Поля» section.' );
+		$this->assertSame( $settlement_index + 1, $allow_index, '"allow_custom_settlement" must sit directly after "field_mode_settlement".' );
+	}
+
+	/**
+	 * Without a location handler declared, none of the location-owned field
+	 * ids — including the new #528 opt-in — should appear at all.
+	 */
+	public function test_fields_section_omits_allow_custom_settlement_without_a_location_handler(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+
+		$fields_section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+		);
+
+		$this->assertNotContains(
+			\Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
+			$fields_section->get_setting_ids()
+		);
+	}
+
+	/**
 	 * set_location_section()/declare_map_needed() called BEFORE declare_shipping_plugin()
 	 * must not make the tab appear early — is_needed() gates everything, exactly like
 	 * Location_Provider_Registry's own activation gate gates its collection.

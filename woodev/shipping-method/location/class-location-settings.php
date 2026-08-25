@@ -362,6 +362,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			);
 
 			/*
+			 * `allow_custom_settlement` (#528, the merchant opt-in that makes
+			 * #517 actually deliver in `ajax-select2`): visible only while
+			 * the settlement axis is «Список с поиском» — same same-handler
+			 * `show_if` discipline as `default_locality_record` below, which
+			 * DOES carry real server-side enforcement here (design §7),
+			 * unlike the cross-handler `region_field` condition on
+			 * `field_mode_region` above.
+			 *
+			 * Explanatory text lives in the CONTROL's `tooltip`, not the
+			 * setting's `description` (operator convention, 25.08.2026,
+			 * AGENTS.md Conventions): `description` is reserved for text
+			 * carrying an interactive element (e.g. an `<a href>`), which
+			 * this field has none of — same shape as `field_mode_region`/
+			 * `field_mode_settlement` above, whose own copy lives in their
+			 * controls' tooltips too.
+			 */
+			$this->register_setting(
+				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Разрешить использовать города не из списка', 'woodev-plugin-framework' ),
+					'default' => false,
+					'show_if' => [
+						'setting' => Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+						'value'   => Location_Provider_Registry::MODE_AJAX_SELECT2,
+					],
+				]
+			);
+			$this->register_control(
+				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Покупатель сможет оставить в поле населённого пункта значение, которого нет у службы доставки. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться. По умолчанию выключено.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			/*
 			 * `address_suggestions` (Task 10; issue #362; design S3/§3.1/§3.2):
 			 * whether the location layer serves the `address` suggest level at
 			 * all. No OPTIONS-gating like the two axes above: this is a plain

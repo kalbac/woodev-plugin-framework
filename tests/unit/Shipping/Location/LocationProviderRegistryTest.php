@@ -3385,6 +3385,84 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Issue #528 — `allow_custom_settlement`: the merchant opt-in that makes
+	// #517 actually deliver in `ajax-select2` (unlocking `address` is not
+	// enough when the settlement field is a real `<select>` with nothing to
+	// hold the customer's free-typed text).
+	// -------------------------------------------------------------------------
+
+	public function test_allow_custom_settlement_setting_is_a_boolean_checkbox_defaulting_to_false(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT );
+
+		$this->assertNotNull( $setting );
+		$this->assertSame( \Woodev_Setting::TYPE_BOOLEAN, $setting->get_type() );
+		$this->assertFalse( $setting->get_default() );
+		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
+	}
+
+	/**
+	 * Visible only while the settlement axis is `ajax-select2` («Список с
+	 * поиском») — the only mode where the settlement field is a `<select>`
+	 * with nothing to hold free-typed text. Same-handler `show_if`, so this
+	 * carries real server-side enforcement (design §7), unlike the
+	 * cross-handler `region_field` condition on `field_mode_region`.
+	 */
+	public function test_allow_custom_settlement_carries_a_show_if_on_field_mode_settlement(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT );
+
+		$this->assertSame(
+			[
+				'setting' => Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				'value'   => Location_Provider_Registry::MODE_AJAX_SELECT2,
+			],
+			$setting->get_show_if_conditions()
+		);
+	}
+
+	public function test_is_custom_settlement_allowed_is_false_before_settings_handler_exists(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$this->assertFalse( $registry->is_custom_settlement_allowed() );
+	}
+
+	public function test_is_custom_settlement_allowed_reads_the_stored_value(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+		$this->stub_options_store( [ 'woodev_location_allow_custom_settlement' => true ] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertTrue( $registry->is_custom_settlement_allowed() );
+	}
+
+	public function test_is_custom_settlement_allowed_stays_false_when_nothing_stored(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [] );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->is_custom_settlement_allowed() );
+	}
+
+	// -------------------------------------------------------------------------
 	// Copy coverage (issue #373) — every field `Location_Settings` itself
 	// registers (as opposed to a provider's own declared fields, covered by
 	// DadataProviderTest) and that actually renders somewhere across the
@@ -3413,6 +3491,7 @@ final class LocationProviderRegistryTest extends TestCase {
 			[
 				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
 				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
+				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
 				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 			]
 		);
