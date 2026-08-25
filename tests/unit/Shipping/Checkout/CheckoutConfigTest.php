@@ -37,6 +37,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Framework\Shipping\Location\Location_Service;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
 use Woodev\Framework\Shipping\Pickup\Pickup_Map_Settings;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
@@ -114,6 +115,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var bool Issue #528: is_custom_settlement_allowed() return value. */
 	private bool $allow_custom_settlement;
 
+	/** @var array<string, array<int, array{key: string, label: string, level: string, record: array<string, mixed>}>> Issue #530: get_popular_settlements_for_country() return value, keyed by country. */
+	private array $popular_settlements;
+
 	/** @var string[] Task 13/issue #294: countries owns_region_states() reports true for. */
 	private array $owned_region_countries;
 
@@ -153,6 +157,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   value; defaults to `false`, matching the setting's
 	 *                                                                                                   own default, so every existing call site stays
 	 *                                                                                                   unaffected.
+	 * @param array<string, array>                                             $popular_settlements     Issue #530: get_popular_settlements_for_country()
+	 *                                                                                                   return value, keyed by country; defaults to `[]`
+	 *                                                                                                   for every country, so every existing call site
+	 *                                                                                                   stays unaffected.
 	 */
 	public function __construct(
 		bool $active,
@@ -164,7 +172,8 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		string $default_country = 'RU',
 		?array $chain_records = null,
 		?string $mode_settlement = null,
-		bool $allow_custom_settlement = false
+		bool $allow_custom_settlement = false,
+		array $popular_settlements = []
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
@@ -174,6 +183,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		$this->mode_settlement         = $mode_settlement ?? $mode_region;
 		$this->owned_region_countries = $owned_region_countries;
 		$this->default_country         = $default_country;
+		$this->popular_settlements     = $popular_settlements;
 		$this->chain_records            = $chain_records;
 		$this->allow_custom_settlement = $allow_custom_settlement;
 	}
@@ -254,6 +264,18 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		}
 
 		return $levels;
+	}
+
+	/**
+	 * Issue #530: WITHOUT this override, calling get_popular_settlements_for_country()
+	 * on this fake would run the REAL method body, which reaches
+	 * `$this->registry->get_active_provider()`; `$this->registry` is never set
+	 * (this fake's constructor never calls the parent's), so that would be a
+	 * fatal "call on null" for every test using this fake — same reasoning as
+	 * `get_customer_chain()`'s own override above.
+	 */
+	public function get_popular_settlements_for_country( string $country ): array {
+		return $this->popular_settlements[ $country ] ?? [];
 	}
 
 	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
@@ -712,6 +734,19 @@ class CheckoutConfigTest extends TestCase {
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
+
+		// Issue #530: see the identical comment in
+		// test_location_block_default_country_reads_the_real_wc_option_through_the_real_service()
+		// for why this mock is needed now that build_location_block() always calls
+		// get_popular_settlements_for_country().
+		$store = Mockery::mock( Popular_Settlement_Store::class );
+		$store->shouldReceive( 'all_for_provider' )->andReturn( [] );
+		$reflection = new \ReflectionClass( Location_Provider_Registry::class );
+		$property   = $reflection->getProperty( 'popular_settlement_store' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( $registry, $store );
 
 		$service = new Location_Service( $registry );
 		$this->assertTrue( $service->is_active() );
@@ -1214,6 +1249,19 @@ class CheckoutConfigTest extends TestCase {
 		$registry->collect();
 
 		$this->assertInstanceOf( Dadata_Provider::class, $registry->get_providers()[ Location_Provider_Registry::DEFAULT_PROVIDER_ID ] );
+
+		// Issue #530: see the identical comment in
+		// test_location_block_default_country_reads_the_real_wc_option_through_the_real_service()
+		// for why this mock is needed now that build_location_block() always calls
+		// get_popular_settlements_for_country().
+		$store = Mockery::mock( Popular_Settlement_Store::class );
+		$store->shouldReceive( 'all_for_provider' )->andReturn( [] );
+		$reflection = new \ReflectionClass( Location_Provider_Registry::class );
+		$property   = $reflection->getProperty( 'popular_settlement_store' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( $registry, $store );
 
 		$service = new Location_Service( $registry );
 		$this->assertTrue( $service->is_active(), 'the bundled DaData provider must be active+configured for this test to be meaningful' );
@@ -1722,6 +1770,20 @@ class CheckoutConfigTest extends TestCase {
 		$registry = Location_Provider_Registry::instance();
 		$registry->declare_needed();
 		$registry->collect();
+
+		// Issue #530: build_location_block() now calls get_popular_settlements_for_country()
+		// for every country, which (the bundled DaData provider declares
+		// CAPABILITY_RESOLVE_KEY) reaches Popular_Settlement_Store::all_for_provider() —
+		// a real \wpdb touch this pure-unit test has no global for. Inject a mock so
+		// this test stays about defaultCountry, not about popular settlements.
+		$store = Mockery::mock( Popular_Settlement_Store::class );
+		$store->shouldReceive( 'all_for_provider' )->andReturn( [] );
+		$reflection = new \ReflectionClass( Location_Provider_Registry::class );
+		$property   = $reflection->getProperty( 'popular_settlement_store' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$property->setAccessible( true );
+		}
+		$property->setValue( $registry, $store );
 
 		$service = new Location_Service( $registry );
 		$this->assertTrue( $service->is_active(), 'the bundled DaData provider must be active+configured for this test to be meaningful' );

@@ -140,6 +140,18 @@ namespace Woodev\Tests\Unit\Shipping {
 		public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
 			return $this->provider;
 		}
+
+		/**
+		 * Issue #530: WITHOUT this override, build_location_block() calling
+		 * get_popular_settlements_for_country() would run the REAL method body,
+		 * which reaches `$this->registry->get_active_provider()`; `$this->registry`
+		 * is never set (this fake's constructor never calls the parent's), so that
+		 * would be a fatal "call on null" — this seam test is not about popular
+		 * settlements at all.
+		 */
+		public function get_popular_settlements_for_country( string $country ): array {
+			return [];
+		}
 	}
 
 	/**

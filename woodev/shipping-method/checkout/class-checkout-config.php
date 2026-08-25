@@ -66,6 +66,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     // 'ajax-select2'; see Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT.
 	 *     'allowCustomSettlement' => bool,
 	 *     'levels'    => [ country_code => [ 'region' => bool, 'settlement' => bool, 'address' => bool ] ],
+	 *     // Issue #530: the shop's ranked popular-settlements list per country (#488's
+	 *     // customer-facing half) -- same wire shape as a /suggest or /list entry,
+	 *     // { key, label, level, record }. [] per country when the active provider lacks
+	 *     // the resolve-key capability (spec D4) or has no entries for it yet.
+	 *     'popular'   => [ country_code => [ [ 'key' => string, 'label' => string, 'level' => string, 'record' => array ] ] ],
 	 *     'owners'    => [ country_code => [ 'region' => string, 'settlement' => string, 'address' => string ] ], // issue #352: provider id or '' — see build_location_block()'s own docblock
 	 *     'current'   => [ 'key' => string, 'level' => string ]|null,
 	 *     'chain'     => [ level => [ 'key' => string, 'level' => string ] ], // issue #330: every level in the customer's saved chain; [] when there is no customer record at all
@@ -703,6 +708,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 `mode` is now `{ region, settlement }` — TWO independent
 		 *              axes, issue #380 — instead of one shared mode string.
 		 *
+		 * @since 2.1.0 Gained `popular` -- the customer-facing half of #488
+		 *              (issue #530): one ranked popular-settlements list per
+		 *              country, via
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_popular_settlements_for_country()}.
+		 *              `[]` per country when the active provider lacks
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
+		 *              (spec D4) or has no enrolled entries for it yet.
+		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
 		 * @return array{
@@ -712,6 +725,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     mode: array{region: string, settlement: string},
 		 *     levels: array<string, array{region: bool, settlement: bool, address: bool}>,
 		 *     owners: array<string, array{region: string, settlement: string, address: string}>,
+		 *     popular: array<string, array<int, array{key: string, label: string, level: string, record: array<string, mixed>}>>,
 		 *     current: array{key: string, level: string}|null,
 		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
@@ -731,11 +745,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 
 			$levels                    = [];
 			$owners                    = [];
+			$popular                   = [];
 			$region_conflict_countries = [];
 
 			foreach ( $countries as $code ) {
 				$country_levels = $service->get_levels_for_country( $code );
 				$country_owners = $service->get_level_owners_for_country( $code );
+				// Issue #530: #488's customer-facing half — see
+				// {@see \Woodev\Framework\Shipping\Location\Location_Service::get_popular_settlements_for_country()}
+				// for the D3/D4 gating and the wire shape (shared with `/suggest`/`/list`).
+				$popular[ $code ] = $service->get_popular_settlements_for_country( $code );
 
 				// #294 arbitration: the authority is the FINAL woocommerce_states
 				// result, read AFTER every filter (native WC, §8 carrier takeover,
@@ -932,6 +951,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'allowCustomSettlement' => $service->is_custom_settlement_allowed(),
 				'levels'                => $levels,
 				'owners'                => $owners,
+				// Issue #530: `{ [country]: Array<{key, label, level, record}> }`, one
+				// ranked list per country in `countries` above — see
+				// {@see \Woodev\Framework\Shipping\Location\Location_Service::get_popular_settlements_for_country()}'s
+				// own docblock for the gating and wire shape. `[]` per country whenever
+				// the active provider lacks the capability, has no orders yet, or (#380/#294)
+				// is otherwise not offering a settlement popular list — never omitted.
+				'popular'               => $popular,
 				'current'               => $current,
 				'chain'                 => $chain,
 				'implicit'              => $implicit,

@@ -215,6 +215,11 @@ function buildConfig( opts ) {
 			// its own real case by every OTHER test in this file, mirroring the `chain`
 			// convention just below.
 			...( o.owners !== undefined ? { owners: o.owners } : {} ),
+			// Issue #530: `{ [country]: Array<{key, label, level, record}> }` — omitted entirely
+			// (not merely `undefined`) unless a test opts in, mirroring `owners`/`chain`'s own
+			// convention, so "no `popular` key at all" (an older server) is exercised as its own
+			// real case by every other test in this file.
+			...( o.popular !== undefined ? { popular: o.popular } : {} ),
 			current: o.current !== undefined ? o.current : null,
 			// Issue #330 (spec §7): `{ level: { key, level } }`, alongside `current` — omitted
 			// entirely (not merely `undefined`) unless a test opts in, so "no `chain` key at
@@ -3485,6 +3490,143 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 	} );
 
 	// -------------------------------------------------------------------
+	// options.popular() — issue #530 (#488's customer-facing half): the shop's popular-
+	// settlements list, scoped to the live country + region, `.value`-stamped exactly like
+	// options.fetch/options.list already are.
+	// -------------------------------------------------------------------
+
+	describe( 'options.popular() — issue #530', () => {
+		it( 'scopes to the live country, stamps entry.value via fieldValueFor(), and is null for a level the popular list can never carry (only settlement is ever enrolled)', () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( { level: 'settlement', options } );
+
+					return { detach: jest.fn() };
+				},
+				'custom-mode:region': ( el, options ) => {
+					specialCalls.push( { level: 'region', options } );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( {
+				region: true, settlement: true, mode: 'custom-mode',
+				popular: {
+					RU: [ {
+						key: 'dadata:tv', label: 'Тверь', level: 'settlement',
+						record: {
+							key: 'dadata:tv', provider_id: 'dadata', level: 'settlement', country: 'RU',
+							settlement: { name: 'Тверь', type: 'г' }, label: 'Тверь', ancestors: [],
+						},
+					} ],
+					// A DIFFERENT country's entries must never leak into the RU-scoped answer.
+					BY: [ {
+						key: 'dadata:mi', label: 'Минск', level: 'settlement',
+						record: {
+							key: 'dadata:mi', provider_id: 'dadata', level: 'settlement', country: 'BY',
+							settlement: { name: 'Минск', type: 'г' }, label: 'Минск', ancestors: [],
+						},
+					} ],
+				},
+			} );
+
+			const settlementCall = specialCalls.find( ( c ) => 'settlement' === c.level );
+			const regionCall = specialCalls.find( ( c ) => 'region' === c.level );
+
+			expect( typeof settlementCall.options.popular ).toBe( 'function' );
+			// Absent, not present-and-empty (spec D4's own "no capability, no list" discipline,
+			// reused client-side): a region field must never even be handed a callback that
+			// could only ever answer [].
+			expect( regionCall.options.popular ).toBeNull();
+
+			const popular = settlementCall.options.popular();
+
+			expect( popular ).toHaveLength( 1 );
+			expect( popular[ 0 ].key ).toBe( 'dadata:tv' );
+			// The value a pick of this entry would WRITE into the field — never the raw
+			// provider key, the same derivation options.fetch/options.list already give.
+			expect( popular[ 0 ].value ).toBe( 'Тверь' );
+		} );
+
+		it( 'excludes an entry whose own level does not match the node it was asked about — defensive, since every stored entry is settlement-level today', () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( options );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( {
+				settlement: true, mode: 'custom-mode',
+				popular: {
+					RU: [ {
+						key: 'dadata:reg1', label: 'Москва', level: 'region',
+						record: {
+							key: 'dadata:reg1', provider_id: 'dadata', level: 'region', country: 'RU',
+							region: { name: 'Москва', type: 'г' }, label: 'Москва', ancestors: [],
+						},
+					} ],
+				},
+			} );
+
+			expect( specialCalls[ 0 ].popular() ).toEqual( [] );
+		} );
+
+		it( 'unscoped (no region confirmed yet) returns every country-scoped entry; once a region is picked, only entries carrying that region key among record.ancestors survive', async () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( options );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			const within = {
+				key: 'dadata:tver-region', level: 'region', provider_id: 'dadata', country: 'RU',
+				region: { name: 'Тверская', type: 'обл' }, label: 'Тверская обл.',
+			};
+
+			boot( {
+				region: true, settlement: true, mode: 'custom-mode',
+				popular: {
+					RU: [
+						{
+							key: 'dadata:in', label: 'Тверь', level: 'settlement',
+							record: {
+								key: 'dadata:in', provider_id: 'dadata', level: 'settlement', country: 'RU',
+								settlement: { name: 'Тверь', type: 'г' }, label: 'Тверь', ancestors: [ within.key ],
+							},
+						},
+						{
+							key: 'dadata:out', label: 'Казань', level: 'settlement',
+							record: {
+								key: 'dadata:out', provider_id: 'dadata', level: 'settlement', country: 'RU',
+								settlement: { name: 'Казань', type: 'г' }, label: 'Казань', ancestors: [ 'dadata:other-region' ],
+							},
+						},
+					],
+				},
+			} );
+
+			// Nothing selected yet — unscoped, both entries survive.
+			expect( specialCalls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:in', 'dadata:out' ] );
+
+			specialCalls[ 0 ].onSelect( { record: within } );
+			await settleLastSelect( within );
+
+			expect( specialCalls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:in' ] );
+		} );
+	} );
+
+	// -------------------------------------------------------------------
 	// isNodeActive()'s ONE necessary D15 exception — related-list region only
 	// -------------------------------------------------------------------
 
@@ -5731,15 +5873,21 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		expect( addressField().disabled ).toBe( true );
 	} );
 
-	it( 'ajax-select2 control: a query below minimumInputLength never reaches the transport and never unlocks the address field', async () => {
+	it( 'ajax-select2 control: a query below minimumInputLength never reaches the network and never unlocks the address field', async () => {
 		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
 
 		const fetchCallsBefore = fetchCalls.length;
 
-		// settlement's own floor is 2 — a single character never reaches the transport.
+		// settlement's own floor is 2. Issue #530 ROUND 2 (BLOCKER 2): a settlement widget
+		// always carries a `popular()` fn, so `minimumInputLengthFor()`'s real floor is now
+		// scoped to 0 at the select2 CONFIG level — the fake's own gate (which mirrors
+		// select2's `MinimumInputLength` decorator) no longer blocks this call before
+		// `transport()` runs. `transport()` itself still short-circuits a below-floor term
+		// locally, though: no network call, empty results, same end state as before this round.
 		const result = instances[ 0 ].query( 'Т' );
 
-		expect( result ).toBeNull();
+		expect( result ).not.toBeNull();
+		expect( result.success ).toHaveBeenCalledWith( { results: [] } );
 		expect( fetchCalls.length ).toBe( fetchCallsBefore );
 
 		await closeSettlementSelect2();
@@ -5872,18 +6020,23 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 
 		expect( instances ).toHaveLength( 2 );
 
-		const byMinLength = {};
+		const byFieldId = {};
 
 		instances.forEach( ( instance ) => {
-			byMinLength[ instance.config.minimumInputLength ] = instance;
+			byFieldId[ instance.el.attr( 'id' ) ] = instance;
 		} );
 
-		// minimumInputLengthFor('region') === 1, ('settlement') === 2 —
-		// location-select-modes.js's own per-level floor, and the critic's identifying control.
-		expect( byMinLength[ 1 ] ).toBeDefined(); // the region widget attached
-		expect( byMinLength[ 2 ] ).toBeDefined(); // the settlement widget attached
-		expect( byMinLength[ 1 ].config.tags ).toBeFalsy(); // REGION: must NEVER get tags
-		expect( byMinLength[ 2 ].config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
+		// Issue #530 ROUND 2 (BLOCKER 2): `minimumInputLength` is no longer a reliable way to
+		// tell these two widgets apart — the settlement widget's floor is now scoped to 0 (it
+		// always carries a `popular()` fn; see `location-select-modes.js`'s own
+		// `popularAvailable`), so keying by field id instead of by
+		// `config.minimumInputLength` is what actually identifies which widget is which here.
+		expect( byFieldId.billing_state ).toBeDefined(); // the region widget attached
+		expect( byFieldId.billing_city ).toBeDefined(); // the settlement widget attached
+		expect( byFieldId.billing_state.config.minimumInputLength ).toBe( 1 ); // region: unaffected, no popular list at that level
+		expect( byFieldId.billing_city.config.minimumInputLength ).toBe( 0 ); // settlement: scoped down by BLOCKER 2's own fix
+		expect( byFieldId.billing_state.config.tags ).toBeFalsy(); // REGION: must NEVER get tags
+		expect( byFieldId.billing_city.config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
 	} );
 
 	it( 'issue #528: a tag pick unlocks the address field, issues NO /select request, and writes no settlement record', async () => {

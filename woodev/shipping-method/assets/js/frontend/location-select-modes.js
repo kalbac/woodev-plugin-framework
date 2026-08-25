@@ -421,6 +421,11 @@
 	 *   since each transport call builds its own `AbortController` in a closure private to that one
 	 *   call. See that function's own `activeAbort` docblock for why a single overwritten reference
 	 *   is enough (never an array of every request ever made).
+	 *   `popular`, when supplied (issue #530), returns the shop's popular-settlements list —
+	 *   already country/region-scoped, already `.value`-stamped ({@see popularFor} in
+	 *   location-cascade.js) — read LIVE by the ajax transport on every completed search so a
+	 *   returned match already IN that list ranks above the rest of that same search (a stable
+	 *   partition, never a re-sort within either group).
 	 * @returns {Object}
 	 */
 	function selectConfigFor( strategy, seed ) {
@@ -442,7 +447,69 @@
 				config.placeholder = seed.placeholder;
 			}
 
-			config.minimumInputLength = minimumInputLengthFor( seed.level );
+			// Issue #530 ROUND 2 (BLOCKER 2, s93 rig measurement): seeding real <option>
+			// elements (`buildSelectField()`, above) is NOT sufficient in ajax mode. Select2's
+			// `AjaxData` adapter never reads a <select>'s own DOM options for what it renders —
+			// it renders only what the transport below hands back — and `minimumInputLength`
+			// blocks the transport from ever running until the floor is met (verified against
+			// the rig's own vendored `selectWoo.full.js`: the `MinimumInputLength` decorator,
+			// `data/minimumInputLength.js`, is wired onto the data adapter at all only `if
+			// (options.minimumInputLength > 0)` — `Defaults.prototype.apply()` — and its own
+			// `query()` override rejects with `results:message: 'inputTooShort'` whenever
+			// `params.term.length < this.minimumInputLength`). So a fresh customer who opens the
+			// field and types nothing gets exactly what the rig measured: `dropdownRowCount: 1`,
+			// «Please enter 2 or more characters» — the seeded options are never shown, and
+			// `minimumInputLengthFor()` alone cannot be lowered globally: issue #461 is what put
+			// that floor there, and this is still a locality-name search once the customer HAS
+			// started typing.
+			//
+			// The floor is instead SCOPED to zero only where a popular list exists to answer an
+			// empty term without one — `select2/base.js`'s own `open()` fires `trigger('query',
+			// {})` immediately on open (verified in the same vendored bundle), which reaches the
+			// transport below with an effectively empty term the moment the field opens, unmet
+			// by any keystroke; `minimumInputLength: 0` is what lets that specific call through
+			// while the decorator would otherwise reject it before the transport ever ran. A
+			// level with no popular list (region, or a store with none configured) keeps the
+			// ORIGINAL floor untouched — this scoping only ever loosens the gate where this
+			// layer itself can answer what the loosened gate lets through.
+			//
+			// `popularAvailable` — not `seed.popular()` called here — decides this ONCE, at
+			// config-build time: the floor itself must not flip between two calls just because a
+			// live-scoped popular list happens to be momentarily empty for the current region
+			// (the transport below still calls `seed.popular()` LIVE, per-request, same as the
+			// ranking it already did before this round).
+			var popularAvailable = 'function' === typeof seed.popular;
+
+			config.minimumInputLength = popularAvailable ? 0 : minimumInputLengthFor( seed.level );
+
+			if ( popularAvailable ) {
+				// The floor's own "type N more characters" message (select2's
+				// `MinimumInputLength` decorator, bypassed above) has no other hook once
+				// `minimumInputLength` is 0 — `language.noResults` is select2's per-render
+				// hook for a genuinely EMPTY result set, which a below-floor term now reaches
+				// too (the transport's short-circuit for that case, below, never hits the
+				// network but still reports zero results). Reusing `inputTooShort` (already
+				// built by `select2LanguageFor()` above, when WooCommerce localized both its
+				// msgids) keeps that wording intact for the one case it still applies to — a
+				// non-empty term shorter than `minimumInputLengthFor( seed.level )`. An empty
+				// term never reaches this at all: the transport answers it with the popular
+				// list, which is either non-empty (no `noResults` call) or a genuine "shop has
+				// no popular entries for this scope" empty state, correctly worded by whatever
+				// `noResults`/`i18n_no_matches` already resolves to.
+				var floor = minimumInputLengthFor( seed.level );
+				var baseNoResults = config.language.noResults;
+				var inputTooShort = config.language.inputTooShort;
+
+				config.language.noResults = function( params ) {
+					var term = params && 'string' === typeof params.term ? params.term : '';
+
+					if ( term && term.length < floor && 'function' === typeof inputTooShort ) {
+						return inputTooShort( { input: term, minimum: floor } );
+					}
+
+					return baseNoResults ? baseNoResults( params ) : undefined;
+				};
+			}
 
 			// Issue #528 (critic MJ-B): the single source of truth `insertTag` below reads —
 			// set ONLY on a genuinely completed (non-stale) response, to `entries.length` for a
@@ -509,6 +576,31 @@
 				};
 			}
 
+			/**
+			 * Shapes one `{key, label, level, record, value}` entry (this layer's own wire
+			 * shape, shared by `/suggest`, `/list`, and the popular map) into select2's own
+			 * result-item contract — the SAME mapping the transport's completed-search branch
+			 * already built inline before this round, now shared with the empty-term popular
+			 * branch below so the two can never drift apart.
+			 *
+			 * @param {Object} entry
+			 * @returns {{id: string, text: string, key: string}}
+			 */
+			function toSelect2Result( entry ) {
+				return {
+					id: undefined !== entry.value ? entry.value : entry.key,
+					text: entry.record.label || entry.label,
+					// Carried through select2/selectWoo's own normalized result data — see
+					// `SelectAdapter.prototype.option()`/`.item()`, selectWoo.full.js:3309-3350
+					// — and handed back verbatim on `select2:select` (`e.params.data.key`,
+					// EventRelay, selectWoo.full.js:2174-2218). This is the STABLE identity
+					// `buildSelectField()`'s `select2:select` handler resolves the record by;
+					// `id`/`text` are select2's own display contract and stay the submitted
+					// field VALUE, never this key (issue #455).
+					key: entry.key,
+				};
+			}
+
 			config.ajax = {
 				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
 				// issue #449 (teardown gap, round 2 — the `ajax.delay` question): a `detach()` that
@@ -528,6 +620,43 @@
 				// unbounded "every keystroke" cost #449 opened with.
 				transport: function( params, success, failure ) {
 					var term = params && params.data && params.data.term ? params.data.term : '';
+
+					// Issue #530 ROUND 2 (BLOCKER 2): neither branch below ever reaches the
+					// network — `/suggest` on the rig measures 6-10s per request, and neither
+					// case is a real search this layer needs the provider to answer.
+					//
+					// EMPTY term — only reachable at all because `minimumInputLength: 0`
+					// (`popularAvailable` above) let select2's own `open()` -> `trigger('query',
+					// {})` (selectWoo.full.js:5667, verified in the rig's vendored bundle) reach
+					// this far without a keystroke: answered synchronously from `seed.popular()`,
+					// read LIVE so a region picked after this select2 instance was built still
+					// scopes it (same discipline the ranking further down already applies).
+					// Routed through `seed.applyEntries` (merge-only, `false` — the SAME call
+					// every completed response already makes below) so a pick straight off this
+					// list resolves through the identical `dataByKey`/`resolveAndSelect()` path a
+					// search pick uses (spec D1) — never a separate mechanism. Deliberately does
+					// NOT touch `lastCompletedEntriesLength` or the #517/#528 abandon machinery:
+					// this is the field's own idle state, not a customer search that came back
+					// empty or full.
+					if ( ! term && 'function' === typeof seed.popular ) {
+						success( { results: seed.applyEntries( seed.popular(), false ).map( toSelect2Result ) } );
+
+						return { abort: function() {} };
+					}
+
+					// A NON-EMPTY term shorter than the REAL floor — only reachable when
+					// `popularAvailable` scoped `minimumInputLength` to 0 above (a level with no
+					// popular list keeps its original floor, and select2's own
+					// `MinimumInputLength` decorator still blocks this call before `transport()`
+					// ever runs). Also answered locally, with an empty result set —
+					// `config.language.noResults`'s own wrap above turns this into the exact
+					// "type N more characters" wording the bypassed decorator used to show
+					// itself, so scoping the floor to 0 costs the customer nothing they can see.
+					if ( term && term.length < minimumInputLengthFor( seed.level ) ) {
+						success( { results: [] } );
+
+						return { abort: function() {} };
+					}
 
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
 					// and aborts it (only if it looks abortable) before starting the NEXT query —
@@ -666,22 +795,29 @@
 							seed.onAbandon( null );
 						}
 
+						// Issue #530: popular entries rank ABOVE the rest of this same completed
+						// search — a stable partition (never a re-sort of provider relevance
+						// within either group), read LIVE via `seed.popular()` so a region
+						// picked after select2 init still scopes it correctly (see that
+						// function's own docblock, `popularFor()` in location-cascade.js).
+						var popularKeys = {};
+
+						if ( 'function' === typeof seed.popular ) {
+							seed.popular().forEach( function( item ) {
+								if ( item && item.key ) {
+									popularKeys[ item.key ] = true;
+								}
+							} );
+						}
+
+						var ranked = accepted.filter( function( item ) {
+							return !! popularKeys[ item.key ];
+						} ).concat( accepted.filter( function( item ) {
+							return ! popularKeys[ item.key ];
+						} ) );
+
 						success( {
-							results: accepted.map( function( entry ) {
-								return {
-									id: undefined !== entry.value ? entry.value : entry.key,
-									text: entry.record.label || entry.label,
-									// Carried through select2/selectWoo's own normalized result
-									// data — see `SelectAdapter.prototype.option()`/`.item()`,
-									// selectWoo.full.js:3309-3350 — and handed back verbatim on
-									// `select2:select` (`e.params.data.key`, EventRelay,
-									// selectWoo.full.js:2174-2218). This is the STABLE identity
-									// `buildSelectField()`'s `select2:select` handler resolves the
-									// record by; `id`/`text` are select2's own display contract and
-									// stay the submitted field VALUE, never this key (issue #455).
-									key: entry.key,
-								};
-							} ),
+							results: ranked.map( toSelect2Result ),
 						} );
 					}, function( error ) {
 						// `isAbortError()`: a request WE cancelled must never paint "search
@@ -1345,6 +1481,12 @@
 				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
 				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.
 				listLoadFailed: listLoadFailed,
+				// Issue #530: OPTIONAL, same discipline as `onAbandon` above — `location-cascade.js`'s
+				// `attachOne()` only hands this over when a level actually carries a popular list
+				// (currently `settlement`). Read LIVE by `selectConfigFor()`'s transport on every
+				// completed search, never captured once here, so a region picked AFTER this select2
+				// instance was built still scopes the ranking correctly.
+				popular: 'function' === typeof options.popular ? options.popular : null,
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -1369,9 +1511,60 @@
 				seededOption.selected = true;
 
 				select.appendChild( seededOption );
-			} else if ( placeholder ) {
-				// The empty leading <option> select2's placeholder requires (see ensureSelect2()).
-				select.appendChild( document.createElement( 'option' ) );
+			} else {
+				// Issue #530: seed the shop's popular-settlements list as real <option>
+				// elements so the field has something useful before the customer types.
+				// `minimumInputLengthFor()` floors this field at 2 characters, so an
+				// ajax-select2 field structurally cannot serve an empty state any other
+				// way — a round-trip at attach time would mean seconds of empty field (the
+				// rig's own `/suggest` measured 8.5s) plus a race with select2 init. `true`
+				// (REPLACE, not merge) is what actually builds the `<option>` DOM nodes —
+				// `applyEntries()`'s own docblock: the ajax `false` call `selectConfigFor()`'s
+				// transport makes is merge-only because select2 renders ITS OWN `<option>`s
+				// for a remote result; this is the empty state BEFORE select2 ever runs, so
+				// it needs the real nodes. Safe to REPLACE here: `select` is still empty at
+				// this point in `buildSelectField()`, nothing to lose. Routed through the SAME
+				// `applyEntries()` every ajax response uses, so a pick here is indistinguishable
+				// from a search pick (spec D1) — real `dataset.woodevKey`, real `dataByKey`
+				// entry, same `resolveAndSelect()` → `options.onSelect()` → `/select` path,
+				// never a separate selection mechanism.
+				if ( 'function' === typeof options.popular ) {
+					applyEntries( options.popular(), true );
+				}
+
+				if ( placeholder ) {
+					// The empty leading <option> select2's placeholder requires (see
+					// ensureSelect2()) — MUST be the first child for select2's placeholder
+					// mechanism to suppress it, so this is inserted BEFORE whatever popular
+					// seeding above produced, never appended after it.
+					//
+					// Issue #530 ROUND 2 (BLOCKER 1, s93 rig measurement): `.selected = true`
+					// is set EXPLICITLY here, never left implicit. `applyEntries()` above
+					// (when `options.popular` ran) appended each popular <option> WITHOUT
+					// setting `.selected` on any of them — the instant the first one landed,
+					// the browser's own reset algorithm for a non-`multiple` <select> ("if no
+					// option has selectedness true, select the first option in tree order")
+					// auto-selected it. Inserting this blank option AFTERWARD, at position 0,
+					// does not undo that on its own: a fresh customer who never touched the
+					// field saw the top popular city pre-filled, and it posted as
+					// `shipping_city` if they submitted without opening the dropdown.
+					//
+					// `.selected = true` is set AFTER `insertBefore`, deliberately, not before:
+					// the "selecting one option deselects every sibling" side effect only
+					// applies to an option that already belongs to a `<select>` at the moment
+					// it is set (measured against jsdom, which does not retroactively enforce
+					// single-selection for a detached option's `.selected` set before it is
+					// attached) — setting it first would leave the earlier auto-selected
+					// popular option's own selectedness untouched. Attaching first and
+					// selecting second makes the deselect-siblings side effect actually run,
+					// regardless of what was auto-selected before it. A popular list is a
+					// SUGGESTION, never a selection (#350, #502's own rule).
+					var blankOption = document.createElement( 'option' );
+
+					select.insertBefore( blankOption, select.firstChild );
+
+					blankOption.selected = true;
+				}
 			}
 
 			// Without select2 available at all, the field is simply a native <select> carrying

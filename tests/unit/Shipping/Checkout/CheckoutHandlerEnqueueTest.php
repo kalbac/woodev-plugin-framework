@@ -107,6 +107,15 @@ final class Checkout_Handler_Fake_Location_Service extends Location_Service {
 	public function resolve_default_country(): string {
 		return 'RU';
 	}
+
+	/**
+	 * Issue #530: same reasoning as every other override on this fake — the
+	 * REAL method reaches `$this->registry`, which this fake's constructor
+	 * never sets, so calling it un-overridden would fatal.
+	 */
+	public function get_popular_settlements_for_country( string $country ): array {
+		return [];
+	}
 }
 
 /**
