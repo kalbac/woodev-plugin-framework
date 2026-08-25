@@ -284,6 +284,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			if ( null !== $this->location_handler ) {
 				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_REGION;
 				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT;
+				// #528: sits directly under the settlement field-mode select it
+				// gates — same "field type controls sit next to the field they
+				// describe" ordering issue #380 established for the two axes above.
+				$field_ids[] = Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT;
 			}
 
 			$field_ids[] = 'address_field';
@@ -318,6 +322,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					__( 'Карта', 'woodev-plugin-framework' ),
 					$this->get_map_settings()->get_owned_setting_ids(),
 					__( 'Общие для всех способов доставки с пунктами выдачи настройки карты: где показывается кнопка выбора точки и что происходит с адресом и картой после того, как покупатель выбрал пункт.', 'woodev-plugin-framework' )
+				);
+			}
+
+			// «Инструменты» (#505) is always LAST, and exists only when at least one
+			// tool is registered — an empty section is worse than no section.
+			$tools = Shipping_Tools_Registry::instance()->get_tools();
+
+			if ( [] !== $tools ) {
+				$sections[] = Settings_Section::create(
+					'tools',
+					__( 'Инструменты', 'woodev-plugin-framework' ),
+					[],
+					__( 'Действия над данными раздела «Доставка» — не настройки, а то, что можно выполнить прямо сейчас.', 'woodev-plugin-framework' ),
+					false,
+					'',
+					true,
+					$tools
 				);
 			}
 

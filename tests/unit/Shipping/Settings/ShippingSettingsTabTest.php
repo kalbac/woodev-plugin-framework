@@ -16,20 +16,22 @@ use Mockery;
 use Woodev\Framework\Settings\Composite_Settings_Handler;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
+use Woodev\Framework\Shipping\Settings\Shipping_Tool;
+use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
+use Woodev\Framework\Shipping\Settings\Tool_Result;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
-require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
-require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
-require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
-require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-tool-result.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-tools-registry.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
 
 class ShippingSettingsTabTest extends TestCase {
@@ -65,11 +67,13 @@ class ShippingSettingsTabTest extends TestCase {
 
 		Shipping_Settings_Tab::reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
+		Shipping_Tools_Registry::reset_for_tests();
 	}
 
 	protected function tearDown(): void {
 		Shipping_Settings_Tab::reset_for_tests();
 		Settings_Page_Registry::instance()->reset_for_tests();
+		Shipping_Tools_Registry::reset_for_tests();
 		parent::tearDown();
 	}
 
@@ -109,6 +113,49 @@ class ShippingSettingsTabTest extends TestCase {
 		$this->assertSame(
 			[ 'location', 'fields', 'map' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
+		);
+	}
+
+	/**
+	 * Issue #528: `allow_custom_settlement` sits directly under the settlement
+	 * field-mode select it gates — same "field type controls sit next to the
+	 * field they describe" ordering issue #380 established for the two axes.
+	 */
+	public function test_fields_section_places_allow_custom_settlement_right_after_field_mode_settlement(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
+
+		$fields_section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+		);
+
+		$ids = $fields_section->get_setting_ids();
+
+		$settlement_index = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, $ids, true );
+		$allow_index       = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT, $ids, true );
+
+		$this->assertNotFalse( $settlement_index, '"field_mode_settlement" is missing from the «Поля» section.' );
+		$this->assertSame( $settlement_index + 1, $allow_index, '"allow_custom_settlement" must sit directly after "field_mode_settlement".' );
+	}
+
+	/**
+	 * Without a location handler declared, none of the location-owned field
+	 * ids — including the new #528 opt-in — should appear at all.
+	 */
+	public function test_fields_section_omits_allow_custom_settlement_without_a_location_handler(): void {
+		$tab = Shipping_Settings_Tab::instance();
+
+		$tab->declare_shipping_plugin();
+
+		$fields_section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+		);
+
+		$this->assertNotContains(
+			\Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
+			$fields_section->get_setting_ids()
 		);
 	}
 
@@ -235,5 +282,54 @@ class ShippingSettingsTabTest extends TestCase {
 
 		$this->assertStringContainsString( 'конструктор полей', $fields_section->get_description() );
 		$this->assertStringEndsNotWith( ' ', $fields_section->get_description() );
+	}
+
+	// ----- «Инструменты» (#505) -----
+
+	public function test_no_tools_section_without_registered_tools(): void {
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+
+		$this->assertSame(
+			[ 'fields' ],
+			array_map( static fn( $s ) => $s->get_id(), $tab->build_sections() )
+		);
+	}
+
+	public function test_tools_section_is_last_and_carries_registered_tools(): void {
+		$tool = Shipping_Tool::create(
+			'noop',
+			'Проверить',
+			'',
+			'Проверить',
+			static fn( array $args ): Tool_Result => Tool_Result::success()
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
+		$tab->declare_map_needed();
+
+		$sections = $tab->build_sections();
+
+		$this->assertSame(
+			[ 'location', 'fields', 'map', 'tools' ],
+			array_map( static fn( $s ) => $s->get_id(), $sections )
+		);
+
+		$tools_section = end( $sections );
+		$this->assertTrue( $tools_section->is_tools() );
+		$this->assertSame( [ $tool ], $tools_section->get_tools() );
+		$this->assertNotSame( '', $tools_section->get_description() );
 	}
 }

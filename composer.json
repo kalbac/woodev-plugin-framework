@@ -40,6 +40,7 @@
             "woodev/licensing/updater",
             "woodev/rest-api",
             "woodev/settings-api",
+            "woodev/settings-page",
             "woodev/setup",
             "woodev/shipping-method",
             "woodev/utilities",

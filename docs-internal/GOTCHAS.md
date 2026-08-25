@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 199 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 201 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -127,6 +127,7 @@
 - [testing/integration] **A stale `.phpunit.result.cache` hides cross-test state leaks CI cannot avoid.** → [phpunit-defects-cache-hides-cross-test-session-leaks](gotchas/phpunit-defects-cache-hides-cross-test-session-leaks.md) (s71)
 - [testing/integration] **A fresh guest's shipping country resolves through geolocation (hardcoded `US` fallback), not the store default.** → [wc-customer-default-location-geolocation-fallback](gotchas/wc-customer-default-location-geolocation-fallback.md) (s78)
 - [testing/integration] **`WP_UnitTestCase` restores the hook table after every test — an identity-based `reset_for_tests()` cannot remove what comes back.** → [hook-snapshot-restore-defeats-an-identity-based-reset](gotchas/hook-snapshot-restore-defeats-an-identity-based-reset.md) (s70)
+- [testing/integration] **`WP_UnitTestCase` rewrites `CREATE TABLE`/`DROP TABLE` to `TEMPORARY` — and `SHOW TABLES` then answers about a different, real table.** → [wp-integration-tests-rewrite-create-and-drop-table-to-temporary](gotchas/wp-integration-tests-rewrite-create-and-drop-table-to-temporary.md) (s91)
 
 - [testing/unit] **A mutation sweep over branch conditions reads as complete and is not.** → [mutation-sweep-branch-only-false-confidence](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
@@ -164,6 +165,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/composer] **Widening `autoload.classmap` breaks every EXISTING checkout until `composer dump-autoload` runs — nine "class not found" errors that read as a bad merge.** → [a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout](gotchas/a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout.md) (s91)
 - [build/ci] **All three integration jobs red at once on a docs-only PR — it is an `api.github.com` 504 inside the wp-env image build, not your change.** → [integration-jobs-die-on-a-github-api-504-not-on-your-code](gotchas/integration-jobs-die-on-a-github-api-504-not-on-your-code.md) (s87)
 - [build/ci] **A failing early CI job silently SKIPS dependent jobs — they never run.** → [ci-failing-gate-skips-dependent-jobs](gotchas/ci-failing-gate-skips-dependent-jobs.md)
 - [build/ci] **`composer audit --no-dev` errors when there are no runtime dependencies.** → [composer-audit-no-prod-deps](gotchas/composer-audit-no-prod-deps.md)

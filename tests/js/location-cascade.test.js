@@ -27,6 +27,8 @@
 
 'use strict';
 
+const { installFakeSelect2 } = require( './support/fake-select2.js' );
+
 const CONFIG_GLOBAL = 'woodev_checkout_field_config_location_cascade_test';
 const SUGGEST_URL = 'https://example.test/wp-json/woodev/v1/location/suggest';
 const SELECT_URL = 'https://example.test/wp-json/woodev/v1/location/select';
@@ -199,6 +201,9 @@ function buildConfig( opts ) {
 			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
 			// 'ajax-select2' — instead of one shared mode string (spec D7).
 			mode: modeAxes,
+			// Issue #528: the merchant opt-in for `ajax-select2` tags — default `false`,
+			// matching the store setting's own default (opt-in only).
+			allowCustomSettlement: o.allowCustomSettlement !== undefined ? o.allowCustomSettlement : false,
 			// Keyed BY COUNTRY, mirroring Checkout_Config::build_location_block(): DaData's
 			// coverage is per country (street data for RU/BY/KZ/UZ, city-only elsewhere), so
 			// a flat per-level map cannot describe it without lying.
@@ -5584,6 +5589,786 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		// an ordinary pick; adopting a different settlement really must not keep the old street.
 		expect( addressField().value ).toBe( '' );
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// issue #517 — the #350 escape hatch (onAbandon -> entry.unresolved.settlement -> the address
+// lock stands down) never fired at all in the two select2-backed modes, and even if it had,
+// `settlementTextIsKnownUnresolved()` compared the marker against `document.getElementById(
+// fieldId).value` — a `<select>`'s own `.value` (what `buildSelectField()` replaces the plain
+// `<input>` with) never carries the customer's typed-but-unresolved search text, only a real
+// picked option's value or ''. This suite boots the REAL `location-select-modes.js` alongside
+// the REAL `location-cascade.js` (never the fake typeahead stand-in the rest of this file uses
+// for the settlement field) to prove the FULL, end-to-end DOM effect — the address field's own
+// `disabled` attribute and locked class — not just the internal marker.
+// -----------------------------------------------------------------------
+
+describe( 'issue #517: onAbandon unlocks the address field through the select2-backed modes too', () => {
+	/**
+	 * Boots the REAL `location-select-modes.js` registry ahead of the REAL
+	 * `location-cascade.js` — mirrors the real enqueue order
+	 * (`class-checkout-handler.php::enqueue_assets()` declares select-modes.js a hard
+	 * dependency of the cascade file) — instead of this file's own `boot()`, which never loads
+	 * select-modes.js at all and drives everything through the fake `WoodevLocationTypeahead`.
+	 * The baseline (address) field still gets the fake typeahead; only the settlement field's
+	 * mode-specific renderer is real.
+	 *
+	 * @param {Object} configOpts Same shape as `boot()`'s own.
+	 * @returns {Array<Object>} the fake-select2 `instances` array (see `support/fake-select2.js`) —
+	 *   populated synchronously by the time this returns, since `boot()` runs at require time.
+	 */
+	function bootWithRealSelectModes( configOpts ) {
+		// Issue #528: this whole describe block predates the merchant opt-in and exercises
+		// the #517 onAbandon/unlock mechanism on the assumption it just works — default it ON
+		// here so every existing test keeps pinning that mechanism unchanged. The dedicated
+		// #528 sub-block below overrides this to `false` to prove the gate itself.
+		const opts = Object.assign( { allowCustomSettlement: true }, configOpts );
+
+		installMarkup( opts, opts && opts.country );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( opts );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return instances;
+	}
+
+	function addressField() {
+		return document.getElementById( 'billing_address_1' );
+	}
+
+	/**
+	 * Issue #517: the ajax-select2/related-list `onAbandon` report is RECORDED at
+	 * search-completion time and only actually FIRED on `select2:close` (the select2 analogue
+	 * of the baseline typeahead's blur-only decision) — see `location-select-modes.js`'s own
+	 * `recordAbandonCandidate`/`handleSelect2Close` docblocks. `fieldId` defaults to the
+	 * settlement field this describe block uses throughout (`billing_city`).
+	 *
+	 * Round 3 (critic MJ-3): the flush this dispatches is now DEFERRED via `setTimeout( fn, 0 )`
+	 * — a macrotask, measured on the rig to survive `select2:select` arriving right after
+	 * `close` (see that function's own docblock) — so this helper is `async` and awaits the
+	 * SAME macrotask via {@see tick} before returning; every caller must `await` it.
+	 *
+	 * @param {string} [fieldId]
+	 * @returns {Promise<void>}
+	 */
+	async function closeSettlementSelect2( fieldId ) {
+		window.jQuery( '#' + ( fieldId || 'billing_city' ) ).trigger( 'select2:close' );
+		await tick();
+	}
+
+	/**
+	 * See `location-select-modes.test.js`'s own identical helper — a microtask chain resolves
+	 * BEFORE any `setTimeout`, so it alone is never enough to observe a deferred flush.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	function tick() {
+		return new Promise( function( resolve ) {
+			setTimeout( resolve, 0 );
+		} );
+	}
+
+	it( 'ajax-select2: a completed, non-empty, zero-result settlement search unlocks the address field once the dropdown closes', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		// #337 baseline: locked with no settlement confirmed, unaffected by the renderer change.
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
+
+		expect( instances ).toHaveLength( 1 );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( SUGGEST_URL );
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		// The search completed — but MJ-1: nothing fires until the dropdown actually closes.
+		expect( addressField().disabled ).toBe( true );
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+	} );
+
+	it( 'ajax-select2 control: a completed settlement search WITH suggestions does NOT unlock the address field, even after select2:close', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		instances[ 0 ].query( 'Моск' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [
+			{ key: 'dadata:msk', label: 'г Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'ajax-select2 control: a query below minimumInputLength never reaches the transport and never unlocks the address field', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		const fetchCallsBefore = fetchCalls.length;
+
+		// settlement's own floor is 2 — a single character never reaches the transport.
+		const result = instances[ 0 ].query( 'Т' );
+
+		expect( result ).toBeNull();
+		expect( fetchCalls.length ).toBe( fetchCallsBefore );
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'ajax-select2 control: a superseded (aborted) request never unlocks the address field, even once it settles with zero entries and the dropdown closes', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьм' ); // left pending
+		const staleReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // supersedes it
+		const liveReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( staleReq ).not.toBe( liveReq );
+
+		staleReq.resolve( { suggestions: [] } ); // the STALE request settles too, also empty
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+
+		liveReq.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		// Still locked — the live query's own candidate is only RECORDED so far.
+		expect( addressField().disabled ).toBe( true );
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'ajax-select2 control: a transport error never unlocks the address field, even after select2:close', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+
+		consoleSpy.mockRestore();
+	} );
+
+	it( 're-locks once the unlocked settlement <select> genuinely changes value — the two events that disprove the marker still apply to a <select>', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false );
+
+		// A real pick — dispatches change on the now-<select> settlement field, exactly like a
+		// customer choosing an option. handleFieldChanged() nulls entry.unresolved.settlement on
+		// ANY real transition, `<select>` included.
+		const select = document.getElementById( 'billing_city' );
+		const option = document.createElement( 'option' );
+
+		option.value = 'Тверь';
+		select.appendChild( option );
+		select.value = 'Тверь';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	// -----------------------------------------------------------------------
+	// issue #528 — the merchant opt-in: gated abandon (address stays locked when off) and a
+	// tag pick unlocking through the SAME onAbandon route, at the full cascade+select-modes
+	// integration level (never reachable through location-select-modes.js's own tests alone,
+	// which know nothing of entry.records/refreshAddressLocks()).
+	// -----------------------------------------------------------------------
+
+	it( 'issue #528 option OFF: a completed, non-empty, zero-result settlement search does NOT unlock the address field, even after select2:close', async () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: false,
+		} );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+	} );
+
+	it( 'issue #528 option OFF: select2 receives no tags config at all', () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: false,
+		} );
+
+		expect( instances[ 0 ].config.tags ).toBeFalsy();
+	} );
+
+	it( 'issue #528 option ON (control): select2 receives tags: true', () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true,
+		} );
+
+		expect( instances[ 0 ].config.tags ).toBe( true );
+	} );
+
+	// -----------------------------------------------------------------------
+	// Critic MJ-A (round 2, #528): the opt-in must be scoped to the SETTLEMENT level. Both
+	// axes on ajax-select2 at once, the critic's own identifying control
+	// (minimumInputLengthFor('region') === 1, ('settlement') === 2).
+	// -----------------------------------------------------------------------
+
+	it( 'critic MJ-A: with BOTH region and settlement on ajax-select2 and the opt-in ON, only the SETTLEMENT widget gets tags — the REGION widget never does', () => {
+		const instances = bootWithRealSelectModes( {
+			region: true, settlement: true, address: true,
+			mode: { region: 'ajax-select2', settlement: 'ajax-select2' },
+			allowCustomSettlement: true,
+		} );
+
+		expect( instances ).toHaveLength( 2 );
+
+		const byMinLength = {};
+
+		instances.forEach( ( instance ) => {
+			byMinLength[ instance.config.minimumInputLength ] = instance;
+		} );
+
+		// minimumInputLengthFor('region') === 1, ('settlement') === 2 —
+		// location-select-modes.js's own per-level floor, and the critic's identifying control.
+		expect( byMinLength[ 1 ] ).toBeDefined(); // the region widget attached
+		expect( byMinLength[ 2 ] ).toBeDefined(); // the settlement widget attached
+		expect( byMinLength[ 1 ].config.tags ).toBeFalsy(); // REGION: must NEVER get tags
+		expect( byMinLength[ 2 ].config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
+	} );
+
+	it( 'issue #528: a tag pick unlocks the address field, issues NO /select request, and writes no settlement record', async () => {
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true,
+		} );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true ); // still open, nothing fired yet
+
+		const selectCallsBefore = fetchCalls.filter( ( c ) => c.url === SELECT_URL ).length;
+
+		// The customer picks the "add tag" row — select2's own createTag() shape, no `key`.
+		// Asserted SYNCHRONOUSLY, with NO `await tick()` first: the tag branch fires
+		// immediately (dropdownOpen is already false by the time select2:select runs, per the
+		// measured close-before-select order), never through the deferred close-flush macrotask
+		// — a version that fell through to the ordinary scheduled flush instead would still
+		// unlock eventually (the flush carries this same term), but not yet at this instant.
+		instances[ 0 ].pick( { id: 'Тьмутаракань', text: 'Тьмутаракань', newTag: true } );
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( selectCallsBefore );
+
+		// #528 round 2 (critic MN-B): the card's ENTIRE deliverable — a picked tag's free text
+		// actually ending up in the submitted field, which is the only reason #528 exists (an
+		// empty <select> made WooCommerce reject the order as a required field). The fake's
+		// own `pick()` now models exactly what a real select2/selectWoo pick does (measured
+		// live on the rig: a matching <option> exists and the field carries the text) — see
+		// that method's own docblock for why a bare `.val()` write would otherwise silently
+		// no-op here (gotcha `a-select-value-write-with-no-matching-option-submits-nothing`).
+		const settlementSelect = document.getElementById( 'billing_city' );
+
+		expect( settlementSelect.value ).toBe( 'Тьмутаракань' );
+		expect( settlementSelect.tagName ).toBe( 'SELECT' );
+		expect( settlementSelect.disabled ).toBe( false );
+
+		// Composes with the already-scheduled close-flush — must not double-fire on its tick.
+		await tick();
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	// -----------------------------------------------------------------------
+	// issue #517 round 2 (critic BL-1 — BLOCKER): the marker outlived the state it was proven
+	// in. clearDescendants()/clearCountryScope() blank the settlement <select> on an ANCESTOR
+	// edit (a region or country change) but, before this round, never cleared
+	// entry.unresolved.settlement — so the #350 marker survived the field going empty and
+	// permanently unlocked the address, in a region/country the customer never searched, with
+	// no settlement record at all. PROBE A1/A2 are the critic's own reproduction, promoted to
+	// permanent regression tests; A3 is the <input> control proving the divergence was new (the
+	// baseline typeahead already re-locks here, by construction of the live-DOM text match).
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE A1 (<select>): a REGION change after an abandoned settlement search re-locks the address field', async () => {
+		const instances = bootWithRealSelectModes( { region: true, settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false ); // the #350/#517 fix working, same as the tests above.
+
+		// The customer realises the region was wrong and changes it — an ORDINARY ancestor
+		// edit, never a pick and never an abandon. clearDescendants() blanks the settlement
+		// <select> and nulls its record as a side effect.
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Другой регион';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+	} );
+
+	it( 'PROBE A2 (<select>): a COUNTRY change after an abandoned settlement search re-locks the address field', async () => {
+		// Both RU and AM stay served (region+settlement+address) so the switch re-scopes the
+		// SAME entry rather than detaching it outright — isolating the marker-staleness claim
+		// from D15's own country-support gate.
+		const instances = bootWithRealSelectModes( {
+			settlement: true, address: true, mode: { settlement: 'ajax-select2' },
+			countries: [ 'RU', 'AM' ],
+			levels: { RU: { region: true, settlement: true, address: true }, AM: { region: true, settlement: true, address: true } },
+		} );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false );
+
+		// The fixture's own country <select> only ships RU/US — append the option the config
+		// above actually declared support for, mirroring this file's own precedent for the
+		// same reason (a value assigned to a <select> with no matching option silently yields
+		// '', reading as "country not supported" and detaching everything).
+		const countrySelect = document.getElementById( 'billing_country' );
+		const am = document.createElement( 'option' );
+
+		am.value = 'AM';
+		am.textContent = 'Армения';
+		countrySelect.appendChild( am );
+
+		countrySelect.value = 'AM';
+		countrySelect.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+	} );
+
+	it( 'PROBE A3 (<input> CONTROL): the identical region-change sequence already re-locks the baseline typeahead — the divergence is the <select> branch alone', async () => {
+		// No select-modes.js, no mode override — the plain fake-typeahead boot() this file uses
+		// everywhere else, so the settlement field stays a plain <input>.
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		abandonViaFake( callFor( 'billing_city' ), 'Тьмутаракань' );
+
+		expect( addressField().disabled ).toBe( false ); // same #350 fix, pre-existing on main.
+
+		const region = document.getElementById( 'billing_state' );
+
+		region.value = 'Другой регион';
+		region.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		// The pre-existing <input> rule already gets this right BY CONSTRUCTION: the blanked
+		// field's live text no longer matches the marker, with no change needed to reach this —
+		// proof that BL-1 is a regression this PR's <select> branch introduced, not a
+		// pre-existing gap in #350/#337 itself.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'related-list:settlement: a completed, non-empty, zero-result local search (language.noResults) unlocks the address field once the dropdown closes', async () => {
+		const select2Calls = [];
+
+		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
+		window.jQuery.fn.select2 = jest.fn( function( config ) {
+			select2Calls.push( config );
+
+			return this;
+		} );
+
+		installMarkup( { settlement: true, address: true } );
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		expect( addressField().disabled ).toBe( true );
+
+		// The one-time full list load — `listFor()` hits /location/list, never /location/suggest.
+		const listReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( listReq.url ).toContain( LIST_URL );
+
+		listReq.resolve( { localities: [
+			{ key: 'dadata:msk', value: 'Москва', label: 'Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		expect( select2Calls ).toHaveLength( 1 );
+
+		// `language.noResults` always fires while the dropdown is open in reality (select2 has
+		// nothing to render otherwise) — MJ-4's own immediate-fire branch depends on this being
+		// tracked accurately, so simulate it explicitly rather than leaving `dropdownOpen` at
+		// its default `false`.
+		window.jQuery( '#billing_city' ).trigger( 'select2:opening' );
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+
+		select2Calls[ 0 ].language.noResults( { term: 'Тьмутаракань' } );
+
+		// Recorded — but MJ-1: nothing fires until the dropdown actually closes.
+		expect( addressField().disabled ).toBe( true );
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'related-list:settlement control: a BLANK term passed to language.noResults does not unlock the address field, even after select2:close', async () => {
+		// This test measures only OUR OWN `term &&` guard in `selectConfigFor()`'s local
+		// branch — it does NOT measure whether a real select2 instance ever calls
+		// `language.noResults` with an empty term in practice (it does not, per select2's own
+		// contract: a blank query always shows the full loaded list, never a filtered-to-zero
+		// one — but that is select2's behaviour, not something this jsdom test can observe
+		// without a real select2 instance). See `location-select-modes.test.js`'s own
+		// pure-config-builder suite for the `language.noResults`/`recordAbandonCandidate`
+		// contract measured in isolation, including the pick-before-close and MN-2 cases.
+		const select2Calls = [];
+
+		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
+		window.jQuery.fn.select2 = jest.fn( function( config ) {
+			select2Calls.push( config );
+
+			return this;
+		} );
+
+		installMarkup( { settlement: true, address: true } );
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { localities: [] } );
+		await flushMicrotasks();
+
+		select2Calls[ 0 ].language.noResults( { term: '' } );
+
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+
+		delete window.jQuery.fn.select2;
+	} );
+
+	// -----------------------------------------------------------------------
+	// issue #517 round 2 (critic MJ-1): a customer typing straight through a non-matching
+	// prefix to a real pick must never have their already-confirmed address text disturbed —
+	// restoreClearedDescendants() consumes its snapshot unconditionally, and firing onAbandon
+	// per keystroke (the pre-fix behaviour) risked exactly that. This is the cascade-level
+	// proof: with the fix, onAbandon (hence restoreClearedDescendants) is provably never
+	// invoked at all before a subsequent select2:close, so the address ends the sequence
+	// exactly where an ORDINARY settlement pick leaves it — cleared by clearDescendants()'s own
+	// unconditional wipe, never restored to the OLD settlement's street mid-typing.
+	// -----------------------------------------------------------------------
+
+	it( 'typing a non-matching prefix on the way to a real pick never restores the previous settlement\'s address text', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		// Confirm settlement = Москва, then address = ул. Тверская, 1 — the starting state the
+		// critic's own scenario names.
+		instances[ 0 ].query( 'Моск' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [
+			{ key: 'dadata:msk', value: 'Москва', label: 'г Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		const settlementSelect = document.getElementById( 'billing_city' );
+		const moscowOption = document.createElement( 'option' );
+
+		moscowOption.value = 'Москва';
+		settlementSelect.appendChild( moscowOption );
+		settlementSelect.value = 'Москва';
+		settlementSelect.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		window.jQuery( settlementSelect ).trigger( window.jQuery.Event( 'select2:select', {
+			params: { data: { id: 'Москва', text: 'г Москва', key: 'dadata:msk' } },
+		} ) );
+
+		selectViaFake( callFor( 'billing_address_1' ), {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' },
+				street: { name: 'Тверская', type: 'ул' }, house: '1', label: 'ул Тверская, 1',
+			},
+		} );
+
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+
+		// Now the customer changes their mind: types a non-matching prefix ("Тве" — zero
+		// results, RECORDED per MJ-1, never fired), then keeps typing to a real match
+		// ("Тверь") and picks it — all WITHOUT ever closing the dropdown on the failed prefix.
+		instances[ 0 ].query( 'Тве' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		// Still holding the OLD confirmed value and address — nothing fired, nothing restored,
+		// nothing wiped yet (typing alone never dispatches change on a <select>).
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+
+		const tverResult = instances[ 0 ].query( 'Тверь' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [
+			{ key: 'dadata:tver', value: 'Тверь', label: 'г Тверь', level: 'settlement', record: { key: 'dadata:tver', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Тверь', type: 'г' }, label: 'г Тверь' } },
+		] } );
+		await flushMicrotasks();
+
+		const tverOption = document.createElement( 'option' );
+
+		tverOption.value = 'Тверь';
+		settlementSelect.appendChild( tverOption );
+		settlementSelect.value = 'Тверь';
+		settlementSelect.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		window.jQuery( settlementSelect ).trigger( window.jQuery.Event( 'select2:select', {
+			params: { data: { id: 'Тверь', text: 'г Тверь', key: 'dadata:tver' } },
+		} ) );
+
+		// The pick is what runs clearDescendants() for settlement's own edit — wiping the OLD
+		// Moscow street. The claim under test: it must NEVER have been "restored" to the old
+		// street first by the earlier "Тве" abandon report (which never fired at all — it was
+		// only recorded, and the pick above cleared that recording before any close could ever
+		// flush it). If it HAD fired mid-typing, the address would read the OLD Moscow street
+		// UNDER Тверь here — the exact corruption MJ-1 describes.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+		expect( addressField().value ).toBe( '' );
+
+		// Closing the dropdown now must not resurrect anything either — the pick already
+		// cleared the pending candidate.
+		await closeSettlementSelect2();
+
+		expect( addressField().value ).toBe( '' );
+	} );
+
+	// -----------------------------------------------------------------------
+	// issue #517 round 3 — three critic probes, promoted to permanent cascade-level tests
+	// (the same "assert the observable DOM state" shape as PROBE A1/A2/A3 above).
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE P1: a zero-result term SUPERSEDED by a later matching search does NOT unlock the address on close (critic BL-2)', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тве' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } ); // zero — recorded
+		await flushMicrotasks();
+
+		instances[ 0 ].query( 'Тверь' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [       // found — must clear the stale candidate
+			{ key: 'dadata:tver', label: 'г Тверь', level: 'settlement', record: { key: 'dadata:tver', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Тверь', type: 'г' }, label: 'г Тверь' } },
+		] } );
+		await flushMicrotasks();
+
+		// The customer clicks away WITHOUT picking.
+		await closeSettlementSelect2();
+
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+	} );
+
+	it( 'PROBE P1c (<input> CONTROL): the baseline typeahead never reaches this state at all — a completed search WITH results adopts the first one rather than reporting an abandon', async () => {
+		boot( { settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		const call = callFor( 'billing_city' );
+		const record = {
+			key: 'dadata:tver', label: 'г Тверь', level: 'settlement',
+			record: { key: 'dadata:tver', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Тверь', type: 'г' }, label: 'г Тверь' },
+		};
+
+		// The typeahead's own handleBlur() (location-typeahead.js) adopts the first result on
+		// a completed search that found something — it never reports onAbandon at all for
+		// that case, so there is no stale marker for a later blur to have left behind.
+		selectViaFake( call, record );
+
+		// s90: the address unlocks on the SERVER's confirmation of the pick, not the optimistic
+		// click itself — settle the /select round trip this pick just queued (same convention
+		// as `settleLastSelect()`'s own callers elsewhere in this file).
+		await settleLastSelect( record );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'г Тверь' );
+		expect( addressField().disabled ).toBe( false ); // unlocked by the REAL, CONFIRMED pick, not a stale marker.
+	} );
+
+	it( 'PROBE P2: a genuine pick clears the recorded candidate even though select2:close fires BEFORE select2:select — the MEASURED rig order (critic MJ-3)', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		// Confirm settlement = Москва, then address = ул. Тверская, 1 — the critic's own
+		// starting state, needed to make the corruption OBSERVABLE (nothing to wrongly
+		// restore without a confirmed address already sitting there).
+		instances[ 0 ].query( 'Моск' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [
+			{ key: 'dadata:msk', value: 'Москва', label: 'г Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		const settlementSelect = document.getElementById( 'billing_city' );
+		const moscowOption = document.createElement( 'option' );
+
+		moscowOption.value = 'Москва';
+		settlementSelect.appendChild( moscowOption );
+		settlementSelect.value = 'Москва';
+		settlementSelect.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		window.jQuery( settlementSelect ).trigger( window.jQuery.Event( 'select2:select', {
+			params: { data: { id: 'Москва', text: 'г Москва', key: 'dadata:msk' } },
+		} ) );
+
+		selectViaFake( callFor( 'billing_address_1' ), {
+			key: 'dadata:addr1', label: 'ул Тверская, 1', level: 'address',
+			record: {
+				key: 'dadata:addr1', provider_id: 'dadata', level: 'address', country: 'RU',
+				settlement: { name: 'Москва', type: 'г' },
+				street: { name: 'Тверская', type: 'ул' }, house: '1', label: 'ул Тверская, 1',
+			},
+		} );
+
+		expect( addressField().value ).toBe( 'ул Тверская, 1' );
+
+		// An EARLIER search finds "Тверь" (populates dataByKey) — BEFORE the failed one, so
+		// BL-2's own "clear on found results" never gets a chance to clear anything here.
+		instances[ 0 ].query( 'Тверь' );
+		const firstReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		firstReq.resolve( { suggestions: [
+			{ key: 'dadata:tver', value: 'Тверь', label: 'г Тверь', level: 'settlement', record: { key: 'dadata:tver', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Тверь', type: 'г' }, label: 'г Тверь' } },
+		] } );
+		await flushMicrotasks();
+
+		// A LATER search for "Тве" completes with zero results — recorded, and STILL pending
+		// right up to the pick below (no interim "found" search AFTER it to clear it via BL-2).
+		instances[ 0 ].query( 'Тве' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		// The pick of the EARLIER "Тверь" result — MEASURED order: change, closing, close,
+		// THEN select. `handleFieldChanged()`'s own `clearDescendants()` (bound to the `change`
+		// dispatched below) wipes the address AND snapshots it into `entry.clearedByEdit`
+		// FIRST — a live snapshot exists in the window between this `change` and the
+		// `select2:select` below, exactly the window MJ-3 is about.
+		const select = document.getElementById( 'billing_city' );
+		const tverOption = document.createElement( 'option' );
+
+		tverOption.value = 'Тверь';
+		select.appendChild( tverOption );
+		select.value = 'Тверь';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		window.jQuery( '#billing_city' ).trigger( 'select2:closing' );
+		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+
+		window.jQuery( '#billing_city' ).trigger( window.jQuery.Event( 'select2:select', {
+			params: { data: { id: 'Тверь', text: 'г Тверь', key: 'dadata:tver' } },
+		} ) );
+
+		await tick();
+
+		// The claim under test: the address must show whatever the pick's own clearDescendants()
+		// left it as (wiped, per the ordinary "adopting a different settlement clears the old
+		// address" rule) — NEVER the OLD Moscow street restored under the newly-picked Тверь,
+		// which is exactly what an inline (non-deferred) close-flush would have done.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+		expect( addressField().value ).toBe( '' );
+	} );
+
+	it( 'PROBE P3: a zero-result response ARRIVING AFTER the dropdown already closed unlocks the address immediately (critic MJ-4)', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // request goes out, dropdown open
+		window.jQuery( '#billing_city' ).trigger( 'select2:closing' );
+		window.jQuery( '#billing_city' ).trigger( 'select2:close' ); // customer clicks away BEFORE the response lands
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } ); // the response finally arrives
+		await flushMicrotasks();
+
+		// No further close, no tick needed — MJ-4's own immediate-fire branch is what unlocks
+		// this, the moment the response is recorded, not the (already-passed) close event.
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+	} );
+
+	it( 'PROBE P3 control: a zero-result response arriving WHILE the dropdown is still open leaves the address locked until close', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // dropdown still open, never closed
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
 	} );
 } );
 

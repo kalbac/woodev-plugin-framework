@@ -58,3 +58,21 @@ export function testConnection( providerId, connectionId, values ) {
 		data: { values },
 	} );
 }
+
+/**
+ * Runs one «Инструменты» tool.
+ *
+ * @param {string} providerId tab/provider id.
+ * @param {string} toolId     tool id.
+ * @param {Object} args       selector values keyed by selector name.
+ * @return {Promise<Object>} { success, message }
+ */
+export function runTool( providerId, toolId, args ) {
+	const { restRoot, nonce } = bootstrap();
+	return apiFetch( {
+		url: `${ restRoot }/${ providerId }/tool/${ toolId }/run`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { args },
+	} );
+}

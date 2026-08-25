@@ -97,9 +97,6 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-section.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';

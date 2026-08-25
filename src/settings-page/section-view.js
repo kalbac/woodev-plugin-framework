@@ -9,6 +9,7 @@
 
 import ControlField from '../components/control-field';
 import ConnectionBlock from './connection-block';
+import ToolsBlock from './tools-block';
 import { isFieldVisible } from '../components/validate';
 
 export default function SectionView( { providerId, section, tabFields, values, conditionValues, onFieldChange, onFieldRevert, showErrors, serverErrors } ) {
@@ -26,6 +27,10 @@ export default function SectionView( { providerId, section, tabFields, values, c
 				onFieldRevert={ onFieldRevert }
 			/>
 		);
+	}
+
+	if ( section.is_tools ) {
+		return <ToolsBlock providerId={ providerId } section={ section } />;
 	}
 
 	return (
