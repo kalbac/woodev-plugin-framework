@@ -14,6 +14,7 @@
  */
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -187,6 +188,149 @@ if ( existsSync( sessionsDir ) ) {
 		}
 	}
 	notes.push( `sessions: ${ sessionFiles.length } files` );
+}
+
+/* ------------------------------------------------------------------ *
+ * The handoff contract (docs-internal/next-session-prompt.md).
+ *
+ * Why this section exists, in the operator's own words (25.08.2026): "в каждой сессии ты пишешь
+ * его так как ты хочешь. Нет чётких правил как писать, что в нём должно быть, а чего не должно".
+ *
+ * The handoff is the ONLY document read first, every session, without exception — and it was the
+ * only one with no schema. The consequence is not a messy file; it is that **an unfinished
+ * commitment leaves the project by simply not being mentioned again**, and no one finds out. The
+ * operator's example: a task discussed in one session and not built in the next must arrive in the
+ * one after that, carrying the fact that it was already discussed.
+ *
+ * The load-bearing check is therefore NOT about the current file's shape. It is the DIFF against
+ * the previous committed version: every issue in the previous "Обязательства" section must still
+ * be accounted for. Silence is what this gate makes impossible.
+ * ------------------------------------------------------------------ */
+
+const HANDOFF_REL = 'docs-internal/next-session-prompt.md';
+const handoffPath = join( INTERNAL, 'next-session-prompt.md' );
+
+// The `##` sections a handoff must carry, in this order. Matched by the leading keyword so the
+// wording stays the author's; only the contract is fixed.
+const HANDOFF_SECTIONS = [
+	[ 'Ждёт кнопки', /^#+\s*.*Ждёт кнопки/imu ],
+	[ 'Обязательства', /^#+\s*.*Обязательства/imu ],
+	[ 'С чего начать', /^#+\s*.*С чего начать/imu ],
+	[ 'Доказано замером', /^#+\s*.*Доказано замером/imu ],
+	[ 'Ловушки', /^#+\s*.*Ловушки/imu ],
+	[ 'Состояние на входе', /^#+\s*.*Состояние на входе/imu ],
+];
+
+/**
+ * The bullet lines under one `##` section, or `null` when the section is absent.
+ */
+const sectionBody = ( text, re ) => {
+	const m = re.exec( text );
+
+	if ( ! m ) {
+		return null;
+	}
+
+	const rest = text.slice( m.index + m[ 0 ].length );
+	const next = /^#+\s/mu.exec( rest );
+
+	return next ? rest.slice( 0, next.index ) : rest;
+};
+
+const issueRefs = ( body ) => new Set( ( body || '' ).match( /#\d+/g ) || [] );
+
+if ( ! existsSync( handoffPath ) ) {
+	fail( `${ HANDOFF_REL } is missing — it is the first thing every session reads.` );
+} else {
+	const handoff = read( handoffPath );
+
+	// 1. Required sections, present and in order.
+	let lastAt = -1;
+	for ( const [ label, re ] of HANDOFF_SECTIONS ) {
+		const m = re.exec( handoff );
+
+		if ( ! m ) {
+			fail( `${ HANDOFF_REL } has no "${ label }" section. Required by DOCS-SCHEMA.md → Handoff.` );
+			continue;
+		}
+
+		if ( m.index < lastAt ) {
+			fail( `${ HANDOFF_REL }: "${ label }" is out of order. Required order: ${ HANDOFF_SECTIONS.map( ( s ) => s[ 0 ] ).join( ' → ' ) }.` );
+		}
+
+		lastAt = m.index;
+	}
+
+	// 2. Every carry-over line names an issue AND the session that decided it — otherwise the
+	//    next reader cannot tell a live commitment from a note, or find where it was settled.
+	const carry = sectionBody( handoff, HANDOFF_SECTIONS[ 1 ][ 1 ] );
+
+	if ( carry ) {
+		// A carry-over item is a LOGICAL bullet, not a physical line: these entries wrap, and the
+		// `sNN` saying where a thing was decided lands on a continuation line as often as not.
+		// Checking raw lines flagged two CORRECT entries on this gate's very first run.
+		const bullets = [];
+
+		for ( const line of carry.split( '\n' ) ) {
+			const t = line.trim();
+
+			if ( t.startsWith( '- ' ) || /^\d+\./.test( t ) ) {
+				bullets.push( t );
+			} else if ( t && bullets.length ) {
+				bullets[ bullets.length - 1 ] += ' ' + t;
+			}
+		}
+
+		for ( const t of bullets ) {
+
+			if ( ! /#\d+/.test( t ) ) {
+				fail( `${ HANDOFF_REL }: carry-over line has no issue reference (#N): "${ t.slice( 0, 80 ) }"` );
+			}
+
+			if ( ! /\bs\d+\b/.test( t ) ) {
+				fail( `${ HANDOFF_REL }: carry-over line does not say WHERE it was decided (sNN): "${ t.slice( 0, 80 ) }"` );
+			}
+		}
+	}
+
+	// 3. Gate numbers must carry the date they were measured. A figure copied forward from a
+	//    previous handoff is an inference, and s93 lost real time to exactly that (two of s92's
+	//    baselines were wrong and rode into the next session unchallenged).
+	if ( /composer check/i.test( handoff ) && ! /\b\d{2}\.\d{2}\.\d{4}\b/.test( handoff ) ) {
+		fail( `${ HANDOFF_REL }: gate numbers are quoted without a DD.MM.YYYY measurement date.` );
+	}
+
+	// 4. THE ONE THAT MATTERS — nothing leaves the carry-over silently.
+	let previous = null;
+
+	try {
+		previous = execFileSync( 'git', [ 'show', `HEAD:${ HANDOFF_REL }` ], {
+			cwd: ROOT,
+			encoding: 'utf8',
+			stdio: [ 'ignore', 'pipe', 'ignore' ],
+		} );
+	} catch {
+		// No committed predecessor (a fresh clone, a first commit, a shallow CI checkout). The
+		// drop check simply does not apply; it is never a failure on its own.
+		previous = null;
+	}
+
+	if ( previous ) {
+		const before = issueRefs( sectionBody( previous, HANDOFF_SECTIONS[ 1 ][ 1 ] ) );
+		const stillThere = issueRefs( handoff ); // anywhere in the new file, not only the section
+
+		for ( const ref of before ) {
+			if ( ! stillThere.has( ref ) ) {
+				fail(
+					`${ HANDOFF_REL }: ${ ref } was a carry-over commitment in the PREVIOUS handoff and ` +
+					`is not mentioned anywhere in this one. A commitment leaves only by being DONE or ` +
+					`by the operator dropping it explicitly — say which, in the file. Never by silence.`
+				);
+			}
+		}
+
+		notes.push( `handoff: ${ before.size } carry-over commitment(s) checked against the previous version` );
+	}
 }
 
 /* ------------------------------------------------------------------ *

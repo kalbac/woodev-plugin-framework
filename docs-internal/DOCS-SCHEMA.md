@@ -146,6 +146,66 @@ Optional: `## Infrastructure Reference` section with operational data (build com
 
 ---
 
+## Handoff Format (`next-session-prompt.md`)
+
+**What it is:** a contract between this session and the next one. Not a summary — that is
+`sessions/sNN.md`. Not state — that is `CURRENT-STATE.md`. It answers exactly one question:
+**what must the next session know before it can act, and what is it obliged to finish?**
+
+It is the only document read first, every session, without exception. Until 25.08.2026 it was
+also the only one with no schema, and the cost was specific: **an unfinished commitment left the
+project by simply not being mentioned again.** Nobody noticed, because nothing was broken — a
+sentence was just absent. The operator's own framing: *«сегодня в хендофф у нас стоит задача X, мы
+её не успели… значит нужно обязательно в следующий хендофф передать, что в сессии X мы обсудили
+задачу Y, но в сессии Z не успели»*.
+
+### Required sections, in this order
+
+| # | Section | Carries |
+|---|---|---|
+| 0 | Header (before the first `#`) | Which BRANCH the working tree is left on and why, open PRs and what each is waiting for, gate numbers **with the date they were measured** |
+| 1 | `Ждёт кнопки оператора` | Everything blocked on him, each saying exactly what to look at and where. Empty → write "пусто" explicitly, never omit the section |
+| 2 | `Обязательства (перенос)` | Every commitment made and not delivered. **See the rule below — this is the section the whole schema exists for** |
+| 3 | `С чего начать` | Ranked. The first item must be unambiguous enough to start on without a decision |
+| 4 | `Что доказано замером` | ONLY measured facts, each with the measurement that proves it. An inference goes in the session file, not here |
+| 5 | `Ловушки` | New traps only, each pointing at its gotcha. Never a re-listing of old ones |
+| 6 | `Состояние на входе` | Table: tree, open PRs, gotcha count, gates |
+
+Wording inside a section is the author's; only the contract is fixed.
+
+### The rule this exists for
+
+**A commitment leaves «Обязательства» in exactly two ways: it is DONE, or the operator explicitly
+drops it. Never by silence.**
+
+Each carry-over line must name:
+
+- the issue — `#N`, so it is findable;
+- the session that decided it — `sNN`, so the next reader can see it was already settled and does
+  not re-open it or, worse, re-ask the operator;
+- why it did not ship, and whether it is still committed.
+
+```markdown
+- **#518** — выбор ПВЗ снимает «неявность». Решено в **s92**, не начато: сессия ушла на #526 и
+  #530. В силе.
+```
+
+### Enforced by `npm run lint:docs`
+
+Text alone did not hold for the other formats in this file and will not hold here. The gate checks:
+
+1. all required sections present and in order;
+2. every carry-over line carries `#N` **and** `sNN`;
+3. gate numbers are quoted with a `DD.MM.YYYY` measurement date — a figure copied forward from a
+   previous handoff is an INFERENCE, and s93 lost real time to exactly that (two of s92's baselines
+   were wrong and rode into the next session unchallenged);
+4. **the drop check, which is the load-bearing one:** every `#N` that appeared in the PREVIOUS
+   committed handoff's carry-over section must still be mentioned somewhere in the new one. This is
+   a diff against `git show HEAD:` — not a property of the current file — because silence is the
+   failure mode, and silence is invisible to any check that only reads what is there.
+
+---
+
 ## ADR Format
 
 ```markdown
