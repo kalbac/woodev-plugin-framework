@@ -125,6 +125,10 @@ namespace Woodev\Tests\Unit\Shipping {
 			return 'typeahead';
 		}
 
+		public function is_custom_settlement_allowed(): bool {
+			return false;
+		}
+
 		public function owns_region_states( string $country, array $final_states ): bool {
 			return false;
 		}

@@ -293,6 +293,72 @@
 			}
 
 			config.minimumInputLength = minimumInputLengthFor( seed.level );
+
+			// Issue #528 (critic MJ-B): the single source of truth `insertTag` below reads —
+			// set ONLY on a genuinely completed (non-stale) response, to `entries.length` for a
+			// real answer (0 or more) or back to `null` for a transport error/never-completed
+			// request. `null` is also the starting value: nothing has answered yet, so no tag
+			// is ever offered before the first completed search. Declared here, ABOVE the
+			// `config.ajax.transport` closure below, so both that transport and `insertTag`
+			// (defined inside the very next `if` block) close over the SAME variable.
+			var lastCompletedEntriesLength = null;
+
+			// Issue #528: the merchant's own opt-in — off by default. `tags` is select2's
+			// own documented feature (select2/select2 docs, tags.md); `createTag`/`insertTag`
+			// follow the SAME shape as the CDEK reference
+			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:179-188).
+			//
+			// Critic MJ-A: `'settlement' === seed.level` is NOT redundant with the option check
+			// — `attachAjaxSelect2()`'s registry entry is bare (`registry['ajax-select2']`,
+			// `location-cascade.js`'s own `resolveModeRenderer()`), so without this a REGION
+			// field whose OWN axis is also `ajax-select2` would get the identical free-typed
+			// tag for a value that posts as `billing_state`/`shipping_state` — permanent order
+			// data this option's own label ("города НЕ ИЗ СПИСКА") and tooltip ("в поле
+			// НАСЕЛЁННОГО ПУНКТА") never promised to touch. Every other layer already scopes
+			// this to settlement (the `show_if`, the label, the tooltip), and so does the CDEK
+			// reference this `insertTag` shape is copied from — `allowTags` is passed to the
+			// CITY widget only, defaulting `false`.
+			if ( seed.allowCustomSettlement && 'settlement' === seed.level ) {
+				config.tags = true;
+
+				// Refuses an empty/whitespace term (returning `null` tells select2 there is
+				// nothing to offer) and stamps `newTag: true` so `handleSelect2Select()` can
+				// tell a tag pick apart from a real record pick — a tag has no locality key.
+				config.createTag = function( params ) {
+					var term = ( params && 'string' === typeof params.term ? params.term : '' ).trim();
+
+					if ( ! term ) {
+						return null;
+					}
+
+					return {
+						id: term,
+						text: term,
+						newTag: true,
+					};
+				};
+
+				// Gates the tag row to the ZERO-result case, exactly like the CDEK reference:
+				// a customer must never be able to free-type past a town the provider actually
+				// carries. Critic MJ-B: reads `lastCompletedEntriesLength` (set by the transport
+				// below from `entries.length`, the SAME provider-truth signal the abandon gate a
+				// few lines down already answers this question from), never the rendered `data`
+				// array select2 hands this hook — `data` is built from `accepted`
+				// (`applyEntries()`'s FILTERED output), which can be empty for a reason that has
+				// nothing to do with whether the provider carries this town: a transport error
+				// resolves `entries` to `null` but `success()` still reports `results: []`
+				// unconditionally, and a response whose rows all fail `applyEntries()`'s own
+				// value-derivation filter is "the provider answered, this layer just could not
+				// derive a submittable value" (critic MN-2's own reasoning, a few lines below in
+				// the transport) — neither is "the provider carries nothing here", and offering
+				// a free-text row for either misrepresents this option's own promise.
+				config.insertTag = function( data, tag ) {
+					if ( 0 === lastCompletedEntriesLength ) {
+						data.push( tag );
+					}
+				};
+			}
+
 			config.ajax = {
 				delay: 250, // select2's own debounce, applied before transport() is ever invoked — WC's own baseline (§2.3); redundant to duplicate here.
 				// issue #449 (teardown gap, round 2 — the `ajax.delay` question): a `detach()` that
@@ -358,11 +424,97 @@
 							return;
 						}
 
+						// Issue #528 (critic MJ-B): `insertTag`'s own single source of truth,
+						// above — `entries.length` for a genuinely completed response (`entries`
+						// an array, possibly empty), or back to `null` for a transport error
+						// (`entries === null`, the SAME signal the abandon gate below treats as
+						// "proves nothing either way").
+						lastCompletedEntriesLength = entries ? entries.length : null;
+
 						// issue #461 BLOCKING 1/2: `applyEntries()` is the SINGLE place that
 						// decides which entries are selectable and what identifies each one —
 						// reusing its return value here (never re-deriving the same filter) is
 						// what keeps select2's own results and `dataByKey` from disagreeing.
 						var accepted = seed.applyEntries( entries, false );
+
+						// Issue #517: this callback only ever runs for a COMPLETED, non-stale
+						// response (the `stale`/`isAbortError()` guards around this transport
+						// already excluded a cancelled/superseded request, and a genuine
+						// transport error takes the separate `failure()` branch below, never
+						// this one). `seed.onAbandon` here is `recordAbandonCandidate` (see that
+						// function's own docblock) — this only RECORDS the condition
+						// `location-cascade.js`'s `onAbandonFor()` exists to hear about;
+						// round 2/MJ-1 moved the actual fire to `select2:close`, since this
+						// transport can complete mid-typing on a term the customer has already
+						// typed past. `term` is never empty here: selectWoo's own
+						// `minimumInputLength` decorator (wired below) never calls this
+						// transport for anything shorter, and that floor is always >= 1 (see
+						// `minimumInputLengthFor()`).
+						//
+						// Below-`minimumInputLength` text — the select2 analogue of
+						// `location-typeahead.js`'s own `resolved: false` report — is
+						// deliberately NOT reproduced here: unlike that widget's plain `<input>`,
+						// select2's search box is an internal implementation detail with no
+						// public event exposing its raw query below the floor, and reaching for
+						// it would mean depending on the same kind of undocumented private field
+						// this file already refuses elsewhere (see `activeAbort`'s own
+						// docblock). THIS IS A NEW GAP, not merely a matched floor: unlike this
+						// function, `location-typeahead.js` closes it explicitly —
+						// `handleBlur()` reports `onAbandon( { resolved: false } )` for a
+						// below-`minChars` blur (17.08.2026 follow-up) — so the baseline widget
+						// has NO gap at its floor to compare against, and the select modes
+						// re-open one the baseline does not have. Narrow in practice (it needs a
+						// real settlement name one character long), tracked as its own card
+						// rather than closed here.
+						//
+						// `entries` (never just `accepted.length`) is the transport-error guard:
+						// `attachAjaxSelect2()`'s own `fetchEntries()` resolves with `null` — not
+						// `[]` — for a genuine (non-abort) fetch failure it otherwise renders as
+						// an ordinary empty result (see that function's own docblock), so `null`
+						// here means "this never completed a real search" and must never read as
+						// the #350/#517 zero-result condition, only a truly returned (possibly
+						// empty) array does.
+						//
+						// `entries.length` (never `accepted.length`) is the RIGHT gate for "the
+						// provider has nothing for this town" (critic MN-2): `accepted` is
+						// `applyEntries()`'s output, which additionally drops any row with no
+						// usable derived value (`fieldValueFor()` returning `''` — "the lesser of
+						// two evils", not an absence of data, per that function's own docblock).
+						// A response whose rows all fail THAT filter is "the provider answered
+						// but we could not derive a submittable value", never "the provider
+						// carries nothing here" — gating on `accepted.length` would report the
+						// #350/#517 marker for the wrong reason. A fully-filtered response falls
+						// through to `success()` below with an empty result list and no abandon
+						// recorded — no results shown, the address lock stands, exactly like an
+						// in-flight/never-completed search.
+						// Issue #528: gates the WHOLE abandon-recording mechanism on the
+						// merchant's opt-in, not just the tag row above — when the option is
+						// OFF, unlocking `address` with nothing able to hold the customer's
+						// free-typed settlement text just moves the rejection from the client
+						// to the server (the card's own measured finding). No candidate
+						// recorded, no flush, the address lock stands.
+						if ( entries && 0 === entries.length && term && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
+							seed.onAbandon( { query: term, resolved: true } );
+						} else if ( entries && entries.length > 0 && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
+							// Critic BL-2 (round 3, BLOCKER): a candidate recorded for an EARLIER,
+							// failed intermediate term (e.g. "Тве") otherwise survives a LATER
+							// completed search that the provider actually answered (e.g. "Тверь",
+							// found on screen) — nothing ever cleared it, so closing without
+							// picking still fired the stale "Тве" abandon and unlocked the address
+							// in a town the provider demonstrably carries. `seed.onAbandon( null )`
+							// is `recordAbandonCandidate`'s own CLEAR signal (see that function's
+							// own docblock) — the candidate must always describe the LAST completed
+							// search, never a stale earlier one that a later search has already
+							// disproven. Gated on `entries.length`, the same provider-truth signal
+							// the fire branch above uses (never `accepted.length` — a row this
+							// layer merely couldn't derive a value for is not "the provider found
+							// nothing", see MN-2's own reasoning) — and, like the fire branch,
+							// never reached for a stale/aborted request (the `stale` guard above
+							// already returned) or a transport error (`entries === null` fails
+							// this same truthy check, so an error neither fires NOR clears —
+							// correct: it proves nothing either way).
+							seed.onAbandon( null );
+						}
 
 						success( {
 							results: accepted.map( function( entry ) {
@@ -398,6 +550,87 @@
 						abort: abortRequest,
 					};
 				},
+			};
+		} else if ( 'function' === typeof seed.onAbandon ) {
+			// related-list:settlement has no transport of its own to observe — the full,
+			// region-scoped list is already loaded (buildSelectField()'s own one-time
+			// fetchEntries('') call) and select2 filters it LOCALLY, with no network
+			// round-trip and no `ajax.transport` this file controls. `language.noResults` is
+			// select2's own PUBLIC, documented per-query message hook (select2/select2 docs,
+			// i18n.md; the same "language.*" callback family the CDEK reference
+			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:220-222)
+			// already overrides for its own noResults string) — select2 calls it, with the
+			// CURRENT query params, exactly when the filtered result set is empty, and never
+			// for a blank term (an empty query always shows the full loaded list, never zero
+			// results). Reusing it here as an observation point is the honest seam this file's
+			// own docblock already commits to: no network, and no private/underscored select2
+			// field the way `activeAbort`'s own docblock explicitly refuses to touch.
+			//
+			// Issue #517 round 2 (MJ-1): `language.noResults` is a RENDER-TIME hook — select2
+			// calls it on every keystroke that still matches nothing, not once per search. So
+			// `seed.onAbandon` here is `recordAbandonCandidate` (see that function's own
+			// docblock), never a direct fire — calling straight through to
+			// `location-cascade.js`'s `onAbandonFor()` on every matching keystroke would consume
+			// `restoreClearedDescendants()`'s snapshot mid-typing, restoring a stale address
+			// before the customer finishes searching. The actual fire is deferred to
+			// `select2:close`, mirroring `location-typeahead.js`'s own blur-only timing.
+			//
+			// The returned string is never invented here: `seed.emptyText` is the SAME
+			// server-supplied "no results" text `location-cascade.js`'s `attachOne()` already
+			// resolves for every renderer at this node (falls back to '', same convention
+			// `attachOne()` itself uses, rather than a hardcoded English literal that would
+			// fight the layer's own i18n route).
+			config.language = {
+				noResults: function( params ) {
+					var term = params && 'string' === typeof params.term ? params.term : '';
+
+					// `! seed.listLoadFailed`: see that flag's own docblock — a region whose
+					// FULL list never loaded reports zero matches for every term, but that is
+					// a transport failure, never a completed search proving the provider has
+					// nothing for this exact town.
+					if ( term && ! seed.listLoadFailed ) {
+						seed.onAbandon( { query: term, resolved: true } );
+					}
+
+					// Deliberate (critic MN-4), for THIS branch only (`related-list:settlement`
+					// — critic MN-5: `ajax-select2` never wires `config.language` at all, so
+					// it always falls through to select2's own untranslated "No results found"
+					// regardless, see `location-cascade.js`'s own `attachOne()` docblock): `''`
+					// when the server sent no string at all, never a hardcoded English
+					// fallback — this layer routes every OTHER customer-facing string
+					// server-side (see `emptyText`'s own resolution in `attachOne()`), and an
+					// untranslated English literal at a non-English checkout is the worse of
+					// the two gaps.
+					return seed.emptyText || '';
+				},
+			};
+
+			// Critic BL-2 (round 3, BLOCKER) — the local/related-list counterpart of the
+			// `entries.length > 0` clear above: `language.noResults` only ever tells us about a
+			// ZERO-match render pass, never a matched one, so a candidate recorded for an
+			// earlier failed prefix (e.g. "Тве") would otherwise survive a LATER keystroke that
+			// DOES match (e.g. "Тверь", rendered as a real row) with nothing to clear it.
+			// `templateResult` is select2's own PUBLIC, documented per-result rendering hook
+			// (select2/select2 docs, dropdown.md) — called once for every row select2 is ABOUT
+			// TO RENDER, i.e. exactly the "a match exists for the current term" signal this
+			// layer needs, with no re-derivation of select2's own matching logic (unlike a
+			// custom `matcher`, which would risk diverging from select2's real default
+			// text-matching behaviour — a risk this file already refuses elsewhere for
+			// `activeAbort`'s private-field reasons, just a different flavour of it here).
+			// Returning `data.text` unchanged is EXACTLY select2's own default `templateResult`
+			// (per the docs: "if no template function is specified... text property... is
+			// used"), so this changes nothing about what renders — pure observation.
+			config.templateResult = function( data ) {
+				// `data.loading` is select2's own placeholder object for an in-flight AJAX
+				// page — never true for this LOCAL, non-ajax strategy, but guarded anyway since
+				// this config object is built by the SAME function the ajax branch shares.
+				if ( ! data || data.loading ) {
+					return data && data.text;
+				}
+
+				seed.onAbandon( null );
+
+				return data.text;
 			};
 		}
 
@@ -463,6 +696,17 @@
 		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
 			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
 
+		// Issue #528: the merchant opt-in for letting the customer submit a settlement the
+		// active provider does not carry — meaningful ONLY for the `ajax-select2` strategy
+		// (the settlement axis's `related-list` mode is clamped away unconditionally, #486,
+		// and never reads this; `typeahead` already carries free text in a plain `<input>`
+		// and never reaches this function at all). See `selectConfigFor()`'s ajax branch for
+		// where this gates `tags`/`insertTag`/`createTag` AND the abandon-recording calls
+		// together — when this is `false`, #517's onAbandon must not fire at all here (the
+		// operator's own #528 reasoning: unlocking `address` with nothing able to hold the
+		// customer's free-typed text just moves the rejection from the client to the server).
+		var allowCustomSettlement = !! ( options.location && options.location.allowCustomSettlement );
+
 		// Issue #466: WooCommerce's own `country-select.js` rebuild reads `data-input-classes`
 		// and `placeholder`/`data-placeholder` straight off whatever CURRENTLY occupies the
 		// state field (`$statebox.attr('data-input-classes')`,
@@ -517,6 +761,20 @@
 		 * reachable even when `detach()` runs on an already half-torn-down widget.
 		 */
 		var activeAbort = null;
+
+		/**
+		 * @type {boolean} Issue #517 (related-list:settlement's own transport-error guard):
+		 * `true` once the ONE-TIME full-list load below has settled having FAILED. Set
+		 * synchronously, in the SAME `.then()` callback that also calls `ensureSelect2()` for
+		 * the first (and only — this strategy never re-fetches) time, so `selectConfigFor()`'s
+		 * `language.noResults` hook — built inside that same `ensureSelect2()` call — always
+		 * reads this at its own final, settled value; never a race. A field whose region-scoped
+		 * list genuinely failed to load has zero options for a reason that says nothing about
+		 * whether the provider carries the customer's typed town — the same "never on a
+		 * transport error" exclusion `attachAjaxSelect2()`'s own `null`-vs-`[]` distinction
+		 * already enforces for the ajax strategy.
+		 */
+		var listLoadFailed = false;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -623,6 +881,18 @@
 
 			lastHandledKey = key;
 
+			// Issue #517 round 3 (MJ-3): a real pick disproves any outstanding zero-result
+			// candidate {@see recordAbandonCandidate} is still holding. MEASURED on the rig
+			// (round 3): a real select2 pick fires `change` → `select2:closing` →
+			// `select2:close` → `select2:select`, in that order — `close` arrives BEFORE
+			// `select`, not after. {@see handleSelect2Close}'s own docblock explains why it
+			// only SCHEDULES a flush rather than firing it inline: this line, clearing the
+			// live candidate before the scheduled flush's callback ever runs, is the other
+			// half of that mechanism — see that docblock for the full reasoning and the
+			// measured event order it depends on.
+			cancelScheduledAbandonFlush();
+			pendingAbandon = null;
+
 			options.onSelect( { record: record } );
 		}
 
@@ -679,11 +949,197 @@
 		function handleSelect2Select( event ) {
 			var data = event && event.params ? event.params.data : null;
 
+			// Issue #528: a tag has no locality key — it is NOT a record pick.
+			// `createTag()`'s own `newTag` stamp (see `selectConfigFor()`'s ajax
+			// branch) survives select2/selectWoo's relay verbatim (same EventRelay
+			// path `resolveAndSelect()`'s own docblock cites for `.key`), so it is
+			// safe to branch on here before ever touching `dataByKey`. Deliberately
+			// NEVER routed through `resolveAndSelect()`: no `/select` call, no
+			// `entry.records.settlement` write — only the #350/#517 unresolved
+			// marker `options.onAbandon` (== `location-cascade.js`'s own
+			// `onAbandonFor()`) already writes for a genuine zero-result search, and
+			// this pick is exactly that same evidence, just customer-confirmed
+			// rather than provider-proven.
+			if ( data && data.newTag ) {
+				handleTagSelect( data );
+
+				return;
+			}
+
 			resolveAndSelect( data ? data.key : null );
 		}
 
+		/**
+		 * Handles a `createTag()`-produced pick (#528) — the customer explicitly
+		 * chose to submit a settlement the active provider does not carry. Composes
+		 * with the SAME deferred-flush mechanism a real pick uses
+		 * ({@see resolveAndSelect}'s own docblock): the measured event order
+		 * (`change → closing → close → select`) means `handleSelect2Close()` has
+		 * already run and set `dropdownOpen = false` by the time this fires, so
+		 * `recordAbandonCandidate()` below fires IMMEDIATELY rather than waiting for
+		 * another close — there is no future close left to defer to.
+		 *
+		 * Cancelling any already-SCHEDULED flush first (round-2 critic MN-A: NOT
+		 * what actually prevents a double-fire — {@see fireAbandonNow} nulls
+		 * `pendingAbandon` BEFORE calling `options.onAbandon`, so a scheduled
+		 * timer that still fires a tick later already finds nothing pending and
+		 * no-ops on its own) is cheap insurance against an unnecessary macrotask
+		 * outliving this synchronous pick, not a correctness requirement.
+		 *
+		 * @param {{id?: string, text?: string}} tag
+		 * @returns {void}
+		 */
+		function handleTagSelect( tag ) {
+			cancelScheduledAbandonFlush();
+
+			var term = tag && 'string' === typeof tag.id && tag.id ? tag.id : ( tag && tag.text ) || '';
+
+			recordAbandonCandidate( term ? { query: term, resolved: true } : null );
+		}
+
+		/**
+		 * @type {{query: string, resolved: boolean}|null} Issue #517: the most recent
+		 * completed-search outcome reported via `selectConfigFor()`'s `seed.onAbandon` — see
+		 * {@see recordAbandonCandidate}'s own docblock for why this is a RECORD, not a fire.
+		 * Holds the full `resolved` flag `onAbandonFor()` expects (critic MN-7, round 3) —
+		 * never re-synthesised at flush time, so a future `resolved: false` caller (issue #523)
+		 * is not silently upgraded to `true`.
+		 */
+		var pendingAbandon = null;
+
+		/** @type {boolean} whether the dropdown is CURRENTLY open — see {@see recordAbandonCandidate}'s MJ-4 half. */
+		var dropdownOpen = false;
+
+		/** @type {number|null} the pending `setTimeout` id from {@see scheduleAbandonFlush}, if any. */
+		var abandonFlushTimer = null;
+
+		/**
+		 * Cancels a scheduled flush without firing it — called whenever something proves the
+		 * pending candidate should not fire as-is (a pick, in {@see resolveAndSelect}) or when
+		 * tearing the widget down (`detach()`).
+		 *
+		 * @returns {void}
+		 */
+		function cancelScheduledAbandonFlush() {
+			if ( null !== abandonFlushTimer ) {
+				clearTimeout( abandonFlushTimer );
+				abandonFlushTimer = null;
+			}
+		}
+
+		/**
+		 * Fires `options.onAbandon` for {@see pendingAbandon} RIGHT NOW, if there is one —
+		 * the only place that ever actually calls the primitive. Idempotent: a second call
+		 * with nothing pending is a silent no-op, which is what lets both
+		 * {@see recordAbandonCandidate}'s immediate-fire branch and the deferred flush below
+		 * share this one implementation without coordinating who "owns" the call.
+		 *
+		 * @returns {void}
+		 */
+		function fireAbandonNow() {
+			if ( null === pendingAbandon || 'function' !== typeof options.onAbandon ) {
+				return;
+			}
+
+			var detail = pendingAbandon;
+
+			pendingAbandon = null;
+
+			options.onAbandon( detail );
+		}
+
+		/**
+		 * Records `detail` as the latest completed-search outcome — called from
+		 * `selectConfigFor()` in place of firing `options.onAbandon` directly (that function's
+		 * own docblock still names it `onAbandon` in the seed it builds; this is what that name
+		 * now resolves to for both strategies sharing this file). `detail === null` is the
+		 * CLEAR signal (critic BL-2, round 3): a completed search that DID return results, or
+		 * an explicit "nothing pending any more" — see the two call sites in `selectConfigFor()`
+		 * for why a candidate must never survive a LATER search that disproves it.
+		 *
+		 * WHY A RECORD, NOT A FIRE (critic MJ-1, corrected in round 3 — see the file's own
+		 * `select2:close` binding docblock for the measured event order this now accounts for):
+		 * `language.noResults` and the ajax transport's success path are both RENDER-TIME/
+		 * per-request hooks — select2 calls the former on every keystroke that still matches
+		 * nothing, and a debounced ajax query can complete mid-typing on an INTERMEDIATE term
+		 * the customer has already typed past. Recording rather than firing inline keeps a
+		 * mid-search completion from deciding anything by itself.
+		 *
+		 * MJ-4 (round 3): a response that lands with the dropdown ALREADY CLOSED will never see
+		 * another `close` event to flush it via {@see scheduleAbandonFlush} — the customer who
+		 * clicks away while the request is still in flight (the rig's own `/suggest` genuinely
+		 * takes seconds) would otherwise be stuck locked forever, on the exact mode #517 was
+		 * filed to fix. So a candidate recorded while `dropdownOpen` is already `false` fires
+		 * IMMEDIATELY instead of waiting — there is no future pick or close left to race against
+		 * on this closed dropdown, so none of MJ-1's mid-typing concerns apply.
+		 *
+		 * @param {{query: string, resolved: boolean}|null} detail
+		 * @returns {void}
+		 */
+		function recordAbandonCandidate( detail ) {
+			pendingAbandon = ( detail && 'string' === typeof detail.query && detail.query )
+				? { query: detail.query, resolved: !! detail.resolved }
+				: null;
+
+			if ( ! dropdownOpen ) {
+				fireAbandonNow();
+			}
+		}
+
+		function handleSelect2Open() {
+			dropdownOpen = true;
+		}
+
+		/**
+		 * `select2:close`, `select2:select` — the ONE fact this whole mechanism turns on, and it
+		 * is MEASURED, not assumed (critic MJ-3, round 3): against the live rig
+		 * (`:8973/classic-checkout/`, `shipping_city` under `ajax-select2`, provider
+		 * `test-cdek`), a real pick fires, in this exact order,
+		 * `select2:opening → change (jQuery) → select2:closing → select2:close →
+		 * select2:select` — reproduced identically across WooCommerce's own `billing_state`
+		 * selectWoo instance (mouse ×2, keyboard Enter ×1) and this file's own ajax-backed
+		 * field. **`close` arrives BEFORE `select`, not after.**
+		 *
+		 * That is the opposite of what a same-tick `select2:close` flush could safely assume: a
+		 * flush running INLINE here would fire {@see fireAbandonNow} before
+		 * {@see resolveAndSelect} ever gets a chance to clear {@see pendingAbandon} — and because
+		 * `change` (which runs `location-cascade.js`'s `clearDescendants()`, snapshotting the
+		 * address field) is FIRST in the measured order, a live snapshot already exists by the
+		 * time an inline flush would run, so `restoreClearedDescendants()` would have something
+		 * to consume — writing the PREVIOUS settlement's street back under the newly picked town.
+		 * That was round 2's actual bug (critic PROBE P2).
+		 *
+		 * The fix: SCHEDULE the flush (`setTimeout( fn, 0 )`, a macrotask) instead of running it
+		 * inline. `select2:select` — confirmed synchronous with `close` in the SAME browser event
+		 * dispatch, per the measured order above — always reaches {@see resolveAndSelect} and
+		 * clears `pendingAbandon` BEFORE any macrotask can run, so a real pick always wins the
+		 * race; a genuine close-without-picking has nothing racing it at all, and the deferred
+		 * flush runs on the very next tick exactly as if it had fired inline. `detach()` cancels
+		 * this timer AND flushes immediately itself (MJ-4's other half — a candidate must not be
+		 * silently dropped on teardown either).
+		 *
+		 * STILL NOT SETTLED: whether re-opening and closing the SAME still-unmatched term
+		 * re-fires this (a repeat close would re-fire — matching `location-typeahead.js`'s own
+		 * `handleBlur()`, which already re-reports on every subsequent blur over unchanged text).
+		 * `tests/js/support/fake-select2.js` now reproduces the MEASURED pick order (see its own
+		 * docblock) so the pick-before-close tests exercise it directly; open/close repetition
+		 * frequency remains rig-only evidence.
+		 *
+		 * @returns {void}
+		 */
+		function handleSelect2Close() {
+			dropdownOpen = false;
+			cancelScheduledAbandonFlush();
+			abandonFlushTimer = setTimeout( function() {
+				abandonFlushTimer = null;
+				fireAbandonNow();
+			}, 0 );
+		}
+
 		if ( $select ) {
+			$select.on( 'select2:open', handleSelect2Open );
 			$select.on( 'select2:select', handleSelect2Select );
+			$select.on( 'select2:close', handleSelect2Close );
 		}
 
 		/**
@@ -707,6 +1163,19 @@
 				onRequestStart: function( abortFn ) {
 					activeAbort = abortFn;
 				},
+				// Issue #517: OPTIONAL, same as every other primitive `location-cascade.js`'s
+				// `attachOne()` hands over — see `selectConfigFor()`'s own docblock for where
+				// each strategy fires it. Issue #517 round 2 (MJ-1): resolves to
+				// `recordAbandonCandidate`, NEVER `options.onAbandon` directly — see that
+				// function's own docblock for why the actual fire is deferred to
+				// `select2:close`.
+				onAbandon: 'function' === typeof options.onAbandon ? recordAbandonCandidate : null,
+				// Issue #528: see the local `allowCustomSettlement` var's own docblock above.
+				allowCustomSettlement: allowCustomSettlement,
+				emptyText: 'string' === typeof options.emptyText ? options.emptyText : '',
+				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
+				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.
+				listLoadFailed: listLoadFailed,
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -749,6 +1218,7 @@
 				},
 				function( error ) {
 					logError( error );
+					listLoadFailed = true;
 					applyEntries( [], true );
 					ensureSelect2();
 				}
@@ -778,10 +1248,22 @@
 					activeAbort = null;
 				}
 
+				// Issue #517 round 3 (MJ-4, second half): a candidate can be sitting in
+				// `pendingAbandon` with no `select2:close` ever coming again — `detach()` IS the
+				// only remaining "leaving the field" moment for a widget WooCommerce is about to
+				// tear down (`updated_checkout` replacing this exact fragment). Cancel any
+				// already-scheduled flush first (never let a stale timer double-fire after this
+				// synchronous one), then fire whatever is left, unconditionally: `fireAbandonNow()`
+				// is a no-op with nothing pending, so this is always safe to call.
+				cancelScheduledAbandonFlush();
+				fireAbandonNow();
+
 				unbind();
 
 				if ( $select ) {
+					$select.off( 'select2:open', handleSelect2Open );
 					$select.off( 'select2:select', handleSelect2Select );
+					$select.off( 'select2:close', handleSelect2Close );
 				}
 
 				// issue #457: gated on the node's ACTUAL select2 data (the same
@@ -841,12 +1323,27 @@
 
 		return buildSelectField( el, options, {
 			ajax: false,
+			// Issue #517: a rejection is left to propagate, UNCAUGHT, straight to
+			// `buildSelectField()`'s own non-ajax `.then( success, error )` — which already
+			// logs and degrades to an empty list itself (previously dead code for this
+			// renderer, since this wrapper used to swallow every rejection right here) and, as
+			// of #517, also sets `listLoadFailed` so a genuinely failed list load can never be
+			// mistaken for the provider having nothing to offer.
+			//
+			// Round 2 correction (critic MJ-2): `Promise.resolve( … )` stays, even with the
+			// `.then( null, … )` swallow gone — it was doing a SECOND job the first pass of
+			// this diff missed: normalising a non-thenable return. `buildSelectField()` calls
+			// `strategy.fetchEntries('').then(…)` directly; the renderer contract this file's
+			// own docblock states never forbids `options.list()` returning a plain array
+			// synchronously (any test double or third-party `related-list` consumer could
+			// reasonably do so), and without this wrapper that throws `TypeError:
+			// …fetchEntries(...).then is not a function` straight out of `attach()`, leaving a
+			// bare `<select>` already swapped in for the `<input>` but never populated. Not
+			// reachable through this framework's own wiring (`location-cascade.js`'s
+			// `listFor()` always returns a real promise) — a contract regression for callers
+			// outside it, not a live bug in this repo, but a one-token fix.
 			fetchEntries: function() {
-				return Promise.resolve( options.list() ).then( null, function( error ) {
-					logError( error );
-
-					return [];
-				} );
+				return Promise.resolve( options.list() );
 			},
 		} );
 	}
@@ -892,7 +1389,17 @@
 
 					logError( error );
 
-					return [];
+					// Issue #517: `null`, never `[]` — `buildSelectField()`'s own `applyEntries()`
+					// treats a missing entries array exactly like an empty one (`(entries ||
+					// []).forEach(...)`), so the customer still sees "nothing found" here,
+					// UNCHANGED from before this card (see this function's own docblock above —
+					// that contract is not being touched). `selectConfigFor()`'s transport uses
+					// the difference between `null` and `[]` for its OWN purpose only: telling a
+					// genuinely completed, zero-result search (the #350/#517 condition
+					// `onAbandonFor()` must hear about) apart from a swallowed transport error
+					// that merely LOOKS like one by the time it gets there — the two are
+					// indistinguishable once collapsed to the same empty array.
+					return null;
 				} );
 			},
 		} );

@@ -2247,16 +2247,29 @@
 	 *
 	 * RENDERER-AGNOSTIC ON PURPOSE. The empty-suggestions row (`location-typeahead.js`'s own
 	 * `emptyText`/`renderItems()`) looks like the obvious "existing precedent" to reuse for D7,
-	 * but it lives entirely inside the baseline typeahead widget and is NOT surfaced by either
-	 * Task 13 renderer this file's own `resolveModeRenderer()` can attach instead
-	 * (`location-select-modes.js`'s `attachRelatedListSettlement()`/`attachAjaxSelect2()` —
-	 * neither wires an empty/no-results message of any kind, `related-list:settlement` being a
-	 * plain pre-populated `<select>` and `ajax-select2` never reading `options.emptyText` at
-	 * all). Since the settlement level a D7 cancel targets can be rendered by ANY of the three,
-	 * a message tied to the typeahead's own listbox would silently vanish for two of them. This
-	 * DOM-anchor notice already existed for exactly this purpose — telling the customer why a
-	 * control just changed — and works identically regardless of which renderer (or none) is
-	 * attached, so D7 reuses IT rather than the typeahead-only row the plan named.
+	 * but it lives entirely inside the baseline typeahead widget's own listbox markup, which
+	 * neither Task 13 renderer this file's own `resolveModeRenderer()` can attach instead ever
+	 * renders (`location-select-modes.js`'s `attachRelatedListSettlement()`/`attachAjaxSelect2()`
+	 * are select2-backed `<select>` fields, not the typeahead's `<ul role="listbox">`).
+	 *
+	 * ROUND 3 CORRECTION (critic MN-5): the round-2 pass here claimed both renderers wire a
+	 * no-results message fed from `options.emptyText` — false for `ajax-select2`, which is
+	 * what round 1's own version of this paragraph correctly said before round 2 overwrote it.
+	 * The two branches are NOT symmetric: `related-list:settlement` DOES wire
+	 * `config.language.noResults`, fed from `options.emptyText` the same way this cascade
+	 * resolves that string for every renderer at this node (`location-select-modes.js`'s
+	 * `selectConfigFor()`, the non-ajax branch) — but `ajax-select2` NEVER assigns
+	 * `config.language` at all and never reads `options.emptyText`, so a genuinely empty ajax
+	 * search still renders select2's own built-in, UNTRANSLATED "No results found" at a
+	 * Russian checkout. Whichever branch actually wires it, the message renders INSIDE select2's
+	 * own dropdown, gone the instant the dropdown closes, never anchored to the field the way
+	 * this DOM-anchor notice is. Since the settlement level a D7 cancel targets can be rendered
+	 * by ANY of the three, and NONE of their own per-search "no results" messages (present or
+	 * absent, translated or not) survive past their own render moment to say "why did my pick
+	 * just get reverted", this DOM-anchor notice — already existing for exactly that purpose,
+	 * telling the customer why a control just changed — is what D7 reuses, working identically
+	 * regardless of which renderer (or none) is attached, rather than any renderer's own
+	 * transient in-widget message.
 	 *
 	 * A missing anchor (the field no longer in the document — a country switch tore the section
 	 * down between the request and this response landing) or blank `text` is a silent no-op:
@@ -3199,18 +3212,29 @@
 	 * the settlement field's CURRENT text exactly matches `entry.unresolved.settlement` — a
 	 * COMPLETED search ({@see onAbandonFor}) already proved the provider has nothing for this
 	 * exact string — the address field stays unlocked despite no settlement record existing.
-	 * `entry.unresolved.settlement` is cleared on the two events that can PROVE it stale — a real
-	 * pick ({@see onSelectFor}), or {@see handleFieldChanged} observing the field's own text
-	 * actually change — never "the instant" the text stops matching in some more general sense: a
+	 * `entry.unresolved.settlement` is cleared by FIVE functions, at SIX call sites (round 3
+	 * correction, critic MN-6 — this paragraph used to say "the two events that can PROVE it
+	 * stale", which {@see settlementTextIsKnownUnresolved}'s own docblock already retracted as
+	 * an inference that shipped wrong; keeping this parent docblock in the old wording left a
+	 * reader who stops here with the retracted version): a real pick
+	 * ({@see onSelectFor}); {@see handleFieldChanged} observing the field's OWN text actually
+	 * change; {@see clearDescendants}/{@see clearCountryScope}, an ANCESTOR edit or a country
+	 * change blanking this field as a side effect (critic BL-1, round 2); and
+	 * {@see carryChainStateToIncomingNodes} (Rule 7c's section-switch carry-block, two call
+	 * sites) clearing it for the column a "ship to a different address" toggle just moved this
+	 * level onto. Never "the instant" the text stops matching in some more general sense: a
 	 * purely PROGRAMMATIC value change that dispatches no event of its own (e.g.
 	 * {@see writeSilently}, used for backwards fill and the pickup-address-replacing
-	 * announcement) touches neither path, and could in principle leave the marker stale. What
-	 * actually keeps that safe is the comparison itself being read off the LIVE DOM element rather
-	 * than a captured value (same reason {@see refreshAddressLock} always re-reads too): a stale
-	 * marker only ever matters if the live text still equals it, and a silent write that changes
-	 * the text without dispatching an event makes them differ on the spot —
-	 * {@see settlementTextIsKnownUnresolved} already stops matching before the marker is ever
-	 * cleared.
+	 * announcement) touches none of the five, and could in principle leave the marker stale for
+	 * an `<input>`-backed field. What actually keeps THAT case safe is the comparison itself
+	 * being read off the LIVE DOM element rather than a captured value (same reason
+	 * {@see refreshAddressLock} always re-reads too): a stale marker only ever matters if the
+	 * live text still equals it, and a silent write that changes the text without dispatching
+	 * an event makes them differ on the spot — {@see settlementTextIsKnownUnresolved} already
+	 * stops matching before the marker is ever cleared. A `<select>`-backed field has no such
+	 * live-text fallback (see that function's own docblock for why), which is exactly why the
+	 * ancestor-clear paths above had to be fixed to cooperate, rather than relying on this
+	 * DOM-comparison safety net a second time.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string, section?: string}} node The address chain node.
@@ -3255,7 +3279,51 @@
 	function settlementTextIsKnownUnresolved( entry ) {
 		var node = chainNodeForLevel( entry, 'settlement' );
 		var el = node ? document.getElementById( node.fieldId ) : null;
-		var text = el ? el.value : '';
+
+		if ( ! el ) {
+			return false;
+		}
+
+		// Issue #517: a select2/selectWoo-backed settlement field (`ajax-select2`,
+		// `related-list:settlement` — `buildSelectField()` in location-select-modes.js has
+		// REPLACED the plain `<input>` with a real `<select>`) has no live DOM proxy for the
+		// customer's typed-but-uncommitted search text at all: that text lives in select2's own
+		// transient search box, gone the moment the dropdown closes, and the `<select>`'s own
+		// `.value` only ever carries a REAL picked option's submitted value or `''` — never the
+		// abandoned query a completed search already proved empty. There is nothing to
+		// text-match against, so the marker's own PRESENCE is the answer instead.
+		//
+		// ROUND 2 CORRECTION (critic BL-1): the first version of this comment claimed the
+		// marker's lifecycle was "already fully owned" by two events and asserted, as fact,
+		// that nothing else could leave it stale. That was an inference, not a verified
+		// property, and it was wrong — `clearDescendants()` and `clearCountryScope()` are a
+		// THIRD, ORDINARY way the marker's own field gets blanked (any ancestor edit: a region
+		// or country change), and neither of them touched `entry.unresolved[ level ]` before
+		// this round. A region/country change would blank the settlement `<select>` while
+		// leaving a stale `entry.unresolved.settlement` behind, and this presence check would
+		// then read it as still-proven-unresolved — unlocking the address permanently, in a
+		// region/country the customer never searched, with no settlement record at all. Fixed
+		// AT THE SOURCE (both functions now null `entry.unresolved[ node.level ]` in the same
+		// place they null `entry.records[ node.level ]`), not by patching this predicate.
+		//
+		// What is actually true after that fix (round 3 correction, critic MN-6 — this used to
+		// say "exactly FOUR places", which was still an undercount by one function/two sites):
+		// FIVE functions, at SIX call sites, clear this marker for a settlement-level entry —
+		// {@see onSelectFor} (a real pick), {@see handleFieldChanged} (the field's own value
+		// changing, native or jQuery — see the file docblock's BOTH EVENT WORLDS section),
+		// {@see clearDescendants}/{@see clearCountryScope} (an ancestor edit or a country
+		// change blanking this field as a side effect), and {@see carryChainStateToIncomingNodes}
+		// (Rule 7c's section-switch carry-block, TWO call sites — clearing it for the column a
+		// "ship to a different address" toggle just moved this level onto). A `<select>` cannot
+		// diverge from all five the way a plain `<input>`'s free-typed text could diverge from
+		// the two event-driven ones alone — but that is because the ancestor-clear paths were
+		// fixed to cooperate, not because a `<select>` has some inherent immunity a plain input
+		// lacks.
+		if ( 'SELECT' === el.tagName ) {
+			return !! entry.unresolved.settlement;
+		}
+
+		var text = el.value;
 
 		return !! text && text === entry.unresolved.settlement;
 	}
@@ -3529,6 +3597,17 @@
 
 			if ( node.level ) {
 				entry.records[ node.level ] = null;
+				// Issue #517 round 2 (BLOCKER): a completed zero-result search at THIS level may
+				// have left `entry.unresolved[ node.level ]` set — the #350 marker that stands
+				// the address lock down. This clear is the ordinary consequence of an ANCESTOR
+				// edit, not a re-proof of anything: the field this marker describes is about to
+				// be blanked, so whatever it once proved unresolved no longer describes the
+				// field's current (empty) state. Clearing it here is what
+				// {@see settlementTextIsKnownUnresolved}'s own docblock now depends on — without
+				// it, a region or country change leaves a `<select>`-backed address field
+				// permanently unlocked, with an empty settlement and no record, because nothing
+				// else ever touches this marker for a level the customer never picked.
+				entry.unresolved[ node.level ] = null;
 			}
 
 			entry.store.setValue( node.fieldId, '' );
@@ -3657,6 +3736,11 @@
 
 			if ( node.level ) {
 				entry.records[ node.level ] = null;
+				// Issue #517 round 2 (BLOCKER) — same reasoning as {@see clearDescendants}'s own
+				// fix: a country change is at least as destructive as an ancestor edit (it can
+				// blank settlement AND address at once), and is strictly worse to leave stale —
+				// the marker would then name a town in a country the customer just left.
+				entry.unresolved[ node.level ] = null;
 			}
 
 			entry.store.setValue( node.fieldId, '' );

@@ -111,6 +111,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string Issue #380: get_field_mode_settlement() return value. */
 	private string $mode_settlement;
 
+	/** @var bool Issue #528: is_custom_settlement_allowed() return value. */
+	private bool $allow_custom_settlement;
+
 	/** @var string[] Task 13/issue #294: countries owns_region_states() reports true for. */
 	private array $owned_region_countries;
 
@@ -146,6 +149,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   moved both axes together, so every existing call
 	 *                                                                                                   site stays unaffected. A test exercising the two
 	 *                                                                                                   axes INDEPENDENTLY passes this explicitly.
+	 * @param bool                                                              $allow_custom_settlement Issue #528: is_custom_settlement_allowed() return
+	 *                                                                                                   value; defaults to `false`, matching the setting's
+	 *                                                                                                   own default, so every existing call site stays
+	 *                                                                                                   unaffected.
 	 */
 	public function __construct(
 		bool $active,
@@ -156,7 +163,8 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		array $owned_region_countries = [],
 		string $default_country = 'RU',
 		?array $chain_records = null,
-		?string $mode_settlement = null
+		?string $mode_settlement = null,
+		bool $allow_custom_settlement = false
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
@@ -167,6 +175,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		$this->owned_region_countries = $owned_region_countries;
 		$this->default_country         = $default_country;
 		$this->chain_records            = $chain_records;
+		$this->allow_custom_settlement = $allow_custom_settlement;
 	}
 
 	public function is_active(): bool {
@@ -227,6 +236,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function get_field_mode_settlement(): string {
 		return $this->mode_settlement;
+	}
+
+	public function is_custom_settlement_allowed(): bool {
+		return $this->allow_custom_settlement;
 	}
 
 	public function owns_region_states( string $country, array $final_states ): bool {
@@ -1411,6 +1424,38 @@ class CheckoutConfigTest extends TestCase {
 
 		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode']['region'] );
 		$this->assertSame( Location_Provider_Registry::MODE_TYPEAHEAD, $config['location']['mode']['settlement'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Issue #528 — `allowCustomSettlement` publishes the merchant's opt-in for
+	// letting `ajax-select2` submit a settlement the provider does not carry.
+	// -------------------------------------------------------------------------
+
+	public function test_allow_custom_settlement_defaults_to_false(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'region' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config['location']['allowCustomSettlement'] );
+	}
+
+	public function test_allow_custom_settlement_reads_from_the_location_service_when_enabled(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true ],
+			null,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_AJAX_SELECT2,
+			[],
+			'RU',
+			null,
+			Location_Provider_Registry::MODE_AJAX_SELECT2,
+			true
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['location']['allowCustomSettlement'] );
 	}
 
 	// -------------------------------------------------------------------------

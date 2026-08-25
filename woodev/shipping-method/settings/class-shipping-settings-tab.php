@@ -284,6 +284,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			if ( null !== $this->location_handler ) {
 				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_REGION;
 				$field_ids[] = Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT;
+				// #528: sits directly under the settlement field-mode select it
+				// gates — same "field type controls sit next to the field they
+				// describe" ordering issue #380 established for the two axes above.
+				$field_ids[] = Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT;
 			}
 
 			$field_ids[] = 'address_field';

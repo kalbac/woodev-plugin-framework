@@ -1940,6 +1940,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Whether the merchant has opted in to letting the customer submit a
+		 * settlement value the active provider does not carry (#528) — thin
+		 * pass-through to {@see Location_Provider_Registry::is_custom_settlement_allowed()}.
+		 *
+		 * @since 2.0.3
+		 *
+		 * @return bool
+		 */
+		public function is_custom_settlement_allowed(): bool {
+			return $this->registry->is_custom_settlement_allowed();
+		}
+
+		/**
 		 * Whether the `related-list` mode's own region injector
 		 * ({@see Location_Provider_Registry::inject_related_list_states()})
 		 * itself wrote `$country`'s `woocommerce_states` options THIS request AND
