@@ -7,12 +7,15 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-25 (s93).** Merged: **#533** (#526). **PR #535 (#530) is OPEN and waiting on the
-operator's rig pass** — customer-facing UI, so it is deliberately not self-merged.
+**As of 2026-08-25 (s93).** Merged: **#533** (#526). **TWO PRs are OPEN and waiting on the
+operator's rig pass** — both customer-facing UI, deliberately not self-merged: **#535** (#530,
+popular settlements shown to the customer) and **#537** (#536, the FIXED default locality made
+visible), the latter stacked on the former so one rig pass covers both.
 
 **Baselines on `main` after #526, measured in the PRIMARY checkout:** `composer check` **2787**
 unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
 **On PR #535's branch:** **2791** / 6826 / **66 skipped**; jest **1491**.
+**On PR #537's branch:** **2798** / 6835 / **66 skipped**; jest **1502**.
 
 ⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
 stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
@@ -50,7 +53,7 @@ ownership rather than a name heuristic. Gotcha:
 | Card | State |
 |---|---|
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488, whose STORAGE/verification/tools side is done — the client-facing list is #530. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
-| **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path.** **Slice 3's D5–D7 are MERGED (#500 server, #501 client): the lazy check inside `/select`, D6's four outcomes, and D7's adopt-or-cancel with «Данные не актуальны, выберите заново».** **Slice 3's D8 is BUILT and green in PR #508** (card #505): the «Инструменты» section, a `woodev_shipping_tools` filter carrying typed `Shipping_Tool` objects, a `POST /settings/{provider}/tool/{tool}/run` route, and the two merchant actions bridging in from the location layer through that public seam. **MERGED (#508) and operator-accepted; #520 closed 25.08 after the tools were exercised against a seeded table.** ⚠ **The customer-facing half was never built** — the spec's own «before the customer types» promise never became a D-decision, and no consumer of the store reaches the checkout. Card **#530**. |
+| **#488** | Popular settlements — **CLOSED in the scope of D1–D8** (#493, #496, #500, #501, #508; #520 closed after the tools ran against a seeded table). `CAPABILITY_RESOLVE_KEY` + `resolve_key()`, the table, whole-record storage, the two clocks, lazy D5 verification, D6's four outcomes, D7 adopt-or-cancel, and the D8 «Инструменты» section all shipped. `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure throws. Full detail: `sessions/s89.md`–`s92.md`. The customer-facing half it never covered is **#530**, in PR #535. |
 | **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
 | ~~**#502**~~ | **DONE — #509 (`4a2dab2`).** An implicit default locality no longer unlocks the address. Merged only after a rebase onto the post-#522 base and a full CI re-run — its original green had been measured against a stale base. |
 | ~~**#517**~~ | **DONE — #522 (`fe90c82`), operator-accepted.** Needed **#528** to deliver. Four defects across three critic passes; report `reviews/2026-08-25-517-critic.md`, detail `sessions/s92.md`. |

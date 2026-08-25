@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 207 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 208 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -283,6 +283,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/git] **A newly-untracked file is DELETED by checking out an older branch that still tracks it, and back. `.gitignore` does not protect it.** → [an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it](gotchas/an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it.md) (s93)
+
 - [tooling/parallel-agents] **`orchestration send --to dispatch:` is PULL — a worker mid-task never sees it; correct a running agent with `terminal send`.** → [orchestration-mail-does-not-reach-a-busy-worker](gotchas/orchestration-mail-does-not-reach-a-busy-worker.md) (s92)
 - [tooling/*] **Search a reference by what it DOES, not by the feature's name — an empty name search is a signal to change the search, not evidence the feature is absent.** → [search-a-reference-by-behaviour-not-by-feature-name](gotchas/search-a-reference-by-behaviour-not-by-feature-name.md) (s92)
 - [tooling/git-merge] **`orca worktree create --base-branch main` takes the LOCAL ref — a session that merged PRs through `gh` has a stale local `main`, and the new branch silently reverts them.** → [orca-worktree-create-base-branch-takes-the-local-ref](gotchas/orca-worktree-create-base-branch-takes-the-local-ref.md) (s87)
