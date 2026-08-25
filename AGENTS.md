@@ -7,7 +7,11 @@
 
 ## ⚡ Session Start (mandatory — this is the CANONICAL list; CLAUDE.md and AGENT-RULES.md point here)
 
-1. **Read `docs-internal/next-session-prompt.md`** — the per-session handoff: what the last session left for you, plus known traps (~1 min)
+1. **Read `docs-internal/next-session-prompt.md`** — the per-session handoff: what the last session
+   left for you, its **carry-over commitments**, and known traps (~1 min). Format and gate:
+   `DOCS-SCHEMA.md` → Handoff Format. **This file is deliberately NOT tracked in git** (the repo is
+   public and the handoff carries operational internals), so a fresh clone has none — say so
+   plainly and start from `CURRENT-STATE.md` rather than pretend a continuity you do not have.
 2. **Read `docs-internal/CURRENT-STATE.md`** — phase status, known bugs, next actions (~1 min)
 3. **Scan `docs-internal/GOTCHAS.md`** — one line per gotcha; scan `[topic/*]` tags relevant to your task (~1 min). Open `gotchas/{slug}.md` for the ones that apply.
 4. **Area-specific docs as needed** — relevant `docs-internal/adr/` and `docs-internal/wiki/` files (navigation hub: `docs-internal/DOCS-INDEX.md`)

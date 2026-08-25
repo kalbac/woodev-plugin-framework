@@ -13,7 +13,7 @@
  * Run: npm run lint:docs
  */
 
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -301,6 +301,7 @@ if ( ! existsSync( handoffPath ) ) {
 	}
 
 	// 4. THE ONE THAT MATTERS — nothing leaves the carry-over silently.
+	const snapshotPath = `${ handoffPath }.prev`;
 	let previous = null;
 
 	try {
@@ -310,9 +311,11 @@ if ( ! existsSync( handoffPath ) ) {
 			stdio: [ 'ignore', 'pipe', 'ignore' ],
 		} );
 	} catch {
-		// No committed predecessor (a fresh clone, a first commit, a shallow CI checkout). The
-		// drop check simply does not apply; it is never a failure on its own.
-		previous = null;
+		// The handoff is deliberately UNTRACKED here (this repo is public — see .gitignore), so
+		// git is not a source at all after the first session. The snapshot below is then the only
+		// way the drop check survives; without it the gate would silently degrade to "no previous
+		// version" and stop catching the exact failure it exists for.
+		previous = existsSync( snapshotPath ) ? read( snapshotPath ) : null;
 	}
 
 	if ( previous ) {
@@ -330,6 +333,16 @@ if ( ! existsSync( handoffPath ) ) {
 		}
 
 		notes.push( `handoff: ${ before.size } carry-over commitment(s) checked against the previous version` );
+	}
+
+	// Refreshed only on a CLEAN run, so a failing run cannot erase the evidence the next run
+	// needs. `.prev` is gitignored alongside the handoff itself.
+	if ( ! errors.length ) {
+		try {
+			writeFileSync( snapshotPath, handoff, 'utf8' );
+		} catch {
+			// A read-only checkout is fine — git is then the only source, the normal case.
+		}
 	}
 }
 
