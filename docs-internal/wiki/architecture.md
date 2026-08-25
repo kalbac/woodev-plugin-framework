@@ -217,6 +217,14 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 Base classes: `tests/unit/TestCase.php` (Brain Monkey) and `tests/integration/TestCase.php` (WP
 test scaffolding).
 
+## P6 gate evidence
+
+> Moved here from `CURRENT-STATE.md` in s91 — it labelled itself reference and pointed at this file.
+
+Base `Woodev_Plugin` is platform-neutral (**zero** WC/HPOS-named methods; enforced by
+`PlatformNeutralBaseHasNoWcMethodTest`, `PlatformNeutralRestApiTest`, `BootstrapRegistrationTest`)
+and not a god-object (`woodev/class-plugin.php` ~1,274 lines / 74 methods).
+
 ## Related
 
 - [[v2-extension-point-pattern]] — how a plugin hooks into these seams.
