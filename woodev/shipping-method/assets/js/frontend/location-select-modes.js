@@ -23,6 +23,13 @@
  * `options.nonceHeader`/`options.country`/`options.parentKey` primitives the cascade hands over
  * for a renderer (like `related-list:region`) that watches a WooCommerce-rendered field instead.
  *
+ * `options.onResolving()` (issue #541) is the one primitive a renderer calls BEFORE it knows the
+ * record: it announces "the customer picked at this level, the identity is still coming" and
+ * returns a `release()` for the case where the identity never arrives. Only `related-list:region`
+ * needs it — it holds nothing but WooCommerce's own label text and must match that against
+ * `/location/list` first — and only it calls it; `ajax-select2` learns the record from the pick
+ * itself and goes straight to `options.onSelect()`.
+ *
  * THE EVENT-WORLD TRAP (gotcha `jquery-trigger-change-fires-no-native-event`): select2 (and
  * WooCommerce's own selectWoo enhancement of a plain `<select>`, which MAY independently apply
  * to the `related-list` region field WooCommerce itself renders) reports a pick via jQuery
@@ -201,6 +208,31 @@
 
 			lastHandledText = text;
 
+			// Issue #541. THE PICK IS ALREADY A FACT HERE; only its identity is not. Everything
+			// below this line is a lookup — `fetchRegionList()` is a `GET /location/list` that
+			// took 10.5 SECONDS on the rig for a cold region — and until it returns this renderer
+			// has no record and therefore cannot call `options.onSelect()`, which is what
+			// eventually raises the busy state for every other level.
+			//
+			// So for those 10.5 seconds the customer had clicked a new region and NOTHING had
+			// changed on screen: no spinner on the region field, and — worse — a settlement field
+			// still offering the OLD region's list, ready to take a click on a town that is no
+			// longer reachable (measured 779 ms after the switch: all six popular entries still
+			// there, three of them in the region just left).
+			//
+			// `options.onResolving()` is the cascade's seam for exactly this shape — announce the
+			// pick by LEVEL now, name the record later. `ajax-select2` needs nothing of the sort
+			// because its own pick carries the record; this renderer is the only one that has to
+			// go and ask. See {@see onResolvingFor} in location-cascade.js.
+			var release = 'function' === typeof options.onResolving ? options.onResolving() : null;
+
+			function releaseIfHeld() {
+				if ( release ) {
+					release();
+					release = null;
+				}
+			}
+
 			fetchRegionList().then( function( entries ) {
 				for ( var i = 0; i < entries.length; i++ ) {
 					var candidate = entries[ i ];
@@ -208,9 +240,21 @@
 					if ( candidate && candidate.record && candidate.record.label === text ) {
 						options.onSelect( { record: candidate.record } );
 
+						// A no-op by construction: `onSelect()` has raised a marker of its own
+						// for the record it just accepted, so the token this one holds is no
+						// longer the standing marker's. Called anyway, unconditionally, so the
+						// release path is one path rather than two — a `mayEnterChain()` refusal
+						// inside `onSelect()` reaches this line with NOTHING having replaced the
+						// marker, and skipping it there would leave the field spinning forever.
+						releaseIfHeld();
+
 						return;
 					}
 				}
+
+				// Searched, and this country's list does not carry the selected text — no record
+				// will ever arrive for this pick, so nothing else is coming to clear the marker.
+				releaseIfHeld();
 			} );
 		}
 

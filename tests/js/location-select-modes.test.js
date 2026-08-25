@@ -917,6 +917,109 @@ describe( 'related-list region renderer', () => {
 		expect( fetchJsonCalls ).toHaveLength( 2 ); // pinned against the same-country 1-call case above.
 	} );
 
+	// Issue #541. The defect was a TIMING one, so every assertion here is about WHEN, not what:
+	// the announcement has to be on the wire in the same tick as the pick, because the lookup it
+	// precedes took 10.5 s on the rig and the customer spent all of it looking at an inert field
+	// and a settlement list belonging to the region they had just left.
+	describe( 'onResolving — announcing the pick before the record is known (#541)', () => {
+		function buildResolvingOptions( overrides ) {
+			// One shared log rather than three independent mocks: the defect was an ORDERING
+			// one, and separate call counts cannot express "this happened before that".
+			const order = [];
+			const release = jest.fn( () => order.push( 'release' ) );
+			const onResolving = jest.fn( () => {
+				order.push( 'resolving' );
+
+				return release;
+			} );
+			const onSelect = jest.fn( () => order.push( 'select' ) );
+
+			return {
+				order,
+				release,
+				onResolving,
+				options: buildOptions( Object.assign(
+					{ node: { level: 'region', fieldId: 'billing_state' }, onResolving, onSelect },
+					overrides
+				) ),
+			};
+		}
+
+		it( 'announces the pick SYNCHRONOUSLY with the change, before /location/list is even answered', () => {
+			const el = installSelect();
+			const { options, order, onResolving, release } = buildResolvingOptions();
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			// THE POINT, and the reason it is asserted here rather than after an await: the
+			// `/location/list` call below is outstanding — deliberately never resolved in this
+			// test — and the announcement has ALREADY happened. Move the call into the `.then`
+			// (the pre-#541 shape, where nothing spoke until the record was known) and this
+			// fails; assert it after awaiting the list instead and it would pass either way.
+			expect( fetchJsonCalls ).toHaveLength( 1 );
+			expect( onResolving ).toHaveBeenCalledTimes( 1 );
+			expect( order ).toEqual( [ 'resolving' ] );
+			expect( options.onSelect ).not.toHaveBeenCalled();
+			expect( release ).not.toHaveBeenCalled();
+		} );
+
+		it( 'releases the announcement when the list carries nothing matching the selected text', async () => {
+			const el = installSelect();
+			const { options, release } = buildResolvingOptions();
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Казань' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect ).not.toHaveBeenCalled();
+			// Nothing else is coming for this pick, so the marker would otherwise spin forever.
+			expect( release ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'releases on the MATCH path too, after onSelect — the one path, never two', async () => {
+			const el = installSelect();
+			const { options, order, release } = buildResolvingOptions();
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+			// Harmless where onSelect raised a marker of its own (the cascade's token check
+			// stands this down — proven in location-cascade.test.js), and REQUIRED where it did
+			// not: a mayEnterChain() refusal returns from onSelect with the marker still up.
+			expect( release ).toHaveBeenCalledTimes( 1 );
+			// Never BEFORE the select — releasing first would clear the marker that onSelect is
+			// about to hand over to, and the field would blink instead of staying busy.
+			expect( order ).toEqual( [ 'resolving', 'select', 'release' ] );
+		} );
+
+		it( 'a renderer handed NO onResolving still selects normally — the primitive is optional', async () => {
+			const el = installSelect();
+			const options = buildOptions( { node: { level: 'region', fieldId: 'billing_state' } } );
+
+			expect( options.onResolving ).toBeUndefined();
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
 	it( 'detach() unbinds both worlds — a change afterwards never reaches onSelect', () => {
 		const el = installSelect();
 		const options = buildOptions( { node: { level: 'region', fieldId: 'billing_state' } } );

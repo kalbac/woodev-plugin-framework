@@ -260,6 +260,9 @@ function fakeTypeahead() {
 		const detach = jest.fn();
 		const call = {
 			el, fetch: opts.fetch, onSelect: opts.onSelect, onAbandon: opts.onAbandon,
+			// Issue #541: the seam a renderer uses to announce a pick whose record it does not
+			// know yet — see onResolvingFor() in the module under test.
+			onResolving: opts.onResolving,
 			emptyText: opts.emptyText, errorText: opts.errorText, detach,
 		};
 
@@ -997,6 +1000,120 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 
 		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
 		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	// Issue #541, the REAL cause. Everything above this point assumes the renderer knows the
+	// record at the moment of the pick — true for `ajax-select2`, false for `related-list:region`,
+	// which holds only WooCommerce's label text and must match it against `GET /location/list`
+	// first. That lookup was MEASURED at 10.5 s on the rig for a cold region, and for all of it
+	// `onSelectFor()` had not run, so none of the s90 machinery above had been reached: no
+	// spinner, and a settlement field still offering the region the customer had just left.
+	describe( 'onResolving — a pick announced before its record is known (#541)', () => {
+		it( 'raises the spinner on the picking field and locks the level below it, with no record and no /select', () => {
+			boot( { region: true, settlement: true } );
+
+			const region = document.getElementById( 'billing_state' );
+			const settlement = document.getElementById( 'billing_city' );
+
+			callFor( 'billing_state' ).onResolving();
+
+			expect( region.parentNode.querySelector( '.woodev-location-select-spinner' ) ).not.toBeNull();
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( region.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+
+			// The operator's point 3: the settlement list on screen still belongs to the OLD
+			// region, so it must stop taking picks — this is the same lock the s90 test above
+			// asserts, reached without any record having been named.
+			expect( settlement.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+			expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+
+			// Still blocked rather than emptied — a disabled control leaves the serialized
+			// checkout form (measured, s90), and this one may hold text the customer typed.
+			expect( settlement.disabled ).toBe( false );
+
+			// Nothing has been ASKED of the server: the record is exactly what is still unknown.
+			expect( selectRequests().length ).toBe( 0 );
+		} );
+
+		it( 'the marker it raises is NOT the queued kind — a queued one would leave the level below unlocked', () => {
+			boot( { region: true, settlement: true } );
+
+			callFor( 'billing_state' ).onResolving();
+
+			// The distinction 85292d1 introduced, asserted from the outside: `queued` means "the
+			// request has not left, so it confirms nothing", and hasUnconfirmedParent() ignores
+			// it. This marker asserts the thing that IS true — this level's identity is unknown
+			// — so it must lock. Passing `true` for queuedOnly here would show the spinner and
+			// silently drop the lock, which is the half of #541 the operator actually saw.
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		} );
+
+		it( 'release() clears the marker it raised — the identity search that found nothing leaves no spinner behind', () => {
+			boot( { region: true, settlement: true } );
+
+			const region = document.getElementById( 'billing_state' );
+			const settlement = document.getElementById( 'billing_city' );
+			const release = callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			expect( region.parentNode.querySelector( '.woodev-location-select-spinner' ) ).toBeNull();
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+			expect( region.hasAttribute( 'aria-busy' ) ).toBe( false );
+			expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		} );
+
+		it( 'release() stands down when a REAL pick has since taken the field over — never strands the newer owner', async () => {
+			boot( { region: true, settlement: true } );
+
+			const release = callFor( 'billing_state' ).onResolving();
+
+			const regionItem = {
+				key: 'dadata:r1', label: 'Московская область', level: 'region',
+				record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+			};
+
+			selectViaFake( callFor( 'billing_state' ), regionItem );
+
+			// This is the ordinary sequence on the match path: the renderer calls release()
+			// unconditionally right after onSelect, and the marker standing now belongs to the
+			// in-flight /select. Clearing it here would take the spinner away for the whole
+			// round trip and unlock the settlement under an unconfirmed region.
+			release();
+
+			const region = document.getElementById( 'billing_state' );
+
+			expect( selectRequests().length ).toBe( 1 );
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+
+			// And the real owner still clears normally when its own answer lands.
+			selectRequests()[ 0 ].resolve( {
+				current: { key: regionItem.record.key, level: 'region' }, persisted: true,
+				chain: { region: { key: regionItem.record.key, level: 'region' } },
+			} );
+			await flushMicrotasks();
+
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+			expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-disabled' ) ).toBe( false );
+		} );
+
+		it( 'a second release() is inert — the token is spent, not re-usable against a later marker', () => {
+			boot( { region: true, settlement: true } );
+
+			const release = callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			// A fresh announcement, e.g. the customer picking a second region while the first
+			// lookup was still running.
+			callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			expect( document.getElementById( 'billing_state' ).parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		} );
 	} );
 
 	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request

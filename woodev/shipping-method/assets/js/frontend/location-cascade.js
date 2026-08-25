@@ -224,6 +224,17 @@
 	var BUSY_HOST_CLASS = 'woodev-location-field-busy';
 
 	/**
+	 * Monotonic id handed out by {@see markLevelBusy}, one per marker raised, ACROSS entries —
+	 * deliberately module-scoped rather than per-entry. It is only ever compared for equality
+	 * against the token stored on the marker it was minted for, so sharing the counter costs
+	 * nothing and removes a piece of per-entry state that would have to be initialised, reset on
+	 * teardown, and kept in step with `entry.selectBusy` by hand.
+	 *
+	 * @type {number}
+	 */
+	var busyToken = 0;
+
+	/**
 	 * The warning mark that opens a notice. Inline SVG rather than a font glyph or a background
 	 * image: it inherits `currentColor`, so the mark and the text can never drift apart, and it
 	 * needs no additional HTTP request and no icon font this plugin does not otherwise ship.
@@ -2568,14 +2579,44 @@
 	 * @returns {void}
 	 */
 	function markSelectBusy( entry, record, queuedOnly ) {
+		return markLevelBusy( entry, record && 'string' === typeof record.level ? record.level : null, queuedOnly );
+	}
+
+	/**
+	 * The body of {@see markSelectBusy}, addressed by LEVEL rather than by record — everything
+	 * that docblock says applies here unchanged; read it first.
+	 *
+	 * Issue #541 (real cause). The two `<select>` renderers do not learn the picked record at the
+	 * same moment, and that asymmetry — not the queue — is what left the customer staring at an
+	 * inert field. Under `ajax-select2` the record IS the pick: `resolveAndSelect()` looks it up
+	 * in its own `dataByKey` and calls `options.onSelect()` synchronously, so the marker is up in
+	 * the same tick as the click. Under `related-list` the region `<select>` is WooCommerce's own,
+	 * carrying nothing but the label text, so `attachRelatedListRegion()` has to match that text
+	 * against a `GET /location/list` response before it has a record to hand over at all —
+	 * MEASURED on the rig at 10.5 s for a cold region, with `onSelectFor()` and therefore
+	 * {@see enqueueSelect} not running until it returns.
+	 *
+	 * So a renderer that must go and ASK before it can name the record needs to be able to say
+	 * "the customer has picked HERE, the identity is still coming" — which is a level, not a
+	 * record. {@see onResolvingFor} is that seam; this function is what it raises.
+	 *
+	 * Returns a token identifying THIS marker, so a caller holding one can release it without
+	 * risking a marker some later, unrelated pick has since raised in its place — see
+	 * {@see onResolvingFor}'s own `release()`. `null` when there was no field to mark.
+	 *
+	 * @param {Object}  entry
+	 * @param {?string} level
+	 * @param {boolean} [queuedOnly]
+	 * @returns {?number} Token for {@see clearSelectBusy}-by-owner, or `null`.
+	 */
+	function markLevelBusy( entry, level, queuedOnly ) {
 		clearSelectBusy( entry );
 
-		var level = record && 'string' === typeof record.level ? record.level : null;
 		var node = level ? chainNodeForLevel( entry, level ) : null;
 		var el = node && document.getElementById( node.fieldId );
 
 		if ( ! el || ! el.parentNode ) {
-			return;
+			return null;
 		}
 
 		var host = el.parentNode;
@@ -2632,12 +2673,16 @@
 		// settlement pick would re-lock the address it just unlocked — the exact behaviour s90
 		// settled and {@see hasUnconfirmedParent}'s own docblock records. Caught by that decision's
 		// own regression test, not by review.
-		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level, queued: !! queuedOnly };
+		var token = ++busyToken;
+
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level, queued: !! queuedOnly, token: token };
 
 		// Everything DEEPER than the level being confirmed is now waiting on an answer that has
 		// not arrived — see refreshDependentLocks().
 		refreshDependentLocks( entry );
 		refreshAddressLock( entry );
+
+		return token;
 	}
 
 	/**
@@ -2935,6 +2980,62 @@
 	}
 
 	/**
+	 * Builds the `onResolving()` callback handed to a Task 13 renderer for one chain node
+	 * (issue #541) — OPTIONAL for the renderer in exactly the sense `onAbandon` already is: one
+	 * that learns the picked record synchronously from the pick itself never needs it, and
+	 * `ajax-select2` accordingly does not call it.
+	 *
+	 * THE CONTRACT, in one sentence: "the customer has just picked at this level, and I do not
+	 * know WHICH record yet". The renderer calls it the moment the pick lands and calls the
+	 * `release()` it returns when the identity search ends WITHOUT a pick — a real
+	 * `options.onSelect()` needs no release, because {@see enqueueSelect}'s own marker supersedes
+	 * this one (and `release()` then finds a token that is not its own and stands down).
+	 *
+	 * WHY A LEVEL IS ENOUGH, AND WHY THIS IS NOT COSMETIC. Two separate obligations fall out of
+	 * the pick alone, neither of which needs the record's identity, and both of which the
+	 * operator named on the rig (26.08.2026):
+	 *
+	 *  - the region field owes the customer a spinner IMMEDIATELY — "занятость поля — свойство
+	 *    действия покупателя", not of whatever request happens to be behind it;
+	 *  - the settlement field must STOP ACCEPTING PICKS immediately, because until the new
+	 *    region resolves the list it is still showing belongs to the OLD one. Measured: 779 ms
+	 *    after switching to Saint Petersburg the settlement field still offered all six popular
+	 *    entries, three of them in Moscow, and would take a click on any of them.
+	 *
+	 * The second is {@see refreshDependentLocks}' existing job and needs no new mechanism — it
+	 * locks every level DEEPER than the busy one, so raising the marker at `region` is the whole
+	 * fix. That is also why the marker raised here is deliberately NOT `queued`: a queued marker
+	 * is one whose request has not left, and {@see hasUnconfirmedParent} ignores it on purpose,
+	 * whereas this one asserts the thing that IS true — this level's identity is unknown, so
+	 * nothing below it may be trusted or picked.
+	 *
+	 * Scoped to the active address section like every other write here: a pick in the section
+	 * that is not currently deciding delivery (Rule 7c) owes no indication at all.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} node
+	 * @returns {function(): function(): void} Call on pick; call ITS return value to release.
+	 */
+	function onResolvingFor( entry, node ) {
+		return function onResolving() {
+			var token = isActiveAddressSection( node.section )
+				? markLevelBusy( entry, node.level, false )
+				: null;
+
+			return function release() {
+				// Only when the marker still standing is the one this call raised. A real pick
+				// has since replaced it ({@see enqueueSelect}), a later pick at another level
+				// has superseded it, or a settled `/select` has already cleared it — in every
+				// one of those cases the marker on screen belongs to something newer, and
+				// clearing it here would strand that owner's spinner and locks.
+				if ( null !== token && entry.selectBusy && entry.selectBusy.token === token ) {
+					clearSelectBusy( entry );
+				}
+			};
+		};
+	}
+
+	/**
 	 * Builds the `onAbandon({ query, resolved })` callback handed to the Task 10 widget for one
 	 * chain node (issue #350) — the widget's own file docblock explains WHEN this runs: a blur
 	 * that leaves the query resolved to exactly zero suggestions (`resolved: true`), after
@@ -3190,6 +3291,11 @@
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
 			// docblock.
 			onAbandon: onAbandonFor( entry, node ),
+			// Issue #541: OPTIONAL in the same sense — only a renderer that must ASK before it
+			// can name the picked record (`related-list:region`, which has nothing but the
+			// label text and has to match it against `/location/list` first) has anything to
+			// say here. See {@see onResolvingFor}'s own docblock.
+			onResolving: onResolvingFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
