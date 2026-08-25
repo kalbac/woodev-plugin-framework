@@ -8,8 +8,6 @@
 namespace Woodev\Tests\Unit;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-status.php';
 
 /**
  * Class ConnectionInterfacesTest.

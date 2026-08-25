@@ -6,13 +6,7 @@ use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-provider.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-page-registry.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-status.php';
 
 class SettingsPageRegistryTest extends TestCase {
 

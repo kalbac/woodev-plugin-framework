@@ -5,8 +5,6 @@ use Mockery;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-provider.php';
 
 class SettingsProviderTest extends TestCase {
 
