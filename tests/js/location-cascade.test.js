@@ -5902,6 +5902,115 @@ describe( 'issue #536: a FIXED default locality writes its text into the field o
 		expect( select.value ).toBe( 'Тверь' );
 		expect( select.options[ select.selectedIndex ].textContent ).toBe( 'Тверь' );
 	} );
+
+	/**
+	 * Issue #536 ROUND 2 — rig-measured (fresh guest, incognito, `related-list` region axis,
+	 * `fixed` policy): the region ancestor is very often STILL a plain WooCommerce `<input>` at
+	 * `prefill()` time — a fresh guest has no session country/state yet, so PHP has nothing to
+	 * render states FOR — and WooCommerce's OWN `assets/js/frontend/country-select.js` promotes
+	 * it to a real, state-populated `<select>` client-side, ASYNCHRONOUSLY relative to this
+	 * module's own boot (`wc_address_i18n_ready`, no ordering guarantee). See
+	 * `applyPendingDefaultLocality()`'s own docblock in the source for the full measured trace.
+	 *
+	 * Reproduces WooCommerce's OWN failed value-carry exactly as `country-select.js` does it:
+	 * captures `$statebox.val()` BEFORE rebuilding, rebuilds with the `related-list` WC-canonical
+	 * uppercase VALUE convention (`wc_strtoupper(trim(label))`), then restores by that captured
+	 * value via `.val(value).trigger('change')`. `capturedValue` is read from the LIVE field
+	 * right before the simulated rebuild — exactly what WooCommerce's own handler would see —
+	 * which is what makes this test discriminate the fix: the OLD code wrote the bare display
+	 * text into the `<input>` immediately, so the capture is a non-empty string that can never
+	 * match the rebuilt option's uppercase value, WC's restore fails, and the resulting genuine
+	 * empty `change` reads (in the OLD code) as a real parent edit — this module's own
+	 * `clearDescendants()` then wipes the settlement default it had JUST correctly written.
+	 */
+	it( 'survives WooCommerce\'s own async input->select promotion of a related-list region field, without wiping the settlement default (issue #536 round 2)', () => {
+		bootWithDefaultLocality( { mode: { region: 'related-list' } } );
+
+		// Settlement's own text is unaffected by the region promotion hazard — written
+		// immediately, exactly like the baseline test above.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+
+		const input = document.getElementById( 'billing_state' );
+
+		expect( input.tagName ).toBe( 'INPUT' );
+
+		const select = document.createElement( 'select' );
+		const blank = document.createElement( 'option' );
+
+		blank.value = '';
+		select.appendChild( blank );
+
+		const option = document.createElement( 'option' );
+
+		option.value = 'ТВЕРСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Тверская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+
+		const capturedValue = input.value; // WooCommerce's OWN `value = $statebox.val()` capture.
+
+		input.parentNode.replaceChild( select, input );
+		select.value = capturedValue; // WooCommerce's OWN `$statebox.val(value)` restore attempt.
+		window.jQuery( select ).trigger( 'change' );
+		window.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		expect( regionEl.tagName ).toBe( 'SELECT' );
+		// The default landed AFTER promotion, matched by TEXT against the real WC-canonical
+		// option — never a fabricated value the state list would reject.
+		expect( regionEl.value ).toBe( 'ТВЕРСКАЯ ОБЛАСТЬ' );
+		expect( regionEl.selectedOptions[ 0 ].textContent ).toBe( 'Тверская область' );
+
+		// The measured symptom itself: the settlement default must survive the region's own
+		// (would-be) false transition — it must never have been read as a real parent edit.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+	} );
+
+	/**
+	 * The safety net's OTHER half: a customer who picks their OWN settlement BEFORE
+	 * WooCommerce's promotion ever completes must never have that pick overwritten by the
+	 * merchant's stale default once the deferred retry finally fires. `entry.records.settlement`
+	 * no longer carries the implicit default's own key once `onSelectFor()` runs — see
+	 * `applyPendingDefaultLocality()`'s own docblock for exactly what disarms it.
+	 */
+	it( 'does NOT resurrect the default over a customer\'s own pick made before the region field is promoted (issue #536 round 2, control)', () => {
+		bootWithDefaultLocality( { mode: { region: 'related-list' } } );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city2', label: 'Жуковский', level: 'settlement',
+			record: {
+				key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				settlement: { name: 'Жуковский', type: '' }, label: 'Жуковский',
+			},
+		} );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Жуковский' );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const blank = document.createElement( 'option' );
+
+		blank.value = '';
+		select.appendChild( blank );
+
+		const option = document.createElement( 'option' );
+
+		option.value = 'ТВЕРСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Тверская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+		window.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		// The merchant's default ('Тверская область') never gets forced in over the customer's
+		// own pick — the settlement default's own retry disarmed the moment the real pick landed.
+		expect( document.getElementById( 'billing_state' ).value ).not.toBe( 'ТВЕРСКАЯ ОБЛАСТЬ' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Жуковский' );
+	} );
 } );
 
 // -----------------------------------------------------------------------
