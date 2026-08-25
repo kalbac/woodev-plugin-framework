@@ -7,21 +7,23 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-26 (s93).** Merged: **#533** (#526). **TWO PRs OPEN:** **#535** (#530, popular
-settlements shown to the customer) — operator accepted the visuals; **#537** (#536 fixed default
-made visible, plus #538 and #541), stacked on #535. **#537 is NOT ready: #541 is unfixed and its
-real cause is now known** — in `related-list` a region pick waits ~10.5 s for `/list` before
-`onSelectFor()` runs at all, so the busy state arrives after the customer has been staring at an
-inert field. Reference for the fix is IN this repo: the same scenario is already correct when the
-region axis is `ajax-select2`.
+**As of 2026-08-26 (s94).** Merged this session: **#535** (#530, popular settlements shown to the
+customer) — `6017a0c`. **ONE PR OPEN: #543**, carrying #536, #538, #541, #540 and part 1 of #539.
+It **waits on the operator's rig pass** and on nothing else; every check is green.
+
+⚠ **#537 no longer exists as a PR.** Squash-merging #535 deleted its head branch, which was #537's
+BASE, and GitHub auto-CLOSED #537 — a closed PR whose base branch is gone cannot be reopened or
+retargeted (`Cannot change the base branch of a closed pull request`). The branch was rebased onto
+`main` (`git rebase --onto origin/main d966b00`, dropping the two #530 commits) and re-opened as
+**#543**, same content. This is the `stacked-pr-github-mechanics` gotcha, one symptom further than
+it was written for.
 
 **The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan). TS was
 measured and scoped: `src/` only (#542), never the raw-served frontend.
 
-**Baselines on `main` after #526, measured in the PRIMARY checkout:** `composer check` **2787**
-unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
-**On PR #535's branch:** **2791** / 6826 / **66 skipped**; jest **1491**.
-**On PR #537's branch:** **2798** / 6835 / **66 skipped**; jest **1508**.
+**Baselines, all measured in the PRIMARY checkout, 26.08.2026.** `main` after #535:
+`composer check` **2791** / 6826 / **66 skipped**; jest **1491**.
+**On PR #543's branch:** **2800** / 6839 / **66 skipped**; jest **1535**.
 
 ⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
 stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
@@ -35,15 +37,19 @@ WooCommerce refuse the order). Detail → `sessions/s92.md`.
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
-**Popular settlements' customer-facing half is BUILT and rig-verified, in PR #535 (#530)** — empty
-state, ranking and region filtering. Two things it taught, both now gotchas: seeding real
-`<option>`s is **not** sufficient in ajax mode (select2's ajax data adapter ignores DOM options and
-enforces `minimumInputLength`), and a popular list must never arrive PRE-SELECTED — the browser's
-own reset-selectedness algorithm picks the first option unless the blank one is attached first and
-explicitly selected.
+**Popular settlements' customer-facing half is MERGED (#530 via #535)** — empty state, ranking,
+region filtering. What it taught is two gotchas: seeding `<option>`s is not sufficient in ajax
+mode, and a popular list must never arrive PRE-SELECTED.
 
-**Open cards from s92-s93:** #523, #524, #525, #527, #529, #531, #532, #538-#542. Which are
-COMMITMENTS, and where each was decided, is the handoff's carry-over section — not this file.
+**#541's real cause is an ASYMMETRY between the two select renderers, not the `/select` queue** —
+`ajax-select2` has the record in the pick, `related-list:region` must match label text against
+`/location/list` (9.7 s cold) first. New seam: `options.onResolving()`, a pick announced by LEVEL.
+Detail → `sessions/s94.md`; the near-miss it taught → gotcha
+`an-empty-list-while-the-search-runs-is-not-a-zero-result`.
+
+**Open cards from s92-s94:** #523, #524, #525, #527, #529, #531, #532, #537(closed, superseded),
+#539 (part 3 only), #542. Which are COMMITMENTS, and where each was decided, is the handoff's
+carry-over section — not this file.
 
 ## ⚠ The checkout location layer
 
@@ -101,7 +107,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **205**.
+Gotchas: **209**.
 
 ## Program status (high level)
 
@@ -199,13 +205,18 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `feat/536-default-locality-visible` (s93).** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
+- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `feat/536-default-locality-visible` (s94) — PR #543, left there deliberately for the operator's pass.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
   region-preset + settlement-search combination, which had never been run live. Options:
   `woodev_location_active_provider`, `woodev_location_field_mode_region`,
-  `woodev_location_field_mode_settlement`. Back to the older default: provider `dadata` and both
+  `woodev_location_field_mode_settlement`. **Also measured 26.08.2026, because the s93 handoff had
+  it wrong: `woodev_location_default_locality_policy` = `fixed` («Москва», `test-cdek:44`) and
+  `woodev_location_allow_custom_settlement` = `no`.** The handoff records that second option as
+  `yes`; it is not, so #528's tag row is correctly ABSENT on the rig — read as a regression once
+  before it was checked. Read the option, never a doc, before calling a missing tag row a bug.
+  Back to the older default: provider `dadata` and both
   axes `ajax-select2`. Note **DaData can never offer `related-list`** — the capability it
   structurally cannot have — so switching the provider back silently removes «Предустановленный
   список» from the region select too. Switching the provider also makes a customer record whose

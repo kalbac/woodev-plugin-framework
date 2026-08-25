@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 208 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 209 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -137,6 +137,7 @@
 
 ### [js/*] — JavaScript language traps
 - [js/select-value-space] **A select2 `language` callback returning `undefined` renders a BLANK message: the merge is `$.extend({}, EN, ours)`, so defining the key shadows English forever. OMIT it instead.** → [a-select2-language-callback-that-returns-undefined-renders-blank](gotchas/a-select2-language-callback-that-returns-undefined-renders-blank.md) (s93)
+- [js/select-value-space] **An empty list painted while the search is still running renders as «не найдено» — select2's `noResults` only asks "is the list empty?", never why. And a test that samples the hook after the transport returns cannot see it.** → [an-empty-list-while-the-search-runs-is-not-a-zero-result](gotchas/an-empty-list-while-the-search-runs-is-not-a-zero-result.md) (s94)
 - [js/select-value-space] **`select2:close` fires BEFORE `select2:select` — a guard that expects the pick to cancel the close cannot work, and a fake dispatching the other order pins a fiction.** → [select2-close-fires-before-select2-select](gotchas/select2-close-fires-before-select2-select.md) (s92)
 - [js/select-value-space] **A `<select>` is not an `<input>`: an unmatched `.value` write submits nothing, a bare `selectedIndex` leaves select2 stale, and select2 caches the option's data ON the node — so the first write works and every later one lies.** → [a-select-value-write-with-no-matching-option-submits-nothing](gotchas/a-select-value-write-with-no-matching-option-submits-nothing.md) (s86)
 - [js/jquery-event-worlds] **A jQuery `.trigger( 'change' )` fires no native event — and that is how select2 reports a pick.** → [jquery-trigger-change-fires-no-native-event](gotchas/jquery-trigger-change-fires-no-native-event.md) (s66)
