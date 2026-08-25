@@ -864,6 +864,45 @@ describe( 'ajax transport — local narrowing while the real search runs (#539)'
 		// 9.6-second window the customer used to spend looking at «Санкт-Петербург» and «Репино».
 		expect( fetchEntries ).toHaveBeenCalledTimes( 1 );
 		expect( success ).toHaveBeenCalledTimes( 1 );
+		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) )
+			.toEqual( [ 'Пушкин', 'Searching…' ] );
+	} );
+
+	// Round 2, found by the operator on the rig: with a local match the field showed «Пушкин» and
+	// nothing else, so the customer could not tell a search was still running. `append()` opens
+	// with `hideLoading()` (selectWoo.full.js:856), so ANY success() strips select2's own loading
+	// row — the early paint has to carry its own.
+	it( 'carries a loading row alongside the local matches, so the customer still sees a search running', () => {
+		const { config } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		const rows = success.mock.calls[ 0 ][ 0 ].results;
+		const loading = rows[ rows.length - 1 ];
+
+		expect( loading.text ).toBe( 'Searching…' );
+		// Shaped exactly as select2's own `showLoading()` shapes its row. `disabled` is what
+		// makes `option()` drop `data-selected`, and BOTH the click binding and
+		// `highlightFirstItem()` filter on that attribute — so this row cannot be clicked, cannot
+		// be keyboard-selected, and never steals the first-item highlight.
+		expect( loading.disabled ).toBe( true );
+		expect( loading.loading ).toBe( true );
+		// It must never look like a pickable entry: no id for select2 to resolve.
+		expect( loading.id ).toBeUndefined();
+	} );
+
+	it( 'the loading row goes LAST — the real matches stay at the top where the customer looks', () => {
+		const { config } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		expect( success.mock.calls[ 0 ][ 0 ].results[ 0 ].text ).toBe( 'Пушкин' );
+	} );
+
+	it( 'omits the loading row when WooCommerce localized no searching string — never a literal invented here', () => {
+		delete window.wc_country_select_params.i18n_searching;
+
+		const { config } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
 		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин' ] );
 	} );
 
@@ -889,16 +928,25 @@ describe( 'ajax transport — local narrowing while the real search runs (#539)'
 		expect( success.mock.calls[ 1 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин, Санкт-Петербург, Россия' ] );
 	} );
 
-	it( 'a term NO popular entry matches narrows to an empty list, and that empty list reads as SEARCHING, not as "not found"', () => {
+	it( 'a term NO popular entry matches shows the loading row ALONE — never an empty list, never "not found"', () => {
 		const { config } = buildAjax();
-		const { success, seenNoResults } = run( config, 'Выборг' );
+		const { success } = run( config, 'Выборг' );
 
-		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [] );
+		// Round 2 unified the two branches: a zero-match narrowing is a ONE-row list rather than
+		// an empty one, so the customer sees the same "still searching" statement whether or not
+		// a popular entry happened to match, and `noResults` is not reached on this path at all.
+		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Searching…' ] );
+	} );
 
-		// THE HALF THAT WAS WRONG ON THE FIRST RIG PASS, and the reason the flag is raised
-		// before the narrowing rather than before the request: an empty narrowed list otherwise
-		// rendered «Поиск не дал результатов» INSTANTLY, over a search that had not been sent.
-		// Trading the stale frame for a false one is not a fix. Sampled AT RENDER TIME — see
+	it( 'and the noResults guard STILL answers "searching" while in flight — the invariant does not rest on that row', () => {
+		const { config } = buildAjax();
+		const { seenNoResults } = run( config, 'Выборг' );
+
+		// THE HALF THAT WAS WRONG ON THE FIRST RIG PASS, and the reason the flag is raised before
+		// the narrowing rather than before the request: an empty list otherwise rendered «Поиск не
+		// дал результатов» INSTANTLY, over a search that had not been sent. Kept as
+		// belt-and-braces now that the loading row keeps the list non-empty — a future edit that
+		// drops the row must not silently bring the false frame back. Sampled AT RENDER TIME; see
 		// `run()`'s own comment for why sampling it afterwards proves nothing.
 		expect( seenNoResults ).toEqual( [ 'Searching…' ] );
 	} );

@@ -609,14 +609,20 @@
 						return inputTooShort( { input: term, minimum: floor } );
 					}
 
-					// Issue #539: the local narrowing above can hand select2 an empty list while
-					// the provider's own answer for the SAME term is still in flight. That is
-					// "still looking", not "nothing exists" — and select2 reaches this hook for
-					// both, because it only ever asks "is the rendered list empty?". `searching`
-					// is WooCommerce's own `i18n_searching`, already wired by
-					// `select2LanguageFor()`, so this shows the customer the exact string they
-					// were already seeing in the prepended loading row — never a string invented
-					// here (#526's rule).
+					// Issue #539: an empty list rendered while the provider's answer for the SAME
+					// term is still in flight is "still looking", not "nothing exists" — and
+					// select2 reaches this hook for both, because it only ever asks "is the
+					// rendered list empty?". `searching` is WooCommerce's own `i18n_searching`,
+					// already wired by `select2LanguageFor()`, so this shows the customer the
+					// exact string they were already seeing in the prepended loading row — never
+					// a string invented here (#526's rule).
+					//
+					// BELT-AND-BRACES since round 2, and deliberately kept: the transport now
+					// appends its own loading row to the narrowing, so a zero-match narrowing is
+					// a one-row list and this hook is no longer reached on that path. It stays
+					// because the invariant it defends — never say "not found" over a live
+					// search — must not depend on some future edit remembering to keep that row.
+					// Same reasoning as the `stale` flag's own docblock below.
 					if ( searchInFlight && 'function' === typeof searching ) {
 						return searching( params );
 					}
@@ -809,7 +815,38 @@
 					searchInFlight = true;
 
 					if ( popularAvailable ) {
-						success( { results: seed.applyEntries( matchingPopular( seed.popular(), term ), false ).map( toSelect2Result ) } );
+						var narrowed = seed.applyEntries( matchingPopular( seed.popular(), term ), false ).map( toSelect2Result );
+
+						// #539 round 2, OPERATOR ON THE RIG: with a local match the field showed
+						// «Пушкин» and NOTHING else — the customer could not tell a search was
+						// still running. The zero-match case looked right only by accident, via
+						// the `noResults` wrap above.
+						//
+						// The cause is in select2, read in the rig's own vendored bundle:
+						// `container.on('query')` prepends a loading row (`showLoading()`,
+						// selectWoo.full.js:940-954), and `Results.prototype.append()` opens with
+						// `hideLoading()` (:856) — so EVERY `success()` removes it, including
+						// this early one. Nothing about our list is special; painting anything at
+						// all takes the indicator away.
+						//
+						// So re-state it as a result row of our own, shaped EXACTLY as
+						// `showLoading()` shapes its own (`{disabled, loading, text}`) rather
+						// than invented: `Results.prototype.option()` (:960-975) drops
+						// `data-selected` for a `disabled` item, and BOTH the click binding
+						// (`mouseup` delegated to `.select2-results__option[data-selected]`,
+						// :1232) and `highlightFirstItem()` (:891-905) filter on that same
+						// attribute — so this row cannot be clicked, cannot be keyboard-selected
+						// and never steals the first-item highlight. Verified in source, not
+						// assumed.
+						//
+						// It also makes the two cases agree: a zero-match narrowing is now a list
+						// of exactly this one row rather than an empty list, so `noResults` is not
+						// reached at all and both branches say the same thing the same way.
+						if ( 'function' === typeof searching ) {
+							narrowed.push( { disabled: true, loading: true, text: searching( { term: term } ) } );
+						}
+
+						success( { results: narrowed } );
 					}
 
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
