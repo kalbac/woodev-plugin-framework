@@ -9,7 +9,6 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
 
 class FieldSchemaTest extends TestCase {
 
