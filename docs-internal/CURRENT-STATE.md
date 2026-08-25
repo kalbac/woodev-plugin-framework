@@ -7,18 +7,25 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-25 (s91, overnight).** Merged: **#507** (#494 + #506), **#513** (#498), **#516**
-(#497). **Two PRs are OPEN and waiting on the operator's EYES, not his approval** — both green on
-every CI check:
+**As of 2026-08-25 (s91).** Merged: **#507** (#494 + #506), **#513** (#498), **#516** (#497),
+**#508** (#505) — **the operator verified the «Инструменты» section on the rig and accepted it, so
+#488 is CLOSED in full.**
 
-| PR | Card | Why it is not merged |
-|---|---|---|
-| **#508** | **#505** — «Инструменты» section | Two critic rounds, all blocking findings fixed and mutation-verified. **A new admin surface nobody has seen in a browser.** |
-| **#509** | **#502** — an implicit default must not unlock the address field | Two rounds, rig-verified before/after. **Customer-visible, and #517 / #518 are decisions only he can make.** |
+**One PR is open: #509 (#502).** It is green on every check and rig-verified before/after, and it is
+**deliberately NOT merged**: it waits on **#517**, which the operator settled 25.08.2026 —
 
-**Cards filed:** #510, #511, #512, #514, #515, #517, #518. **#503 (маска телефона) is in `Бэклог`
-with the operator's answer and was NOT started** — the night went to #505, #502 and three critic
-rounds.
+| Decision | What was settled |
+|---|---|
+| **#517** | **Implement `onAbandon` in `location-select-modes.js` FIRST, then merge #509.** Merging first would knowingly widen a customer-blocking dead end to `fixed` stores. |
+| **#518** | **A pickup selection lifts the "implicit" flag** — the settlement record the map mounted on stops being implicit the moment the customer picks a point, and the address unlocks. The stricter alternative (never mount the map on an implicit locality) was rejected: it removes a scenario that works today. |
+
+Both decisions are written on the issues themselves, with their reasoning and what to build.
+
+**Cards filed this session:** #510, #511, #512, #514, #515, #517, #518, #520.
+
+**#520 is the honest limit of the #505 acceptance:** the tools were exercised only against an EMPTY
+table (operator: «нет живых данных, поэтому найдено 0»). D6's `updated` / `deleted` / `failed`
+outcomes and the partial-failure path have never run against real rows.
 
 **`main`'s unit baseline is 2701 tests / 66 skipped**, jest **1380** — measured 25.08.2026. The 2718
 every handoff had been quoting was STALE and was carried into every brief this session before a
@@ -28,10 +35,8 @@ critic reconciled it.
 `.git` file carries `gitdir: D:/…`, which WSL git does not treat as absolute. The canary rule worked —
 it reviewed nothing rather than inventing a review. Critics were Claude Opus. Card **#510**.
 
-**Three confident conclusions were wrong this session and each was killed by a measurement or an
-independent pass** — #502's own card hypothesis, my own fix for it (it re-opened the bug one click
-later), and "CI is stalled" on #508 (the PR was `DIRTY`; GitHub schedules no `pull_request` workflow
-on a conflicted branch). Detail: `sessions/s91.md`.
+**A PR with merge conflicts is `DIRTY` and GitHub schedules NO `pull_request` workflow on it** — CI
+silence there is a conflict, not a queue stall. Cost #508 a wasted diagnosis (`sessions/s91.md`).
 
 ## ⚠ The checkout location layer
 
@@ -46,9 +51,9 @@ ownership rather than a name heuristic. Gotcha:
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488 and is now done bar D8. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
 | **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path.** **Slice 3's D5–D7 are MERGED (#500 server, #501 client): the lazy check inside `/select`, D6's four outcomes, and D7's adopt-or-cancel with «Данные не актуальны, выберите заново».** **Slice 3's D8 is BUILT and green in PR #508** (card #505): the «Инструменты» section, a `woodev_shipping_tools` filter carrying typed `Shipping_Tool` objects, a `POST /settings/{provider}/tool/{tool}/run` route, and the two merchant actions bridging in from the location layer through that public seam. **Not merged — it is admin UI nobody has looked at.** Its two critic reports are on the branch under `docs-internal/reviews/`. |
 | **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
-| **#502** | **PR #509 open.** An implicit default locality unlocked the address field off a settlement the customer never picked and cannot see. Fixed in two rounds; the second added `implicit` to the `/select` response, because the chain that route answers with is read through the lazy trigger for the default-locality policy, not echoed from the write. **#517 and #518 are the two open decisions.** |
-| **#517** | Инбокс. The #350 escape hatch does not exist in `ajax-select2` / `related-list` mode — `location-select-modes.js` never calls `onAbandon`. Pre-existing under `default_locality_policy = off`; #509 removes the fig leaf that covered it for `fixed` stores. |
-| **#518** | Инбокс. `pickup-mount.js` ignores `detail.implicit`, so a customer can reach a pickup point with the address field still `disabled` — and a disabled input is not serialized into the checkout POST. #509 creates that intersection. |
+| **#502** | **PR #509 open, green, NOT to be merged until #517 lands.** An implicit default locality unlocked the address field off a settlement the customer never picked and cannot see. Fixed in two rounds; the second added `implicit` to the `/select` response, because the chain that route answers with is read through the lazy trigger for the default-locality policy, not echoed from the write. |
+| **#517** | **DECIDED 25.08 — build it, and #509 waits for it.** The #350 escape hatch does not exist in `ajax-select2` / `related-list` mode: `location-select-modes.js` never calls `onAbandon`, so `entry.unresolved[level]` is never written and the lock can never lift for a customer whose town the provider does not carry. Fire `onAbandon` on a COMPLETED search over a non-empty query that returned nothing — not on an empty query, a cancelled request or a transport error. |
+| **#518** | **DECIDED 25.08 — a pickup selection lifts the implicit flag.** `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
 | **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
 | **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
@@ -120,13 +125,6 @@ Gotchas: **201**.
 | REST API | ✅ | ✅ | Plugin REST routes |
 | PHPStan | ✅ | — | Level 3, **no baseline** (`phpstan-baseline.neon` removed; do not reintroduce) |
 | Documentation | ✅ | — | Two-tier: `docs/` (GH Pages) + `docs-internal/` (AI agents) |
-
-## P6 gate evidence (reference)
-
-Base `Woodev_Plugin` is platform-neutral (**zero** WC/HPOS-named methods; enforced by
-`PlatformNeutralBaseHasNoWcMethodTest`, `PlatformNeutralRestApiTest`, `BootstrapRegistrationTest`)
-and not a god-object (`woodev/class-plugin.php` ~1,274 lines / 74 methods). Detail →
-`wiki/architecture.md`.
 
 ## Known Bugs / Open debt
 
