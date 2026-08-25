@@ -1943,7 +1943,12 @@
 		var level = record && 'string' === typeof record.level ? record.level : null;
 		var node = level ? chainNodeForLevel( entry, level ) : null;
 
-		adoptChain( entry, body && body.chain, protectedLevel );
+		// The fourth argument is NOT decorative and NOT always false (issue #502, s91
+		// critic MAJOR-1): this response wrote NOTHING before reading the chain — that is
+		// the D7 cancel path's whole point — so under a `fixed` default-locality policy the
+		// chain it answers with IS the merchant's default guess. Adopting it as explicit
+		// unlocked the address field off a locality the customer never chose.
+		adoptChain( entry, body && body.chain, protectedLevel, !! ( body && body.implicit ) );
 
 		if ( node && level !== protectedLevel ) {
 			clearChainField( entry, level );
@@ -2031,7 +2036,11 @@
 				// server, so it cannot honestly speak to that level at all; adopting it as
 				// "dropped" would null out the optimistic write onSelectFor() already made. See
 				// adoptChain()'s own docblock for the full reasoning.
-				adoptChain( entry, body && body.chain, entry.pendingRecord ? entry.pendingRecord.level : null );
+				// `body.implicit` for the same reason as the cancel path (issue #502): this chain
+				// is read from the server's own store, not from the record just posted, and a
+				// `persisted: false` write (a guest whose cart cookie has not initialized) leaves
+				// the store answering with the implicit default instead.
+				adoptChain( entry, body && body.chain, entry.pendingRecord ? entry.pendingRecord.level : null, !! ( body && body.implicit ) );
 
 				// Issue #337: the server's own chain is authoritative ({@see adoptChain}), so a
 				// repair that DROPPED the settlement level must re-lock the address field the
@@ -3260,11 +3269,46 @@
 			return true;
 		}
 
-		if ( null === scopeKeyFor( entry, 'address' ) ) {
+		// ISSUE #502 — AN IMPLICIT DEFAULT IS NOT A PICK. `scopeKeyFor()` answers "is there a
+		// settlement key to scope by", which is the right question for a `/suggest` `within` and
+		// the WRONG one for this lock: the store's default-locality policy (spec §4.6 / D11)
+		// seeds a settlement record for a customer who has picked nothing, and {@see prefill}
+		// adopts it, so the lock lifted on a locality the customer never chose. Measured on the
+		// rig with `woodev_location_default_locality_policy = fixed`: the settlement field
+		// renders EMPTY (in `ajax-select2` mode a bare «Выберите…», in `typeahead` mode a blank
+		// input — neither renderer writes a seeded record's text) while the address field is
+		// live. That is precisely what D11 forbids: «Implicit records participate in rate
+		// calculation but never suppress "please choose your locality" prompts», and this lock
+		// IS such a prompt — it is the whole mechanism issue #337 introduced for it.
+		//
+		// The default locality still does its own job untouched: it scopes suggestions and rate
+		// calculation exactly as before, because `scopeKeyFor()` itself is deliberately NOT
+		// changed here. Only the lock stops treating it as an answer.
+		if ( null === scopeKeyFor( entry, 'address' ) || settlementRecordIsImplicit( entry ) ) {
 			return ! settlementTextIsKnownUnresolved( entry );
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether the settlement record the lock would otherwise unlock off is the store's
+	 * DEFAULT-LOCALITY guess rather than the customer's own selection (issue #502).
+	 *
+	 * The flag is written by {@see adoptChain}: from `config.location.implicit` on the boot-time
+	 * seed, and from the `/select` response's own `implicit` key on the two settle paths — see
+	 * that function's docblock for why the response needs one at all. The optimistic record
+	 * {@see onSelectFor} writes is the raw `/suggest` payload and carries no flag, so it reads as
+	 * a real pick, which is what it is; `Location_Record::from_array()` builds that payload from a
+	 * strict whitelist of known keys, so a provider cannot forge one either.
+	 *
+	 * @param {Object} entry
+	 * @returns {boolean}
+	 */
+	function settlementRecordIsImplicit( entry ) {
+		var record = entry.records.settlement;
+
+		return !! ( record && record.implicit );
 	}
 
 	/**
@@ -4116,14 +4160,38 @@
 	 * one via {@see settleSelect}'s dequeue, adopts a chain that (by then) genuinely does cover
 	 * it.
 	 *
+	 * `implicit` (issue #502) marks the adopted records as the store's DEFAULT LOCALITY rather
+	 * than anything the customer picked — the flag the server publishes as
+	 * `config.location.implicit`, carried onto the records themselves so
+	 * {@see isAddressLocked} can tell the two apart later. It is chain-level on the server too
+	 * (`Customer_Location_Store`'s precedence gate "looks only at the chain's own `implicit`
+	 * flag", and any explicit write drops it for the whole chain), which is why one argument
+	 * covers every level this call adopts.
+	 *
+	 * EVERY caller must pass it. This corrects the first version of this fix, which claimed only
+	 * {@see prefill}'s boot-time call needed to, on the reasoning that a `/select` response is by
+	 * definition a customer's own pick and the route persists it "always EXPLICIT (spec D11)".
+	 * The route does persist explicitly, but the `chain` it ANSWERS with is not the thing it just
+	 * persisted: the server reads that from `Location_Service::get_customer_chain()`, which is
+	 * itself the lazy trigger for the store-level default-locality policy. A D7 `cancelled`
+	 * response writes nothing at all before reading it, and a `persisted: false` response (a guest
+	 * whose cart cookie has not initialized) never wrote either — both then carry the merchant's
+	 * default guess. The server publishes `implicit` alongside `chain` on both shapes for exactly
+	 * this reason.
+	 *
+	 * Adopting a record as implicit is never a permanent verdict: the customer's next real pick
+	 * writes a raw `/suggest` record through {@see onSelectFor}, which carries no flag at all.
+	 *
 	 * @param {Object}      entry
 	 * @param {*}           chain          `{ [level]: { key, level } }` per spec §7, or anything else.
 	 * @param {?string}     [protectedLevel] A level to leave untouched regardless of whether
 	 *                                       `chain` names it — see this docblock's own section
 	 *                                       above.
+	 * @param {boolean}     [implicit]     Whether these records are the store's default-locality
+	 *                                     guess rather than a customer selection (issue #502).
 	 * @returns {void}
 	 */
-	function adoptChain( entry, chain, protectedLevel ) {
+	function adoptChain( entry, chain, protectedLevel, implicit ) {
 		if ( ! chain || 'object' !== typeof chain ) {
 			return;
 		}
@@ -4142,7 +4210,7 @@
 				// {@see fireLocationApplied} publishes a settlement key only for a confirmed
 				// record, so an optimistic one can never be handed to `pickup-mount.js` as
 				// the map's addressing locality (adversarial review).
-				adopted[ level ] = { key: node.key, confirmed: true };
+				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit };
 			}
 		} );
 
@@ -4238,14 +4306,23 @@
 			// absent/malformed `chain` (older server, or none at all — {@see adoptChain} is then
 			// a silent no-op) degrades to EXACTLY today's single-level seed, and `current` always
 			// wins over its own chain entry for its own level regardless.
-			adoptChain( entry, entry.location.chain );
+			adoptChain( entry, entry.location.chain, null, !! entry.location.implicit );
 
 			// `confirmed` for the same reason every chain entry above carries it: this seed
 			// is the SERVER's own rendered config block, not an optimistic client write —
 			// {@see fireLocationApplied} may publish it as the map's addressing locality.
 			// Without it this line would DOWNGRADE the record adoptChain() just confirmed
 			// for this very level.
-			entry.records[ current.level ] = { key: current.key, confirmed: true };
+			//
+			// `implicit` travels with it for the same reason (issue #502) — this line REPLACES
+			// whatever adoptChain() just wrote for `current.level`, so omitting the flag here
+			// would silently launder the store's default locality into a record that looks
+			// like a customer pick at exactly the level the lock reads.
+			entry.records[ current.level ] = {
+				key: current.key,
+				confirmed: true,
+				implicit: !! entry.location.implicit,
+			};
 
 			// The event still fires for `current` ONLY, unchanged — the chain is restoration
 			// plumbing for scoping (see scopeKeyFor()), never a second source of "the customer's

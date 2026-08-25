@@ -1808,6 +1808,93 @@ final class LocationControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Issue #502, s91 critic finding MAJOR-1. `/select` used to answer with a
+	 * `chain` and no word about its provenance, and the client therefore had to
+	 * guess — it guessed "a select response is a customer's own pick, so this is
+	 * explicit". That guess is wrong on two shapes, because the chain is read from
+	 * `Location_Service::get_customer_chain()`, which is the LAZY TRIGGER for the
+	 * store-level default-locality policy rather than an echo of what was just
+	 * written. Publishing the flag is what lets the client tell the merchant's
+	 * default guess from the customer's answer, which spec §4.6/D11 requires:
+	 * "Implicit records participate in rate calculation but never suppress 'please
+	 * choose your locality' prompts."
+	 */
+	public function test_select_response_publishes_the_chains_implicit_flag(): void {
+		// `persist_result = false` is not incidental — it is one of the exact two
+		// shapes where the flag survives to reach the client. A guest whose
+		// session/cart cookie has not initialized cannot be written to (gotcha
+		// `guest-session-write-needs-the-cart-cookie`), so the store keeps answering
+		// with the merchant's default and this route reports it unchanged.
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			[ 'record' => $this->record(), 'implicit' => true, 'saved_at' => 0 ],
+			false
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $this->record()->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertArrayHasKey( 'implicit', $result, 'Without this key the client cannot tell the store default from a real pick.' );
+		$this->assertTrue( $result['implicit'] );
+	}
+
+	public function test_select_response_reports_an_explicit_chain_as_explicit(): void {
+		// The control: same call, same shape, same failed write, only the stored
+		// flag differs.
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			[ 'record' => $this->record(), 'implicit' => false, 'saved_at' => 0 ],
+			false
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $this->record()->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertFalse( $result['implicit'] );
+	}
+
+	public function test_a_successful_write_reports_the_chain_as_explicit_even_over_an_implicit_one(): void {
+		// The store's own precedence rule (spec D11: "A real customer selection
+		// overwrites it and drops the flag") seen from the outside: the customer had
+		// only the merchant's default, picked for real, and the response must now
+		// say explicit — otherwise the address field would stay locked after the very
+		// pick that was supposed to free it.
+		$service = new Location_Controller_Fake_Service(
+			true,
+			null,
+			[ 'record' => $this->record(), 'implicit' => true, 'saved_at' => 0 ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $this->record()->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertTrue( $result['persisted'] );
+		$this->assertFalse( $result['implicit'] );
+	}
+
+	public function test_select_response_implicit_is_false_when_there_is_no_chain_at_all(): void {
+		// No stored record: the client must read "nothing implicit here", not a
+		// missing key it would have to interpret.
+		$service = new Location_Controller_Fake_Service( true, null, null, false );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'record' => $this->record()->to_array() ] );
+		$result  = $ctrl->handle_select_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [], $result['chain'] );
+		$this->assertFalse( $result['implicit'] );
+	}
+
 	public function test_select_response_chain_is_empty_array_when_the_write_did_not_persist(): void {
 		// persist_result = false, and no pre-existing chain — mirrors a guest
 		// whose session/cart cookie has not initialized yet (issue #324).
@@ -2038,6 +2125,11 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNull( $result['current'] );
 		$this->assertFalse( $result['persisted'] );
 		$this->assertSame( [], $result['chain'] );
+		// Issue #502: the cancel shape writes NOTHING before reading the chain, so it
+		// is the sharper of the two paths that can hand the client the merchant's
+		// default. The key must be present on this shape too, not only the ordinary one.
+		$this->assertArrayHasKey( 'implicit', $result );
+		$this->assertFalse( $result['implicit'] );
 		$this->assertCount( 0, $service->set_calls, 'Nothing may be written to the customer store on cancel.' );
 	}
 

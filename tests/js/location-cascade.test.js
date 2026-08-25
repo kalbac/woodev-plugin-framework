@@ -5165,6 +5165,163 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
+	// ISSUE #502 — measured on the rig, s91. With
+	// `woodev_location_default_locality_policy = fixed` the server seeds a settlement record
+	// the customer never picked and flags the chain `implicit`; NEITHER settlement renderer
+	// writes that record's text into the field, so the customer saw an empty НП field beside a
+	// live address field. Spec §4.6/D11: «Implicit records participate in rate calculation but
+	// never suppress "please choose your locality" prompts» — and this lock is such a prompt.
+	it( 'stays LOCKED when the restored settlement record is the store\'s implicit default (#502)', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'unlocks on the SAME restored record once it is explicit rather than implicit (#502 control)', () => {
+		// The control the measurement needs: the ONLY difference from the test above is the
+		// flag, so a failure here would mean the fix locked something it should not have.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: false,
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'unlocks once the customer picks a settlement over an implicit default (#502)', async () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:implicit-seed', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:implicit-seed', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+
+		await pickSettlementAndSettle();
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'still SCOPES address suggestions by the implicit default while the field is locked (#502)', () => {
+		// The default locality keeps doing its own job — the fix touches the lock only, never
+		// `scopeKeyFor()`. Read off the address node's own fetch callback, which resolves its
+		// scope live at call time.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		callFor( 'billing_address_1' ).fetch( 'Тверская' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( req.url ).toContain( 'level=address' );
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:0c5b2444' ) );
+	} );
+
+	// ISSUE #502, s91 critic finding MAJOR-1. The first version of this fix passed the implicit
+	// flag ONLY on the boot-time seed, on the reasoning that a `/select` response is by definition
+	// a customer's own pick. The route does persist explicitly — but the `chain` it ANSWERS with is
+	// read from the server's own store through the accessor that is itself the lazy trigger for the
+	// default-locality policy, so a response that wrote nothing (D7 `cancelled`) or failed to write
+	// (`persisted: false`) hands the client the merchant's default guess. Adopting that as explicit
+	// re-opened #502 one click after the fix had produced the correct state.
+	//
+	// A CORRECTION TO THE CRITIC'S OWN WORKED SCENARIO, so a later reader does not chase it: it
+	// numbered the reachable path as a cancel of the SETTLEMENT pick. That exact step does not
+	// reach the defect — `handleCancelledSelect()` calls `clearChainField( entry, level )`, which
+	// sets `entry.records[ level ] = null`, so a cancelled settlement re-locks the address whatever
+	// the flag says (verified: the control below, written for that shape first, could not be made
+	// to unlock). The finding is real one level down: a cancel at a level BELOW settlement leaves
+	// `records.settlement` holding whatever the chain just supplied — hence `ADDRESS_ITEM`,
+	// the fixture this describe block already declares further down, rather than a settlement pick.
+	it( 'does NOT unlock off a cancelled response whose chain is the implicit default (#502)', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			cancelled: true,
+			reason: 'stale_record',
+			message: 'Данные не актуальны, выберите заново',
+			current: null,
+			persisted: false,
+			chain: { settlement: { key: 'dadata:store-default', level: 'settlement' } },
+			implicit: true,
+		} );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'DOES unlock off a cancelled response whose chain is explicit — the control for the test above (#502)', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_address_1' ), ADDRESS_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			cancelled: true,
+			reason: 'stale_record',
+			message: 'Данные не актуальны, выберите заново',
+			current: null,
+			persisted: false,
+			chain: { settlement: { key: 'dadata:a-real-earlier-pick', level: 'settlement' } },
+			implicit: false,
+		} );
+		await flushMicrotasks();
+
+		// Only the flag differs from the test above, so a failure here would mean the fix locks
+		// something it must not.
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'does NOT unlock off a persisted:false response whose chain is the implicit default (#502)', async () => {
+		// A guest whose session/cart cookie has not initialized: the explicit write fails, the
+		// server then resolves and serves the implicit default, and the client used to adopt that
+		// default's key as a confirmed customer pick.
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: 'dadata:store-default', level: 'settlement' },
+			persisted: false,
+			chain: { settlement: { key: 'dadata:store-default', level: 'settlement' } },
+			implicit: true,
+		} );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'DOES unlock off a persisted:false response whose chain is explicit — the second control (#502)', async () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_city' ), SETTLEMENT_ITEM );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( {
+			current: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' },
+			persisted: false,
+			chain: { settlement: { key: SETTLEMENT_ITEM.record.key, level: 'settlement' } },
+			implicit: false,
+		} );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
 	it( 'stays locked when the restored record is an ADDRESS with no settlement behind it', () => {
 		// The pre-#337 state itself: an address picked while no settlement ever was. The chain
 		// the server restores names no settlement, so there is still nothing keying the pickup

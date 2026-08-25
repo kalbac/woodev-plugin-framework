@@ -1343,6 +1343,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * simply whatever chain the store already held — still the honest,
 			 * current server-side answer.
 			 */
+			$chain_block = $this->customer_chain_response();
+
 			return rest_ensure_response(
 				[
 					'current'   => [
@@ -1350,33 +1352,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 						'level' => $record->level(),
 					],
 					'persisted' => $persisted,
-					'chain'     => $this->customer_chain_response(),
+					'chain'     => $chain_block['chain'],
+					'implicit'  => $chain_block['implicit'],
 				]
 			);
 		}
 
 
 		/**
-		 * Builds the `chain` response block {@see self::handle_select_request()}
+		 * Builds the `chain` + `implicit` response block {@see self::handle_select_request()}
 		 * returns on every shape (ordinary and D7-cancelled) — every level in the
-		 * customer's CURRENT chain, `{ key, level }` each, keyed by level. Reads
-		 * straight from {@see Location_Service::get_customer_chain()}, so calling
-		 * this WITHOUT an intervening write (the D7 cancel path) honestly reports
-		 * "the server's chain as it stands — unchanged by this request" (spec D7),
-		 * and calling it AFTER {@see Location_Service::set_customer_record()}
-		 * reports the freshly-written state — same accessor, whichever is true at
-		 * the moment it is called.
+		 * customer's CURRENT chain, `{ key, level }` each, keyed by level, plus the
+		 * chain's own `implicit` flag. Reads straight from
+		 * {@see Location_Service::get_customer_chain()}, so calling this WITHOUT an
+		 * intervening write (the D7 cancel path) honestly reports "the server's chain
+		 * as it stands — unchanged by this request" (spec D7), and calling it AFTER
+		 * {@see Location_Service::set_customer_record()} reports the freshly-written
+		 * state — same accessor, whichever is true at the moment it is called.
+		 *
+		 * WHY `implicit` IS PUBLISHED HERE AT ALL (issue #502, s91 critic finding
+		 * MAJOR-1). It is tempting to reason that a `/select` response is by
+		 * definition the result of a customer's own pick, which this route does
+		 * persist "always EXPLICIT (spec D11)" — and to conclude the chain it answers
+		 * with must therefore be explicit too. That conclusion is FALSE, and it shipped
+		 * as a comment in the client before this flag existed. The chain is NOT the
+		 * thing this route just persisted: {@see Location_Service::get_customer_chain()}
+		 * is itself the LAZY TRIGGER for the store-level default-locality policy, so it
+		 * resolves and seeds the merchant's default whenever nothing explicit survives.
+		 * Two responses reach the client carrying that default:
+		 *
+		 * - the D7 `cancelled` shape ({@see self::cancelled_stale_record_response()}),
+		 *   which deliberately writes NOTHING before reading the chain;
+		 * - any response with `persisted: false` — a guest whose session/cart cookie has
+		 *   not initialized (gotcha `guest-session-write-needs-the-cart-cookie`).
+		 *
+		 * Without this flag the client is structurally unable to tell those apart from a
+		 * real pick, and #502 (an implicit default unlocking the address field) re-opens
+		 * one click after being fixed. Spec §4.6/D11: "Implicit records participate in
+		 * rate calculation but never suppress 'please choose your locality' prompts."
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Returns the chain under a `chain` key alongside `implicit`,
+		 *              instead of being the chain itself (issue #502). Both callers are
+		 *              private and in this file; nothing outside it consumed the old
+		 *              shape.
 		 *
-		 * @return array<string, array{key: string, level: string}>
+		 * @return array{chain: array<string, array{key: string, level: string}>, implicit: bool}
 		 */
 		private function customer_chain_response(): array {
-			$chain = [];
+			$chain    = [];
+			$implicit = false;
 
 			$customer_chain = $this->service->get_customer_chain();
 
 			if ( null !== $customer_chain ) {
+				// Read ONCE, both values off the same answer: a second
+				// get_customer_chain() call would re-run the lazy default resolution and
+				// could, in principle, disagree with the first.
+				$implicit = ! empty( $customer_chain['implicit'] );
+
 				foreach ( $customer_chain['records'] as $chain_level => $chain_record ) {
 					$chain[ $chain_level ] = [
 						'key'   => $chain_record->key(),
@@ -1385,7 +1419,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				}
 			}
 
-			return $chain;
+			return [
+				'chain'    => $chain,
+				'implicit' => $implicit,
+			];
 		}
 
 		/**
@@ -1408,16 +1445,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array{cancelled: bool, reason: string, message: string, current: null, persisted: bool, chain: array<string, array{key: string, level: string}>}
+		 * @return array{cancelled: bool, reason: string, message: string, current: null, persisted: bool, chain: array<string, array{key: string, level: string}>, implicit: bool}
 		 */
 		private function cancelled_stale_record_response(): array {
+			$chain_block = $this->customer_chain_response();
+
 			return [
 				'cancelled' => true,
 				'reason'    => 'stale_record',
 				'message'   => __( 'Данные не актуальны, выберите заново', 'woodev-plugin-framework' ),
 				'current'   => null,
 				'persisted' => false,
-				'chain'     => $this->customer_chain_response(),
+				'chain'     => $chain_block['chain'],
+				'implicit'  => $chain_block['implicit'],
 			];
 		}
 
