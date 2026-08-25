@@ -255,9 +255,12 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	} );
 
 	it( 'a missing wc_country_select_params OMITS every key, so select2 keeps its own English — a key defined-but-returning-undefined would render a BLANK message', () => {
-		// No `window.wc_country_select_params` at all: the dependency declared in
-		// `Checkout_Handler` should make this unreachable in production, but a third party
-		// can dequeue anything.
+		// No `window.wc_country_select_params` at all. The dependency declared in
+		// `Checkout_Handler` makes a missing HANDLE unlikely; the demonstrated route to
+		// missing PARAMS is WooCommerce's own `woocommerce_get_script_data` filter, which any
+		// plugin may use to strip msgids from the localized object. (An earlier version of
+		// this comment blamed "a third party can dequeue anything" — unverified, and not the
+		// route a re-critic could actually demonstrate.)
 		//
 		// The distinction this test pins is measured in the shipped selectWoo, not reasoned:
 		// `customTranslation.extend( baseTranslation )` is `$.extend( {}, base, ours )`

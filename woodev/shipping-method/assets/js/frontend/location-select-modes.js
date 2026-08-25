@@ -321,7 +321,18 @@
 		/**
 		 * WooCommerce ships the 1-item and n-item plurals as separate msgids with a `%qty%`
 		 * placeholder — mirroring `country-select.js`'s own branch rather than pluralizing
-		 * here. Wired only when BOTH msgids are present, since either branch is reachable.
+		 * here. Wired only when BOTH msgids are present.
+		 *
+		 * On requiring both: only `inputTooShort` is actually live in this layer today
+		 * (`minimumInputLengthFor()` returns 1 or 2, and both of ITS branches render — 2 with
+		 * an empty box, 1 after one character). `inputTooLong` and `maximumSelected` are dead
+		 * in practice, because this file never sets `maximumInputLength` or
+		 * `maximumSelectionLength` and select2 defaults both to 0. They are wired anyway for
+		 * the same reason the whole block is: a consumer that sets either option through a
+		 * filter should not get an English message back. Requiring both msgids is therefore
+		 * a uniform rule, not a per-key reachability claim — stated here because the first
+		 * version of this comment asserted all three were live, and a re-critic measured
+		 * otherwise.
 		 *
 		 * @param {string} name        The select2 `language` key.
 		 * @param {string} singularKey
@@ -735,10 +746,18 @@
 			// `i18n_no_matches` can answer (see its own docblock for why omission and not an
 			// `undefined`-returning callback). The abandon observation still has to happen in
 			// that case, so the wrap installs itself either way and returns `undefined` only
-			// when there was no string to begin with — at which point defining the key costs
-			// select2's English fallback, which is the deliberate trade: the RECORD of an
-			// abandoned search outranks the message shown for it, and this branch only reaches
-			// here at all when `onAbandon` is wired.
+			// when there was no string to begin with.
+			//
+			// KNOWN, ACCEPTED, and NOT unreachable — stated precisely because a re-critic
+			// refuted the first version of this comment, which called it impossible. Defining
+			// the key here costs select2's English fallback, so that one corner renders a
+			// BLANK zero-result message. Reaching it takes BOTH of two public filters used
+			// destructively at once: `woodev_location_i18n` emptying `noResults` (it is a
+			// hardcoded `__()` string otherwise) AND WooCommerce's own
+			// `woocommerce_get_script_data` suppressing `i18n_no_matches`. Neither default
+			// gets there. The trade is deliberate: the RECORD of an abandoned search is what
+			// #350/#517 exist for and outranks the message shown for it, and this branch is
+			// only reached at all when `onAbandon` is wired.
 			var localizedNoResults = config.language.noResults;
 
 			config.language.noResults = function( params ) {
