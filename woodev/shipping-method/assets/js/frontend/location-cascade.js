@@ -1399,11 +1399,36 @@
 	 * @param {{level: string, fieldId: string}} node
 	 * @returns {function(): Array}
 	 */
+	/**
+	 * The ancestor key set of the locality currently standing at `level` — the #536 fixed
+	 * default, or an ordinary earlier pick, whichever put it there.
+	 *
+	 * Reads `entry.records[ level ]` and NOT the DOM: a field's text is just a label, while the
+	 * record is the only thing carrying provider-published ancestors at all. Returns `[]` for
+	 * every "nothing to say" case (no record, a bare `{ key }` seed with no components, a
+	 * provider that publishes no ancestors) — {@see popularFor} treats `[]` as "do not narrow",
+	 * so an absent answer can never hide entries.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {string[]}
+	 */
+	function ancestorsOfCurrent( entry, level ) {
+		var record = entry.records[ level ];
+
+		return record && Array.isArray( record.ancestors ) ? record.ancestors : [];
+	}
+
 	function popularFor( entry, node ) {
 		return function() {
 			var country = countryFor( entry, node );
 			var raw = ( entry.location.popular && entry.location.popular[ country ] ) || [];
 			var within = scopeKeyFor( entry, node.level );
+			// Issue #538: the ancestor set of the locality ALREADY standing at this level, used
+			// only when there is no parent key to scope by. See the filter's own note below.
+			var siblingAncestors = within ? [] : ancestorsOfCurrent( entry, node.level );
 
 			var scoped = raw.filter( function( item ) {
 				// Defensive: every stored popular entry is settlement-level today (only an
@@ -1413,13 +1438,41 @@
 					return false;
 				}
 
-				if ( ! within ) {
+				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
+
+				if ( within ) {
+					return ancestors.indexOf( within ) !== -1;
+				}
+
+				// ISSUE #538 — A REGION THE CUSTOMER DID NOT PICK STILL SCOPES THE LIST.
+				// `scopeKeyFor()` answers "what key did the PARENT level record", and a region
+				// filled in by the #536 fixed-default path records no key at all: it writes the
+				// field's text, and the region key is not recoverable from the default record
+				// either. `Location_Record::parse_ancestors()` keeps ancestors as a flat SET and
+				// refuses a `level => key` map DELIBERATELY — measured against a live DaData
+				// capture where one row carries `city_fias_id` and `settlement_fias_id` at once,
+				// so no derivation can say which ancestor is "the region".
+				//
+				// Measured symptom (rig, fixed default «Москва», fresh incognito): the region
+				// field read «МОСКВА» while the settlement list still offered all six popular
+				// entries, three of them in Saint Petersburg.
+				//
+				// So this asks the one question the layer's own design says it CAN answer — do
+				// these two localities share an ancestor — instead of naming which ancestor is
+				// which. It is reached only when nothing recorded a parent key, so a real
+				// customer region pick keeps taking the exact branch above, unchanged.
+				//
+				// ⚠ INFERRED, not measured, and safe either way: a provider that also publishes a
+				// COUNTRY-level ancestor would make every entry intersect, degrading this to
+				// "show everything" — the pre-#538 behaviour, never hiding coverage. Measured for
+				// `test-cdek`: it publishes the region only (`ancestors: ["test-cdek:r81"]`).
+				if ( ! siblingAncestors.length ) {
 					return true;
 				}
 
-				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
-
-				return ancestors.indexOf( within ) !== -1;
+				return ancestors.some( function( key ) {
+					return siblingAncestors.indexOf( key ) !== -1;
+				} );
 			} );
 
 			scoped.forEach( function( item ) {
@@ -1854,6 +1907,29 @@
 	function enqueueSelect( entry, record ) {
 		entry.pendingRecord = record;
 
+		// Issue #541: the busy state belongs to the customer's ACTION, not to the request. It
+		// used to be raised inside sendNextSelect(), i.e. at the moment the request left — which
+		// is the same instant for an idle queue and up to eleven seconds late behind a busy one.
+		//
+		// MEASURED on the rig, `default_locality_policy = fixed`, a region picked 3.7 s after
+		// load while the boot-time default's own `/select` was still in flight:
+		//
+		//     >>> click on the region     +0 ms
+		//     /select left               +11 045 ms
+		//     SPINNER on shipping_state  +11 048 ms
+		//     /select answered           +17 905 ms
+		//
+		// The spinner was 3 ms behind its request and eleven seconds behind the human. The field
+		// sat inert the whole time, which is exactly the complaint s90 already fixed once for a
+		// 2.4-4.5 s gap — the operator's words then, recorded on BUSY_HOST_CLASS: «я уже даже
+		// подумал, что перестало работать». That fix attached the indicator to the request; the
+		// single-flight queue then re-opened the same gap in front of it.
+		//
+		// Marking here also correctly MOVES the spinner when a queued pick is superseded by a
+		// later one before either is sent: markSelectBusy() clears the previous marker first, so
+		// the indicator always sits on the field whose record is actually pending.
+		markSelectBusy( entry, record, entry.selectInFlight );
+
 		if ( entry.selectInFlight ) {
 			return; // a request is already in flight — it will pick this up in settleSelect().
 		}
@@ -2038,6 +2114,12 @@
 		entry.pendingRecord = null;
 		entry.selectInFlight = true;
 
+		// Issue #541: KEPT, and deliberately not removed when the mark moved to enqueueSelect().
+		// Not every path into this function comes through an enqueue: {@see settleSelect} dequeues
+		// whatever is pending when a request finishes, and that pending record's own field must
+		// carry the indicator for the request that is only NOW leaving. Re-marking the same record
+		// is idempotent — markSelectBusy() clears the previous marker first — so the ordinary
+		// enqueue-then-send path is unaffected.
 		markSelectBusy( entry, record );
 
 		var url = entry.location.endpoints.select;
@@ -2485,7 +2567,7 @@
 	 * @param {Object} record The record whose `/select` is being sent.
 	 * @returns {void}
 	 */
-	function markSelectBusy( entry, record ) {
+	function markSelectBusy( entry, record, queuedOnly ) {
 		clearSelectBusy( entry );
 
 		var level = record && 'string' === typeof record.level ? record.level : null;
@@ -2543,7 +2625,14 @@
 			el.readOnly = true;
 		}
 
-		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level };
+		// Issue #541: `queued` separates the two jobs this one marker was doing. The SPINNER is
+		// owed to the customer the moment they pick — including while the single-flight queue holds
+		// their request behind an earlier one. The LOCK is a different claim ("this level's parent
+		// is not confirmed yet") and must NOT fire for a request that has not even left, or a
+		// settlement pick would re-lock the address it just unlocked — the exact behaviour s90
+		// settled and {@see hasUnconfirmedParent}'s own docblock records. Caught by that decision's
+		// own regression test, not by review.
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level, queued: !! queuedOnly };
 
 		// Everything DEEPER than the level being confirmed is now waiting on an answer that has
 		// not arrived — see refreshDependentLocks().
@@ -2613,7 +2702,9 @@
 	 * @returns {boolean}
 	 */
 	function hasUnconfirmedParent( entry, level ) {
-		var busyLevel = entry.selectBusy ? entry.selectBusy.level : null;
+		// Issue #541: a marker raised for a pick still WAITING in the single-flight queue shows the
+		// spinner but asserts nothing about confirmation — nothing has been asked of the server yet.
+		var busyLevel = entry.selectBusy && ! entry.selectBusy.queued ? entry.selectBusy.level : null;
 
 		if ( ! busyLevel || ! level ) {
 			return false;
@@ -4554,6 +4645,22 @@
 
 				if ( defaultNode ) {
 					var defaultRecord = entry.location.defaultLocality.record;
+
+					// Issue #538: carry the default's ANCESTORS onto the seeded record. The seed
+					// written above for `current.level` is deliberately bare (`{ key, confirmed,
+					// implicit, implicitSource }`) because `current`/`chain` carry no components —
+					// but that leaves {@see popularFor} with nothing to narrow the popular list by
+					// when the region was filled in by this path rather than picked, and the
+					// customer saw settlements from other regions offered under an auto-filled
+					// «Москва».
+					//
+					// Additive on purpose: every other reader of this record keys off `key` /
+					// `confirmed` / `implicit`, and an extra field cannot disturb them. Only
+					// `ancestors` is copied, not the whole record — the components belong to
+					// `pendingDefaultLocality` below, which is what writes field text.
+					if ( Array.isArray( defaultRecord.ancestors ) && entry.records[ current.level ] ) {
+						entry.records[ current.level ].ancestors = defaultRecord.ancestors;
+					}
 
 					writeSilently( entry, defaultNode.fieldId, fieldValueFor( defaultRecord, current.level ) );
 

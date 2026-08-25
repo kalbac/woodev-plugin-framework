@@ -7951,3 +7951,166 @@ describe( 'the real rig sequence: starts CHECKED, uncheck, fill billing, check a
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
 	} );
 } );
+
+// -------------------------------------------------------------------
+// Issue #538 — a region the customer did NOT pick still scopes the popular list.
+//
+// The #536 fixed default fills the region field's TEXT but records no region KEY, and the key is
+// not recoverable from the default record either: Location_Record keeps ancestors as a flat SET
+// and refuses a `level => key` map deliberately. So popularFor() narrows by ancestor INTERSECTION
+// when nothing recorded a parent key.
+//
+// Measured on the rig before the fix (fixed default «Москва», fresh incognito): the region field
+// read «МОСКВА» while the settlement list still offered all six popular entries, three of them in
+// Saint Petersburg.
+// -------------------------------------------------------------------
+
+describe( 'options.popular() scoped by an AUTO-FILLED region — issue #538', () => {
+	const MSK = 'test-cdek:r81';
+	const SPB = 'test-cdek:r82';
+
+	const entryFor = ( key, name, region ) => ( {
+		key, label: name, level: 'settlement',
+		record: {
+			key, provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+			settlement: { name, type: 'г' }, label: name, ancestors: [ region ],
+		},
+	} );
+
+	const POPULAR = {
+		RU: [
+			entryFor( 'test-cdek:137', 'Санкт-Петербург', SPB ),
+			entryFor( 'test-cdek:28', 'Внуково', MSK ),
+			entryFor( 'test-cdek:394', 'Пушкин', SPB ),
+			entryFor( 'test-cdek:44', 'Москва', MSK ),
+		],
+	};
+
+	const DEFAULT_MSK = {
+		key: 'test-cdek:44', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+		region: { name: 'Москва', type: '' }, settlement: { name: 'Москва', type: '' },
+		label: 'Москва, Россия', ancestors: [ MSK ],
+	};
+
+	const popularCallbackAfterBoot = ( extra ) => {
+		const calls = [];
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el, options ) => {
+				calls.push( options );
+
+				return { detach: jest.fn() };
+			},
+			'custom-mode:region': () => ( { detach: jest.fn() } ),
+		};
+
+		boot( { region: true, settlement: true, mode: 'custom-mode', popular: POPULAR, ...extra } );
+
+		return calls[ 0 ].popular;
+	};
+
+	it( 'narrows to the auto-filled region — the defect the operator saw: three foreign-region entries were offered under «Москва»', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'fixed', record: DEFAULT_MSK },
+		} );
+
+		expect( popular().map( ( e ) => e.label ).sort() ).toEqual( [ 'Внуково', 'Москва' ] );
+	} );
+
+	it( 'still shows everything when nothing at all is standing at the level — the empty state #530 exists for', () => {
+		const popular = popularCallbackAfterBoot( {} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+
+	it( 'shows everything when the record standing there publishes NO ancestors — an absent answer must never hide entries', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: {
+				policy: 'fixed',
+				record: { ...DEFAULT_MSK, ancestors: [] },
+			},
+		} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+
+	it( 'a GEOIP default never narrows either, because it never fills the field in the first place (#536)', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'geoip', record: DEFAULT_MSK },
+		} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+} );
+
+// -------------------------------------------------------------------
+// Issue #541 — the busy state belongs to the customer's ACTION, not to the request.
+//
+// `/select` is single-flight per section. The marker used to be raised inside sendNextSelect(),
+// i.e. when the request left — the same instant for an idle queue, and arbitrarily late behind a
+// busy one. Measured on the rig with a `fixed` default (whose own boot-time /select runs ~14 s
+// against the real CDEK test API), picking a region 3.7 s after load:
+//
+//     >>> click on the region     +0 ms
+//     /select left               +11 045 ms
+//     SPINNER on shipping_state  +11 048 ms
+//
+// The spinner was 3 ms behind its request and ELEVEN SECONDS behind the human.
+// -------------------------------------------------------------------
+
+describe( 'the /select busy state is raised on ENQUEUE, not on send — issue #541', () => {
+	const REGION = {
+		key: 'dadata:reg1', label: 'Московская область', level: 'region',
+		record: { key: 'dadata:reg1', provider_id: 'dadata', level: 'region', country: 'RU', label: 'Московская область' },
+	};
+	const CITY = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+	};
+
+	const spinner = () => document.querySelector( '.woodev-location-select-spinner' );
+	const selectCount = () => fetchCalls.filter( ( c ) => c.url === SELECT_URL ).length;
+
+	it( 'shows the spinner for a pick still WAITING in the queue, before its request has left', () => {
+		boot( { region: true, settlement: true } );
+
+		// First pick occupies the single-flight slot and is left UNANSWERED.
+		selectViaFake( callFor( 'billing_state' ), REGION );
+
+		expect( selectCount() ).toBe( 1 );
+
+		// Second pick can only queue — nothing new goes to the server...
+		selectViaFake( callFor( 'billing_city' ), CITY );
+
+		expect( selectCount() ).toBe( 1 );
+
+		// ...and yet the customer must see their own field working. Before #541 the spinner sat
+		// on the REGION field until the first request settled.
+		const city = document.getElementById( 'billing_city' );
+
+		expect( spinner() ).not.toBeNull();
+		expect( city.parentNode.contains( spinner() ) ).toBe( true );
+		expect( city.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+	} );
+
+	it( 'a merely QUEUED pick does not re-lock the address it just unlocked — the s90 rule survives the change', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_state' ), REGION );
+		selectViaFake( callFor( 'billing_city' ), CITY );
+
+		// A settlement pick unlocks the address on the spot. The queued marker shows a spinner but
+		// asserts nothing about confirmation, so hasUnconfirmedParent() must ignore it — marking
+		// unconditionally here re-locked the address and broke s90's own regression test.
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
+	} );
+} );
