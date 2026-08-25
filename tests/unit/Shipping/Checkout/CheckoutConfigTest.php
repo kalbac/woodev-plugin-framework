@@ -124,6 +124,9 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	/** @var string Issue #296: resolve_default_country() return value. */
 	private string $default_country;
 
+	/** @var string Issue #536: get_default_locality_policy() return value. */
+	private string $default_locality_policy;
+
 	/**
 	 * @param bool                                                             $active                 is_active() return value.
 	 * @param array<string, bool>                                              $supported_levels       level => whether SOME configured provider serves it,
@@ -161,6 +164,11 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 	 *                                                                                                   return value, keyed by country; defaults to `[]`
 	 *                                                                                                   for every country, so every existing call site
 	 *                                                                                                   stays unaffected.
+	 * @param string                                                            $default_locality_policy Issue #536: get_default_locality_policy() return
+	 *                                                                                                   value; defaults to `off`, matching the setting's
+	 *                                                                                                   own default, so every existing call site stays
+	 *                                                                                                   unaffected (build_location_block() never sends
+	 *                                                                                                   `defaultLocality` for `off`).
 	 */
 	public function __construct(
 		bool $active,
@@ -173,7 +181,8 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		?array $chain_records = null,
 		?string $mode_settlement = null,
 		bool $allow_custom_settlement = false,
-		array $popular_settlements = []
+		array $popular_settlements = [],
+		string $default_locality_policy = Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF
 	) {
 		$this->active                 = $active;
 		$this->supported_levels       = $supported_levels;
@@ -186,6 +195,7 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 		$this->popular_settlements     = $popular_settlements;
 		$this->chain_records            = $chain_records;
 		$this->allow_custom_settlement = $allow_custom_settlement;
+		$this->default_locality_policy = $default_locality_policy;
 	}
 
 	public function is_active(): bool {
@@ -194,6 +204,10 @@ final class Checkout_Config_Fake_Location_Service extends Location_Service {
 
 	public function resolve_default_country(): string {
 		return $this->default_country;
+	}
+
+	public function get_default_locality_policy(): string {
+		return $this->default_locality_policy;
 	}
 
 	public function get_customer_record( ?string $for_country = null ): ?array {
@@ -1079,6 +1093,131 @@ class CheckoutConfigTest extends TestCase {
 		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
 
 		$this->assertTrue( $config['location']['implicit'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// defaultLocality — issue #536 (spec §4.6/D11 amendment, operator decision
+	// 25.08.2026): a FIXED default locality is shown to the customer exactly as if
+	// they had picked it. `null` unless the policy is `fixed` AND the customer's
+	// current record is genuinely an implicit default — never for `geoip` (a guess,
+	// stays invisible) or for an EXPLICIT customer record (nothing to seed: the
+	// customer's own browser already holds their own text).
+	// -------------------------------------------------------------------------
+
+	public function test_default_locality_is_null_when_the_customer_has_no_record(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			null,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			null,
+			null,
+			false,
+			[],
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertNull( $config['location']['defaultLocality'] );
+	}
+
+	public function test_default_locality_is_null_when_the_policy_is_off_even_with_an_implicit_customer_record(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			$this->customer_record( true ),
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			null,
+			null,
+			false,
+			[],
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertNull( $config['location']['defaultLocality'] );
+	}
+
+	/**
+	 * The operator's own decision, verbatim: `geoip` is a guess and stays invisible —
+	 * only `fixed` (a merchant-confirmed locality) is ever shown to the customer.
+	 */
+	public function test_default_locality_is_null_when_the_policy_is_geoip_even_with_an_implicit_customer_record(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			$this->customer_record( true ),
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			null,
+			null,
+			false,
+			[],
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertNull( $config['location']['defaultLocality'] );
+	}
+
+	public function test_default_locality_is_null_when_the_customer_record_is_explicit_even_when_the_policy_is_fixed(): void {
+		$service = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			$this->customer_record( false ),
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			null,
+			null,
+			false,
+			[],
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertNull( $config['location']['defaultLocality'] );
+	}
+
+	public function test_default_locality_is_populated_with_the_full_record_when_the_policy_is_fixed_and_the_customer_record_is_implicit(): void {
+		$customer = $this->customer_record( true );
+		$service  = new Checkout_Config_Fake_Location_Service(
+			true,
+			[ 'region' => true, 'settlement' => true, 'address' => true ],
+			$customer,
+			[ 'RU' ],
+			Location_Provider_Registry::MODE_TYPEAHEAD,
+			[],
+			'RU',
+			null,
+			null,
+			false,
+			[],
+			Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED
+		);
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame(
+			[
+				'policy' => 'fixed',
+				'record' => $customer['record']->to_array(),
+			],
+			$config['location']['defaultLocality']
+		);
+		// The client cannot write a locality's text from a bare key
+		// (`location-cascade.js::prefill()`'s own docblock) — this is the ONE field in
+		// this config that must carry full components, not just `{ key, level }`.
+		$this->assertSame( 'dadata:fias-1', $config['location']['defaultLocality']['record']['key'] );
+		$this->assertSame( 'settlement', $config['location']['defaultLocality']['record']['level'] );
 	}
 
 	// -------------------------------------------------------------------------

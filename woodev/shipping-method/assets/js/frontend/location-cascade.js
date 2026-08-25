@@ -3357,14 +3357,27 @@
 
 	/**
 	 * Whether the settlement record the lock would otherwise unlock off is the store's
-	 * DEFAULT-LOCALITY guess rather than the customer's own selection (issue #502).
+	 * GEOIP default-locality GUESS rather than the customer's own selection (issue #502) —
+	 * narrowed from "any implicit record" to "an implicit record NOT sourced from the `fixed`
+	 * policy" by issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a `fixed`
+	 * default is a merchant-confirmed, specific locality — shown to the customer exactly as if
+	 * they had picked it (see {@see prefill}'s own `defaultLocality` seeding) — so it no longer
+	 * blocks this lock the way a `geoip` guess still must. This function's NAME is unchanged
+	 * (every caller still reads it as "is this an implicit guess the lock should distrust") —
+	 * only what counts as such a guess narrowed.
 	 *
-	 * The flag is written by {@see adoptChain}: from `config.location.implicit` on the boot-time
-	 * seed, and from the `/select` response's own `implicit` key on the two settle paths — see
-	 * that function's docblock for why the response needs one at all. The optimistic record
-	 * {@see onSelectFor} writes is the raw `/suggest` payload and carries no flag, so it reads as
-	 * a real pick, which is what it is; `Location_Record::from_array()` builds that payload from a
-	 * strict whitelist of known keys, so a provider cannot forge one either.
+	 * The `implicit` flag is written by {@see adoptChain}: from `config.location.implicit` on
+	 * the boot-time seed, and from the `/select` response's own `implicit` key on the two
+	 * settle paths — see that function's docblock for why the response needs one at all. The
+	 * optimistic record {@see onSelectFor} writes is the raw `/suggest` payload and carries no
+	 * flag, so it reads as a real pick, which is what it is; `Location_Record::from_array()`
+	 * builds that payload from a strict whitelist of known keys, so a provider cannot forge one
+	 * either. `implicitSource` (issue #536) travels alongside it, from
+	 * {@see defaultLocalitySource} — see that function's own docblock for why it is a
+	 * best-effort inference rather than a measured fact, and why the direction it degrades in
+	 * (missing/ambiguous → `'geoip'`) is the safe one for THIS caller: an older server or an
+	 * absent `defaultLocality` block must keep locking exactly as it did before #536, never
+	 * newly unlock off a guess this function cannot actually prove is `fixed`.
 	 *
 	 * @param {Object} entry
 	 * @returns {boolean}
@@ -3372,7 +3385,7 @@
 	function settlementRecordIsImplicit( entry ) {
 		var record = entry.records.settlement;
 
-		return !! ( record && record.implicit );
+		return !! ( record && record.implicit && 'fixed' !== record.implicitSource );
 	}
 
 	/**
@@ -4255,12 +4268,35 @@
 	 *                                     guess rather than a customer selection (issue #502).
 	 * @returns {void}
 	 */
+	/**
+	 * Which STORE POLICY an implicit record most likely came from (issue #536) — `'fixed'`
+	 * only when `config.location.defaultLocality` names that policy, `'geoip'` for every other
+	 * case (`geoip` itself, `off` with a stale still-live implicit record, or an older server
+	 * that never shipped `defaultLocality` at all). Never asserted as a MEASURED fact about a
+	 * given record — the server does not tag `chain`/`current` entries with their own source,
+	 * only the LIVE policy at config-build time (`class-checkout-config.php::build_location_block()`)
+	 * — so this is a best-effort inference, safe-by-construction in the direction that matters:
+	 * defaulting to `'geoip'` keeps {@see isAddressLocked}'s pre-#536 behaviour (locked) for
+	 * every state this function cannot positively prove is `fixed`.
+	 *
+	 * @param {Object} entry
+	 * @returns {string} `'fixed'` or `'geoip'`.
+	 */
+	function defaultLocalitySource( entry ) {
+		return ( entry.location.defaultLocality && 'fixed' === entry.location.defaultLocality.policy )
+			? 'fixed'
+			: 'geoip';
+	}
+
 	function adoptChain( entry, chain, protectedLevel, implicit ) {
 		if ( ! chain || 'object' !== typeof chain ) {
 			return;
 		}
 
 		var adopted = {};
+		// Issue #536: only meaningful when `implicit` is true — see
+		// {@see defaultLocalitySource}'s own docblock.
+		var source = implicit ? defaultLocalitySource( entry ) : null;
 
 		Object.keys( chain ).forEach( function( level ) {
 			var node = chain[ level ];
@@ -4274,7 +4310,14 @@
 				// {@see fireLocationApplied} publishes a settlement key only for a confirmed
 				// record, so an optimistic one can never be handed to `pickup-mount.js` as
 				// the map's addressing locality (adversarial review).
-				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit };
+				//
+				// `implicitSource` (issue #536) travels alongside `implicit` rather than
+				// replacing it — {@see settlementRecordIsImplicit} narrows on it, but the
+				// `implicit` flag itself is still what {@see fireLocationApplied} publishes as
+				// `woodev_location_applied`'s `detail.implicit`, and that must stay truthful
+				// for BOTH sources (spec §4.6: an implicit record is never a customer's own
+				// answer, `fixed` or not).
+				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit, implicitSource: source };
 			}
 		} );
 
@@ -4381,12 +4424,45 @@
 			// `implicit` travels with it for the same reason (issue #502) — this line REPLACES
 			// whatever adoptChain() just wrote for `current.level`, so omitting the flag here
 			// would silently launder the store's default locality into a record that looks
-			// like a customer pick at exactly the level the lock reads.
+			// like a customer pick at exactly the level the lock reads. `implicitSource`
+			// (issue #536) travels the same way, for the same reason.
 			entry.records[ current.level ] = {
 				key: current.key,
 				confirmed: true,
 				implicit: !! entry.location.implicit,
+				implicitSource: entry.location.implicit ? defaultLocalitySource( entry ) : null,
 			};
+
+			// Issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a `fixed`
+			// default locality is shown to the customer exactly as if they had picked it —
+			// full text, region backwards-filled. `current`/`chain` above only ever carry
+			// `{ key, level }` (see this function's own docblock), so the TEXT comes from
+			// `config.location.defaultLocality.record` instead — the one place in this config
+			// that carries full components (`class-checkout-config.php::build_location_block()`'s
+			// own docblock explains why). `geoip` stays invisible by construction: the server
+			// only ever populates `defaultLocality` for the `fixed` policy in the first place
+			// (see that method), so `defaultLocalitySource()` already reads `'geoip'` for it —
+			// this block simply never runs.
+			//
+			// Gated on the DEFAULT record's own level matching `current.level`, not hardcoded to
+			// `'settlement'`: the merchant-picked default is ordinarily settlement-level, but
+			// nothing here should silently mis-seed a field if it were ever anything else.
+			if (
+				entry.location.implicit &&
+				entry.location.defaultLocality &&
+				'fixed' === entry.location.defaultLocality.policy &&
+				entry.location.defaultLocality.record &&
+				entry.location.defaultLocality.record.level === current.level
+			) {
+				var defaultNode = chainNodeForLevel( entry, current.level );
+
+				if ( defaultNode ) {
+					var defaultRecord = entry.location.defaultLocality.record;
+
+					writeSilently( entry, defaultNode.fieldId, fieldValueFor( defaultRecord, current.level ) );
+					backwardsFill( entry, defaultNode, defaultRecord );
+				}
+			}
 
 			// The event still fires for `current` ONLY, unchanged — the chain is restoration
 			// plumbing for scoping (see scopeKeyFor()), never a second source of "the customer's
