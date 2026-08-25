@@ -7,15 +7,21 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-25 (s93).** Merged: **#533** (#526). **TWO PRs are OPEN and waiting on the
-operator's rig pass** — both customer-facing UI, deliberately not self-merged: **#535** (#530,
-popular settlements shown to the customer) and **#537** (#536, the FIXED default locality made
-visible), the latter stacked on the former so one rig pass covers both.
+**As of 2026-08-26 (s93).** Merged: **#533** (#526). **TWO PRs OPEN:** **#535** (#530, popular
+settlements shown to the customer) — operator accepted the visuals; **#537** (#536 fixed default
+made visible, plus #538 and #541), stacked on #535. **#537 is NOT ready: #541 is unfixed and its
+real cause is now known** — in `related-list` a region pick waits ~10.5 s for `/list` before
+`onSelectFor()` runs at all, so the busy state arrives after the customer has been staring at an
+inert field. Reference for the fix is IN this repo: the same scenario is already correct when the
+region axis is `ajax-select2`.
+
+**The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan). TS was
+measured and scoped: `src/` only (#542), never the raw-served frontend.
 
 **Baselines on `main` after #526, measured in the PRIMARY checkout:** `composer check` **2787**
 unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
 **On PR #535's branch:** **2791** / 6826 / **66 skipped**; jest **1491**.
-**On PR #537's branch:** **2798** / 6835 / **66 skipped**; jest **1502**.
+**On PR #537's branch:** **2798** / 6835 / **66 skipped**; jest **1508**.
 
 ⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
 stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
@@ -26,10 +32,8 @@ previous handoff is an INFERENCE — re-measure before comparing.** Detail: `ses
 mechanism is gated off and the address lock stands (measured: an empty settlement `<select>` makes
 WooCommerce refuse the order). Detail → `sessions/s92.md`.
 
-**MEASURED, and it inverts an obvious assumption: `select2:close` fires BEFORE `select2:select`**
-(four reproductions on the rig, mouse and keyboard, ajax and non-ajax). Any guard shaped as "the
-pick will cancel the close" cannot work. Gotcha
-`select2-close-fires-before-select2-select`.
+**`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
+pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
 **Popular settlements' customer-facing half is BUILT and rig-verified, in PR #535 (#530)** — empty
 state, ranking and region filtering. Two things it taught, both now gotchas: seeding real
@@ -38,9 +42,8 @@ enforces `minimumInputLength`), and a popular list must never arrive PRE-SELECTE
 own reset-selectedness algorithm picks the first option unless the blank one is attached first and
 explicitly selected.
 
-**Cards filed in s92:** #523, #524, #525, #527, #529, #531, #532 (open); #526, #530 done/in PR.
-**s93:** #534 filed and closed as `not planned` — it described a defect that was a measurement
-artefact (see the rig gotcha below).
+**Open cards from s92-s93:** #523, #524, #525, #527, #529, #531, #532, #538-#542. Which are
+COMMITMENTS, and where each was decided, is the handoff's carry-over section — not this file.
 
 ## ⚠ The checkout location layer
 
@@ -196,10 +199,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and **switch the tree BEFORE asking, then leave it there until the pass is over** — s92 verified on the branch, switched back to `main` for tidiness, and the operator spent a pass on code without the fix (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`, which now carries that second half). Confirm by measurement, not memory: `grep -c "<a symbol the fix introduces>" <the served file>`. **Дерево на `main`, чисто (s93).** ⚠ **`woodev_location_allow_custom_settlement` на риге = `yes`** (замерено s93; s92 писала
-«удалена»). Следствие: в «Списке с поиском» строку «ничего не найдено» не увидеть — слот занимает
-tag-строка #528. Замерять пустое состояние только при `no`, потом вернуть `yes`. Таблица
-`wp_woodev_popular_settlements` ЗАСЕЯНА: по 3 реальные записи `test-cdek` на регионы Москва (`test-cdek:r81`) и Санкт-Петербург (`test-cdek:r82`), у всех `last_verified_at = NULL`, поэтому ленивая проверка D5 реально отрабатывает. Ворктри Orca этой сессии сняты.
+- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `feat/536-default-locality-visible` (s93).** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
