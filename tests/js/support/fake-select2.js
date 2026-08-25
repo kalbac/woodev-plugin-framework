@@ -171,10 +171,29 @@ function installFakeSelect2( $ ) {
 			 * before `close` — that was never the real order, and a fake that dispatched it
 			 * that way could not have caught issue #517's own round-2 regression.
 			 *
+			 * #528 round 2 (critic MN-B): a real select2/selectWoo always leaves a genuine
+			 * `<option>` behind for whatever it is about to select — its own `SelectAdapter`
+			 * builds and appends one for every result it renders, ajax results and `Tags`-
+			 * decorator-inserted rows alike (this file's own docblock cites the exact same
+			 * mechanism for `success()`'s reported items) — BEFORE the underlying `<select>`'s
+			 * value is ever set. `$el.val()` against a `<select>` with no matching `<option>`
+			 * writes nothing (this repo's own gotcha
+			 * `a-select-value-write-with-no-matching-option-submits-nothing`), so without this
+			 * the line above would silently no-op for exactly the case #528 exists to prove —
+			 * a picked tag's free text actually ending up in the submitted field — and no test
+			 * driving `pick()` could ever catch that regressing. Only appends when one is not
+			 * already present (a seeded initial-value `<option>`, or a prior pick's).
+			 *
 			 * @param {{id: string, text: string, key: string}} resultItem
 			 * @returns {void}
 			 */
 			pick: function( resultItem ) {
+				if ( ! $el.find( 'option' ).filter( function() {
+					return this.value === String( resultItem.id );
+				} ).length ) {
+					$el.append( $( '<option></option>' ).val( resultItem.id ).text( resultItem.text ) );
+				}
+
 				$el.val( resultItem.id );
 				$el.trigger( 'change' );
 

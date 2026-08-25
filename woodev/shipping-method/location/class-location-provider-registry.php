@@ -1367,18 +1367,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * Whether the merchant has opted in to letting the customer submit a
 		 * settlement value the active provider does not carry (#528).
 		 *
-		 * Deliberately UNCLAMPED against {@see self::get_field_mode_settlement()}:
-		 * the only reader of this flag is `ajax-select2`'s own
-		 * `selectConfigFor()` branch, which never runs for `typeahead`, so a
-		 * stale `true` left over from a mode switch is inert rather than
-		 * something this accessor needs to police — the same "narrow the
-		 * OFFERED surface, not every reader" split
+		 * Deliberately UNCLAMPED against {@see self::get_field_mode_settlement()}
+		 * — but this is safe ONLY because the client-side reader is scoped to
+		 * BOTH the `ajax-select2` branch AND `'settlement' === seed.level`
+		 * (`location-select-modes.js`'s `selectConfigFor()`, fixed against
+		 * critic MJ-A on the #528 round-2 pass: the region axis can ALSO be
+		 * `ajax-select2`, and this flag is read off the shared, level-blind
+		 * `options.location` block — WITHOUT the level check, a stale `true`
+		 * left over from a settlement-mode switch would still let the REGION
+		 * field free-type, a value that posts as `billing_state`/
+		 * `shipping_state`, permanent order data this setting's own label and
+		 * `show_if` never promised to touch). With that level check in place,
+		 * a stale `true` really is inert for every level other than
+		 * settlement, and reaching `selectConfigFor()`'s ajax branch AT ALL
+		 * for the settlement node already implies the settlement axis's OWN
+		 * mode is `ajax-select2` — `location-cascade.js`'s own
+		 * `resolveModeRenderer()` picks the renderer from
+		 * `axisModeForLevel( entry, node.level )`, so a settlement node can
+		 * never reach this branch under any other stored mode. A server-side
+		 * clamp on THIS accessor would therefore change nothing a real
+		 * customer can reach; it was considered and declined for exactly that
+		 * reason (#528 round-2 report) rather than added as belt-and-braces.
+		 * Same "narrow the OFFERED surface, not every reader" split
 		 * {@see self::get_field_mode_settlement()}'s own docblock argues for
 		 * `related-list`. Mirrors {@see self::get_address_suggestions_raw()}'s
 		 * "no settings handler yet" shape: answers this setting's own
 		 * default (`false`) rather than throwing.
 		 *
 		 * @since 2.0.3
+		 * @since 2.0.3 Documented the level-scoping the client-side MJ-A fix
+		 *              now depends on for this docblock's own claim to be true.
 		 *
 		 * @return bool
 		 */

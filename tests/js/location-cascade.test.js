@@ -5700,6 +5700,35 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		expect( instances[ 0 ].config.tags ).toBe( true );
 	} );
 
+	// -----------------------------------------------------------------------
+	// Critic MJ-A (round 2, #528): the opt-in must be scoped to the SETTLEMENT level. Both
+	// axes on ajax-select2 at once, the critic's own identifying control
+	// (minimumInputLengthFor('region') === 1, ('settlement') === 2).
+	// -----------------------------------------------------------------------
+
+	it( 'critic MJ-A: with BOTH region and settlement on ajax-select2 and the opt-in ON, only the SETTLEMENT widget gets tags — the REGION widget never does', () => {
+		const instances = bootWithRealSelectModes( {
+			region: true, settlement: true, address: true,
+			mode: { region: 'ajax-select2', settlement: 'ajax-select2' },
+			allowCustomSettlement: true,
+		} );
+
+		expect( instances ).toHaveLength( 2 );
+
+		const byMinLength = {};
+
+		instances.forEach( ( instance ) => {
+			byMinLength[ instance.config.minimumInputLength ] = instance;
+		} );
+
+		// minimumInputLengthFor('region') === 1, ('settlement') === 2 —
+		// location-select-modes.js's own per-level floor, and the critic's identifying control.
+		expect( byMinLength[ 1 ] ).toBeDefined(); // the region widget attached
+		expect( byMinLength[ 2 ] ).toBeDefined(); // the settlement widget attached
+		expect( byMinLength[ 1 ].config.tags ).toBeFalsy(); // REGION: must NEVER get tags
+		expect( byMinLength[ 2 ].config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
+	} );
+
 	it( 'issue #528: a tag pick unlocks the address field, issues NO /select request, and writes no settlement record', async () => {
 		const instances = bootWithRealSelectModes( {
 			settlement: true, address: true, mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true,
@@ -5728,15 +5757,22 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
 		expect( fetchCalls.filter( ( c ) => c.url === SELECT_URL ) ).toHaveLength( selectCallsBefore );
 
+		// #528 round 2 (critic MN-B): the card's ENTIRE deliverable — a picked tag's free text
+		// actually ending up in the submitted field, which is the only reason #528 exists (an
+		// empty <select> made WooCommerce reject the order as a required field). The fake's
+		// own `pick()` now models exactly what a real select2/selectWoo pick does (measured
+		// live on the rig: a matching <option> exists and the field carries the text) — see
+		// that method's own docblock for why a bare `.val()` write would otherwise silently
+		// no-op here (gotcha `a-select-value-write-with-no-matching-option-submits-nothing`).
+		const settlementSelect = document.getElementById( 'billing_city' );
+
+		expect( settlementSelect.value ).toBe( 'Тьмутаракань' );
+		expect( settlementSelect.tagName ).toBe( 'SELECT' );
+		expect( settlementSelect.disabled ).toBe( false );
+
 		// Composes with the already-scheduled close-flush — must not double-fire on its tick.
 		await tick();
 		expect( addressField().disabled ).toBe( false );
-		// The submitted DOM VALUE for a picked tag is select2's own responsibility (it manages
-		// the underlying <select>'s <option> elements for every result it renders, tag rows
-		// included — the same mechanism a normal ajax pick already relies on); this fake's
-		// pick() never models that DOM management for ANY pick, so asserting `.value` here
-		// would pin the fake's own limitation, not this module's contract. What IS this
-		// module's contract — no /select, no record, address unlocked — is asserted above.
 	} );
 
 	// -----------------------------------------------------------------------

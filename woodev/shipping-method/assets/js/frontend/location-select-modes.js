@@ -294,11 +294,31 @@
 
 			config.minimumInputLength = minimumInputLengthFor( seed.level );
 
+			// Issue #528 (critic MJ-B): the single source of truth `insertTag` below reads —
+			// set ONLY on a genuinely completed (non-stale) response, to `entries.length` for a
+			// real answer (0 or more) or back to `null` for a transport error/never-completed
+			// request. `null` is also the starting value: nothing has answered yet, so no tag
+			// is ever offered before the first completed search. Declared here, ABOVE the
+			// `config.ajax.transport` closure below, so both that transport and `insertTag`
+			// (defined inside the very next `if` block) close over the SAME variable.
+			var lastCompletedEntriesLength = null;
+
 			// Issue #528: the merchant's own opt-in — off by default. `tags` is select2's
 			// own documented feature (select2/select2 docs, tags.md); `createTag`/`insertTag`
 			// follow the SAME shape as the CDEK reference
 			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:179-188).
-			if ( seed.allowCustomSettlement ) {
+			//
+			// Critic MJ-A: `'settlement' === seed.level` is NOT redundant with the option check
+			// — `attachAjaxSelect2()`'s registry entry is bare (`registry['ajax-select2']`,
+			// `location-cascade.js`'s own `resolveModeRenderer()`), so without this a REGION
+			// field whose OWN axis is also `ajax-select2` would get the identical free-typed
+			// tag for a value that posts as `billing_state`/`shipping_state` — permanent order
+			// data this option's own label ("города НЕ ИЗ СПИСКА") and tooltip ("в поле
+			// НАСЕЛЁННОГО ПУНКТА") never promised to touch. Every other layer already scopes
+			// this to settlement (the `show_if`, the label, the tooltip), and so does the CDEK
+			// reference this `insertTag` shape is copied from — `allowTags` is passed to the
+			// CITY widget only, defaulting `false`.
+			if ( seed.allowCustomSettlement && 'settlement' === seed.level ) {
 				config.tags = true;
 
 				// Refuses an empty/whitespace term (returning `null` tells select2 there is
@@ -320,13 +340,20 @@
 
 				// Gates the tag row to the ZERO-result case, exactly like the CDEK reference:
 				// a customer must never be able to free-type past a town the provider actually
-				// carries. `data` is the CURRENT rendered result set for this completed query
-				// (`success()`'s own `results` above) — non-empty only when the provider found
-				// something for this exact term.
+				// carries. Critic MJ-B: reads `lastCompletedEntriesLength` (set by the transport
+				// below from `entries.length`, the SAME provider-truth signal the abandon gate a
+				// few lines down already answers this question from), never the rendered `data`
+				// array select2 hands this hook — `data` is built from `accepted`
+				// (`applyEntries()`'s FILTERED output), which can be empty for a reason that has
+				// nothing to do with whether the provider carries this town: a transport error
+				// resolves `entries` to `null` but `success()` still reports `results: []`
+				// unconditionally, and a response whose rows all fail `applyEntries()`'s own
+				// value-derivation filter is "the provider answered, this layer just could not
+				// derive a submittable value" (critic MN-2's own reasoning, a few lines below in
+				// the transport) — neither is "the provider carries nothing here", and offering
+				// a free-text row for either misrepresents this option's own promise.
 				config.insertTag = function( data, tag ) {
-					if ( ! data.filter( function( item ) {
-						return item !== tag;
-					} ).length ) {
+					if ( 0 === lastCompletedEntriesLength ) {
 						data.push( tag );
 					}
 				};
@@ -396,6 +423,13 @@
 						if ( stale ) {
 							return;
 						}
+
+						// Issue #528 (critic MJ-B): `insertTag`'s own single source of truth,
+						// above — `entries.length` for a genuinely completed response (`entries`
+						// an array, possibly empty), or back to `null` for a transport error
+						// (`entries === null`, the SAME signal the abandon gate below treats as
+						// "proves nothing either way").
+						lastCompletedEntriesLength = entries ? entries.length : null;
 
 						// issue #461 BLOCKING 1/2: `applyEntries()` is the SINGLE place that
 						// decides which entries are selectable and what identifies each one —
@@ -943,10 +977,14 @@
 		 * (`change → closing → close → select`) means `handleSelect2Close()` has
 		 * already run and set `dropdownOpen = false` by the time this fires, so
 		 * `recordAbandonCandidate()` below fires IMMEDIATELY rather than waiting for
-		 * another close — there is no future close left to defer to. Cancelling any
-		 * already-SCHEDULED flush first (an earlier zero-result term recorded
-		 * during typing) prevents a stale term from double-firing after this one
-		 * already committed the customer's own text.
+		 * another close — there is no future close left to defer to.
+		 *
+		 * Cancelling any already-SCHEDULED flush first (round-2 critic MN-A: NOT
+		 * what actually prevents a double-fire — {@see fireAbandonNow} nulls
+		 * `pendingAbandon` BEFORE calling `options.onAbandon`, so a scheduled
+		 * timer that still fires a tick later already finds nothing pending and
+		 * no-ops on its own) is cheap insurance against an unnecessary macrotask
+		 * outliving this synchronous pick, not a correctness requirement.
 		 *
 		 * @param {{id?: string, text?: string}} tag
 		 * @returns {void}

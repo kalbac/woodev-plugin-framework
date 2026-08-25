@@ -220,13 +220,14 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	} );
 
 	// -----------------------------------------------------------------------
-	// Issue #528 — `tags`/`createTag`/`insertTag`, gated on `seed.allowCustomSettlement`.
+	// Issue #528 — `tags`/`createTag`/`insertTag`, gated on `seed.allowCustomSettlement` AND
+	// (round 2, critic MJ-A) `'settlement' === seed.level`.
 	// -----------------------------------------------------------------------
 
 	it( 'control: seed.allowCustomSettlement omitted (falsy) wires NO tags/createTag/insertTag into the ajax config', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn() }
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement' }
 		);
 
 		expect( config.tags ).toBeUndefined();
@@ -234,10 +235,10 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		expect( config.insertTag ).toBeUndefined();
 	} );
 
-	it( 'seed.allowCustomSettlement === true wires tags: true plus createTag/insertTag into the ajax config', () => {
+	it( 'seed.allowCustomSettlement === true AND seed.level === "settlement" wires tags: true plus createTag/insertTag into the ajax config', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true }
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true, level: 'settlement' }
 		);
 
 		expect( config.tags ).toBe( true );
@@ -245,10 +246,37 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		expect( typeof config.insertTag ).toBe( 'function' );
 	} );
 
+	// -----------------------------------------------------------------------
+	// Critic MJ-A (round 2): the opt-in must NOT also enable tags for the REGION level, whose
+	// own `ajax-select2` widget shares this exact function — a region value posts as
+	// `billing_state`/`shipping_state`, permanent order data the option's own label/tooltip
+	// never promised to touch.
+	// -----------------------------------------------------------------------
+
+	it( 'critic MJ-A: seed.allowCustomSettlement === true wires NO tags/createTag/insertTag for a REGION-level seed', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true, level: 'region' }
+		);
+
+		expect( config.tags ).toBeFalsy();
+		expect( config.createTag ).toBeUndefined();
+		expect( config.insertTag ).toBeUndefined();
+	} );
+
+	it( 'critic MJ-A: an ADDRESS-level seed (the third ajax-select2-capable level) also gets no tags', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true, level: 'address' }
+		);
+
+		expect( config.tags ).toBeFalsy();
+	} );
+
 	it( 'createTag() returns null for an empty or whitespace-only term — select2 offers no tag row at all', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true }
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true, level: 'settlement' }
 		);
 
 		expect( config.createTag( { term: '' } ) ).toBeNull();
@@ -259,7 +287,7 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	it( 'createTag() trims the term and stamps newTag: true on a real term', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true }
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true, level: 'settlement' }
 		);
 
 		expect( config.createTag( { term: '  Тьмутаракань  ' } ) ).toEqual( {
@@ -269,30 +297,109 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		} );
 	} );
 
-	it( 'insertTag() inserts the tag only when the current result set is otherwise empty', () => {
+	// -----------------------------------------------------------------------
+	// Critic MJ-B (round 2): `insertTag` must answer from the completed search's own
+	// `entries.length` — the SAME provider-truth signal the abandon gate uses a few lines
+	// away in the same config — never from the rendered/filtered `data` array select2 hands
+	// the hook, which can be empty for reasons that say nothing about what the provider
+	// carries. Driven through the REAL `config.ajax.transport`, never a hand-built array —
+	// the critic's own finding was that the shipped test could not have caught this because
+	// it never drove `success()` at all.
+	// -----------------------------------------------------------------------
+
+	it( 'critic MJ-B control: a genuinely completed ZERO-result search offers the tag row', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [] ) );
 		const config = mod.selectConfigFor(
-			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true }
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn( () => [] ), allowCustomSettlement: true, level: 'settlement' }
 		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Тьмутаракань' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledWith( { results: [] } );
+
 		const tag = { id: 'Тьмутаракань', text: 'Тьмутаракань', newTag: true };
+		const data = [];
 
-		const empty = [];
-
-		config.insertTag( empty, tag );
-		expect( empty ).toEqual( [ tag ] );
+		config.insertTag( data, tag );
+		expect( data ).toEqual( [ tag ] );
 	} );
 
-	it( 'insertTag() control: a NON-empty result set — a town the provider actually carries — gets no tag row', () => {
+	it( 'critic MJ-B (Z4): a TRANSPORT ERROR still reports success([]) but offers NO tag row — an outage must not read as "the provider carries nothing"', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( null ) ); // attachAjaxSelect2()'s own fetchEntries() swallow contract
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
 		const config = mod.selectConfigFor(
-			{ ajax: true, fetchEntries: jest.fn() },
-			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), allowCustomSettlement: true }
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn( () => [] ), allowCustomSettlement: true, level: 'settlement' }
 		);
-		const tag = { id: 'Тве', text: 'Тве', newTag: true };
 
-		const withResults = [ { id: 'dadata:tver', text: 'Тверь', key: 'dadata:tver' } ];
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Тверь' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledWith( { results: [] } ); // the existing, unchanged contract
+
+		const tag = { id: 'Тверь', text: 'Тверь', newTag: true };
+		const data = [];
+
+		config.insertTag( data, tag );
+		expect( data ).toEqual( [] ); // MJ-B: must NOT offer a free-text row for an outage
+
+		consoleSpy.mockRestore();
+	} );
+
+	it( 'critic MJ-B (Z3): a response the provider genuinely answered, but whose rows all fail applyEntries()\'s own value-derivation filter, offers NO tag row', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:tver', label: 'г Тверь', record: { key: 'dadata:tver', label: 'г Тверь' } },
+		] ) );
+		// applyEntries() filtered EVERY row (e.g. no derivable submit value) — accepted/results
+		// end up empty even though the provider plainly answered with something.
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn( () => [] ), allowCustomSettlement: true, level: 'settlement' }
+		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Тверь' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledWith( { results: [] } );
+
+		const tag = { id: 'Тверь', text: 'Тверь', newTag: true };
+		const data = [];
+
+		config.insertTag( data, tag );
+		expect( data ).toEqual( [] ); // MJ-B: the provider answered — no free-text row
+	} );
+
+	it( 'insertTag() control: a NON-empty result set — a town the provider actually carries — gets no tag row', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:tver', value: 'Тверь', label: 'г Тверь', record: { key: 'dadata:tver', label: 'г Тверь' } },
+		] ) );
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{
+				initialValue: '', placeholder: '',
+				applyEntries: jest.fn( ( entries ) => entries ),
+				allowCustomSettlement: true, level: 'settlement',
+			}
+		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Тверь' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const tag = { id: 'Тве', text: 'Тве', newTag: true };
+		const withResults = success.mock.calls[ 0 ][ 0 ].results.slice();
 
 		config.insertTag( withResults, tag );
-		expect( withResults ).toEqual( [ { id: 'dadata:tver', text: 'Тверь', key: 'dadata:tver' } ] );
+		expect( withResults.indexOf( tag ) ).toBe( -1 );
 	} );
 } );
 
