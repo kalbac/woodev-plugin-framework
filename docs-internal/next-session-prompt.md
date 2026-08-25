@@ -103,7 +103,7 @@ cart-cookie) отдают клиенту догадку магазина — **#
 `fix/502-implicit-default-must-not-unlock-address` (фронтовый JS отдаётся напрямую, пересборка не
 нужна).
 
-Ворктри Orca `s91-505-tools` и `s91-494-keyescape` ещё на месте — снимать через Orca (`orca worktree
+Ворктри Orca этой сессии сняты (через Orca, не `git worktree remove`) — дерево одно. Снимать всегда так: `orca worktree
 rm --worktree id:<repoId>::<path> --force`), никогда через `git worktree remove`.
 
 ```bash
