@@ -7,30 +7,31 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-25 (s90).** **#500 and #501 merged — #488 slice 3 is done on the server and the
-client.** No PR is open. Cards filed: **#499**, **#502**, **#503**, **#505**, **#506**, all Бэклог
-except #503 (Инбокс — the operator's own).
+**As of 2026-08-25 (s91, overnight).** Merged: **#507** (#494 + #506), **#513** (#498), **#516**
+(#497). **Two PRs are OPEN and waiting on the operator's EYES, not his approval** — both green on
+every CI check:
 
-**#488 slice 3's ADMIN half was built wrong and is being rebuilt.** The two D8 merchant actions
-shipped as two separate fields-less connection sections; the operator's shape is a **«Инструменты»**
-section, last on the «Доставка» tab, built as a registry any carrier plugin can register into. Spec:
-`specs/2026-08-25-shipping-tools-section.md`, card **#505**. The branch
-`feat/488-slice3-d8-merchant-actions` is **NOT continued** — it carries the wrong shape in its
-foundation, and D5 of that spec lists exactly what survives (the server mechanics) and what unwinds
-with it (the staged-provider guard, the public-interface widening, the REST allow-list widening).
+| PR | Card | Why it is not merged |
+|---|---|---|
+| **#508** | **#505** — «Инструменты» section | Two critic rounds, all blocking findings fixed and mutation-verified. **A new admin surface nobody has seen in a browser.** |
+| **#509** | **#502** — an implicit default must not unlock the address field | Two rounds, rig-verified before/after. **Customer-visible, and #517 / #518 are decisions only he can make.** |
 
-**#337 is OVERTURNED (operator, 25.08.2026).** The address field now waits for `/select` to confirm
-rather than unlocking on the pick itself. Recorded in `isAddressLocked()`'s docblock, at the old call
-site in `onSelectFor()`, and on issue #337 — three places, because a decision recorded only in a
-session file came back for re-litigation once already.
+**Cards filed:** #510, #511, #512, #514, #515, #517, #518. **#503 (маска телефона) is in `Бэклог`
+with the operator's answer and was NOT started** — the night went to #505, #502 and three critic
+rounds.
 
-**The standing lesson of s90: the operator's rig pass found four defects that 1380 green tests, five
-Codex rounds and a driven browser pass of mine all missed** — all four presentational, none reachable
-by a programmatic assertion (`sessions/s90.md`).
+**`main`'s unit baseline is 2701 tests / 66 skipped**, jest **1380** — measured 25.08.2026. The 2718
+every handoff had been quoting was STALE and was carried into every brief this session before a
+critic reconciled it.
 
-**The 2–3 agent cap stands, but the RAM ceiling was never about agents:** the Telegram Claude Code
-plugin leaked ~230 MB/hour per session (two instances held 7.35 GB). Disabled in
-`~/.claude/settings.json`; commit went 44.6 → 36.2 GB.
+**Codex cannot be a critic inside an Orca worktree.** Its shell is WSL; a Windows-created worktree's
+`.git` file carries `gitdir: D:/…`, which WSL git does not treat as absolute. The canary rule worked —
+it reviewed nothing rather than inventing a review. Critics were Claude Opus. Card **#510**.
+
+**Three confident conclusions were wrong this session and each was killed by a measurement or an
+independent pass** — #502's own card hypothesis, my own fix for it (it re-opened the bug one click
+later), and "CI is stalled" on #508 (the PR was `DIRTY`; GitHub schedules no `pull_request` workflow
+on a conflicted branch). Detail: `sessions/s91.md`.
 
 ## ⚠ The checkout location layer
 
@@ -43,9 +44,11 @@ ownership rather than a name heuristic. Gotcha:
 | Card | State |
 |---|---|
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488 and is now done bar D8. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
-| **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path.** **Slice 3's D5–D7 are MERGED (#500 server, #501 client): the lazy check inside `/select`, D6's four outcomes, and D7's adopt-or-cancel with «Данные не актуальны, выберите заново».** Left: **D8**, and it is now card **#505** — the two actions move into a new «Инструменты» section, spec `specs/2026-08-25-shipping-tools-section.md`. |
-| **#497** | The store default on `Shipping_Admin_Order`'s constructor is what makes popular-settlements enrolment reachable at all, and no test pins it — removing it would silently switch the feature off, which already happened twice during #488 slice 2. The equivalent default on `Abstract_Shipment_Handler` IS covered. |
-| **#494** | The derived-key marker is a bare `derived:` prefix, so a provider native id beginning with it would be misread as derived. Reserving the prefix was tried and REVERTED — it makes such a native id unrepresentable. Needs an escaping scheme that preserves every native id; cheap now, expensive after release. |
+| **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path.** **Slice 3's D5–D7 are MERGED (#500 server, #501 client): the lazy check inside `/select`, D6's four outcomes, and D7's adopt-or-cancel with «Данные не актуальны, выберите заново».** **Slice 3's D8 is BUILT and green in PR #508** (card #505): the «Инструменты» section, a `woodev_shipping_tools` filter carrying typed `Shipping_Tool` objects, a `POST /settings/{provider}/tool/{tool}/run` route, and the two merchant actions bridging in from the location layer through that public seam. **Not merged — it is admin UI nobody has looked at.** Its two critic reports are on the branch under `docs-internal/reviews/`. |
+| **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
+| **#502** | **PR #509 open.** An implicit default locality unlocked the address field off a settlement the customer never picked and cannot see. Fixed in two rounds; the second added `implicit` to the `/select` response, because the chain that route answers with is read through the lazy trigger for the default-locality policy, not echoed from the write. **#517 and #518 are the two open decisions.** |
+| **#517** | Инбокс. The #350 escape hatch does not exist in `ajax-select2` / `related-list` mode — `location-select-modes.js` never calls `onAbandon`. Pre-existing under `default_locality_policy = off`; #509 removes the fig leaf that covered it for `fixed` stores. |
+| **#518** | Инбокс. `pickup-mount.js` ignores `detail.implicit`, so a customer can reach a pickup point with the address field still `disabled` — and a disabled input is not serialized into the checkout POST. #509 creates that intersection. |
 | **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
 | **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
@@ -86,7 +89,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **199**.
+Gotchas: **201**.
 
 ## Program status (high level)
 
@@ -144,26 +147,39 @@ oversight.
 
 ## Next Actions
 
-**Ничего не ждёт кнопки — открытых PR нет.** Автономно можно брать всё, кроме отмеченного 🙋.
+**Две кнопки ждут ТЕБЯ. Обе — «посмотри», а не «одобри».**
 
-1. **#505 — секция «Инструменты»**, спека `specs/2026-08-25-shipping-tools-section.md`, все развилки
-   закрыты. Ветку `feat/488-slice3-d8-merchant-actions` НЕ продолжать: новая от `main`, переносом
-   только выжившего по D5 спеки. Это закрывает #488 целиком.
-2. **#502** — адрес открыт до выбора НП при РАЗНЫХ провайдерах на уровнях. **Начинать с замера**, а
-   не с правки `isAddressLocked()`: сперва установить, какой guard реально открыл поле.
-3. **#503** 🙋 — маска телефона. В `Инбоксе`, постановка оператора; спека в самой карточке.
-4. **#437** — окружающий редизайн поиска НП. Спека готова, развилки закрыты, не начат. Самый крупный
-   оставшийся кусок.
-5. **Дёшево сейчас, дорого после релиза:** #494 (экранирование метки производного ключа), #497 (тест
-   на дефолт стора), #498 (интеграционный тест на саму таблицу), #506 (classmap).
-6. **#473** — чинить достижимую половину: безусловный `maybeInitSelect2()` через
-   `isLocationOwnedField()`; замер в комментарии к карточке.
-7. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-8. **#405** — долг по проверке; сперва найти условие, при котором фикстура СДЭК реально падает.
-9. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-10. 🙋 **НЕ брать автономно:** **#474** (развилка по публичному контракту), **#483** (вопрос в
-    Инбоксе), **#331**, **#332**, **#374** (его прямая просьба). **#379** — низкий приоритет.
-    **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
+1. 🙋 **PR #508 (#505) — секция «Инструменты».** 19 проверок CI зелёные, два круга критиков, все
+   блокирующие находки закрыты и проверены мутацией. **Никто не видел её в браузере.** Что смотреть:
+   вкладка «Доставка» → последняя секция; результат под кнопкой, а не над ней; кнопка уходит в busy
+   мгновенно; селектор провайдера по умолчанию — активный, но всегда видимый; «Сохранить» в этой
+   секции быть НЕ должно.
+2. 🙋 **PR #509 (#502) — неявная локация не снимает замок адреса.** 18 проверок зелёные, до/после
+   замерено мной на риге. Но **#517 и #518 — твои решения**, и без них поведение не окончательно:
+   #517 — покупателя из неизвестного НП в режимах «Список с поиском»/«Предустановленный список»
+   больше ничто не выпускает; #518 — выбор ПВЗ по неявной локации оставляет адрес `disabled`, а такое
+   поле не уходит в POST.
+
+**Дальше по величине:**
+
+3. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`,
+   развилки закрыты, не начат. Самый крупный оставшийся кусок.
+4. **#503** — маска телефона. **Ты перенёс её в `Бэклог` и дал ответ в карточке** (KISS: свой
+   велосипед — можно в общий бандл, готовая библиотека — отдельным `wp_enqueue_script` плюс
+   обработчик на смену страны в несколько строк; `maskInput` — не истина, а первое, что вспомнилось).
+   **Не начата этой ночью**: ночь ушла на #505, #502 и три круга критиков. Следующая по очереди
+   после кнопок.
+5. **#510** — Codex не читает ворктри Orca (WSL-git против Windows-метаданных в `.git`-файле). Пока
+   не решено, критик = Claude Opus, а стандартная форма «критик Codex» не работает.
+6. **Дёшево сейчас, дорого после релиза:** #512 (остаток #494), #514 (остаток ревью #505).
+7. **#473** — достижимая половина через `isLocationOwnedField()`; замер в комментарии к карточке.
+8. **Мелочи:** #444, #451, #453. **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
+9. **#405** — сперва найти условие, при котором фикстура СДЭК реально падает.
+10. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+11. 🙋 **НЕ брать автономно:** **#474** (развилка по публичному контракту), **#483**, **#511**,
+    **#515**, **#517**, **#518** (все в Инбоксе), **#331**, **#332**, **#374** (его прямая просьба).
+    **#379** — низкий приоритет. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310,
+    #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -177,19 +193,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `main` (s90).** Патч фикстуры СДЭК снят, таблица `wp_woodev_popular_settlements` очищена, ворктри Orca сняты.
-- **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
-- **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
-  (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and
-  `billing_company` is a field WooCommerce REMOVES from the checkout array entirely when that
-  setting is `hidden` — measured: with it hidden the id was absent even with the customer country
-  set to RU, so the demo had nothing to take over and was invisible on the rig. Revert with
-  `wp option update woocommerce_checkout_company_field hidden`, but the §8 root demo then goes dark
-  again. Note that both demo fields keep WooCommerce's OWN labels server-side (`Company name`,
-  `Apartment, suite, unit, etc.`): a takeover field is converted CLIENT-side by
-  `checkout-field-classic.js`, and `inject()` deliberately leaves WC's entry alone
-  (`test_inject_leaves_takeover_fields_to_woocommerce` asserts exactly that). Do not read the
-  native label as "the demo is not working".
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and switch the tree BEFORE asking — handing the operator a checklist while the tree holds another branch has already cost a wasted pass (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`).  **Дерево на `feat/505-shipping-tools-section` (s91)** — специально, чтобы секция «Инструменты» была видна в админке сразу. Для проверки #509 переключить: `git checkout fix/502-implicit-default-must-not-unlock-address` (JS чекаута отдаётся напрямую, пересборка не нужна; бандлы админки — только в основном чекауте). Таблица `wp_woodev_popular_settlements` есть и пуста — я снёс её пробой в s91 и восстановил (9 колонок, опция схемы `2`). Ворктри Orca `s91-505-tools` и `s91-494-keyescape` ещё на месте.
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
@@ -202,17 +206,8 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
   level the new provider does not own read as ABSENT (by design, s78): the chain empties and the
   address locks until re-picked.
 - **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
+- **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
-- **Two live location providers on the rig now (s76).** DaData is active by default; the CDEK test
-  contour is registered as `test-cdek` (fixture
-  `tests/_fixtures/woodev-test-shipping-method/class-test-cdek-location-provider.php`) and its
-  credentials sit in the container's wp-config as `WOODEV_TEST_CDEK_CLIENT_ID` /
-  `WOODEV_TEST_CDEK_CLIENT_SECRET`. Flip with
-  `wp option update woodev_location_active_provider test-cdek` (back: `dadata`). CDEK serves
-  region+settlement only, so with DaData also configured the address level falls back to DaData —
-  that is the layer answering honestly, not a bug (gotcha
-  `a-level-served-can-come-from-the-fallback-not-the-active-provider`).
-- **dev `:8973` — LIVE YANDEX bulk ON.** `WOODEV_TEST_PICKUP_LIVE_YANDEX=1` wins over `WOODEV_TEST_PICKUP_LIVE_POCHTA=false` and `WOODEV_TEST_PICKUP_STRATEGY=viewport`; the rig serves 812 live Yandex points (Moscow). The DaData token and `clean_secret` are both configured. Fixture is active only when both live flags are false. `WOODEV_TEST_POCHTA_ACCOUNT_ID` / `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` (operator-supplied Отправка credentials — never committed) let `WOODEV_TEST_PICKUP_EMBEDDED=1` drive the live Почта widget; that switch is currently OFF.
 - **tests `:8974` carries NO `WOODEV_TEST_*` constants** — deleted with `wp config delete` so the integration suite is deterministic locally. The authority is `wp config set` **inside the container**, not `.wp-env.override.json`, which is only a mirror (measured).
 - **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
 - Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
