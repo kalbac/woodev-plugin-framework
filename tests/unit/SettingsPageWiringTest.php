@@ -7,10 +7,6 @@ use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-provider.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-page-registry.php';
 
 class SettingsPageWiringTest extends TestCase {
 

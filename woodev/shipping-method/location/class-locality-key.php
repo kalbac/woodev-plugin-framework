@@ -57,10 +57,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * prediction about what the marker looks like.
 		 *
 		 * Safe under {@see self::parse()}'s existing "split on the FIRST colon only"
-		 * contract without any change to `parse()` — a real DaData native id already
-		 * legitimately contains colons of its own (`relation:59195`, `way:1247091839`,
-		 * measured OSM ids), so a marker segment containing one more is nothing new to
-		 * that contract, and this marker's OWN colon is likewise inert to it.
+		 * contract without any change to that splitting rule — a real DaData native id
+		 * already legitimately contains colons of its own (`relation:59195`,
+		 * `way:1247091839`, measured OSM ids), so a marker segment containing one more
+		 * is nothing new to that rule, and this marker's OWN colon is likewise inert to it.
+		 *
+		 * A bare prefix is STILL a prediction, though — one about what a provider's own
+		 * native id looks like, and a provider id beginning with this exact marker is not
+		 * implausible given the above (#494). {@see self::compose()} therefore ESCAPES a
+		 * native id that begins with the marker by doubling it (`derived:` becomes
+		 * `derived:derived:`) rather than refusing it outright — refusing was tried and
+		 * reverted (commit `0848029`) because it makes such an id UNREPRESENTABLE: DaData's
+		 * own mapper composes every record it maps, so the refusal would degrade a real
+		 * locality into an unmappable one, trading a classification bug for data loss on
+		 * ingest. {@see self::parse()} reverses the doubling so every caller still gets
+		 * back exactly the id it was given; see that method and {@see self::is_derived()}
+		 * for how a single marker (derived) is told apart from a doubled one (an escaped
+		 * provider id) — correct at any depth of accidental doubling in source data.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -75,6 +88,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * applies to a component of a key, not only to a whole key: a blank provider_id
 		 * would produce a key with no real namespace, and a blank native_id would produce
 		 * a namespace pointing at nothing.
+		 *
+		 * A native id that itself begins with {@see self::DERIVED_MARKER} is ESCAPED —
+		 * see {@see self::escape_native_id()} — rather than refused, so every provider
+		 * native id stays representable (#494); {@see self::parse()} reverses the
+		 * escaping so a caller never sees the doubled marker.
 		 *
 		 * @since 2.0.2
 		 *
@@ -94,25 +112,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 				throw new \InvalidArgumentException( 'Locality_Key::compose() requires a non-empty native_id.' );
 			}
 
-			// KNOWN GAP, tracked as its own card — see {@see self::DERIVED_MARKER}. A provider
-			// native id that itself began with the marker would be misread as derived. It is NOT
-			// closed by refusing to compose such a key: that was tried and reverted, because it
-			// makes the id UNREPRESENTABLE — DaData's own mapper composes every record it maps,
-			// so the refusal degrades a real locality into an unmappable one, trading a
-			// misclassification for data loss on ingest. Closing it properly needs an escaping
-			// scheme that preserves EVERY native id, which changes what `parse()` returns and so
-			// belongs in its own reviewed change rather than here.
-			return self::join( $provider_id, $native_id );
+			return self::join( $provider_id, self::escape_native_id( $native_id ) );
 		}
 
 		/**
 		 * Concatenates the two segments with the separator, and validates nothing.
 		 *
-		 * Exists so {@see self::derive()} can mint the one native-id shape
-		 * {@see self::compose()} is required to refuse — the reserved
-		 * {@see self::DERIVED_MARKER} prefix — without either method having to duplicate
-		 * the other's separator, and without `compose()`'s reservation growing an
-		 * exception that a future caller could reach.
+		 * Exists so {@see self::derive()} can mint its single-marker native-id segment
+		 * through the same separator {@see self::compose()} uses, without either method
+		 * duplicating the other's separator — `derive()`'s marker never passes through
+		 * {@see self::escape_native_id()}, because `derive()` MINTS the marker, it is
+		 * not escaping a provider-issued value.
 		 *
 		 * @since 2.0.2
 		 *
@@ -127,8 +137,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 		/**
 		 * Splits a namespaced key into `[ provider_id, native_id ]`, on the FIRST colon
-		 * only — a native id is free to contain colons of its own (e.g. a provider that
-		 * derives composite ids), so only the first separator carries meaning.
+		 * only, WITHOUT reversing any {@see self::escape_native_id()} escaping — the RAW
+		 * segment exactly as stored. {@see self::parse()} is the public, unescaping entry
+		 * point; this exists so {@see self::is_derived()} can read the raw marker instead
+		 * of a value `parse()` may already have unescaped — an escaped provider id
+		 * unescapes to a single leading marker too, one level shallower than its stored
+		 * form, so reading ownership off the unescaped value would misclassify it as
+		 * derived (#494, the bug the escaping scheme exists to close).
 		 *
 		 * A malformed key (no colon at all, or an empty OR WHITESPACE-ONLY provider/native
 		 * part either side of the first colon) is refused rather than returning a
@@ -149,12 +164,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 *
 		 * @param string $key A key produced by {@see self::compose()} or {@see self::derive()}.
 		 *
-		 * @return array{0: string, 1: string} `[ provider_id, native_id ]`.
+		 * @return array{0: string, 1: string} `[ provider_id, native_id ]`, native_id RAW.
 		 *
 		 * @throws \InvalidArgumentException When the key has no colon, or either resulting
 		 *                                   part is empty or whitespace-only.
 		 */
-		public static function parse( string $key ): array {
+		private static function split_key( string $key ): array {
 			$position = strpos( $key, ':' );
 
 			if ( false === $position ) {
@@ -173,6 +188,110 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 			}
 
 			return [ $provider_id, $native_id ];
+		}
+
+		/**
+		 * Escapes a RAW native id for storage in a composed key: a native id that itself
+		 * begins with {@see self::DERIVED_MARKER} gets one more marker prepended
+		 * (`derived:` becomes `derived:derived:`, `derived:derived:` becomes
+		 * `derived:derived:derived:`, …), so it is stored one marker level "louder" than
+		 * a genuinely {@see self::derive()}d key's single marker and
+		 * {@see self::is_derived()} can never confuse the two. A native id that does not
+		 * begin with the marker is stored verbatim — the entire cost of this scheme for
+		 * every native id measured in production (#494): none of them begin with the
+		 * marker, so none of them are touched.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $native_id RAW native id, as issued by the provider.
+		 *
+		 * @return string
+		 */
+		private static function escape_native_id( string $native_id ): string {
+			if ( ! self::starts_with_marker( $native_id ) ) {
+				return $native_id;
+			}
+
+			return self::DERIVED_MARKER . $native_id;
+		}
+
+		/**
+		 * Reverses {@see self::escape_native_id()}: a stored native id beginning with the
+		 * marker written TWICE in a row is an escaped provider id one marker level
+		 * "louder" than it should read as, so exactly one marker is stripped to recover
+		 * the original — correct at any depth, since escaping only ever adds ONE marker
+		 * per {@see self::compose()} call. A segment beginning with the marker only ONCE
+		 * is a genuine {@see self::derive()} marker, not an escaped value, and is
+		 * returned unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $native_id STORED native id, as read from a composed key.
+		 *
+		 * @return string RAW native id, as originally issued by the provider.
+		 */
+		private static function unescape_native_id( string $native_id ): string {
+			if ( ! self::starts_with_doubled_marker( $native_id ) ) {
+				return $native_id;
+			}
+
+			return substr( $native_id, strlen( self::DERIVED_MARKER ) );
+		}
+
+		/**
+		 * Whether `$native_id` begins with {@see self::DERIVED_MARKER} at least once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $native_id A native-id segment (raw or stored).
+		 *
+		 * @return bool
+		 */
+		private static function starts_with_marker( string $native_id ): bool {
+			return 0 === strpos( $native_id, self::DERIVED_MARKER );
+		}
+
+		/**
+		 * Whether `$native_id` begins with {@see self::DERIVED_MARKER} written TWICE in a
+		 * row — the signature of a stored native id {@see self::escape_native_id()}
+		 * produced, as opposed to a genuinely {@see self::derive()}d key's single marker.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $native_id A STORED native-id segment.
+		 *
+		 * @return bool
+		 */
+		private static function starts_with_doubled_marker( string $native_id ): bool {
+			return 0 === strpos( $native_id, self::DERIVED_MARKER . self::DERIVED_MARKER );
+		}
+
+		/**
+		 * Splits a namespaced key into `[ provider_id, native_id ]`, on the FIRST colon
+		 * only — a native id is free to contain colons of its own (e.g. a provider that
+		 * derives composite ids), so only the first separator carries meaning — and
+		 * reverses any {@see self::escape_native_id()} escaping {@see self::compose()}
+		 * applied, so the returned native_id is always exactly what the provider issued
+		 * (#494). A genuinely {@see self::derive()}d key's single-marker segment is
+		 * returned unchanged: it was never escaped, and {@see self::is_derived()} still
+		 * reads it as derived.
+		 *
+		 * See {@see self::split_key()} for the malformed-key refusal rules this delegates
+		 * to.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $key A key produced by {@see self::compose()} or {@see self::derive()}.
+		 *
+		 * @return array{0: string, 1: string} `[ provider_id, native_id ]`.
+		 *
+		 * @throws \InvalidArgumentException When the key has no colon, or either resulting
+		 *                                   part is empty or whitespace-only.
+		 */
+		public static function parse( string $key ): array {
+			[ $provider_id, $native_id ] = self::split_key( $key );
+
+			return [ $provider_id, self::unescape_native_id( $native_id ) ];
 		}
 
 		/**
@@ -249,8 +368,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 			$canonical = self::canonicalize( $components );
 
-			// `join()`, not `compose()`: this is the ONE place allowed to mint the reserved
-			// marker, and `compose()` refuses it precisely so nothing else can.
+			// `join()`, not `compose()`: this is the ONE place allowed to mint a single,
+			// un-escaped marker. `compose()` never produces one — it either leaves a
+			// native id untouched (no leading marker) or escapes it to a DOUBLED one —
+			// so a single leading marker is unambiguous evidence of derivation.
 			return self::join( $provider_id, self::DERIVED_MARKER . substr( sha1( $canonical ), 0, self::DERIVED_ID_LENGTH ) );
 		}
 
@@ -260,6 +381,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * marker, never a guess about what a derived key's native-id segment happens to
 		 * look like. See {@see self::DERIVED_MARKER}'s own docblock for why the earlier
 		 * shape-guessing approach was wrong and this replaced it.
+		 *
+		 * Reads the RAW stored segment via {@see self::split_key()}, NOT
+		 * {@see self::parse()}'s unescaped one: an escaped provider id (one that itself
+		 * began with the marker) unescapes to a single leading marker too, one level
+		 * shallower than its stored form — reading ownership off the unescaped value
+		 * would misclassify that provider id as derived (#494, the bug this whole
+		 * escaping scheme exists to close). Derived means "the marker appears exactly
+		 * once", never "the marker appears at least once".
 		 *
 		 * A caller that needs to know whether a stored key can ever be looked up again
 		 * by a provider's own by-id lookup (e.g.
@@ -276,9 +405,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * @throws \InvalidArgumentException When `$key` is malformed — see {@see self::parse()}.
 		 */
 		public static function is_derived( string $key ): bool {
-			[ , $native_id ] = self::parse( $key );
+			[ , $native_id ] = self::split_key( $key );
 
-			return 0 === strpos( $native_id, self::DERIVED_MARKER );
+			return self::starts_with_marker( $native_id ) && ! self::starts_with_doubled_marker( $native_id );
 		}
 
 		/**

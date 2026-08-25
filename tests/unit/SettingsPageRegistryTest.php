@@ -9,15 +9,7 @@ use Woodev\Framework\Settings\Settings_Section;
 use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Settings\Tool_Result;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-field-schema.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-provider.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-page-registry.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-status.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
 
 class SettingsPageRegistryTest extends TestCase {
 

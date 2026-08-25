@@ -229,8 +229,8 @@ final class LocalityKeyTest extends TestCase {
 	 * `derive()` mints the marker through a private `join()` rather than through `compose()`.
 	 * Regression cover for the reverted reservation guard: `compose()` deliberately does NOT
 	 * refuse the marker (refusing it made a provider-issued id starting with the marker
-	 * unrepresentable), so this pins that derivation still works and reads back as derived.
-	 * The remaining ambiguity is tracked as its own card.
+	 * unrepresentable) — it ESCAPES it instead (#494), so this pins that derivation still
+	 * works and reads back as derived.
 	 */
 	public function test_derive_mints_a_key_that_reads_back_as_derived(): void {
 		$key = Locality_Key::derive( 'dadata', [ 'city' => 'Пенза', 'region' => 'Пензенская' ] );
@@ -238,5 +238,71 @@ final class LocalityKeyTest extends TestCase {
 		$this->assertTrue( Locality_Key::is_derived( $key ) );
 		$this->assertSame( 'dadata', Locality_Key::parse( $key )[0] );
 		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', 'relation:59195' ) ) );
+	}
+
+	// ---- #494: a bare `derived:` prefix is a prediction about what a provider's own
+	// native id looks like, and measured DaData native ids DO contain colons
+	// (`relation:59195`, `way:1247091839`). A provider native id that itself begins with
+	// the marker must still round-trip through compose()/parse() UNCHANGED, and must never
+	// be misread as derived — see Locality_Key::DERIVED_MARKER's own docblock for the
+	// sentinel-doubling scheme this pins. ----
+
+	/**
+	 * @dataProvider native_id_shape_provider
+	 */
+	public function test_parse_round_trips_every_native_id_shape( string $native_id ): void {
+		$key = Locality_Key::compose( 'dadata', $native_id );
+
+		$this->assertSame( [ 'dadata', $native_id ], Locality_Key::parse( $key ) );
+	}
+
+	/**
+	 * @dataProvider native_id_shape_provider
+	 */
+	public function test_is_derived_is_false_for_every_composed_native_id_shape( string $native_id ): void {
+		// A composed key is never derived, regardless of what its native id looks like —
+		// including a native id that begins with the marker itself, which is exactly the
+		// case a bare-prefix check would have gotten wrong.
+		$this->assertFalse( Locality_Key::is_derived( Locality_Key::compose( 'dadata', $native_id ) ) );
+	}
+
+	public function native_id_shape_provider(): array {
+		return [
+			'plain'                                  => [ 'abc-123' ],
+			'osm-relation'                            => [ 'relation:59195' ],
+			'osm-way'                                  => [ 'way:1247091839' ],
+			'fias-uuid'                                => [ '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' ],
+			'cdek-numeric-code'                        => [ '616635' ],
+			'coincidentally-shaped-like-a-derived-hash' => [ '0123456789abcdef0123' ],
+			'starts-with-the-word-derived-not-the-marker' => [ 'derived-by-the-carrier-42' ],
+			'single-marker'                            => [ 'derived:' ],
+			'single-marker-with-suffix'                 => [ 'derived:abc-123' ],
+			'doubled-marker'                            => [ 'derived:derived:' ],
+			'doubled-marker-with-suffix'                 => [ 'derived:derived:abc-123' ],
+			'marker-tripled'                            => [ 'derived:derived:derived:' ],
+			'marker-tripled-with-suffix'                 => [ 'derived:derived:derived:abc-123' ],
+		];
+	}
+
+	public function test_compose_escapes_a_native_id_that_begins_with_the_derived_marker(): void {
+		// The escaping is observable: a native id beginning with the marker is stored
+		// with the marker doubled, one level "louder" than a genuinely derived key's
+		// single marker.
+		$this->assertSame( 'dadata:derived:derived:abc-123', Locality_Key::compose( 'dadata', 'derived:abc-123' ) );
+	}
+
+	public function test_compose_does_not_touch_a_native_id_that_does_not_begin_with_the_marker(): void {
+		// The entire cost of the escaping scheme for every native id measured in
+		// production (#494): none of them begin with the marker, so composing them is
+		// byte-for-byte identical to before this change.
+		$this->assertSame( 'dadata:relation:59195', Locality_Key::compose( 'dadata', 'relation:59195' ) );
+	}
+
+	public function test_is_derived_is_true_only_for_a_key_whose_native_id_carries_exactly_one_marker(): void {
+		$derived_key = Locality_Key::derive( 'dadata', [ 'settlement' => 'Тюмень' ] );
+		$escaped_key = Locality_Key::compose( 'dadata', 'derived:abc-123' );
+
+		$this->assertTrue( Locality_Key::is_derived( $derived_key ) );
+		$this->assertFalse( Locality_Key::is_derived( $escaped_key ) );
 	}
 }

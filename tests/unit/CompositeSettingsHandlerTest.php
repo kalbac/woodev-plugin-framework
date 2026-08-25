@@ -8,7 +8,6 @@ require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/abstract-class-settings.php';
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-composite-settings-handler.php';
 
 /**
  * `Composite_Settings_Handler` routes every `Field_Schema` / REST-controller call to the real

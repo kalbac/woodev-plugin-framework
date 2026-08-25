@@ -3,7 +3,6 @@ namespace Woodev\Tests\Unit;
 
 use Woodev\Framework\Settings\Settings_Section;
 
-require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/class-settings-section.php';
 
 class SettingsSectionTest extends TestCase {
 
