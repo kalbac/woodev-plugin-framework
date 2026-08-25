@@ -22,16 +22,20 @@ managing it.
 
 An untracked-and-ignored file only survives a checkout while **no branch involved tracks it**.
 
-## Why it bites here specifically
+## How it bit here
 
-`docs-internal/next-session-prompt.md` is deliberately untracked (this repo is public — see
-`.gitignore` and the `woodev-docs-system` skill). Every feature branch cut before that change
-still tracks it. So the ordinary act of switching to a feature branch to verify something on the
-rig, then switching back, silently destroys the handoff — the one file the next session is
-required to read first.
+`docs-internal/next-session-prompt.md` was untracked for about an hour on 25.08.2026 (the repo was
+public then). Every feature branch cut before that change still tracked it, so the ordinary act of
+switching to a feature branch to drive the rig and switching back destroyed the handoff — the one
+file the next session is required to read first. It happened twice within minutes.
 
-It also destroys `next-session-prompt.md.prev`, the snapshot the handoff drop-check falls back to,
-which would quietly disable that gate as well.
+**That specific exposure is over**: the repo went private the same evening and the handoff is
+tracked again. The trap itself is not project-specific and stays recorded, because the setup
+recurs — any `git rm --cached` + `.gitignore` on a file that older branches still track reproduces
+it exactly, and the `woodev-docs-system` skill still mandates that setup for PUBLIC repos.
+
+It also destroys `next-session-prompt.md.prev`, the snapshot the handoff drop-check falls back to
+when the handoff is untracked — quietly disabling that gate along with it.
 
 ## ✅ What to do
 
@@ -50,7 +54,7 @@ over), so the loss is caught — but it is caught **after** the content is alrea
 is what saves it.
 
 The exposure ends by itself once every branch predating the untracking commit is merged or
-deleted. Until then, treat the handoff as a file that does not survive `git checkout`.
+deleted. Until then, treat such a file as one that does not survive `git checkout`.
 
 ## Related
 
