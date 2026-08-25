@@ -421,6 +421,11 @@
 	 *   since each transport call builds its own `AbortController` in a closure private to that one
 	 *   call. See that function's own `activeAbort` docblock for why a single overwritten reference
 	 *   is enough (never an array of every request ever made).
+	 *   `popular`, when supplied (issue #530), returns the shop's popular-settlements list —
+	 *   already country/region-scoped, already `.value`-stamped ({@see popularFor} in
+	 *   location-cascade.js) — read LIVE by the ajax transport on every completed search so a
+	 *   returned match already IN that list ranks above the rest of that same search (a stable
+	 *   partition, never a re-sort within either group).
 	 * @returns {Object}
 	 */
 	function selectConfigFor( strategy, seed ) {
@@ -666,8 +671,29 @@
 							seed.onAbandon( null );
 						}
 
+						// Issue #530: popular entries rank ABOVE the rest of this same completed
+						// search — a stable partition (never a re-sort of provider relevance
+						// within either group), read LIVE via `seed.popular()` so a region
+						// picked after select2 init still scopes it correctly (see that
+						// function's own docblock, `popularFor()` in location-cascade.js).
+						var popularKeys = {};
+
+						if ( 'function' === typeof seed.popular ) {
+							seed.popular().forEach( function( item ) {
+								if ( item && item.key ) {
+									popularKeys[ item.key ] = true;
+								}
+							} );
+						}
+
+						var ranked = accepted.filter( function( item ) {
+							return !! popularKeys[ item.key ];
+						} ).concat( accepted.filter( function( item ) {
+							return ! popularKeys[ item.key ];
+						} ) );
+
 						success( {
-							results: accepted.map( function( entry ) {
+							results: ranked.map( function( entry ) {
 								return {
 									id: undefined !== entry.value ? entry.value : entry.key,
 									text: entry.record.label || entry.label,
@@ -1345,6 +1371,12 @@
 				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
 				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.
 				listLoadFailed: listLoadFailed,
+				// Issue #530: OPTIONAL, same discipline as `onAbandon` above — `location-cascade.js`'s
+				// `attachOne()` only hands this over when a level actually carries a popular list
+				// (currently `settlement`). Read LIVE by `selectConfigFor()`'s transport on every
+				// completed search, never captured once here, so a region picked AFTER this select2
+				// instance was built still scopes the ranking correctly.
+				popular: 'function' === typeof options.popular ? options.popular : null,
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -1369,9 +1401,34 @@
 				seededOption.selected = true;
 
 				select.appendChild( seededOption );
-			} else if ( placeholder ) {
-				// The empty leading <option> select2's placeholder requires (see ensureSelect2()).
-				select.appendChild( document.createElement( 'option' ) );
+			} else {
+				// Issue #530: seed the shop's popular-settlements list as real <option>
+				// elements so the field has something useful before the customer types.
+				// `minimumInputLengthFor()` floors this field at 2 characters, so an
+				// ajax-select2 field structurally cannot serve an empty state any other
+				// way — a round-trip at attach time would mean seconds of empty field (the
+				// rig's own `/suggest` measured 8.5s) plus a race with select2 init. `true`
+				// (REPLACE, not merge) is what actually builds the `<option>` DOM nodes —
+				// `applyEntries()`'s own docblock: the ajax `false` call `selectConfigFor()`'s
+				// transport makes is merge-only because select2 renders ITS OWN `<option>`s
+				// for a remote result; this is the empty state BEFORE select2 ever runs, so
+				// it needs the real nodes. Safe to REPLACE here: `select` is still empty at
+				// this point in `buildSelectField()`, nothing to lose. Routed through the SAME
+				// `applyEntries()` every ajax response uses, so a pick here is indistinguishable
+				// from a search pick (spec D1) — real `dataset.woodevKey`, real `dataByKey`
+				// entry, same `resolveAndSelect()` → `options.onSelect()` → `/select` path,
+				// never a separate selection mechanism.
+				if ( 'function' === typeof options.popular ) {
+					applyEntries( options.popular(), true );
+				}
+
+				if ( placeholder ) {
+					// The empty leading <option> select2's placeholder requires (see
+					// ensureSelect2()) — MUST be the first child for select2's placeholder
+					// mechanism to suppress it, so this is inserted BEFORE whatever popular
+					// seeding above produced, never appended after it.
+					select.insertBefore( document.createElement( 'option' ), select.firstChild );
+				}
 			}
 
 			// Without select2 available at all, the field is simply a native <select> carrying

@@ -1373,6 +1373,64 @@
 	}
 
 	/**
+	 * Builds the `popular()` callback handed to a Task 13 renderer (issue #530 — #488's
+	 * customer-facing half): the shop's popular-settlements list for THIS node's live
+	 * country, already narrowed to the currently-selected region and already `.value`-
+	 * stamped via {@see fieldValueFor} — the SAME contract `fetch`/`list` already honour,
+	 * so a renderer never re-derives either.
+	 *
+	 * Scope is read LIVE at call time (never captured at attach time), same discipline as
+	 * {@see fetchFor}/{@see listFor} — a region picked AFTER the widget was built still
+	 * narrows the very next call.
+	 *
+	 * Region narrowing does NOT use a single "region key" field — `Location_Record::region()`
+	 * carries only `{ name, type }`, no key (MEASURED against the server payload; an earlier
+	 * draft of this feature assumed otherwise). Each entry's `record.ancestors` — the same
+	 * flat locality-key SET `is_within()` already uses server-side — is checked against
+	 * {@see scopeKeyFor}'s own live-resolved parent key instead: `null` (no region selected,
+	 * or the region field is not yet a confirmed record) means "unscoped", every entry stays;
+	 * a real key means "only entries within that region".
+	 *
+	 * `entry.location.popular` is a STATIC per-country map from `Checkout_Config` (one
+	 * `wp_localize_script` emission per page render, spec: same reasoning as `levels`/`owners`)
+	 * — this function only reads and filters it, never fetches.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string, fieldId: string}} node
+	 * @returns {function(): Array}
+	 */
+	function popularFor( entry, node ) {
+		return function() {
+			var country = countryFor( entry, node );
+			var raw = ( entry.location.popular && entry.location.popular[ country ] ) || [];
+			var within = scopeKeyFor( entry, node.level );
+
+			var scoped = raw.filter( function( item ) {
+				// Defensive: every stored popular entry is settlement-level today (only an
+				// order's own settlement is ever enrolled), but this function must not assume
+				// that will always hold for whatever level it is asked about.
+				if ( ! item || item.level !== node.level ) {
+					return false;
+				}
+
+				if ( ! within ) {
+					return true;
+				}
+
+				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
+
+				return ancestors.indexOf( within ) !== -1;
+			} );
+
+			scoped.forEach( function( item ) {
+				item.value = fieldValueFor( item.record, node.level );
+			} );
+
+			return scoped;
+		};
+	}
+
+	/**
 	 * Writes `value` onto `el` — an `<input>` gets a plain `.value` assignment (unchanged);
 	 * a `<select>` (issue #460) needs an actually SELECTED `<option>`, or the field is
 	 * silently omitted from the next `update_checkout` POST.
@@ -3030,6 +3088,12 @@
 			// `fieldValueFor()` value stamping — for a Task 13 `related-list` renderer that needs
 			// the FULL scoped list rather than a per-keystroke suggest query.
 			list: listFor( entry, node ),
+			// Issue #530: only handed over for the level the popular-settlements list can
+			// ever carry — `settlement` (only an order's own settlement is ever enrolled,
+			// spec D2/D3) — a mode-specific renderer for `region`/`address` gets no
+			// `options.popular` at all, the same "omit rather than hand over an
+			// always-empty primitive" discipline `onAbandon` already follows elsewhere.
+			popular: 'settlement' === node.level ? popularFor( entry, node ) : null,
 			onSelect: onSelectFor( entry, node ),
 			// Issue #350: OPTIONAL for the widget (a mode-specific Task 13 renderer is free to
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own

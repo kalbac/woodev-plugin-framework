@@ -380,6 +380,71 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	} );
 
 	// -----------------------------------------------------------------------
+	// Issue #530 — a completed search's results are re-ranked so an entry ALSO in the shop's
+	// popular list sorts above the rest of that same search (a stable partition, never a
+	// re-sort of provider relevance within either group).
+	// -----------------------------------------------------------------------
+
+	it( 'issue #530: entries that are also in seed.popular() rank above the rest, preserving the provider\'s own relative order within each group', async () => {
+		// Provider relevance order: Тверь, Тверская область, Тверь (Калужская обл.) — only
+		// the SECOND one is popular. The expected output moves it to the front, WITHOUT
+		// reordering the other two relative to each other.
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:a', label: 'Тверь', record: { key: 'dadata:a', label: 'Тверь' } },
+			{ key: 'dadata:b', label: 'Тверская область', record: { key: 'dadata:b', label: 'Тверская область' } },
+			{ key: 'dadata:c', label: 'Тверь (Калужская обл.)', record: { key: 'dadata:c', label: 'Тверь (Калужская обл.)' } },
+		] ) );
+		const applyEntries = jest.fn( ( entries ) => entries );
+		const popular = jest.fn( () => [ { key: 'dadata:b' } ] );
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries, popular: popular }
+		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Твер' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledWith( {
+			results: [
+				{ id: 'dadata:b', text: 'Тверская область', key: 'dadata:b' },
+				{ id: 'dadata:a', text: 'Тверь', key: 'dadata:a' },
+				{ id: 'dadata:c', text: 'Тверь (Калужская обл.)', key: 'dadata:c' },
+			],
+		} );
+		// Read LIVE, not captured once — a region picked between two searches must scope the
+		// very next ranking, same discipline `options.parentKey()`'s own callers already follow.
+		expect( popular ).toHaveBeenCalled();
+	} );
+
+	it( 'control: with no seed.popular at all (a related-list-only page, or a level the popular list never carries), the transport reports results in the provider\'s own order, unchanged', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:a', label: 'Тверь', record: { key: 'dadata:a', label: 'Тверь' } },
+			{ key: 'dadata:b', label: 'Тверская область', record: { key: 'dadata:b', label: 'Тверская область' } },
+		] ) );
+		const applyEntries = jest.fn( ( entries ) => entries );
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries } // no `popular` key at all.
+		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Твер' } }, success, jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledWith( {
+			results: [
+				{ id: 'dadata:a', text: 'Тверь', key: 'dadata:a' },
+				{ id: 'dadata:b', text: 'Тверская область', key: 'dadata:b' },
+			],
+		} );
+	} );
+
+	// -----------------------------------------------------------------------
 	// Issue #528 — `tags`/`createTag`/`insertTag`, gated on `seed.allowCustomSettlement` AND
 	// (round 2, critic MJ-A) `'settlement' === seed.level`.
 	// -----------------------------------------------------------------------
@@ -1455,6 +1520,117 @@ describe( 'ajax-select2 renderer — current value is seeded before select2 init
 		expect( seenSignals[ 1 ] ).toBeInstanceOf( AbortSignal );
 		expect( seenSignals[ 0 ].aborted ).toBe( true );
 		expect( seenSignals[ 1 ].aborted ).toBe( false );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #530 (#488's customer-facing half): the settlement field's EMPTY state is seeded from
+// the shop's popular-settlements list — real <option> elements, since minimumInputLengthFor()
+// floors this field at 2 characters and select2 renders NOTHING below that, so a fetched empty
+// state is structurally impossible here (see location-select-modes.js's own comment at the
+// seeding call site).
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issue #530: the empty state is seeded from options.popular()', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	const POPULAR = [
+		{
+			key: 'dadata:tv', label: 'Тверь', level: 'settlement', value: 'Тверь',
+			record: { key: 'dadata:tv', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'Тверь' },
+		},
+		{
+			key: 'dadata:kz', label: 'Казань', level: 'settlement', value: 'Казань',
+			record: { key: 'dadata:kz', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'Казань' },
+		},
+	];
+
+	it( 'an empty field with no placeholder seeds the popular entries, in the order options.popular() returned them, with NO select2 present at all', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" />';
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'billing_city' ),
+			buildOptions( { popular: jest.fn( () => POPULAR ) } )
+		);
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.options.length ).toBe( 2 );
+		expect( select.options[ 0 ].value ).toBe( 'Тверь' );
+		expect( select.options[ 0 ].textContent ).toBe( 'Тверь' );
+		expect( select.options[ 1 ].value ).toBe( 'Казань' );
+	} );
+
+	// MUTATION PROOF (per the brief's own rule — a test that cannot fail survives review):
+	// reverting the seeding call in buildSelectField() (the `if ( 'function' === typeof
+	// options.popular ) { applyEntries( options.popular(), false ); }` block) back out makes
+	// this test fail with `select.options.length` = 0, not 2. Verified by hand — see the
+	// worker_done report for the exact mutation and its failing output.
+
+	it( 'the blank leading <option> select2\'s placeholder requires stays FIRST — popular entries are appended after it, never before', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" placeholder="Населённый пункт" />';
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'billing_city' ),
+			buildOptions( { popular: jest.fn( () => POPULAR ) } )
+		);
+
+		expect( instances[ 0 ].config.placeholder ).toBe( 'Населённый пункт' );
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.options.length ).toBe( 3 );
+		expect( select.options[ 0 ].value ).toBe( '' );
+		expect( select.options[ 1 ].value ).toBe( 'Тверь' );
+		expect( select.options[ 2 ].value ).toBe( 'Казань' );
+	} );
+
+	it( 'a non-empty initialValue (issue #447) still wins — no popular seeding at all when the field already carries a value', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="Уже выбрано" />';
+
+		const popular = jest.fn( () => POPULAR );
+
+		mod.attachAjaxSelect2( document.getElementById( 'billing_city' ), buildOptions( { popular } ) );
+
+		expect( popular ).not.toHaveBeenCalled();
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.options.length ).toBe( 1 );
+		expect( select.options[ 0 ].value ).toBe( 'Уже выбрано' );
+	} );
+
+	it( 'picking a seeded popular option calls options.onSelect with its record — the SAME resolution path a search pick uses, never a separate mechanism (spec D1)', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" />';
+
+		const onSelect = jest.fn();
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'billing_city' ),
+			buildOptions( { popular: jest.fn( () => POPULAR ), onSelect } )
+		);
+
+		const select = document.getElementById( 'billing_city' );
+
+		// The NATIVE resolution path (no select2 installed) — handleChange() reads the STABLE
+		// identity applyEntries() stamped onto the option's own dataset, exactly like a
+		// related-list pick. A real select2 pick would instead go through handleSelect2Select()
+		// (issue #461 BLOCKING 2's own coverage), but both converge on the same resolveAndSelect().
+		select.value = 'Казань';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect ).toHaveBeenCalledWith( { record: POPULAR[ 1 ].record } );
 	} );
 } );
 

@@ -1631,6 +1631,69 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Gets the active provider's popular-settlements list for ONE country
+		 * (issue #530 — #488's customer-facing half: the list existed, but nothing
+		 * served it to the checkout), in the same wire shape
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::to_response_records()}
+		 * already uses for `/suggest`/`/list`: `{ key, label, level, record }`, `record`
+		 * the settlement's own {@see Location_Record::to_array()} untouched — so a pick
+		 * seeded from this list posts to `/select` byte-identical to a search pick
+		 * (spec D1: "picking from the popular list must be indistinguishable from
+		 * picking through search").
+		 *
+		 * Gated exactly like
+		 * {@see \Woodev\Framework\Shipping\Location\Popular_Settlements_Tools}'s own D3
+		 * rule: `[]` — never present-and-partial — when there is no active provider, or
+		 * it does not declare {@see Location_Provider::CAPABILITY_RESOLVE_KEY} (spec
+		 * D4: "no capability, no popular list at all"). Already ranked
+		 * ({@see Popular_Settlement_Store::all_for_provider()} sorts by `order_count`
+		 * DESC) — this method only narrows to `$country`, since the store itself is
+		 * NOT country-scoped (one provider's rows can span every country it serves).
+		 *
+		 * MEASURED, not the plan's original guess: {@see Location_Record::region()}
+		 * carries only `{ name, type }` — no key — so there is no single "region key"
+		 * to carry per entry the way an earlier draft of this feature assumed. The
+		 * mechanism the client actually needs for local region filtering is
+		 * {@see Location_Record::ancestors()}, already present verbatim inside
+		 * `record` below (the same flat ancestor-key SET
+		 * {@see Location_Record::is_within()} already uses server-side, and
+		 * `location-cascade.js`'s own `scopeKeyFor()` already resolves the selected
+		 * region's key to compare against) — never re-derived or invented here.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code.
+		 *
+		 * @return array<int, array{key: string, label: string, level: string, record: array<string, mixed>}>
+		 */
+		public function get_popular_settlements_for_country( string $country ): array {
+			$provider = $this->registry->get_active_provider();
+
+			if ( null === $provider || ! in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $provider->get_capabilities(), true ) ) {
+				return [];
+			}
+
+			$country = strtoupper( trim( $country ) );
+			$mapped  = [];
+
+			foreach ( $this->popular_settlement_store()->all_for_provider( $provider->get_id() ) as $entry ) {
+				if ( $entry->country() !== $country ) {
+					continue;
+				}
+
+				$record   = $entry->record();
+				$mapped[] = [
+					'key'    => $record->key(),
+					'label'  => esc_html( $record->label() ),
+					'level'  => $record->level(),
+					'record' => $record->to_array(),
+				];
+			}
+
+			return $mapped;
+		}
+
+		/**
 		 * Resolves ONE SPECIFIC registered provider for a suggest level — the
 		 * admin-override counterpart to {@see self::provider_for_level()}'s D15
 		 * chosen -> bundled-fallback chain walk (issue #380).
