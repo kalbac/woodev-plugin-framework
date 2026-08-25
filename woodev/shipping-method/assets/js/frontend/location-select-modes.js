@@ -1163,6 +1163,15 @@
 		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
 			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
 
+		// Issue #540: the SEARCH BOX's placeholder — a different surface from `placeholder`
+		// above, which names the closed control. Read from `options.searchPlaceholder`
+		// (`location-cascade.js` sources it from the same server-supplied `i18n` block) with a
+		// direct fallback to that block, so a renderer invoked with a hand-built `options` — as
+		// this file's own tests do — still resolves it. `''` disables the feature entirely; see
+		// {@see handleSelect2Open} for why silence is the right degradation.
+		var searchPlaceholder = ( 'string' === typeof options.searchPlaceholder ? options.searchPlaceholder : '' )
+			|| ( options.location && options.location.i18n && options.location.i18n.searchPlaceholder ) || '';
+
 		// Issue #528: the merchant opt-in for letting the customer submit a settlement the
 		// active provider does not carry — meaningful ONLY for the `ajax-select2` strategy
 		// (the settlement axis's `related-list` mode is clamped away unconditionally, #486,
@@ -1555,6 +1564,32 @@
 
 		function handleSelect2Open() {
 			dropdownOpen = true;
+
+			// Issue #540. select2 4.x exposes NO config option for the search box's own
+			// placeholder (`placeholder` names the closed control), so the attribute has to be
+			// set once the dropdown exists — `select2:open` is the documented public event for
+			// exactly that moment.
+			//
+			// Found through the OPEN CONTAINER rather than through
+			// `$select.data('select2').$dropdown`: select2 renders its dropdown detached from
+			// this `<select>` (appended to `<body>`), and reaching for `$dropdown` would mean
+			// depending on the instance's private shape — the same dependency this file refuses
+			// elsewhere (see `activeAbort`'s own docblock). `.select2-container--open` is
+			// select2's own public CSS contract, and at most ONE container carries it at a time,
+			// so this cannot reach another field's dropdown.
+			//
+			// Silently does nothing when the server supplied no string (an older config, or a
+			// `woodev_location_i18n` filter that cleared it) — an absent placeholder is the
+			// status quo ante, and inventing wording here is what #526 forbids.
+			if ( ! searchPlaceholder ) {
+				return;
+			}
+
+			var searchBox = document.querySelector( '.select2-container--open .select2-search__field' );
+
+			if ( searchBox ) {
+				searchBox.setAttribute( 'placeholder', searchPlaceholder );
+			}
 		}
 
 		/**

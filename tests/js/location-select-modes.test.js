@@ -964,6 +964,116 @@ describe( 'ajax transport — local narrowing while the real search runs (#539)'
 	} );
 } );
 
+// -----------------------------------------------------------------------
+// Issue #540 — the SEARCH BOX's own placeholder.
+//
+// With #530's popular list showing ready-made towns, a customer can read that list as the whole
+// offer and never realise the box above it accepts typing. select2 4.x has no config option for
+// this placeholder, so it is set on `select2:open`.
+// -----------------------------------------------------------------------
+
+describe( 'search-box placeholder (#540)', () => {
+	let mod;
+
+	function installStub( $ ) {
+		const calls = [];
+
+		$.fn.select2 = jest.fn( function( config ) {
+			calls.push( config );
+
+			return this;
+		} );
+
+		return calls;
+	}
+
+	/**
+	 * The markup select2 actually builds when a dropdown opens: a container carrying the PUBLIC
+	 * `--open` class, with the search input inside it. The renderer finds the box through that
+	 * class rather than through the select2 instance's private `$dropdown`, so the test has to
+	 * present the same public surface.
+	 *
+	 * @param {boolean} open
+	 * @returns {HTMLInputElement}
+	 */
+	function installDropdown( open ) {
+		const container = document.createElement( 'span' );
+
+		container.className = 'select2-container' + ( open ? ' select2-container--open' : '' );
+		container.innerHTML = '<input class="select2-search__field" />';
+		document.body.appendChild( container );
+
+		return container.querySelector( '.select2-search__field' );
+	}
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		document.body.innerHTML = '<form><input type="text" id="billing_city" name="billing_city" value="" /></form>';
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	function attach( overrides ) {
+		installStub( window.jQuery );
+		mod.attachRelatedListSettlement(
+			document.getElementById( 'billing_city' ),
+			buildOptions( Object.assign( { list: jest.fn( () => Promise.resolve( [] ) ) }, overrides ) )
+		);
+	}
+
+	it( 'stamps the server-supplied string onto the search box when the dropdown opens', async () => {
+		attach( { searchPlaceholder: 'Начните вводить название' } );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const box = installDropdown( true );
+
+		expect( box.getAttribute( 'placeholder' ) ).toBeNull();
+
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+
+		expect( box.getAttribute( 'placeholder' ) ).toBe( 'Начните вводить название' );
+	} );
+
+	it( 'falls back to location.i18n.searchPlaceholder when the caller passed none directly', async () => {
+		attach( {
+			location: { endpoints: { list: LIST_URL }, mode: 'related-list', allowCustomSettlement: true, i18n: { searchPlaceholder: 'Введите город' } },
+		} );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const box = installDropdown( true );
+
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+
+		expect( box.getAttribute( 'placeholder' ) ).toBe( 'Введите город' );
+	} );
+
+	it( 'sets NOTHING when the server supplied no string — silence, never a literal invented here (#526)', async () => {
+		attach( {} );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const box = installDropdown( true );
+
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+
+		expect( box.hasAttribute( 'placeholder' ) ).toBe( false );
+	} );
+
+	it( 'never reaches a container that is not the OPEN one — at most one dropdown is open at a time', async () => {
+		attach( { searchPlaceholder: 'Начните вводить название' } );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const closedBox = installDropdown( false );
+
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+
+		// Another field's closed container must be left alone — a selector without the
+		// `--open` half would have stamped this one too.
+		expect( closedBox.hasAttribute( 'placeholder' ) ).toBe( false );
+	} );
+} );
+
 describe( 'registers onto window.WoodevLocationRenderers on load', () => {
 	it( 'registers related-list:region, related-list:settlement, and the bare ajax-select2 key', () => {
 		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );

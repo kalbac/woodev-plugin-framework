@@ -1537,6 +1537,48 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertNotSame( '', $config['location']['i18n']['placeholder'] );
 	}
 
+	/**
+	 * Issue #540: the placeholder for select2's own SEARCH BOX — a different surface from
+	 * `placeholder` above, which names the CLOSED control. With #530's popular list showing
+	 * ready-made towns, a customer can read that list as the whole offer and never realise the
+	 * box accepts typing (operator, on the rig).
+	 *
+	 * Asserted DISTINCT from `placeholder` deliberately: the two are one keystroke apart in the
+	 * config and reusing «Выберите…» for a search box would be silently wrong rather than
+	 * visibly broken. Same shape of guard as `unavailable` vs `noResults` above.
+	 */
+	public function test_location_block_carries_a_search_placeholder_distinct_from_the_control_placeholder(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertIsString( $config['location']['i18n']['searchPlaceholder'] );
+		$this->assertNotSame( '', $config['location']['i18n']['searchPlaceholder'] );
+		$this->assertNotSame(
+			$config['location']['i18n']['placeholder'],
+			$config['location']['i18n']['searchPlaceholder']
+		);
+	}
+
+	/**
+	 * Issue #540: the string travels the SAME public filter every other customer-facing string
+	 * in this block does — a shop that wants different wording overrides it there, and never by
+	 * patching JS.
+	 */
+	public function test_search_placeholder_is_filterable_through_woodev_location_i18n(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_i18n' === $hook ? [ 'searchPlaceholder' => 'Введите город' ] : $value;
+			}
+		);
+
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertSame( 'Введите город', $config['location']['i18n']['searchPlaceholder'] );
+	}
+
 	public function test_no_token_or_secret_leaks_into_the_i18n_block(): void {
 		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
 		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )

@@ -3307,6 +3307,11 @@
 			// when this actually renders (a rejected/thrown `fetch()`, never a resolved-empty
 			// one).
 			errorText: 'string' === typeof i18n.unavailable ? i18n.unavailable : '',
+			// Issue #540: the placeholder for select2's own SEARCH BOX — not `placeholder`,
+			// which names the closed control. Same server-supplied/filterable route as every
+			// other customer-facing string here; an older config without the key degrades to no
+			// placeholder rather than to a literal invented client-side.
+			searchPlaceholder: 'string' === typeof i18n.searchPlaceholder ? i18n.searchPlaceholder : '',
 			node: node,
 			location: entry.location,
 			country: function() {
