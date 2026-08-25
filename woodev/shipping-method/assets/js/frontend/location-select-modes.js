@@ -260,6 +260,118 @@
 	}
 
 	/**
+	 * Issue #526: the `language` block for EVERY select2 this file builds, sourced from
+	 * WooCommerce's OWN `wc_country_select_params` rather than from strings invented here
+	 * (operator's ruling on #526: «нам не нужно свои переводы подсовывать, а брать уже готовые
+	 * из `wc_country_select_params`»).
+	 *
+	 * Without it select2 falls back to its BUILT-IN English messages, which is what the
+	 * operator saw on the rig three times — «No results found» on a Russian checkout. The gap
+	 * is wider than that one string: `minimumInputLengthFor()` floors the settlement field at
+	 * 2, so `inputTooShort` («Please enter 2 or more characters») is what the customer stares
+	 * at BEFORE typing anything at all, on every single visit.
+	 *
+	 * Copied key-for-key from WooCommerce's own `assets/js/frontend/country-select.js`
+	 * (measured in the rig container, `woocommerce.latest-stable`, lines 13-51) — the same
+	 * block `plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:194-224`
+	 * already copies. That includes the `errorLoading` line, which deliberately returns
+	 * `i18n_searching` and NOT `i18n_ajax_error`: it is WooCommerce's documented workaround for
+	 * select2/select2#4355, not a mistake to be corrected on the way past.
+	 *
+	 * `wc_country_select_params` is localized onto WooCommerce's `wc-country-select` handle,
+	 * which `Checkout_Handler` now declares as a dependency of `woodev-location-select-modes`
+	 * so the global is both present and printed first. Every key is still read DEFENSIVELY:
+	 * a missing param yields `undefined`, and select2 keeps its own default for that one
+	 * message rather than rendering the literal string "undefined".
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {{emptyText?: string}} seed
+	 * @returns {Object} A select2 `language` object. Never null — the abandon-recording branch
+	 *   below WRAPS the `noResults` this returns rather than replacing it.
+	 */
+	function select2LanguageFor( seed ) {
+		var params = 'undefined' !== typeof window && window.wc_country_select_params
+			? window.wc_country_select_params
+			: {};
+
+		/**
+		 * `undefined` for an absent param — never `''`, which select2 would render as an
+		 * empty message box, and never an English literal.
+		 *
+		 * @param {string} key
+		 * @returns {string|undefined}
+		 */
+		function param( key ) {
+			return 'string' === typeof params[ key ] ? params[ key ] : undefined;
+		}
+
+		/**
+		 * WooCommerce ships the 1-item and n-item plurals as separate msgids with a `%qty%`
+		 * placeholder — mirroring `country-select.js`'s own branch rather than pluralizing here.
+		 *
+		 * @param {number} qty
+		 * @param {string} singularKey
+		 * @param {string} pluralKey
+		 * @returns {string|undefined}
+		 */
+		function plural( qty, singularKey, pluralKey ) {
+			if ( 1 === qty ) {
+				return param( singularKey );
+			}
+
+			var many = param( pluralKey );
+
+			return 'string' === typeof many ? many.replace( '%qty%', qty ) : undefined;
+		}
+
+		return {
+			// See the docblock above: `i18n_searching` here is WooCommerce's own
+			// select2#4355 workaround, deliberately not `i18n_ajax_error`.
+			errorLoading: function() {
+				return param( 'i18n_searching' );
+			},
+			inputTooLong: function( args ) {
+				return plural(
+					args.input.length - args.maximum,
+					'i18n_input_too_long_1',
+					'i18n_input_too_long_n'
+				);
+			},
+			inputTooShort: function( args ) {
+				return plural(
+					args.minimum - args.input.length,
+					'i18n_input_too_short_1',
+					'i18n_input_too_short_n'
+				);
+			},
+			loadingMore: function() {
+				return param( 'i18n_load_more' );
+			},
+			maximumSelected: function( args ) {
+				return plural(
+					args.maximum,
+					'i18n_selection_too_long_1',
+					'i18n_selection_too_long_n'
+				);
+			},
+			// The ONE key where this layer's own string wins over WooCommerce's generic
+			// «No matches found»: `seed.emptyText` is `Checkout_Config`'s `i18n.noResults`
+			// («Поиск не дал результатов. Попробуйте изменить запрос.»), already routed
+			// through this plugin's text domain and already what `related-list` shows. Using
+			// WooCommerce's string here instead would make the two settlement modes disagree
+			// about the same outcome. `i18n_no_matches` is the FALLBACK, which is strictly
+			// better than the `''` this branch used to return when the server sent nothing.
+			noResults: function() {
+				return seed.emptyText || param( 'i18n_no_matches' );
+			},
+			searching: function() {
+				return param( 'i18n_searching' );
+			},
+		};
+	}
+
+	/**
 	 * Builds the config object for `strategy` — the exact object `ensureSelect2()` passes to
 	 * `.select2()`.
 	 *
@@ -279,7 +391,12 @@
 	 * @returns {Object}
 	 */
 	function selectConfigFor( strategy, seed ) {
-		var config = { width: '100%' };
+		// Issue #526: wired for EVERY strategy, not just the ajax one. The card was filed
+		// against «Список с поиском» because that is where the operator saw it, but the same
+		// untranslated select2 defaults reach a `related-list` field that carries no
+		// `onAbandon` (a region list) — the old code only ever set `language` on the
+		// non-ajax branch, and only when `seed.onAbandon` was a function.
+		var config = { width: '100%', language: select2LanguageFor( seed ) };
 
 		if ( strategy.ajax ) {
 			// Only meaningful when the field starts EMPTY — select2's own docs require a
@@ -577,32 +694,34 @@
 			//
 			// The returned string is never invented here: `seed.emptyText` is the SAME
 			// server-supplied "no results" text `location-cascade.js`'s `attachOne()` already
-			// resolves for every renderer at this node (falls back to '', same convention
-			// `attachOne()` itself uses, rather than a hardcoded English literal that would
-			// fight the layer's own i18n route).
-			config.language = {
-				noResults: function( params ) {
-					var term = params && 'string' === typeof params.term ? params.term : '';
+			// resolves for every renderer at this node.
+			//
+			// Issue #526 changed the SHAPE of this, not its timing: `config.language` is now
+			// built for every strategy by `select2LanguageFor()` above, so this branch WRAPS
+			// the `noResults` already there instead of replacing the whole `language` object.
+			// Replacing it would silently drop the seven other WooCommerce-sourced messages.
+			// The wrapped callback keeps `select2LanguageFor()`'s own return value — the same
+			// `seed.emptyText`, now with `i18n_no_matches` behind it instead of `''`.
+			//
+			// The critic MN-4/MN-5 note that used to sit here asserted that «`ajax-select2`
+			// never wires `config.language` at all». That was a MEASUREMENT of the old code,
+			// and #526 made it false — it is removed rather than left to mislead the next
+			// reader (this file has been bitten three times by an inference left standing in a
+			// docblock as a fact).
+			var localizedNoResults = config.language.noResults;
 
-					// `! seed.listLoadFailed`: see that flag's own docblock — a region whose
-					// FULL list never loaded reports zero matches for every term, but that is
-					// a transport failure, never a completed search proving the provider has
-					// nothing for this exact town.
-					if ( term && ! seed.listLoadFailed ) {
-						seed.onAbandon( { query: term, resolved: true } );
-					}
+			config.language.noResults = function( params ) {
+				var term = params && 'string' === typeof params.term ? params.term : '';
 
-					// Deliberate (critic MN-4), for THIS branch only (`related-list:settlement`
-					// — critic MN-5: `ajax-select2` never wires `config.language` at all, so
-					// it always falls through to select2's own untranslated "No results found"
-					// regardless, see `location-cascade.js`'s own `attachOne()` docblock): `''`
-					// when the server sent no string at all, never a hardcoded English
-					// fallback — this layer routes every OTHER customer-facing string
-					// server-side (see `emptyText`'s own resolution in `attachOne()`), and an
-					// untranslated English literal at a non-English checkout is the worse of
-					// the two gaps.
-					return seed.emptyText || '';
-				},
+				// `! seed.listLoadFailed`: see that flag's own docblock — a region whose
+				// FULL list never loaded reports zero matches for every term, but that is
+				// a transport failure, never a completed search proving the provider has
+				// nothing for this exact town.
+				if ( term && ! seed.listLoadFailed ) {
+					seed.onAbandon( { query: term, resolved: true } );
+				}
+
+				return localizedNoResults( params );
 			};
 
 			// Critic BL-2 (round 3, BLOCKER) — the local/related-list counterpart of the
