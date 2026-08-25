@@ -93,6 +93,7 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 - `wiki/architecture.md` — subsystems, base classes, seams (opened on demand, not at session start)
 - `wiki/rig-pickup-walkthrough.md` — the rig walkthrough for the pickup layer, in the order that actually works (s75); moved here from `CURRENT-STATE.md` in s87
 - `wiki/orchestrating-agents-with-orca.md` — how multi-agent work is run here: worker Sonnet / critic Codex, worktree placement, what we did not adopt
+- `wiki/local-rig.md` — why the rig's fixtures and options are set the way they are (the pickup mu-plugin, the company field, the two location providers, the live-Yandex switch); moved here from `CURRENT-STATE.md` in s91
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
 - `QWEN.md` — Qwen-specific agent instructions
 - `.ai/QUICK-REFERENCE.md` — shared project rules and conventions for all AI agents
