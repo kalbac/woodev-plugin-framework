@@ -280,95 +280,117 @@
 	 *
 	 * `wc_country_select_params` is localized onto WooCommerce's `wc-country-select` handle,
 	 * which `Checkout_Handler` now declares as a dependency of `woodev-location-select-modes`
-	 * so the global is both present and printed first. Every key is still read DEFENSIVELY:
-	 * a missing param yields `undefined`, and select2 keeps its own default for that one
-	 * message rather than rendering the literal string "undefined".
+	 * so the global is both present and printed first.
+	 *
+	 * A key whose params are missing is **OMITTED from the returned object entirely** rather
+	 * than mapped to a callback returning `undefined`. That distinction is load-bearing and it
+	 * is MEASURED, not reasoned: select2 merges our block over its English one with
+	 * `customTranslation.extend( baseTranslation )`, which is
+	 * `$.extend( {}, base.all(), this.dict )` — OUR dict wins for every key we define
+	 * (`selectWoo.full.js:2236,4934-4940`, read in the rig container). So a defined callback
+	 * SHADOWS the English string permanently: returning `undefined` from it does not fall back,
+	 * it renders a blank message (`Results.prototype.append` still fires
+	 * `results:message: 'noResults'` at `selectWoo.full.js:856-861`, now with nothing to show).
+	 * Leaving the key absent is what actually lets select2's own default through.
+	 *
+	 * The first version of this function got that backwards and said so in this docblock as if
+	 * it were a fact. Codex refuted it against the selectWoo source, and the refutation was
+	 * re-verified here before the change was made.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @param {{emptyText?: string}} seed
-	 * @returns {Object} A select2 `language` object. Never null — the abandon-recording branch
-	 *   below WRAPS the `noResults` this returns rather than replacing it.
+	 * @returns {Object} A select2 `language` object carrying only the keys this environment can
+	 *   actually answer. Never null — the abandon-recording branch below WRAPS the `noResults`
+	 *   this returns rather than replacing it, and must tolerate its absence.
 	 */
 	function select2LanguageFor( seed ) {
 		var params = 'undefined' !== typeof window && window.wc_country_select_params
 			? window.wc_country_select_params
 			: {};
+		var language = {};
 
 		/**
-		 * `undefined` for an absent param — never `''`, which select2 would render as an
-		 * empty message box, and never an English literal.
-		 *
 		 * @param {string} key
-		 * @returns {string|undefined}
+		 * @returns {boolean} Whether WooCommerce actually localized this msgid.
 		 */
-		function param( key ) {
-			return 'string' === typeof params[ key ] ? params[ key ] : undefined;
+		function has( key ) {
+			return 'string' === typeof params[ key ];
 		}
 
 		/**
 		 * WooCommerce ships the 1-item and n-item plurals as separate msgids with a `%qty%`
-		 * placeholder — mirroring `country-select.js`'s own branch rather than pluralizing here.
+		 * placeholder — mirroring `country-select.js`'s own branch rather than pluralizing
+		 * here. Wired only when BOTH msgids are present, since either branch is reachable.
 		 *
-		 * @param {number} qty
+		 * @param {string} name        The select2 `language` key.
 		 * @param {string} singularKey
 		 * @param {string} pluralKey
-		 * @returns {string|undefined}
+		 * @param {function(Object): number} qtyOf
+		 * @returns {void}
 		 */
-		function plural( qty, singularKey, pluralKey ) {
-			if ( 1 === qty ) {
-				return param( singularKey );
+		function addPlural( name, singularKey, pluralKey, qtyOf ) {
+			if ( ! has( singularKey ) || ! has( pluralKey ) ) {
+				return;
 			}
 
-			var many = param( pluralKey );
+			language[ name ] = function( args ) {
+				var qty = qtyOf( args );
 
-			return 'string' === typeof many ? many.replace( '%qty%', qty ) : undefined;
+				return 1 === qty
+					? params[ singularKey ]
+					: params[ pluralKey ].replace( '%qty%', qty );
+			};
 		}
 
-		return {
-			// See the docblock above: `i18n_searching` here is WooCommerce's own
-			// select2#4355 workaround, deliberately not `i18n_ajax_error`.
-			errorLoading: function() {
-				return param( 'i18n_searching' );
-			},
-			inputTooLong: function( args ) {
-				return plural(
-					args.input.length - args.maximum,
-					'i18n_input_too_long_1',
-					'i18n_input_too_long_n'
-				);
-			},
-			inputTooShort: function( args ) {
-				return plural(
-					args.minimum - args.input.length,
-					'i18n_input_too_short_1',
-					'i18n_input_too_short_n'
-				);
-			},
-			loadingMore: function() {
-				return param( 'i18n_load_more' );
-			},
-			maximumSelected: function( args ) {
-				return plural(
-					args.maximum,
-					'i18n_selection_too_long_1',
-					'i18n_selection_too_long_n'
-				);
-			},
-			// The ONE key where this layer's own string wins over WooCommerce's generic
-			// «No matches found»: `seed.emptyText` is `Checkout_Config`'s `i18n.noResults`
-			// («Поиск не дал результатов. Попробуйте изменить запрос.»), already routed
-			// through this plugin's text domain and already what `related-list` shows. Using
-			// WooCommerce's string here instead would make the two settlement modes disagree
-			// about the same outcome. `i18n_no_matches` is the FALLBACK, which is strictly
-			// better than the `''` this branch used to return when the server sent nothing.
-			noResults: function() {
-				return seed.emptyText || param( 'i18n_no_matches' );
-			},
-			searching: function() {
-				return param( 'i18n_searching' );
-			},
-		};
+		/**
+		 * @param {string} name The select2 `language` key.
+		 * @param {string} key  The `wc_country_select_params` msgid backing it.
+		 * @returns {void}
+		 */
+		function addSimple( name, key ) {
+			if ( ! has( key ) ) {
+				return;
+			}
+
+			language[ name ] = function() {
+				return params[ key ];
+			};
+		}
+
+		// `i18n_searching` here is WooCommerce's own select2#4355 workaround, deliberately
+		// not `i18n_ajax_error` — see the docblock above.
+		addSimple( 'errorLoading', 'i18n_searching' );
+		addSimple( 'loadingMore', 'i18n_load_more' );
+		addSimple( 'searching', 'i18n_searching' );
+
+		addPlural( 'inputTooLong', 'i18n_input_too_long_1', 'i18n_input_too_long_n', function( args ) {
+			return args.input.length - args.maximum;
+		} );
+		addPlural( 'inputTooShort', 'i18n_input_too_short_1', 'i18n_input_too_short_n', function( args ) {
+			return args.minimum - args.input.length;
+		} );
+		addPlural( 'maximumSelected', 'i18n_selection_too_long_1', 'i18n_selection_too_long_n', function( args ) {
+			return args.maximum;
+		} );
+
+		// The ONE key where this layer's own string wins over WooCommerce's generic
+		// «No matches found»: `seed.emptyText` is `Checkout_Config`'s `i18n.noResults`
+		// («Поиск не дал результатов. Попробуйте изменить запрос.»), already routed through
+		// this plugin's text domain and already what `related-list` shows. Using WooCommerce's
+		// string here instead would make the two settlement modes disagree about the same
+		// outcome. `i18n_no_matches` is the FALLBACK.
+		//
+		// Wired only when at least one of the two can answer — with neither, omitting the key
+		// leaves select2's own English «No results found», which is worse than a translation
+		// and better than a blank dropdown.
+		if ( seed.emptyText || has( 'i18n_no_matches' ) ) {
+			language.noResults = function() {
+				return seed.emptyText || params.i18n_no_matches;
+			};
+		}
+
+		return language;
 	}
 
 	/**
@@ -708,6 +730,15 @@
 			// and #526 made it false — it is removed rather than left to mislead the next
 			// reader (this file has been bitten three times by an inference left standing in a
 			// docblock as a fact).
+			//
+			// `select2LanguageFor()` OMITS `noResults` when neither `seed.emptyText` nor
+			// `i18n_no_matches` can answer (see its own docblock for why omission and not an
+			// `undefined`-returning callback). The abandon observation still has to happen in
+			// that case, so the wrap installs itself either way and returns `undefined` only
+			// when there was no string to begin with — at which point defining the key costs
+			// select2's English fallback, which is the deliberate trade: the RECORD of an
+			// abandoned search outranks the message shown for it, and this branch only reaches
+			// here at all when `onAbandon` is wired.
 			var localizedNoResults = config.language.noResults;
 
 			config.language.noResults = function( params ) {
@@ -721,7 +752,7 @@
 					seed.onAbandon( { query: term, resolved: true } );
 				}
 
-				return localizedNoResults( params );
+				return localizedNoResults ? localizedNoResults( params ) : undefined;
 			};
 
 			// Critic BL-2 (round 3, BLOCKER) — the local/related-list counterpart of the

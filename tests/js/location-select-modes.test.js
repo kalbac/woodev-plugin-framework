@@ -254,21 +254,58 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
 	} );
 
-	it( 'a missing wc_country_select_params leaves each message undefined so select2 keeps its OWN default — never the literal string "undefined"', () => {
+	it( 'a missing wc_country_select_params OMITS every key, so select2 keeps its own English — a key defined-but-returning-undefined would render a BLANK message', () => {
 		// No `window.wc_country_select_params` at all: the dependency declared in
 		// `Checkout_Handler` should make this unreachable in production, but a third party
-		// can dequeue anything, and rendering "undefined" to a customer is worse than
-		// rendering select2's English.
+		// can dequeue anything.
+		//
+		// The distinction this test pins is measured in the shipped selectWoo, not reasoned:
+		// `customTranslation.extend( baseTranslation )` is `$.extend( {}, base, ours )`
+		// (`selectWoo.full.js:2236,4934-4940`), so ANY key we define shadows the English one
+		// permanently. A callback returning `undefined` therefore does NOT fall back — it
+		// renders an empty message box. Only ABSENCE of the key lets English through.
+		//
+		// The first version of this fix asserted the opposite and said so in a docblock.
+		// Codex refuted it against the selectWoo source; re-verified before this rewrite.
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },
 			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
 		);
 
-		expect( config.language.noResults() ).toBeUndefined();
-		expect( config.language.searching() ).toBeUndefined();
-		expect( config.language.inputTooShort( { minimum: 2, input: '' } ) ).toBeUndefined();
-		expect( config.language.inputTooLong( { maximum: 5, input: 'абвгдеё' } ) ).toBeUndefined();
-		expect( config.language.maximumSelected( { maximum: 3 } ) ).toBeUndefined();
+		expect( config.language ).toEqual( {} );
+		expect( 'noResults' in config.language ).toBe( false );
+		expect( 'inputTooShort' in config.language ).toBe( false );
+		expect( 'searching' in config.language ).toBe( false );
+	} );
+
+	it( 'a HALF-localized plural pair omits that key rather than wiring a callback that can return undefined on one branch', () => {
+		// Only the singular msgid present. Both branches of `inputTooShort` are reachable
+		// (minimum 2 renders the plural, minimum 1 the singular), so a key wired off the
+		// singular alone would render blank exactly when the customer has typed nothing.
+		window.wc_country_select_params = { i18n_input_too_short_1: 'Please enter 1 or more characters' };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		expect( 'inputTooShort' in config.language ).toBe( false );
+	} );
+
+	it( 'emptyText alone still wires noResults even with no wc_country_select_params at all', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{
+				initialValue: '',
+				placeholder: '',
+				applyEntries: jest.fn(),
+				level: 'settlement',
+				emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+			}
+		);
+
+		expect( config.language.noResults() )
+			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
 	} );
 
 	it( 'a non-ajax strategy gets width and the localized language block only — no ajax block, no placeholder', () => {
