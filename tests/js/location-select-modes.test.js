@@ -28,6 +28,21 @@ const { installFakeSelect2 } = require( './support/fake-select2.js' );
 
 const LIST_URL = 'https://example.test/wp-json/woodev/v1/location/list';
 
+/**
+ * Issue #517 round 3 (critic MJ-3): `handleSelect2Close()` defers its flush via
+ * `setTimeout( fn, 0 )` rather than firing inline (see that function's own docblock for the
+ * measured rig event order this survives). A test that expects the deferred fire has to
+ * actually wait for that macrotask — a microtask chain (`Promise.resolve().then(...)`) resolves
+ * BEFORE any `setTimeout`, so it is never enough on its own.
+ *
+ * @returns {Promise<void>}
+ */
+function tick() {
+	return new Promise( function( resolve ) {
+		setTimeout( resolve, 0 );
+	} );
+}
+
 let fetchJsonCalls;
 
 /**
@@ -1751,6 +1766,13 @@ describe( 'ajax-select2 renderer — issue #449 (teardown gap, round 2): detach(
 // paired with the control the operator's own exact condition requires: a completed search
 // WITH results, an empty query, a cancelled/superseded request, and a transport error must
 // all leave `onAbandon` uncalled.
+//
+// Round 3 rewrite: the "pick before close" tests now drive `instances[ 0 ].pick(...)`
+// (`support/fake-select2.js`), which dispatches the MEASURED rig event order — `change`,
+// `select2:closing`, `select2:close`, `select2:select`, in that order — never the
+// hand-dispatched "select then close" this suite used before the rig measurement (critic
+// MJ-3). Every test that expects the deferred close-flush now `await tick()`s the macrotask
+// {@see handleSelect2Close} schedules it on (see that function's own docblock).
 // -----------------------------------------------------------------------
 
 describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed, non-empty, zero-result search', () => {
@@ -1764,19 +1786,6 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 	afterEach( () => {
 		delete window.jQuery.fn.select2;
 	} );
-
-	// -----------------------------------------------------------------------
-	// issue #517 round 2 (critic MJ-1): `language.noResults`/this ajax transport are
-	// RENDER-TIME/per-request hooks — select2 can complete a debounced zero-result query
-	// mid-typing, on a term the customer has already typed past. `onAbandonFor()` is not a
-	// passive recorder — it calls `restoreClearedDescendants()`, which CONSUMES a snapshot
-	// unconditionally. Firing immediately here would restore a stale address mid-typing, which
-	// the baseline `location-typeahead.js` widget cannot do because it decides on `blur` only.
-	// So `options.onAbandon` is no longer called directly from the transport: a completed
-	// zero-result search RECORDS a candidate, and the candidate only actually fires on
-	// `select2:close` (select2's own public, documented close event) — the select2 analogue of
-	// the typeahead's blur.
-	// -----------------------------------------------------------------------
 
 	it( 'records a completed, non-empty, zero-result search but does NOT fire onAbandon until select2:close', async () => {
 		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
@@ -1806,20 +1815,74 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		instances[ 0 ].query( 'Мухосранск' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].close();
+		await tick();
 
 		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
 		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
 	} );
 
-	it( 'a genuine PICK before select2:close clears the recorded candidate — the intermediate zero-result keystroke on the way to a real match never fires', async () => {
-		// Reproduces the critic's exact failure shape one level down (the cascade-level
-		// snapshot-restore consequence is covered in location-cascade.test.js): the customer
-		// types a non-matching prefix (recorded as a candidate), then keeps typing to a REAL
-		// match and picks it, all before ever closing the dropdown on the failed term.
+	// -----------------------------------------------------------------------
+	// CRITIC PROBE P2 (round 3, MJ-3) — the corruption round 2's fix actually introduced,
+	// promoted to a permanent test. Drives the FAKE's own `pick()`, which dispatches the
+	// MEASURED order (`change`, `closing`, `close`, THEN `select` — close arrives BEFORE
+	// select, not after). Before the round-3 fix, `handleSelect2Close` fired inline on
+	// `select2:close`, i.e. BEFORE `resolveAndSelect()` ever got a chance to clear the
+	// candidate — this test is what catches that if it regresses.
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE P2: a genuine pick clears the recorded candidate even though select2:close fires BEFORE select2:select (the MEASURED order)', async () => {
+		// Isolates MJ-3 from BL-2 (round 3's OWN "clear on found results" fix would otherwise
+		// clear the candidate itself, before the pick ever runs, masking the ordering claim
+		// under test here). Sequence: an EARLIER search finds "Тверь" (populating dataByKey,
+		// never touching the candidate — nothing was pending yet), THEN a LATER search for
+		// "Тве" completes with zero results (recording the candidate) — mirroring a customer
+		// who saw a result, backspaced to reconsider, found nothing, then clicked the
+		// STILL-VISIBLE earlier "Тверь" row rather than a freshly re-searched one. The
+		// candidate must survive right up to the pick for this test to actually exercise the
+		// ordering guarantee, not BL-2's separate one.
 		const fetchSpy = jest.fn()
-			.mockImplementationOnce( () => Promise.resolve( [] ) ) // "Тве" — zero results, recorded
-			.mockImplementationOnce( () => Promise.resolve( [       // "Тверь" — a real match
+			.mockImplementationOnce( () => Promise.resolve( [       // "Тверь" — a real match, first
+				{ key: 'dadata:tver', value: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
+			] ) )
+			.mockImplementationOnce( () => Promise.resolve( [] ) ); // "Тве" — zero results, recorded LAST
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		const firstQuery = instances[ 0 ].query( 'Тверь' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instances[ 0 ].query( 'Тве' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// The MEASURED pick sequence: change, closing, close, THEN select — never the other
+		// way around. `pick()`'s own docblock is explicit that this is not a choice. Picking
+		// the EARLIER "Тверь" result (still resolvable via `dataByKey`, per issue #488 slice 3's
+		// own re-pick contract) while "Тве" is the currently-pending candidate.
+		instances[ 0 ].pick( firstQuery.success.mock.calls[ 0 ][ 0 ].results[ 0 ] );
+
+		// The scheduled flush from `close` (inside `pick()`) would run on the next tick if
+		// nothing cancelled it — the claim under test is that the SYNCHRONOUS `select2:select`
+		// that `pick()` fires immediately after already cancelled it before this tick runs.
+		await tick();
+
+		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// -----------------------------------------------------------------------
+	// CRITIC BL-2 (round 3, BLOCKER) — a candidate recorded for an earlier FAILED term must
+	// not survive a LATER completed search on the same field that DID find something.
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE P1: a zero-result term SUPERSEDED by a later matching search does NOT unlock on close', async () => {
+		const fetchSpy = jest.fn()
+			.mockImplementationOnce( () => Promise.resolve( [] ) ) // "Тве" — zero, recorded
+			.mockImplementationOnce( () => Promise.resolve( [       // "Тверь" — found, on screen
 				{ key: 'dadata:tver', value: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
 			] ) );
 		const onAbandon = jest.fn();
@@ -1832,25 +1895,135 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		instances[ 0 ].query( 'Тве' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		const secondQuery = instances[ 0 ].query( 'Тверь' );
+		instances[ 0 ].query( 'Тверь' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		const select = document.getElementById( 'shipping_city' );
-		const option = document.createElement( 'option' );
+		// The customer clicks away WITHOUT picking — second thoughts, a phone call.
+		instances[ 0 ].close();
+		await tick();
 
-		option.value = 'Тверь';
-		select.appendChild( option );
-		select.value = 'Тверь';
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-		window.jQuery( select ).trigger( window.jQuery.Event( 'select2:select', {
-			params: { data: secondQuery.success.mock.calls[ 0 ][ 0 ].results[ 0 ] },
-		} ) );
-
-		// The pick happened; NOW the dropdown closes, as it always does after a real selection.
-		instances[ 0 ].el.trigger( 'select2:close' );
-
-		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		// The stale "Тве" candidate must have been cleared by the "Тверь" search finding
+		// something — never fired.
 		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	it( 'PROBE P1 control: a zero-result term with NO later matching search still unlocks on close (the ordinary #350/#517 case, unaffected by the BL-2 fix)', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instances[ 0 ].close();
+		await tick();
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Тьмутаракань', resolved: true } );
+	} );
+
+	// -----------------------------------------------------------------------
+	// CRITIC MJ-4 (round 3, MAJOR) — a response landing AFTER the dropdown already closed
+	// must fire immediately: no future close is coming to flush it.
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE P3: a zero-result response ARRIVING AFTER the dropdown already closed fires immediately', async () => {
+		let resolveFetch;
+		const fetchSpy = jest.fn( () => new Promise( ( resolve ) => {
+			resolveFetch = resolve;
+		} ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // the request goes out, dropdown open
+		instances[ 0 ].close(); // the customer clicks away BEFORE the response lands
+
+		resolveFetch( [] ); // the response finally arrives — dropdown is already closed
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// No `tick()` — the claim is that this fires the MOMENT the response is recorded,
+		// through `recordAbandonCandidate()`'s own immediate-fire branch, not through the
+		// scheduled `select2:close` flush (which already ran, before the response existed).
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Тьмутаракань', resolved: true } );
+	} );
+
+	it( 'PROBE P3 control: a zero-result response arriving WHILE the dropdown is still open does NOT fire immediately — it waits for close', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // dropdown open, never closed
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	it( 'detach() flushes a pending candidate immediately — never silently dropped on teardown (critic MJ-4, second half)', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // dropdown open, response about to land
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( onAbandon ).not.toHaveBeenCalled(); // still open, still just recorded
+
+		api.detach(); // WooCommerce tears the widget down before any close ever fires
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Тьмутаракань', resolved: true } );
+	} );
+
+	it( 'control: detach() with nothing pending does nothing', () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		installFakeSelect2( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		expect( () => api.detach() ).not.toThrow();
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	it( 'a scheduled close-flush does not double-fire when detach() runs before its tick — detach fires it once, immediately, and the pending timer finds nothing left', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		const api = mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instances[ 0 ].close(); // schedules a flush for the NEXT tick
+		api.detach(); // runs synchronously, before that tick — flushes immediately and cancels the timer
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+
+		await tick(); // let the (cancelled) timer's slot pass
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 ); // still just once
 	} );
 
 	it( 'control (critic MN-2): a response whose rows ALL fail applyEntries()\'s filter does NOT fire onAbandon — the provider answered, this layer just could not derive a submittable value', async () => {
@@ -1874,7 +2047,8 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 
 		expect( result.success ).toHaveBeenCalledWith( { results: [] } );
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].close();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
@@ -1888,7 +2062,9 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 
 		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].open();
+		instances[ 0 ].close();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
@@ -1907,7 +2083,8 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		instances[ 0 ].query( 'Жук' );
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].close();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
@@ -1950,7 +2127,8 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		resolveFirst( [] ); // the STALE request settles too, also with zero entries
 		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].close();
+		await tick();
 
 		// Only the live (second) query's own zero-result completion may report — never a
 		// second call from the cancelled first one settling behind it (the stale one, being
@@ -1987,7 +2165,8 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		expect( result.failure ).not.toHaveBeenCalled();
 		expect( onAbandon ).not.toHaveBeenCalled();
 
-		instances[ 0 ].el.trigger( 'select2:close' );
+		instances[ 0 ].close();
+		await tick();
 
 		// Still nothing to flush — the `null`-entries guard means a transport error is never
 		// even recorded as a candidate, so a close afterward cannot resurrect it either.
@@ -2009,7 +2188,8 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 		await expect( ( async () => {
 			instances[ 0 ].query( 'Мухосранск' );
 			await Promise.resolve().then( () => Promise.resolve() );
-			instances[ 0 ].el.trigger( 'select2:close' );
+			instances[ 0 ].close();
+			await tick();
 		} )() ).resolves.not.toThrow();
 	} );
 } );
@@ -2026,9 +2206,14 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 	/**
 	 * Installs a minimal `jQuery.fn.select2` stub that records the config it was called with —
 	 * mirrors this file's OWN "initializes select2 in LOCAL mode" test above. Real select2 is
-	 * never present in jsdom (see the file docblock), so `config.language.noResults` is invoked
-	 * DIRECTLY, the same way `selectConfigFor()`'s own pure-builder suite already tests the ajax
-	 * transport without a real select2 instance.
+	 * never present in jsdom (see the file docblock), so `config.language.noResults` and
+	 * `config.templateResult` are invoked DIRECTLY, the same way `selectConfigFor()`'s own
+	 * pure-builder suite already tests the ajax transport without a real select2 instance.
+	 * Round 3: also exposes `open()`/`close()`, dispatching the same `select2:open`/`opening`/
+	 * `closing`/`close` events real select2 fires — `recordAbandonCandidate()`'s MJ-4 branch
+	 * needs `dropdownOpen` tracking active for these tests to represent reality (a
+	 * `language.noResults` call ALWAYS happens while the dropdown is open — select2 has
+	 * nothing to render otherwise).
 	 *
 	 * @param {Object} $ jQuery.
 	 * @returns {Array<Object>}
@@ -2045,6 +2230,16 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 		return calls;
 	}
 
+	function openDropdown() {
+		window.jQuery( '#billing_city' ).trigger( 'select2:opening' );
+		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
+	}
+
+	function closeDropdown() {
+		window.jQuery( '#billing_city' ).trigger( 'select2:closing' );
+		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+	}
+
 	beforeEach( () => {
 		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
 		document.body.innerHTML = '<form><input type="text" id="billing_city" name="billing_city" value="" /></form>';
@@ -2053,16 +2248,6 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 	afterEach( () => {
 		delete window.jQuery.fn.select2;
 	} );
-
-	// -----------------------------------------------------------------------
-	// issue #517 round 2 (critic MJ-1): `language.noResults` is a RENDER-TIME hook — select2
-	// calls it on every keystroke that still matches nothing. `onAbandon` here resolves to
-	// `recordAbandonCandidate` (see that function's own docblock), never a direct fire; the
-	// actual fire is deferred to `select2:close`, dispatched on the SAME `<select>` element
-	// `buildSelectField()` leaves at `billing_city`'s id — real jQuery, no fake-select2
-	// extension needed for this (the fake in `support/fake-select2.js` only reproduces the
-	// `ajax.transport` contract, which this LOCAL strategy never uses at all).
-	// -----------------------------------------------------------------------
 
 	it( 'records a call to language.noResults with a non-empty term but does NOT fire onAbandon until select2:close', async () => {
 		const list = jest.fn( () => Promise.resolve( [
@@ -2079,6 +2264,8 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		expect( select2Calls ).toHaveLength( 1 );
 		expect( typeof select2Calls[ 0 ].language.noResults ).toBe( 'function' );
+
+		openDropdown();
 
 		const message = select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
 
@@ -2099,15 +2286,28 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		await Promise.resolve().then( () => Promise.resolve() );
 
+		openDropdown();
 		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
 
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+		closeDropdown();
+		await tick();
 
 		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
 		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
 	} );
 
-	it( 'a genuine PICK before select2:close clears the recorded candidate — a keystroke that briefly matched nothing on the way to a real pick never fires', async () => {
+	it( 'a genuine pick clears the recorded candidate for related-list too — NOT the same race as ajax-select2\'s PROBE P2 (see note below)', async () => {
+		// NOTE, verified by mutation (round 3): unlike `ajax-select2` — where a real select2
+		// pick's own `<option>` never carries our `dataset.woodevKey` (see `handleChange()`'s
+		// own docblock), so resolution can ONLY happen via the LATE `select2:select` event,
+		// after `close` per the measured order — a `related-list:settlement` pick lands on a
+		// REAL, already-rendered `<option>` this file itself built (`applyEntries()` stamps
+		// `dataset.woodevKey` on every option regardless of strategy), so the NATIVE `change`
+		// handler (`handleChange()`) resolves it immediately, and `change` is FIRST in the
+		// measured order — well before `close`. So this test does not exercise the same
+		// close-before-select race PROBE P2 does (confirmed: mutating `handleSelect2Close`
+		// back to an inline fire does NOT turn this test red) — it only confirms the pick
+		// still clears the candidate here too, via the ordinary `resolveAndSelect()` path.
 		const list = jest.fn( () => Promise.resolve( [
 			{ key: 'dadata:tver', value: 'Тверь', label: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
 		] ) );
@@ -2120,6 +2320,8 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		await Promise.resolve().then( () => Promise.resolve() );
 
+		openDropdown();
+
 		// The customer's search briefly matched nothing (recorded)...
 		select2Calls[ 0 ].language.noResults( { term: 'Тве' } );
 
@@ -2129,10 +2331,101 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 		select.value = 'Тверь';
 		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+		closeDropdown();
+
+		window.jQuery( '#billing_city' ).trigger( window.jQuery.Event( 'select2:select', {
+			params: { data: { id: 'Тверь', text: 'Тверь', key: 'dadata:tver' } },
+		} ) );
+
+		await tick();
 
 		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// -----------------------------------------------------------------------
+	// CRITIC BL-2 (round 3, BLOCKER) — the related-list counterpart, using `templateResult`
+	// (select2's own public per-result rendering hook) as the "a match exists" signal, since
+	// `language.noResults` only ever reports the ZERO-match case.
+	// -----------------------------------------------------------------------
+
+	it( 'a matched render (templateResult) clears an earlier failed candidate — the local-strategy counterpart of BL-2', async () => {
+		const list = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:tver', value: 'Тверь', label: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
+		] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { list, onAbandon } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( typeof select2Calls[ 0 ].templateResult ).toBe( 'function' );
+
+		openDropdown();
+
+		select2Calls[ 0 ].language.noResults( { term: 'Тве' } ); // recorded
+
+		// select2 is now about to render "Тверь" as a real matched row.
+		const rendered = select2Calls[ 0 ].templateResult( { id: 'Тверь', text: 'Тверь' } );
+
+		expect( rendered ).toBe( 'Тверь' ); // pure observation — the default rendering, unchanged
+
+		closeDropdown();
+		await tick();
+
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	it( 'control: templateResult ignores select2\'s own AJAX loading placeholder — never clears on {loading:true}', async () => {
+		const list = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { list, onAbandon } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		openDropdown();
+		select2Calls[ 0 ].language.noResults( { term: 'Тве' } );
+
+		// This strategy is non-ajax and never produces a loading placeholder in practice —
+		// the guard is defensive, since `templateResult` is built by the SAME shared function
+		// the ajax branch could (in principle) also wire it through.
+		const rendered = select2Calls[ 0 ].templateResult( { loading: true, text: 'Searching…' } );
+
+		expect( rendered ).toBe( 'Searching…' );
+
+		closeDropdown();
+		await tick();
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 ); // the "Тве" candidate survived — correctly.
+	} );
+
+	it( 'detach() flushes a pending candidate immediately — never silently dropped on teardown (critic MJ-4)', async () => {
+		const list = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { list, onAbandon } );
+
+		const select2Calls = installCapturingSelect2Stub( window.jQuery );
+
+		const api = mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		openDropdown();
+		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
+
+		expect( onAbandon ).not.toHaveBeenCalled();
+
+		api.detach();
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
 	} );
 
 	it( 'control: select2:close with nothing recorded does nothing', async () => {
@@ -2146,7 +2439,9 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+		openDropdown();
+		closeDropdown();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
@@ -2161,9 +2456,11 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		await Promise.resolve().then( () => Promise.resolve() );
 
+		openDropdown();
 		select2Calls[ 0 ].language.noResults( { term: '' } );
 
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+		closeDropdown();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 	} );
@@ -2184,16 +2481,18 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		expect( select2Calls ).toHaveLength( 1 );
 
+		openDropdown();
 		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
 
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
+		closeDropdown();
+		await tick();
 
 		expect( onAbandon ).not.toHaveBeenCalled();
 
 		consoleSpy.mockRestore();
 	} );
 
-	it( 'never installs a custom language.noResults when onAbandon is omitted — OPTIONAL, same as every other primitive', async () => {
+	it( 'never installs a custom language.noResults or templateResult when onAbandon is omitted — OPTIONAL, same as every other primitive', async () => {
 		const list = jest.fn( () => Promise.resolve( [] ) );
 		const options = buildOptions( { list } );
 
@@ -2206,5 +2505,6 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 		await Promise.resolve().then( () => Promise.resolve() );
 
 		expect( select2Calls[ 0 ].language ).toBeUndefined();
+		expect( select2Calls[ 0 ].templateResult ).toBeUndefined();
 	} );
 } );
