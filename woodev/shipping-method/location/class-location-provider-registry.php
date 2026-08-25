@@ -674,6 +674,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_related_list_states' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed_for_popular_settlements' ], 20, 3 );
+
+			// #505 D6/4f: registers the D8 merchant actions through the shipping-tools
+			// registry's own public filter, the same seam any carrier plugin uses. A
+			// STATIC callback (class+method string, not an instance) — WordPress dedupes
+			// `add_filter()` by that string, so a later `add_hooks()` call on a fresh
+			// instance (a test reset) never adds a second copy, and there is nothing
+			// instance-bound here for `reset_for_tests()` to remove.
+			add_filter(
+				\Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::FILTER_TOOLS,
+				[ Popular_Settlements_Tools::class, 'register_tools' ]
+			);
 		}
 
 		/**

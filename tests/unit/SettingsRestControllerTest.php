@@ -3,11 +3,35 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Shipping\Settings\Shipping_Tool;
+use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
+use Woodev\Framework\Shipping\Settings\Tool_Result;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-settings-page.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tools-registry.php';
 
 class SettingsRestControllerTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+		Shipping_Tools_Registry::reset_for_tests();
+	}
+
+	protected function tearDown(): void {
+		Shipping_Tools_Registry::reset_for_tests();
+		parent::tearDown();
+	}
+
+	private function tools_section( array $tools ) {
+		$section = Mockery::mock();
+		$section->shouldReceive( 'is_tools' )->andReturn( true );
+		$section->shouldReceive( 'get_tools' )->andReturn( $tools );
+
+		return $section;
+	}
 
 	private function request( array $params ) {
 		$request = Mockery::mock( 'WP_REST_Request' );
@@ -142,5 +166,118 @@ class SettingsRestControllerTest extends TestCase {
 
 		$this->assertTrue( $response['saved'] );
 		$this->assertSame( 'cdek', $response['provider'] );
+	}
+
+	// ----- run_tool() (#505) -----
+
+	public function test_run_tool_unknown_provider_is_404(): void {
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'ghost' )->andReturn( null );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'ghost', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_unknown_provider', $result->get_error_code() );
+	}
+
+	public function test_run_tool_unknown_tool_is_404(): void {
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'shipping', 'tool_id' => 'ghost', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_unknown_tool', $result->get_error_code() );
+	}
+
+	public function test_run_tool_scopes_args_and_returns_the_result_payload(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$received = null;
+		$tool     = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ) use ( &$received ): Tool_Result {
+				$received = $args;
+
+				return Tool_Result::success( 'Готово' );
+			},
+			false,
+			'',
+			[ 'name' => 'provider_id', 'options' => [] ]
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $tool ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$response   = $controller->run_tool(
+			$this->request(
+				[
+					'provider_id' => 'shipping',
+					'tool_id'     => 'sweep',
+					'args'        => [ 'provider_id' => 'dadata', 'extra' => 'must-not-reach-the-callback' ],
+				]
+			)
+		);
+
+		$this->assertSame( [ 'provider_id' => 'dadata' ], $received );
+		$this->assertTrue( $response['success'] );
+		$this->assertSame( 'Готово', $response['message'] );
+	}
+
+	public function test_run_tool_callback_throwing_is_a_logged_500(): void {
+		$tool = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ): Tool_Result {
+				throw new \RuntimeException( 'boom' );
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $tool ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'shipping', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_tool_error', $result->get_error_code() );
+		$this->assertSame( 500, $result->get_error_data()['status'] );
 	}
 }

@@ -186,6 +186,18 @@ final class Settings_Page_Registry {
 				'fields'      => empty( $setting_ids ) ? [] : Field_Schema::from_handler( $handler, $setting_ids ),
 			];
 
+			if ( $section->is_tools() ) {
+				$entry['is_tools'] = true;
+				// Never `to_array()`-adjacent shortcuts here — the callback lives only on
+				// Shipping_Tool itself, and to_array() is the one place that omits it.
+				$entry['tools'] = array_map(
+					static function ( $tool ): array {
+						return $tool->to_array();
+					},
+					$section->get_tools()
+				);
+			}
+
 			if ( $section->is_connection() ) {
 				$entry['is_connection'] = true;
 				$entry['action_label']  = $section->get_action_label();

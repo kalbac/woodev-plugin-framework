@@ -175,6 +175,57 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertTrue( $sections[0]['supports_test'] );
 	}
 
+	public function test_build_sections_marks_tools_and_serializes_descriptors_without_callback(): void {
+		$handler  = $this->make_connection_handler();
+		$tool     = Mockery::mock();
+		$tool->shouldReceive( 'to_array' )->andReturn(
+			[
+				'id'          => 'sweep',
+				'name'        => 'Проверить',
+				'desc'        => '',
+				'button'      => 'Проверить',
+				'disabled'    => false,
+				'status_text' => '',
+			]
+		);
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $tool ] ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertTrue( $sections[0]['is_tools'] );
+		$this->assertSame( [ [
+			'id'          => 'sweep',
+			'name'        => 'Проверить',
+			'desc'        => '',
+			'button'      => 'Проверить',
+			'disabled'    => false,
+			'status_text' => '',
+		] ], $sections[0]['tools'] );
+		$this->assertArrayNotHasKey( 'callback', $sections[0]['tools'][0] );
+	}
+
+	public function test_build_sections_non_tools_section_omits_tools_key(): void {
+		$handler  = $this->make_connection_handler();
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[ Settings_Section::create( 'general', 'Общие', [ 'token' ] ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'is_tools', $sections[0] );
+		$this->assertArrayNotHasKey( 'tools', $sections[0] );
+	}
+
 	/**
 	 * A section that declares NO setting ids (a deliberate empty stub, or a
 	 * connection-only block) must render no fields at all. get_settings( [] )

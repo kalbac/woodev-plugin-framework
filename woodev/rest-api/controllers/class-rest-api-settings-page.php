@@ -84,6 +84,16 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 					'permission_callback' => [ $this, 'save_permissions_check' ],
 				]
 			);
+
+			register_rest_route(
+				$base,
+				'/settings/(?P<provider_id>[\w-]+)/tool/(?P<tool_id>[\w-]+)/run',
+				[
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => [ $this, 'run_tool' ],
+					'permission_callback' => [ $this, 'save_permissions_check' ],
+				]
+			);
 		}
 
 		/**
@@ -296,6 +306,79 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				return new WP_Error(
 					'woodev_settings_connection_error',
 					__( 'Ошибка при проверке подключения.', 'woodev-plugin-framework' ),
+					[ 'status' => 500 ]
+				);
+			}
+
+			return rest_ensure_response( $result->to_array() );
+		}
+
+		/**
+		 * Runs one «Инструменты» tool (#505) through {@see \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry}.
+		 *
+		 * Mirrors {@see self::test_connection()}: finds the declaring tools
+		 * section on the targeted provider, scopes the POSTed args to the
+		 * tool's own declared selector names (a crafted request must not reach
+		 * anything else — the registry re-applies the same allow-list, this is
+		 * defense in depth, not the only gate), and catches `\Throwable` around
+		 * the callback exactly the same way.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function run_tool( $request ) {
+			$provider_id = (string) $request->get_param( 'provider_id' );
+			$tool_id     = (string) $request->get_param( 'tool_id' );
+			$provider    = $this->registry->get_provider( $provider_id );
+
+			if ( null === $provider ) {
+				return new WP_Error(
+					'woodev_settings_unknown_provider',
+					__( 'Неизвестная вкладка настроек.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			// Find the tools section and the tool itself, by id.
+			$tool = null;
+			foreach ( $provider->get_sections() as $section ) {
+				if ( ! $section->is_tools() ) {
+					continue;
+				}
+
+				foreach ( $section->get_tools() as $candidate ) {
+					if ( $candidate->get_id() === $tool_id ) {
+						$tool = $candidate;
+						break 2;
+					}
+				}
+			}
+
+			if ( null === $tool ) {
+				return new WP_Error(
+					'woodev_settings_unknown_tool',
+					__( 'Неизвестный инструмент.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			// Scope POSTed args to the tool's own declared selector names (allow-list).
+			$args = array_intersect_key(
+				(array) $request->get_param( 'args' ),
+				array_flip( $tool->get_selector_names() )
+			);
+
+			try {
+				$result = \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::instance()->run( $tool_id, $args );
+			} catch ( \Throwable $e ) {
+				error_log( sprintf( '[woodev] shipping tool run failed for %s/%s: %s', $provider_id, $tool_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
+				return new WP_Error(
+					'woodev_settings_tool_error',
+					__( 'Ошибка при выполнении инструмента.', 'woodev-plugin-framework' ),
 					[ 'status' => 500 ]
 				);
 			}
