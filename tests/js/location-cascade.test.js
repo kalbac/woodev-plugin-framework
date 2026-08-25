@@ -5873,15 +5873,21 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		expect( addressField().disabled ).toBe( true );
 	} );
 
-	it( 'ajax-select2 control: a query below minimumInputLength never reaches the transport and never unlocks the address field', async () => {
+	it( 'ajax-select2 control: a query below minimumInputLength never reaches the network and never unlocks the address field', async () => {
 		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
 
 		const fetchCallsBefore = fetchCalls.length;
 
-		// settlement's own floor is 2 — a single character never reaches the transport.
+		// settlement's own floor is 2. Issue #530 ROUND 2 (BLOCKER 2): a settlement widget
+		// always carries a `popular()` fn, so `minimumInputLengthFor()`'s real floor is now
+		// scoped to 0 at the select2 CONFIG level — the fake's own gate (which mirrors
+		// select2's `MinimumInputLength` decorator) no longer blocks this call before
+		// `transport()` runs. `transport()` itself still short-circuits a below-floor term
+		// locally, though: no network call, empty results, same end state as before this round.
 		const result = instances[ 0 ].query( 'Т' );
 
-		expect( result ).toBeNull();
+		expect( result ).not.toBeNull();
+		expect( result.success ).toHaveBeenCalledWith( { results: [] } );
 		expect( fetchCalls.length ).toBe( fetchCallsBefore );
 
 		await closeSettlementSelect2();
@@ -6014,18 +6020,23 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 
 		expect( instances ).toHaveLength( 2 );
 
-		const byMinLength = {};
+		const byFieldId = {};
 
 		instances.forEach( ( instance ) => {
-			byMinLength[ instance.config.minimumInputLength ] = instance;
+			byFieldId[ instance.el.attr( 'id' ) ] = instance;
 		} );
 
-		// minimumInputLengthFor('region') === 1, ('settlement') === 2 —
-		// location-select-modes.js's own per-level floor, and the critic's identifying control.
-		expect( byMinLength[ 1 ] ).toBeDefined(); // the region widget attached
-		expect( byMinLength[ 2 ] ).toBeDefined(); // the settlement widget attached
-		expect( byMinLength[ 1 ].config.tags ).toBeFalsy(); // REGION: must NEVER get tags
-		expect( byMinLength[ 2 ].config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
+		// Issue #530 ROUND 2 (BLOCKER 2): `minimumInputLength` is no longer a reliable way to
+		// tell these two widgets apart — the settlement widget's floor is now scoped to 0 (it
+		// always carries a `popular()` fn; see `location-select-modes.js`'s own
+		// `popularAvailable`), so keying by field id instead of by
+		// `config.minimumInputLength` is what actually identifies which widget is which here.
+		expect( byFieldId.billing_state ).toBeDefined(); // the region widget attached
+		expect( byFieldId.billing_city ).toBeDefined(); // the settlement widget attached
+		expect( byFieldId.billing_state.config.minimumInputLength ).toBe( 1 ); // region: unaffected, no popular list at that level
+		expect( byFieldId.billing_city.config.minimumInputLength ).toBe( 0 ); // settlement: scoped down by BLOCKER 2's own fix
+		expect( byFieldId.billing_state.config.tags ).toBeFalsy(); // REGION: must NEVER get tags
+		expect( byFieldId.billing_city.config.tags ).toBe( true ); // SETTLEMENT: the merchant's actual opt-in
 	} );
 
 	it( 'issue #528: a tag pick unlocks the address field, issues NO /select request, and writes no settlement record', async () => {

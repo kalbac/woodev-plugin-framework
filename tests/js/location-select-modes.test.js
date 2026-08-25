@@ -445,6 +445,122 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	} );
 
 	// -----------------------------------------------------------------------
+	// Issue #530 ROUND 2 (BLOCKER 2, s93 rig measurement): seeding real <option> elements is
+	// NOT sufficient in ajax mode — select2's AjaxData adapter never reads a <select>'s own DOM
+	// options for what it renders, and `minimumInputLength` blocks the transport from running
+	// at all below the floor. The fix scopes the floor to 0 for a level that carries a popular
+	// list, and answers an empty (or below-floor) term LOCALLY, never over the network.
+	// -----------------------------------------------------------------------
+
+	it( 'BLOCKER 2: minimumInputLength is scoped to 0 for a level that carries a popular list', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', popular: jest.fn( () => [] ) }
+		);
+
+		expect( config.minimumInputLength ).toBe( 0 );
+	} );
+
+	it( 'control: minimumInputLength keeps its ORIGINAL floor when no popular list exists for this level — the scoping never loosens a gate it cannot itself answer', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement' } // no `popular` key.
+		);
+
+		expect( config.minimumInputLength ).toBe( 2 );
+	} );
+
+	it( 'BLOCKER 2: an EMPTY term is answered from seed.popular() directly, SYNCHRONOUSLY — strategy.fetchEntries (the network call) is never invoked', () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [] ) );
+		const popularEntries = [
+			{ key: 'dadata:tv', label: 'Тверь', value: 'Тверь', record: { key: 'dadata:tv', label: 'Тверь' } },
+			{ key: 'dadata:kz', label: 'Казань', value: 'Казань', record: { key: 'dadata:kz', label: 'Казань' } },
+		];
+		const applyEntries = jest.fn( ( entries ) => entries );
+		const popular = jest.fn( () => popularEntries );
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries, level: 'settlement', popular: popular }
+		);
+
+		const success = jest.fn();
+		const failure = jest.fn();
+
+		config.ajax.transport( { data: { term: '' } }, success, failure );
+
+		// SYNCHRONOUS — no `await`, no microtask flush. MUTATION PROOF (per the brief's own
+		// rule): reverting the empty-term short-circuit in the transport routes this through
+		// `strategy.fetchEntries('').then(...)` instead — a real Promise, whose `.then()`
+		// callback cannot have run yet at this point — so `success` would still be
+		// `not.toHaveBeenCalled()` here and this assertion fails. Verified by hand (see the
+		// worker_done report for the exact mutation and its failing output).
+		expect( fetchEntries ).not.toHaveBeenCalled();
+		expect( applyEntries ).toHaveBeenCalledWith( popularEntries, false );
+		expect( success ).toHaveBeenCalledWith( {
+			results: [
+				{ id: 'Тверь', text: 'Тверь', key: 'dadata:tv' },
+				{ id: 'Казань', text: 'Казань', key: 'dadata:kz' },
+			],
+		} );
+		expect( failure ).not.toHaveBeenCalled();
+	} );
+
+	it( 'BLOCKER 2: a NON-EMPTY term shorter than the real floor also never reaches strategy.fetchEntries — answered locally as zero results, not a search', () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [ { key: 'dadata:x', label: 'x', record: { key: 'dadata:x', label: 'x' } } ] ) );
+		const applyEntries = jest.fn( ( entries ) => entries );
+		const popular = jest.fn( () => [] );
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries, level: 'settlement', popular: popular }
+		);
+
+		const success = jest.fn();
+
+		// One character — settlement's own floor (minimumInputLengthFor()) is 2, only REACHABLE
+		// here at all because BLOCKER 2's own scoping lowered select2's built-in gate to 0.
+		config.ajax.transport( { data: { term: 'М' } }, success, jest.fn() );
+
+		expect( fetchEntries ).not.toHaveBeenCalled();
+		expect( success ).toHaveBeenCalledWith( { results: [] } );
+	} );
+
+	it( 'control: a term AT the real floor still reaches strategy.fetchEntries normally — the scoping only ever widens what is answered LOCALLY, never narrows what is searched', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [
+			{ key: 'dadata:tv', label: 'Тверь', record: { key: 'dadata:tv', label: 'Тверь' } },
+		] ) );
+		const applyEntries = jest.fn( ( entries ) => entries );
+		const popular = jest.fn( () => [] );
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: fetchEntries },
+			{ initialValue: '', placeholder: '', applyEntries: applyEntries, level: 'settlement', popular: popular }
+		);
+
+		const success = jest.fn();
+
+		config.ajax.transport( { data: { term: 'Тв' } }, success, jest.fn() ); // exactly 2 chars
+
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( fetchEntries ).toHaveBeenCalledWith( 'Тв', expect.anything() );
+		expect( success ).toHaveBeenCalledWith( { results: [ { id: 'dadata:tv', text: 'Тверь', key: 'dadata:tv' } ] } );
+	} );
+
+	it( 'BLOCKER 2: language.noResults shows the "type N more characters" wording for a below-floor term once popular scoping lowered the built-in gate — and the ordinary message otherwise', () => {
+		window.wc_country_select_params = { ...WC_PARAMS };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', popular: jest.fn( () => [] ), emptyText: '' }
+		);
+
+		expect( config.language.noResults( { term: 'М' } ) ).toBe( 'Please enter 1 or more characters' );
+		expect( config.language.noResults( { term: 'Москва не найдена' } ) ).toBe( WC_PARAMS.i18n_no_matches );
+	} );
+
+	// -----------------------------------------------------------------------
 	// Issue #528 — `tags`/`createTag`/`insertTag`, gated on `seed.allowCustomSettlement` AND
 	// (round 2, critic MJ-A) `'settlement' === seed.level`.
 	// -----------------------------------------------------------------------
@@ -1595,6 +1711,48 @@ describe( 'ajax-select2 renderer — issue #530: the empty state is seeded from 
 		expect( select.options[ 2 ].value ).toBe( 'Казань' );
 	} );
 
+	// -----------------------------------------------------------------------
+	// Issue #530 ROUND 2 (BLOCKER 1, s93 rig measurement): a fresh customer, isolated browser
+	// context, `test-cdek`, «Список с поиском» — `selectedIndex` came back `1`, not `0`: the
+	// blank option existed but was NOT selected, and the field arrived showing «Санкт-Петербург»
+	// pre-filled. ROOT CAUSE, measured against the real reset-selectedness algorithm a
+	// non-`multiple` <select> runs: `applyEntries()` appends each popular <option> WITHOUT
+	// `.selected` set, so the browser auto-selects the FIRST one the instant it lands in the
+	// DOM; the blank leading <option> used to be inserted only AFTER that already happened —
+	// too late to become the selected one. NOT `buildSelectField()`'s `initialValue` seam
+	// (issue #447): that branch is `initialValue`-gated and never runs at all for a fresh
+	// customer, whose input starts genuinely empty.
+	// -----------------------------------------------------------------------
+
+	it( 'BLOCKER 1: the blank leading <option> is the SELECTED one — a popular entry landing in the DOM first must never win the browser\'s own auto-select', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" placeholder="Населённый пункт" />';
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'billing_city' ),
+			buildOptions( { popular: jest.fn( () => POPULAR ) } )
+		);
+
+		const select = document.getElementById( 'billing_city' );
+
+		// The exact rig assertion shape (measured, s93): index, value, AND the rendered text —
+		// never `.value` alone (this project's own standing rule: `.value` has passed while the
+		// widget showed something else, three times before).
+		expect( select.selectedIndex ).toBe( 0 );
+		expect( select.value ).toBe( '' );
+		expect( select.options[ select.selectedIndex ].textContent ).toBe( '' );
+		expect( select.options[ 0 ].selected ).toBe( true );
+		expect( select.options[ 1 ].selected ).toBe( false );
+		expect( select.options[ 2 ].selected ).toBe( false );
+
+		// MUTATION PROOF (per the brief's own rule): dropping the `blankOption.selected = true`
+		// line this fix adds (leaving the rest of the insertion — position, `if ( placeholder )`
+		// — unchanged) reproduces the measured defect exactly: `select.selectedIndex` comes back
+		// `1`, `select.value` comes back `'Тверь'` (the first popular entry, matching the rig's
+		// own «Санкт-Петербург» — whichever popular entry the shop ranks first), and this
+		// assertion block fails on its very first line. Verified by hand — see the worker_done
+		// report for the exact mutation and its failing output.
+	} );
+
 	it( 'a non-empty initialValue (issue #447) still wins — no popular seeding at all when the field already carries a value', () => {
 		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="Уже выбрано" />';
 
@@ -1631,6 +1789,43 @@ describe( 'ajax-select2 renderer — issue #530: the empty state is seeded from 
 
 		expect( onSelect ).toHaveBeenCalledTimes( 1 );
 		expect( onSelect ).toHaveBeenCalledWith( { record: POPULAR[ 1 ].record } );
+	} );
+
+	// -----------------------------------------------------------------------
+	// Issue #530 ROUND 2 (BLOCKER 2, s93 rig measurement): end-to-end, through the REAL select2
+	// config (via the #450 fake) — a fresh customer who opens the field, having typed nothing,
+	// must see the popular cities listed, never the dead «Please enter 2 or more characters»
+	// state the rig measured (`dropdownRowCount: 1`).
+	// -----------------------------------------------------------------------
+
+	it( 'BLOCKER 2, end-to-end: a fresh customer who opens the field having typed nothing sees the popular cities — answered directly, never over the network', () => {
+		document.body.innerHTML = '<input type="text" id="billing_city" name="billing_city" value="" placeholder="Населённый пункт" />';
+
+		// `options.fetch` — the REST `/suggest` round trip (the rig measures 6-10s for it).
+		// This must never be called for the empty-term/open case.
+		const fetch = jest.fn( () => Promise.resolve( [] ) );
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2(
+			document.getElementById( 'billing_city' ),
+			buildOptions( { popular: jest.fn( () => POPULAR ), fetch } )
+		);
+
+		expect( instances[ 0 ].config.minimumInputLength ).toBe( 0 );
+
+		// No term — exactly select2's own `open()` -> `trigger('query', {})` (verified against
+		// the rig's own vendored selectWoo.full.js:5662-5668), the moment the field opens,
+		// before any keystroke.
+		const result = instances[ 0 ].query();
+
+		expect( result ).not.toBeNull(); // never blocked by the (now-scoped) minimumInputLength gate.
+		expect( fetch ).not.toHaveBeenCalled();
+		expect( result.success ).toHaveBeenCalledWith( {
+			results: [
+				{ id: 'Тверь', text: 'Тверь', key: 'dadata:tv' },
+				{ id: 'Казань', text: 'Казань', key: 'dadata:kz' },
+			],
+		} );
 	} );
 } );
 
