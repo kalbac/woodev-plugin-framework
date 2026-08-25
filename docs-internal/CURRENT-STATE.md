@@ -7,35 +7,37 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-25 (s92).** Merged this session: **#522** (cards #517 + #528) and **#509** (#502).
-**No open PRs.**
+**As of 2026-08-25 (s93).** Merged: **#533** (#526). **PR #535 (#530) is OPEN and waiting on the
+operator's rig pass** — customer-facing UI, so it is deliberately not self-merged.
 
-**Baselines on `main`, RE-measured 25.08.2026 (s93) in the PRIMARY checkout:** `composer check`
-**2787** unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
+**Baselines on `main` after #526, measured in the PRIMARY checkout:** `composer check` **2787**
+unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
+**On PR #535's branch:** **2791** / 6826 / **66 skipped**; jest **1491**.
 
 ⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
 stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
 previous handoff is an INFERENCE — re-measure before comparing.** Detail: `sessions/s93.md`.
 
-**#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, visible
-only for «Список с поиском». ON → select2 `tags`, `insertTag` gating the tag row to the zero-result
-case; a tag pick is NOT a record pick (no `/select`, no record). OFF → the #517 abandon mechanism is
-gated off and the address lock stands. OFF must also disable the unlock, measured: with the
-settlement `<select>` empty WooCommerce refuses the order with `Shipping Город (Location Provider)
-is a required field`. (Why #517 needed #528 at all → `sessions/s92.md`.)
+**#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
+«Список с поиском». ON → select2 `tags`; a tag pick is NOT a record pick. OFF → the #517 abandon
+mechanism is gated off and the address lock stands (measured: an empty settlement `<select>` makes
+WooCommerce refuse the order). Detail → `sessions/s92.md`.
 
 **MEASURED, and it inverts an obvious assumption: `select2:close` fires BEFORE `select2:select`**
 (four reproductions on the rig, mouse and keyboard, ajax and non-ajax). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha
 `select2-close-fires-before-select2-select`.
 
-**Popular settlements have no customer-facing half.** The spec says the list *"gives the field
-something useful before the customer types"*, but decisions D1–D8 only ever covered storage,
-verification and the merchant tools — so it was never built. No consumer of the store reaches the
-checkout. Card **#530**.
+**Popular settlements' customer-facing half is BUILT and rig-verified, in PR #535 (#530)** — empty
+state, ranking and region filtering. Two things it taught, both now gotchas: seeding real
+`<option>`s is **not** sufficient in ajax mode (select2's ajax data adapter ignores DOM options and
+enforces `minimumInputLength`), and a popular list must never arrive PRE-SELECTED — the browser's
+own reset-selectedness algorithm picks the first option unless the blank one is attached first and
+explicitly selected.
 
-**Cards filed this session:** #523, #524, #525, #526, #527, #529, #530, #531, #532.
-**Closed:** #517, #528, #520.
+**Cards filed in s92:** #523, #524, #525, #527, #529, #531, #532 (open); #526, #530 done/in PR.
+**s93:** #534 filed and closed as `not planned` — it described a defect that was a measurement
+artefact (see the rig gotcha below).
 
 ## ⚠ The checkout location layer
 
@@ -50,8 +52,8 @@ ownership rather than a name heuristic. Gotcha:
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488, whose STORAGE/verification/tools side is done — the client-facing list is #530. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
 | **#488** | Popular settlements. **Slices 1 and 2 are MERGED (#493, #496): `CAPABILITY_RESOLVE_KEY` + `resolve_key( string $key ): ?Location_Record` exist, DaData and the `test-cdek` fixture declare it, every other provider inherits a throwing default.** `null` means exactly one thing — "asked, answered, does not know this key" — because spec D6 DELETES the row on it; unconfigured, transport failure, malformed payload and unmappable row all throw. **Slice 2 added the table (D3), whole-record storage (D1), the two clocks (D2), the D4a derived-key gate settled by the operator in #491, and the enrolment path.** **Slice 3's D5–D7 are MERGED (#500 server, #501 client): the lazy check inside `/select`, D6's four outcomes, and D7's adopt-or-cancel with «Данные не актуальны, выберите заново».** **Slice 3's D8 is BUILT and green in PR #508** (card #505): the «Инструменты» section, a `woodev_shipping_tools` filter carrying typed `Shipping_Tool` objects, a `POST /settings/{provider}/tool/{tool}/run` route, and the two merchant actions bridging in from the location layer through that public seam. **MERGED (#508) and operator-accepted; #520 closed 25.08 after the tools were exercised against a seeded table.** ⚠ **The customer-facing half was never built** — the spec's own «before the customer types» promise never became a D-decision, and no consumer of the store reaches the checkout. Card **#530**. |
 | **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
-| ~~**#502**~~ | **DONE — merged as #509 (`4a2dab2`).** An implicit default locality no longer unlocks the address. Merged only after its branch was updated onto the post-#522 base and all 19 jobs re-ran there; its original green CI had been measured against a stale base. |
-| ~~**#517**~~ | **DONE — merged as #522 (`fe90c82`), operator-accepted on the rig.** Needed **#528** to actually deliver: the unlock alone left the `<select>` empty and WooCommerce rejected the order. Four defects found across three critic passes (BL-1, BL-2, MJ-3, MJ-4), all reproduced with red probes and `<input>` controls, all verified live. Report: `reviews/2026-08-25-517-critic.md`. |
+| ~~**#502**~~ | **DONE — #509 (`4a2dab2`).** An implicit default locality no longer unlocks the address. Merged only after a rebase onto the post-#522 base and a full CI re-run — its original green had been measured against a stale base. |
+| ~~**#517**~~ | **DONE — #522 (`fe90c82`), operator-accepted.** Needed **#528** to deliver. Four defects across three critic passes; report `reviews/2026-08-25-517-critic.md`, detail `sessions/s92.md`. |
 | **#518** | **DECIDED 25.08 — a pickup selection lifts the implicit flag.** `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
 | **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
