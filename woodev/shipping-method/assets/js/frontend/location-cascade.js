@@ -3255,7 +3255,35 @@
 	function settlementTextIsKnownUnresolved( entry ) {
 		var node = chainNodeForLevel( entry, 'settlement' );
 		var el = node ? document.getElementById( node.fieldId ) : null;
-		var text = el ? el.value : '';
+
+		if ( ! el ) {
+			return false;
+		}
+
+		// Issue #517: a select2/selectWoo-backed settlement field (`ajax-select2`,
+		// `related-list:settlement` — `buildSelectField()` in location-select-modes.js has
+		// REPLACED the plain `<input>` with a real `<select>`) has no live DOM proxy for the
+		// customer's typed-but-uncommitted search text at all: that text lives in select2's own
+		// transient search box, gone the moment the dropdown closes, and the `<select>`'s own
+		// `.value` only ever carries a REAL picked option's submitted value or `''` — never the
+		// abandoned query a completed search already proved empty. There is nothing to
+		// text-match against, so the marker's own PRESENCE is the answer instead. This is not a
+		// weaker check: `entry.unresolved.settlement`'s lifecycle is already fully owned, for a
+		// `<select>` exactly as for an `<input>`, by the two events that disprove it — a real
+		// pick via {@see onSelectFor} (settlement level's `entry.unresolved.settlement` set
+		// `null`), and the field's own value changing via {@see handleFieldChanged} (`change`
+		// fires on a genuine select2 pick or any other programmatic value swap, native OR
+		// jQuery — see the file docblock's BOTH EVENT WORLDS section — and that handler already
+		// nulls `entry.unresolved[ info.level ]` on every real transition). Nothing about a
+		// `<select>` lets the customer change its committed value WITHOUT one of those two
+		// events firing, unlike a plain `<input>`'s free-typed text — so there is no divergent
+		// state this presence check could miss that the input-backed text-match above is
+		// protecting against.
+		if ( 'SELECT' === el.tagName ) {
+			return !! entry.unresolved.settlement;
+		}
+
+		var text = el.value;
 
 		return !! text && text === entry.unresolved.settlement;
 	}

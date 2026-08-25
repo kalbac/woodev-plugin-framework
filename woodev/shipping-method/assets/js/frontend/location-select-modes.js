@@ -364,6 +364,37 @@
 						// what keeps select2's own results and `dataByKey` from disagreeing.
 						var accepted = seed.applyEntries( entries, false );
 
+						// Issue #517: this callback only ever runs for a COMPLETED, non-stale
+						// response (the `stale`/`isAbortError()` guards around this transport
+						// already excluded a cancelled/superseded request, and a genuine
+						// transport error takes the separate `failure()` branch below, never
+						// this one) — exactly the condition `location-cascade.js`'s
+						// `onAbandonFor()` exists to hear about. `term` is never empty here:
+						// selectWoo's own `minimumInputLength` decorator (wired below) never
+						// calls this transport for anything shorter, and that floor is always
+						// >= 1 (see `minimumInputLengthFor()`). Below-`minimumInputLength` text
+						// — the select2 analogue of `location-typeahead.js`'s own
+						// `resolved: false` report — is deliberately NOT reproduced here: unlike
+						// that widget's plain `<input>`, select2's search box is an internal
+						// implementation detail with no public event exposing its raw query
+						// below the floor, and reaching for it would mean depending on the same
+						// kind of undocumented private field this file already refuses
+						// elsewhere (see `activeAbort`'s own docblock). The floor this leaves
+						// unclosed (`minimumInputLengthFor('settlement') === 2`) is no worse
+						// than `location-typeahead.js`'s own `DEFAULT_MIN_CHARS`, so this is not
+						// a NEW gap relative to the baseline widget.
+						//
+						// `entries` (never just `accepted.length`) is the transport-error guard:
+						// `attachAjaxSelect2()`'s own `fetchEntries()` resolves with `null` — not
+						// `[]` — for a genuine (non-abort) fetch failure it otherwise renders as
+						// an ordinary empty result (see that function's own docblock), so `null`
+						// here means "this never completed a real search" and must never read as
+						// the #350/#517 zero-result condition, only a truly returned (possibly
+						// empty) array does.
+						if ( entries && 0 === accepted.length && term && 'function' === typeof seed.onAbandon ) {
+							seed.onAbandon( { query: term, resolved: true } );
+						}
+
 						success( {
 							results: accepted.map( function( entry ) {
 								return {
@@ -397,6 +428,41 @@
 					return {
 						abort: abortRequest,
 					};
+				},
+			};
+		} else if ( 'function' === typeof seed.onAbandon ) {
+			// related-list:settlement has no transport of its own to observe — the full,
+			// region-scoped list is already loaded (buildSelectField()'s own one-time
+			// fetchEntries('') call) and select2 filters it LOCALLY, with no network
+			// round-trip and no `ajax.transport` this file controls. `language.noResults` is
+			// select2's own PUBLIC, documented per-query message hook (select2/select2 docs,
+			// i18n.md; the same "language.*" callback family the CDEK reference
+			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:220-222)
+			// already overrides for its own noResults string) — select2 calls it, with the
+			// CURRENT query params, exactly when the filtered result set is empty, and never
+			// for a blank term (an empty query always shows the full loaded list, never zero
+			// results). Reusing it here as an observation point is the honest seam this file's
+			// own docblock already commits to: no network, and no private/underscored select2
+			// field the way `activeAbort`'s own docblock explicitly refuses to touch.
+			//
+			// The returned string is never invented here: `seed.emptyText` is the SAME
+			// server-supplied "no results" text `location-cascade.js`'s `attachOne()` already
+			// resolves for every renderer at this node (falls back to '', same convention
+			// `attachOne()` itself uses, rather than a hardcoded English literal that would
+			// fight the layer's own i18n route).
+			config.language = {
+				noResults: function( params ) {
+					var term = params && 'string' === typeof params.term ? params.term : '';
+
+					// `! seed.listLoadFailed`: see that flag's own docblock — a region whose
+					// FULL list never loaded reports zero matches for every term, but that is
+					// a transport failure, never a completed search proving the provider has
+					// nothing for this exact town.
+					if ( term && ! seed.listLoadFailed ) {
+						seed.onAbandon( { query: term, resolved: true } );
+					}
+
+					return seed.emptyText || '';
 				},
 			};
 		}
@@ -517,6 +583,20 @@
 		 * reachable even when `detach()` runs on an already half-torn-down widget.
 		 */
 		var activeAbort = null;
+
+		/**
+		 * @type {boolean} Issue #517 (related-list:settlement's own transport-error guard):
+		 * `true` once the ONE-TIME full-list load below has settled having FAILED. Set
+		 * synchronously, in the SAME `.then()` callback that also calls `ensureSelect2()` for
+		 * the first (and only — this strategy never re-fetches) time, so `selectConfigFor()`'s
+		 * `language.noResults` hook — built inside that same `ensureSelect2()` call — always
+		 * reads this at its own final, settled value; never a race. A field whose region-scoped
+		 * list genuinely failed to load has zero options for a reason that says nothing about
+		 * whether the provider carries the customer's typed town — the same "never on a
+		 * transport error" exclusion `attachAjaxSelect2()`'s own `null`-vs-`[]` distinction
+		 * already enforces for the ajax strategy.
+		 */
+		var listLoadFailed = false;
 
 		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
@@ -707,6 +787,14 @@
 				onRequestStart: function( abortFn ) {
 					activeAbort = abortFn;
 				},
+				// Issue #517: OPTIONAL, same as every other primitive `location-cascade.js`'s
+				// `attachOne()` hands over — see `selectConfigFor()`'s own docblock for where
+				// each strategy fires it.
+				onAbandon: 'function' === typeof options.onAbandon ? options.onAbandon : null,
+				emptyText: 'string' === typeof options.emptyText ? options.emptyText : '',
+				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
+				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.
+				listLoadFailed: listLoadFailed,
 			} ) );
 
 			// Set only AFTER a successful call — issue #457: setting this BEFORE `.select2()`
@@ -749,6 +837,7 @@
 				},
 				function( error ) {
 					logError( error );
+					listLoadFailed = true;
 					applyEntries( [], true );
 					ensureSelect2();
 				}
@@ -841,12 +930,14 @@
 
 		return buildSelectField( el, options, {
 			ajax: false,
+			// Issue #517: a rejection is left to propagate, UNCAUGHT, straight to
+			// `buildSelectField()`'s own non-ajax `.then( success, error )` — which already
+			// logs and degrades to an empty list itself (previously dead code for this
+			// renderer, since this wrapper used to swallow every rejection right here) and, as
+			// of #517, also sets `listLoadFailed` so a genuinely failed list load can never be
+			// mistaken for the provider having nothing to offer.
 			fetchEntries: function() {
-				return Promise.resolve( options.list() ).then( null, function( error ) {
-					logError( error );
-
-					return [];
-				} );
+				return options.list();
 			},
 		} );
 	}
@@ -892,7 +983,17 @@
 
 					logError( error );
 
-					return [];
+					// Issue #517: `null`, never `[]` — `buildSelectField()`'s own `applyEntries()`
+					// treats a missing entries array exactly like an empty one (`(entries ||
+					// []).forEach(...)`), so the customer still sees "nothing found" here,
+					// UNCHANGED from before this card (see this function's own docblock above —
+					// that contract is not being touched). `selectConfigFor()`'s transport uses
+					// the difference between `null` and `[]` for its OWN purpose only: telling a
+					// genuinely completed, zero-result search (the #350/#517 condition
+					// `onAbandonFor()` must hear about) apart from a swallowed transport error
+					// that merely LOOKS like one by the time it gets there — the two are
+					// indistinguishable once collapsed to the same empty array.
+					return null;
 				} );
 			},
 		} );

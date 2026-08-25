@@ -27,6 +27,8 @@
 
 'use strict';
 
+const { installFakeSelect2 } = require( './support/fake-select2.js' );
+
 const CONFIG_GLOBAL = 'woodev_checkout_field_config_location_cascade_test';
 const SUGGEST_URL = 'https://example.test/wp-json/woodev/v1/location/suggest';
 const SELECT_URL = 'https://example.test/wp-json/woodev/v1/location/select';
@@ -5427,6 +5429,263 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		// an ordinary pick; adopting a different settlement really must not keep the old street.
 		expect( addressField().value ).toBe( '' );
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// issue #517 — the #350 escape hatch (onAbandon -> entry.unresolved.settlement -> the address
+// lock stands down) never fired at all in the two select2-backed modes, and even if it had,
+// `settlementTextIsKnownUnresolved()` compared the marker against `document.getElementById(
+// fieldId).value` — a `<select>`'s own `.value` (what `buildSelectField()` replaces the plain
+// `<input>` with) never carries the customer's typed-but-unresolved search text, only a real
+// picked option's value or ''. This suite boots the REAL `location-select-modes.js` alongside
+// the REAL `location-cascade.js` (never the fake typeahead stand-in the rest of this file uses
+// for the settlement field) to prove the FULL, end-to-end DOM effect — the address field's own
+// `disabled` attribute and locked class — not just the internal marker.
+// -----------------------------------------------------------------------
+
+describe( 'issue #517: onAbandon unlocks the address field through the select2-backed modes too', () => {
+	/**
+	 * Boots the REAL `location-select-modes.js` registry ahead of the REAL
+	 * `location-cascade.js` — mirrors the real enqueue order
+	 * (`class-checkout-handler.php::enqueue_assets()` declares select-modes.js a hard
+	 * dependency of the cascade file) — instead of this file's own `boot()`, which never loads
+	 * select-modes.js at all and drives everything through the fake `WoodevLocationTypeahead`.
+	 * The baseline (address) field still gets the fake typeahead; only the settlement field's
+	 * mode-specific renderer is real.
+	 *
+	 * @param {Object} configOpts Same shape as `boot()`'s own.
+	 * @returns {Array<Object>} the fake-select2 `instances` array (see `support/fake-select2.js`) —
+	 *   populated synchronously by the time this returns, since `boot()` runs at require time.
+	 */
+	function bootWithRealSelectModes( configOpts ) {
+		installMarkup( configOpts, configOpts && configOpts.country );
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( configOpts );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return instances;
+	}
+
+	function addressField() {
+		return document.getElementById( 'billing_address_1' );
+	}
+
+	it( 'ajax-select2: a completed, non-empty, zero-result settlement search unlocks the address field', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		// #337 baseline: locked with no settlement confirmed, unaffected by the renderer change.
+		expect( addressField().disabled ).toBe( true );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( true );
+		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
+
+		expect( instances ).toHaveLength( 1 );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+		expect( req.url ).toContain( SUGGEST_URL );
+
+		req.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+	} );
+
+	it( 'ajax-select2 control: a completed settlement search WITH suggestions does NOT unlock the address field', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		instances[ 0 ].query( 'Моск' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.resolve( { suggestions: [
+			{ key: 'dadata:msk', label: 'г Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'ajax-select2 control: a query below minimumInputLength never reaches the transport and never unlocks the address field', () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		const fetchCallsBefore = fetchCalls.length;
+
+		// settlement's own floor is 2 — a single character never reaches the transport.
+		const result = instances[ 0 ].query( 'Т' );
+
+		expect( result ).toBeNull();
+		expect( fetchCalls.length ).toBe( fetchCallsBefore );
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'ajax-select2 control: a superseded (aborted) request never unlocks the address field, even once it settles with zero entries', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьм' ); // left pending
+		const staleReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		instances[ 0 ].query( 'Тьмутаракань' ); // supersedes it
+		const liveReq = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( staleReq ).not.toBe( liveReq );
+
+		staleReq.resolve( { suggestions: [] } ); // the STALE request settles too, also empty
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+
+		liveReq.resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'ajax-select2 control: a transport error never unlocks the address field', async () => {
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		req.reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( true );
+
+		consoleSpy.mockRestore();
+	} );
+
+	it( 're-locks once the unlocked settlement <select> genuinely changes value — the two events that disprove the marker still apply to a <select>', async () => {
+		const instances = bootWithRealSelectModes( { settlement: true, address: true, mode: { settlement: 'ajax-select2' } } );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [] } );
+		await flushMicrotasks();
+
+		expect( addressField().disabled ).toBe( false );
+
+		// A real pick — dispatches change on the now-<select> settlement field, exactly like a
+		// customer choosing an option. handleFieldChanged() nulls entry.unresolved.settlement on
+		// ANY real transition, `<select>` included.
+		const select = document.getElementById( 'billing_city' );
+		const option = document.createElement( 'option' );
+
+		option.value = 'Тверь';
+		select.appendChild( option );
+		select.value = 'Тверь';
+		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'related-list:settlement: a completed, non-empty, zero-result local search (language.noResults) unlocks the address field', async () => {
+		const select2Calls = [];
+
+		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
+		window.jQuery.fn.select2 = jest.fn( function( config ) {
+			select2Calls.push( config );
+
+			return this;
+		} );
+
+		installMarkup( { settlement: true, address: true } );
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		expect( addressField().disabled ).toBe( true );
+
+		// The one-time full list load — `listFor()` hits /location/list, never /location/suggest.
+		const listReq = fetchCalls[ fetchCalls.length - 1 ];
+		expect( listReq.url ).toContain( LIST_URL );
+
+		listReq.resolve( { localities: [
+			{ key: 'dadata:msk', value: 'Москва', label: 'Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
+		] } );
+		await flushMicrotasks();
+
+		expect( select2Calls ).toHaveLength( 1 );
+
+		select2Calls[ 0 ].language.noResults( { term: 'Тьмутаракань' } );
+
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+
+		delete window.jQuery.fn.select2;
+	} );
+
+	it( 'related-list:settlement control: language.noResults for a term that actually matches an option must never be observed as a zero-result report (guard is explicit on the call site, not exercised here — see the unit suite in location-select-modes.test.js for the matcher itself)', async () => {
+		// This file only proves the WIRING (a real onAbandon call unlocks the DOM); the
+		// zero-vs-nonzero MATCH decision itself is select2's own default matcher, already out of
+		// scope for a jsdom test with no real select2 — see location-select-modes.test.js's own
+		// pure-config-builder suite for the `language.noResults` contract in isolation.
+		const select2Calls = [];
+
+		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
+		window.jQuery.fn.select2 = jest.fn( function( config ) {
+			select2Calls.push( config );
+
+			return this;
+		} );
+
+		installMarkup( { settlement: true, address: true } );
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { localities: [] } );
+		await flushMicrotasks();
+
+		// select2 itself never calls language.noResults for a BLANK term (the whole loaded list
+		// renders instead) — asserted directly, never inferred.
+		select2Calls[ 0 ].language.noResults( { term: '' } );
+
+		expect( addressField().disabled ).toBe( true );
+
+		delete window.jQuery.fn.select2;
 	} );
 } );
 
