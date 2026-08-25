@@ -744,6 +744,226 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 	} );
 } );
 
+// -----------------------------------------------------------------------
+// Issue #539 — the popular list narrows LOCALLY while the real search runs.
+//
+// MEASURED on the rig before the fix (region «Санкт-Петербург», popular list
+// «Санкт-Петербург»/«Пушкин»/«Репино», term «Пушк»): select2 PREPENDS its «Searching…» row and
+// leaves the previous results below it, so for 9.6 s the field went on offering «Санкт-Петербург»
+// and «Репино» to a customer who had already typed «Пушк».
+// -----------------------------------------------------------------------
+
+describe( 'matchingPopular() — the local narrowing filter (#539)', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+	} );
+
+	const ENTRIES = [
+		{ key: 'p:1', label: 'СПб', record: { label: 'Санкт-Петербург' } },
+		{ key: 'p:2', label: 'ignored', record: { label: 'Пушкин' } },
+		{ key: 'p:3', label: 'Репино', record: {} },
+	];
+
+	it( 'keeps only the entries whose label contains the term, case-insensitively', () => {
+		expect( mod.matchingPopular( ENTRIES, 'Пушк' ).map( ( e ) => e.key ) ).toEqual( [ 'p:2' ] );
+		expect( mod.matchingPopular( ENTRIES, 'пушк' ).map( ( e ) => e.key ) ).toEqual( [ 'p:2' ] );
+		expect( mod.matchingPopular( ENTRIES, 'ПУШК' ).map( ( e ) => e.key ) ).toEqual( [ 'p:2' ] );
+	} );
+
+	it( 'matches SUBSTRING, not prefix — the same rule select2\'s own stock matcher applies to these very rows', () => {
+		// «петер» is not a prefix of «Санкт-Петербург». select2's default matcher would still
+		// match it, and a prefix-only rule here would make the popular list answer a keystroke
+		// differently from every other list rendered in the same dropdown.
+		expect( mod.matchingPopular( ENTRIES, 'петер' ).map( ( e ) => e.key ) ).toEqual( [ 'p:1' ] );
+	} );
+
+	it( 'reads record.label first and falls back to the entry label — the same text toSelect2Result renders', () => {
+		// p:2's own `label` is 'ignored'; matching it would prove the wrong field was read.
+		expect( mod.matchingPopular( ENTRIES, 'ignored' ) ).toEqual( [] );
+		// p:3 has no record.label at all, so its own label is what must answer.
+		expect( mod.matchingPopular( ENTRIES, 'Репино' ).map( ( e ) => e.key ) ).toEqual( [ 'p:3' ] );
+	} );
+
+	it( 'an empty term keeps everything — that is the idle popular list, not a search', () => {
+		expect( mod.matchingPopular( ENTRIES, '' ) ).toHaveLength( 3 );
+		expect( mod.matchingPopular( ENTRIES, undefined ) ).toHaveLength( 3 );
+	} );
+
+	it( 'tolerates a non-array and a hole rather than throwing', () => {
+		expect( mod.matchingPopular( null, 'Пушк' ) ).toEqual( [] );
+		expect( mod.matchingPopular( undefined, 'Пушк' ) ).toEqual( [] );
+		expect( mod.matchingPopular( [ null, undefined ], 'Пушк' ) ).toEqual( [] );
+	} );
+} );
+
+describe( 'ajax transport — local narrowing while the real search runs (#539)', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		window.wc_country_select_params = {
+			i18n_no_matches: 'No matches found',
+			i18n_input_too_short_1: 'Please enter 1 or more characters',
+			i18n_input_too_short_n: 'Please enter %qty% or more characters',
+			i18n_searching: 'Searching…',
+		};
+	} );
+
+	afterEach( () => {
+		delete window.wc_country_select_params;
+	} );
+
+	const POPULAR = [
+		{ key: 'p:1', value: 'Санкт-Петербург', label: 'Санкт-Петербург', record: { label: 'Санкт-Петербург' } },
+		{ key: 'p:2', value: 'Пушкин', label: 'Пушкин', record: { label: 'Пушкин' } },
+		{ key: 'p:3', value: 'Репино', label: 'Репино', record: { label: 'Репино' } },
+	];
+
+	function buildAjax( overrides ) {
+		let settle;
+		const pending = new Promise( ( resolve ) => { settle = resolve; } );
+		const fetchEntries = jest.fn( () => pending );
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries },
+			Object.assign( {
+				initialValue: '', placeholder: '', level: 'settlement',
+				emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+				popular: () => POPULAR,
+				applyEntries: ( entries ) => ( Array.isArray( entries ) ? entries : [] ),
+			}, overrides )
+		);
+
+		return { config, fetchEntries, settle };
+	}
+
+	// `success` asks `language.noResults` AT CALL TIME, because that is when select2 asks it:
+	// the callback select2 hands this transport runs `processResults()` -> `results:all`
+	// synchronously (`selectWoo.full.js:3586-3600`), and an empty list is rendered — and its
+	// message resolved — inside that call, not after the transport returns. Sampling the hook
+	// afterwards instead cannot tell the two orderings apart: a probe that moved
+	// `searchInFlight = true` to AFTER the narrowing left every test green, while the rig showed
+	// «Поиск не дал результатов» instantly. The flag is only ever wrong DURING this window.
+	function run( config, term ) {
+		const seenNoResults = [];
+		const success = jest.fn( () => {
+			seenNoResults.push( config.language.noResults( { term } ) );
+		} );
+		const failure = jest.fn();
+		config.ajax.transport( { data: { term } }, success, failure );
+
+		return { success, failure, seenNoResults };
+	}
+
+	it( 'paints the locally-matching popular entries SYNCHRONOUSLY, before the provider has answered anything', () => {
+		const { config, fetchEntries } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		// Asserted while `fetchEntries`'s promise is deliberately still pending: this is the
+		// 9.6-second window the customer used to spend looking at «Санкт-Петербург» and «Репино».
+		expect( fetchEntries ).toHaveBeenCalledTimes( 1 );
+		expect( success ).toHaveBeenCalledTimes( 1 );
+		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин' ] );
+	} );
+
+	it( 'STILL sends the request on a local hit — the popular list is ranking and an empty state, never coverage', () => {
+		const { config, fetchEntries } = buildAjax();
+
+		run( config, 'Пушк' );
+
+		// The card's own rejected first form was "do not go to ajax when we found it locally".
+		// «Мос» matching «Москва» locally must never hide Московский, Мосрентген and the rest.
+		expect( fetchEntries ).toHaveBeenCalledTimes( 1 );
+		expect( fetchEntries.mock.calls[ 0 ][ 0 ] ).toBe( 'Пушк' );
+	} );
+
+	it( 'the provider\'s own answer replaces the narrowed list when it lands', async () => {
+		const { config, settle } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		settle( [ { key: 's:9', value: 'Пушкин, Санкт-Петербург, Россия', label: 'Пушкин, Санкт-Петербург, Россия', record: { label: 'Пушкин, Санкт-Петербург, Россия' } } ] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		expect( success ).toHaveBeenCalledTimes( 2 );
+		expect( success.mock.calls[ 1 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин, Санкт-Петербург, Россия' ] );
+	} );
+
+	it( 'a term NO popular entry matches narrows to an empty list, and that empty list reads as SEARCHING, not as "not found"', () => {
+		const { config } = buildAjax();
+		const { success, seenNoResults } = run( config, 'Выборг' );
+
+		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [] );
+
+		// THE HALF THAT WAS WRONG ON THE FIRST RIG PASS, and the reason the flag is raised
+		// before the narrowing rather than before the request: an empty narrowed list otherwise
+		// rendered «Поиск не дал результатов» INSTANTLY, over a search that had not been sent.
+		// Trading the stale frame for a false one is not a fix. Sampled AT RENDER TIME — see
+		// `run()`'s own comment for why sampling it afterwards proves nothing.
+		expect( seenNoResults ).toEqual( [ 'Searching…' ] );
+	} );
+
+	it( 'once the provider answers empty, the SAME hook goes back to the real "nothing found" message', async () => {
+		const { config, settle } = buildAjax();
+
+		run( config, 'Выборг' );
+		settle( [] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		expect( config.language.noResults( { term: 'Выборг' } ) )
+			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'a failed request also stops reading as searching — the flag never sticks', async () => {
+		let reject;
+		const fetchEntries = jest.fn( () => new Promise( ( resolve, r ) => { reject = r; } ) );
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries },
+			{
+				initialValue: '', placeholder: '', level: 'settlement',
+				emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+				popular: () => POPULAR,
+				applyEntries: ( entries ) => ( Array.isArray( entries ) ? entries : [] ),
+			}
+		);
+
+		config.ajax.transport( { data: { term: 'Выборг' } }, jest.fn(), jest.fn() );
+		reject( new Error( 'boom' ) );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		expect( config.language.noResults( { term: 'Выборг' } ) )
+			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'a below-floor term is untouched by the narrowing — it still short-circuits to the "type more" message', () => {
+		const { config, fetchEntries } = buildAjax();
+		const { success } = run( config, 'П' );
+
+		expect( fetchEntries ).not.toHaveBeenCalled();
+		expect( success.mock.calls[ 0 ][ 0 ].results ).toEqual( [] );
+		expect( config.language.noResults( { term: 'П' } ) ).toBe( 'Please enter 1 or more characters' );
+	} );
+
+	it( 'an EMPTY term still answers with the whole popular list — the idle empty state is unchanged', () => {
+		const { config, fetchEntries } = buildAjax();
+		const { success } = run( config, '' );
+
+		expect( fetchEntries ).not.toHaveBeenCalled();
+		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.text ) )
+			.toEqual( [ 'Санкт-Петербург', 'Пушкин', 'Репино' ] );
+	} );
+
+	it( 'a level with NO popular list narrows nothing and keeps its own floor', () => {
+		const { config, fetchEntries } = buildAjax( { popular: undefined, level: 'settlement' } );
+		const { success } = run( config, 'Пушк' );
+
+		expect( config.minimumInputLength ).toBe( 2 );
+		expect( fetchEntries ).toHaveBeenCalledTimes( 1 );
+		// Nothing painted before the answer — there is no local list to paint from.
+		expect( success ).not.toHaveBeenCalled();
+	} );
+} );
+
 describe( 'registers onto window.WoodevLocationRenderers on load', () => {
 	it( 'registers related-list:region, related-list:settlement, and the bare ajax-select2 key', () => {
 		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );

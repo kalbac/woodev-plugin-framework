@@ -304,6 +304,54 @@
 	}
 
 	/**
+	 * Issue #539: the subset of `entries` whose label matches `term` — what the popular list
+	 * narrows to while the real `/suggest` for that same term is still on its way.
+	 *
+	 * SUBSTRING, CASE-INSENSITIVE, ON THE SAME TEXT SELECT2 ITSELF WOULD MATCH. This is not a
+	 * preference: the rows this filters are rendered by `toSelect2Result()`, whose `text` is
+	 * `record.label || label`, and select2's own stock matcher (`matcher.js` in the vendored
+	 * bundle) lowercases both sides and asks `indexOf(...) > -1` on exactly that `text`. Any
+	 * cleverer rule here — prefix-only, token-aware, transliterating — would make the popular
+	 * list answer a keystroke differently from every other list select2 renders in the same
+	 * dropdown, which is the kind of divergence this file already refuses elsewhere (see the
+	 * `templateResult`-over-custom-`matcher` reasoning in the local strategy).
+	 *
+	 * `toLowerCase()` rather than `toLocaleLowerCase()`: the labels are Russian locality names,
+	 * and the one case where the two disagree — Turkish dotted/dotless I — would apply the
+	 * TURKISH rule to Cyrillic text whenever a customer's browser happened to be `tr-TR`,
+	 * which is worse than not localising at all.
+	 *
+	 * A non-array `entries` (a provider that answered nothing, the store having no popular rows
+	 * for this scope) yields `[]` rather than throwing — same tolerance the empty-term branch
+	 * already relies on.
+	 *
+	 * @param {Array}  entries
+	 * @param {string} term
+	 * @returns {Array}
+	 */
+	function matchingPopular( entries, term ) {
+		if ( ! Array.isArray( entries ) ) {
+			return [];
+		}
+
+		var needle = 'string' === typeof term ? term.toLowerCase() : '';
+
+		if ( ! needle ) {
+			return entries;
+		}
+
+		return entries.filter( function( entry ) {
+			if ( ! entry ) {
+				return false;
+			}
+
+			var text = ( entry.record && entry.record.label ) || entry.label || '';
+
+			return 'string' === typeof text && text.toLowerCase().indexOf( needle ) > -1;
+		} );
+	}
+
+	/**
 	 * Issue #526: the `language` block for EVERY select2 this file builds, sourced from
 	 * WooCommerce's OWN `wc_country_select_params` rather than from strings invented here
 	 * (operator's ruling on #526: «нам не нужно свои переводы подсовывать, а брать уже готовые
@@ -524,6 +572,15 @@
 			// ranking it already did before this round).
 			var popularAvailable = 'function' === typeof seed.popular;
 
+			// Issue #539: true from the moment a real `/suggest` leaves until it settles. Read
+			// ONLY by the `noResults` wrap below — the local narrowing this round introduces can
+			// legitimately produce an EMPTY list (the customer typed something no popular entry
+			// matches) while the provider is still being asked, and rendering «Поиск не дал
+			// результатов» over a search that has not finished is the same conflation #405
+			// exists to prevent: "the source has not answered yet" is not "searched, found
+			// nothing". Without this, narrowing would trade one misleading frame for another.
+			var searchInFlight = false;
+
 			config.minimumInputLength = popularAvailable ? 0 : minimumInputLengthFor( seed.level );
 
 			if ( popularAvailable ) {
@@ -543,12 +600,25 @@
 				var floor = minimumInputLengthFor( seed.level );
 				var baseNoResults = config.language.noResults;
 				var inputTooShort = config.language.inputTooShort;
+				var searching = config.language.searching;
 
 				config.language.noResults = function( params ) {
 					var term = params && 'string' === typeof params.term ? params.term : '';
 
 					if ( term && term.length < floor && 'function' === typeof inputTooShort ) {
 						return inputTooShort( { input: term, minimum: floor } );
+					}
+
+					// Issue #539: the local narrowing above can hand select2 an empty list while
+					// the provider's own answer for the SAME term is still in flight. That is
+					// "still looking", not "nothing exists" — and select2 reaches this hook for
+					// both, because it only ever asks "is the rendered list empty?". `searching`
+					// is WooCommerce's own `i18n_searching`, already wired by
+					// `select2LanguageFor()`, so this shows the customer the exact string they
+					// were already seeing in the prepended loading row — never a string invented
+					// here (#526's rule).
+					if ( searchInFlight && 'function' === typeof searching ) {
+						return searching( params );
 					}
 
 					return baseNoResults ? baseNoResults( params ) : undefined;
@@ -702,6 +772,46 @@
 						return { abort: function() {} };
 					}
 
+					// Issue #539. MEASURED on the rig (region «Санкт-Петербург», popular list
+					// «Санкт-Петербург»/«Пушкин»/«Репино», term «Пушк»):
+					//
+					//     before   Санкт-Петербург · Пушкин · Репино
+					//     +303 ms  Searching… · Санкт-Петербург · Пушкин · Репино
+					//     +9597 ms Пушкин, Санкт-Петербург, Россия
+					//
+					// select2 does NOT replace the list while a query runs — `showLoading()`
+					// PREPENDS its message and leaves the previous results below it. So for the
+					// whole 9.6 s the field went on offering «Санкт-Петербург» and «Репино» to a
+					// customer who had already typed «Пушк»: rows that demonstrably do not match
+					// what they asked for. The operator's own words — the intermediate frame
+					// misleads.
+					//
+					// So narrow the popular list LOCALLY, on every keystroke, before the request
+					// leaves. This is `success()` called twice for one query, which the vendored
+					// bundle supports by construction: `AjaxAdapter.prototype.query()` hands the
+					// transport a plain callback (`selectWoo.full.js:3586-3600`) that runs
+					// `processResults()` -> `callback()` -> `results:all`, and `results:all`
+					// REPLACES the rendered list. The second, real answer therefore overwrites
+					// this one — read in the vendored source rather than assumed.
+					//
+					// THE AJAX REQUEST STILL ALWAYS GOES OUT. Skipping it on a local hit was the
+					// card's own rejected first form: the popular list is ranking and an empty
+					// state, NEVER coverage (spec `2026-08-21-settlement-search-design.md` §4), so
+					// answering «Мос» from it alone would hide Московский, Мосрентген and the rest.
+					// Set BEFORE the narrowing below, not merely before the request leaves, and
+					// this ORDER IS THE WHOLE POINT — measured on the rig, getting it wrong the
+					// other way round: with the flag raised after `success()`, a term no popular
+					// entry matches («Выборг» against a Saint Petersburg list) rendered «Поиск не
+					// дал результатов» INSTANTLY, over a search that had not even been sent. That
+					// is a worse frame than the stale one #539 set out to remove. Everything that
+					// could still short-circuit this transport has already returned above, so by
+					// this line a real request is a certainty, not a prediction.
+					searchInFlight = true;
+
+					if ( popularAvailable ) {
+						success( { results: seed.applyEntries( matchingPopular( seed.popular(), term ), false ).map( toSelect2Result ) } );
+					}
+
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
 					// and aborts it (only if it looks abortable) before starting the NEXT query —
 					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. issue #449
@@ -742,7 +852,13 @@
 						seed.onRequestStart( abortRequest );
 					}
 
+					// Cleared in BOTH settled branches below — including the stale/abort early
+					// returns, since a superseded request is not "still searching" either and
+					// leaving the flag up would make the NEXT genuinely-empty answer read as a
+					// search still in progress.
 					strategy.fetchEntries( term, { signal: controller ? controller.signal : undefined } ).then( function( entries ) {
+						searchInFlight = false;
+
 						if ( stale ) {
 							return;
 						}
@@ -864,6 +980,8 @@
 							results: ranked.map( toSelect2Result ),
 						} );
 					}, function( error ) {
+						searchInFlight = false;
+
 						// `isAbortError()`: a request WE cancelled must never paint "search
 						// failed" for the customer (issue #449). `stale` alone already guards
 						// this in practice (see the block comment above), but the explicit check
@@ -1825,6 +1943,7 @@
 			attachAjaxSelect2: attachAjaxSelect2,
 			bindChangeBothWorlds: bindChangeBothWorlds,
 			selectConfigFor: selectConfigFor,
+			matchingPopular: matchingPopular,
 		};
 	}
 
