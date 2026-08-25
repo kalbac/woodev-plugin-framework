@@ -80,7 +80,9 @@ This project has **two documentation directories** with different audiences, pub
 1. Edit files directly — no build step, no mkdocs
 2. Follow format rules in `docs-internal/DOCS-SCHEMA.md`
 3. Session logs and gotchas excluded from markdownlint (in `.markdownlintignore`)
-4. All files tracked in git — never gitignore docs-internal/
+4. All files tracked in git — with ONE deliberate exception: `next-session-prompt.md` (and its
+   `.prev` gate snapshot). This repo is PUBLIC and the handoff carries operational internals.
+   Nothing else here is exempt; do not widen it without an operator decision
 
 **What goes here:**
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
