@@ -5160,6 +5160,70 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
+	// ISSUE #502 — measured on the rig, s91. With
+	// `woodev_location_default_locality_policy = fixed` the server seeds a settlement record
+	// the customer never picked and flags the chain `implicit`; NEITHER settlement renderer
+	// writes that record's text into the field, so the customer saw an empty НП field beside a
+	// live address field. Spec §4.6/D11: «Implicit records participate in rate calculation but
+	// never suppress "please choose your locality" prompts» — and this lock is such a prompt.
+	it( 'stays LOCKED when the restored settlement record is the store\'s implicit default (#502)', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'unlocks on the SAME restored record once it is explicit rather than implicit (#502 control)', () => {
+		// The control the measurement needs: the ONLY difference from the test above is the
+		// flag, so a failure here would mean the fix locked something it should not have.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: false,
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'unlocks once the customer picks a settlement over an implicit default (#502)', async () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:implicit-seed', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:implicit-seed', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+
+		await pickSettlementAndSettle();
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'still SCOPES address suggestions by the implicit default while the field is locked (#502)', () => {
+		// The default locality keeps doing its own job — the fix touches the lock only, never
+		// `scopeKeyFor()`. Read off the address node's own fetch callback, which resolves its
+		// scope live at call time.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:0c5b2444', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:0c5b2444', level: 'settlement' } },
+			implicit: true,
+		} );
+
+		callFor( 'billing_address_1' ).fetch( 'Тверская' );
+
+		const req = fetchCalls[ fetchCalls.length - 1 ];
+
+		expect( req.url ).toContain( 'level=address' );
+		expect( req.url ).toContain( 'within=' + encodeURIComponent( 'dadata:0c5b2444' ) );
+	} );
+
 	it( 'stays locked when the restored record is an ADDRESS with no settlement behind it', () => {
 		// The pre-#337 state itself: an address picked while no settlement ever was. The chain
 		// the server restores names no settlement, so there is still nothing keying the pickup
