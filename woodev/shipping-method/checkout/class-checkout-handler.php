@@ -577,10 +577,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				// `boot()` calls `attachAll()` — the cascade never imports this file directly (spec
 				// D7: "mode is presentation... the cascade must not know which renderer a field
 				// uses"), it only reads the registry that file populates.
+				// `wc-country-select` (issue #526) is NOT needed for behaviour — it is needed for
+				// the `wc_country_select_params` object WooCommerce localizes ONTO that handle.
+				// `select2LanguageFor()` in the JS reads it to source select2's own UI messages
+				// («No results found», «Please enter 2 or more characters», …) from WooCommerce's
+				// already-translated strings instead of leaving select2 on its built-in English.
+				// Declaring the dependency is what guarantees both that the handle is enqueued at
+				// all and that its `wp_localize_script` output is printed BEFORE this file runs.
+				// WooCommerce itself already pulls `wc-country-select` in as a dependency of
+				// `wc-checkout`, so on the classic checkout this adds no second request — but this
+				// file is also enqueued on surfaces that are not the checkout, where it would
+				// otherwise be missing (verified against `WC_Frontend_Scripts::get_script_data()`,
+				// `case 'wc-country-select'`, in the rig's `woocommerce.latest-stable`).
 				$select_modes_built = $this->enqueue_script_if_built(
 					'woodev-location-select-modes',
 					'js/frontend/location-select-modes.js',
-					[ 'jquery', 'selectWoo' ]
+					[ 'jquery', 'selectWoo', 'wc-country-select' ]
 				);
 
 				$this->enqueue_script_if_built(

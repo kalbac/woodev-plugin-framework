@@ -158,13 +158,173 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
 	} );
 
-	it( 'a non-ajax strategy gets width only — no ajax block, no placeholder', () => {
+	afterEach( () => {
+		delete window.wc_country_select_params;
+	} );
+
+	// -------------------------------------------------------------------------
+	// Issue #526 — select2's UI messages come from WooCommerce's own
+	// `wc_country_select_params`, never from select2's built-in English defaults and never
+	// from a literal invented in this repo.
+	//
+	// The keys and the shape below are NOT guessed: they are copied from WooCommerce's own
+	// `assets/js/frontend/country-select.js` + `WC_Frontend_Scripts::get_script_data()`
+	// `case 'wc-country-select'`, both read in the rig container (`woocommerce.latest-stable`)
+	// on 25.08.2026. `WC_PARAMS` below is that param set verbatim, in ENGLISH, because that
+	// is what the rig actually serves — the site locale there is English, so English strings
+	// coming out of these tests is the CORRECT result and not a reproduction of the bug. What
+	// the fix changes is the SOURCE, which is what these tests measure.
+	// -------------------------------------------------------------------------
+
+	const WC_PARAMS = {
+		i18n_no_matches: 'No matches found',
+		i18n_ajax_error: 'Loading failed',
+		i18n_input_too_short_1: 'Please enter 1 or more characters',
+		i18n_input_too_short_n: 'Please enter %qty% or more characters',
+		i18n_input_too_long_1: 'Please delete 1 character',
+		i18n_input_too_long_n: 'Please delete %qty% characters',
+		i18n_selection_too_long_1: 'You can only select 1 item',
+		i18n_selection_too_long_n: 'You can only select %qty% items',
+		i18n_load_more: 'Loading more results…',
+		i18n_searching: 'Searching…',
+	};
+
+	it( 'an ajax strategy wires language from wc_country_select_params — the mode the card was filed against, which used to get no language block at all', () => {
+		window.wc_country_select_params = { ...WC_PARAMS };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		expect( config.language.noResults() ).toBe( 'No matches found' );
+		expect( config.language.searching() ).toBe( 'Searching…' );
+		expect( config.language.loadingMore() ).toBe( 'Loading more results…' );
+	} );
+
+	it( 'inputTooShort — the message the settlement field shows BEFORE the customer types, given minimumInputLength 2', () => {
+		window.wc_country_select_params = { ...WC_PARAMS };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		expect( config.minimumInputLength ).toBe( 2 );
+
+		// Two characters still to go — the plural msgid, with %qty% substituted.
+		expect( config.language.inputTooShort( { minimum: 2, input: '' } ) )
+			.toBe( 'Please enter 2 or more characters' );
+
+		// Exactly one to go — WooCommerce ships this as its OWN msgid, not as a %qty% of 1.
+		expect( config.language.inputTooShort( { minimum: 2, input: 'М' } ) )
+			.toBe( 'Please enter 1 or more characters' );
+	} );
+
+	it( 'errorLoading returns i18n_searching, matching WooCommerce\'s own select2#4355 workaround — NOT i18n_ajax_error', () => {
+		window.wc_country_select_params = { ...WC_PARAMS };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		// Pinned deliberately: the "obvious" key here is `i18n_ajax_error` ("Loading failed"),
+		// and WooCommerce does not use it. Reading this as a bug in the reference and
+		// "fixing" it on the way past is the mistake this test exists to catch.
+		expect( config.language.errorLoading() ).toBe( 'Searching…' );
+		expect( config.language.errorLoading() ).not.toBe( WC_PARAMS.i18n_ajax_error );
+	} );
+
+	it( 'this layer\'s own emptyText outranks WooCommerce\'s generic i18n_no_matches — the two settlement modes must agree', () => {
+		window.wc_country_select_params = { ...WC_PARAMS };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{
+				initialValue: '',
+				placeholder: '',
+				applyEntries: jest.fn(),
+				level: 'settlement',
+				emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+			}
+		);
+
+		expect( config.language.noResults() )
+			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'a missing wc_country_select_params OMITS every key, so select2 keeps its own English — a key defined-but-returning-undefined would render a BLANK message', () => {
+		// No `window.wc_country_select_params` at all. The dependency declared in
+		// `Checkout_Handler` makes a missing HANDLE unlikely; the demonstrated route to
+		// missing PARAMS is WooCommerce's own `woocommerce_get_script_data` filter, which any
+		// plugin may use to strip msgids from the localized object. (An earlier version of
+		// this comment blamed "a third party can dequeue anything" — unverified, and not the
+		// route a re-critic could actually demonstrate.)
+		//
+		// The distinction this test pins is measured in the shipped selectWoo, not reasoned:
+		// `customTranslation.extend( baseTranslation )` is `$.extend( {}, base, ours )`
+		// (`selectWoo.full.js:2236,4934-4940`), so ANY key we define shadows the English one
+		// permanently. A callback returning `undefined` therefore does NOT fall back — it
+		// renders an empty message box. Only ABSENCE of the key lets English through.
+		//
+		// The first version of this fix asserted the opposite and said so in a docblock.
+		// Codex refuted it against the selectWoo source; re-verified before this rewrite.
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		expect( config.language ).toEqual( {} );
+		expect( 'noResults' in config.language ).toBe( false );
+		expect( 'inputTooShort' in config.language ).toBe( false );
+		expect( 'searching' in config.language ).toBe( false );
+	} );
+
+	it( 'a HALF-localized plural pair omits that key rather than wiring a callback that can return undefined on one branch', () => {
+		// Only the singular msgid present. Both branches of `inputTooShort` are reachable
+		// (minimum 2 renders the plural, minimum 1 the singular), so a key wired off the
+		// singular alone would render blank exactly when the customer has typed nothing.
+		window.wc_country_select_params = { i18n_input_too_short_1: 'Please enter 1 or more characters' };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: '' }
+		);
+
+		expect( 'inputTooShort' in config.language ).toBe( false );
+	} );
+
+	it( 'emptyText alone still wires noResults even with no wc_country_select_params at all', () => {
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{
+				initialValue: '',
+				placeholder: '',
+				applyEntries: jest.fn(),
+				level: 'settlement',
+				emptyText: 'Поиск не дал результатов. Попробуйте изменить запрос.',
+			}
+		);
+
+		expect( config.language.noResults() )
+			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+	} );
+
+	it( 'a non-ajax strategy gets width and the localized language block only — no ajax block, no placeholder', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: false },
 			{ initialValue: '', placeholder: 'Регион', applyEntries: jest.fn() }
 		);
 
-		expect( config ).toEqual( { width: '100%' } );
+		// Issue #526 widened this from `{ width }`: `language` is now built for EVERY
+		// strategy, because select2's untranslated English defaults reached a `related-list`
+		// field carrying no `onAbandon` too — not only the ajax mode the card was filed
+		// against. Everything else about a non-ajax config is unchanged.
+		expect( Object.keys( config ).sort() ).toEqual( [ 'language', 'width' ] );
+		expect( config.width ).toBe( '100%' );
+		expect( config.ajax ).toBeUndefined();
+		expect( config.placeholder ).toBeUndefined();
 	} );
 
 	it( 'an ajax strategy with an initial value gets no placeholder — the seeded <option> already carries it', () => {
@@ -2898,9 +3058,9 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 		consoleSpy.mockRestore();
 	} );
 
-	it( 'never installs a custom language.noResults or templateResult when onAbandon is omitted — OPTIONAL, same as every other primitive', async () => {
+	it( 'installs no templateResult and no abandon side-effect when onAbandon is omitted — OPTIONAL, same as every other primitive — but STILL localizes language', async () => {
 		const list = jest.fn( () => Promise.resolve( [] ) );
-		const options = buildOptions( { list } );
+		const options = buildOptions( { list, emptyText: 'Ничего не найдено' } );
 
 		delete options.onAbandon;
 
@@ -2910,7 +3070,16 @@ describe( 'related-list settlement renderer — issue #517: onAbandon via the pu
 
 		await Promise.resolve().then( () => Promise.resolve() );
 
-		expect( select2Calls[ 0 ].language ).toBeUndefined();
+		// `templateResult` is the abandon-observation half and stays absent — that half IS
+		// gated on `onAbandon`, and this test is what pins the gate.
 		expect( select2Calls[ 0 ].templateResult ).toBeUndefined();
+
+		// Issue #526: `language` is NOT gated on `onAbandon` and must be present anyway —
+		// this field renders to a customer whether or not anything observes its abandons,
+		// and select2's fallback messages are English. Calling `noResults` here proves the
+		// unwrapped (no side-effect) version is what got installed.
+		expect( typeof select2Calls[ 0 ].language.noResults ).toBe( 'function' );
+		expect( select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } ) )
+			.toBe( options.emptyText );
 	} );
 } );
