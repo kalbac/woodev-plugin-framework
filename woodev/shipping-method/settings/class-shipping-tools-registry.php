@@ -52,6 +52,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tools_Re
 		 * is rejected and logged (`_doing_it_wrong`), the rest of the list
 		 * still registers.
 		 *
+		 * Registration deadline: `init` priority 25. This filter is applied once
+		 * per request, on the registry's first access, and the result is
+		 * memoized. The first access in a normal request is
+		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::register()}
+		 * at `init` priority 25, so a callback added later than that is silently
+		 * never collected. Register from `plugins_loaded` or from `init` at a
+		 * priority below 25.
+		 *
 		 * @since 2.0.2
 		 * @var string
 		 */
@@ -115,6 +123,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Tools_Re
 			 * returned entry that does not implement {@see Shipping_Tool} is
 			 * rejected and logged via `_doing_it_wrong()`; the rest of the list
 			 * still registers.
+			 *
+			 * Registration deadline: `init` priority 25. This filter is applied
+			 * once per request, on the registry's first access, and the result is
+			 * memoized. The first access in a normal request is
+			 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::register()}
+			 * at `init` priority 25, so a callback added later than that is
+			 * silently never collected. Register from `plugins_loaded` or from
+			 * `init` at a priority below 25.
 			 *
 			 * @since 2.0.2
 			 *

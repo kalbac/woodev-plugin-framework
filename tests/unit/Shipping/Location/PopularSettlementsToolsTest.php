@@ -16,6 +16,8 @@ use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Location\Locality_Key;
+use Woodev\Framework\Shipping\Location\Popular_Settlement_Entry;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Location\Popular_Settlements_Tools;
 use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
@@ -90,6 +92,38 @@ final class Popular_Settlements_Tools_Resolving_Fixture_Provider extends Abstrac
 }
 
 /**
+ * Declares CAPABILITY_RESOLVE_KEY (reflection-derived) but resolve_key()
+ * always throws — simulates a transport failure so a swept entry lands in
+ * Popular_Settlement_Verification::OUTCOME_FAILED (M2/T1).
+ */
+final class Popular_Settlements_Tools_Failing_Fixture_Provider extends Abstract_Location_Provider {
+
+	public function get_id(): string {
+		return 'dadata';
+	}
+
+	public function get_name(): string {
+		return 'DaData';
+	}
+
+	public function get_countries(): array {
+		return [ 'RU' ];
+	}
+
+	protected function declare_suggest_levels(): array {
+		return [ Location_Record::LEVEL_SETTLEMENT ];
+	}
+
+	public function suggest( string $query, Location_Scope $scope ): array {
+		return [];
+	}
+
+	public function resolve_key( string $key ): ?Location_Record {
+		throw new \RuntimeException( 'simulated transport failure' );
+	}
+}
+
+/**
  * Does NOT override resolve_key() — D3-ineligible.
  */
 final class Popular_Settlements_Tools_Non_Resolving_Fixture_Provider extends Abstract_Location_Provider {
@@ -124,8 +158,11 @@ final class Popular_Settlements_Tools_Store_Spy extends Popular_Settlement_Store
 	public ?string $cleared_provider_id = null;
 	public int $clear_return = 0;
 
+	/** @var Popular_Settlement_Entry[] rows returned by all_for_provider(), keyed however the test needs. */
+	public array $rows = [];
+
 	public function all_for_provider( string $provider_id ): array {
-		return [];
+		return $this->rows;
 	}
 
 	public function clear_provider( string $provider_id ): int {
@@ -286,6 +323,39 @@ final class PopularSettlementsToolsTest extends TestCase {
 
 		$this->assertTrue( $result->is_success() );
 		$this->assertStringContainsString( 'Проверено: 0', $result->get_message() );
+	}
+
+	/**
+	 * M2/T1: `failed` is `unverified`, not `gone` (popular-settlements design
+	 * D6) — a sweep that could not verify every row it checked must not be
+	 * reported as a success, and the two must be distinguishable BY OUTCOME,
+	 * not only by the counts embedded in the message text.
+	 */
+	public function test_run_sweep_reports_failure_when_a_row_could_not_be_verified(): void {
+		$this->stub_active_provider_filters();
+
+		$record = Location_Record::from_array(
+			[
+				'key'         => Locality_Key::compose( 'dadata', 'settlement-1' ),
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'RU',
+			]
+		);
+
+		$store       = new Popular_Settlements_Tools_Store_Spy();
+		$store->rows = [ new Popular_Settlement_Entry( 1, 'dadata', 'RU', $record, 0, null, null, time() ) ];
+
+		$this->install_registry(
+			[ 'dadata' => new Popular_Settlements_Tools_Failing_Fixture_Provider() ],
+			'dadata',
+			$store
+		);
+
+		$result = Popular_Settlements_Tools::run_sweep( [ 'provider_id' => 'dadata' ] );
+
+		$this->assertFalse( $result->is_success() );
+		$this->assertStringContainsString( 'Ошибок: 1', $result->get_message() );
 	}
 
 	public function test_run_sweep_fails_when_the_requested_provider_is_not_capable(): void {

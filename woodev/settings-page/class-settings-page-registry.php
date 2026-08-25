@@ -188,14 +188,26 @@ final class Settings_Page_Registry {
 
 			if ( $section->is_tools() ) {
 				$entry['is_tools'] = true;
-				// Never `to_array()`-adjacent shortcuts here — the callback lives only on
-				// Shipping_Tool itself, and to_array() is the one place that omits it.
-				$entry['tools'] = array_map(
-					static function ( $tool ): array {
-						return $tool->to_array();
-					},
-					$section->get_tools()
-				);
+				$entry['tools']    = [];
+
+				// Never `to_array()`-adjacent shortcuts here — the callback lives only
+				// on Shipping_Tool itself, and to_array() is the one place that omits
+				// it. A non-conforming entry is rejected the same way the FILTER_TOOLS
+				// filter door rejects one (Shipping_Tools_Registry::collect()) — a
+				// fatal here would take down the whole settings page for every tab,
+				// not just this section's tools.
+				foreach ( $section->get_tools() as $tool ) {
+					if ( ! $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
+						_doing_it_wrong(
+							__METHOD__,
+							'A Settings_Section tools entry does not implement Shipping_Tool; it was ignored.',
+							'2.0.2'
+						);
+						continue;
+					}
+
+					$entry['tools'][] = $tool->to_array();
+				}
 			}
 
 			if ( $section->is_connection() ) {

@@ -158,6 +158,55 @@ test( 'a tool without a selector renders no selector and calls runTool with empt
 	await waitFor( () => screen.getByText( 'ok' ) );
 } );
 
+/**
+ * M1/T2: the selector is the load-bearing input — it names which provider's
+ * list a run reports on. After a run resolves and its result is visible,
+ * changing the card's selector must leave no result rendered, the same way
+ * ConnectionBlock drops a stale result on a field change
+ * (connection-block.js:34-37).
+ */
+test( 'changing the selector after a run clears the stale result', async () => {
+	runTool.mockResolvedValue( { success: true, message: 'Удалено записей: 37.' } );
+
+	const twoProviderSection = {
+		...section,
+		tools: [
+			{
+				...section.tools[ 0 ],
+				selector: {
+					...section.tools[ 0 ].selector,
+					options: [
+						{ value: 'dadata', label: 'DaData' },
+						{ value: 'yandex', label: 'Yandex' },
+					],
+				},
+			},
+		],
+	};
+
+	const { container } = render(
+		createElement( ToolsBlock, { providerId: 'shipping', section: twoProviderSection } )
+	);
+
+	fireEvent.click( screen.getByRole( 'button', { name: 'Проверить' } ) );
+	await waitFor( () => screen.getByText( 'Удалено записей: 37.' ) );
+
+	fireEvent.click( container.querySelector( '.woodev-select__trigger' ) );
+
+	// The popover positions itself asynchronously — await it, or its state
+	// update lands outside act() (settings-page-control-field.test.js already
+	// establishes this).
+	await waitFor( () => {
+		expect( screen.getByText( 'Yandex' ) ).toBeTruthy();
+	} );
+
+	fireEvent.click( screen.getByRole( 'option', { name: 'Yandex' } ) );
+
+	await waitFor( () => {
+		expect( screen.queryByText( 'Удалено записей: 37.' ) ).not.toBeInTheDocument();
+	} );
+} );
+
 test( 'a disabled tool renders its status text and a disabled button', () => {
 	const disabledSection = {
 		...section,

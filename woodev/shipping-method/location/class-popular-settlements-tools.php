@@ -116,17 +116,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			$store  = Location_Provider_Registry::instance()->popular_settlement_store();
 			$counts = ( new Popular_Settlement_Verifier( $store ) )->sweep( $provider );
 
-			return Tool_Result::success(
-				sprintf(
-					/* translators: 1: checked count, 2: unchanged count, 3: updated count, 4: deleted count, 5: failed count. */
-					__( 'Проверено: %1$d. Без изменений: %2$d. Обновлено: %3$d. Удалено: %4$d. Ошибок: %5$d.', 'woodev-plugin-framework' ),
-					$counts['checked'],
-					$counts['unchanged'],
-					$counts['updated'],
-					$counts['deleted'],
-					$counts['failed']
-				)
+			$message = sprintf(
+				/* translators: 1: checked count, 2: unchanged count, 3: updated count, 4: deleted count, 5: failed count. */
+				__( 'Проверено: %1$d. Без изменений: %2$d. Обновлено: %3$d. Удалено: %4$d. Ошибок: %5$d.', 'woodev-plugin-framework' ),
+				$counts['checked'],
+				$counts['unchanged'],
+				$counts['updated'],
+				$counts['deleted'],
+				$counts['failed']
 			);
+
+			// A sweep that could not verify every row it checked is not a
+			// successful sweep — `failed` rows are unverified, not gone, and the
+			// merchant's next action (re-run) depends on being able to tell the
+			// two apart by outcome, not only by reading the message.
+			if ( $counts['failed'] > 0 ) {
+				return Tool_Result::failure( $message );
+			}
+
+			return Tool_Result::success( $message );
 		}
 
 		/**

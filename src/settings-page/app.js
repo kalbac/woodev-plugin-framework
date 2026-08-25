@@ -340,16 +340,18 @@ export default function App() {
 						showErrors={ !! showErrors[ tab.id ] }
 						serverErrors={ fieldErrors[ tab.id ] || {} }
 					/>
-					<div className="woodev-settings__actions">
-						<Button
-							variant="primary"
-							isBusy={ saving === tab.id }
-							disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
-							onClick={ () => onSave( tab.id, tab ) }
-						>
-							{ __( 'Сохранить', 'woodev-plugin-framework' ) }
-						</Button>
-					</div>
+					{ ! section.is_tools && (
+						<div className="woodev-settings__actions">
+							<Button
+								variant="primary"
+								isBusy={ saving === tab.id }
+								disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
+								onClick={ () => onSave( tab.id, tab ) }
+							>
+								{ __( 'Сохранить', 'woodev-plugin-framework' ) }
+							</Button>
+						</div>
+					) }
 				</CardBody>
 			</Card>
 		);

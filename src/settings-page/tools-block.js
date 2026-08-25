@@ -39,6 +39,15 @@ function ToolCard( { providerId, tool } ) {
 			.finally( () => setBusy( false ) );
 	};
 
+	// The selector is the load-bearing input — it names which provider's list
+	// a run reports on. A stale result under a changed selector would read as
+	// a claim about the provider now selected, so drop it the same way
+	// ConnectionBlock drops a stale result on a field change.
+	const handleSelectorChange = ( next ) => {
+		setResult( null );
+		setValue( next );
+	};
+
 	return (
 		<div className="woodev-tool">
 			<h4 className="woodev-tool__name">{ tool.name }</h4>
@@ -52,7 +61,7 @@ function ToolCard( { providerId, tool } ) {
 					<SelectField
 						value={ value }
 						options={ selector.options }
-						onChange={ setValue }
+						onChange={ handleSelectorChange }
 						placeholder={ selector.placeholder }
 						disabled={ tool.disabled || busy }
 					/>
