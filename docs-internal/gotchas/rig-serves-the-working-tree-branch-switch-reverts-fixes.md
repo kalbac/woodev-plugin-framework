@@ -125,6 +125,25 @@ When the operator says "I don't see the fixes any more", **check `git branch --s
 primary checkout before forming any other hypothesis.** In s86 that one command was the whole
 answer, and it is cheaper than every alternative explanation.
 
+### s92: switching the tree BACK, then asking the operator to look
+
+The rule has a second half that s92 paid for. The coordinator switched the primary checkout to the
+PR branch, verified everything in the browser, **switched it back to `main` for tidiness — and only
+then handed the operator a checklist.** He spent his pass on `main`, where the fix does not exist,
+and reported step 1 as broken.
+
+**The tree must be on the branch AT THE MOMENT you ask, and stay there until the pass is over.**
+"I verified it earlier" is not the state the operator sees. Confirm with a measurement, not a
+memory of the checkout:
+
+```bash
+grep -c "<a symbol the fix introduces>" <the file the rig serves>   # 0 = the fix is not being served
+```
+
+In s92 that read `0` before the switch and `10` after, which settled it in one command. The
+`?ver=` query string is a filemtime, so a branch switch busts the cache on its own — a stale asset
+is not the explanation, the branch is.
+
 ## Related
 
 - [[jest-scans-agent-worktrees-inside-the-repo]] — the same family: local state that silently

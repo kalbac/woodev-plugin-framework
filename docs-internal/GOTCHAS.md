@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 201 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 205 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -80,6 +80,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **To sample a region's settlements, scope the LIST — `suggest()` by name returns homonyms from other regions.** → [list-by-region-scope-not-suggest-by-name](gotchas/list-by-region-scope-not-suggest-by-name.md) (s92)
 - [shipping/location] **One `/select` response narrows EVERY level — including a still-queued pick it could not have named — wiping its optimistic record.** → [a-shared-select-queue-narrows-a-level-its-response-never-named](gotchas/a-shared-select-queue-narrows-a-level-its-response-never-named.md) (s89)
 - [shipping/location] **An empty `owners[country][level]` DISARMS the cross-provider guard that reads it — falsy is an open gate, not a closed one.** → [an-empty-level-owner-silently-disarms-the-cross-provider-guard](gotchas/an-empty-level-owner-silently-disarms-the-cross-provider-guard.md) (s88)
 - [shipping/location] **«Список с поиском» is `ajax-select2`, NOT `related-list` — and DaData can never offer «Предустановленный список» at all.** → [the-three-location-field-modes-and-their-russian-labels](gotchas/the-three-location-field-modes-and-their-russian-labels.md) (s87)
@@ -134,6 +135,7 @@
 - [testing/unit] **An invented fixture tests your assumptions, not the carrier.** → [an-invented-fixture-tests-your-assumptions-not-the-carrier](gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
 
 ### [js/*] — JavaScript language traps
+- [js/select-value-space] **`select2:close` fires BEFORE `select2:select` — a guard that expects the pick to cancel the close cannot work, and a fake dispatching the other order pins a fiction.** → [select2-close-fires-before-select2-select](gotchas/select2-close-fires-before-select2-select.md) (s92)
 - [js/select-value-space] **A `<select>` is not an `<input>`: an unmatched `.value` write submits nothing, a bare `selectedIndex` leaves select2 stale, and select2 caches the option's data ON the node — so the first write works and every later one lies.** → [a-select-value-write-with-no-matching-option-submits-nothing](gotchas/a-select-value-write-with-no-matching-option-submits-nothing.md) (s86)
 - [js/jquery-event-worlds] **A jQuery `.trigger( 'change' )` fires no native event — and that is how select2 reports a pick.** → [jquery-trigger-change-fires-no-native-event](gotchas/jquery-trigger-change-fires-no-native-event.md) (s66)
 - [js/object-as-map] **A plain object is not an insertion-ordered map, and not a safe one.** → [plain-object-is-not-an-insertion-ordered-map](gotchas/plain-object-is-not-an-insertion-ordered-map.md) (s59)
@@ -279,6 +281,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/parallel-agents] **`orchestration send --to dispatch:` is PULL — a worker mid-task never sees it; correct a running agent with `terminal send`.** → [orchestration-mail-does-not-reach-a-busy-worker](gotchas/orchestration-mail-does-not-reach-a-busy-worker.md) (s92)
+- [tooling/*] **Search a reference by what it DOES, not by the feature's name — an empty name search is a signal to change the search, not evidence the feature is absent.** → [search-a-reference-by-behaviour-not-by-feature-name](gotchas/search-a-reference-by-behaviour-not-by-feature-name.md) (s92)
 - [tooling/git-merge] **`orca worktree create --base-branch main` takes the LOCAL ref — a session that merged PRs through `gh` has a stale local `main`, and the new branch silently reverts them.** → [orca-worktree-create-base-branch-takes-the-local-ref](gotchas/orca-worktree-create-base-branch-takes-the-local-ref.md) (s87)
 - [tooling/parallel-agents] **Sharing `vendor/` into a worktree breaks Composer's autoloader — it bakes in `$baseDir`, and PHP resolves the symlink to the PRIMARY checkout. Copy it, never share it.** → [sharing-vendor-breaks-composer-autoload-in-a-worktree](gotchas/sharing-vendor-breaks-composer-autoload-in-a-worktree.md) (s83)
 - [tooling/parallel-agents] **`input_accepted` is not proof a worker started — the prompt can sit queued in the TUI while every liveness signal reads healthy.** → [input-accepted-is-not-proof-a-worker-started](gotchas/input-accepted-is-not-proof-a-worker-started.md) (s83)

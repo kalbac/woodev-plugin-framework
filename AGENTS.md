@@ -292,6 +292,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 | Methods/variables/hooks | `snake_case` |
 | Visibility | default `private`, `protected`/`public` only when needed |
 | Arrays | Short syntax `[]` **only — never `array()`** in new or modified code |
+| Settings help text | Goes in the **tooltip/`desc_tip`** slot by default — `tooltip` on `register_control()` for this project's typed settings API, `desc_tip` in a WooCommerce `form_fields` array. The `description` slot is reserved for text carrying **interactive elements** (e.g. an `<a href>` link), because that is the slot WooCommerce renders inline rather than as a hover tip. Operator rule, 25.08.2026. |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
 | `@since` | The **planned release** the change ships in — currently `2.0.2`. NOT the `VERSION` constant, which records the **released** version (`2.0.1`). Operator decision, #409 (s83): the two are deliberately separate concepts. Raising `VERSION` on `main` publishes a release, so it lags behind by design (#285). |
