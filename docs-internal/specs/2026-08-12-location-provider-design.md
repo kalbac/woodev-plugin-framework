@@ -166,6 +166,20 @@ the new provider, and if that fails the settings surface flags the default as ne
 (cart shipping calculator, checkout render), stored in the same slot flagged `implicit`. A real
 customer selection overwrites it and drops the flag.
 
+> **How to read this file at all — the lesson that produced the amendment below.**
+> These specs are written by the AGENT from brainstorm conversations with the operator. He does not
+> write them and does not proof-read them. **A D-decision is therefore a TRANSCRIPT of him, and a
+> transcript can be wrong** — mis-heard, over-generalized, or quietly filled in where the
+> conversation was vague. D11's original wording is a worked example: it read "implicit records
+> never suppress the locality prompt", which built a feature nobody could see.
+>
+> So a D-decision is **never authority over the operator's live answer.** Where the two disagree,
+> he is right and the spec gets corrected — dated, with the superseded wording quoted, as below.
+> Cite a decision to him as *"I recorded it this way — confirm"*, never as *"this is settled"*.
+> In s93 the agent did the opposite: it found D11 and produced it as an argument against his own
+> fresh decision. His reply: *«спеку то не я пишу а ты… ты в какой-то из сессий записал не так,
+> возможно додумал, неверно трактовал. А сейчас дошло до реализации и делаешь по спеке всё чётко»*.
+
 **D11 amendment (approved 25.08.2026, issue #536):** a `fixed` default is shown to the
 customer exactly as if they had picked it themselves — the settlement field carries its text,
 the region is backwards-filled from the same record, and the address field unlocks. `geoip`
