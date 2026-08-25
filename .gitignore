@@ -12,6 +12,16 @@ opencode.json
 # Internal docs — tracked in git (like woodev_theme docs/)
 # docs-internal/ — AI agent operational docs (CURRENT-STATE, SESSION-LOG, GOTCHAS, ADR, wiki)
 
+# The handoff is NOT tracked: THIS REPO IS PUBLIC and the file carries operational internals —
+# rig URLs, container ids, ports, and how the operator works. Skill rule: woodev-docs-system →
+# "The handoff" → Two hard conditions. Operator decision, 25.08.2026.
+#
+# ⚠ This hides FUTURE versions only. Every handoff pushed before this line is still readable in
+# git history and on GitHub; clearing that needs a history rewrite (git filter-repo + force-push),
+# which is the operator's call and has not been made.
+/docs-internal/next-session-prompt.md
+/docs-internal/next-session-prompt.md.prev
+
 # AI tools — do not ignore (reference files required)
 !/.ai/
 !/.claude/
