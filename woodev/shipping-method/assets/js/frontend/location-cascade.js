@@ -224,6 +224,17 @@
 	var BUSY_HOST_CLASS = 'woodev-location-field-busy';
 
 	/**
+	 * Monotonic id handed out by {@see markLevelBusy}, one per marker raised, ACROSS entries —
+	 * deliberately module-scoped rather than per-entry. It is only ever compared for equality
+	 * against the token stored on the marker it was minted for, so sharing the counter costs
+	 * nothing and removes a piece of per-entry state that would have to be initialised, reset on
+	 * teardown, and kept in step with `entry.selectBusy` by hand.
+	 *
+	 * @type {number}
+	 */
+	var busyToken = 0;
+
+	/**
 	 * The warning mark that opens a notice. Inline SVG rather than a font glyph or a background
 	 * image: it inherits `currentColor`, so the mark and the text can never drift apart, and it
 	 * needs no additional HTTP request and no icon font this plugin does not otherwise ship.
@@ -1399,11 +1410,36 @@
 	 * @param {{level: string, fieldId: string}} node
 	 * @returns {function(): Array}
 	 */
+	/**
+	 * The ancestor key set of the locality currently standing at `level` — the #536 fixed
+	 * default, or an ordinary earlier pick, whichever put it there.
+	 *
+	 * Reads `entry.records[ level ]` and NOT the DOM: a field's text is just a label, while the
+	 * record is the only thing carrying provider-published ancestors at all. Returns `[]` for
+	 * every "nothing to say" case (no record, a bare `{ key }` seed with no components, a
+	 * provider that publishes no ancestors) — {@see popularFor} treats `[]` as "do not narrow",
+	 * so an absent answer can never hide entries.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param {Object} entry
+	 * @param {string} level
+	 * @returns {string[]}
+	 */
+	function ancestorsOfCurrent( entry, level ) {
+		var record = entry.records[ level ];
+
+		return record && Array.isArray( record.ancestors ) ? record.ancestors : [];
+	}
+
 	function popularFor( entry, node ) {
 		return function() {
 			var country = countryFor( entry, node );
 			var raw = ( entry.location.popular && entry.location.popular[ country ] ) || [];
 			var within = scopeKeyFor( entry, node.level );
+			// Issue #538: the ancestor set of the locality ALREADY standing at this level, used
+			// only when there is no parent key to scope by. See the filter's own note below.
+			var siblingAncestors = within ? [] : ancestorsOfCurrent( entry, node.level );
 
 			var scoped = raw.filter( function( item ) {
 				// Defensive: every stored popular entry is settlement-level today (only an
@@ -1413,13 +1449,41 @@
 					return false;
 				}
 
-				if ( ! within ) {
+				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
+
+				if ( within ) {
+					return ancestors.indexOf( within ) !== -1;
+				}
+
+				// ISSUE #538 — A REGION THE CUSTOMER DID NOT PICK STILL SCOPES THE LIST.
+				// `scopeKeyFor()` answers "what key did the PARENT level record", and a region
+				// filled in by the #536 fixed-default path records no key at all: it writes the
+				// field's text, and the region key is not recoverable from the default record
+				// either. `Location_Record::parse_ancestors()` keeps ancestors as a flat SET and
+				// refuses a `level => key` map DELIBERATELY — measured against a live DaData
+				// capture where one row carries `city_fias_id` and `settlement_fias_id` at once,
+				// so no derivation can say which ancestor is "the region".
+				//
+				// Measured symptom (rig, fixed default «Москва», fresh incognito): the region
+				// field read «МОСКВА» while the settlement list still offered all six popular
+				// entries, three of them in Saint Petersburg.
+				//
+				// So this asks the one question the layer's own design says it CAN answer — do
+				// these two localities share an ancestor — instead of naming which ancestor is
+				// which. It is reached only when nothing recorded a parent key, so a real
+				// customer region pick keeps taking the exact branch above, unchanged.
+				//
+				// ⚠ INFERRED, not measured, and safe either way: a provider that also publishes a
+				// COUNTRY-level ancestor would make every entry intersect, degrading this to
+				// "show everything" — the pre-#538 behaviour, never hiding coverage. Measured for
+				// `test-cdek`: it publishes the region only (`ancestors: ["test-cdek:r81"]`).
+				if ( ! siblingAncestors.length ) {
 					return true;
 				}
 
-				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
-
-				return ancestors.indexOf( within ) !== -1;
+				return ancestors.some( function( key ) {
+					return siblingAncestors.indexOf( key ) !== -1;
+				} );
 			} );
 
 			scoped.forEach( function( item ) {
@@ -1854,6 +1918,29 @@
 	function enqueueSelect( entry, record ) {
 		entry.pendingRecord = record;
 
+		// Issue #541: the busy state belongs to the customer's ACTION, not to the request. It
+		// used to be raised inside sendNextSelect(), i.e. at the moment the request left — which
+		// is the same instant for an idle queue and up to eleven seconds late behind a busy one.
+		//
+		// MEASURED on the rig, `default_locality_policy = fixed`, a region picked 3.7 s after
+		// load while the boot-time default's own `/select` was still in flight:
+		//
+		//     >>> click on the region     +0 ms
+		//     /select left               +11 045 ms
+		//     SPINNER on shipping_state  +11 048 ms
+		//     /select answered           +17 905 ms
+		//
+		// The spinner was 3 ms behind its request and eleven seconds behind the human. The field
+		// sat inert the whole time, which is exactly the complaint s90 already fixed once for a
+		// 2.4-4.5 s gap — the operator's words then, recorded on BUSY_HOST_CLASS: «я уже даже
+		// подумал, что перестало работать». That fix attached the indicator to the request; the
+		// single-flight queue then re-opened the same gap in front of it.
+		//
+		// Marking here also correctly MOVES the spinner when a queued pick is superseded by a
+		// later one before either is sent: markSelectBusy() clears the previous marker first, so
+		// the indicator always sits on the field whose record is actually pending.
+		markSelectBusy( entry, record, entry.selectInFlight );
+
 		if ( entry.selectInFlight ) {
 			return; // a request is already in flight — it will pick this up in settleSelect().
 		}
@@ -2038,6 +2125,12 @@
 		entry.pendingRecord = null;
 		entry.selectInFlight = true;
 
+		// Issue #541: KEPT, and deliberately not removed when the mark moved to enqueueSelect().
+		// Not every path into this function comes through an enqueue: {@see settleSelect} dequeues
+		// whatever is pending when a request finishes, and that pending record's own field must
+		// carry the indicator for the request that is only NOW leaving. Re-marking the same record
+		// is idempotent — markSelectBusy() clears the previous marker first — so the ordinary
+		// enqueue-then-send path is unaffected.
 		markSelectBusy( entry, record );
 
 		var url = entry.location.endpoints.select;
@@ -2485,15 +2578,45 @@
 	 * @param {Object} record The record whose `/select` is being sent.
 	 * @returns {void}
 	 */
-	function markSelectBusy( entry, record ) {
+	function markSelectBusy( entry, record, queuedOnly ) {
+		return markLevelBusy( entry, record && 'string' === typeof record.level ? record.level : null, queuedOnly );
+	}
+
+	/**
+	 * The body of {@see markSelectBusy}, addressed by LEVEL rather than by record — everything
+	 * that docblock says applies here unchanged; read it first.
+	 *
+	 * Issue #541 (real cause). The two `<select>` renderers do not learn the picked record at the
+	 * same moment, and that asymmetry — not the queue — is what left the customer staring at an
+	 * inert field. Under `ajax-select2` the record IS the pick: `resolveAndSelect()` looks it up
+	 * in its own `dataByKey` and calls `options.onSelect()` synchronously, so the marker is up in
+	 * the same tick as the click. Under `related-list` the region `<select>` is WooCommerce's own,
+	 * carrying nothing but the label text, so `attachRelatedListRegion()` has to match that text
+	 * against a `GET /location/list` response before it has a record to hand over at all —
+	 * MEASURED on the rig at 10.5 s for a cold region, with `onSelectFor()` and therefore
+	 * {@see enqueueSelect} not running until it returns.
+	 *
+	 * So a renderer that must go and ASK before it can name the record needs to be able to say
+	 * "the customer has picked HERE, the identity is still coming" — which is a level, not a
+	 * record. {@see onResolvingFor} is that seam; this function is what it raises.
+	 *
+	 * Returns a token identifying THIS marker, so a caller holding one can release it without
+	 * risking a marker some later, unrelated pick has since raised in its place — see
+	 * {@see onResolvingFor}'s own `release()`. `null` when there was no field to mark.
+	 *
+	 * @param {Object}  entry
+	 * @param {?string} level
+	 * @param {boolean} [queuedOnly]
+	 * @returns {?number} Token for {@see clearSelectBusy}-by-owner, or `null`.
+	 */
+	function markLevelBusy( entry, level, queuedOnly ) {
 		clearSelectBusy( entry );
 
-		var level = record && 'string' === typeof record.level ? record.level : null;
 		var node = level ? chainNodeForLevel( entry, level ) : null;
 		var el = node && document.getElementById( node.fieldId );
 
 		if ( ! el || ! el.parentNode ) {
-			return;
+			return null;
 		}
 
 		var host = el.parentNode;
@@ -2543,12 +2666,23 @@
 			el.readOnly = true;
 		}
 
-		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level };
+		// Issue #541: `queued` separates the two jobs this one marker was doing. The SPINNER is
+		// owed to the customer the moment they pick — including while the single-flight queue holds
+		// their request behind an earlier one. The LOCK is a different claim ("this level's parent
+		// is not confirmed yet") and must NOT fire for a request that has not even left, or a
+		// settlement pick would re-lock the address it just unlocked — the exact behaviour s90
+		// settled and {@see hasUnconfirmedParent}'s own docblock records. Caught by that decision's
+		// own regression test, not by review.
+		var token = ++busyToken;
+
+		entry.selectBusy = { el: el, host: host, spinner: spinner, readOnlyApplied: readOnlyCapable, level: level, queued: !! queuedOnly, token: token };
 
 		// Everything DEEPER than the level being confirmed is now waiting on an answer that has
 		// not arrived — see refreshDependentLocks().
 		refreshDependentLocks( entry );
 		refreshAddressLock( entry );
+
+		return token;
 	}
 
 	/**
@@ -2613,7 +2747,9 @@
 	 * @returns {boolean}
 	 */
 	function hasUnconfirmedParent( entry, level ) {
-		var busyLevel = entry.selectBusy ? entry.selectBusy.level : null;
+		// Issue #541: a marker raised for a pick still WAITING in the single-flight queue shows the
+		// spinner but asserts nothing about confirmation — nothing has been asked of the server yet.
+		var busyLevel = entry.selectBusy && ! entry.selectBusy.queued ? entry.selectBusy.level : null;
 
 		if ( ! busyLevel || ! level ) {
 			return false;
@@ -2840,6 +2976,62 @@
 					triggerCheckoutUpdate();
 				}
 			}
+		};
+	}
+
+	/**
+	 * Builds the `onResolving()` callback handed to a Task 13 renderer for one chain node
+	 * (issue #541) — OPTIONAL for the renderer in exactly the sense `onAbandon` already is: one
+	 * that learns the picked record synchronously from the pick itself never needs it, and
+	 * `ajax-select2` accordingly does not call it.
+	 *
+	 * THE CONTRACT, in one sentence: "the customer has just picked at this level, and I do not
+	 * know WHICH record yet". The renderer calls it the moment the pick lands and calls the
+	 * `release()` it returns when the identity search ends WITHOUT a pick — a real
+	 * `options.onSelect()` needs no release, because {@see enqueueSelect}'s own marker supersedes
+	 * this one (and `release()` then finds a token that is not its own and stands down).
+	 *
+	 * WHY A LEVEL IS ENOUGH, AND WHY THIS IS NOT COSMETIC. Two separate obligations fall out of
+	 * the pick alone, neither of which needs the record's identity, and both of which the
+	 * operator named on the rig (26.08.2026):
+	 *
+	 *  - the region field owes the customer a spinner IMMEDIATELY — "занятость поля — свойство
+	 *    действия покупателя", not of whatever request happens to be behind it;
+	 *  - the settlement field must STOP ACCEPTING PICKS immediately, because until the new
+	 *    region resolves the list it is still showing belongs to the OLD one. Measured: 779 ms
+	 *    after switching to Saint Petersburg the settlement field still offered all six popular
+	 *    entries, three of them in Moscow, and would take a click on any of them.
+	 *
+	 * The second is {@see refreshDependentLocks}' existing job and needs no new mechanism — it
+	 * locks every level DEEPER than the busy one, so raising the marker at `region` is the whole
+	 * fix. That is also why the marker raised here is deliberately NOT `queued`: a queued marker
+	 * is one whose request has not left, and {@see hasUnconfirmedParent} ignores it on purpose,
+	 * whereas this one asserts the thing that IS true — this level's identity is unknown, so
+	 * nothing below it may be trusted or picked.
+	 *
+	 * Scoped to the active address section like every other write here: a pick in the section
+	 * that is not currently deciding delivery (Rule 7c) owes no indication at all.
+	 *
+	 * @param {Object} entry
+	 * @param {Object} node
+	 * @returns {function(): function(): void} Call on pick; call ITS return value to release.
+	 */
+	function onResolvingFor( entry, node ) {
+		return function onResolving() {
+			var token = isActiveAddressSection( node.section )
+				? markLevelBusy( entry, node.level, false )
+				: null;
+
+			return function release() {
+				// Only when the marker still standing is the one this call raised. A real pick
+				// has since replaced it ({@see enqueueSelect}), a later pick at another level
+				// has superseded it, or a settled `/select` has already cleared it — in every
+				// one of those cases the marker on screen belongs to something newer, and
+				// clearing it here would strand that owner's spinner and locks.
+				if ( null !== token && entry.selectBusy && entry.selectBusy.token === token ) {
+					clearSelectBusy( entry );
+				}
+			};
 		};
 	}
 
@@ -3099,6 +3291,11 @@
 			// ignore it, same as every other primitive here) — see {@see onAbandonFor}'s own
 			// docblock.
 			onAbandon: onAbandonFor( entry, node ),
+			// Issue #541: OPTIONAL in the same sense — only a renderer that must ASK before it
+			// can name the picked record (`related-list:region`, which has nothing but the
+			// label text and has to match it against `/location/list` first) has anything to
+			// say here. See {@see onResolvingFor}'s own docblock.
+			onResolving: onResolvingFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
 			// every other user-facing string in this layer takes.
@@ -3110,6 +3307,11 @@
 			// when this actually renders (a rejected/thrown `fetch()`, never a resolved-empty
 			// one).
 			errorText: 'string' === typeof i18n.unavailable ? i18n.unavailable : '',
+			// Issue #540: the placeholder for select2's own SEARCH BOX — not `placeholder`,
+			// which names the closed control. Same server-supplied/filterable route as every
+			// other customer-facing string here; an older config without the key degrades to no
+			// placeholder rather than to a literal invented client-side.
+			searchPlaceholder: 'string' === typeof i18n.searchPlaceholder ? i18n.searchPlaceholder : '',
 			node: node,
 			location: entry.location,
 			country: function() {
@@ -3357,14 +3559,27 @@
 
 	/**
 	 * Whether the settlement record the lock would otherwise unlock off is the store's
-	 * DEFAULT-LOCALITY guess rather than the customer's own selection (issue #502).
+	 * GEOIP default-locality GUESS rather than the customer's own selection (issue #502) —
+	 * narrowed from "any implicit record" to "an implicit record NOT sourced from the `fixed`
+	 * policy" by issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a `fixed`
+	 * default is a merchant-confirmed, specific locality — shown to the customer exactly as if
+	 * they had picked it (see {@see prefill}'s own `defaultLocality` seeding) — so it no longer
+	 * blocks this lock the way a `geoip` guess still must. This function's NAME is unchanged
+	 * (every caller still reads it as "is this an implicit guess the lock should distrust") —
+	 * only what counts as such a guess narrowed.
 	 *
-	 * The flag is written by {@see adoptChain}: from `config.location.implicit` on the boot-time
-	 * seed, and from the `/select` response's own `implicit` key on the two settle paths — see
-	 * that function's docblock for why the response needs one at all. The optimistic record
-	 * {@see onSelectFor} writes is the raw `/suggest` payload and carries no flag, so it reads as
-	 * a real pick, which is what it is; `Location_Record::from_array()` builds that payload from a
-	 * strict whitelist of known keys, so a provider cannot forge one either.
+	 * The `implicit` flag is written by {@see adoptChain}: from `config.location.implicit` on
+	 * the boot-time seed, and from the `/select` response's own `implicit` key on the two
+	 * settle paths — see that function's docblock for why the response needs one at all. The
+	 * optimistic record {@see onSelectFor} writes is the raw `/suggest` payload and carries no
+	 * flag, so it reads as a real pick, which is what it is; `Location_Record::from_array()`
+	 * builds that payload from a strict whitelist of known keys, so a provider cannot forge one
+	 * either. `implicitSource` (issue #536) travels alongside it, from
+	 * {@see defaultLocalitySource} — see that function's own docblock for why it is a
+	 * best-effort inference rather than a measured fact, and why the direction it degrades in
+	 * (missing/ambiguous → `'geoip'`) is the safe one for THIS caller: an older server or an
+	 * absent `defaultLocality` block must keep locking exactly as it did before #536, never
+	 * newly unlock off a guess this function cannot actually prove is `fixed`.
 	 *
 	 * @param {Object} entry
 	 * @returns {boolean}
@@ -3372,7 +3587,7 @@
 	function settlementRecordIsImplicit( entry ) {
 		var record = entry.records.settlement;
 
-		return !! ( record && record.implicit );
+		return !! ( record && record.implicit && 'fixed' !== record.implicitSource );
 	}
 
 	/**
@@ -4089,6 +4304,12 @@
 	 * @returns {void}
 	 */
 	function reconcileAfterCheckoutUpdate( entry ) {
+		// Issue #536 round 2: `country_to_state_changed` is ALSO the completion signal a
+		// deferred default-locality ancestor write is waiting on — see
+		// {@see applyPendingDefaultLocality}'s own docblock. A no-op whenever nothing is
+		// pending, or the target field is not promoted yet.
+		applyPendingDefaultLocality( entry );
+
 		entry.chain.forEach( function( node ) {
 			if ( ! isNodeActive( entry, node ) ) {
 				return;
@@ -4255,12 +4476,35 @@
 	 *                                     guess rather than a customer selection (issue #502).
 	 * @returns {void}
 	 */
+	/**
+	 * Which STORE POLICY an implicit record most likely came from (issue #536) — `'fixed'`
+	 * only when `config.location.defaultLocality` names that policy, `'geoip'` for every other
+	 * case (`geoip` itself, `off` with a stale still-live implicit record, or an older server
+	 * that never shipped `defaultLocality` at all). Never asserted as a MEASURED fact about a
+	 * given record — the server does not tag `chain`/`current` entries with their own source,
+	 * only the LIVE policy at config-build time (`class-checkout-config.php::build_location_block()`)
+	 * — so this is a best-effort inference, safe-by-construction in the direction that matters:
+	 * defaulting to `'geoip'` keeps {@see isAddressLocked}'s pre-#536 behaviour (locked) for
+	 * every state this function cannot positively prove is `fixed`.
+	 *
+	 * @param {Object} entry
+	 * @returns {string} `'fixed'` or `'geoip'`.
+	 */
+	function defaultLocalitySource( entry ) {
+		return ( entry.location.defaultLocality && 'fixed' === entry.location.defaultLocality.policy )
+			? 'fixed'
+			: 'geoip';
+	}
+
 	function adoptChain( entry, chain, protectedLevel, implicit ) {
 		if ( ! chain || 'object' !== typeof chain ) {
 			return;
 		}
 
 		var adopted = {};
+		// Issue #536: only meaningful when `implicit` is true — see
+		// {@see defaultLocalitySource}'s own docblock.
+		var source = implicit ? defaultLocalitySource( entry ) : null;
 
 		Object.keys( chain ).forEach( function( level ) {
 			var node = chain[ level ];
@@ -4274,7 +4518,14 @@
 				// {@see fireLocationApplied} publishes a settlement key only for a confirmed
 				// record, so an optimistic one can never be handed to `pickup-mount.js` as
 				// the map's addressing locality (adversarial review).
-				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit };
+				//
+				// `implicitSource` (issue #536) travels alongside `implicit` rather than
+				// replacing it — {@see settlementRecordIsImplicit} narrows on it, but the
+				// `implicit` flag itself is still what {@see fireLocationApplied} publishes as
+				// `woodev_location_applied`'s `detail.implicit`, and that must stay truthful
+				// for BOTH sources (spec §4.6: an implicit record is never a customer's own
+				// answer, `fixed` or not).
+				adopted[ level ] = { key: node.key, confirmed: true, implicit: !! implicit, implicitSource: source };
 			}
 		} );
 
@@ -4301,6 +4552,96 @@
 
 			entry.records[ level ] = adopted[ level ] || null;
 		} );
+	}
+
+	/**
+	 * Retries the ANCESTOR half of the #536 default-locality seed (the settlement's own TEXT is
+	 * written unconditionally and immediately by {@see prefill}; only {@see backwardsFill}'s
+	 * ancestor writes — region, under `related-list` — go through here) — issue #536 round 2,
+	 * rig-measured (fresh guest, `fixed` policy): a region `related-list` field is very often
+	 * still a plain WooCommerce `<input>` at `prefill()` time (a fresh guest has no session
+	 * country/state yet, so PHP has nothing to render states FOR), and WooCommerce's OWN
+	 * `assets/js/frontend/country-select.js` promotes it to a real, state-populated `<select>`
+	 * client-side, ASYNCHRONOUSLY relative to this module's own `boot()` — triggered by
+	 * `wc_address_i18n_ready`, itself fired once by WC's `address-i18n.js` once it has loaded,
+	 * with no ordering guarantee relative to this file's `DOMContentLoaded` boot.
+	 *
+	 * Writing straight into that `<input>` (a plain `.value =`, `{@see applyValueToElement}`'s
+	 * non-`<select>` branch) is NOT itself the loss — the loss happens when WooCommerce's OWN
+	 * promotion runs LATER: `country-select.js` captures `value = $statebox.val()` off the
+	 * `<input>` BEFORE rebuilding it into a `<select>`, then tries `$statebox.val(value)` to
+	 * carry it across — but the freshly-registered `related-list` options carry
+	 * `wc_strtoupper(trim(label))` as their VALUE (`class-checkout-config.php`'s own "related-list
+	 * region seam" docblock), never the bare display text {@see fieldValueFor} writes. `.val()`
+	 * finds no match, selects nothing, and fires a REAL `change` with the now-empty value —
+	 * which this module's OWN {@see handleFieldChanged} then reads as a genuine parent edit
+	 * (`entry.resolved[fieldId]` still says the intended text), running {@see clearDescendants}
+	 * and wiping the settlement text {@see prefill} had ALREADY correctly seeded, as a pure side
+	 * effect. Measured on the rig (issue #536 round 2): `shipping_state` ends with 88 real
+	 * options, `Москва` among them, nothing selected; `shipping_city` keeps its single `Москва`
+	 * `<option>` but loses its selection the same tick.
+	 *
+	 * THE FIX IS ORDERING, NOT A TIMER (explicitly ruled out — a fixed delay cannot know when
+	 * WooCommerce's own async promotion actually finishes, and guessing wrong either fires too
+	 * early, same failure, or flashes an empty field too long): defer the ancestor write until
+	 * the field can actually hold it, using the completion signal WooCommerce's OWN promotion
+	 * already emits — `country_to_state_changed` — which {@see bindCountryToStateChangedWatcher}
+	 * (issue #460) already routes into {@see reconcileAfterCheckoutUpdate} for every entry, on
+	 * every fire. This function is a NO-OP until the REGION ancestor's own live element is
+	 * actually a `<select>` (the SAME gate {@see attachRelatedListRegion} itself uses to decide
+	 * whether it can attach at all) — so it harmlessly re-checks on a wrapper's OWN premature
+	 * fire (e.g. the billing wrapper's promotion firing before the shipping wrapper's, when
+	 * shipping is the active section) and only actually writes once ITS OWN region field has
+	 * been promoted. A chain with no region node, or a region under any mode OTHER than
+	 * `related-list`, has nothing to wait for and writes immediately (see below).
+	 *
+	 * DISARMS ITSELF the moment the customer's own action has moved past the implicit default —
+	 * a real pick ({@see onSelectFor}, whose record carries no `implicit` flag at all) or an
+	 * edit/clear ({@see handleFieldChanged}'s own destructive gate, which nulls
+	 * `entry.records[level]`) — so a customer who interacts with the settlement field BEFORE
+	 * WooCommerce's own promotion ever completes is never overwritten by a stale default on a
+	 * later `country_to_state_changed`. Checked by KEY, not merely presence, so a customer who
+	 * picks a DIFFERENT settlement and then somehow re-triggers this event never has THEIR pick
+	 * silently replaced by the merchant's default for the level it once occupied.
+	 *
+	 * A no-op (silently, every time) once `entry.pendingDefaultLocality` is falsy — the ordinary
+	 * case for every entry with no `fixed` default, and for one whose default already applied.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function applyPendingDefaultLocality( entry ) {
+		var pending = entry.pendingDefaultLocality;
+
+		if ( ! pending ) {
+			return;
+		}
+
+		var current = entry.records[ pending.level ];
+
+		if ( ! current || ! current.implicit || current.key !== pending.key ) {
+			// The customer's own action (a real pick, or an edit that dropped the record)
+			// already moved past the implicit default — never resurrect it from here.
+			entry.pendingDefaultLocality = null;
+			return;
+		}
+
+		// The only ancestor {@see backwardsFill} can lose to WooCommerce's own async promotion
+		// is a `related-list` region — see this function's own docblock. No region node, or a
+		// region under any OTHER mode, has nothing to wait for: WooCommerce never rebuilds those
+		// fields out from under this module.
+		var regionNode = chainNodeForLevel( entry, 'region' );
+
+		if ( regionNode && isRelatedListRegionNode( entry, regionNode ) ) {
+			var regionEl = document.getElementById( regionNode.fieldId );
+
+			if ( ! regionEl || 'SELECT' !== regionEl.tagName ) {
+				return; // WooCommerce has not promoted this field yet — retry on the next signal.
+			}
+		}
+
+		backwardsFill( entry, pending.node, pending.record );
+		entry.pendingDefaultLocality = null;
 	}
 
 	/**
@@ -4381,12 +4722,68 @@
 			// `implicit` travels with it for the same reason (issue #502) — this line REPLACES
 			// whatever adoptChain() just wrote for `current.level`, so omitting the flag here
 			// would silently launder the store's default locality into a record that looks
-			// like a customer pick at exactly the level the lock reads.
+			// like a customer pick at exactly the level the lock reads. `implicitSource`
+			// (issue #536) travels the same way, for the same reason.
 			entry.records[ current.level ] = {
 				key: current.key,
 				confirmed: true,
 				implicit: !! entry.location.implicit,
+				implicitSource: entry.location.implicit ? defaultLocalitySource( entry ) : null,
 			};
+
+			// Issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a `fixed`
+			// default locality is shown to the customer exactly as if they had picked it —
+			// full text, region backwards-filled. `current`/`chain` above only ever carry
+			// `{ key, level }` (see this function's own docblock), so the TEXT comes from
+			// `config.location.defaultLocality.record` instead — the one place in this config
+			// that carries full components (`class-checkout-config.php::build_location_block()`'s
+			// own docblock explains why). `geoip` stays invisible by construction: the server
+			// only ever populates `defaultLocality` for the `fixed` policy in the first place
+			// (see that method), so `defaultLocalitySource()` already reads `'geoip'` for it —
+			// this block simply never runs.
+			//
+			// Gated on the DEFAULT record's own level matching `current.level`, not hardcoded to
+			// `'settlement'`: the merchant-picked default is ordinarily settlement-level, but
+			// nothing here should silently mis-seed a field if it were ever anything else.
+			if (
+				entry.location.implicit &&
+				entry.location.defaultLocality &&
+				'fixed' === entry.location.defaultLocality.policy &&
+				entry.location.defaultLocality.record &&
+				entry.location.defaultLocality.record.level === current.level
+			) {
+				var defaultNode = chainNodeForLevel( entry, current.level );
+
+				if ( defaultNode ) {
+					var defaultRecord = entry.location.defaultLocality.record;
+
+					// Issue #538: carry the default's ANCESTORS onto the seeded record. The seed
+					// written above for `current.level` is deliberately bare (`{ key, confirmed,
+					// implicit, implicitSource }`) because `current`/`chain` carry no components —
+					// but that leaves {@see popularFor} with nothing to narrow the popular list by
+					// when the region was filled in by this path rather than picked, and the
+					// customer saw settlements from other regions offered under an auto-filled
+					// «Москва».
+					//
+					// Additive on purpose: every other reader of this record keys off `key` /
+					// `confirmed` / `implicit`, and an extra field cannot disturb them. Only
+					// `ancestors` is copied, not the whole record — the components belong to
+					// `pendingDefaultLocality` below, which is what writes field text.
+					if ( Array.isArray( defaultRecord.ancestors ) && entry.records[ current.level ] ) {
+						entry.records[ current.level ].ancestors = defaultRecord.ancestors;
+					}
+
+					writeSilently( entry, defaultNode.fieldId, fieldValueFor( defaultRecord, current.level ) );
+
+					// Issue #536 round 2: the ancestor write (region, under `related-list`) is NOT
+					// done here directly — see {@see applyPendingDefaultLocality}'s own docblock for
+					// why an unconditional {@see backwardsFill} call at THIS point loses the region
+					// silently. `pendingDefaultLocality` is retried from {@see reconcileAfterCheckoutUpdate}
+					// once the ancestor field is actually able to hold it.
+					entry.pendingDefaultLocality = { node: defaultNode, record: defaultRecord, level: current.level, key: current.key };
+					applyPendingDefaultLocality( entry );
+				}
+			}
 
 			// The event still fires for `current` ONLY, unchanged — the chain is restoration
 			// plumbing for scoping (see scopeKeyFor()), never a second source of "the customer's

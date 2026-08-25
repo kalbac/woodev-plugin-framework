@@ -140,6 +140,33 @@ one carries the rig merge for the PR ahead of it.
 stack into the rig branch but branch each PR off `main` directly. The rig branch exists to give the
 operator one tree to look at; nothing requires the PR branches to descend from it.
 
+## Symptom 5 (s94, 26.08.2026) — and there is no way back
+
+Confirmed again, and with the recovery path measured this time. Squash-merging #535 with
+`--delete-branch` removed the branch that was #537's BASE. GitHub closed #537 immediately, and
+**neither half of the obvious recovery works**:
+
+```
+$ gh pr reopen 537
+GraphQL: Could not open the pull request. (reopenPullRequest)
+
+$ gh pr edit 537 --base main
+GraphQL: Cannot change the base branch of a closed pull request. (updatePullRequest)
+```
+
+Retargeting requires the PR to be open; reopening requires the base branch to exist. A closed PR
+whose base branch is gone is **permanently closed** — the work survives, the PR does not.
+
+Recovery: rebase the branch onto `main`, dropping the commits the squash already absorbed, and open
+a NEW PR. `git rebase --onto origin/main <last-commit-of-the-merged-branch>` does it in one step,
+and the resulting diff-stat against `main` is the check that it dropped exactly the right commits.
+Carry the old PR's body across and leave a comment on the closed one pointing at the replacement,
+or the review history is orphaned.
+
+**The cheap prevention:** merge the base PR with `--squash` but WITHOUT `--delete-branch`, retarget
+the downstream PR to `main` while it is still open, and only then delete the branch.
+
+
 ## Related
 
 - [[git-squash-onto-stale-origin-main-diverge]] — the same squash-merge-breaks-ancestry root cause,

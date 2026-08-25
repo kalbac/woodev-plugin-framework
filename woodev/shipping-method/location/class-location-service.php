@@ -752,6 +752,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Gets the store's default-locality policy (spec D11, §4.6) — thin
+		 * pass-through to {@see Location_Provider_Registry::get_default_locality_policy()},
+		 * same facade pattern as {@see self::get_field_mode_settlement()}.
+		 *
+		 * Issue #536: {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::build_location_block()}
+		 * reads this to decide whether the `defaultLocality` config block is
+		 * worth sending at all — a customer-facing config block, so this is a
+		 * PURE READ, same discipline as {@see self::resolve_fixed_default()}'s
+		 * own "customer-facing getter must never mutate a store setting" rule.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @return string One of {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF} /
+		 *                {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED} /
+		 *                {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP}.
+		 */
+		public function get_default_locality_policy(): string {
+			return $this->registry->get_default_locality_policy();
+		}
+
+		/**
 		 * Resolves the `fixed` default-locality policy (spec §4.6/D15
 		 * amendment): the merchant's stored record is served AS-IS when the
 		 * D15 chain still resolves the SAME provider for its level — meaning

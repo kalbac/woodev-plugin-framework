@@ -23,6 +23,13 @@
  * `options.nonceHeader`/`options.country`/`options.parentKey` primitives the cascade hands over
  * for a renderer (like `related-list:region`) that watches a WooCommerce-rendered field instead.
  *
+ * `options.onResolving()` (issue #541) is the one primitive a renderer calls BEFORE it knows the
+ * record: it announces "the customer picked at this level, the identity is still coming" and
+ * returns a `release()` for the case where the identity never arrives. Only `related-list:region`
+ * needs it — it holds nothing but WooCommerce's own label text and must match that against
+ * `/location/list` first — and only it calls it; `ajax-select2` learns the record from the pick
+ * itself and goes straight to `options.onSelect()`.
+ *
  * THE EVENT-WORLD TRAP (gotcha `jquery-trigger-change-fires-no-native-event`): select2 (and
  * WooCommerce's own selectWoo enhancement of a plain `<select>`, which MAY independently apply
  * to the `related-list` region field WooCommerce itself renders) reports a pick via jQuery
@@ -201,6 +208,31 @@
 
 			lastHandledText = text;
 
+			// Issue #541. THE PICK IS ALREADY A FACT HERE; only its identity is not. Everything
+			// below this line is a lookup — `fetchRegionList()` is a `GET /location/list` that
+			// took 10.5 SECONDS on the rig for a cold region — and until it returns this renderer
+			// has no record and therefore cannot call `options.onSelect()`, which is what
+			// eventually raises the busy state for every other level.
+			//
+			// So for those 10.5 seconds the customer had clicked a new region and NOTHING had
+			// changed on screen: no spinner on the region field, and — worse — a settlement field
+			// still offering the OLD region's list, ready to take a click on a town that is no
+			// longer reachable (measured 779 ms after the switch: all six popular entries still
+			// there, three of them in the region just left).
+			//
+			// `options.onResolving()` is the cascade's seam for exactly this shape — announce the
+			// pick by LEVEL now, name the record later. `ajax-select2` needs nothing of the sort
+			// because its own pick carries the record; this renderer is the only one that has to
+			// go and ask. See {@see onResolvingFor} in location-cascade.js.
+			var release = 'function' === typeof options.onResolving ? options.onResolving() : null;
+
+			function releaseIfHeld() {
+				if ( release ) {
+					release();
+					release = null;
+				}
+			}
+
 			fetchRegionList().then( function( entries ) {
 				for ( var i = 0; i < entries.length; i++ ) {
 					var candidate = entries[ i ];
@@ -208,9 +240,21 @@
 					if ( candidate && candidate.record && candidate.record.label === text ) {
 						options.onSelect( { record: candidate.record } );
 
+						// A no-op by construction: `onSelect()` has raised a marker of its own
+						// for the record it just accepted, so the token this one holds is no
+						// longer the standing marker's. Called anyway, unconditionally, so the
+						// release path is one path rather than two — a `mayEnterChain()` refusal
+						// inside `onSelect()` reaches this line with NOTHING having replaced the
+						// marker, and skipping it there would leave the field spinning forever.
+						releaseIfHeld();
+
 						return;
 					}
 				}
+
+				// Searched, and this country's list does not carry the selected text — no record
+				// will ever arrive for this pick, so nothing else is coming to clear the marker.
+				releaseIfHeld();
 			} );
 		}
 
@@ -257,6 +301,54 @@
 	 */
 	function minimumInputLengthFor( level ) {
 		return 'region' === level ? 1 : 2;
+	}
+
+	/**
+	 * Issue #539: the subset of `entries` whose label matches `term` — what the popular list
+	 * narrows to while the real `/suggest` for that same term is still on its way.
+	 *
+	 * SUBSTRING, CASE-INSENSITIVE, ON THE SAME TEXT SELECT2 ITSELF WOULD MATCH. This is not a
+	 * preference: the rows this filters are rendered by `toSelect2Result()`, whose `text` is
+	 * `record.label || label`, and select2's own stock matcher (`matcher.js` in the vendored
+	 * bundle) lowercases both sides and asks `indexOf(...) > -1` on exactly that `text`. Any
+	 * cleverer rule here — prefix-only, token-aware, transliterating — would make the popular
+	 * list answer a keystroke differently from every other list select2 renders in the same
+	 * dropdown, which is the kind of divergence this file already refuses elsewhere (see the
+	 * `templateResult`-over-custom-`matcher` reasoning in the local strategy).
+	 *
+	 * `toLowerCase()` rather than `toLocaleLowerCase()`: the labels are Russian locality names,
+	 * and the one case where the two disagree — Turkish dotted/dotless I — would apply the
+	 * TURKISH rule to Cyrillic text whenever a customer's browser happened to be `tr-TR`,
+	 * which is worse than not localising at all.
+	 *
+	 * A non-array `entries` (a provider that answered nothing, the store having no popular rows
+	 * for this scope) yields `[]` rather than throwing — same tolerance the empty-term branch
+	 * already relies on.
+	 *
+	 * @param {Array}  entries
+	 * @param {string} term
+	 * @returns {Array}
+	 */
+	function matchingPopular( entries, term ) {
+		if ( ! Array.isArray( entries ) ) {
+			return [];
+		}
+
+		var needle = 'string' === typeof term ? term.toLowerCase() : '';
+
+		if ( ! needle ) {
+			return entries;
+		}
+
+		return entries.filter( function( entry ) {
+			if ( ! entry ) {
+				return false;
+			}
+
+			var text = ( entry.record && entry.record.label ) || entry.label || '';
+
+			return 'string' === typeof text && text.toLowerCase().indexOf( needle ) > -1;
+		} );
 	}
 
 	/**
@@ -480,6 +572,15 @@
 			// ranking it already did before this round).
 			var popularAvailable = 'function' === typeof seed.popular;
 
+			// Issue #539: true from the moment a real `/suggest` leaves until it settles. Read
+			// ONLY by the `noResults` wrap below — the local narrowing this round introduces can
+			// legitimately produce an EMPTY list (the customer typed something no popular entry
+			// matches) while the provider is still being asked, and rendering «Поиск не дал
+			// результатов» over a search that has not finished is the same conflation #405
+			// exists to prevent: "the source has not answered yet" is not "searched, found
+			// nothing". Without this, narrowing would trade one misleading frame for another.
+			var searchInFlight = false;
+
 			config.minimumInputLength = popularAvailable ? 0 : minimumInputLengthFor( seed.level );
 
 			if ( popularAvailable ) {
@@ -499,12 +600,31 @@
 				var floor = minimumInputLengthFor( seed.level );
 				var baseNoResults = config.language.noResults;
 				var inputTooShort = config.language.inputTooShort;
+				var searching = config.language.searching;
 
 				config.language.noResults = function( params ) {
 					var term = params && 'string' === typeof params.term ? params.term : '';
 
 					if ( term && term.length < floor && 'function' === typeof inputTooShort ) {
 						return inputTooShort( { input: term, minimum: floor } );
+					}
+
+					// Issue #539: an empty list rendered while the provider's answer for the SAME
+					// term is still in flight is "still looking", not "nothing exists" — and
+					// select2 reaches this hook for both, because it only ever asks "is the
+					// rendered list empty?". `searching` is WooCommerce's own `i18n_searching`,
+					// already wired by `select2LanguageFor()`, so this shows the customer the
+					// exact string they were already seeing in the prepended loading row — never
+					// a string invented here (#526's rule).
+					//
+					// BELT-AND-BRACES since round 2, and deliberately kept: the transport now
+					// appends its own loading row to the narrowing, so a zero-match narrowing is
+					// a one-row list and this hook is no longer reached on that path. It stays
+					// because the invariant it defends — never say "not found" over a live
+					// search — must not depend on some future edit remembering to keep that row.
+					// Same reasoning as the `stale` flag's own docblock below.
+					if ( searchInFlight && 'function' === typeof searching ) {
+						return searching( params );
 					}
 
 					return baseNoResults ? baseNoResults( params ) : undefined;
@@ -658,6 +778,77 @@
 						return { abort: function() {} };
 					}
 
+					// Issue #539. MEASURED on the rig (region «Санкт-Петербург», popular list
+					// «Санкт-Петербург»/«Пушкин»/«Репино», term «Пушк»):
+					//
+					//     before   Санкт-Петербург · Пушкин · Репино
+					//     +303 ms  Searching… · Санкт-Петербург · Пушкин · Репино
+					//     +9597 ms Пушкин, Санкт-Петербург, Россия
+					//
+					// select2 does NOT replace the list while a query runs — `showLoading()`
+					// PREPENDS its message and leaves the previous results below it. So for the
+					// whole 9.6 s the field went on offering «Санкт-Петербург» and «Репино» to a
+					// customer who had already typed «Пушк»: rows that demonstrably do not match
+					// what they asked for. The operator's own words — the intermediate frame
+					// misleads.
+					//
+					// So narrow the popular list LOCALLY, on every keystroke, before the request
+					// leaves. This is `success()` called twice for one query, which the vendored
+					// bundle supports by construction: `AjaxAdapter.prototype.query()` hands the
+					// transport a plain callback (`selectWoo.full.js:3586-3600`) that runs
+					// `processResults()` -> `callback()` -> `results:all`, and `results:all`
+					// REPLACES the rendered list. The second, real answer therefore overwrites
+					// this one — read in the vendored source rather than assumed.
+					//
+					// THE AJAX REQUEST STILL ALWAYS GOES OUT. Skipping it on a local hit was the
+					// card's own rejected first form: the popular list is ranking and an empty
+					// state, NEVER coverage (spec `2026-08-21-settlement-search-design.md` §4), so
+					// answering «Мос» from it alone would hide Московский, Мосрентген and the rest.
+					// Set BEFORE the narrowing below, not merely before the request leaves, and
+					// this ORDER IS THE WHOLE POINT — measured on the rig, getting it wrong the
+					// other way round: with the flag raised after `success()`, a term no popular
+					// entry matches («Выборг» against a Saint Petersburg list) rendered «Поиск не
+					// дал результатов» INSTANTLY, over a search that had not even been sent. That
+					// is a worse frame than the stale one #539 set out to remove. Everything that
+					// could still short-circuit this transport has already returned above, so by
+					// this line a real request is a certainty, not a prediction.
+					searchInFlight = true;
+
+					if ( popularAvailable ) {
+						var narrowed = seed.applyEntries( matchingPopular( seed.popular(), term ), false ).map( toSelect2Result );
+
+						// #539 round 2, OPERATOR ON THE RIG: with a local match the field showed
+						// «Пушкин» and NOTHING else — the customer could not tell a search was
+						// still running. The zero-match case looked right only by accident, via
+						// the `noResults` wrap above.
+						//
+						// The cause is in select2, read in the rig's own vendored bundle:
+						// `container.on('query')` prepends a loading row (`showLoading()`,
+						// selectWoo.full.js:940-954), and `Results.prototype.append()` opens with
+						// `hideLoading()` (:856) — so EVERY `success()` removes it, including
+						// this early one. Nothing about our list is special; painting anything at
+						// all takes the indicator away.
+						//
+						// So re-state it as a result row of our own, shaped EXACTLY as
+						// `showLoading()` shapes its own (`{disabled, loading, text}`) rather
+						// than invented: `Results.prototype.option()` (:960-975) drops
+						// `data-selected` for a `disabled` item, and BOTH the click binding
+						// (`mouseup` delegated to `.select2-results__option[data-selected]`,
+						// :1232) and `highlightFirstItem()` (:891-905) filter on that same
+						// attribute — so this row cannot be clicked, cannot be keyboard-selected
+						// and never steals the first-item highlight. Verified in source, not
+						// assumed.
+						//
+						// It also makes the two cases agree: a zero-match narrowing is now a list
+						// of exactly this one row rather than an empty list, so `noResults` is not
+						// reached at all and both branches say the same thing the same way.
+						if ( 'function' === typeof searching ) {
+							narrowed.push( { disabled: true, loading: true, text: searching( { term: term } ) } );
+						}
+
+						success( { results: narrowed } );
+					}
+
 					// issue #449: select2/selectWoo stores whatever this returns as `this._request`
 					// and aborts it (only if it looks abortable) before starting the NEXT query —
 					// see AjaxAdapter.prototype.query, selectWoo.full.js:3564-3571. issue #449
@@ -698,7 +889,13 @@
 						seed.onRequestStart( abortRequest );
 					}
 
+					// Cleared in BOTH settled branches below — including the stale/abort early
+					// returns, since a superseded request is not "still searching" either and
+					// leaving the flag up would make the NEXT genuinely-empty answer read as a
+					// search still in progress.
 					strategy.fetchEntries( term, { signal: controller ? controller.signal : undefined } ).then( function( entries ) {
+						searchInFlight = false;
+
 						if ( stale ) {
 							return;
 						}
@@ -820,6 +1017,8 @@
 							results: ranked.map( toSelect2Result ),
 						} );
 					}, function( error ) {
+						searchInFlight = false;
+
 						// `isAbortError()`: a request WE cancelled must never paint "search
 						// failed" for the customer (issue #449). `stale` alone already guards
 						// this in practice (see the block comment above), but the explicit check
@@ -1000,6 +1199,15 @@
 		// DOM carries none — never a literal here.
 		var placeholder = input.getAttribute( 'placeholder' ) || input.getAttribute( 'data-placeholder' )
 			|| ( options.location && options.location.i18n && options.location.i18n.placeholder ) || '';
+
+		// Issue #540: the SEARCH BOX's placeholder — a different surface from `placeholder`
+		// above, which names the closed control. Read from `options.searchPlaceholder`
+		// (`location-cascade.js` sources it from the same server-supplied `i18n` block) with a
+		// direct fallback to that block, so a renderer invoked with a hand-built `options` — as
+		// this file's own tests do — still resolves it. `''` disables the feature entirely; see
+		// {@see handleSelect2Open} for why silence is the right degradation.
+		var searchPlaceholder = ( 'string' === typeof options.searchPlaceholder ? options.searchPlaceholder : '' )
+			|| ( options.location && options.location.i18n && options.location.i18n.searchPlaceholder ) || '';
 
 		// Issue #528: the merchant opt-in for letting the customer submit a settlement the
 		// active provider does not carry — meaningful ONLY for the `ajax-select2` strategy
@@ -1393,6 +1601,32 @@
 
 		function handleSelect2Open() {
 			dropdownOpen = true;
+
+			// Issue #540. select2 4.x exposes NO config option for the search box's own
+			// placeholder (`placeholder` names the closed control), so the attribute has to be
+			// set once the dropdown exists — `select2:open` is the documented public event for
+			// exactly that moment.
+			//
+			// Found through the OPEN CONTAINER rather than through
+			// `$select.data('select2').$dropdown`: select2 renders its dropdown detached from
+			// this `<select>` (appended to `<body>`), and reaching for `$dropdown` would mean
+			// depending on the instance's private shape — the same dependency this file refuses
+			// elsewhere (see `activeAbort`'s own docblock). `.select2-container--open` is
+			// select2's own public CSS contract, and at most ONE container carries it at a time,
+			// so this cannot reach another field's dropdown.
+			//
+			// Silently does nothing when the server supplied no string (an older config, or a
+			// `woodev_location_i18n` filter that cleared it) — an absent placeholder is the
+			// status quo ante, and inventing wording here is what #526 forbids.
+			if ( ! searchPlaceholder ) {
+				return;
+			}
+
+			var searchBox = document.querySelector( '.select2-container--open .select2-search__field' );
+
+			if ( searchBox ) {
+				searchBox.setAttribute( 'placeholder', searchPlaceholder );
+			}
 		}
 
 		/**
@@ -1781,6 +2015,7 @@
 			attachAjaxSelect2: attachAjaxSelect2,
 			bindChangeBothWorlds: bindChangeBothWorlds,
 			selectConfigFor: selectConfigFor,
+			matchingPopular: matchingPopular,
 		};
 	}
 

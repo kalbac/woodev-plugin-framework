@@ -257,7 +257,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *         current: array{key: string, level: string}|null,
 		 *         chain: array<string, array{key: string, level: string}>,
-		 *         implicit: bool
+		 *         implicit: bool,
+		 *         defaultLocality: array{policy: string, record: array<string, mixed>}|null
 		 *     }
 		 * }
 		 */
@@ -716,6 +717,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
 		 *              (spec D4) or has no enrolled entries for it yet.
 		 *
+		 * @since 2.1.0 Gained `defaultLocality` (issue #536; spec §4.6/D11
+		 *              amendment, operator decision 25.08.2026): the FULL
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+		 *              of the customer's implicit default, but ONLY when the
+		 *              store's policy is `fixed` — `null` for `geoip`/`off`, an
+		 *              explicit customer record, or no record at all. `current`/
+		 *              `chain` above deliberately stay narrowed to `{ key, level }`
+		 *              for `/select` response parity; this is the one field in this
+		 *              config that carries components, because
+		 *              `location-cascade.js::prefill()` cannot write a locality's
+		 *              text into a field from a bare key.
+		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
 		 * @return array{
@@ -729,6 +742,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     current: array{key: string, level: string}|null,
 		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
+		 *     defaultLocality: array{policy: string, record: array<string, mixed>}|null,
 		 *     defaultCountry: string
 		 * }
 		 */
@@ -841,6 +855,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				$implicit = (bool) $customer['implicit'];
 			}
 
+			// Issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a
+			// FIXED default locality must be shown to the customer exactly as if they
+			// had picked it themselves — full text in the field, region backwards-filled,
+			// address unlocked. `geoip` stays invisible (it is a guess, never a
+			// merchant-confirmed answer), so this block is `null` for every OTHER
+			// policy/state — the client's own gate is `'fixed' === defaultLocality.policy`,
+			// so `null` and "key absent" are equally inert to it; `null` was chosen over
+			// omitting the key to match this method's OWN established convention
+			// (`current`/`chain` are always present, `null`/`[]` is the "nothing" value,
+			// never an absent key).
+			//
+			// `record` carries the FULL {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+			// shape — unlike `current`/`chain` above, which are deliberately narrowed to
+			// `{ key, level }` for the `/select` response parity reasons this method's own
+			// docblock explains. The client CANNOT write "Москва" into a field from a bare
+			// key (`location-cascade.js::prefill()`'s own docblock says so explicitly), so
+			// this is the one place in this config that must carry the components.
+			//
+			// Gated on `$implicit`: an EXPLICIT customer record (a real pick, even one that
+			// happens to equal the merchant's configured default) needs nothing extra here —
+			// the customer's own browser already holds whatever text they typed.
+			$default_locality = null;
+
+			if (
+				$implicit
+				&& null !== $customer
+				&& \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED === $service->get_default_locality_policy()
+			) {
+				$default_locality = [
+					'policy' => \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+					'record' => $customer['record']->to_array(),
+				];
+			}
+
 			// Issue #330 (location-chain design §8): every level in the customer's
 			// saved chain, same `{ key, level }` shape as `current` above, keyed by
 			// level. `[]` (never `null`) when there is no customer record at all —
@@ -877,7 +925,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// Shown INSIDE the open listbox when a completed search returned nothing.
 					// A silent empty panel and a slow network are indistinguishable to the
 					// customer, so this one case is worth a sentence (operator, s70).
-					'noResults'        => __(
+					'noResults'         => __(
 						'Поиск не дал результатов. Попробуйте изменить запрос.',
 						'woodev-plugin-framework'
 					),
@@ -888,7 +936,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// case there, not an error. This says the field still works, which is
 					// true: a location field is a plain text input with the typeahead layered
 					// on top, so a hand-typed address was always accepted.
-					'noResultsAddress' => __(
+					'noResultsAddress'  => __(
 						'Адрес не найден — введите вручную.',
 						'woodev-plugin-framework'
 					),
@@ -900,7 +948,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// used to read for exactly one thing (not firing `update_checkout`) and
 					// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
 					// the consumer this string exists for.
-					'notPersisted'     => __(
+					'notPersisted'      => __(
 						'Не удалось сохранить выбор — попробуйте ещё раз.',
 						'woodev-plugin-framework'
 					),
@@ -913,7 +961,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// `Location_Provider::suggest()`'s "EMPTY VS. FAILED" docblock section are
 					// the two ends of this same contract — a REST 502 from `/location/suggest`
 					// is what actually triggers this string.
-					'unavailable'      => __(
+					'unavailable'       => __(
 						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
 						'woodev-plugin-framework'
 					),
@@ -927,7 +975,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// Checkout_Handler::placeholder_label()} (shares its translation across a PO
 					// merge) — that method lives on an unrelated class this one has no reference
 					// to, so the string is repeated here rather than cross-called.
-					'placeholder'      => __( 'Выберите…', 'woodev-plugin-framework' ),
+					'placeholder'       => __( 'Выберите…', 'woodev-plugin-framework' ),
+
+					// Issue #540: the placeholder for select2's own SEARCH BOX — a different
+					// string, and a different surface, from 'placeholder' above, which names the
+					// CLOSED control. Operator's observation on the rig: with #530's popular list
+					// showing six ready-made towns, a customer can reasonably read that list as
+					// the whole offer and never realise the box above it accepts typing at all.
+					// That lands them in exactly the dead end #517/#528 exist for, except here
+					// the dead end is made by the UI rather than by the provider's coverage.
+					//
+					// A NEW msgid rather than a reused one, deliberately: #526's rule is "take
+					// the ready-made string, do not invent translations", and neither
+					// `wc_country_select_params` (i18n_no_matches / i18n_searching /
+					// i18n_input_too_short_* / i18n_load_more / i18n_selection_too_long_* /
+					// i18n_input_too_long_* / i18n_ajax_error) nor this block carries anything
+					// that means "start typing a name" — checked key by key before adding this.
+					// The rule's own escape hatch is this file: a string with no ready-made
+					// source belongs in `Checkout_Config`, never hardcoded in JS.
+					'searchPlaceholder' => __( 'Начните вводить название', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -961,6 +1027,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'current'               => $current,
 				'chain'                 => $chain,
 				'implicit'              => $implicit,
+				// Issue #536 (spec §4.6/D11 amendment): `null` unless the policy is `fixed`
+				// AND a default actually resolved for THIS customer — see this method's own
+				// computation above for the full reasoning.
+				'defaultLocality'       => $default_locality,
 				// Issue #296: steps 2+3 of the country fallback chain `checkout field ->
 				// WooCommerce store setting -> RU`, already merged into ONE value by
 				// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}

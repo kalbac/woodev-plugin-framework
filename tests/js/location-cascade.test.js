@@ -166,6 +166,7 @@ function locationField( level, section = 'billing' ) {
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
  *          levels?: Object, owners?: Object, countries?: string[], current?: Object|null,
  *          chain?: Object, implicit?: boolean, defaultCountry?: string,
+ *          defaultLocality?: Object|null,
  *          mode?: string|{region?: string, settlement?: string}}} opts
  * @returns {Object}
  */
@@ -226,6 +227,11 @@ function buildConfig( opts ) {
 			// all" (an older server) is exercised as its own real case, not a stand-in for it.
 			...( o.chain !== undefined ? { chain: o.chain } : {} ),
 			implicit: o.implicit !== undefined ? o.implicit : false,
+			// Issue #536 (spec §4.6/D11 amendment): omitted entirely (not merely
+			// `undefined`) unless a test opts in, mirroring `owners`/`chain`/`popular`'s own
+			// convention — "no `defaultLocality` key at all" (an older server) is exercised
+			// as its own real case by every other test in this file.
+			...( o.defaultLocality !== undefined ? { defaultLocality: o.defaultLocality } : {} ),
 			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
 			// already merged into ONE value server-side by Location_Service::resolve_default_country().
 			defaultCountry: o.defaultCountry !== undefined ? o.defaultCountry : 'RU',
@@ -254,6 +260,9 @@ function fakeTypeahead() {
 		const detach = jest.fn();
 		const call = {
 			el, fetch: opts.fetch, onSelect: opts.onSelect, onAbandon: opts.onAbandon,
+			// Issue #541: the seam a renderer uses to announce a pick whose record it does not
+			// know yet — see onResolvingFor() in the module under test.
+			onResolving: opts.onResolving,
 			emptyText: opts.emptyText, errorText: opts.errorText, detach,
 		};
 
@@ -991,6 +1000,120 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 
 		expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
 		expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+	} );
+
+	// Issue #541, the REAL cause. Everything above this point assumes the renderer knows the
+	// record at the moment of the pick — true for `ajax-select2`, false for `related-list:region`,
+	// which holds only WooCommerce's label text and must match it against `GET /location/list`
+	// first. That lookup was MEASURED at 10.5 s on the rig for a cold region, and for all of it
+	// `onSelectFor()` had not run, so none of the s90 machinery above had been reached: no
+	// spinner, and a settlement field still offering the region the customer had just left.
+	describe( 'onResolving — a pick announced before its record is known (#541)', () => {
+		it( 'raises the spinner on the picking field and locks the level below it, with no record and no /select', () => {
+			boot( { region: true, settlement: true } );
+
+			const region = document.getElementById( 'billing_state' );
+			const settlement = document.getElementById( 'billing_city' );
+
+			callFor( 'billing_state' ).onResolving();
+
+			expect( region.parentNode.querySelector( '.woodev-location-select-spinner' ) ).not.toBeNull();
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( region.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+
+			// The operator's point 3: the settlement list on screen still belongs to the OLD
+			// region, so it must stop taking picks — this is the same lock the s90 test above
+			// asserts, reached without any record having been named.
+			expect( settlement.getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+			expect( settlement.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+
+			// Still blocked rather than emptied — a disabled control leaves the serialized
+			// checkout form (measured, s90), and this one may hold text the customer typed.
+			expect( settlement.disabled ).toBe( false );
+
+			// Nothing has been ASKED of the server: the record is exactly what is still unknown.
+			expect( selectRequests().length ).toBe( 0 );
+		} );
+
+		it( 'the marker it raises is NOT the queued kind — a queued one would leave the level below unlocked', () => {
+			boot( { region: true, settlement: true } );
+
+			callFor( 'billing_state' ).onResolving();
+
+			// The distinction 85292d1 introduced, asserted from the outside: `queued` means "the
+			// request has not left, so it confirms nothing", and hasUnconfirmedParent() ignores
+			// it. This marker asserts the thing that IS true — this level's identity is unknown
+			// — so it must lock. Passing `true` for queuedOnly here would show the spinner and
+			// silently drop the lock, which is the half of #541 the operator actually saw.
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		} );
+
+		it( 'release() clears the marker it raised — the identity search that found nothing leaves no spinner behind', () => {
+			boot( { region: true, settlement: true } );
+
+			const region = document.getElementById( 'billing_state' );
+			const settlement = document.getElementById( 'billing_city' );
+			const release = callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			expect( region.parentNode.querySelector( '.woodev-location-select-spinner' ) ).toBeNull();
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+			expect( region.hasAttribute( 'aria-busy' ) ).toBe( false );
+			expect( settlement.hasAttribute( 'aria-disabled' ) ).toBe( false );
+		} );
+
+		it( 'release() stands down when a REAL pick has since taken the field over — never strands the newer owner', async () => {
+			boot( { region: true, settlement: true } );
+
+			const release = callFor( 'billing_state' ).onResolving();
+
+			const regionItem = {
+				key: 'dadata:r1', label: 'Московская область', level: 'region',
+				record: { key: 'dadata:r1', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+			};
+
+			selectViaFake( callFor( 'billing_state' ), regionItem );
+
+			// This is the ordinary sequence on the match path: the renderer calls release()
+			// unconditionally right after onSelect, and the marker standing now belongs to the
+			// in-flight /select. Clearing it here would take the spinner away for the whole
+			// round trip and unlock the settlement under an unconfirmed region.
+			release();
+
+			const region = document.getElementById( 'billing_state' );
+
+			expect( selectRequests().length ).toBe( 1 );
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+
+			// And the real owner still clears normally when its own answer lands.
+			selectRequests()[ 0 ].resolve( {
+				current: { key: regionItem.record.key, level: 'region' }, persisted: true,
+				chain: { region: { key: regionItem.record.key, level: 'region' } },
+			} );
+			await flushMicrotasks();
+
+			expect( region.parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( false );
+			expect( document.getElementById( 'billing_city' ).hasAttribute( 'aria-disabled' ) ).toBe( false );
+		} );
+
+		it( 'a second release() is inert — the token is spent, not re-usable against a later marker', () => {
+			boot( { region: true, settlement: true } );
+
+			const release = callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			// A fresh announcement, e.g. the customer picking a second region while the first
+			// lookup was still running.
+			callFor( 'billing_state' ).onResolving();
+
+			release();
+
+			expect( document.getElementById( 'billing_state' ).parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
+			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+		} );
 	} );
 
 	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request
@@ -5464,6 +5587,43 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
+	// ISSUE #536 — spec §4.6/D11 amendment, operator decision 25.08.2026: a FIXED default
+	// locality is shown to the customer exactly as if they had picked it — including the
+	// address unlocking. The DEFAULT record here deliberately carries a DIFFERENT settlement
+	// (Тверь) than SETTLEMENT_ITEM (Москва) so a test asserting on it cannot pass by accident
+	// off some OTHER fixture's text.
+	const DEFAULT_LOCALITY_RECORD = {
+		key: 'dadata:tver-1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+		region: { name: 'Тверская область', type: 'обл' },
+		settlement: { name: 'Тверь', type: 'г' }, label: 'Тверская обл., г Тверь',
+	};
+
+	it( 'unlocks a FIXED implicit default on boot — the #536 control for the #502 tests above', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'fixed', record: DEFAULT_LOCALITY_RECORD },
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'stays LOCKED for a GEOIP implicit default even when defaultLocality is present but not fixed (#536)', () => {
+		// The operator's decision, verbatim: geoip is a guess and stays invisible — this is the
+		// control proving #536 narrowed the #502 rule rather than removing it.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'geoip', record: DEFAULT_LOCALITY_RECORD },
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
 	it( 'stays locked when the restored record is an ADDRESS with no settlement behind it', () => {
 		// The pre-#337 state itself: an address picked while no settlement ever was. The chain
 		// the server restores names no settlement, so there is still nothing keying the pickup
@@ -5731,6 +5891,242 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		// an ordinary pick; adopting a different settlement really must not keep the old street.
 		expect( addressField().value ).toBe( '' );
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// issue #536 — spec §4.6/D11 amendment, operator decision 25.08.2026: a FIXED default
+// locality is shown to the customer exactly as if they had picked it. `class-checkout-
+// config.php::build_location_block()` sends `defaultLocality.record` (the FULL
+// Location_Record::to_array() shape) only for the `fixed` policy; `prefill()` writes its
+// text into the settlement field and backwards-fills the region, through the same
+// writeSilently()/backwardsFill() primitives a real pick uses.
+// -----------------------------------------------------------------------
+
+describe( 'issue #536: a FIXED default locality writes its text into the field on boot', () => {
+	const DEFAULT_RECORD = {
+		key: 'dadata:tver-1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+		region: { name: 'Тверская область', type: 'обл' },
+		settlement: { name: 'Тверь', type: 'г' }, label: 'Тверская обл., г Тверь',
+	};
+
+	function bootWithDefaultLocality( extra ) {
+		return boot( Object.assign(
+			{
+				region: true, settlement: true, address: true,
+				current: { key: 'dadata:tver-1', level: 'settlement' },
+				chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+				implicit: true,
+				defaultLocality: { policy: 'fixed', record: DEFAULT_RECORD },
+			},
+			extra || {}
+		) );
+	}
+
+	it( 'writes the settlement field\'s text from the default record\'s own component (typeahead mode)', () => {
+		bootWithDefaultLocality();
+
+		// fieldValueFor() derives from the component's bare `name`, never the ancestor-carrying
+		// `label` — "Тверь", not "Тверская обл., г Тверь" (see that function's own docblock).
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+	} );
+
+	it( 'backwards-fills the region field from the SAME default record, no second lookup', () => {
+		bootWithDefaultLocality();
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Тверская область' );
+	} );
+
+	it( 'does NOT write any text when the policy is geoip, even though implicit is true (control)', () => {
+		bootWithDefaultLocality( { defaultLocality: { policy: 'geoip', record: DEFAULT_RECORD } } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+	} );
+
+	it( 'does NOT write any text when defaultLocality is absent (older server) — the #502 tests\' own baseline', () => {
+		bootWithDefaultLocality( { defaultLocality: undefined } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+	} );
+
+	it( 'does NOT write any text for an EXPLICIT customer record, even when defaultLocality is present (nothing to seed)', () => {
+		bootWithDefaultLocality( { implicit: false } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+
+	it( 'still fires woodev_location_applied with implicit:true — the flag itself stays truthful regardless of source (issue #536, #309)', () => {
+		var received = null;
+		document.body.addEventListener( 'woodev_location_applied', function( e ) {
+			received = e.detail;
+		} );
+
+		bootWithDefaultLocality();
+
+		expect( received ).not.toBeNull();
+		expect( received.implicit ).toBe( true );
+	} );
+
+	/**
+	 * The blocker the operator's own brief called out: `ajax-select2` replaces the settlement
+	 * `<input>` with a real `<select>` (`location-select-modes.js::buildSelectField()`), and an
+	 * unmatched `.value` write there submits NOTHING (gotcha
+	 * `a-select-value-write-with-no-matching-option-submits-nothing`). Boots the REAL
+	 * `location-select-modes.js` registry (never the fake typeahead the rest of this describe
+	 * block uses) to prove the integration: `prefill()` writes the plain `<input>`'s `.value`
+	 * BEFORE `attachAll()` converts it, so `buildSelectField()`'s own issue #447 seeding
+	 * (`initialValue = input.value`) picks it up as a REAL, selected `<option>` — not a blank
+	 * select2 with the write silently lost.
+	 */
+	it( 'ajax-select2: the seeded initialValue mechanism (issue #447) picks up the default text and SUBMITS it', () => {
+		installMarkup(
+			{ region: true, settlement: true, address: true },
+			'RU'
+		);
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( {
+			region: true, settlement: true, address: true,
+			mode: { settlement: 'ajax-select2' },
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'fixed', record: DEFAULT_RECORD },
+		} );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.tagName ).toBe( 'SELECT' );
+		// Half 1 of the gotcha: a value with NO matching <option> reads back as ''. This proves
+		// a real, matching option exists — the write SUBMITS, not just "looks right" in a variable.
+		expect( select.value ).toBe( 'Тверь' );
+		expect( select.options[ select.selectedIndex ].textContent ).toBe( 'Тверь' );
+	} );
+
+	/**
+	 * Issue #536 ROUND 2 — rig-measured (fresh guest, incognito, `related-list` region axis,
+	 * `fixed` policy): the region ancestor is very often STILL a plain WooCommerce `<input>` at
+	 * `prefill()` time — a fresh guest has no session country/state yet, so PHP has nothing to
+	 * render states FOR — and WooCommerce's OWN `assets/js/frontend/country-select.js` promotes
+	 * it to a real, state-populated `<select>` client-side, ASYNCHRONOUSLY relative to this
+	 * module's own boot (`wc_address_i18n_ready`, no ordering guarantee). See
+	 * `applyPendingDefaultLocality()`'s own docblock in the source for the full measured trace.
+	 *
+	 * Reproduces WooCommerce's OWN failed value-carry exactly as `country-select.js` does it:
+	 * captures `$statebox.val()` BEFORE rebuilding, rebuilds with the `related-list` WC-canonical
+	 * uppercase VALUE convention (`wc_strtoupper(trim(label))`), then restores by that captured
+	 * value via `.val(value).trigger('change')`. `capturedValue` is read from the LIVE field
+	 * right before the simulated rebuild — exactly what WooCommerce's own handler would see —
+	 * which is what makes this test discriminate the fix: the OLD code wrote the bare display
+	 * text into the `<input>` immediately, so the capture is a non-empty string that can never
+	 * match the rebuilt option's uppercase value, WC's restore fails, and the resulting genuine
+	 * empty `change` reads (in the OLD code) as a real parent edit — this module's own
+	 * `clearDescendants()` then wipes the settlement default it had JUST correctly written.
+	 */
+	it( 'survives WooCommerce\'s own async input->select promotion of a related-list region field, without wiping the settlement default (issue #536 round 2)', () => {
+		bootWithDefaultLocality( { mode: { region: 'related-list' } } );
+
+		// Settlement's own text is unaffected by the region promotion hazard — written
+		// immediately, exactly like the baseline test above.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+
+		const input = document.getElementById( 'billing_state' );
+
+		expect( input.tagName ).toBe( 'INPUT' );
+
+		const select = document.createElement( 'select' );
+		const blank = document.createElement( 'option' );
+
+		blank.value = '';
+		select.appendChild( blank );
+
+		const option = document.createElement( 'option' );
+
+		option.value = 'ТВЕРСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Тверская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+
+		const capturedValue = input.value; // WooCommerce's OWN `value = $statebox.val()` capture.
+
+		input.parentNode.replaceChild( select, input );
+		select.value = capturedValue; // WooCommerce's OWN `$statebox.val(value)` restore attempt.
+		window.jQuery( select ).trigger( 'change' );
+		window.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		const regionEl = document.getElementById( 'billing_state' );
+
+		expect( regionEl.tagName ).toBe( 'SELECT' );
+		// The default landed AFTER promotion, matched by TEXT against the real WC-canonical
+		// option — never a fabricated value the state list would reject.
+		expect( regionEl.value ).toBe( 'ТВЕРСКАЯ ОБЛАСТЬ' );
+		expect( regionEl.selectedOptions[ 0 ].textContent ).toBe( 'Тверская область' );
+
+		// The measured symptom itself: the settlement default must survive the region's own
+		// (would-be) false transition — it must never have been read as a real parent edit.
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+	} );
+
+	/**
+	 * The safety net's OTHER half: a customer who picks their OWN settlement BEFORE
+	 * WooCommerce's promotion ever completes must never have that pick overwritten by the
+	 * merchant's stale default once the deferred retry finally fires. `entry.records.settlement`
+	 * no longer carries the implicit default's own key once `onSelectFor()` runs — see
+	 * `applyPendingDefaultLocality()`'s own docblock for exactly what disarms it.
+	 */
+	it( 'does NOT resurrect the default over a customer\'s own pick made before the region field is promoted (issue #536 round 2, control)', () => {
+		bootWithDefaultLocality( { mode: { region: 'related-list' } } );
+
+		selectViaFake( callFor( 'billing_city' ), {
+			key: 'dadata:city2', label: 'Жуковский', level: 'settlement',
+			record: {
+				key: 'dadata:city2', provider_id: 'dadata', level: 'settlement', country: 'RU',
+				region: { name: 'Московская область', type: '' },
+				settlement: { name: 'Жуковский', type: '' }, label: 'Жуковский',
+			},
+		} );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Жуковский' );
+
+		const input = document.getElementById( 'billing_state' );
+		const select = document.createElement( 'select' );
+		const blank = document.createElement( 'option' );
+
+		blank.value = '';
+		select.appendChild( blank );
+
+		const option = document.createElement( 'option' );
+
+		option.value = 'ТВЕРСКАЯ ОБЛАСТЬ';
+		option.textContent = 'Тверская область';
+		select.appendChild( option );
+		select.id = input.id;
+		select.name = input.name;
+		input.parentNode.replaceChild( select, input );
+		window.jQuery( document.body ).trigger( 'country_to_state_changed', [ 'RU' ] );
+
+		// The merchant's default ('Тверская область') never gets forced in over the customer's
+		// own pick — the settlement default's own retry disarmed the moment the real pick landed.
+		expect( document.getElementById( 'billing_state' ).value ).not.toBe( 'ТВЕРСКАЯ ОБЛАСТЬ' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Жуковский' );
 	} );
 } );
 
@@ -7670,5 +8066,168 @@ describe( 'the real rig sequence: starts CHECKED, uncheck, fill billing, check a
 
 		expect( document.getElementById( 'shipping_state' ).value ).toBe( 'Омская область' );
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Омск' );
+	} );
+} );
+
+// -------------------------------------------------------------------
+// Issue #538 — a region the customer did NOT pick still scopes the popular list.
+//
+// The #536 fixed default fills the region field's TEXT but records no region KEY, and the key is
+// not recoverable from the default record either: Location_Record keeps ancestors as a flat SET
+// and refuses a `level => key` map deliberately. So popularFor() narrows by ancestor INTERSECTION
+// when nothing recorded a parent key.
+//
+// Measured on the rig before the fix (fixed default «Москва», fresh incognito): the region field
+// read «МОСКВА» while the settlement list still offered all six popular entries, three of them in
+// Saint Petersburg.
+// -------------------------------------------------------------------
+
+describe( 'options.popular() scoped by an AUTO-FILLED region — issue #538', () => {
+	const MSK = 'test-cdek:r81';
+	const SPB = 'test-cdek:r82';
+
+	const entryFor = ( key, name, region ) => ( {
+		key, label: name, level: 'settlement',
+		record: {
+			key, provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+			settlement: { name, type: 'г' }, label: name, ancestors: [ region ],
+		},
+	} );
+
+	const POPULAR = {
+		RU: [
+			entryFor( 'test-cdek:137', 'Санкт-Петербург', SPB ),
+			entryFor( 'test-cdek:28', 'Внуково', MSK ),
+			entryFor( 'test-cdek:394', 'Пушкин', SPB ),
+			entryFor( 'test-cdek:44', 'Москва', MSK ),
+		],
+	};
+
+	const DEFAULT_MSK = {
+		key: 'test-cdek:44', provider_id: 'test-cdek', level: 'settlement', country: 'RU',
+		region: { name: 'Москва', type: '' }, settlement: { name: 'Москва', type: '' },
+		label: 'Москва, Россия', ancestors: [ MSK ],
+	};
+
+	const popularCallbackAfterBoot = ( extra ) => {
+		const calls = [];
+
+		window.WoodevLocationRenderers = {
+			'custom-mode:settlement': ( el, options ) => {
+				calls.push( options );
+
+				return { detach: jest.fn() };
+			},
+			'custom-mode:region': () => ( { detach: jest.fn() } ),
+		};
+
+		boot( { region: true, settlement: true, mode: 'custom-mode', popular: POPULAR, ...extra } );
+
+		return calls[ 0 ].popular;
+	};
+
+	it( 'narrows to the auto-filled region — the defect the operator saw: three foreign-region entries were offered under «Москва»', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'fixed', record: DEFAULT_MSK },
+		} );
+
+		expect( popular().map( ( e ) => e.label ).sort() ).toEqual( [ 'Внуково', 'Москва' ] );
+	} );
+
+	it( 'still shows everything when nothing at all is standing at the level — the empty state #530 exists for', () => {
+		const popular = popularCallbackAfterBoot( {} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+
+	it( 'shows everything when the record standing there publishes NO ancestors — an absent answer must never hide entries', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: {
+				policy: 'fixed',
+				record: { ...DEFAULT_MSK, ancestors: [] },
+			},
+		} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+
+	it( 'a GEOIP default never narrows either, because it never fills the field in the first place (#536)', () => {
+		const popular = popularCallbackAfterBoot( {
+			implicit: true,
+			current: { key: 'test-cdek:44', level: 'settlement' },
+			chain: { settlement: { key: 'test-cdek:44', level: 'settlement' } },
+			defaultLocality: { policy: 'geoip', record: DEFAULT_MSK },
+		} );
+
+		expect( popular() ).toHaveLength( 4 );
+	} );
+} );
+
+// -------------------------------------------------------------------
+// Issue #541 — the busy state belongs to the customer's ACTION, not to the request.
+//
+// `/select` is single-flight per section. The marker used to be raised inside sendNextSelect(),
+// i.e. when the request left — the same instant for an idle queue, and arbitrarily late behind a
+// busy one. Measured on the rig with a `fixed` default (whose own boot-time /select runs ~14 s
+// against the real CDEK test API), picking a region 3.7 s after load:
+//
+//     >>> click on the region     +0 ms
+//     /select left               +11 045 ms
+//     SPINNER on shipping_state  +11 048 ms
+//
+// The spinner was 3 ms behind its request and ELEVEN SECONDS behind the human.
+// -------------------------------------------------------------------
+
+describe( 'the /select busy state is raised on ENQUEUE, not on send — issue #541', () => {
+	const REGION = {
+		key: 'dadata:reg1', label: 'Московская область', level: 'region',
+		record: { key: 'dadata:reg1', provider_id: 'dadata', level: 'region', country: 'RU', label: 'Московская область' },
+	};
+	const CITY = {
+		key: 'dadata:city1', label: 'г Москва', level: 'settlement',
+		record: { key: 'dadata:city1', provider_id: 'dadata', level: 'settlement', country: 'RU', label: 'г Москва' },
+	};
+
+	const spinner = () => document.querySelector( '.woodev-location-select-spinner' );
+	const selectCount = () => fetchCalls.filter( ( c ) => c.url === SELECT_URL ).length;
+
+	it( 'shows the spinner for a pick still WAITING in the queue, before its request has left', () => {
+		boot( { region: true, settlement: true } );
+
+		// First pick occupies the single-flight slot and is left UNANSWERED.
+		selectViaFake( callFor( 'billing_state' ), REGION );
+
+		expect( selectCount() ).toBe( 1 );
+
+		// Second pick can only queue — nothing new goes to the server...
+		selectViaFake( callFor( 'billing_city' ), CITY );
+
+		expect( selectCount() ).toBe( 1 );
+
+		// ...and yet the customer must see their own field working. Before #541 the spinner sat
+		// on the REGION field until the first request settled.
+		const city = document.getElementById( 'billing_city' );
+
+		expect( spinner() ).not.toBeNull();
+		expect( city.parentNode.contains( spinner() ) ).toBe( true );
+		expect( city.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+	} );
+
+	it( 'a merely QUEUED pick does not re-lock the address it just unlocked — the s90 rule survives the change', () => {
+		boot( { region: true, settlement: true, address: true } );
+
+		selectViaFake( callFor( 'billing_state' ), REGION );
+		selectViaFake( callFor( 'billing_city' ), CITY );
+
+		// A settlement pick unlocks the address on the spot. The queued marker shows a spinner but
+		// asserts nothing about confirmation, so hasUnconfirmedParent() must ignore it — marking
+		// unconditionally here re-locked the address and broke s90's own regression test.
+		expect( document.getElementById( 'billing_address_1' ).disabled ).toBe( false );
 	} );
 } );
