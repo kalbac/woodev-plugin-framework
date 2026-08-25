@@ -10,22 +10,19 @@
 **As of 2026-08-25 (s92).** Merged this session: **#522** (cards #517 + #528) and **#509** (#502).
 **No open PRs.**
 
-**Baselines on `main`, measured 25.08.2026 in the PRIMARY checkout:** `composer check` **2783**
-unit tests / 6800 assertions / **66 skipped**; jest **1459** in 19 suites. (The 2701 figure earlier
-handoffs carried was wrong; `main` was 2774/6785/66 before this session's PRs.)
+**Baselines on `main`, RE-measured 25.08.2026 (s93) in the PRIMARY checkout:** `composer check`
+**2787** unit tests / **6813** assertions / **66 skipped**; jest **1474** in 19 suites.
 
-**#517 turned out to be two halves, not one.** Firing `onAbandon` in the select modes writes the
-marker, but `settlementTextIsKnownUnresolved()` compares it against the field's live `.value`, and
-a `<select>` never carries the customer's typed text — so the unlock alone was a no-op. The second
-half is **#528**.
+⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
+stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
+previous handoff is an INFERENCE — re-measure before comparing.** Detail: `sessions/s93.md`.
 
 **#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, visible
-only for «Список с поиском». ON → select2 `tags`, with `insertTag` gating the tag row to the
-zero-result case; a tag pick is NOT a record pick (no `/select`, no record). OFF → the whole #517
-abandon mechanism is gated off and the address lock stands. The reason OFF must also disable the
-unlock is measured: with the settlement `<select>` empty, WooCommerce refuses the order with
-`Shipping Город (Location Provider) is a required field`, so unlocking the address only lets the
-customer fill more before being rejected.
+only for «Список с поиском». ON → select2 `tags`, `insertTag` gating the tag row to the zero-result
+case; a tag pick is NOT a record pick (no `/select`, no record). OFF → the #517 abandon mechanism is
+gated off and the address lock stands. OFF must also disable the unlock, measured: with the
+settlement `<select>` empty WooCommerce refuses the order with `Shipping Город (Location Provider)
+is a required field`. (Why #517 needed #528 at all → `sessions/s92.md`.)
 
 **MEASURED, and it inverts an obvious assumption: `select2:close` fires BEFORE `select2:select`**
 (four reproductions on the rig, mouse and keyboard, ajax and non-ajax). Any guard shaped as "the
@@ -185,7 +182,10 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and **switch the tree BEFORE asking, then leave it there until the pass is over** — s92 verified on the branch, switched back to `main` for tidiness, and the operator spent a pass on code without the fix (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`, which now carries that second half). Confirm by measurement, not memory: `grep -c "<a symbol the fix introduces>" <the served file>`. **Дерево на `main`, чисто (s92).** Таблица `wp_woodev_popular_settlements` ЗАСЕЯНА: по 3 реальные записи `test-cdek` на регионы Москва (`test-cdek:r81`) и Санкт-Петербург (`test-cdek:r82`), у всех `last_verified_at = NULL`, поэтому ленивая проверка D5 реально отрабатывает. Ворктри Orca этой сессии сняты.
+- **The rig serves the WORKING TREE.** Name the branch out loud whenever you ask anyone to look, and **switch the tree BEFORE asking, then leave it there until the pass is over** — s92 verified on the branch, switched back to `main` for tidiness, and the operator spent a pass on code without the fix (gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`, which now carries that second half). Confirm by measurement, not memory: `grep -c "<a symbol the fix introduces>" <the served file>`. **Дерево на `main`, чисто (s93).** ⚠ **`woodev_location_allow_custom_settlement` на риге = `yes`** (замерено s93; s92 писала
+«удалена»). Следствие: в «Списке с поиском» строку «ничего не найдено» не увидеть — слот занимает
+tag-строка #528. Замерять пустое состояние только при `no`, потом вернуть `yes`. Таблица
+`wp_woodev_popular_settlements` ЗАСЕЯНА: по 3 реальные записи `test-cdek` на регионы Москва (`test-cdek:r81`) и Санкт-Петербург (`test-cdek:r82`), у всех `last_verified_at = NULL`, поэтому ленивая проверка D5 реально отрабатывает. Ворктри Orca этой сессии сняты.
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the

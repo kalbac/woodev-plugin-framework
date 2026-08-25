@@ -77,6 +77,53 @@ The general rule: **in this dialog Enter is not "dismiss", it is "yes"** — the
 `1. Update now`. Never send a bare Enter to a Codex terminal whose current frame you have not just
 looked at.
 
+## s93: `tui-idle` reports `satisfied: true` WHILE the update dialog is on screen
+
+The step-2 recipe above says `tui-idle` "reports `satisfied:false` with `blockedReason`
+`codex-update-prompt` until you do [ESC]". **In s93 it did not.** `terminal wait --for tui-idle`
+returned `satisfied: true` on the first call, and a `terminal read --screen` immediately afterwards
+showed the dialog still up:
+
+```text
+  ✨ Update available! 0.148.0 -> 0.149.1
+› 1. Update now (runs `npm install -g @openai/codex`)
+  2. Skip
+  Press enter to continue
+```
+
+Had step 4 followed the `satisfied: true` without looking, the Enter would have selected
+**`1. Update now`** — the s86 failure mode above, which loses the injected brief.
+
+So `tui-idle` is **not** a usable gate for this dialog. The only reliable gate is the one s86
+already arrived at for a different reason: **read the screen and grep it.** Do that after the wait
+as well as before every `--enter`, and never treat `satisfied: true` as evidence the composer has
+focus.
+
+```bash
+out=$( orca terminal read --terminal "$H" --screen --json )
+if echo "$out" | grep -qi "Update available"; then
+    orca terminal send --terminal "$H" --text $'\e'      # ESC — never Enter
+fi
+```
+
+## s93: a failed `worker-start` marks the task `failed`, not `blocked`
+
+Two `worker-start --agent codex` attempts failed at `stage: dispatch_input` with
+`lastError: agent_prompt_blocked` (the dialog again). That circuit-broke the task to **`failed`**,
+and the subsequent manual `dispatch --inject` was refused:
+
+```text
+Task task_… is failed; only ready tasks can be dispatched
+```
+
+Same recovery as the `blocked` case below — `task-update --id <task_id> --status ready` — but the
+status to look for is different, so a recovery that only checks for `blocked` will miss it.
+
+**Also measured in s93:** once the Codex terminal is created by hand, the same handle happily takes
+a SECOND `dispatch --inject` for a follow-up task (here, a re-critic on the fix for the first
+critic's finding). No new terminal, no re-launch, no ESC needed the second time — just create the
+task, dispatch it, and read the buffer back to confirm it started working.
+
 ## Recovering a botched launch
 
 `worker-stop` moves the task to `blocked`, and `dispatch` then refuses it:
