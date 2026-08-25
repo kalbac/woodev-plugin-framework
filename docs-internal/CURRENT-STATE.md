@@ -30,9 +30,8 @@ stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate n
 previous handoff is an INFERENCE — re-measure before comparing.** Detail: `sessions/s93.md`.
 
 **#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
-«Список с поиском». ON → select2 `tags`; a tag pick is NOT a record pick. OFF → the #517 abandon
-mechanism is gated off and the address lock stands (measured: an empty settlement `<select>` makes
-WooCommerce refuse the order). Detail → `sessions/s92.md`.
+«Список с поиском». ON → select2 `tags`; OFF → #517's abandon mechanism is gated off and the address
+lock stands. Detail → `sessions/s92.md`.
 
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
