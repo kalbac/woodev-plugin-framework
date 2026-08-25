@@ -110,6 +110,88 @@
 	}
 }
 
+.woodev-tools {
+	display: flex;
+	flex-direction: column;
+	gap: wd.$gap-lg;
+
+	&__desc {
+		margin: 0 0 wd.$gap-lg;
+		color: wd.$muted;
+		font-size: 14px;
+		line-height: 1.5;
+	}
+}
+
+.woodev-tool {
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius;
+	padding: wd.$gap-lg;
+	background: wd.$surface;
+
+	&__name {
+		margin: 0 0 wd.$gap-xs;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	&__desc {
+		margin: 0 0 wd.$gap;
+		color: wd.$muted;
+	}
+
+	&__selector {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		margin-bottom: wd.$gap;
+	}
+
+	&__selector-label {
+		color: wd.$muted;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+
+	// The button's own spinner (Button isBusy) already centers vertically
+	// against the button's label — this row just keeps the button from
+	// stretching to the card's full width.
+	&__action {
+		display: flex;
+		align-items: center;
+	}
+
+	&__status {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+
+	// The result ALWAYS renders below the action row (never above it) and
+	// carries its own visually distinct success/failure treatment — not bare
+	// text — per the s90 lesson: a plain-text result blended into the card and
+	// five review passes missed it.
+	&__result {
+		margin-top: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		border-radius: wd.$radius-sm;
+		font-size: 13px;
+		line-height: 1.5;
+
+		// rgba literals (not color-mix()) to match the $accent-soft convention
+		// tokens.scss already establishes for tinted backgrounds.
+		&.is-ok {
+			color: wd.$ok;
+			background: rgba( 0, 163, 42, 0.12 );
+		}
+
+		&.is-error {
+			color: wd.$error;
+			background: rgba( 214, 54, 56, 0.12 );
+		}
+	}
+}
+
 .woodev-field__constant {
 	display: inline-flex;
 	align-items: center;

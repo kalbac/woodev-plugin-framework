@@ -321,6 +321,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				);
 			}
 
+			// «Инструменты» (#505) is always LAST, and exists only when at least one
+			// tool is registered — an empty section is worse than no section.
+			$tools = Shipping_Tools_Registry::instance()->get_tools();
+
+			if ( [] !== $tools ) {
+				$sections[] = Settings_Section::create(
+					'tools',
+					__( 'Инструменты', 'woodev-plugin-framework' ),
+					[],
+					__( 'Действия над данными раздела «Доставка» — не настройки, а то, что можно выполнить прямо сейчас.', 'woodev-plugin-framework' ),
+					false,
+					'',
+					true,
+					$tools
+				);
+			}
+
 			return $sections;
 		}
 

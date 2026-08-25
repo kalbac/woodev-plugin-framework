@@ -37,17 +37,36 @@ final class Settings_Section {
 	private string $action_label = '';
 
 	/**
+	 * Whether this section is a registry-backed tools block (#505). Deliberately
+	 * a separate flag from {@see self::$is_connection} rather than overloading
+	 * it — the React branch a tools block renders is different from a
+	 * connection block's.
+	 *
+	 * @var bool
+	 */
+	private bool $is_tools = false;
+
+	/**
+	 * Tool descriptors for a tools block. Empty unless {@see self::$is_tools}.
+	 *
+	 * @var array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
+	 */
+	private array $tools = [];
+
+	/**
 	 * Use the named constructor instead.
 	 *
 	 * @since 2.0.2
 	 */
-	private function __construct( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '' ) {
+	private function __construct( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '', bool $is_tools = false, array $tools = [] ) {
 		$this->id            = $id;
 		$this->label         = $label;
 		$this->setting_ids   = array_values( $setting_ids );
 		$this->description   = $description;
 		$this->is_connection = $is_connection;
 		$this->action_label  = $action_label;
+		$this->is_tools       = $is_tools;
+		$this->tools          = array_values( $tools );
 	}
 
 	/**
@@ -55,16 +74,18 @@ final class Settings_Section {
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string   $id            section id.
-	 * @param string   $label         section label.
-	 * @param string[] $setting_ids   referenced setting ids.
-	 * @param string   $description   optional description shown under the sub-tab.
-	 * @param bool     $is_connection whether this section is a self-contained connection block.
-	 * @param string   $action_label  label for the block's primary action button.
+	 * @param string                                                        $id            section id.
+	 * @param string                                                        $label         section label.
+	 * @param string[]                                                      $setting_ids   referenced setting ids.
+	 * @param string                                                        $description   optional description shown under the sub-tab.
+	 * @param bool                                                          $is_connection whether this section is a self-contained connection block.
+	 * @param string                                                        $action_label  label for the block's primary action button.
+	 * @param bool                                                          $is_tools      whether this section is a registry-backed tools block (#505).
+	 * @param array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool> $tools      tool descriptors, only meaningful when `$is_tools` is true.
 	 * @return self
 	 */
-	public static function create( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '' ): self {
-		return new self( $id, $label, $setting_ids, $description, $is_connection, $action_label );
+	public static function create( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '', bool $is_tools = false, array $tools = [] ): self {
+		return new self( $id, $label, $setting_ids, $description, $is_connection, $action_label, $is_tools, $tools );
 	}
 
 	/**
@@ -131,5 +152,27 @@ final class Settings_Section {
 	 */
 	public function get_action_label(): string {
 		return $this->action_label;
+	}
+
+	/**
+	 * Whether this section is a registry-backed tools block.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return bool
+	 */
+	public function is_tools(): bool {
+		return $this->is_tools;
+	}
+
+	/**
+	 * Returns the tool descriptors. Empty unless {@see self::is_tools()}.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
+	 */
+	public function get_tools(): array {
+		return $this->tools;
 	}
 }

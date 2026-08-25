@@ -1,10 +1,13 @@
 <?php
 namespace Woodev\Tests\Unit;
 
+use Brain\Monkey\Functions;
 use Mockery;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Framework\Settings\Settings_Provider;
 use Woodev\Framework\Settings\Settings_Section;
+use Woodev\Framework\Shipping\Settings\Shipping_Tool;
+use Woodev\Framework\Shipping\Settings\Tool_Result;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
 
@@ -167,6 +170,84 @@ class SettingsPageRegistryTest extends TestCase {
 		$this->assertTrue( $sections[0]['is_connection'] );
 		$this->assertSame( 'Проверить', $sections[0]['action_label'] );
 		$this->assertTrue( $sections[0]['supports_test'] );
+	}
+
+	public function test_build_sections_marks_tools_and_serializes_descriptors_without_callback(): void {
+		$handler  = $this->make_connection_handler();
+		$tool     = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static fn( array $args ): Tool_Result => Tool_Result::success()
+		);
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $tool ] ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertTrue( $sections[0]['is_tools'] );
+		$this->assertSame( [ [
+			'id'          => 'sweep',
+			'name'        => 'Проверить',
+			'desc'        => '',
+			'button'      => 'Проверить',
+			'disabled'    => false,
+			'status_text' => '',
+		] ], $sections[0]['tools'] );
+		$this->assertArrayNotHasKey( 'callback', $sections[0]['tools'][0] );
+	}
+
+	public function test_build_sections_non_tools_section_omits_tools_key(): void {
+		$handler  = $this->make_connection_handler();
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[ Settings_Section::create( 'general', 'Общие', [ 'token' ] ) ]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertArrayNotHasKey( 'is_tools', $sections[0] );
+		$this->assertArrayNotHasKey( 'tools', $sections[0] );
+	}
+
+	/**
+	 * m3: the direct-construction door guards the same way the FILTER_TOOLS
+	 * filter door does (Shipping_Tools_Registry::collect()) — a non-conforming
+	 * entry is rejected and logged, the rest of the list still registers,
+	 * rather than a page-wide fatal on `$tool->to_array()`.
+	 */
+	public function test_build_sections_rejects_a_non_conforming_tool_entry(): void {
+		$handler   = $this->make_connection_handler();
+		$conforming = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static fn( array $args ): Tool_Result => Tool_Result::success()
+		);
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $conforming, 'not-a-tool' ] ) ]
+		);
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		$this->assertCount( 1, $sections[0]['tools'] );
+		$this->assertSame( 'sweep', $sections[0]['tools'][0]['id'] );
 	}
 
 	/**
