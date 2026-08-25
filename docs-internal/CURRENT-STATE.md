@@ -55,8 +55,8 @@ ownership rather than a name heuristic. Gotcha:
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488, whose STORAGE/verification/tools side is done — the client-facing list is #530. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
 | **#488** | Popular settlements — **CLOSED in the scope of D1–D8** (#493, #496, #500, #501, #508; #520 closed after the tools ran against a seeded table). `CAPABILITY_RESOLVE_KEY` + `resolve_key()`, the table, whole-record storage, the two clocks, lazy D5 verification, D6's four outcomes, D7 adopt-or-cancel, and the D8 «Инструменты» section all shipped. `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure throws. Full detail: `sessions/s89.md`–`s92.md`. The customer-facing half it never covered is **#530**, in PR #535. |
 | **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
-| ~~**#502**~~ | **DONE — #509 (`4a2dab2`).** An implicit default locality no longer unlocks the address. Merged only after a rebase onto the post-#522 base and a full CI re-run — its original green had been measured against a stale base. |
-| ~~**#517**~~ | **DONE — #522 (`fe90c82`), operator-accepted.** Needed **#528** to deliver. Four defects across three critic passes; report `reviews/2026-08-25-517-critic.md`, detail `sessions/s92.md`. |
+| ~~**#502**~~ | **DONE — #509.** An implicit default no longer unlocks the address; merged only after a rebase and full CI re-run on the current base. Its other half became **#536**. |
+| ~~**#517**~~ | **DONE — #522, accepted.** Needed #528. Detail: `sessions/s92.md`. |
 | **#518** | **DECIDED 25.08 — a pickup selection lifts the implicit flag.** `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
 | **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
@@ -136,6 +136,15 @@ Gotchas: **205**.
 - **B-2 loader-protocol forward-tolerance — standing behavior:** the resolver loads framework classes from the **highest registered copy for the whole fleet**, and `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Standing rules → `AGENT-RULES.md` Rule 3.
 - [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
+
+### The repo is PRIVATE since 25.08.2026 — GitHub Pages is gone with it
+
+Operator decision, once measured that hiding one file was theatre: **all 433 `docs-internal` files
+were already public.** Measured consequences: **Pages is dead** (needs Pro for a private repo, the
+account is Free; the API 404s), so `docs.yml` is disabled on `push` and left runnable by hand —
+publishing is one uncommented block away. **0 forks**, nothing detached. **History is NOT hidden
+retroactively** for anyone who already cloned it; nothing was rewritten and no rewrite was asked
+for. `next-session-prompt.md` is **tracked again**; only the gate's `.prev` snapshot stays ignored.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
 

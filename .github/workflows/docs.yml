@@ -1,13 +1,20 @@
 name: Deploy Docs
 
+# ⚠ DISABLED on push, 25.08.2026. The repo went PRIVATE, and GitHub Pages is not available for a
+# private repo on the Free plan — the site at kalbac.github.io/woodev-plugin-framework is gone
+# (the Pages API now returns 404) and every automatic run of this workflow would fail on deploy.
+# Operator decision: «Закроем GH Pages. Ничего страшного. Потребителей у нас 0.»
+#
+# Kept rather than deleted, and still runnable by hand, so that publishing is one line away if the
+# account moves to Pro or the repo goes public again: restore the `push:` block below.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'woodev/class-plugin.php'
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'docs/**'
+  #     - 'mkdocs.yml'
+  #     - 'woodev/class-plugin.php'
   workflow_dispatch:
 
 permissions:
