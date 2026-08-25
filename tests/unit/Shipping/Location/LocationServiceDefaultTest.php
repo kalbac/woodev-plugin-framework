@@ -325,6 +325,30 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
+		 * Issue #536: {@see Location_Service::get_default_locality_policy()} is a thin
+		 * pass-through to {@see Location_Provider_Registry::get_default_locality_policy()}
+		 * (same facade pattern as `get_field_mode_settlement()`) — `Checkout_Config::
+		 * build_location_block()` reads it to decide whether `defaultLocality` is worth
+		 * sending at all.
+		 */
+		public function test_get_default_locality_policy_defaults_to_off_when_the_gate_is_closed(): void {
+			$service = $this->service( Location_Provider_Registry::instance() );
+
+			$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF, $service->get_default_locality_policy() );
+		}
+
+		public function test_get_default_locality_policy_reflects_the_stored_setting(): void {
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$this->assertSame( Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, $service->get_default_locality_policy() );
+		}
+
+		/**
 		 * Mirrors the private `Customer_Location_Store::STORAGE_KEY` literal —
 		 * same discipline `CustomerLocationStoreTest` itself uses (its own
 		 * `SESSION_KEY`/`META_KEY` local consts), since the real constant is

@@ -257,7 +257,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *         owners: array<string, array{region: string, settlement: string, address: string}>,
 		 *         current: array{key: string, level: string}|null,
 		 *         chain: array<string, array{key: string, level: string}>,
-		 *         implicit: bool
+		 *         implicit: bool,
+		 *         defaultLocality: array{policy: string, record: array<string, mixed>}|null
 		 *     }
 		 * }
 		 */
@@ -716,6 +717,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
 		 *              (spec D4) or has no enrolled entries for it yet.
 		 *
+		 * @since 2.1.0 Gained `defaultLocality` (issue #536; spec §4.6/D11
+		 *              amendment, operator decision 25.08.2026): the FULL
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+		 *              of the customer's implicit default, but ONLY when the
+		 *              store's policy is `fixed` — `null` for `geoip`/`off`, an
+		 *              explicit customer record, or no record at all. `current`/
+		 *              `chain` above deliberately stay narrowed to `{ key, level }`
+		 *              for `/select` response parity; this is the one field in this
+		 *              config that carries components, because
+		 *              `location-cascade.js::prefill()` cannot write a locality's
+		 *              text into a field from a bare key.
+		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Service $service The active, already-confirmed facade.
 		 *
 		 * @return array{
@@ -729,6 +742,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     current: array{key: string, level: string}|null,
 		 *     chain: array<string, array{key: string, level: string}>,
 		 *     implicit: bool,
+		 *     defaultLocality: array{policy: string, record: array<string, mixed>}|null,
 		 *     defaultCountry: string
 		 * }
 		 */
@@ -839,6 +853,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					'level' => $customer['record']->level(),
 				];
 				$implicit = (bool) $customer['implicit'];
+			}
+
+			// Issue #536 (spec §4.6/D11 amendment, operator decision 25.08.2026): a
+			// FIXED default locality must be shown to the customer exactly as if they
+			// had picked it themselves — full text in the field, region backwards-filled,
+			// address unlocked. `geoip` stays invisible (it is a guess, never a
+			// merchant-confirmed answer), so this block is `null` for every OTHER
+			// policy/state — the client's own gate is `'fixed' === defaultLocality.policy`,
+			// so `null` and "key absent" are equally inert to it; `null` was chosen over
+			// omitting the key to match this method's OWN established convention
+			// (`current`/`chain` are always present, `null`/`[]` is the "nothing" value,
+			// never an absent key).
+			//
+			// `record` carries the FULL {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
+			// shape — unlike `current`/`chain` above, which are deliberately narrowed to
+			// `{ key, level }` for the `/select` response parity reasons this method's own
+			// docblock explains. The client CANNOT write "Москва" into a field from a bare
+			// key (`location-cascade.js::prefill()`'s own docblock says so explicitly), so
+			// this is the one place in this config that must carry the components.
+			//
+			// Gated on `$implicit`: an EXPLICIT customer record (a real pick, even one that
+			// happens to equal the merchant's configured default) needs nothing extra here —
+			// the customer's own browser already holds whatever text they typed.
+			$default_locality = null;
+
+			if (
+				$implicit
+				&& null !== $customer
+				&& \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED === $service->get_default_locality_policy()
+			) {
+				$default_locality = [
+					'policy' => \Woodev\Framework\Shipping\Location\Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+					'record' => $customer['record']->to_array(),
+				];
 			}
 
 			// Issue #330 (location-chain design §8): every level in the customer's
@@ -961,6 +1009,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'current'               => $current,
 				'chain'                 => $chain,
 				'implicit'              => $implicit,
+				// Issue #536 (spec §4.6/D11 amendment): `null` unless the policy is `fixed`
+				// AND a default actually resolved for THIS customer — see this method's own
+				// computation above for the full reasoning.
+				'defaultLocality'       => $default_locality,
 				// Issue #296: steps 2+3 of the country fallback chain `checkout field ->
 				// WooCommerce store setting -> RU`, already merged into ONE value by
 				// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}

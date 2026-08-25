@@ -166,6 +166,7 @@ function locationField( level, section = 'billing' ) {
  * @param {{region?: boolean, settlement?: boolean, address?: boolean, section?: string,
  *          levels?: Object, owners?: Object, countries?: string[], current?: Object|null,
  *          chain?: Object, implicit?: boolean, defaultCountry?: string,
+ *          defaultLocality?: Object|null,
  *          mode?: string|{region?: string, settlement?: string}}} opts
  * @returns {Object}
  */
@@ -226,6 +227,11 @@ function buildConfig( opts ) {
 			// all" (an older server) is exercised as its own real case, not a stand-in for it.
 			...( o.chain !== undefined ? { chain: o.chain } : {} ),
 			implicit: o.implicit !== undefined ? o.implicit : false,
+			// Issue #536 (spec §4.6/D11 amendment): omitted entirely (not merely
+			// `undefined`) unless a test opts in, mirroring `owners`/`chain`/`popular`'s own
+			// convention — "no `defaultLocality` key at all" (an older server) is exercised
+			// as its own real case by every other test in this file.
+			...( o.defaultLocality !== undefined ? { defaultLocality: o.defaultLocality } : {} ),
 			// Issue #296: steps 2+3 of the checkout-field -> WC-store-setting -> RU chain,
 			// already merged into ONE value server-side by Location_Service::resolve_default_country().
 			defaultCountry: o.defaultCountry !== undefined ? o.defaultCountry : 'RU',
@@ -5464,6 +5470,43 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
+	// ISSUE #536 — spec §4.6/D11 amendment, operator decision 25.08.2026: a FIXED default
+	// locality is shown to the customer exactly as if they had picked it — including the
+	// address unlocking. The DEFAULT record here deliberately carries a DIFFERENT settlement
+	// (Тверь) than SETTLEMENT_ITEM (Москва) so a test asserting on it cannot pass by accident
+	// off some OTHER fixture's text.
+	const DEFAULT_LOCALITY_RECORD = {
+		key: 'dadata:tver-1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+		region: { name: 'Тверская область', type: 'обл' },
+		settlement: { name: 'Тверь', type: 'г' }, label: 'Тверская обл., г Тверь',
+	};
+
+	it( 'unlocks a FIXED implicit default on boot — the #536 control for the #502 tests above', () => {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'fixed', record: DEFAULT_LOCALITY_RECORD },
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
+	it( 'stays LOCKED for a GEOIP implicit default even when defaultLocality is present but not fixed (#536)', () => {
+		// The operator's decision, verbatim: geoip is a guess and stays invisible — this is the
+		// control proving #536 narrowed the #502 rule rather than removing it.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'geoip', record: DEFAULT_LOCALITY_RECORD },
+		} );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
 	it( 'stays locked when the restored record is an ADDRESS with no settlement behind it', () => {
 		// The pre-#337 state itself: an address picked while no settlement ever was. The chain
 		// the server restores names no settlement, so there is still nothing keying the pickup
@@ -5731,6 +5774,133 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		// an ordinary pick; adopting a different settlement really must not keep the old street.
 		expect( addressField().value ).toBe( '' );
 		expect( addressField().disabled ).toBe( false ); // unlocked by the pick itself.
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// issue #536 — spec §4.6/D11 amendment, operator decision 25.08.2026: a FIXED default
+// locality is shown to the customer exactly as if they had picked it. `class-checkout-
+// config.php::build_location_block()` sends `defaultLocality.record` (the FULL
+// Location_Record::to_array() shape) only for the `fixed` policy; `prefill()` writes its
+// text into the settlement field and backwards-fills the region, through the same
+// writeSilently()/backwardsFill() primitives a real pick uses.
+// -----------------------------------------------------------------------
+
+describe( 'issue #536: a FIXED default locality writes its text into the field on boot', () => {
+	const DEFAULT_RECORD = {
+		key: 'dadata:tver-1', provider_id: 'dadata', level: 'settlement', country: 'RU',
+		region: { name: 'Тверская область', type: 'обл' },
+		settlement: { name: 'Тверь', type: 'г' }, label: 'Тверская обл., г Тверь',
+	};
+
+	function bootWithDefaultLocality( extra ) {
+		return boot( Object.assign(
+			{
+				region: true, settlement: true, address: true,
+				current: { key: 'dadata:tver-1', level: 'settlement' },
+				chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+				implicit: true,
+				defaultLocality: { policy: 'fixed', record: DEFAULT_RECORD },
+			},
+			extra || {}
+		) );
+	}
+
+	it( 'writes the settlement field\'s text from the default record\'s own component (typeahead mode)', () => {
+		bootWithDefaultLocality();
+
+		// fieldValueFor() derives from the component's bare `name`, never the ancestor-carrying
+		// `label` — "Тверь", not "Тверская обл., г Тверь" (see that function's own docblock).
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'Тверь' );
+	} );
+
+	it( 'backwards-fills the region field from the SAME default record, no second lookup', () => {
+		bootWithDefaultLocality();
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( 'Тверская область' );
+	} );
+
+	it( 'does NOT write any text when the policy is geoip, even though implicit is true (control)', () => {
+		bootWithDefaultLocality( { defaultLocality: { policy: 'geoip', record: DEFAULT_RECORD } } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+	} );
+
+	it( 'does NOT write any text when defaultLocality is absent (older server) — the #502 tests\' own baseline', () => {
+		bootWithDefaultLocality( { defaultLocality: undefined } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+	} );
+
+	it( 'does NOT write any text for an EXPLICIT customer record, even when defaultLocality is present (nothing to seed)', () => {
+		bootWithDefaultLocality( { implicit: false } );
+
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+
+	it( 'still fires woodev_location_applied with implicit:true — the flag itself stays truthful regardless of source (issue #536, #309)', () => {
+		var received = null;
+		document.body.addEventListener( 'woodev_location_applied', function( e ) {
+			received = e.detail;
+		} );
+
+		bootWithDefaultLocality();
+
+		expect( received ).not.toBeNull();
+		expect( received.implicit ).toBe( true );
+	} );
+
+	/**
+	 * The blocker the operator's own brief called out: `ajax-select2` replaces the settlement
+	 * `<input>` with a real `<select>` (`location-select-modes.js::buildSelectField()`), and an
+	 * unmatched `.value` write there submits NOTHING (gotcha
+	 * `a-select-value-write-with-no-matching-option-submits-nothing`). Boots the REAL
+	 * `location-select-modes.js` registry (never the fake typeahead the rest of this describe
+	 * block uses) to prove the integration: `prefill()` writes the plain `<input>`'s `.value`
+	 * BEFORE `attachAll()` converts it, so `buildSelectField()`'s own issue #447 seeding
+	 * (`initialValue = input.value`) picks it up as a REAL, selected `<option>` — not a blank
+	 * select2 with the write silently lost.
+	 */
+	it( 'ajax-select2: the seeded initialValue mechanism (issue #447) picks up the default text and SUBMITS it', () => {
+		installMarkup(
+			{ region: true, settlement: true, address: true },
+			'RU'
+		);
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( {
+			region: true, settlement: true, address: true,
+			mode: { settlement: 'ajax-select2' },
+			current: { key: 'dadata:tver-1', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:tver-1', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'fixed', record: DEFAULT_RECORD },
+		} );
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		const select = document.getElementById( 'billing_city' );
+
+		expect( select.tagName ).toBe( 'SELECT' );
+		// Half 1 of the gotcha: a value with NO matching <option> reads back as ''. This proves
+		// a real, matching option exists — the write SUBMITS, not just "looks right" in a variable.
+		expect( select.value ).toBe( 'Тверь' );
+		expect( select.options[ select.selectedIndex ].textContent ).toBe( 'Тверь' );
 	} );
 } );
 

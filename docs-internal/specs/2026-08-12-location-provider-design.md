@@ -40,6 +40,7 @@ mandatory adapter.
 | D13 | Postcode is a **derived, write-only field** | The operator's own pipeline: changing postcode clears nothing and has no dependents; Почта's adapter reads the index from the RECORD, not from the field |
 | D14 | The existing `Address_Normalizer` seam (zero call sites) is **superseded** by this contract; the registered-but-never-enqueued DaData assets are removed | Clean-break policy; the seam's `suggest()`/`normalize()` shape is absorbed into the provider contract |
 | D15 *(post-review amendment, approved 12.08.2026)* | Suggest support is declared **per level** (`region` / `settlement` / `address`), and for a level the chosen provider does not support the framework falls back down a **provider chain** (chosen → bundled DaData, when configured). A level no configured provider supports leaves that field native | A single all-or-nothing `suggest` capability would kill the address field for a store choosing a city-level provider: the CDEK dictionary has regions and cities but NO street data — which is why the operator's own production pairs CDEK city + DaData address inside the same mode (`address-autocomplete.js` enqueued in every СДЭК mode). The fallback chain reproduces that production behavior by construction and mirrors WC's own fallback-provider concept |
+| D11 *(post-review amendment, approved 25.08.2026 — issue #536)* | A **`fixed`** default locality is shown to the customer **exactly as if they had picked it themselves** — settlement field text, region backwards-fill, address unlock. `geoip` is UNCHANGED by this amendment: it stays a guess, invisible, never unlocking the address field | D11's original wording ("implicit records never suppress the locality prompt") was this project's own mis-transcription of the decision, not the operator's actual intent — corrected 25.08.2026. A merchant who picked a specific locality in admin has already made the customer's choice FOR them; treating that confirmed pick as a mere guess forced every customer through a redundant re-selection of a field the merchant already answered. A geo-IP guess carries no such confirmation and stays subject to the original rule |
 
 ## 3. Terminology (fixed)
 
@@ -163,8 +164,19 @@ default resolution under a different provider the framework re-resolves it by co
 the new provider, and if that fails the settings surface flags the default as needing re-picking
 (never silently serving a stale foreign-namespace record). Resolved lazily on first need
 (cart shipping calculator, checkout render), stored in the same slot flagged `implicit`. A real
-customer selection overwrites it and drops the flag. Implicit records participate in rate
-calculation but never suppress "please choose your locality" prompts.
+customer selection overwrites it and drops the flag.
+
+**D11 amendment (approved 25.08.2026, issue #536):** a `fixed` default is shown to the
+customer exactly as if they had picked it themselves — the settlement field carries its text,
+the region is backwards-filled from the same record, and the address field unlocks. `geoip`
+is unchanged: it is a guess, stays invisible, and never unlocks the address field or
+suppresses the "please choose your locality" prompt the way `fixed` now does. The client
+learns which policy is active from `Checkout_Config::build_location_block()`'s own
+`defaultLocality` block (`{ policy, record }`, populated only for `fixed`); an older server
+or a `geoip`/`off` state degrades to the pre-amendment behavior by construction (no block to
+read, so the lock/text-write logic never engages) — see
+`woodev/shipping-method/assets/js/frontend/location-cascade.js`'s `prefill()` and
+`isAddressLocked()`/`settlementRecordIsImplicit()` for the client mechanics.
 
 ### 4.7 Coexistence & degradation
 
