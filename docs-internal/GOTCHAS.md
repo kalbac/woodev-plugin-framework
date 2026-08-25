@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 199 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 200 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -127,6 +127,7 @@
 - [testing/integration] **A stale `.phpunit.result.cache` hides cross-test state leaks CI cannot avoid.** → [phpunit-defects-cache-hides-cross-test-session-leaks](gotchas/phpunit-defects-cache-hides-cross-test-session-leaks.md) (s71)
 - [testing/integration] **A fresh guest's shipping country resolves through geolocation (hardcoded `US` fallback), not the store default.** → [wc-customer-default-location-geolocation-fallback](gotchas/wc-customer-default-location-geolocation-fallback.md) (s78)
 - [testing/integration] **`WP_UnitTestCase` restores the hook table after every test — an identity-based `reset_for_tests()` cannot remove what comes back.** → [hook-snapshot-restore-defeats-an-identity-based-reset](gotchas/hook-snapshot-restore-defeats-an-identity-based-reset.md) (s70)
+- [testing/integration] **`WP_UnitTestCase` rewrites `CREATE TABLE`/`DROP TABLE` to `TEMPORARY` — and `SHOW TABLES` then answers about a different, real table.** → [wp-integration-tests-rewrite-create-and-drop-table-to-temporary](gotchas/wp-integration-tests-rewrite-create-and-drop-table-to-temporary.md) (s91)
 
 - [testing/unit] **A mutation sweep over branch conditions reads as complete and is not.** → [mutation-sweep-branch-only-false-confidence](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
