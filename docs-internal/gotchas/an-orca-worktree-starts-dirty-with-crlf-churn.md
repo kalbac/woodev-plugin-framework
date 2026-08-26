@@ -44,6 +44,27 @@ mass rewrite, and a reviewer cannot tell the real change from the noise.
   `git diff`, `git log`, `git ls-files --eol`. `git checkout --` and `git add -A` in a live
   worktree are how another agent's work disappears.
 
+## The same dirt also blocks worktree REMOVAL (s95)
+
+`orca worktree rm --worktree branch:<name>` **refuses** to delete a worktree whose tree is dirty —
+and every worktree is dirty, by this gotcha, the moment it is created. So the ordinary cleanup at
+the end of a wave fails with what reads like a real warning:
+
+```
+ok: false
+Failed to delete worktree at .../s95-critic-545.
+ M woodev/assets/js/admin/jquery.jquery-confirm.min.js
+ M woodev/assets/js/admin/woodev-admin-job-batch-handler.js
+ M woodev/assets/js/admin/woodev-admin-script.js
+ M woodev/payment-gateway/assets/js/frontend/woodev-payment-gateway-frontend.js
+```
+
+Those are the CRLF files, not work. `orca worktree rm --worktree branch:<name> --force` removes it.
+
+**Read the listed paths before reaching for `--force`.** If the list contains anything other than
+these known line-ending files, the worktree holds real uncommitted work and forcing it destroys
+that work. `--force` is correct for THIS list and dangerous for any other.
+
 ## Related
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss that made tree-mutating git commands a standing worry

@@ -7,22 +7,24 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-26 (s94).** Merged this session: **#535** (#530) and **#543** (#536, #538, #540,
-#541, part 1 of #539) — `e71b4e6`. **NO open PRs. Tree on `main`, clean.** The operator ran the rig
-and accepted everything.
+**As of 2026-08-26 (s95, overnight).** Merged this session: **#544** (#542), **#545** (#531),
+**#548** (#512), **#549** (#525), **#550** (#529) — `main` is at `c67de29`, tree clean.
+**ONE open PR: #547** (#539 part 3) — 18/18 green, **UI, waiting on the operator's rig pass.**
 
-**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026:** `composer check` **2800** /
-6839 / **66 skipped**; jest **1539** in 19 suites.
+**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026 at `c67de29`:** `composer check`
+**2820** / 6882 / **66 skipped**; jest **1529** in 21 suites. ⚠ The jest count went DOWN on purpose
+— #550 removed 20 tests covering an unreachable renderer; the accounting is test-by-test in its PR
+body and in `sessions/s95.md`.
 
-**Four operator decisions taken this session, all recorded on their cards:**
+**Operator decisions still shaping the work:**
 
-- **#531 — server half of the «города не из списка» option: BUILD IT.** Discriminator is the
-  SERVER RECORD (`get_customer_record_at('settlement', $country)`), never a client `isCustom` flag —
-  a cached page or hand-edited form would not send one, and those are the cases the card names.
-  Scope: **`ajax-select2` ONLY**. Seam exists: `Checkout_Handler` hooks
-  `woocommerce_checkout_process`. Full reasoning on the card.
-- **#542 — TS for `src/`: new files + lint rule, migrate existing ON TOUCH.** No bulk migration.
-  `woodev/**/assets/js/frontend/` stays out, as decided in s93.
+- ~~**#531**~~ **SHIPPED in s95 (#545).** `Checkout_Handler::guard_custom_settlement()` on
+  `woocommerce_checkout_process`: option OFF **and** the posted settlement does not match
+  `get_customer_record_at('settlement', $country)` → checkout blocked. `ajax-select2` ONLY. The
+  discriminator is the SERVER RECORD, never a client flag.
+- ~~**#542**~~ **SHIPPED in s95 (#544).** TypeScript is the default for NEW files in `src/`,
+  enforced by `npm run lint:ts-baseline` against `scripts/ts-baseline.txt`; existing files migrate
+  ON TOUCH by deleting their baseline line. `woodev/**/assets/js/frontend/` stays out.
 - **#437 — STAYS OPEN, needs a scope conversation. Do NOT take autonomously.** The thing the spec
   is titled for already happened another way; decision 6's capability model and decision 8's
   checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
@@ -45,8 +47,9 @@ pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-sele
 seam `options.onResolving()`, a pick announced by LEVEL. Detail → `sessions/s94.md`; the two
 near-miss frames it taught → gotcha `an-empty-list-while-the-search-runs-is-not-a-zero-result`.
 
-**Open cards from s92-s94:** #523, #524, #525, #527, #529, #531, #532, #537(closed, superseded),
-#539 (part 3 only), #542. Which are COMMITMENTS, and where each was decided, is the handoff's
+**Open cards after s95:** #523, #524, #527, #532, #539 (part 3 built, in PR #547, awaiting the
+operator), #546 (NEW — the `@since` drift, in `Инбокс`, needs his decision). **Closed in s95:**
+#512, #525, #529, #531, #542. Which are COMMITMENTS, and where each was decided, is the handoff's
 carry-over section — not this file.
 
 ## ⚠ The checkout location layer
@@ -60,10 +63,8 @@ ownership rather than a name heuristic. Gotcha:
 | Card | State |
 |---|---|
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488, whose STORAGE/verification/tools side is done — the client-facing list is #530. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
-| **#488** | Popular settlements — **CLOSED in the scope of D1–D8** (#493, #496, #500, #501, #508; #520 closed after the tools ran against a seeded table). `CAPABILITY_RESOLVE_KEY` + `resolve_key()`, the table, whole-record storage, the two clocks, lazy D5 verification, D6's four outcomes, D7 adopt-or-cancel, and the D8 «Инструменты» section all shipped. `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure throws. Full detail: `sessions/s89.md`–`s92.md`. The customer-facing half it never covered is **#530**, in PR #535. |
-| **#512** | Remainder of #494 (closed in #507). `compose( ...parse( $k ) )` is no longer the identity for a DERIVED key and silently flips `is_derived()` to false — no in-repo caller reaches it, but `Locality_Key` is contract for third-party providers. Needs a docblock warning plus a pinning test. Also: escaping adds 8 bytes to a value stored in a `VARCHAR(191)` UNIQUE column with no length guard. |
-| ~~**#502**~~ | **DONE — #509.** An implicit default no longer unlocks the address; merged only after a rebase and full CI re-run on the current base. Its other half became **#536**. |
-| ~~**#517**~~ | **DONE — #522, accepted.** Needed #528. Detail: `sessions/s92.md`. |
+| ~~**#488**~~ | **CLOSED (D1-D8).** The one fact still load-bearing: `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure THROWS. History: `sessions/s89.md`-`s92.md`. |
+| ~~**#512**~~ | **DONE — #548 (s95).** Surviving contract fact: `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key — documented on both methods and PINNED by a test. The `VARCHAR(191)` length question was measured and closed with no guard (100+ chars of headroom). |
 | **#518** | **DECIDED 25.08 — a pickup selection lifts the implicit flag.** `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
 | **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
@@ -92,9 +93,16 @@ test failure for it**),
 `the-three-location-field-modes-and-their-russian-labels` (**«Список с поиском» is `ajax-select2`,
 NOT `related-list`** — this one cost the operator a wasted rig pass).
 
-**⚠ #405 is still NOT rig-verified** (unchanged since s83). With a deliberately bogus CDEK client id
-— confirmed in wp-config, transient cleared, measured against a control — the provider returned the
-same results as with valid keys and never threw.
+**✅ #405 IS rig-verified as of s95 — and the s83 note that said otherwise was measuring the wrong
+thing.** The `test-cdek` fixture reads its credentials from the WooCommerce integration settings
+array (`woocommerce_woodev_test_shipping_method_settings`), NOT from the same-looking standalone
+`woodev_location_cdek_client_id` option, which nothing reads. Every earlier bogus-key probe wrote
+the decoy. Written correctly, the provider throws exactly as #405's contract promises. Two further
+masks: a cached `woodev_test_cdek_token` short-circuits `token()` before credentials are consulted,
+and the REGION level answers from `woodev_test_cdek_regions_{country}` without touching the network
+— so on this rig (region axis `related-list`) the region level can never demonstrate a credential
+failure at all. Full measurement table + control:
+gotcha `the-cdek-fixture-credentials-are-not-the-option-they-look-like`.
 
 **Operator decision, #409 (closed):** `@since` records the **planned release** (`2.0.2`); `VERSION`
 records the **released** one (`2.0.1`) and lags on purpose (#285).
@@ -105,7 +113,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **209**.
+Gotchas: **210**.
 
 ## Program status (high level)
 
@@ -165,31 +173,25 @@ oversight.
 
 ## Next Actions
 
-**Ничего не ждёт кнопки — открытых PR нет.** Следующий по величине кусок:
+**Ждёт кнопки оператора: PR #547** (#539 часть 3) — 18/18 зелёные, UI, ручной проход на риге.
+⚠ Риг стоит на `main` — чтобы смотреть #547, сперва переключить дерево на
+`feat/539-merge-popular-with-provider-results`.
 
-1. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`,
-   развилки закрыты, не начат. Самый крупный оставшийся.
-2. **#530** — популярные НП покупателю: пустое состояние + ранжирование совпадений. Требование есть
-   в спеке, решения D1–D8 его не несут, поэтому не построено. Отдельным PR. Референс —
-   `wc_edostavka_get_preloaded_data_locations()` в СДЭК (фиксированный список, но те же две работы).
-   ⚠ `minimumInputLengthFor('settlement') === 2`, поэтому пустое состояние надо засевать настоящими
-   `<option>`, а не через ajax-адаптер.
-3. **#526** — английское «No results found» на русском чекауте. Оператор ответил в карточке: строки
-   брать из `wc_country_select_params` через `language`, свои переводы не изобретать; пример —
-   `plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:186-215`.
-4. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-5. **Хвосты этой сессии:** #525 (тесты не удерживают порядок событий select2 — переворот фейка не
-   краснит ни одного из 329), #529 (`related-list:settlement` недостижим, но код под него жив),
-   #527, #532, #523, #524. **#531 в Инбоксе** — развилка про серверную половину опции #528.
-6. **#518** — выбор ПВЗ снимает «неявность». Решено 25.08, **не начато**.
-7. **Дёшево сейчас, дорого после релиза:** #512 (остаток #494), #514 (остаток ревью #505).
-8. **#473** — достижимая половина через `isLocationOwnedField()`. **Мелочи:** #444, #451, #453.
+1. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`.
+   Самый крупный оставшийся. 🙋 **Оператор пометил: нужна беседа об объёме, автономно НЕ брать.**
+2. **#546 (в Инбоксе, новая)** — `@since` разошёлся: 1460 докблоков говорят `2.0.2`, слой локаций
+   ставит `2.1.0`, `AGENTS.md` говорит `2.0.2`. Развилка про планируемый релиз — только оператор.
+3. **#518** — выбор ПВЗ снимает «неявность». Решено 25.08, **не начато**.
+4. **#514** — остаток ревью #505. ⚠ Карточка СМЕШАННАЯ: m1/m2 не-UI, а m4 (контраст WCAG AA) и
+   m5 (ширина селектора) — UI. Разделить на два PR, иначе не-UI половина застрянет в ожидании рига.
+5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+6. **Хвосты:** #527, #532, #523, #524.
+7. **#473** — достижимая половина через `isLocationOwnedField()`. **Мелочи:** #444, #451, #453.
    **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-9. **#405** — сперва найти условие, при котором фикстура СДЭК реально падает.
-10. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-11. 🙋 **НЕ брать автономно:** **#474**, **#483**, **#511**, **#515**, **#531** (в Инбоксе), **#331**,
-    **#332**, **#374** (его прямая просьба). **Отложено до релиза:** #285, #247.
-    **Старое:** #289, #270, #310, #318, #321, #322.
+8. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+9. 🙋 **НЕ брать автономно:** **#437**, **#474**, **#483**, **#511**, **#515**, **#546**, **#331**,
+   **#332**, **#374** (его прямая просьба). **Отложено до релиза:** #285, #247.
+   **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
@@ -203,7 +205,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `feat/536-default-locality-visible` (s94) — PR #543, left there deliberately for the operator's pass.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
+- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (`c67de29`) — s95 left it there; PR #547 is NOT checked out, so the rig does NOT currently serve #539 part 3. Check out `feat/539-merge-popular-with-provider-results` before the operator's pass on it.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
 - **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the

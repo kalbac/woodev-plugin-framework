@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 209 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 210 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -92,6 +92,7 @@
 - [shipping/location] **A locality's display NAME is not an identifier — the same settlement answers «Москва» or «Moscow» depending on the account's locale.** → [a-locality-display-name-is-not-an-identifier](gotchas/a-locality-display-name-is-not-an-identifier.md) (s71)
 
 ### [rig/*] — Local verification rig
+- [rig/fixtures] **The test-cdek credentials are NOT `woodev_location_cdek_*` — that option is a decoy nothing reads; a bad-key experiment there silently installs nothing.** → [the-cdek-fixture-credentials-are-not-the-option-they-look-like](gotchas/the-cdek-fixture-credentials-are-not-the-option-they-look-like.md) (s95)
 - [rig/browser] **A rig measurement on a timer invents a defect: the round-trip is 6-10 s, so a premature read looks clean and a plausible mechanism is always available to explain it. Poll, and add a control.** → [a-rig-measurement-on-a-timer-invents-a-defect-that-is-not-there](gotchas/a-rig-measurement-on-a-timer-invents-a-defect-that-is-not-there.md) (s93)
 - [rig/browser] **The rig's `/checkout/` is the BLOCK checkout — the picker lives on `/classic-checkout/`.** → [rig-checkout-url-is-the-block-checkout](gotchas/rig-checkout-url-is-the-block-checkout.md) (s65)
 - [rig/browser] **The rig serves the working tree — a branch switch silently un-fixes things (a docs-only checkout of `main` counts), and a concurrent agent's half-written edit fatals every request.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56, s81, s86)
