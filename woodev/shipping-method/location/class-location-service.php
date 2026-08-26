@@ -61,7 +61,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * (issue #551) — see that method's own docblock for the full
 		 * reasoning and default.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 * @var string
 		 */
 		public const FILTER_REGION_ANCESTOR_CACHE_TTL = 'woodev_location_region_ancestor_cache_ttl';
@@ -72,7 +72,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * {@see \Woodev_Test_Cdek_Location_Provider}'s own `REGIONS_TRANSIENT_PREFIX`
 		 * uses for the same kind of provider-dictionary fact.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 * @var string
 		 */
 		private const REGION_ANCESTOR_CACHE_PREFIX = 'woodev_location_region_ancestor_';
@@ -86,7 +86,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * provider calls ({@see Location_Provider::list_localities()} vs.
 		 * {@see Location_Provider::resolve_key()}) and must not collide.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 * @var string
 		 */
 		private const REGION_DICTIONARY_CACHE_PREFIX = 'woodev_location_region_dictionary_';
@@ -412,7 +412,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
 		 *              through to {@see self::get_customer_record()} and
 		 *              {@see self::gate_chain()} (#350/#352 follow-up).
-		 * @since 2.1.0 Fills a missing REGION ancestor from the settlement
+		 * @since 2.0.2 Fills a missing REGION ancestor from the settlement
 		 *              record's own published ancestors, on both return shapes
 		 *              (issue #551), via {@see self::with_derived_region_ancestor()}.
 		 *
@@ -467,7 +467,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * is shallower than the settlement it came from, so it can never BE
 		 * `current` — and every other key on `$chain` passes through unchanged.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int} $chain
 		 *
@@ -541,8 +541,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * {@see self::cached_region_lookup()} for why an outright failure
 		 * specifically is never cached.
 		 *
-		 * @since 2.1.0
-		 * @since 2.1.0 Prefers {@see Location_Provider::CAPABILITY_LIST} over
+		 * @since 2.0.2
+		 * @since 2.0.2 Prefers {@see Location_Provider::CAPABILITY_LIST} over
 		 *              `CAPABILITY_RESOLVE_KEY` when the provider declares
 		 *              both, and added the ancestor-membership guard (#551
 		 *              round 2 / #553).
@@ -609,7 +609,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * on the very next request, not calcify into "no region" for a whole
 		 * cache lifetime.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param Location_Provider $provider The provider that owns `$key`.
 		 * @param string            $key      A locality key `$provider` previously produced.
@@ -637,7 +637,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			 * in seconds (issue #551) — same shape as
 			 * {@see Location_Resolution_Cache::FILTER_TTL}.
 			 *
-			 * @since 2.1.0
+			 * @since 2.0.2
 			 *
 			 * @param int $ttl Seconds; `DAY_IN_SECONDS` default — a provider's
 			 *                 region dictionary changes on the order of years,
@@ -666,7 +666,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * discipline {@see self::cached_region_lookup()} already applies to
 		 * its own provider call.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param Location_Provider $provider  The settlement's own provider.
 		 * @param string            $country   The settlement's own country.
@@ -699,7 +699,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * tries, and a `list_localities()` failure must fall through to the
 		 * `resolve_key()` path rather than aborting the whole derivation.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param Location_Provider $provider The provider whose dictionary to fetch.
 		 * @param string            $country  ISO-3166 alpha-2.
@@ -1095,7 +1095,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * PURE READ, same discipline as {@see self::resolve_fixed_default()}'s
 		 * own "customer-facing getter must never mutate a store setting" rule.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @return string One of {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF} /
 		 *                {@see Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED} /
@@ -2014,7 +2014,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * `location-cascade.js`'s own `scopeKeyFor()` already resolves the selected
 		 * region's key to compare against) — never re-derived or invented here.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param string $country ISO-3166 alpha-2 country code.
 		 *
@@ -2361,7 +2361,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * settlement value the active provider does not carry (#528) — thin
 		 * pass-through to {@see Location_Provider_Registry::is_custom_settlement_allowed()}.
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */

@@ -481,7 +481,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 *
 		 * Defaults to `_wc_{gateway_id}_`
 		 *
-		 * @since 2.2.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */

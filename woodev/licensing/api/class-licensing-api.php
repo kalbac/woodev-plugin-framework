@@ -194,7 +194,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		/**
 		 * Get the plugin class instance associated with this API.
 		 *
-		 * @since 2.2.0
+		 * @since 2.0.2
 		 * @return Woodev_Plugin
 		 */
 		protected function get_plugin(): Woodev_Plugin {

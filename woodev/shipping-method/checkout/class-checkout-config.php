@@ -489,7 +489,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * array, which would drift the moment either copy changed alone. The filter
 		 * name, its `@since` and its documented shape are unchanged by the move.
 		 *
-		 * @since 2.1.0 Extracted out of {@see self::build_location_block()}; gained
+		 * @since 2.0.2 Extracted out of {@see self::build_location_block()}; gained
 		 *              `invalidSettlement` (issue #531).
 		 *
 		 * @return array<string, string>
@@ -504,7 +504,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			 * carrier calls a locality something else must be able to say so without
 			 * translating the framework.
 			 *
-			 * @since 2.1.0
+			 * @since 2.0.2
 			 *
 			 * @param array<string, string> $strings The framework's default strings.
 			 */
@@ -830,7 +830,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * @since 2.0.2 `mode` is now `{ region, settlement }` — TWO independent
 		 *              axes, issue #380 — instead of one shared mode string.
 		 *
-		 * @since 2.1.0 Gained `popular` -- the customer-facing half of #488
+		 * @since 2.0.2 Gained `popular` -- the customer-facing half of #488
 		 *              (issue #530): one ranked popular-settlements list per
 		 *              country, via
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::get_popular_settlements_for_country()}.
@@ -838,7 +838,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}
 		 *              (spec D4) or has no enrolled entries for it yet.
 		 *
-		 * @since 2.1.0 Gained `defaultLocality` (issue #536; spec §4.6/D11
+		 * @since 2.0.2 Gained `defaultLocality` (issue #536; spec §4.6/D11
 		 *              amendment, operator decision 25.08.2026): the FULL
 		 *              {@see \Woodev\Framework\Shipping\Location\Location_Record::to_array()}
 		 *              of the customer's implicit default, but ONLY when the

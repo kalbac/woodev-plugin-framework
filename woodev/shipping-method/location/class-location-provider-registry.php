@@ -169,7 +169,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * setting drives (select2 `tags` + the abandon-recording gate
 		 * together).
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 * @var string
 		 */
 		public const SETTING_ALLOW_CUSTOM_SETTLEMENT = 'allow_custom_settlement';
@@ -1394,8 +1394,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * "no settings handler yet" shape: answers this setting's own
 		 * default (`false`) rather than throwing.
 		 *
-		 * @since 2.0.3
-		 * @since 2.0.3 Documented the level-scoping the client-side MJ-A fix
+		 * @since 2.0.2
+		 * @since 2.0.2 Documented the level-scoping the client-side MJ-A fix
 		 *              now depends on for this docblock's own claim to be true.
 		 *
 		 * @return bool

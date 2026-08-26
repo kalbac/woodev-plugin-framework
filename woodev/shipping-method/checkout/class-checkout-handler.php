@@ -501,9 +501,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2
 		 * @since 2.0.2 Enqueues the location-provider client scripts, guarded on
 		 *              their files existing on disk (location-provider layer Task 9).
-		 * @since 2.1.0 Also enqueues `location.css`, the typeahead listbox's own
+		 * @since 2.0.2 Also enqueues `location.css`, the typeahead listbox's own
 		 *              theme-resistant styles, under the same guard.
-		 * @since 2.1.0 Also enqueues `location-select-modes.js` (Task 13; spec D7), the
+		 * @since 2.0.2 Also enqueues `location-select-modes.js` (Task 13; spec D7), the
 		 *              `related-list`/`ajax-select2` renderer registry — same guard, declared
 		 *              as a dependency of `woodev-location-cascade` so it always registers
 		 *              before the cascade's own boot pass reads it.
@@ -665,7 +665,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `location.css` (the typeahead's own suggestion-listbox styles). Mirrors
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::enqueue_style_if_built()}.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param string   $handle   the style handle to register.
 		 * @param string   $relative path relative to the assets directory.
@@ -843,7 +843,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Builds a `$state` map (chosen shipping method + billing country) and
 		 *              passes it to `validate()` so conditional-required specs (A2) can be
 		 *              resolved at validation time.
-		 * @since 2.1.0 Also runs {@see self::guard_custom_settlement()} — the server-side
+		 * @since 2.0.2 Also runs {@see self::guard_custom_settlement()} — the server-side
 		 *              backstop for the #528 custom-settlement opt-in (issue #531).
 		 *
 		 * @return void
@@ -910,7 +910,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_checkout_process()}'s
 		 * own docblock for the same reasoning).
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param array<string, mixed> $values         clean values keyed by field id, as
 		 *     returned by {@see self::sanitize_posted_data()}
@@ -974,7 +974,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * why the redundant `wc_ship_to_billing_address_only()` guard inside
 		 * `resolve()` is harmless when fed the raw posted flag.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */
@@ -996,7 +996,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * configurations this guard simply has nothing to check in — it returns
 		 * `null` and {@see self::guard_custom_settlement()} stands down.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param string $section `billing` or `shipping`
 		 *
@@ -1026,7 +1026,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * inlines the same `settlement()['name']` read at its own two call sites
 		 * rather than sharing a helper).
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Record|null $record
 		 *
@@ -1055,7 +1055,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * hazard that gotcha warns about is a stored, cross-request/cross-locale
 		 * identity comparison, which this is not.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param string $value
 		 *
@@ -1072,7 +1072,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * so a plugin overriding that filter changes this message too and the default
 		 * text is never duplicated between the two call sites.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */
