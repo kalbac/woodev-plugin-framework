@@ -57,6 +57,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public const FILTER_DEFAULT_COUNTRY = 'woodev_location_default_country';
 
 		/**
+		 * Filter tag: overrides {@see self::cached_region_lookup()}'s cache TTL
+		 * (issue #551) — see that method's own docblock for the full
+		 * reasoning and default.
+		 *
+		 * @since 2.1.0
+		 * @var string
+		 */
+		public const FILTER_REGION_ANCESTOR_CACHE_TTL = 'woodev_location_region_ancestor_cache_ttl';
+
+		/**
+		 * Transient key prefix {@see self::cached_region_lookup()} stores under
+		 * — `self::class`-owned, mirrors the naming
+		 * {@see \Woodev_Test_Cdek_Location_Provider}'s own `REGIONS_TRANSIENT_PREFIX`
+		 * uses for the same kind of provider-dictionary fact.
+		 *
+		 * @since 2.1.0
+		 * @var string
+		 */
+		private const REGION_ANCESTOR_CACHE_PREFIX = 'woodev_location_region_ancestor_';
+
+
+		/**
+		 * Transient key prefix {@see self::cached_region_dictionary()} stores
+		 * under (issue #551 round 2) — a whole provider+country REGION
+		 * dictionary, keyed separately from {@see self::REGION_ANCESTOR_CACHE_PREFIX}'s
+		 * single-key answers because the two are fetched through different
+		 * provider calls ({@see Location_Provider::list_localities()} vs.
+		 * {@see Location_Provider::resolve_key()}) and must not collide.
+		 *
+		 * @since 2.1.0
+		 * @var string
+		 */
+		private const REGION_DICTIONARY_CACHE_PREFIX = 'woodev_location_region_dictionary_';
+
+		/**
 		 * @since 2.0.2
 		 * @var Location_Provider_Registry
 		 */
@@ -360,6 +395,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * {@see self::get_customer_record()} already returned, rather than
 		 * re-deriving it.
 		 *
+		 * BOTH return shapes are passed through {@see self::with_derived_region_ancestor()}
+		 * (issue #551) before this method ever answers — a settlement-only
+		 * chain (persisted OR this synthetic one) scopes nothing for its own
+		 * search until a region entry exists alongside it, and the store-level
+		 * default-locality policy only ever seeds the SETTLEMENT it was
+		 * configured with, never a region. Applying the same enrichment to
+		 * both shapes is deliberate, not incidental: they must never disagree
+		 * about whether a region is derivable for the same underlying record.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Gates the stored chain against staleness (#346/#333,
 		 *              {@see self::gate_chain()}) rather than returning
@@ -368,6 +412,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @since 2.0.2 Added the optional `$for_country` parameter, threaded
 		 *              through to {@see self::get_customer_record()} and
 		 *              {@see self::gate_chain()} (#350/#352 follow-up).
+		 * @since 2.1.0 Fills a missing REGION ancestor from the settlement
+		 *              record's own published ancestors, on both return shapes
+		 *              (issue #551), via {@see self::with_derived_region_ancestor()}.
 		 *
 		 * @param string|null $for_country Optional ISO-3166 alpha-2 country code — see {@see self::is_customer_record_stale()}.
 		 *
@@ -384,19 +431,305 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$gated = null === $raw ? null : $this->gate_chain( $raw, $for_country );
 
 			if ( null !== $gated ) {
-				return $gated;
+				return $this->with_derived_region_ancestor( $gated );
 			}
 
 			// self::$unpersisted_default (review finding F1, see docblock above):
 			// the store has nothing persisted yet, but get_customer_record() just
 			// resolved (and could not write) a default. Build the one-entry chain
 			// that write WOULD have produced, so this accessor agrees with it.
-			return [
-				'records'  => [ $current['record']->level() => $current['record'] ],
-				'current'  => $current['record']->level(),
-				'implicit' => $current['implicit'],
-				'saved_at' => $current['saved_at'],
-			];
+			return $this->with_derived_region_ancestor(
+				[
+					'records'  => [ $current['record']->level() => $current['record'] ],
+					'current'  => $current['record']->level(),
+					'implicit' => $current['implicit'],
+					'saved_at' => $current['saved_at'],
+				]
+			);
+		}
+
+		/**
+		 * Fills a chain's missing REGION ancestor from its SETTLEMENT record's
+		 * own published `ancestors()` (issue #551 — the sibling gap #538 left
+		 * open: that fix narrows the POPULAR list via ancestor INTERSECTION,
+		 * answerable from the flat set alone, but scoping a provider `/suggest`
+		 * call needs one specific region KEY, which the flat set — deliberately,
+		 * see {@see Location_Record::parse_ancestors()}'s own docblock — cannot
+		 * name by itself; only asking the record's own provider, via
+		 * {@see self::region_ancestor_of()}, can answer which ancestor IS the
+		 * region).
+		 *
+		 * NEVER overrides an already-present `records['region']` — a customer's
+		 * own region pick always wins, and this can never disturb it. A no-op
+		 * whenever there is no settlement to derive from either.
+		 *
+		 * Additive only: `current` is left exactly as given — a derived region
+		 * is shallower than the settlement it came from, so it can never BE
+		 * `current` — and every other key on `$chain` passes through unchanged.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int} $chain
+		 *
+		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}
+		 */
+		private function with_derived_region_ancestor( array $chain ): array {
+			if ( isset( $chain['records'][ Location_Record::LEVEL_REGION ] ) || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
+				return $chain;
+			}
+
+			$region = $this->region_ancestor_of( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] );
+
+			if ( null !== $region ) {
+				$chain['records'][ Location_Record::LEVEL_REGION ] = $region;
+			}
+
+			return $chain;
+		}
+
+		/**
+		 * Derives `$settlement`'s REGION-level ancestor, if its own provider can
+		 * identify one (issue #551).
+		 *
+		 * Asks the SAME provider that produced `$settlement` — never
+		 * {@see self::provider_for_level()}, which could resolve to a DIFFERENT
+		 * provider in a mixed D15 chain — because an ancestor key is namespaced
+		 * to whichever provider published it
+		 * ({@see Location_Record::parse_ancestors()}'s own enforcement), so only
+		 * that exact provider can ever resolve it back.
+		 *
+		 * **Two derivation paths, LIST preferred (issue #551 round 2).** A live
+		 * rig measurement against the test CDEK contour caught round 1's
+		 * `CAPABILITY_RESOLVE_KEY`-only approach returning a WRONG region (a
+		 * `resolve_key()` bug in that fixture, tracked and fixed separately as
+		 * #553, made this observable — but the framework-level fragility of
+		 * resting the whole feature on ONE optional, per-key provider call is
+		 * real regardless of that specific bug):
+		 *
+		 * 1. {@see Location_Provider::CAPABILITY_LIST} — preferred when the
+		 *    provider declares it. One cached call
+		 *    ({@see self::cached_region_dictionary()}) fetches the provider's
+		 *    WHOLE region dictionary for the settlement's country — the same
+		 *    source `related-list:region` already trusts
+		 *    ({@see Location_Provider_Registry::inject_related_list_states()})
+		 *    — and every
+		 *    ancestor is checked against it locally, in memory, with no further
+		 *    provider round-trips.
+		 * 2. {@see Location_Provider::CAPABILITY_RESOLVE_KEY} — fallback for a
+		 *    provider that cannot enumerate at all (DaData: query-driven API
+		 *    only, never declares `CAPABILITY_LIST`), via
+		 *    {@see self::cached_region_lookup()}, one resolve per ancestor key.
+		 *
+		 * Tries each published ancestor in turn — {@see Location_Record::parse_ancestors()}'s
+		 * flat SET can carry more than one (e.g. a district alongside a region).
+		 *
+		 * **The guard (#553).** Whichever path answers, the candidate is
+		 * accepted ONLY when its own `key()` is actually one of `$settlement`'s
+		 * published `ancestors()` — never on the strength of "a provider call
+		 * returned a region-level record". This is what makes the derivation
+		 * safe against a provider-side bug that answers a WRONG region for the
+		 * key it was asked about (exactly what the unfixed #553 fixture did):
+		 * a region the settlement does not actually descend from can never be
+		 * accepted, regardless of which derivation path or which provider
+		 * produced it.
+		 *
+		 * `null` when the provider is not registered, declares neither
+		 * capability, `$settlement` publishes no ancestors, or no candidate
+		 * survives the guard above — every provider-side outcome (an unknown
+		 * key, a non-region level, an actual failure, or a wrong-but-region-
+		 * shaped answer) degrades to "no region" here; see
+		 * {@see self::cached_region_lookup()} for why an outright failure
+		 * specifically is never cached.
+		 *
+		 * @since 2.1.0
+		 * @since 2.1.0 Prefers {@see Location_Provider::CAPABILITY_LIST} over
+		 *              `CAPABILITY_RESOLVE_KEY` when the provider declares
+		 *              both, and added the ancestor-membership guard (#551
+		 *              round 2 / #553).
+		 *
+		 * @param Location_Record $settlement
+		 *
+		 * @return Location_Record|null
+		 */
+		private function region_ancestor_of( Location_Record $settlement ): ?Location_Record {
+			$ancestors = $settlement->ancestors();
+
+			if ( [] === $ancestors ) {
+				return null;
+			}
+
+			$provider = $this->get_registered_provider( $settlement->provider_id() );
+
+			if ( null === $provider ) {
+				return null;
+			}
+
+			$capabilities = $provider->get_capabilities();
+			$region       = null;
+
+			if ( in_array( Location_Provider::CAPABILITY_LIST, $capabilities, true ) ) {
+				$region = $this->region_ancestor_via_dictionary( $provider, $settlement->country(), $ancestors );
+			}
+
+			if ( null === $region && in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $capabilities, true ) ) {
+				foreach ( $ancestors as $ancestor_key ) {
+					$region = $this->cached_region_lookup( $provider, $ancestor_key );
+
+					if ( null !== $region ) {
+						break;
+					}
+				}
+			}
+
+			// The guard (#553): never surface a region the settlement does not
+			// actually descend from, regardless of which path produced it.
+			return null !== $region && in_array( $region->key(), $ancestors, true ) ? $region : null;
+		}
+
+		/**
+		 * Resolves `$key` through `$provider` and answers it back ONLY when it
+		 * is itself region-level — cached in a SITE-WIDE transient (issue #551),
+		 * never per-customer/session: which ancestor key is a region is a fact
+		 * about the PROVIDER's own dictionary, identical for every customer, so
+		 * a session-scoped cache (the shape {@see Location_Resolution_Cache}
+		 * uses for its own, genuinely per-plugin-per-customer answer) would
+		 * needlessly re-ask the provider once per new guest session.
+		 *
+		 * A cache is required here, not optional: {@see Location_Provider::resolve_key()}'s
+		 * own contract is explicitly "re-fetched, not cached" (that method's own
+		 * docblock), and this is called from the lazy default-locality trigger
+		 * that every guest checkout render (and every `/suggest`/`/select` call)
+		 * routes through — an uncached call here would mean a live provider
+		 * request on every single page load.
+		 *
+		 * A THROW from `resolve_key()` (unconfigured, a transport failure, a
+		 * malformed payload — see that method's own docblock) is NEVER cached,
+		 * mirroring {@see Popular_Settlement_Verifier::verify_entry()}'s own
+		 * discipline for this exact same call: a transient failure must retry
+		 * on the very next request, not calcify into "no region" for a whole
+		 * cache lifetime.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param Location_Provider $provider The provider that owns `$key`.
+		 * @param string            $key      A locality key `$provider` previously produced.
+		 *
+		 * @return Location_Record|null
+		 */
+		private function cached_region_lookup( Location_Provider $provider, string $key ): ?Location_Record {
+			$transient_key = self::REGION_ANCESTOR_CACHE_PREFIX . md5( $key );
+			$cached        = get_transient( $transient_key );
+
+			if ( is_array( $cached ) ) {
+				return [] === $cached ? null : Location_Record::from_array( $cached );
+			}
+
+			try {
+				$resolved = $provider->resolve_key( $key );
+			} catch ( \Throwable $exception ) {
+				return null; // Never cached — see this method's own docblock.
+			}
+
+			$is_region = null !== $resolved && Location_Record::LEVEL_REGION === $resolved->level();
+
+			/**
+			 * Filters {@see Location_Service::cached_region_lookup()}'s cache TTL,
+			 * in seconds (issue #551) — same shape as
+			 * {@see Location_Resolution_Cache::FILTER_TTL}.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param int $ttl Seconds; `DAY_IN_SECONDS` default — a provider's
+			 *                 region dictionary changes on the order of years,
+			 *                 not requests (matching the bundled test-rig CDEK
+			 *                 fixture's own internal dictionary cache TTL).
+			 */
+			$ttl = (int) apply_filters( self::FILTER_REGION_ANCESTOR_CACHE_TTL, DAY_IN_SECONDS );
+
+			set_transient( $transient_key, $is_region ? $resolved->to_array() : [], max( 0, $ttl ) );
+
+			return $is_region ? $resolved : null;
+		}
+
+
+		/**
+		 * Finds `$settlement`'s region ancestor by checking `$provider`'s WHOLE
+		 * region dictionary for `$country` against `$ancestors` (issue #551
+		 * round 2) — the {@see Location_Provider::CAPABILITY_LIST} path
+		 * preferred over the single-key {@see self::cached_region_lookup()}
+		 * path in {@see self::region_ancestor_of()}.
+		 *
+		 * A `list_localities()` failure degrades to "no candidate from this
+		 * path" rather than propagating — {@see self::region_ancestor_of()}
+		 * still has the `CAPABILITY_RESOLVE_KEY` fallback to try, and this is
+		 * the SAME "provider trouble degrades, never breaks the caller"
+		 * discipline {@see self::cached_region_lookup()} already applies to
+		 * its own provider call.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param Location_Provider $provider  The settlement's own provider.
+		 * @param string            $country   The settlement's own country.
+		 * @param string[]          $ancestors The settlement's published ancestor keys.
+		 *
+		 * @return Location_Record|null
+		 */
+		private function region_ancestor_via_dictionary( Location_Provider $provider, string $country, array $ancestors ): ?Location_Record {
+			foreach ( $this->cached_region_dictionary( $provider, $country ) as $record ) {
+				if ( in_array( $record->key(), $ancestors, true ) ) {
+					return $record;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * The provider's whole region dictionary for `$country` — cached in a
+		 * SITE-WIDE transient (issue #551 round 2), same reasoning as
+		 * {@see self::cached_region_lookup()}: which regions exist in a
+		 * provider's dictionary is a fact about the PROVIDER, identical for
+		 * every customer.
+		 *
+		 * A THROW from {@see Location_Provider::list_localities()} is NEVER
+		 * cached and propagates as an EMPTY result here (never cached either) —
+		 * mirroring {@see self::cached_region_lookup()}'s own never-cache-a-
+		 * failure discipline, but degrading to `[]` rather than re-throwing:
+		 * this is one of two derivation paths {@see self::region_ancestor_of()}
+		 * tries, and a `list_localities()` failure must fall through to the
+		 * `resolve_key()` path rather than aborting the whole derivation.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param Location_Provider $provider The provider whose dictionary to fetch.
+		 * @param string            $country  ISO-3166 alpha-2.
+		 *
+		 * @return Location_Record[]
+		 */
+		private function cached_region_dictionary( Location_Provider $provider, string $country ): array {
+			$transient_key = self::REGION_DICTIONARY_CACHE_PREFIX . md5( $provider->get_id() . '|' . $country );
+			$cached        = get_transient( $transient_key );
+
+			if ( is_array( $cached ) ) {
+				return array_map( [ Location_Record::class, 'from_array' ], $cached );
+			}
+
+			try {
+				$records = $provider->list_localities( Location_Scope::for_country( $country, Location_Record::LEVEL_REGION ) );
+			} catch ( \Throwable $exception ) {
+				return []; // Never cached — see this method's own docblock.
+			}
+
+			/** This filter is documented in {@see self::cached_region_lookup()}. */
+			$ttl = (int) apply_filters( self::FILTER_REGION_ANCESTOR_CACHE_TTL, DAY_IN_SECONDS );
+
+			set_transient(
+				$transient_key,
+				array_map( static fn ( Location_Record $record ): array => $record->to_array(), $records ),
+				max( 0, $ttl )
+			);
+
+			return $records;
 		}
 
 		/**

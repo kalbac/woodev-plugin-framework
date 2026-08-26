@@ -265,6 +265,54 @@ class CdekFixtureProviderTest extends TestCase {
 	}
 
 	/**
+	 * Stubs a cached OAuth token (same shortcut as
+	 * {@see self::stub_settlement_suggest_transport()}) plus a
+	 * `GET /location/regions` response that varies by `country_codes` — for
+	 * {@see \Woodev_Test_Cdek_Location_Provider::resolve_region()} (issue
+	 * #553), which now asks about EVERY supported country in turn rather
+	 * than trusting a single-row `region_code` filter the live test contour
+	 * does not actually honour (measured, see that method's own docblock).
+	 *
+	 * `$rows_by_country` is keyed by ISO-3166 alpha-2; a country not present
+	 * answers `[]` (CDEK's own "no matches" shape), matching `regions()`'s
+	 * own request params exactly ({@see Woodev_Test_Cdek_Location_Provider::regions()}).
+	 * Captures the LAST request into {@see self::$last_request}, same as
+	 * {@see self::stub_settlement_suggest_transport()}.
+	 *
+	 * @param array<string, array<int, array<string, mixed>>> $rows_by_country Raw `/location/regions` rows, keyed by country.
+	 *
+	 * @return void
+	 */
+	private function stub_region_dictionary_transport( array $rows_by_country ): void {
+		$this->last_request = null;
+
+		Functions\when( 'get_transient' )->justReturn( 'fake-cached-token' );
+		Functions\when( 'set_transient' )->justReturn( true );
+		Functions\when( 'add_query_arg' )->alias(
+			function ( $params, $path ) {
+				$this->last_request = [ $path, $params ];
+
+				return [ $path, $params ];
+			}
+		);
+		Functions\when( 'wp_safe_remote_get' )->alias(
+			static function ( $request ) {
+				return [ 'request' => $request ];
+			}
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->alias(
+			static function ( $response ) use ( $rows_by_country ) {
+				[ , $params ] = $response['request'];
+				$country = strtoupper( (string) ( $params['country_codes'] ?? '' ) );
+
+				return (string) json_encode( $rows_by_country[ $country ] ?? [] );
+			}
+		);
+	}
+
+	/**
 	 * A `200 OK` body that is not JSON at all — `json_decode()` returns `null`,
 	 * which is not an array.
 	 */
@@ -350,16 +398,16 @@ class CdekFixtureProviderTest extends TestCase {
 	}
 
 	public function test_resolve_key_resolves_a_region_by_code(): void {
-		$this->stub_settlement_suggest_transport(
-			(string) json_encode(
-				[
+		$this->stub_region_dictionary_transport(
+			[
+				'RU' => [
 					[
 						'region_code'  => 81,
 						'region'       => 'Москва',
 						'country_code' => 'RU',
 					],
-				]
-			)
+				],
+			]
 		);
 
 		$provider = new \Woodev_Test_Cdek_Location_Provider();
@@ -367,7 +415,7 @@ class CdekFixtureProviderTest extends TestCase {
 
 		$this->assert_last_request(
 			'https://api.edu.cdek.ru/v2/location/regions',
-			[ 'region_code' => '81' ]
+			[ 'country_codes' => 'RU', 'size' => '1000' ]
 		);
 
 		$this->assertNotNull( $record );
@@ -437,15 +485,33 @@ class CdekFixtureProviderTest extends TestCase {
 		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':44' );
 	}
 
-	public function test_resolve_key_throws_rather_than_returns_null_for_an_unmappable_region_row(): void {
-		$this->stub_settlement_suggest_transport(
-			// Missing `region`/`country_code` — record_from_region()'s own required fields.
-			(string) json_encode( [ [ 'region_code' => 81 ] ] )
+	/**
+	 * Superseded by the #553 rewrite of `resolve_region()`: it now searches
+	 * the SAME per-country dictionary {@see \Woodev_Test_Cdek_Location_Provider::regions()}
+	 * already builds for `match_regions()`/`list_localities()` — which
+	 * deliberately, per that method's own docblock, skips a row missing
+	 * `region_code`/`region` while enumerating many, rather than trusting a
+	 * single untrustworthy row at face value. The failure mode the OLD
+	 * "throw on an unmappable row" test targeted (HIGH 1, round 2 of #405)
+	 * cannot occur any more for regions: there is no longer a SINGLE row
+	 * being trusted — a malformed dictionary row is now excluded from the
+	 * map exactly like `list_localities()`/`match_regions()` already exclude
+	 * one, indistinguishable from "not present in this country".
+	 */
+	public function test_resolve_key_region_skips_a_malformed_row_and_keeps_searching(): void {
+		$this->stub_region_dictionary_transport(
+			[
+				// Missing `region`/`country_code` — regions() requires both
+				// and silently skips a row missing either.
+				'RU' => [ [ 'region_code' => 81 ] ],
+			]
 		);
 
 		$provider = new \Woodev_Test_Cdek_Location_Provider();
 
-		$this->expectException( Location_Provider_Exception::class );
-		$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81' );
+		$this->assertNull(
+			$provider->resolve_key( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81' ),
+			'a malformed dictionary row degrades to "not found", the same as any other row regions() cannot map'
+		);
 	}
 }
