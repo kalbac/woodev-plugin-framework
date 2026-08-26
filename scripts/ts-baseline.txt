@@ -1,0 +1,38 @@
+# Grandfathered `src/**/*.js`/`.jsx` files (#542, 26.08.2026).
+#
+# TypeScript is the default for NEW files under `src/` — see scripts/lint-ts-baseline.mjs and
+# AGENTS.md → Conventions. Existing JS is migrated on touch, not in bulk: when a file below is
+# rewritten as `.ts`/`.tsx` for some other reason, delete its line here. The gate fails if a line
+# names a file that no longer exists, so a migrated-and-renamed file cannot leave a stale entry.
+src/components/control-field.js
+src/components/field-row.js
+src/components/field-tip.js
+src/components/icons.js
+src/components/location-picker-field.js
+src/components/richtext.js
+src/components/select-field.js
+src/components/tabs-nav.js
+src/components/validate.js
+src/license-page/app.js
+src/license-page/card-state.js
+src/license-page/index.js
+src/license-page/license-card.js
+src/plugins-page/account.js
+src/plugins-page/app.js
+src/plugins-page/catalog.js
+src/plugins-page/index.js
+src/plugins-page/install.js
+src/plugins-page/purchases.js
+src/settings-page/app.js
+src/settings-page/connection-block.js
+src/settings-page/index.js
+src/settings-page/rest.js
+src/settings-page/section-view.js
+src/settings-page/tools-block.js
+src/setup-wizard/app.js
+src/setup-wizard/index.js
+src/setup-wizard/rest.js
+src/setup-wizard/stepper.js
+src/setup-wizard/step-view.js
+src/ui-kit-gallery/app.js
+src/ui-kit-gallery/index.js

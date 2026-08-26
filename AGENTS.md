@@ -201,6 +201,8 @@ composer test:integration   # integration tests (requires wp-env)
 # JS tests + build
 npm run test:js -- --roots "<rootDir>/tests/js"   # jest (800 tests) — CI gate (test-js job)
 npm run build                                     # build the 5 React bundles (CI has an assets-parity job)
+npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI gate (test-js job)
+npm run typecheck                                 # tsc --noEmit over src/ — CI gate (test-js job)
 
 # Docs
 mkdocs serve                # preview public docs locally
@@ -295,6 +297,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 | Methods/variables/hooks | `snake_case` |
 | Visibility | default `private`, `protected`/`public` only when needed |
 | Arrays | Short syntax `[]` **only — never `array()`** in new or modified code |
+| Frontend (`src/`) | **TypeScript is the default for NEW files.** Existing `.js`/`.jsx` is migrated only on touch, not in bulk — enforced by `npm run lint:ts-baseline` (baseline: `scripts/ts-baseline.txt`), gated in CI's `test-js` job alongside `npm run typecheck`. `woodev/**/assets/js/frontend/` (raw JS served to the browser as-is) is explicitly OUT of this scope — do not take TypeScript there (#542, 26.08.2026). |
 | Settings help text | Goes in the **tooltip/`desc_tip`** slot by default — `tooltip` on `register_control()` for this project's typed settings API, `desc_tip` in a WooCommerce `form_fields` array. The `description` slot is reserved for text carrying **interactive elements** (e.g. an `<a href>` link), because that is the slot WooCommerce renders inline rather than as a hover tip. Operator rule, 25.08.2026. |
 | Git | Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) |
 | Version | Stored in `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) |
