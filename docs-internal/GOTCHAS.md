@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 212 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 216 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -173,6 +173,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/ci] **A `pull_request` workflow can simply not fire on a CLEAN PR — only `PR Triage` shows up. Close and reopen; and COUNT the jobs (19 code-only, 20 with `.md`), never read the colour.** → [a-pull-request-workflow-can-simply-not-fire](gotchas/a-pull-request-workflow-can-simply-not-fire.md) (s97)
 - [build/composer] **Widening `autoload.classmap` breaks every EXISTING checkout until `composer dump-autoload` runs — nine "class not found" errors that read as a bad merge.** → [a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout](gotchas/a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout.md) (s91)
 - [build/ci] **All three integration jobs red at once on a docs-only PR — it is an `api.github.com` 504 inside the wp-env image build, not your change.** → [integration-jobs-die-on-a-github-api-504-not-on-your-code](gotchas/integration-jobs-die-on-a-github-api-504-not-on-your-code.md) (s87)
 - [build/ci] **A failing early CI job silently SKIPS dependent jobs — they never run.** → [ci-failing-gate-skips-dependent-jobs](gotchas/ci-failing-gate-skips-dependent-jobs.md)
@@ -287,6 +288,9 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/git] **`git push` hangs forever and SILENTLY under Git Credential Manager — it is waiting on a GUI dialog nobody can see. `fetch` works, which hides it.** → [git-push-hangs-silently-under-credential-manager](gotchas/git-push-hangs-silently-under-credential-manager.md) (s97)
+- [tooling/orca] **`terminal create --command "bash"` on Windows lands in WSL (`bash` = `System32ash.exe`), and the resulting git failure reads as "Orca runs agents in WSL" — which is false.** → [orca-terminal-command-bash-lands-in-wsl-on-windows](gotchas/orca-terminal-command-bash-lands-in-wsl-on-windows.md) (s97)
+- [tooling/orca] **Launching kilo under Orca: the agent id is `kilo`, its update dialog eats the injected brief, and `--inject` revokes the capability before the worker can report — dispatch WITHOUT `--inject`.** → [starting-kilo-under-orca-repeats-every-codex-launch-trap](gotchas/starting-kilo-under-orca-repeats-every-codex-launch-trap.md) (s97)
 - [tooling/git] **A newly-untracked file is DELETED by checking out an older branch that still tracks it, and back. `.gitignore` does not protect it.** → [an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it](gotchas/an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it.md) (s93)
 
 - [tooling/parallel-agents] **`orchestration send --to dispatch:` is PULL — a worker mid-task never sees it; correct a running agent with `terminal send`.** → [orchestration-mail-does-not-reach-a-busy-worker](gotchas/orchestration-mail-does-not-reach-a-busy-worker.md) (s92)
