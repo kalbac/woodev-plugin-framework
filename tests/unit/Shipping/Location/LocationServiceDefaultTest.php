@@ -188,6 +188,55 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * A `resolve_key`-capable fake provider (issue #551) — a SEPARATE class
+	 * from {@see Default_Test_Fake_Provider} for the same reflection reason
+	 * {@see Default_Test_Fake_Locate_Provider}'s own docblock states: only a
+	 * class that genuinely OVERRIDES `resolve_key()` ever reports
+	 * {@see \Woodev\Framework\Shipping\Location\Location_Provider::CAPABILITY_RESOLVE_KEY}.
+	 */
+	class Default_Test_Fake_Resolve_Key_Provider extends Abstract_Location_Provider {
+
+		private string $id;
+
+		/** @var callable */
+		private $resolve_key_callback;
+
+		/** @var array<int, string> */
+		public array $resolve_key_calls = [];
+
+		public function __construct( string $id, callable $resolve_key_callback ) {
+			$this->id                    = $id;
+			$this->resolve_key_callback  = $resolve_key_callback;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return $this->id;
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return Location_Record::LEVELS;
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+
+		public function resolve_key( string $key ): ?Location_Record {
+			$this->resolve_key_calls[] = $key;
+
+			return ( $this->resolve_key_callback )( $key );
+		}
+	}
+
+	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
 	 */
@@ -407,6 +456,230 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:customer-own-choice', $fetched['record']->key() );
 			$this->assertFalse( $fetched['implicit'] );
 			$this->assertCount( 0, $provider->suggest_calls, 'resolve_default() must never even run once a real record already exists' );
+		}
+
+		// -------------------------------------------------------------------
+		// policy `fixed` — the #536 default seeds only a SETTLEMENT record,
+		// so scoping a settlement search by region silently fell back to a
+		// country-wide search (issue #551, the #538 fallback's unfixed
+		// sibling). get_customer_chain() now derives the missing REGION
+		// ancestor from the settlement's own published ancestors, via the
+		// SAME provider that produced them.
+		// -------------------------------------------------------------------
+
+		/**
+		 * Stubs an in-memory `get_transient()`/`set_transient()` pair — same
+		 * shape `LocationControllerTest`'s own rate-limit tests already use —
+		 * for {@see Location_Service::cached_region_lookup()} (issue #551).
+		 *
+		 * Backed by an `\ArrayObject` rather than a plain array: PHP arrays
+		 * are value types, so returning one would hand the caller a snapshot
+		 * frozen at call time, unable to see the writes the closures below
+		 * make on later calls. An object is a reference type — the same
+		 * instance the closures close over — so the caller can still observe
+		 * it live.
+		 *
+		 * @return \ArrayObject<string, mixed> The backing store.
+		 */
+		private function stub_region_ancestor_transients(): \ArrayObject {
+			$store = new \ArrayObject();
+
+			Functions\when( 'get_transient' )->alias(
+				static function ( $key ) use ( $store ) {
+					return $store[ $key ] ?? false;
+				}
+			);
+			Functions\when( 'set_transient' )->alias(
+				static function ( $key, $value, $ttl ) use ( $store ) {
+					$store[ $key ] = $value;
+
+					return true;
+				}
+			);
+
+			return $store;
+		}
+
+		public function test_fixed_default_derives_a_region_ancestor_when_the_provider_can_resolve_it(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $region_record ): ?Location_Record {
+					return 'prov-a:region-1' === $key ? $region_record : null;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $chain['records'], 'the implicit default must now yield a region in the chain' );
+			$this->assertSame( 'prov-a:region-1', $chain['records'][ Location_Record::LEVEL_REGION ]->key() );
+			$this->assertSame( Location_Record::LEVEL_REGION, $chain['records'][ Location_Record::LEVEL_REGION ]->level() );
+			$this->assertSame( 'prov-a:city-1', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'], 'the derived region must never become current — it is an ancestor, not the customer\'s own pick' );
+			$this->assertSame( [ 'prov-a:region-1' ], $provider->resolve_key_calls );
+		}
+
+		public function test_fixed_default_region_ancestor_derivation_is_cached_across_calls(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $region_record ): ?Location_Record {
+					return 'prov-a:region-1' === $key ? $region_record : null;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$first  = $service->get_customer_chain();
+			$second = $service->get_customer_chain();
+
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $first['records'] );
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $second['records'] );
+			$this->assertCount( 1, $provider->resolve_key_calls, 'resolve_key() must not run again once the transient cache holds the answer — it must not run on every checkout page load' );
+		}
+
+		public function test_region_ancestor_derivation_degrades_when_the_provider_lacks_resolve_key(): void {
+			// Default_Test_Fake_Provider never overrides resolve_key(), so it
+			// never declares CAPABILITY_RESOLVE_KEY (reflection-based, see
+			// Abstract_Location_Provider's own docblock) — this is DaData's
+			// own real shape before #536; #551 must not require every
+			// provider to gain this capability to keep working as before.
+			$provider = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayNotHasKey( Location_Record::LEVEL_REGION, $chain['records'], 'a provider without CAPABILITY_RESOLVE_KEY must degrade to today\'s behaviour — no region, no crash' );
+			$this->assertSame( 'prov-a:city-1', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
+		}
+
+		public function test_region_ancestor_derivation_never_overrides_an_explicit_customer_region_pick(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $region_record ): ?Location_Record {
+					// A DIFFERENT region than the one the customer actually
+					// picked below — proves this is never even consulted.
+					return 'prov-a:region-1' === $key ? $region_record : null;
+				}
+			);
+
+			// stub_default_locality_options() is not about the default-locality
+			// policy here (left 'off') — it is what makes 'prov-a' the ACTIVE
+			// provider, which is_customer_record_stale()'s rule (a) requires to
+			// treat these explicit picks as non-stale.
+			$this->stub_default_locality_options( 'prov-a' );
+			$registry = $this->activate( [ $provider ] );
+			$service  = $this->service( $registry );
+
+			$picked_region = $this->record( 'prov-a:customer-picked-region', Location_Record::LEVEL_REGION );
+			$this->assertTrue( $service->set_customer_record( $picked_region, false ) );
+
+			$settlement = $this->record( 'prov-a:city-2', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:customer-picked-region' ] ] );
+			$this->assertTrue( $service->set_customer_record( $settlement, false ) );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertSame(
+				'prov-a:customer-picked-region',
+				$chain['records'][ Location_Record::LEVEL_REGION ]->key(),
+				'an explicit customer region pick must never be replaced by a derived one'
+			);
+			$this->assertCount( 0, $provider->resolve_key_calls, 'derivation must never even run once the chain already carries a region' );
+		}
+
+		public function test_unpersisted_default_chain_agrees_with_the_persisted_one_on_the_derived_region(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $region_record ): ?Location_Record {
+					return 'prov-a:region-1' === $key ? $region_record : null;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			// No session at all -> Customer_Location_Store::set() always fails
+			// -> get_customer_chain() takes the SYNTHETIC $unpersisted_default
+			// branch (review finding F1) rather than the persisted/gated one —
+			// issue #551 requires both branches to agree on the derived region.
+			$service = new Location_Service( $registry, new Default_Test_Customer_Store_Probe( null ) );
+
+			$first = $service->get_customer_record();
+			$this->assertNotNull( $first, 'sanity: the default still resolves without a session' );
+			$this->assertTrue( $first['implicit'] );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $chain['records'], 'the unpersisted-default branch must derive the same region the persisted branch would' );
+			$this->assertSame( 'prov-a:region-1', $chain['records'][ Location_Record::LEVEL_REGION ]->key() );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'] );
+		}
+
+		public function test_region_ancestor_derivation_is_never_cached_when_resolve_key_throws(): void {
+			$store = $this->stub_region_ancestor_transients();
+
+			$attempts = 0;
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( &$attempts ): ?Location_Record {
+					$attempts++;
+
+					throw new \RuntimeException( 'transient provider failure' );
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$first = $service->get_customer_chain();
+
+			$this->assertNotNull( $first );
+			$this->assertArrayNotHasKey( Location_Record::LEVEL_REGION, $first['records'], 'a provider failure must degrade to "no region" for this call, never crash checkout' );
+			$this->assertSame( 1, $attempts );
+
+			$second = $service->get_customer_chain();
+
+			$this->assertNotNull( $second );
+			$this->assertArrayNotHasKey( Location_Record::LEVEL_REGION, $second['records'] );
+			$this->assertSame( 2, $attempts, 'a thrown resolve_key() must never be cached — the very next call must retry, not calcify into "no region"' );
+			$this->assertSame( 0, $store->count(), 'nothing must ever be written to the transient cache for a thrown resolve_key()' );
 		}
 
 		// -------------------------------------------------------------------
