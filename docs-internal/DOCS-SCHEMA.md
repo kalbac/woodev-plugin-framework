@@ -82,9 +82,16 @@ no tokenizer was run. The check says the number is not absurd; it does not prove
 | `CURRENT-STATE.md` | 24 357 | 23 907 | −450 | shrank |
 | **whole set** | 111 225 | 120 937 | **+9 712** | **+971 B** |
 
-`GOTCHAS.md` is 88 % of the growth, so it gets the slack. But **the two gateway files do grow** —
-only the two under "state only, never history" shrink, and that discipline governs those two and
-nothing else. At the whole-set rate, 176 KB is ~61 sessions of headroom.
+`GOTCHAS.md` is 88 % of the growth, so it gets the slack. The other four are **not
+interchangeable**, and what bounds each is a different thing:
+
+| File | What bounds it |
+|---|---|
+| `CURRENT-STATE.md` | Its own hard rule, "state only, never history" (see [CURRENT-STATE.md Format](#current-statemd-format)). That rule names **this file and no other**. |
+| `next-session-prompt.md` | REPLACED wholesale at every session end, so it cannot accumulate — a different mechanism, not that rule. |
+| `AGENTS.md`, `CLAUDE.md` | Nothing but the caps above. Which is why these two are the ones that grow. |
+
+At the whole-set rate, 176 KB is ~61 sessions of headroom.
 
 **If it binds again, do not raise it a third time.** The structural fix is the one #554 also
 proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map

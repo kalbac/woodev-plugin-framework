@@ -54,11 +54,20 @@ const size = ( p ) => ( existsSync( p ) ? statSync( p ).size : 0 );
  *   CURRENT-STATE.md         24,357 -> 23,907     -450   (SHRANK)
  *   whole set                                   +9,712   (+971 B/session)
  *
- * GOTCHAS.md is 88% of the growth, so it gets the slack. But the two gateway
- * files DO grow — an earlier draft of this comment called all four non-gotcha
- * files "flat", which the numbers above disprove. Only the two under "state
- * only, never history" shrink; that discipline governs those two and nothing
- * else. At the whole-set rate, 176 KB is ~61 sessions of headroom.
+ * GOTCHAS.md is 88% of the growth, so it gets the slack. The other four are
+ * NOT interchangeable, and an earlier draft of this comment got their causes
+ * wrong twice — first calling all four "flat", then attributing both shrinking
+ * files to one rule. What actually bounds each:
+ *
+ *   CURRENT-STATE.md       its own hard rule, "state only, never history"
+ *                          (DOCS-SCHEMA.md -> CURRENT-STATE.md Format). That
+ *                          rule names THIS FILE and no other.
+ *   next-session-prompt.md REPLACED wholesale every session end, so it cannot
+ *                          accumulate. A different mechanism, not that rule.
+ *   AGENTS.md, CLAUDE.md   nothing bounds them but the caps below — which is
+ *                          why they are the two that grow.
+ *
+ * At the whole-set rate, 176 KB is ~61 sessions of headroom.
  *
  * If this binds again, do not raise it a third time. The structural fix #554
  * also proposed: split GOTCHAS.md into per-tag indexes and read only the tag
