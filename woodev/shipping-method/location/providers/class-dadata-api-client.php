@@ -229,7 +229,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * Applies to the three SUGGESTIONS endpoints only. The Clean API is a different
 		 * host with its own contract and is deliberately left alone here.
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @param array<string, mixed> $body Request body built by the caller.
 		 *
@@ -249,7 +249,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			/**
 			 * Filters the language DaData is asked to answer in.
 			 *
-			 * @since 2.1.0
+			 * @since 2.0.2
 			 *
 			 * @param string $language Either `ru` or `en`.
 			 * @param string $locale   The WordPress locale the default was derived from.
@@ -282,7 +282,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * Returns `''` when neither locale function exists (outside a WordPress runtime),
 		 * which {@see self::with_language()} reads as "express no opinion".
 		 *
-		 * @since 2.1.0
+		 * @since 2.0.2
 		 *
 		 * @return string
 		 */

@@ -27,7 +27,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 	 * base class as they are encountered during gateway integration development,
 	 * and use a subclass to include any gateway-specific codes/messages.
 	 *
-	 * @since 2.2.0
+	 * @since 2.0.2
 	 */
 	class Woodev_Payment_Gateway_API_Response_Message_Helper {
 

@@ -440,7 +440,7 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * callers already treat one would be an arbitrary inconsistency, not
 		 * a meaningful distinction.
 		 *
-		 * @since 2.1.0 Rewritten to search the cached per-country dictionaries
+		 * @since 2.0.2 Rewritten to search the cached per-country dictionaries
 		 *              instead of the single-row `region_code` filter, which
 		 *              does not honour its own parameter on the live test
 		 *              contour (issue #553) — see the contract-change note

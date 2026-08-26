@@ -10,7 +10,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 	 * The purpose of this class is to centralize common utility functions that
 	 * are commonly used in Woodev plugins
 	 *
-	 * @since 2.2.0
+	 * @since 2.0.2
 	 */
 	class Woodev_Helper {
 
@@ -240,7 +240,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * needs to defer to it too, for consistency, rather than each re-implementing
 		 * its own `extension_loaded( 'mbstring' )` check.
 		 *
-		 * @since 2.2.0
+		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */

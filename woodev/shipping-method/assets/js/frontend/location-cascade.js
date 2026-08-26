@@ -146,7 +146,7 @@
  * framework inventing that wording itself.
  *
  * @file
- * @since 2.1.0
+ * @since 2.0.2
  */
 
 ( function() {
