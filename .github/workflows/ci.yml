@@ -202,6 +202,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: TypeScript-by-default gate for src/ (#542)
+        run: npm run lint:ts-baseline
+
+      - name: Typecheck src/
+        run: npm run typecheck
+
       - name: Run JS tests
         run: npm run test:js
 
