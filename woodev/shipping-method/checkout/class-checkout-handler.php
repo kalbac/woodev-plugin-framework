@@ -843,15 +843,241 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Builds a `$state` map (chosen shipping method + billing country) and
 		 *              passes it to `validate()` so conditional-required specs (A2) can be
 		 *              resolved at validation time.
+		 * @since 2.1.0 Also runs {@see self::guard_custom_settlement()} — the server-side
+		 *              backstop for the #528 custom-settlement opt-in (issue #531).
 		 *
 		 * @return void
 		 */
 		public function handle_checkout_process(): void {
-			$state = [
+			$country = $this->posted_country();
+			$state   = [
 				'chosen_shipping_method' => $this->chosen_shipping_method(),
-				'country'                => $this->posted_country(),
+				'country'                => $country,
 			];
-			$this->validate( $this->sanitize_posted_data( $this->get_posted_data() ), $state );
+			$values = $this->sanitize_posted_data( $this->get_posted_data() );
+
+			$this->validate( $values, $state );
+			$this->guard_custom_settlement(
+				$values,
+				$country,
+				\Woodev\Framework\Shipping\Pickup\Address_Target::resolve( $this->posted_ship_to_different_address() )
+			);
+		}
+
+		/**
+		 * Server-side backstop for the #528 custom-settlement opt-in (issue #531).
+		 *
+		 * #528 shipped the merchant opt-in "Разрешить использовать города не из
+		 * списка" CLIENT-SIDE only: OFF, `location-cascade.js` locks the customer to a
+		 * settlement actually picked from the `ajax-select2` widget; ON, the widget
+		 * gets `tags: true` and a hand-typed settlement is let through. A cached
+		 * checkout page, a stale JS bundle, or a hand-edited form never runs that
+		 * client-side code at all, so the option was unenforced the moment any of
+		 * those happened — this method is the enforcement.
+		 *
+		 * THE DISCRIMINATOR IS THE SERVER RECORD, never a client-supplied flag
+		 * (operator decision, 26.08.2026): a flag would not survive exactly the three
+		 * holes this guard exists for — none of them POSTs it. A real pick goes
+		 * through `POST /location/select` and leaves a customer record at
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT}
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Service::get_customer_record_at()});
+		 * a select2 TAG pick does not (#528: "a tag pick is NOT a record pick — no
+		 * `/select`, no record"). So: option OFF AND the posted settlement does not
+		 * match that record -> reject the checkout.
+		 *
+		 * Known, accepted cost: the record lives in the WooCommerce session and is
+		 * emptied by a provider switch or a lost session, in which case an honest
+		 * customer is refused. Mitigated because in exactly those cases the chain
+		 * empties and the address field locks anyway (s78) — the customer must re-pick
+		 * regardless — and the refusal self-heals the instant a new pick writes a new
+		 * record. Deliberately no extra machinery added to "fix" this.
+		 *
+		 * SCOPE: `ajax-select2` only. `woocommerce_checkout_process` sees every posted
+		 * settlement regardless of field mode, but `typeahead` is a plain `<input>`
+		 * that has NEVER been validated against the provider — a check not bound to
+		 * the mode would silently start blocking free text on already-installed
+		 * sites, in a mode where the #528 opt-in is not even offered.
+		 *
+		 * Only checks the settlement field on the column that CURRENTLY determines
+		 * delivery ({@see self::settlement_field_id_for_section()}; AGENT-RULES.md
+		 * Rule 7c) — when both columns carry the field (Rule 7b), the OTHER one has no
+		 * live cascade attached and was never stamped by `fieldValueFor()` in
+		 * `location-cascade.js`, so comparing it would not be testing what #531 is
+		 * about.
+		 *
+		 * A blank posted value is not this method's concern — that is required-field
+		 * territory, already {@see self::validate()}'s job (mirrors
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_checkout_process()}'s
+		 * own docblock for the same reasoning).
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param array<string, mixed> $values         clean values keyed by field id, as
+		 *     returned by {@see self::sanitize_posted_data()}
+		 * @param string               $country        the posted billing country
+		 *     ({@see self::posted_country()})
+		 * @param string               $active_section `billing` or `shipping` — the column
+		 *     {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()} currently
+		 *     resolves to
+		 *
+		 * @return bool true when nothing blocks checkout; false when a notice was added
+		 */
+		public function guard_custom_settlement( array $values, string $country, string $active_section ): bool {
+			$service = $this->location_service();
+
+			if ( $service->is_custom_settlement_allowed() ) {
+				return true;
+			}
+
+			if ( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::MODE_AJAX_SELECT2 !== $service->get_field_mode_settlement() ) {
+				return true;
+			}
+
+			$field_id = $this->settlement_field_id_for_section( $active_section );
+
+			if ( null === $field_id ) {
+				return true;
+			}
+
+			$posted = (string) ( $values[ $field_id ] ?? '' );
+
+			if ( self::is_blank( $posted ) ) {
+				return true;
+			}
+
+			$record   = $service->get_customer_record_at(
+				\Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT,
+				$country
+			);
+			$expected = self::settlement_record_value( $record );
+
+			if (
+				'' !== $expected
+				&& self::normalize_for_settlement_match( $posted ) === self::normalize_for_settlement_match( $expected )
+			) {
+				return true;
+			}
+
+			$this->add_error( self::custom_settlement_error_message() );
+
+			return false;
+		}
+
+		/**
+		 * Returns whether the customer ticked "ship to a different address".
+		 *
+		 * Mirrors {@see self::posted_country()}: WooCommerce verifies the checkout
+		 * nonce before its checkout hooks fire, so no separate nonce check is
+		 * performed here. Feeds
+		 * {@see \Woodev\Framework\Shipping\Pickup\Address_Target::resolve()} from
+		 * {@see self::handle_checkout_process()} — see that class's own docblock for
+		 * why the redundant `wc_ship_to_billing_address_only()` guard inside
+		 * `resolve()` is harmless when fed the raw posted flag.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @return bool
+		 */
+		private function posted_ship_to_different_address(): bool {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
+			return ! empty( $_POST['ship_to_different_address'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		}
+
+		/**
+		 * The effective field id carrying the SETTLEMENT level on `$section`, or
+		 * `null` when no such field exists there.
+		 *
+		 * A field is not guaranteed to exist on the requested section at all — Rule 7b
+		 * attaches a Location-Provider field to `billing` alone under "force shipping
+		 * to billing", and the id-precedence rule documented on
+		 * {@see self::effective_fields()} can let a direct declaration steal the
+		 * fan-out variant's slot, leaving the live cascade on the OTHER column
+		 * entirely (that method's own "KNOWN CONSEQUENCE" note). Both are legitimate
+		 * configurations this guard simply has nothing to check in — it returns
+		 * `null` and {@see self::guard_custom_settlement()} stands down.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string $section `billing` or `shipping`
+		 *
+		 * @return string|null
+		 */
+		private function settlement_field_id_for_section( string $section ): ?string {
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if (
+					\Woodev\Framework\Shipping\Location\Location_Record::LEVEL_SETTLEMENT === ( $field['location_level'] ?? null )
+					&& $section === ( $field['section'] ?? null )
+				) {
+					return $id;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * The text a SETTLEMENT-level location field carries for `$record` — the PHP
+		 * mirror of the settlement branch of `fieldValueFor()` in
+		 * `location-cascade.js`: the component's bare `name`, WITHOUT its `type` (the
+		 * operator's carriers reject a locality name with its prefix, e.g. "г
+		 * Жуковский" where "Жуковский" resolves — s70 rig pass), falling back to the
+		 * record's `label` only when the derivation yields nothing at all. No PHP-side
+		 * derivation of this existed before #531 (checked: {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}
+		 * inlines the same `settlement()['name']` read at its own two call sites
+		 * rather than sharing a helper).
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param \Woodev\Framework\Shipping\Location\Location_Record|null $record
+		 *
+		 * @return string
+		 */
+		private static function settlement_record_value( ?\Woodev\Framework\Shipping\Location\Location_Record $record ): string {
+			if ( null === $record ) {
+				return '';
+			}
+
+			$settlement = $record->settlement();
+			$name       = null !== $settlement ? trim( (string) $settlement['name'] ) : '';
+
+			return '' !== $name ? $name : $record->label();
+		}
+
+		/**
+		 * Normalizes a settlement value for the #531 posted-vs-record comparison:
+		 * trimmed, `mb_strtolower`-ed — tolerant of what a form round-trip legitimately
+		 * changes (surrounding whitespace, case), intolerant of everything else. Same
+		 * discipline as
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::normalize_for_stale_pick_comparison()}
+		 * ("never a near/fuzzy match"). Gotcha `a-locality-display-name-is-not-an-identifier`
+		 * does not apply here: both sides are derived from the SAME customer record
+		 * within the SAME request, never compared across locales or accounts — the
+		 * hazard that gotcha warns about is a stored, cross-request/cross-locale
+		 * identity comparison, which this is not.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string $value
+		 *
+		 * @return string
+		 */
+		private static function normalize_for_settlement_match( string $value ): string {
+			return mb_strtolower( trim( $value ) );
+		}
+
+		/**
+		 * The #531 error notice — pulled from the SAME filtered `woodev_location_i18n`
+		 * strings the location typeahead's client-side config already reads
+		 * ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::location_i18n_strings()}),
+		 * so a plugin overriding that filter changes this message too and the default
+		 * text is never duplicated between the two call sites.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @return string
+		 */
+		private static function custom_settlement_error_message(): string {
+			return (string) ( Checkout_Config::location_i18n_strings()['invalidSettlement'] ?? '' );
 		}
 
 		/**
