@@ -480,6 +480,127 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		}
 
 		/**
+		 * The location layer's user-facing strings — one shared source of truth.
+		 *
+		 * Extracted out of {@see self::build_location_block()} (its sole reader until
+		 * now) so the server-side #531 guard —
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::guard_custom_settlement()} —
+		 * can read the SAME filtered strings instead of a second copy of the defaults
+		 * array, which would drift the moment either copy changed alone. The filter
+		 * name, its `@since` and its documented shape are unchanged by the move.
+		 *
+		 * @since 2.1.0 Extracted out of {@see self::build_location_block()}; gained
+		 *              `invalidSettlement` (issue #531).
+		 *
+		 * @return array<string, string>
+		 */
+		public static function location_i18n_strings(): array {
+			/**
+			 * Filters the location typeahead's user-facing strings.
+			 *
+			 * Mirrors `woodev_pickup_map_i18n` (see
+			 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_js_config()}) — the
+			 * same reason applies here: these strings reach the customer, so a plugin whose
+			 * carrier calls a locality something else must be able to say so without
+			 * translating the framework.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param array<string, string> $strings The framework's default strings.
+			 */
+			$strings = apply_filters(
+				'woodev_location_i18n',
+				[
+					// Shown INSIDE the open listbox when a completed search returned nothing.
+					// A silent empty panel and a slow network are indistinguishable to the
+					// customer, so this one case is worth a sentence (operator, s70).
+					'noResults'          => __(
+						'Поиск не дал результатов. Попробуйте изменить запрос.',
+						'woodev-plugin-framework'
+					),
+
+					// The ADDRESS level gets its own wording (operator, s70). "Nothing found"
+					// under a street field reads as "you cannot be delivered to" — and a
+					// street genuinely absent from the provider's registry is the ordinary
+					// case there, not an error. This says the field still works, which is
+					// true: a location field is a plain text input with the typeahead layered
+					// on top, so a hand-typed address was always accepted.
+					'noResultsAddress'   => __(
+						'Адрес не найден — введите вручную.',
+						'woodev-plugin-framework'
+					),
+
+					// #295 finding 1 (Task 13): `POST /location/select` answers
+					// `{persisted: false}` when the write failed server-side (typically a guest
+					// whose WooCommerce session/cart cookie has not initialized yet — gotcha
+					// `guest-session-write-needs-the-cart-cookie`) — an honest signal the client
+					// used to read for exactly one thing (not firing `update_checkout`) and
+					// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
+					// the consumer this string exists for.
+					'notPersisted'       => __(
+						'Не удалось сохранить выбор — попробуйте ещё раз.',
+						'woodev-plugin-framework'
+					),
+
+					// Issue #405: shown INSIDE the open listbox when a search could not be
+					// COMPLETED at all (the provider's own request failed — wrong keys, a
+					// network failure, a malformed upstream payload), as opposed to `noResults`/
+					// `noResultsAddress` above, which mean "the search ran and genuinely found
+					// nothing". `location-typeahead.js`'s own `errorText` docblock and
+					// `Location_Provider::suggest()`'s "EMPTY VS. FAILED" docblock section are
+					// the two ends of this same contract — a REST 502 from `/location/suggest`
+					// is what actually triggers this string.
+					'unavailable'        => __(
+						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
+						'woodev-plugin-framework'
+					),
+
+					// Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s
+					// `country_to_state_changed` handler) carries neither a value nor a
+					// `placeholder`/`data-placeholder` attribute, leaving an ajax-select2 widget
+					// with zero content height until the customer picks something —
+					// `location-select-modes.js`'s `buildSelectField()` falls back to this string
+					// when the DOM itself carries none. Same msgid as {@see
+					// Checkout_Handler::placeholder_label()} (shares its translation across a PO
+					// merge) — that method lives on an unrelated class this one has no reference
+					// to, so the string is repeated here rather than cross-called.
+					'placeholder'        => __( 'Выберите…', 'woodev-plugin-framework' ),
+
+					// Issue #540: the placeholder for select2's own SEARCH BOX — a different
+					// string, and a different surface, from 'placeholder' above, which names the
+					// CLOSED control. Operator's observation on the rig: with #530's popular list
+					// showing six ready-made towns, a customer can reasonably read that list as
+					// the whole offer and never realise the box above it accepts typing at all.
+					// That lands them in exactly the dead end #517/#528 exist for, except here
+					// the dead end is made by the UI rather than by the provider's coverage.
+					//
+					// A NEW msgid rather than a reused one, deliberately: #526's rule is "take
+					// the ready-made string, do not invent translations", and neither
+					// `wc_country_select_params` (i18n_no_matches / i18n_searching /
+					// i18n_input_too_short_* / i18n_load_more / i18n_selection_too_long_* /
+					// i18n_input_too_long_* / i18n_ajax_error) nor this block carries anything
+					// that means "start typing a name" — checked key by key before adding this.
+					// The rule's own escape hatch is this file: a string with no ready-made
+					// source belongs in `Checkout_Config`, never hardcoded in JS.
+					'searchPlaceholder'  => __( 'Начните вводить название', 'woodev-plugin-framework' ),
+
+					// Issue #531: the server-side backstop for #528's custom-settlement opt-in
+					// (`Checkout_Handler::guard_custom_settlement()`) — shown when the option is
+					// OFF and the posted settlement does not match the customer's own picked
+					// record. #526's same escape hatch as `searchPlaceholder` above: no existing
+					// key here or in `wc_country_select_params` means "the value you typed is not
+					// in the list", so this is a genuinely new msgid, not a reused one.
+					'invalidSettlement'  => __(
+						'Выбранный населённый пункт не найден в списке — выберите его из подсказки.',
+						'woodev-plugin-framework'
+					),
+				]
+			);
+
+			return array_map( 'strval', (array) $strings );
+		}
+
+		/**
 		 * Builds the location-provider config block (Task 9; spec D1, D4, D15, §4.4).
 		 *
 		 * Only ever called once {@see self::build()} has already confirmed
@@ -906,96 +1027,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				}
 			}
 
-			/**
-			 * Filters the location typeahead's user-facing strings.
-			 *
-			 * Mirrors `woodev_pickup_map_i18n` (see
-			 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::get_js_config()}) — the
-			 * same reason applies here: these strings reach the customer, so a plugin whose
-			 * carrier calls a locality something else must be able to say so without
-			 * translating the framework.
-			 *
-			 * @since 2.1.0
-			 *
-			 * @param array<string, string> $strings The framework's default strings.
-			 */
-			$strings = apply_filters(
-				'woodev_location_i18n',
-				[
-					// Shown INSIDE the open listbox when a completed search returned nothing.
-					// A silent empty panel and a slow network are indistinguishable to the
-					// customer, so this one case is worth a sentence (operator, s70).
-					'noResults'         => __(
-						'Поиск не дал результатов. Попробуйте изменить запрос.',
-						'woodev-plugin-framework'
-					),
-
-					// The ADDRESS level gets its own wording (operator, s70). "Nothing found"
-					// under a street field reads as "you cannot be delivered to" — and a
-					// street genuinely absent from the provider's registry is the ordinary
-					// case there, not an error. This says the field still works, which is
-					// true: a location field is a plain text input with the typeahead layered
-					// on top, so a hand-typed address was always accepted.
-					'noResultsAddress'  => __(
-						'Адрес не найден — введите вручную.',
-						'woodev-plugin-framework'
-					),
-
-					// #295 finding 1 (Task 13): `POST /location/select` answers
-					// `{persisted: false}` when the write failed server-side (typically a guest
-					// whose WooCommerce session/cart cookie has not initialized yet — gotcha
-					// `guest-session-write-needs-the-cart-cookie`) — an honest signal the client
-					// used to read for exactly one thing (not firing `update_checkout`) and
-					// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
-					// the consumer this string exists for.
-					'notPersisted'      => __(
-						'Не удалось сохранить выбор — попробуйте ещё раз.',
-						'woodev-plugin-framework'
-					),
-
-					// Issue #405: shown INSIDE the open listbox when a search could not be
-					// COMPLETED at all (the provider's own request failed — wrong keys, a
-					// network failure, a malformed upstream payload), as opposed to `noResults`/
-					// `noResultsAddress` above, which mean "the search ran and genuinely found
-					// nothing". `location-typeahead.js`'s own `errorText` docblock and
-					// `Location_Provider::suggest()`'s "EMPTY VS. FAILED" docblock section are
-					// the two ends of this same contract — a REST 502 from `/location/suggest`
-					// is what actually triggers this string.
-					'unavailable'       => __(
-						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
-						'woodev-plugin-framework'
-					),
-
-					// Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s
-					// `country_to_state_changed` handler) carries neither a value nor a
-					// `placeholder`/`data-placeholder` attribute, leaving an ajax-select2 widget
-					// with zero content height until the customer picks something —
-					// `location-select-modes.js`'s `buildSelectField()` falls back to this string
-					// when the DOM itself carries none. Same msgid as {@see
-					// Checkout_Handler::placeholder_label()} (shares its translation across a PO
-					// merge) — that method lives on an unrelated class this one has no reference
-					// to, so the string is repeated here rather than cross-called.
-					'placeholder'       => __( 'Выберите…', 'woodev-plugin-framework' ),
-
-					// Issue #540: the placeholder for select2's own SEARCH BOX — a different
-					// string, and a different surface, from 'placeholder' above, which names the
-					// CLOSED control. Operator's observation on the rig: with #530's popular list
-					// showing six ready-made towns, a customer can reasonably read that list as
-					// the whole offer and never realise the box above it accepts typing at all.
-					// That lands them in exactly the dead end #517/#528 exist for, except here
-					// the dead end is made by the UI rather than by the provider's coverage.
-					//
-					// A NEW msgid rather than a reused one, deliberately: #526's rule is "take
-					// the ready-made string, do not invent translations", and neither
-					// `wc_country_select_params` (i18n_no_matches / i18n_searching /
-					// i18n_input_too_short_* / i18n_load_more / i18n_selection_too_long_* /
-					// i18n_input_too_long_* / i18n_ajax_error) nor this block carries anything
-					// that means "start typing a name" — checked key by key before adding this.
-					// The rule's own escape hatch is this file: a string with no ready-made
-					// source belongs in `Checkout_Config`, never hardcoded in JS.
-					'searchPlaceholder' => __( 'Начните вводить название', 'woodev-plugin-framework' ),
-				]
-			);
+			// Issue #531: extracted to self::location_i18n_strings() so the server-side
+			// guard reads the SAME filtered strings — see that method's own docblock.
+			$strings = self::location_i18n_strings();
 
 			return [
 				'endpoints'             => [
@@ -1040,7 +1074,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				// to leave the whole location layer silently dead — no widget ever attached,
 				// because the client had no country to arbitrate by).
 				'defaultCountry'        => $service->resolve_default_country(),
-				'i18n'                  => array_map( 'strval', (array) $strings ),
+				'i18n'                  => $strings,
 			];
 		}
 
