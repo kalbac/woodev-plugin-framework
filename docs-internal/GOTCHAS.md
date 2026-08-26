@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 210 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 212 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -80,6 +80,7 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 ### [shipping/location] — Location provider layer
+- [shipping/location] **A fixture docblock asserted an API parameter that does not exist (`/location/regions?region_code=`) and a capability was declared on it — every region key resolved to the same wrong row.** → [the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist](gotchas/the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist.md) (s96)
 - [shipping/location] **To sample a region's settlements, scope the LIST — `suggest()` by name returns homonyms from other regions.** → [list-by-region-scope-not-suggest-by-name](gotchas/list-by-region-scope-not-suggest-by-name.md) (s92)
 - [shipping/location] **One `/select` response narrows EVERY level — including a still-queued pick it could not have named — wiping its optimistic record.** → [a-shared-select-queue-narrows-a-level-its-response-never-named](gotchas/a-shared-select-queue-narrows-a-level-its-response-never-named.md) (s89)
 - [shipping/location] **An empty `owners[country][level]` DISARMS the cross-provider guard that reads it — falsy is an open gate, not a closed one.** → [an-empty-level-owner-silently-disarms-the-cross-provider-guard](gotchas/an-empty-level-owner-silently-disarms-the-cross-provider-guard.md) (s88)
@@ -123,6 +124,7 @@
 - [testing/unit] **Patchwork redefinable internals need an EARLY load in bootstrap — Brain Monkey's lazy load misses suite-build-time source files.** → [patchwork-early-load-bootstrap](gotchas/patchwork-early-load-bootstrap.md) (s9)
 - [testing/wc-admin-access-403] **Testing an admin capability gate (403) on the rig: WooCommerce blocks subscribers from wp-admin — use an EDITOR.** → [wc-blocks-subscriber-wp-admin-403-test](gotchas/wc-blocks-subscriber-wp-admin-403-test.md) (s19)
 - [testing/integration] **Local e2e rig: `wp_safe_remote_request` blocks the private issuer host + non-standard port.** → [wp-safe-remote-request-local-rig](gotchas/wp-safe-remote-request-local-rig.md) (s11)
+- [testing/unit] **A mocked collaborator proves the MOCK, not the contract — six falsified tests and 19 green CI jobs shipped a feature that returned Spain for Moscow. Measure the real provider once.** → [a-mocked-provider-proves-the-mock-not-the-contract](gotchas/a-mocked-provider-proves-the-mock-not-the-contract.md) (s96)
 - [testing/unit] **Adding a method to a Mockery-mocked class → stub it AND run the FULL unit suite.** → [mockery-mock-new-method-full-suite](gotchas/mockery-mock-new-method-full-suite.md) (s40)
 - [testing/integration] **A wrong `dirname(__DIR__, N)` depth aborts the ENTIRE Integration suite, not one file.** → [wrong-dirname-depth-aborts-the-whole-integration-suite](gotchas/wrong-dirname-depth-aborts-the-whole-integration-suite.md) (s44)
 - [testing/integration] **A fixture class that implements a framework interface must be declared inside the plugin's init callback.** → [fixture-classes-must-live-inside-plugin-init](gotchas/fixture-classes-must-live-inside-plugin-init.md) (s46)

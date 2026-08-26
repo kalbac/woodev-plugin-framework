@@ -1,20 +1,33 @@
 # Current State — Woodev Plugin Framework
 
 > **State only — never history.** Phase status, open debt, next actions, rig/infrastructure facts.
-> Session history → `SESSION-LOG.md` (index) + `sessions/sNN.md` (per-session detail).
+> Session history → `SESSION-LOG.md` (index, s50+) + `sessions/sNN.md` (per-session detail).
 > Lessons learned → a gotcha (`gotchas/{slug}.md`) if it is about code or a mechanism, the session
 > file if it is about how the work went. **Never a third copy here.**
-> Program history snapshot → `platform-v2-program-tracker.md`; active program map →
-> `specs/2026-06-25-shipping-module-decisions.md`.
+> Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-26 (s95, overnight).** Merged this session: **#544** (#542), **#545** (#531),
-**#548** (#512), **#549** (#525), **#550** (#529) — `main` is at `c67de29`, tree clean.
-**ONE open PR: #547** (#539 part 3) — 18/18 green, **UI, waiting on the operator's rig pass.**
+**As of 2026-08-26 (s96).** `main` is at `6e4478b`, tree clean, **no open PRs.** Merged this
+session: **#547** (#539 part 3, accepted by the operator on the rig) and **#552** (#551 + #553).
 
-**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026 at `c67de29`:** `composer check`
-**2820** / 6882 / **66 skipped**; jest **1529** in 21 suites. ⚠ The jest count went DOWN on purpose
-— #550 removed 20 tests covering an unreachable renderer; the accounting is test-by-test in its PR
-body and in `sessions/s95.md`.
+**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026 at `6e4478b`:** `composer check`
+**2828** / 6921 / **66 skipped**; jest **1535** in 21 suites.
+
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
+
+⚠ **A green unit suite is NOT sufficient where our code meets someone else's contract** — s96's
+#551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
+collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
+
+**The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan).
+
+**`select2:close` fires BEFORE `select2:select`** — pinned by a test since #525.
+
+**The settlement search is scoped by the region even when the region came from the DEFAULT**
+(#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
+
+**Open cards:** #523, #524, #527, #532, #546 (`@since` drift — operator decision), #554 (docs
+reading budget — operator decision). Which are COMMITMENTS, and where each was decided, is the
+handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -76,22 +89,12 @@ moving in **both directions** on the toggle, **and carrying its records with it*
 is the only thing that picks the column; `woocommerce_ship_to_destination` merely decides whether the
 checkbox exists (`billing_only`) or what it defaults to — five `file:line` citations are in the rule.
 
-**⚠ Tooling traps — hooks only; each owned by its gotcha.** **Compare SKIPPED, not assertions — the
-primary is 66** (`a-worktree-silently-skips-five-contract-tests`; s87 saw it invert — a critic's
-worktree reported 1 skipped because its environment RAN 65 tests the primary skips). Also
-`phpunit-result-cache-makes-a-run-unreproducible`,
-`local-npm-run-build-is-not-assets-parity-evidence`,
-`powershell-drops-the-roots-flag-from-the-jest-command`,
-`three-agents-is-the-concurrency-cap-on-this-machine`,
-`starting-codex-under-orca-needs-four-steps-not-one`,
-`dispatch-inject-reports-failure-after-succeeding`,
-`stacked-pr-github-mechanics` (s87 Symptom 4: a rig aggregate branch turns the rest of a stack
-`DIRTY` on the first squash-merge),
-`integration-jobs-die-on-a-github-api-504-not-on-your-code` (**but read the log — s87 mistook a real
-test failure for it**),
-`orca-worktree-create-base-branch-takes-the-local-ref` (use `origin/main`, and verify), and
-`the-three-location-field-modes-and-their-russian-labels` (**«Список с поиском» is `ajax-select2`,
-NOT `related-list`** — this one cost the operator a wasted rig pass).
+**⚠ Tooling traps — the ONE number to carry, everything else is in `GOTCHAS.md`.**
+**Compare SKIPPED, not assertions — the primary is 66** (`a-worktree-silently-skips-five-contract-tests`; s87 saw it invert). Every other trap in this
+area — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration-job
+flakiness, the three field modes and their Russian labels — is one line each under the
+`[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
+anyway. Scan the tag for your task; do not keep a second copy here.
 
 **✅ #405 IS rig-verified as of s95 — and the s83 note that said otherwise was measuring the wrong
 thing.** The `test-cdek` fixture reads its credentials from the WooCommerce integration settings
@@ -113,7 +116,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **210**.
+Gotchas: **212**.
 
 ## Program status (high level)
 

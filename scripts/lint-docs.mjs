@@ -182,9 +182,22 @@ const sessionsDir = join( INTERNAL, 'sessions' );
 if ( existsSync( sessionsDir ) ) {
 	const sessionFiles = readdirSync( sessionsDir ).filter( ( f ) => /^s\d+\.md$/.test( f ) );
 	const log = existsSync( sessionLogPath ) ? read( sessionLogPath ) : '';
+
+	// The index may hand older entries to an archive it links to (s96: 95 paragraph-length
+	// entries had filled this file's own 48 KB gate). Reachability is what this rule protects,
+	// so an entry counts wherever it lives, as long as SESSION-LOG.md itself points there —
+	// an archive nothing links to would leave those sessions unreachable and still fails.
+	const archived = [ ...log.matchAll( /\((archive\/[^)]+\.md)\)/g ) ]
+		.map( ( m ) => join( INTERNAL, m[ 1 ] ) )
+		.filter( ( f ) => existsSync( f ) )
+		.map( ( f ) => read( f ) )
+		.join( '\n' );
+
+	const indexed = `${ log }\n${ archived }`;
+
 	for ( const f of sessionFiles ) {
-		if ( ! log.includes( `sessions/${ f }` ) ) {
-			fail( `sessions/${ f } is not linked from SESSION-LOG.md.` );
+		if ( ! indexed.includes( `sessions/${ f }` ) ) {
+			fail( `sessions/${ f } is not linked from SESSION-LOG.md (or an archive it links to).` );
 		}
 	}
 	notes.push( `sessions: ${ sessionFiles.length } files` );
