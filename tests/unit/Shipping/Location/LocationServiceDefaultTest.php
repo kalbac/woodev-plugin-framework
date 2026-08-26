@@ -237,6 +237,68 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	}
 
 	/**
+	 * A fake provider declaring BOTH `list` and `resolve_key` (issue #551
+	 * round 2) — proves the LIST-preferred derivation order: when a provider
+	 * offers both, {@see Location_Service::region_ancestor_of()} must use
+	 * {@see Location_Provider::CAPABILITY_LIST} and never fall through to
+	 * `resolve_key()`.
+	 */
+	class Default_Test_Fake_List_Provider extends Abstract_Location_Provider {
+
+		private string $id;
+
+		/** @var callable */
+		private $list_localities_callback;
+
+		/** @var array<int, string> */
+		public array $resolve_key_calls = [];
+
+		/** @var int */
+		public int $list_localities_calls = 0;
+
+		public function __construct( string $id, callable $list_localities_callback ) {
+			$this->id                        = $id;
+			$this->list_localities_callback  = $list_localities_callback;
+		}
+
+		public function get_id(): string {
+			return $this->id;
+		}
+
+		public function get_name(): string {
+			return $this->id;
+		}
+
+		public function get_countries(): array {
+			return [ 'RU' ];
+		}
+
+		protected function declare_suggest_levels(): array {
+			return Location_Record::LEVELS;
+		}
+
+		public function suggest( string $query, Location_Scope $scope ): array {
+			return [];
+		}
+
+		public function list_localities( Location_Scope $scope ): array {
+			$this->list_localities_calls++;
+
+			return ( $this->list_localities_callback )( $scope );
+		}
+
+		public function resolve_key( string $key ): ?Location_Record {
+			// Never legitimately reached when list_localities() already answers
+			// — see this class's own docblock. Still callable (not throwing) so
+			// a test can prove it was SKIPPED via resolve_key_calls, rather than
+			// getting a false pass from a BadMethodCallException short-circuit.
+			$this->resolve_key_calls[] = $key;
+
+			return null;
+		}
+	}
+
+	/**
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Provider_Registry
 	 */
@@ -680,6 +742,84 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertArrayNotHasKey( Location_Record::LEVEL_REGION, $second['records'] );
 			$this->assertSame( 2, $attempts, 'a thrown resolve_key() must never be cached — the very next call must retry, not calcify into "no region"' );
 			$this->assertSame( 0, $store->count(), 'nothing must ever be written to the transient cache for a thrown resolve_key()' );
+		}
+
+		/**
+		 * Issue #551 round 2: {@see Location_Service::region_ancestor_of()}
+		 * must prefer {@see Location_Provider::CAPABILITY_LIST} over
+		 * `CAPABILITY_RESOLVE_KEY` when a provider declares both — one cached
+		 * dictionary fetch rather than a per-key resolution.
+		 */
+		public function test_region_ancestor_derivation_prefers_list_over_resolve_key_when_the_provider_declares_both(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:region-1', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_List_Provider(
+				'prov-a',
+				static function ( Location_Scope $scope ) use ( $region_record ): array {
+					return Location_Record::LEVEL_REGION === $scope->level() ? [ $region_record ] : [];
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-1' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayHasKey( Location_Record::LEVEL_REGION, $chain['records'] );
+			$this->assertSame( 'prov-a:region-1', $chain['records'][ Location_Record::LEVEL_REGION ]->key() );
+			$this->assertSame( 1, $provider->list_localities_calls, 'list_localities() must be used when the provider declares CAPABILITY_LIST' );
+			$this->assertSame( [], $provider->resolve_key_calls, 'resolve_key() must never even be tried once list_localities() already answered' );
+		}
+
+		/**
+		 * Issue #553's own shape, reproduced WITHOUT a live provider: a
+		 * provider's `resolve_key()` answers a region-level record for a
+		 * DIFFERENT key than the one it was asked to resolve (exactly what the
+		 * unfixed test-CDEK fixture did — `resolve_key('...:r81')` answering
+		 * Spain's `...:r482` instead). The ancestor-membership guard in
+		 * {@see Location_Service::region_ancestor_of()} must reject any
+		 * candidate whose own `key()` is not one of the settlement's published
+		 * `ancestors()`, regardless of which derivation path produced it —
+		 * this is the regression test round 1's own suite could not have
+		 * caught, since round 1's mock provider always answered the region it
+		 * was actually asked about.
+		 */
+		public function test_region_ancestor_derivation_rejects_a_region_the_settlement_does_not_descend_from(): void {
+			$this->stub_region_ancestor_transients();
+
+			$wrong_region = $this->record( 'prov-a:region-482', Location_Record::LEVEL_REGION, [ 'label' => 'Галисия' ] );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $wrong_region ): ?Location_Record {
+					// Wrong on purpose — never matches the requested $key,
+					// mirroring the #553 provider bug this guard defends
+					// against.
+					return $wrong_region;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [ 'prov-a:region-81' ] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayNotHasKey(
+				Location_Record::LEVEL_REGION,
+				$chain['records'],
+				'a region the settlement does not actually descend from must never be accepted, even when the provider itself hands one back — issue #553'
+			);
+			$this->assertSame( 'prov-a:city-1', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
 		}
 
 		// -------------------------------------------------------------------

@@ -405,9 +405,46 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		/**
 		 * Resolves a single region by its CDEK `region_code`.
 		 *
-		 * `null` only when CDEK answered ZERO rows for the code — see
-		 * {@see self::resolve_key()}'s own docblock for why every other outcome
-		 * (including a non-empty but unmappable row) throws instead.
+		 * Deliberately does NOT call `GET /location/regions?region_code=` (issue
+		 * #553) — MEASURED against the live test contour: that endpoint ignores
+		 * the `region_code` filter outright and answers an unrelated page
+		 * instead, so `$rows[0]` can be a region that was never asked for
+		 * (`region_code=81` answered Spain's Галисия/482, with the actually
+		 * requested row entirely absent from that same page) — and even
+		 * scanning the WHOLE page cannot be trusted to contain the wanted row.
+		 * {@see self::regions()} — the per-country dictionary
+		 * {@see self::match_regions()}/{@see self::list_localities()} already
+		 * rely on, and already get right (measured: 87 regions for RU,
+		 * `region_code` 81 correctly "Москва") — has no such problem: it reads
+		 * every row of a `country_codes`-scoped page rather than trusting
+		 * position, and it caches the result. Reusing it here bounds the cost
+		 * to at most one cached dictionary fetch per supported country, rather
+		 * than an unbounded (and, per the above, still unreliable) paging loop
+		 * over a filter that does not work.
+		 *
+		 * `null` when `$region_code` is not present in ANY supported country's
+		 * dictionary — see {@see self::resolve_key()}'s own docblock for why
+		 * every other outcome (a dictionary request failing for one of the
+		 * countries checked) throws instead. **Contract change from the
+		 * pre-#553 version:** a dictionary ROW that is present but cannot be
+		 * mapped (missing `region`/`country_code`) is no longer distinguished
+		 * from "not present" — {@see self::regions()} silently excludes it,
+		 * exactly as it already does for {@see self::match_regions()} and
+		 * {@see self::list_localities()} (its own docblock: "skip one bad row
+		 * while enumerating many"). The old single-row endpoint made that
+		 * distinction meaningful (the ONE row we asked about, malformed, was
+		 * plainly CDEK's answer just unusable); once resolution goes through
+		 * an already-vetted multi-row dictionary shared with two other
+		 * callers, there is no longer a single row to single out — treating a
+		 * malformed dictionary entry any differently from how those two
+		 * callers already treat one would be an arbitrary inconsistency, not
+		 * a meaningful distinction.
+		 *
+		 * @since 2.1.0 Rewritten to search the cached per-country dictionaries
+		 *              instead of the single-row `region_code` filter, which
+		 *              does not honour its own parameter on the live test
+		 *              contour (issue #553) — see the contract-change note
+		 *              above for the resulting malformed-row behaviour.
 		 *
 		 * @param int $region_code CDEK region code (the `r`-prefixed native id, minus
 		 *                         the prefix).
@@ -415,7 +452,7 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * @return \Woodev\Framework\Shipping\Location\Location_Record|null
 		 *
 		 * @throws \Woodev\Framework\Shipping\Location\Location_Provider_Exception
-		 *         When unconfigured, the request fails, or CDEK's row cannot be mapped.
+		 *         When unconfigured, or a country's dictionary request fails.
 		 */
 		private function resolve_region( int $region_code ): ?\Woodev\Framework\Shipping\Location\Location_Record {
 			if ( '' === $this->token() ) {
@@ -424,21 +461,15 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 				);
 			}
 
-			$rows = $this->request( '/location/regions', [ 'region_code' => $region_code ] );
+			foreach ( self::COUNTRIES as $country ) {
+				$name = $this->regions( $country )[ $region_code ] ?? null;
 
-			if ( [] === $rows ) {
-				return null;
+				if ( null !== $name ) {
+					return $this->record_from_region( $region_code, $name, $country );
+				}
 			}
 
-			$row = $rows[0];
-
-			if ( ! is_array( $row ) || empty( $row['region_code'] ) || empty( $row['region'] ) || empty( $row['country_code'] ) ) {
-				throw new \Woodev\Framework\Shipping\Location\Location_Provider_Exception(
-					sprintf( 'CDEK test contour resolve_key(): the region row for code "%d" could not be mapped.', $region_code )
-				);
-			}
-
-			return $this->record_from_region( (int) $row['region_code'], (string) $row['region'], (string) $row['country_code'] );
+			return null;
 		}
 
 		// -----------------------------------------------------------------
