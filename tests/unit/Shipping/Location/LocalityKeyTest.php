@@ -305,4 +305,79 @@ final class LocalityKeyTest extends TestCase {
 		$this->assertTrue( Locality_Key::is_derived( $derived_key ) );
 		$this->assertFalse( Locality_Key::is_derived( $escaped_key ) );
 	}
+
+	// ---- #512 (the remainder of #494 a critic flagged during review): compose()
+	// escapes a native id that begins with the marker, but parse() returns a
+	// DERIVED key's native-id segment unescaped (derive() never escapes its own
+	// marker) — so compose( ...parse( $key ) ) is NOT the identity for a derived
+	// key. No in-repo caller round-trips that way today, but Locality_Key is
+	// CONTRACT for third-party Location_Provider implementations, so this is
+	// pinned deliberately rather than left as an undocumented trap. ----
+
+	public function test_compose_of_parse_is_not_the_identity_for_a_derived_key(): void {
+		// Deliberately PINS current behaviour — this is NOT a bug report. parse()
+		// hands back a derived key's native-id segment with its single "derived:"
+		// marker intact (derive() never escapes its own marker, so there is nothing
+		// for parse() to reverse); compose() then ESCAPES that same marker by
+		// doubling it, because compose() cannot tell "a marker derive() minted" apart
+		// from "a marker a provider's own native id happens to start with". Feeding
+		// parse()'s output straight back into compose() therefore silently produces a
+		// key that is_derived() no longer recognises as derived. A future change that
+		// makes this an identity must consciously break this test, not do so by
+		// accident.
+		$derived_key = Locality_Key::derive( 'dadata', [ 'settlement' => 'Тюмень' ] );
+
+		$this->assertTrue( Locality_Key::is_derived( $derived_key ), 'sanity: derive() must mint a key that reads back as derived' );
+
+		[ $provider_id, $native_id ] = Locality_Key::parse( $derived_key );
+		$round_tripped = Locality_Key::compose( $provider_id, $native_id );
+
+		$this->assertNotSame( $derived_key, $round_tripped, 'compose( ...parse( $key ) ) is expected to CHANGE a derived key' );
+		$this->assertFalse( Locality_Key::is_derived( $round_tripped ), 'the round-tripped key is expected to silently stop reading as derived' );
+	}
+
+	// ---- #512: split_key()'s exceptions used to always name parse(), even when
+	// reached through is_derived() — pointing a reader chasing a malformed-key
+	// exception at the wrong call site. ----
+
+	public function test_is_derived_names_itself_when_the_key_has_no_colon(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Locality_Key::is_derived(): "dadata-abc-123" is not a namespaced key (no colon found).' );
+		Locality_Key::is_derived( 'dadata-abc-123' );
+	}
+
+	public function test_is_derived_names_itself_when_a_key_part_is_empty(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Locality_Key::is_derived(): "dadata:" has an empty or whitespace-only provider_id or native_id part.' );
+		Locality_Key::is_derived( 'dadata:' );
+	}
+
+	public function test_parse_still_names_itself_when_the_key_has_no_colon(): void {
+		$this->expectException( \InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Locality_Key::parse(): "dadata-abc-123" is not a namespaced key (no colon found).' );
+		Locality_Key::parse( 'dadata-abc-123' );
+	}
+
+	// ---- #512: escaping widens a native id by up to strlen( "derived:" ) = 8
+	// characters, and the one shipped caller that persists a composed key
+	// (Popular_Settlement_Store) stores it in a `locality_key VARCHAR(191)`
+	// column with no length guard anywhere. Measured rather than guessed: the
+	// longest native-id shapes the one shipped provider can actually mint (a FIAS
+	// UUID; derive()'s own hash segment), even escaped, leave well over 100
+	// characters of headroom under the column width. ----
+
+	public function test_a_composed_key_from_realistic_native_ids_never_approaches_the_locality_key_column_width(): void {
+		$locality_key_column_width = 191; // Popular_Settlement_Store::get_schema(): `locality_key VARCHAR(191)`.
+		$comfortable_margin        = 100;
+
+		$fias_uuid_key = Locality_Key::compose( 'dadata', '0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		$derived_key   = Locality_Key::derive( 'dadata', [ 'settlement' => 'Тюмень' ] );
+		// Worst case in both dimensions at once: a FIAS-UUID-length native id that
+		// ALSO begins with the marker, forcing the 8-byte escape overhead.
+		$escaped_uuid_length_key = Locality_Key::compose( 'dadata', 'derived:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+
+		$this->assertLessThan( $locality_key_column_width - $comfortable_margin, strlen( $fias_uuid_key ) );
+		$this->assertLessThan( $locality_key_column_width - $comfortable_margin, strlen( $derived_key ) );
+		$this->assertLessThan( $locality_key_column_width - $comfortable_margin, strlen( $escaped_uuid_length_key ) );
+	}
 }

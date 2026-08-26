@@ -94,6 +94,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * native id stays representable (#494); {@see self::parse()} reverses the
 		 * escaping so a caller never sees the doubled marker.
 		 *
+		 * WARNING — `self::compose( ...self::parse( $key ) )` is NOT the identity when
+		 * `$key` is a {@see self::derive()}d key. See {@see self::parse()}'s own docblock
+		 * for the full explanation (the escape/unescape asymmetry between the two
+		 * methods) — this is deliberate, current behaviour (#512), not a bug.
+		 *
+		 * Length: the framework itself does not cap `$provider_id`/`$native_id` length —
+		 * the one shipped caller that persists a composed key
+		 * ({@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store}) stores it
+		 * in a `locality_key VARCHAR(191)` column, and escaping can widen a native id by
+		 * up to `strlen( self::DERIVED_MARKER )` (8) characters. Measured (#512): the one
+		 * shipped provider's `provider_id` ("dadata", 6 chars) and native ids (FIAS UUIDs,
+		 * 36 chars; OSM `relation:`/`way:` ids, well under 30 chars) never approach the
+		 * 191-character ceiling even after escaping — well over 100 characters of headroom
+		 * — so no length guard is added here; see
+		 * {@see \Woodev\Tests\Unit\Shipping\Location\LocalityKeyTest::test_a_composed_key_from_realistic_native_ids_never_approaches_the_locality_key_column_width()},
+		 * which pins that measurement rather than leaving it undocumented.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $provider_id Unique id of the owning provider.
@@ -160,21 +177,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * verbatim) — a part containing incidental internal whitespace alongside real
 		 * content is a much narrower, pre-existing imperfection this fix does not reach.
 		 *
+		 * `$entry_point` names the PUBLIC method the caller actually used (`"parse()"`,
+		 * `"is_derived()"`) in a thrown exception's message, rather than always naming
+		 * `parse()` regardless of which method a reader actually called — this private
+		 * helper has two public callers and a message pointing at the wrong one sends a
+		 * reader chasing the wrong call site (#512).
+		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $key A key produced by {@see self::compose()} or {@see self::derive()}.
+		 * @param string $key         A key produced by {@see self::compose()} or {@see self::derive()}.
+		 * @param string $entry_point The public method name to name in a thrown exception,
+		 *                            e.g. `"parse()"` or `"is_derived()"`.
 		 *
 		 * @return array{0: string, 1: string} `[ provider_id, native_id ]`, native_id RAW.
 		 *
 		 * @throws \InvalidArgumentException When the key has no colon, or either resulting
 		 *                                   part is empty or whitespace-only.
 		 */
-		private static function split_key( string $key ): array {
+		private static function split_key( string $key, string $entry_point ): array {
 			$position = strpos( $key, ':' );
 
 			if ( false === $position ) {
 				throw new \InvalidArgumentException(
-					sprintf( 'Locality_Key::parse(): "%s" is not a namespaced key (no colon found).', $key )
+					sprintf( 'Locality_Key::%s: "%s" is not a namespaced key (no colon found).', $entry_point, $key )
 				);
 			}
 
@@ -183,7 +208,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 
 			if ( '' === trim( $provider_id ) || '' === trim( $native_id ) ) {
 				throw new \InvalidArgumentException(
-					sprintf( 'Locality_Key::parse(): "%s" has an empty or whitespace-only provider_id or native_id part.', $key )
+					sprintf( 'Locality_Key::%s: "%s" has an empty or whitespace-only provider_id or native_id part.', $entry_point, $key )
 				);
 			}
 
@@ -279,6 +304,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * See {@see self::split_key()} for the malformed-key refusal rules this delegates
 		 * to.
 		 *
+		 * WARNING — `self::compose( ...self::parse( $key ) )` is NOT the identity when
+		 * `$key` is a {@see self::derive()}d key: parse() returns a derived key's native-id
+		 * segment UNESCAPED (its single {@see self::DERIVED_MARKER} marker intact, exactly
+		 * as derive() minted it — nothing to reverse, since derive() never escapes its own
+		 * marker), but compose() ESCAPES any native id that itself begins with the marker
+		 * by doubling it. Feeding parse()'s output straight back into compose() therefore
+		 * turns that single marker into a doubled one, and {@see self::is_derived()} then
+		 * silently reads the result as `false` — a derived key silently reclassified as a
+		 * provider-issued one. Nothing in this framework does that round-trip today, but a
+		 * third-party {@see \Woodev\Framework\Shipping\Location\Location_Provider}
+		 * implementation reasonably could. This is deliberately NOT changed by #512 — see
+		 * that card and
+		 * {@see \Woodev\Tests\Unit\Shipping\Location\LocalityKeyTest::test_compose_of_parse_is_not_the_identity_for_a_derived_key()},
+		 * which pins it as intentional current behaviour rather than an accident a later
+		 * change could silently alter.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $key A key produced by {@see self::compose()} or {@see self::derive()}.
@@ -289,7 +330,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 *                                   part is empty or whitespace-only.
 		 */
 		public static function parse( string $key ): array {
-			[ $provider_id, $native_id ] = self::split_key( $key );
+			[ $provider_id, $native_id ] = self::split_key( $key, 'parse()' );
 
 			return [ $provider_id, self::unescape_native_id( $native_id ) ];
 		}
@@ -405,7 +446,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Locality_Key' ) )
 		 * @throws \InvalidArgumentException When `$key` is malformed — see {@see self::parse()}.
 		 */
 		public static function is_derived( string $key ): bool {
-			[ , $native_id ] = self::split_key( $key );
+			[ , $native_id ] = self::split_key( $key, 'is_derived()' );
 
 			return self::starts_with_marker( $native_id ) && ! self::starts_with_doubled_marker( $native_id );
 		}
