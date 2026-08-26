@@ -49,6 +49,72 @@ All expected files in `docs-internal/`:
 
 ---
 
+## Session-start reading budget
+
+Five files are read before any work begins, and `npm run lint:docs` caps both each one and their
+sum. **The 176 KB budget is an OPERATOR DECISION (#554, 27.08.2026) — not a derived limit. Do not
+cite it as one.**
+
+| File | Cap |
+|------|-----|
+| `AGENTS.md` | 28 KB |
+| `CLAUDE.md` | 12 KB |
+| `docs-internal/next-session-prompt.md` | 16 KB |
+| `docs-internal/CURRENT-STATE.md` | 28 KB |
+| `docs-internal/GOTCHAS.md` | 96 KB |
+| **Sum — the binding limit** | **176 KB** |
+
+**The sanity check that sized it, and what is assumption in it.** A 200k-token context, of which
+25 % is judged acceptable to spend on session-start reading = 50k tokens; at roughly 3.5 bytes per
+token for mixed RU/EN markdown that lands near 176 KB. **Both steps are assumptions:** the 25 %
+share is a judgement call with no source behind it, and the bytes-per-token figure is an estimate —
+no tokenizer was run. The check says the number is not absurd; it does not prove it. The previous
+120 KB had no derivation at all, which is the only sense in which this is better.
+
+**What WAS measured** — byte sizes across s86 (`a0bcace`) → s96 (`5630663`), ten sessions:
+
+| File | s86 | s96 | Delta | Per session |
+|---|---|---|---|---|
+| `GOTCHAS.md` | 46 810 | 55 323 | **+8 513** | **+851 B** |
+| `AGENTS.md` | 21 914 | 23 192 | +1 278 | +128 B |
+| `CLAUDE.md` | 7 224 | 7 983 | +759 | +76 B |
+| `next-session-prompt.md` | 10 920 | 10 532 | −388 | shrank |
+| `CURRENT-STATE.md` | 24 357 | 23 907 | −450 | shrank |
+| **whole set** | 111 225 | 120 937 | **+9 712** | **+971 B** |
+
+`GOTCHAS.md` is 88 % of the growth, so it gets the slack. The other four are **not
+interchangeable**, and what bounds each is a different thing:
+
+| File | What bounds it |
+|---|---|
+| `CURRENT-STATE.md` | Its own hard rule, "state only, never history" (see [CURRENT-STATE.md Format](#current-statemd-format)). That rule names **this file and no other**. |
+| `next-session-prompt.md` | REPLACED wholesale at every session end, so it cannot accumulate — a different mechanism, not that rule. |
+| `AGENTS.md`, `CLAUDE.md` | Nothing but the caps above. Which is why these two are the ones that grow. |
+
+At the whole-set rate, 176 KB is ~61 sessions of headroom.
+
+**Why each per-file cap moved, and why one did not.** The card and the operator's decision were
+about the SUM. The per-file caps were raised by the agent, not by the operator — recorded here so
+nobody reads them as his call. The justification is per file, measured, not a uniform bump:
+
+| File | Was at / old cap | Rate | Sessions to red | Raised? |
+|---|---|---|---|---|
+| `GOTCHAS.md` | 55 323 / 57 344 | +851 B | **~2** | → 96 KB |
+| `CLAUDE.md` | 7 983 / 8 192 | +76 B | **~3** | → 12 KB |
+| `AGENTS.md` | 23 192 / 24 576 | +128 B | **~11** | → 28 KB |
+| `CURRENT-STATE.md` | 23 907 / 24 576 | −45 B | not growing, but sat **219 B** under at s86 | → 28 KB |
+| `next-session-prompt.md` | 10 532 / 16 384 | replaced each session | never | **no** |
+
+The last row is the point: a cap with 5.8 KB of slack on a file that cannot accumulate did not
+move. Raising the other four is the same defect #554 names — a red gate at session save, in the
+worst possible moment — caught at file scope instead of at the sum.
+
+**If it binds again, do not raise it a third time.** The structural fix is the one #554 also
+proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map
+at session start, and open a tag under the task — which is what the protocol already tells you to do.
+
+---
+
 ## GOTCHAS.md Format
 
 One line per gotcha:

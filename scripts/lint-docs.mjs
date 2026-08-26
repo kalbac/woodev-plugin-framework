@@ -31,17 +31,58 @@ const size = ( p ) => ( existsSync( p ) ? statSync( p ).size : 0 );
 
 /* ------------------------------------------------------------------ *
  * 1. The session-start budget — the reason this gate exists.
+ *
+ * WHAT THE NUMBER IS. 176 KB is an OPERATOR DECISION (#554, 27.08.2026), not
+ * a derived limit. Do not cite it as one. It is a governance ceiling on how
+ * much of a fresh agent's context is spent BEFORE it does any work.
+ *
+ * The sanity check that sized it — and every step of it is an ASSUMPTION, not
+ * a measurement: a 200k-token context, of which 25% is judged acceptable to
+ * spend on session-start reading (that 25% is a judgement call with no source
+ * behind it) = 50k tokens; at roughly 3.5 bytes/token for mixed RU/EN markdown
+ * (an estimate — no tokenizer was run) that lands near 176 KB. It says the
+ * number is not absurd. It does not prove it. The previous 120 KB had no
+ * derivation at all, which is the only sense in which this is an improvement.
+ *
+ * WHAT WAS ACTUALLY MEASURED. Byte sizes across s86 (a0bcace) -> s96 (5630663),
+ * ten sessions:
+ *
+ *   GOTCHAS.md               46,810 -> 55,323   +8,513   (+851 B/session)
+ *   AGENTS.md                21,914 -> 23,192   +1,278   (+128 B/session)
+ *   CLAUDE.md                 7,224 ->  7,983     +759    (+76 B/session)
+ *   next-session-prompt.md   10,920 -> 10,532     -388   (SHRANK)
+ *   CURRENT-STATE.md         24,357 -> 23,907     -450   (SHRANK)
+ *   whole set                                   +9,712   (+971 B/session)
+ *
+ * GOTCHAS.md is 88% of the growth, so it gets the slack. The other four are
+ * NOT interchangeable, and an earlier draft of this comment got their causes
+ * wrong twice — first calling all four "flat", then attributing both shrinking
+ * files to one rule. What actually bounds each:
+ *
+ *   CURRENT-STATE.md       its own hard rule, "state only, never history"
+ *                          (DOCS-SCHEMA.md -> CURRENT-STATE.md Format). That
+ *                          rule names THIS FILE and no other.
+ *   next-session-prompt.md REPLACED wholesale every session end, so it cannot
+ *                          accumulate. A different mechanism, not that rule.
+ *   AGENTS.md, CLAUDE.md   nothing bounds them but the caps below — which is
+ *                          why they are the two that grow.
+ *
+ * At the whole-set rate, 176 KB is ~61 sessions of headroom.
+ *
+ * If this binds again, do not raise it a third time. The structural fix #554
+ * also proposed: split GOTCHAS.md into per-tag indexes and read only the tag
+ * map at session start.
  * ------------------------------------------------------------------ */
 
 const START_SET = [
-	[ 'AGENTS.md', join( ROOT, 'AGENTS.md' ), 24 * 1024 ],
-	[ 'CLAUDE.md', join( ROOT, 'CLAUDE.md' ), 8 * 1024 ],
+	[ 'AGENTS.md', join( ROOT, 'AGENTS.md' ), 28 * 1024 ],
+	[ 'CLAUDE.md', join( ROOT, 'CLAUDE.md' ), 12 * 1024 ],
 	[ 'docs-internal/next-session-prompt.md', join( INTERNAL, 'next-session-prompt.md' ), 16 * 1024 ],
-	[ 'docs-internal/CURRENT-STATE.md', join( INTERNAL, 'CURRENT-STATE.md' ), 24 * 1024 ],
-	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 56 * 1024 ],
+	[ 'docs-internal/CURRENT-STATE.md', join( INTERNAL, 'CURRENT-STATE.md' ), 28 * 1024 ],
+	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 96 * 1024 ],
 ];
 
-const BUDGET = 120 * 1024;
+const BUDGET = 176 * 1024;
 let total = 0;
 
 for ( const [ label, path, limit ] of START_SET ) {
