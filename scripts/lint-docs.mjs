@@ -32,23 +32,37 @@ const size = ( p ) => ( existsSync( p ) ? statSync( p ).size : 0 );
 /* ------------------------------------------------------------------ *
  * 1. The session-start budget — the reason this gate exists.
  *
- * WHAT THE NUMBER MEANS. This is a governance ceiling on how much of a
- * fresh agent's context is spent BEFORE it does any work — not a measured
- * threshold of anyone's attention. The original 120 KB was a guess and was
- * never derived from anything; #554 (operator decision, 27.08.2026) replaced
- * it with a figure that has a basis:
+ * WHAT THE NUMBER IS. 176 KB is an OPERATOR DECISION (#554, 27.08.2026), not
+ * a derived limit. Do not cite it as one. It is a governance ceiling on how
+ * much of a fresh agent's context is spent BEFORE it does any work.
  *
- *   200k-token context * 25% allowed for session-start reading = 50k tokens.
- *   This corpus is mixed RU/EN markdown, ~3.5 bytes/token (estimate, not a
- *   tokenizer measurement) => ~176 KB.
+ * The sanity check that sized it — and every step of it is an ASSUMPTION, not
+ * a measurement: a 200k-token context, of which 25% is judged acceptable to
+ * spend on session-start reading (that 25% is a judgement call with no source
+ * behind it) = 50k tokens; at roughly 3.5 bytes/token for mixed RU/EN markdown
+ * (an estimate — no tokenizer was run) that lands near 176 KB. It says the
+ * number is not absurd. It does not prove it. The previous 120 KB had no
+ * derivation at all, which is the only sense in which this is an improvement.
  *
- * WHY IT NEEDS HEADROOM. Growth was measured across s86 -> s96: the whole
- * set grew +971 B/session, of which GOTCHAS.md was +851 B (88%). The other
- * four files are flat — "state only, never history" holds them there. So the
- * only file that needs real slack is the gotcha index; 96 KB is ~48 sessions
- * at the measured rate. If this ever binds again, the fix is the structural
- * one #554 also proposed: split GOTCHAS.md into per-tag indexes and read only
- * the tag map at session start.
+ * WHAT WAS ACTUALLY MEASURED. Byte sizes across s86 (a0bcace) -> s96 (5630663),
+ * ten sessions:
+ *
+ *   GOTCHAS.md               46,810 -> 55,323   +8,513   (+851 B/session)
+ *   AGENTS.md                21,914 -> 23,192   +1,278   (+128 B/session)
+ *   CLAUDE.md                 7,224 ->  7,983     +759    (+76 B/session)
+ *   next-session-prompt.md   10,920 -> 10,532     -388   (SHRANK)
+ *   CURRENT-STATE.md         24,357 -> 23,907     -450   (SHRANK)
+ *   whole set                                   +9,712   (+971 B/session)
+ *
+ * GOTCHAS.md is 88% of the growth, so it gets the slack. But the two gateway
+ * files DO grow — an earlier draft of this comment called all four non-gotcha
+ * files "flat", which the numbers above disprove. Only the two under "state
+ * only, never history" shrink; that discipline governs those two and nothing
+ * else. At the whole-set rate, 176 KB is ~61 sessions of headroom.
+ *
+ * If this binds again, do not raise it a third time. The structural fix #554
+ * also proposed: split GOTCHAS.md into per-tag indexes and read only the tag
+ * map at session start.
  * ------------------------------------------------------------------ */
 
 const START_SET = [

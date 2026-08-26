@@ -52,7 +52,8 @@ All expected files in `docs-internal/`:
 ## Session-start reading budget
 
 Five files are read before any work begins, and `npm run lint:docs` caps both each one and their
-sum. **Operator decision, #554 (27.08.2026): the budget is 176 KB.**
+sum. **The 176 KB budget is an OPERATOR DECISION (#554, 27.08.2026) — not a derived limit. Do not
+cite it as one.**
 
 | File | Cap |
 |------|-----|
@@ -63,20 +64,31 @@ sum. **Operator decision, #554 (27.08.2026): the budget is 176 KB.**
 | `docs-internal/GOTCHAS.md` | 96 KB |
 | **Sum — the binding limit** | **176 KB** |
 
-**What the number means.** A governance ceiling on how much of a fresh agent's context is spent
-before it does anything — not a measured threshold of attention. The previous 120 KB was a guess with
-no derivation behind it. 176 KB has one: a 200k-token context, 25 % of it allowed for session-start
-reading = 50k tokens, and this mixed RU/EN markdown runs at roughly 3.5 bytes/token (an estimate, not
-a tokenizer measurement) → ~176 KB.
+**The sanity check that sized it, and what is assumption in it.** A 200k-token context, of which
+25 % is judged acceptable to spend on session-start reading = 50k tokens; at roughly 3.5 bytes per
+token for mixed RU/EN markdown that lands near 176 KB. **Both steps are assumptions:** the 25 %
+share is a judgement call with no source behind it, and the bytes-per-token figure is an estimate —
+no tokenizer was run. The check says the number is not absurd; it does not prove it. The previous
+120 KB had no derivation at all, which is the only sense in which this is better.
 
-**Where the growth actually comes from.** Measured across s86 → s96: the whole set grew **+971
-B/session**, of which `GOTCHAS.md` was **+851 B (88 %)**. The other four are flat — "state only,
-never history" holds them there. So `GOTCHAS.md` is the only file that needs real slack, and 96 KB is
-~48 sessions at that rate.
+**What WAS measured** — byte sizes across s86 (`a0bcace`) → s96 (`5630663`), ten sessions:
 
-**If it binds again, do not just raise it a second time.** The structural fix is the one #554 also
-proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map at
-session start, and open a tag under the task — which is what the protocol already tells you to do.
+| File | s86 | s96 | Delta | Per session |
+|---|---|---|---|---|
+| `GOTCHAS.md` | 46 810 | 55 323 | **+8 513** | **+851 B** |
+| `AGENTS.md` | 21 914 | 23 192 | +1 278 | +128 B |
+| `CLAUDE.md` | 7 224 | 7 983 | +759 | +76 B |
+| `next-session-prompt.md` | 10 920 | 10 532 | −388 | shrank |
+| `CURRENT-STATE.md` | 24 357 | 23 907 | −450 | shrank |
+| **whole set** | 111 225 | 120 937 | **+9 712** | **+971 B** |
+
+`GOTCHAS.md` is 88 % of the growth, so it gets the slack. But **the two gateway files do grow** —
+only the two under "state only, never history" shrink, and that discipline governs those two and
+nothing else. At the whole-set rate, 176 KB is ~61 sessions of headroom.
+
+**If it binds again, do not raise it a third time.** The structural fix is the one #554 also
+proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map
+at session start, and open a tag under the task — which is what the protocol already tells you to do.
 
 ---
 
