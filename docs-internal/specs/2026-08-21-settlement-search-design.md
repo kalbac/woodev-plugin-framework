@@ -291,6 +291,23 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
   actually wanted from it — a higher chance of finding the settlement — gets *better*. The mode
   disappears; the capability improves.
 
+## ⚠ Status, 26.08.2026 — this spec needs a scope conversation before any of it is built
+
+The operator kept #437 open but flagged it for **detailed discussion**, and a read of the spec
+against the code says why: the thing it is TITLED for — replacing the preset settlement list —
+already happened by another route (#486 clamped `related-list:settlement` after the `LIST_HARD_CAP`
+= 500 measurement; the dead code under it is #529; the settlement axis is `ajax-select2` today and
+already narrows by region). Decision 6's capability model and decision 8's «связанный поиск»
+checkbox **do not exist in code at all**.
+
+What still looks live: decisions 7/8 (must the settlement field REQUIRE a region, and does that need
+a checkbox) and decision 9 (region as a server-side correctness precondition).
+
+The operator's own worry — "don't load the whole settlement list into the DOM, resolve server-side,
+return only the match" — was raised and then answered by him in the same message: it is the
+PROVIDER's responsibility, and it is already the shipped contract. Nothing was missed. Detail on the
+card, #437.
+
 ## Open questions
 
 - ~~Where the popular list lives and how it is revalidated (schedule, batch size, what happens to
@@ -302,7 +319,17 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
   ever calling a provider.
 - Whether `search_settlements_within` and `search_settlements_countrywide` are one contract method
   with an optional scope or two, given decision 7 collapses the difference to one bit.
-- What the settlement field offers when a provider declares neither settlement-search capability.
+  **Not an operator decision** (26.08.2026) — and the shipped code already answers it: ONE method,
+  `suggest( string $query, Location_Scope $scope )`, with the scope carrying `within`. Measured on
+  the rig: `/location/suggest?q=Пушк&level=settlement&country=RU&within=test-cdek:r82`.
+- ~~What the settlement field offers when a provider declares neither settlement-search
+  capability.~~ **CLOSED 26.08.2026 (operator): the case cannot arise.** Settlement search is a
+  PRECONDITION of registering a provider at all, not a capability — confirmed in code, `suggest()`
+  is declared on `interface-location-provider.php:335` itself, so a provider that cannot search
+  cannot implement the contract. DaData always offers it. If the case somehow appeared, the floor
+  is a plain text field with free input. ⚠ Note the capability model this question belonged to
+  (decision 6) **does not exist in code** — today's four are `list`, `locate`, `normalize`,
+  `resolve_key`.
 - ~~**Is `WC()->checkout` reachable in wp-admin at all?**~~ **MEASURED 24.08.2026: it is.** Under
   `WP_ADMIN` with `set_current_screen()`, `WC()->session` and `WC()->cart` both instantiate,
   `WC()->checkout()` returns a `WC_Checkout`, and `get_checkout_fields( 'billing' )` returns the

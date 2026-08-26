@@ -7,27 +7,32 @@
 > Program history snapshot → `platform-v2-program-tracker.md`; active program map →
 > `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-26 (s94).** Merged this session: **#535** (#530, popular settlements shown to the
-customer) — `6017a0c`. **ONE PR OPEN: #543**, carrying #536, #538, #541, #540 and part 1 of #539.
-It **waits on the operator's rig pass** and on nothing else; every check is green.
+**As of 2026-08-26 (s94).** Merged this session: **#535** (#530) and **#543** (#536, #538, #540,
+#541, part 1 of #539) — `e71b4e6`. **NO open PRs. Tree on `main`, clean.** The operator ran the rig
+and accepted everything.
 
-⚠ **#537 no longer exists as a PR.** Squash-merging #535 deleted its head branch, which was #537's
-BASE, and GitHub auto-CLOSED #537 — a closed PR whose base branch is gone cannot be reopened or
-retargeted (`Cannot change the base branch of a closed pull request`). The branch was rebased onto
-`main` (`git rebase --onto origin/main d966b00`, dropping the two #530 commits) and re-opened as
-**#543**, same content. This is the `stacked-pr-github-mechanics` gotcha, one symptom further than
-it was written for.
+**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026:** `composer check` **2800** /
+6839 / **66 skipped**; jest **1539** in 19 suites.
+
+**Four operator decisions taken this session, all recorded on their cards:**
+
+- **#531 — server half of the «города не из списка» option: BUILD IT.** Discriminator is the
+  SERVER RECORD (`get_customer_record_at('settlement', $country)`), never a client `isCustom` flag —
+  a cached page or hand-edited form would not send one, and those are the cases the card names.
+  Scope: **`ajax-select2` ONLY**. Seam exists: `Checkout_Handler` hooks
+  `woocommerce_checkout_process`. Full reasoning on the card.
+- **#542 — TS for `src/`: new files + lint rule, migrate existing ON TOUCH.** No bulk migration.
+  `woodev/**/assets/js/frontend/` stays out, as decided in s93.
+- **#437 — STAYS OPEN, needs a scope conversation. Do NOT take autonomously.** The thing the spec
+  is titled for already happened another way; decision 6's capability model and decision 8's
+  checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
+  Detail on the card and in the spec's own status banner.
 
 **The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan). TS was
 measured and scoped: `src/` only (#542), never the raw-served frontend.
 
-**Baselines, all measured in the PRIMARY checkout, 26.08.2026.** `main` after #535:
-`composer check` **2791** / 6826 / **66 skipped**; jest **1491**.
-**On PR #543's branch:** **2800** / 6839 / **66 skipped**; jest **1535**.
-
-⚠ **s92's figures were wrong** (2783/6800/66, jest 1459) and rode into the handoff. Re-measured by
-stashing a diff on a clean `main`: really 2787/6813/66 and jest 1467. **A gate number copied from a
-previous handoff is an INFERENCE — re-measure before comparing.** Detail: `sessions/s93.md`.
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
+s92's figures rode into two handoffs wrong. Detail: `sessions/s93.md`.
 
 **#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
 «Список с поиском». ON → select2 `tags`; OFF → #517's abandon mechanism is gated off and the address
@@ -36,15 +41,9 @@ lock stands. Detail → `sessions/s92.md`.
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
-**Popular settlements' customer-facing half is MERGED (#530 via #535)** — empty state, ranking,
-region filtering. What it taught is two gotchas: seeding `<option>`s is not sufficient in ajax
-mode, and a popular list must never arrive PRE-SELECTED.
-
-**#541's real cause is an ASYMMETRY between the two select renderers, not the `/select` queue** —
-`ajax-select2` has the record in the pick, `related-list:region` must match label text against
-`/location/list` (9.7 s cold) first. New seam: `options.onResolving()`, a pick announced by LEVEL.
-Detail → `sessions/s94.md`; the near-miss it taught → gotcha
-`an-empty-list-while-the-search-runs-is-not-a-zero-result`.
+**#541's cause was an ASYMMETRY between the two select renderers, not the `/select` queue** — new
+seam `options.onResolving()`, a pick announced by LEVEL. Detail → `sessions/s94.md`; the two
+near-miss frames it taught → gotcha `an-empty-list-while-the-search-runs-is-not-a-zero-result`.
 
 **Open cards from s92-s94:** #523, #524, #525, #527, #529, #531, #532, #537(closed, superseded),
 #539 (part 3 only), #542. Which are COMMITMENTS, and where each was decided, is the handoff's
