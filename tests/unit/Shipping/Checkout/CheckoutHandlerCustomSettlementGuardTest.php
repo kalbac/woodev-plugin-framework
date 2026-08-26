@@ -323,6 +323,41 @@ class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------------
+	// Both columns carry a settlement field (Rule 7b fan-out, the ordinary
+	// non-"force shipping to billing" store) — the section match in
+	// settlement_field_id_for_section() must be load-bearing: the OTHER
+	// column's posted value must never leak into the comparison.
+	// -----------------------------------------------------------------------
+
+	public function test_active_section_billing_reads_the_billing_field_when_both_columns_carry_one(): void {
+		Functions\expect( 'wc_add_notice' )->never();
+
+		$handler = self::handler( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::settlement_record( 'Жуковский' ) );
+
+		$this->assertTrue(
+			$handler->guard_custom_settlement(
+				[ 'billing_city' => 'Жуковский', 'shipping_city' => 'Москва' ],
+				'RU',
+				'billing'
+			)
+		);
+	}
+
+	public function test_active_section_shipping_reads_the_shipping_field_when_both_columns_carry_one(): void {
+		Functions\expect( 'wc_add_notice' )->once()->with( self::EXPECTED_MESSAGE, 'error' );
+
+		$handler = self::handler( false, Location_Provider_Registry::MODE_AJAX_SELECT2, self::settlement_record( 'Жуковский' ) );
+
+		$this->assertFalse(
+			$handler->guard_custom_settlement(
+				[ 'billing_city' => 'Жуковский', 'shipping_city' => 'Москва' ],
+				'RU',
+				'shipping'
+			)
+		);
+	}
+
+	// -----------------------------------------------------------------------
 	// Country is passed through explicitly, never left to fall back.
 	// -----------------------------------------------------------------------
 
