@@ -1403,37 +1403,28 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 	} );
 
 	// -------------------------------------------------------------------
-	// Codex round 2: the two tests this replaced drove a HAND-SWAPPED bare <select> through the
-	// DETACHED fake typeahead call (`settlementCall.onSelect(...)` bypassing DOM entirely) and
-	// asserted `.value`/`options.length` on it — a shape no real renderer ever produces, which is
-	// exactly why it never caught either defect below. These boot the REAL Task 13 renderer
-	// (`location-select-modes.js`, not `fakeTypeahead()`'s stand-in) and drive picks through its
-	// OWN native `change` wiring, so both are exercised for real:
-	//
-	//  - applyValueToElement()'s synthetic-option branch, which used to REUSE (never remove) a
-	//    synthetic `<option>` for an EMPTY clear, permanently leaving one behind — see this
-	//    function's own docblock in location-cascade.js.
-	//  - resolveAndSelect()'s `lastHandledKey` guard (location-select-modes.js), which never
-	//    expired on its own — so re-picking the SAME still-rendered entry after this exact clear
-	//    resolved to a no-op and never re-fired `/select` at all, the worst version of the D7
-	//    cancel bug: the notice tells the customer to pick again, and picking the same entry again
-	//    is precisely the path that did nothing.
+	// Issue #529: `related-list:settlement` is gone (the settlement axis never offers
+	// `related-list` — operator decision 24.08.2026, issue #486). The two tests below were
+	// never really ABOUT that renderer — Codex round 2 already said so: they exist to pin
+	// `applyValueToElement()`'s synthetic-option branch and `resolveAndSelect()`'s
+	// `lastHandledKey` guard (location-select-modes.js's shared `buildSelectField()`) against a
+	// REAL DOM-replacing widget, not `boot()`'s `fakeTypeahead()` stand-in. Both mechanisms are
+	// shared with `ajax-select2`, so this round ports them to boot that renderer for real
+	// instead, driving the pick through `resolveAndSelect()`'s OTHER caller —
+	// `handleSelect2Select()`, which resolves by `.key` off the select2 event payload, never the
+	// DOM `<option>`'s own dataset (see that function's own docblock) — via
+	// `support/fake-select2.js`'s `pick()`.
 	// -------------------------------------------------------------------
 
 	/**
-	 * Boots `location-cascade.js` against the REAL `location-select-modes.js` `related-list`
-	 * settlement renderer — deliberately NOT `boot()`'s `fakeTypeahead()` stand-in, and
-	 * deliberately without a fake select2 installed: `location-select-modes.js`'s own docblock
-	 * ("SELECT2 IS OPTIONAL AT RUNTIME") means `ensureSelect2()` simply no-ops here, and the
-	 * widget runs its real native-`<select>` fallback path — the exact path `resolveAndSelect()`'s
-	 * `lastHandledKey` guard exists for (a real user pick there fires BOTH the native
-	 * `addEventListener` and jQuery `.on('change')` halves of `bindChangeBothWorlds()` for ONE
-	 * dispatched event, so a single `pickByKey()` call below already exercises the guard's
-	 * original double-fire protection, not just this fix).
+	 * Boots `location-cascade.js` against the REAL `location-select-modes.js` `ajax-select2`
+	 * settlement renderer, with the REAL fake-select2 instrumentation installed — mirrors
+	 * `bootWithRealSelectModes()` in the `issue #517` describe block further down this file
+	 * (duplicated locally per this file's own convention: each describe owns its boot helper).
 	 *
-	 * @returns {void}
+	 * @returns {Array<Object>} the fake-select2 `instances` array (see `support/fake-select2.js`).
 	 */
-	function bootRealRelatedListSettlement() {
+	function bootRealAjaxSelect2Settlement() {
 		installMarkup( { settlement: true }, 'RU' );
 
 		global.jQuery = require( 'jquery' );
@@ -1444,105 +1435,83 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
 		);
 
-		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-
+		fakeTypeahead();
 		mockFetch();
 
-		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, mode: 'related-list' } );
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, mode: { settlement: 'ajax-select2' } } );
 
 		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return instances;
 	}
 
 	/**
-	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
-	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 * Boots, searches for `SETTLEMENT_ITEM`, resolves the `/suggest` request with it as the ONLY
+	 * result, and picks it through the fake's `pick()` — the `ajax-select2` analog of the removed
+	 * `attachAndPopulateRelatedList()`/`pickByKey()` pair. `query.success` may be called TWICE
+	 * (once synchronously with the empty/narrowed local state — settlement always carries a
+	 * `popular()` primitive, issue #530 — and once for real once the `/suggest` fetch resolves),
+	 * so this reads the LAST call, never the first, for the actually-fetched result.
 	 *
-	 * @returns {Object}
+	 * @returns {Promise<{select: Element, resultItem: {id: string, text: string, key: string}, instance: Object}>}
 	 */
-	function listRequest() {
-		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
-	}
-
-	/**
-	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
-	 * setting `selectedIndex` then dispatching one real native `change` event, exactly like this
-	 * file's own `selectViaFake()` does for the baseline typeahead's `<input>`.
-	 *
-	 * @param {Element} select
-	 * @param {string}  key
-	 * @returns {void}
-	 */
-	function pickByKey( select, key ) {
-		var options = select.options;
-		var idx = -1;
-
-		for ( var i = 0; i < options.length; i++ ) {
-			if ( options[ i ].dataset.woodevKey === key ) {
-				idx = i;
-				break;
-			}
-		}
-
-		expect( idx ).not.toBe( -1 );
-
-		select.selectedIndex = idx;
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-	}
-
-	/**
-	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
-	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry.
-	 *
-	 * @returns {Promise<Element>}
-	 */
-	async function attachAndPopulateRelatedList() {
-		bootRealRelatedListSettlement();
-
-		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
-		await flushMicrotasks();
-
-		return document.getElementById( 'billing_city' );
-	}
-
-	it( 'clears a REAL related-list <select> to no selection, leaving no synthetic empty option behind', async () => {
-		const select = await attachAndPopulateRelatedList();
+	async function attachAndPickAjaxSelect2() {
+		const instances = bootRealAjaxSelect2Settlement();
+		const select = document.getElementById( 'billing_city' );
 
 		expect( select.tagName ).toBe( 'SELECT' );
 
-		pickByKey( select, SETTLEMENT_ITEM.key );
-		// Exactly ONE /select request for ONE dispatched `change` event — the native+jQuery
-		// double-fire `resolveAndSelect()`'s guard exists for was already exercised here.
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const calls = query.success.mock.calls;
+		const resultItem = calls[ calls.length - 1 ][ 0 ].results[ 0 ];
+
+		instances[ 0 ].pick( resultItem );
+		// Exactly ONE /select request for ONE dispatched pick — the native+jQuery double-fire
+		// `resolveAndSelect()`'s guard exists for was already exercised here (the fake's own
+		// `pick()` dispatches jQuery `change` — see its own docblock — which reaches
+		// `handleChange()`'s native/no-select2 path too, but that path no-ops on an
+		// `<option>` carrying no `dataset.woodevKey`, exactly what a real select2-rendered
+		// option never carries either).
 		expect( selectRequests().length ).toBe( 1 );
+
+		return { select, resultItem, instance: instances[ 0 ] };
+	}
+
+	it( 'clears a REAL ajax-select2 <select> to no selection on a cancel, leaving the real option behind unmarked as synthetic', async () => {
+		const { select, resultItem } = await attachAndPickAjaxSelect2();
 
 		selectRequests()[ 0 ].resolve( cancelledBody() );
 		await flushMicrotasks();
 
 		// The rendered, customer-visible state: nothing selected, and the ONE real entry the
-		// /location/list response supplied is still the only option — no phantom empty row a
-		// customer opening this dropdown (or select2, had it initialized) would ever have to
-		// explain, and nothing this layer itself could ever have produced another way.
+		// pick produced is still the only option — no phantom empty row a customer opening this
+		// dropdown would ever have to explain, and never re-marked as the synthetic placeholder
+		// applyValueToElement()'s own third branch would otherwise leave behind.
 		expect( select.selectedIndex ).toBe( -1 );
 		expect( select.options.length ).toBe( 1 );
-		expect( select.options[ 0 ].dataset.woodevKey ).toBe( SETTLEMENT_ITEM.key );
+		expect( select.options[ 0 ].value ).toBe( String( resultItem.id ) );
 		expect( select.options[ 0 ].hasAttribute( 'data-woodev-location-synthetic' ) ).toBe( false );
 	} );
 
 	it( 'lets the customer re-pick the SAME still-rendered entry after a cancel — /select fires again, not a silent no-op', async () => {
-		const select = await attachAndPopulateRelatedList();
-
-		pickByKey( select, SETTLEMENT_ITEM.key );
-		expect( selectRequests().length ).toBe( 1 );
+		const { resultItem, instance } = await attachAndPickAjaxSelect2();
 
 		selectRequests()[ 0 ].resolve( cancelledBody() );
 		await flushMicrotasks();
-
-		expect( select.selectedIndex ).toBe( -1 );
 
 		// The exact recovery the cancel notice instructs the customer to take: click the SAME
 		// still-rendered entry again. Before this fix, resolveAndSelect()'s lastHandledKey guard
 		// silently ate this — no second /select request ever went out, and the field stayed
 		// empty forever no matter how many times the customer repeated the instruction.
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
@@ -1619,13 +1588,15 @@ describe( 'D7 — a cancelled /select response (stale popular-settlement pick, i
 
 // -----------------------------------------------------------------------
 // Issue #488 slice 3 round 3 (Codex re-review): resetWidgetGuard() must run on EVERY route that
-// overwrites a select2/related-list widget's DOM value out from under it — not only the D7
-// cancel path clearChainField() already covers above. Enumerated by grepping this file for every
-// literal `applyValueToElement( el, '' )` call: clearChainField() (already covered by the D7
-// suite above), clearDescendants() (an ordinary ANCESTOR text edit — no country involved), and
-// clearCountryScope() (a country change). Both of the latter two are exercised here, each through
-// the REAL Task 13 related-list renderer, never a hand-rolled stand-in — same standard as the D7
-// suite's own round-2 rewrite.
+// overwrites a select2 widget's DOM value out from under it — not only the D7 cancel path
+// clearChainField() already covers above. Enumerated by grepping this file for every literal
+// `applyValueToElement( el, '' )` call: clearChainField() (already covered by the D7 suite
+// above), clearDescendants() (an ordinary ANCESTOR text edit — no country involved), and
+// clearCountryScope() (a country change). Both of the latter two are exercised here, each
+// through a REAL Task 13 widget, never a hand-rolled stand-in — same standard as the D7 suite's
+// own round-2 rewrite. Issue #529 ported this whole describe from the removed
+// `related-list:settlement` renderer to `ajax-select2` — see the D7 suite's own port comment
+// above for why that renderer was never really what these tests are about.
 //
 // Falsified first, per the operator's own instruction, rather than assumed: `applyCountryArbitration()`
 // (:2689-2700) only calls `detachOne()` when a node's `isNodeActive()` flips to false — a country
@@ -1650,52 +1621,16 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	}
 
 	/**
-	 * The `/location/list` request `attachRelatedListSettlement()` issues synchronously on
-	 * attach (boot is synchronous — see `boot()`'s own docblock).
+	 * Boots `location-cascade.js` against the REAL `location-select-modes.js` `ajax-select2`
+	 * settlement renderer, with the REAL fake-select2 instrumentation installed — see the D7
+	 * suite's own `bootRealAjaxSelect2Settlement()` above for the identical shape (duplicated
+	 * locally per this file's own convention: each describe owns its boot helper).
 	 *
-	 * @returns {Object}
+	 * @param {Object} configOpts merged into `buildConfig()`/`installMarkup()` — a test opts
+	 *   into `region: true` or a multi-country `levels` map as its own scenario needs.
+	 * @returns {Array<Object>} the fake-select2 `instances` array (see `support/fake-select2.js`).
 	 */
-	function listRequest() {
-		return fetchCalls.find( ( c ) => 0 === c.url.indexOf( LIST_URL ) );
-	}
-
-	/**
-	 * Picks the `<option>` carrying `key` by driving the widget's OWN rendered `<select>` —
-	 * same technique as `location-cascade.test.js`'s own D7 suite above.
-	 *
-	 * @param {Element} select
-	 * @param {string}  key
-	 * @returns {void}
-	 */
-	function pickByKey( select, key ) {
-		var options = select.options;
-		var idx = -1;
-
-		for ( var i = 0; i < options.length; i++ ) {
-			if ( options[ i ].dataset.woodevKey === key ) {
-				idx = i;
-				break;
-			}
-		}
-
-		expect( idx ).not.toBe( -1 );
-
-		select.selectedIndex = idx;
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-	}
-
-	/**
-	 * Boots the REAL `location-select-modes.js` `related-list` settlement renderer — deliberately
-	 * not `boot()`'s `fakeTypeahead()` stand-in, and deliberately without a fake select2 (SELECT2
-	 * IS OPTIONAL AT RUNTIME, per that file's own docblock — `ensureSelect2()` no-ops and the
-	 * widget runs its real native-`<select>` fallback, exactly the path `resolveAndSelect()`'s
-	 * guard exists for).
-	 *
-	 * @param {Object} configOpts merged into `buildConfig()` — a test opts into `region: true`
-	 *   or a multi-country `levels` map as its own scenario needs.
-	 * @returns {void}
-	 */
-	function bootRealRelatedListSettlement( configOpts ) {
+	function bootRealAjaxSelect2Settlement( configOpts ) {
 		installMarkup( Object.assign( { settlement: true }, configOpts ), 'RU' );
 
 		global.jQuery = require( 'jquery' );
@@ -1706,38 +1641,47 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
 		);
 
-		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-
+		fakeTypeahead();
 		mockFetch();
 
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		const instances = installFakeSelect2( window.jQuery );
+
 		window[ CONFIG_GLOBAL ] = buildConfig( Object.assign(
-			{ settlement: true, mode: { settlement: 'related-list' } },
+			{ settlement: true, mode: { settlement: 'ajax-select2' } },
 			configOpts
 		) );
 
 		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+
+		return instances;
 	}
 
 	/**
-	 * Boots + resolves the ONE `/location/list` fetch the real renderer issues on attach, leaving
-	 * `SETTLEMENT_ITEM` populated as the field's one real, rendered entry, then picks it once and
-	 * lets that first `/select` succeed ordinarily — the baseline state both tests below start
-	 * their OWN clearing route from.
+	 * Boots, searches for and picks `SETTLEMENT_ITEM` through the fake's `pick()`, and lets that
+	 * first `/select` succeed ordinarily — the baseline state every test below starts its OWN
+	 * clearing route from. `query.success` may be called TWICE (see the D7 suite's own
+	 * `attachAndPickAjaxSelect2()` docblock above) — this reads the LAST call.
 	 *
 	 * @param {Object} configOpts
-	 * @returns {Promise<Element>}
+	 * @returns {Promise<{select: Element, resultItem: {id: string, text: string, key: string}, instance: Object}>}
 	 */
 	async function attachPopulateAndPick( configOpts ) {
-		bootRealRelatedListSettlement( configOpts );
-
-		listRequest().resolve( { localities: [ SETTLEMENT_ITEM ] } );
-		await flushMicrotasks();
-
+		const instances = bootRealAjaxSelect2Settlement( configOpts );
 		const select = document.getElementById( 'billing_city' );
 
 		expect( select.tagName ).toBe( 'SELECT' );
 
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		const query = instances[ 0 ].query( SETTLEMENT_ITEM.label );
+
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [ SETTLEMENT_ITEM ] } );
+		await flushMicrotasks();
+
+		const calls = query.success.mock.calls;
+		const resultItem = calls[ calls.length - 1 ][ 0 ].results[ 0 ];
+
+		instances[ 0 ].pick( resultItem );
 		expect( selectRequests().length ).toBe( 1 );
 
 		selectRequests()[ 0 ].resolve( {
@@ -1746,11 +1690,11 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		} );
 		await flushMicrotasks();
 
-		return select;
+		return { select, resultItem, instance: instances[ 0 ] };
 	}
 
 	it( 'an ancestor (region) text edit — clearDescendants() — lets the SAME still-rendered settlement entry be re-picked', async () => {
-		const select = await attachPopulateAndPick( { region: true } );
+		const { select, resultItem, instance } = await attachPopulateAndPick( { region: true } );
 
 		// An ORDINARY customer edit on the ANCESTOR level — never a pick — which
 		// handleFieldChanged() routes straight to clearDescendants(), never through
@@ -1766,7 +1710,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		// The exact recovery: re-pick the SAME still-rendered settlement entry. Before this fix,
 		// resolveAndSelect()'s lastHandledKey guard — never reset by clearDescendants() — silently
 		// ate this: no second /select request, the field stayed empty forever.
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
@@ -1776,7 +1720,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		// applyCountryArbitration() neither detaches nor re-attaches: the SAME widget instance
 		// (and its own lastHandledKey closure) survives, exactly the falsification this test
 		// pins per the operator's own instruction.
-		const select = await attachPopulateAndPick( {
+		const { select, resultItem, instance } = await attachPopulateAndPick( {
 			countries: [ 'RU', 'US' ],
 			levels: { RU: { settlement: true }, US: { settlement: true } },
 		} );
@@ -1788,7 +1732,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 
 		expect( select.selectedIndex ).toBe( -1 );
 
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
@@ -1801,7 +1745,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// `writeSilently()`. Hence the fix sits in `writeSilently()` itself rather than at a fourth
 	// call site.
 	it( 'a pickup point with NO locality — an EMPTY silent write — lets the SAME still-rendered entry be re-picked', async () => {
-		const select = await attachPopulateAndPick();
+		const { select, resultItem, instance } = await attachPopulateAndPick();
 
 		// Exactly what applyAddressReplacement() sends for a point whose `locality` is absent:
 		// `'' === point.locality ? ... : ''` reaches the announcement as a real empty string.
@@ -1816,7 +1760,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		// The recovery a customer would actually attempt. Before the writeSilently() fix,
 		// resolveAndSelect()'s lastHandledKey still held this exact key and ate the re-pick:
 		// one /select total, the settlement record gone, the address field locked.
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
@@ -1830,7 +1774,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// than suppresses. `resolveAndSelect()` compares only the provider KEY, so a changed
 	// spelling leaves it just as stale as a blank does.
 	it( 'a pickup point with a DIFFERENT locality spelling — a non-empty silent write — also lets the SAME entry be re-picked', async () => {
-		const select = await attachPopulateAndPick();
+		const { select, resultItem, instance } = await attachPopulateAndPick();
 
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
 			detail: { fields: { billing_city: 'Москва' } },
@@ -1843,7 +1787,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 		// The customer puts their own settlement back. Under an empty-only release this was
 		// swallowed: no second /select, and handleFieldChanged() then read the text change as a
 		// manual edit and dropped the confirmed record, re-locking the address.
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 2 );
 	} );
@@ -1854,14 +1798,14 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// delivery the guard exists to eat (issue #461 BLOCKING 2 — one pick must not fire across
 	// both the select2 and the native path).
 	it( 'a silent write of the SAME text leaves the guard alone — the entry is still treated as already handled', async () => {
-		const select = await attachPopulateAndPick();
+		const { resultItem, instance } = await attachPopulateAndPick();
 
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
 			detail: { fields: { billing_city: 'Старое Место' } },
 			bubbles: true,
 		} ) );
 
-		pickByKey( select, SETTLEMENT_ITEM.key );
+		instance.pick( resultItem );
 
 		expect( selectRequests().length ).toBe( 1 );
 	} );
@@ -6574,109 +6518,6 @@ describe( 'issue #517: onAbandon unlocks the address field through the select2-b
 		expect( addressField().disabled ).toBe( true );
 	} );
 
-	it( 'related-list:settlement: a completed, non-empty, zero-result local search (language.noResults) unlocks the address field once the dropdown closes', async () => {
-		const select2Calls = [];
-
-		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
-		window.jQuery.fn.select2 = jest.fn( function( config ) {
-			select2Calls.push( config );
-
-			return this;
-		} );
-
-		installMarkup( { settlement: true, address: true } );
-
-		window.WoodevCheckoutFieldStore = require(
-			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
-		);
-
-		fakeTypeahead();
-		mockFetch();
-
-		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-
-		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
-
-		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
-
-		expect( addressField().disabled ).toBe( true );
-
-		// The one-time full list load — `listFor()` hits /location/list, never /location/suggest.
-		const listReq = fetchCalls[ fetchCalls.length - 1 ];
-		expect( listReq.url ).toContain( LIST_URL );
-
-		listReq.resolve( { localities: [
-			{ key: 'dadata:msk', value: 'Москва', label: 'Москва', level: 'settlement', record: { key: 'dadata:msk', provider_id: 'dadata', level: 'settlement', country: 'RU', settlement: { name: 'Москва', type: 'г' }, label: 'г Москва' } },
-		] } );
-		await flushMicrotasks();
-
-		expect( select2Calls ).toHaveLength( 1 );
-
-		// `language.noResults` always fires while the dropdown is open in reality (select2 has
-		// nothing to render otherwise) — MJ-4's own immediate-fire branch depends on this being
-		// tracked accurately, so simulate it explicitly rather than leaving `dropdownOpen` at
-		// its default `false`.
-		window.jQuery( '#billing_city' ).trigger( 'select2:opening' );
-		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
-
-		select2Calls[ 0 ].language.noResults( { term: 'Тьмутаракань' } );
-
-		// Recorded — but MJ-1: nothing fires until the dropdown actually closes.
-		expect( addressField().disabled ).toBe( true );
-
-		await closeSettlementSelect2();
-
-		expect( addressField().disabled ).toBe( false );
-		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
-
-		delete window.jQuery.fn.select2;
-	} );
-
-	it( 'related-list:settlement control: a BLANK term passed to language.noResults does not unlock the address field, even after select2:close', async () => {
-		// This test measures only OUR OWN `term &&` guard in `selectConfigFor()`'s local
-		// branch — it does NOT measure whether a real select2 instance ever calls
-		// `language.noResults` with an empty term in practice (it does not, per select2's own
-		// contract: a blank query always shows the full loaded list, never a filtered-to-zero
-		// one — but that is select2's behaviour, not something this jsdom test can observe
-		// without a real select2 instance). See `location-select-modes.test.js`'s own
-		// pure-config-builder suite for the `language.noResults`/`recordAbandonCandidate`
-		// contract measured in isolation, including the pick-before-close and MN-2 cases.
-		const select2Calls = [];
-
-		window.jQuery = global.jQuery = global.$ = require( 'jquery' );
-		window.jQuery.fn.select2 = jest.fn( function( config ) {
-			select2Calls.push( config );
-
-			return this;
-		} );
-
-		installMarkup( { settlement: true, address: true } );
-
-		window.WoodevCheckoutFieldStore = require(
-			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
-		);
-
-		fakeTypeahead();
-		mockFetch();
-
-		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-
-		window[ CONFIG_GLOBAL ] = buildConfig( { settlement: true, address: true, mode: { settlement: 'related-list' } } );
-
-		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
-
-		fetchCalls[ fetchCalls.length - 1 ].resolve( { localities: [] } );
-		await flushMicrotasks();
-
-		select2Calls[ 0 ].language.noResults( { term: '' } );
-
-		await closeSettlementSelect2();
-
-		expect( addressField().disabled ).toBe( true );
-
-		delete window.jQuery.fn.select2;
-	} );
-
 	// -----------------------------------------------------------------------
 	// issue #517 round 2 (critic MJ-1): a customer typing straight through a non-matching
 	// prefix to a real pick must never have their already-confirmed address text disturbed —
@@ -7558,13 +7399,13 @@ describe( 'a column swap carries the record even after its /select round trip ha
  * ({@see window.WoodevLocationTypeahead}, faked by {@see fakeTypeahead}) attaches directly to the
  * field's own `<input>` and never replaces it — so `document.getElementById( fieldId )`, read
  * AFTER `detachOne()` has already run, still finds the same element the pick was written onto.
- * Production settlement/address fields are never `typeahead` when a `related-list`/`ajax-select2`
- * axis is configured (`location-select-modes.js`'s `buildSelectField()`): that widget swaps the
+ * Production settlement/address fields are never `typeahead` when an `ajax-select2` axis is
+ * configured (`location-select-modes.js`'s `buildSelectField()`): that widget swaps the
  * `<input>` for a fresh `<select>` on attach and, on `detach()`, restores the ORIGINAL `<input>`
  * VERBATIM — never synced with whatever the customer picked in the `<select>` (its own docblock:
  * "`detach()` restores it verbatim ... never left in place under the SAME id" — restores the
  * ORIGINAL node, not a copy carrying the pick). Measured on the rig (issue #490 round 2): this is
- * exactly why settlement — always `ajax-select2` or `related-list:settlement` in production —
+ * exactly why settlement — always `ajax-select2` in production —
  * still did not carry in either direction even after round 1's fix, while region (always
  * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
  *

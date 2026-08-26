@@ -937,14 +937,14 @@
 	 * after `detachOne()` has run is safe ONLY for a widget whose `detach()` leaves the SAME
 	 * element in the DOM (the baseline typeahead, and {@see attachRelatedListRegion}'s native-
 	 * `<select>` watcher — both only unbind listeners). It is NOT safe for a `buildSelectField()`-
-	 * based renderer (`ajax-select2`, `related-list:settlement` — `location-select-modes.js`):
+	 * based renderer (`ajax-select2` — `location-select-modes.js`):
 	 * that widget REPLACES the field's original `<input>` with a fresh `<select>` on attach and,
 	 * on `detach()`, swaps the ORIGINAL `<input>` back in VERBATIM — its own docblock is explicit
 	 * that this restore is never synced with whatever the customer picked in the `<select>`. So a
 	 * read taken after `detachOne()` for one of these levels finds the stale pre-attach `<input>`
 	 * — typically empty — never the picked text, regardless of what {@see applyValueToElement}'s
 	 * value-space understands. Measured on the rig (issue #490 round 2): this is exactly why
-	 * settlement (always `ajax-select2` or `related-list:settlement` in production) carried in
+	 * settlement (always `ajax-select2` in production) carried in
 	 * NEITHER direction even after round 1's fix, while region (always
 	 * {@see attachRelatedListRegion}'s native-`<select>` watcher, never swapped) carried in both.
 	 * `entry.widgets[ fieldId ].el` is read here instead of `document.getElementById()` for
@@ -1344,18 +1344,24 @@
 	 * (country/within read at call time, never captured at attach time) and the SAME `value`
 	 * stamping via {@see fieldValueFor}, so a `related-list` select's own value space is derived
 	 * in exactly the one place `fetchFor()` already derives it for `ajax-select2` — never
-	 * re-derived (or forgotten) at the presentation site (issue #463: `attachRelatedListSettlement()`
-	 * previously called `options.fetchJson()` against `/location/list` directly and never stamped
-	 * `.value` at all, so `buildSelectField()`'s own `applyEntries()` fell back to `entry.key` —
-	 * the raw provider key — exactly the #455 disease on the `ajax-select2` branch that PR already
-	 * closed).
+	 * re-derived (or forgotten) at the presentation site (issue #463).
+	 *
+	 * Issue #529: NOT dead code. The settlement axis's own `related-list` mode
+	 * (`attachRelatedListSettlement()`) was this primitive's only IN-TREE consumer, and that
+	 * renderer is gone (the settlement axis never offers `related-list` — operator decision
+	 * 24.08.2026, issue #486). `related-list:region` never called this either — it watches
+	 * WooCommerce's own rendered `<select>` via `options.fetchJson()`/`options.buildUrl()`
+	 * directly (see {@see attachRelatedListRegion} in location-select-modes.js). This stays
+	 * anyway: `window.WoodevLocationRenderers` is an OPEN registry (this file's own docblock,
+	 * RENDERER SEAM section) — any THIRD-PARTY renderer registered under a custom mode key
+	 * still gets `options.list` handed to it below, same as `options.fetch`/`options.popular`,
+	 * and `tests/js/location-cascade.test.js`'s own `options.list() — issue #463` suite proves
+	 * exactly that seam against a hypothetical `custom-mode:settlement` renderer, independent of
+	 * which built-in renderer (if any) happens to consume it right now.
 	 *
 	 * issue #449 (second half): deliberately does NOT accept an `opts.signal` the way
-	 * {@see fetchFor} now does. `attachRelatedListSettlement()` calls this ONCE, on attach/country
-	 * change — never per keystroke — so there is no rapid-fire supersession to cancel: by the time
-	 * a second call could ever happen, the field (and any renderer watching it) has already been
-	 * torn down and rebuilt for the new country. Revisit only if a caller starts invoking this
-	 * more than once per attach.
+	 * {@see fetchFor} now does — no known caller has ever invoked this more than once per
+	 * attach. Revisit only if one starts to.
 	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string}} node
@@ -2407,29 +2413,24 @@
 	 *
 	 * RENDERER-AGNOSTIC ON PURPOSE. The empty-suggestions row (`location-typeahead.js`'s own
 	 * `emptyText`/`renderItems()`) looks like the obvious "existing precedent" to reuse for D7,
-	 * but it lives entirely inside the baseline typeahead widget's own listbox markup, which
-	 * neither Task 13 renderer this file's own `resolveModeRenderer()` can attach instead ever
-	 * renders (`location-select-modes.js`'s `attachRelatedListSettlement()`/`attachAjaxSelect2()`
-	 * are select2-backed `<select>` fields, not the typeahead's `<ul role="listbox">`).
+	 * but it lives entirely inside the baseline typeahead widget's own listbox markup, which the
+	 * one Task 13 renderer this file's own `resolveModeRenderer()` can attach instead of it for
+	 * a settlement field never renders (`location-select-modes.js`'s `attachAjaxSelect2()` is a
+	 * select2-backed `<select>`, not the typeahead's `<ul role="listbox">`; issue #529 removed
+	 * the settlement axis's other candidate, `attachRelatedListSettlement()` — the settlement
+	 * axis never offers `related-list`).
 	 *
-	 * ROUND 3 CORRECTION (critic MN-5): the round-2 pass here claimed both renderers wire a
-	 * no-results message fed from `options.emptyText` — false for `ajax-select2`, which is
-	 * what round 1's own version of this paragraph correctly said before round 2 overwrote it.
-	 * The two branches are NOT symmetric: `related-list:settlement` DOES wire
-	 * `config.language.noResults`, fed from `options.emptyText` the same way this cascade
-	 * resolves that string for every renderer at this node (`location-select-modes.js`'s
-	 * `selectConfigFor()`, the non-ajax branch) — but `ajax-select2` NEVER assigns
-	 * `config.language` at all and never reads `options.emptyText`, so a genuinely empty ajax
-	 * search still renders select2's own built-in, UNTRANSLATED "No results found" at a
-	 * Russian checkout. Whichever branch actually wires it, the message renders INSIDE select2's
-	 * own dropdown, gone the instant the dropdown closes, never anchored to the field the way
-	 * this DOM-anchor notice is. Since the settlement level a D7 cancel targets can be rendered
-	 * by ANY of the three, and NONE of their own per-search "no results" messages (present or
-	 * absent, translated or not) survive past their own render moment to say "why did my pick
-	 * just get reverted", this DOM-anchor notice — already existing for exactly that purpose,
-	 * telling the customer why a control just changed — is what D7 reuses, working identically
-	 * regardless of which renderer (or none) is attached, rather than any renderer's own
-	 * transient in-widget message.
+	 * `ajax-select2` DOES wire `config.language.noResults`, fed from `options.emptyText` the
+	 * same way this cascade resolves that string for every renderer at this node
+	 * (`location-select-modes.js`'s `selectConfigFor()`/`select2LanguageFor()`, issue #526). That
+	 * message still renders INSIDE select2's own dropdown, gone the instant the dropdown closes,
+	 * never anchored to the field the way this DOM-anchor notice is. Since the settlement level a
+	 * D7 cancel targets can be rendered by EITHER the baseline typeahead or `ajax-select2`, and
+	 * neither's own per-search "no results" message survives past its own render moment to say
+	 * "why did my pick just get reverted", this DOM-anchor notice — already existing for exactly
+	 * that purpose, telling the customer why a control just changed — is what D7 reuses, working
+	 * identically regardless of which renderer (or none) is attached, rather than any renderer's
+	 * own transient in-widget message.
 	 *
 	 * A missing anchor (the field no longer in the document — a country switch tore the section
 	 * down between the request and this response landing) or blank `text` is a silent no-op:
@@ -3278,7 +3279,9 @@
 			fetch: fetchFor( entry, node ),
 			// Issue #463: the `/location/list` analog of `fetch` above — same live scope, same
 			// `fieldValueFor()` value stamping — for a Task 13 `related-list` renderer that needs
-			// the FULL scoped list rather than a per-keystroke suggest query.
+			// the FULL scoped list rather than a per-keystroke suggest query. See `listFor()`'s
+			// own docblock (issue #529) for why this stays even though no built-in renderer
+			// currently reads it.
 			list: listFor( entry, node ),
 			// Issue #530: only handed over for the level the popular-settlements list can
 			// ever carry — `settlement` (only an order's own settlement is ever enrolled,
@@ -3607,8 +3610,8 @@
 			return false;
 		}
 
-		// Issue #517: a select2/selectWoo-backed settlement field (`ajax-select2`,
-		// `related-list:settlement` — `buildSelectField()` in location-select-modes.js has
+		// Issue #517: a select2/selectWoo-backed settlement field (`ajax-select2` —
+		// `buildSelectField()` in location-select-modes.js has
 		// REPLACED the plain `<input>` with a real `<select>`) has no live DOM proxy for the
 		// customer's typed-but-uncommitted search text at all: that text lives in select2's own
 		// transient search box, gone the moment the dropdown closes, and the `<select>`'s own

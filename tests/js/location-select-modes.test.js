@@ -1,15 +1,19 @@
 /**
  * Tests for location-select-modes.js — Task 13 of the 2026-08-12 location-provider plan
- * (spec D7: `related-list` region/settlement renderers, `ajax-select2`).
+ * (spec D7: `related-list` region renderer, `ajax-select2`). The settlement axis's own
+ * `related-list` renderer (`attachRelatedListSettlement()`) and its tests were removed by
+ * issue #529: the settlement axis never offers `related-list` (operator decision 24.08.2026,
+ * issue #486), so no store configuration could ever reach it.
  *
  * Covers, per renderer: the decline contract (wrong element shape falls back to the baseline
  * typeahead, per `location-cascade.js`'s own `attachOne()`), the DOM-replacement + restore
- * lifecycle for the two select2-backed renderers (select2 can only enhance a real `<select>`),
- * population from the SAME `/location/list`/`options.fetch` primitives the cascade hands over,
- * the SHARED `onSelect` persist path (never a duplicated one), and the dual native+jQuery
- * `change` event-world binding (gotcha `jquery-trigger-change-fires-no-native-event`) —
- * including that a SINGLE real native event delivered to BOTH bound worlds calls `onSelect`
- * only once (double delivery harmless by construction).
+ * lifecycle for the select2-backed `ajax-select2` renderer (select2 can only enhance a real
+ * `<select>`), population from the SAME `/location/list`/`options.fetch` primitives the cascade
+ * hands over, the SHARED `onSelect` persist path (never a duplicated one), and the dual
+ * native+jQuery `change` event-world binding (gotcha
+ * `jquery-trigger-change-fires-no-native-event`) — including that a SINGLE real native event
+ * delivered to BOTH bound worlds calls `onSelect` only once (double delivery harmless by
+ * construction).
  *
  * Real jQuery is loaded throughout (a devDependency). `select2` itself is NOT a dependency of
  * this repo (it ships with WordPress/WooCommerce as the `selectWoo` script handle) — every test
@@ -100,13 +104,6 @@ function buildOptions( overrides ) {
 	return Object.assign(
 		{
 			fetch: jest.fn( () => Promise.resolve( [] ) ),
-			// Issue #463: the /location/list analog of `fetch` — `location-cascade.js`'s own
-			// `listFor()` already scopes the request AND stamps `entry.value` via
-			// `fieldValueFor()` before an entry ever reaches this module (proven separately in
-			// location-cascade.test.js's own `options.list()` suite). Entries handed to THIS
-			// module's tests below therefore already carry `.value`, mirroring how `fetch`'s own
-			// overrides already do for the ajax-select2 tests.
-			list: jest.fn( () => Promise.resolve( [] ) ),
 			onSelect: jest.fn(),
 			emptyText: '',
 			node: { level: 'settlement', fieldId: 'billing_city' },
@@ -309,22 +306,6 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 
 		expect( config.language.noResults() )
 			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
-	} );
-
-	it( 'a non-ajax strategy gets width and the localized language block only — no ajax block, no placeholder', () => {
-		const config = mod.selectConfigFor(
-			{ ajax: false },
-			{ initialValue: '', placeholder: 'Регион', applyEntries: jest.fn() }
-		);
-
-		// Issue #526 widened this from `{ width }`: `language` is now built for EVERY
-		// strategy, because select2's untranslated English defaults reached a `related-list`
-		// field carrying no `onAbandon` too — not only the ajax mode the card was filed
-		// against. Everything else about a non-ajax config is unchanged.
-		expect( Object.keys( config ).sort() ).toEqual( [ 'language', 'width' ] );
-		expect( config.width ).toBe( '100%' );
-		expect( config.ajax ).toBeUndefined();
-		expect( config.placeholder ).toBeUndefined();
 	} );
 
 	it( 'an ajax strategy with an initial value gets no placeholder — the seeded <option> already carries it', () => {
@@ -1063,11 +1044,15 @@ describe( 'search-box placeholder (#540)', () => {
 		delete window.jQuery.fn.select2;
 	} );
 
+	// Issue #529: this feature (`handleSelect2Open()`'s search-box placeholder) lives in
+	// `buildSelectField()`, shared by every select2-backed renderer — proven here through
+	// `attachAjaxSelect2()` now that `attachRelatedListSettlement()` (the settlement axis's
+	// `related-list` mode, unreachable per operator decision 24.08.2026, issue #486) is gone.
 	function attach( overrides ) {
 		installStub( window.jQuery );
-		mod.attachRelatedListSettlement(
+		mod.attachAjaxSelect2(
 			document.getElementById( 'billing_city' ),
-			buildOptions( Object.assign( { list: jest.fn( () => Promise.resolve( [] ) ) }, overrides ) )
+			buildOptions( overrides )
 		);
 	}
 
@@ -1123,12 +1108,20 @@ describe( 'search-box placeholder (#540)', () => {
 } );
 
 describe( 'registers onto window.WoodevLocationRenderers on load', () => {
-	it( 'registers related-list:region, related-list:settlement, and the bare ajax-select2 key', () => {
+	it( 'registers related-list:region and the bare ajax-select2 key', () => {
 		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
 
 		expect( typeof window.WoodevLocationRenderers[ 'related-list:region' ] ).toBe( 'function' );
-		expect( typeof window.WoodevLocationRenderers[ 'related-list:settlement' ] ).toBe( 'function' );
 		expect( typeof window.WoodevLocationRenderers[ 'ajax-select2' ] ).toBe( 'function' );
+	} );
+
+	// Issue #529: the settlement axis has exactly two modes, `typeahead` and `ajax-select2` —
+	// `related-list` is clamped away unconditionally server-side (operator decision 24.08.2026,
+	// issue #486), so this key must never come back.
+	it( 'does NOT register related-list:settlement — the settlement axis never offers related-list (issue #486/#529)', () => {
+		require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+
+		expect( window.WoodevLocationRenderers[ 'related-list:settlement' ] ).toBeUndefined();
 	} );
 } );
 
@@ -1411,178 +1404,6 @@ describe( 'related-list region renderer', () => {
 		window.jQuery( el ).trigger( 'change' );
 
 		expect( fetchJsonCalls ).toHaveLength( 0 );
-	} );
-} );
-
-// -----------------------------------------------------------------------
-// related-list: settlement — select2 fed by the full per-region /location/list
-// -----------------------------------------------------------------------
-
-describe( 'related-list settlement renderer', () => {
-	let mod;
-
-	beforeEach( () => {
-		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-		document.body.innerHTML = '<form><input type="text" id="billing_city" name="billing_city" value="" /></form>';
-	} );
-
-	it( 'declines when the field is not a plain <input>', () => {
-		document.body.innerHTML = '<select id="billing_city" name="billing_city"></select>';
-		const options = buildOptions();
-
-		const api = mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		expect( api ).toBeNull();
-	} );
-
-	it( 'replaces the <input> with a <select> carrying the SAME id, fetches entries via options.list(), and populates <option>s', async () => {
-		const input = document.getElementById( 'billing_city' );
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
-		] ) );
-		const options = buildOptions( {
-			node: { level: 'settlement', fieldId: 'billing_city' },
-			list,
-		} );
-
-		mod.attachRelatedListSettlement( input, options );
-
-		expect( document.getElementById( 'billing_city' ).tagName ).toBe( 'SELECT' );
-		// Scoping (level/country/within) is `location-cascade.js`'s own `listFor()` responsibility
-		// now — proven separately in location-cascade.test.js's `options.list()` suite. This
-		// renderer only has to CALL it.
-		expect( list ).toHaveBeenCalledTimes( 1 );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		const select = document.getElementById( 'billing_city' );
-		expect( select.options.length ).toBe( 1 ); // pinned: exactly the one entry the fake response carried.
-		expect( select.options[ 0 ].textContent ).toBe( 'Жуковский' );
-	} );
-
-	// -----------------------------------------------------------------------
-	// issue #463 — the option VALUE is the derived field value (entry.value), never the raw
-	// provider key. Same claim `ajax-select2`'s own #455 suite already pins for that renderer;
-	// `attachRelatedListSettlement()` never got the fix — this is what closes the gap.
-	// -----------------------------------------------------------------------
-
-	it( 'issue #463: a picked option submits entry.value, never entry.key — the raw provider key', async () => {
-		const list = jest.fn( () => Promise.resolve( [
-			{
-				key: 'dadata:0c5b2444-city-zhukovsky', value: 'Жуковский', label: 'Московская обл., г Жуковский',
-				level: 'settlement', record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Московская обл., г Жуковский' },
-			},
-		] ) );
-		const options = buildOptions( { node: { level: 'settlement', fieldId: 'shipping_city' }, list } );
-
-		document.body.innerHTML = '<form id="checkout"><input type="text" id="shipping_city" name="shipping_city" value="" /></form>';
-
-		mod.attachRelatedListSettlement( document.getElementById( 'shipping_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		const select = document.getElementById( 'shipping_city' );
-
-		// FAILS before the #463 fix: the option's own value used to be the raw provider key
-		// (`dadata:0c5b2444-city-zhukovsky`), which is what the checkout form then submitted.
-		expect( select.options[ 0 ].value ).toBe( 'Жуковский' );
-
-		select.value = 'Жуковский';
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-
-		// Identity resolution still goes through the STABLE key (issue #461 BLOCKING 2), never the
-		// submitted value — same contract ajax-select2 already honours.
-		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:0c5b2444-city-zhukovsky', label: 'Московская обл., г Жуковский' } } );
-
-		expect( window.jQuery( '#shipping_city' ).val() ).toBe( 'Жуковский' );
-		expect( window.jQuery( '#checkout' ).serialize() ).toBe( 'shipping_city=' + encodeURIComponent( 'Жуковский' ) );
-	} );
-
-	it( 'issue #463/#461 BLOCKING 1: an entry with an explicitly EMPTY derived value is excluded — never selectable under its own raw key', async () => {
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
-			{ key: 'dadata:no-derivable-value', value: '', label: 'Some place', level: 'settlement', record: { key: 'dadata:no-derivable-value', label: 'Some place' } },
-		] ) );
-		const options = buildOptions( { list } );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		const select = document.getElementById( 'billing_city' );
-
-		expect( select.options.length ).toBe( 1 );
-		expect( select.options[ 0 ].value ).toBe( 'Жуковский' );
-	} );
-
-	it( 'picking an option calls the shared onSelect with the matching record — the SAME persist path as every other level', async () => {
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
-		] ) );
-		const options = buildOptions( { node: { level: 'settlement', fieldId: 'billing_city' }, list } );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		const select = document.getElementById( 'billing_city' );
-		select.value = 'Жуковский';
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-
-		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
-		expect( options.onSelect ).toHaveBeenCalledWith( { record: { key: 'dadata:zh', label: 'Жуковский' } } );
-	} );
-
-	it( 'initializes select2 in LOCAL mode (no `ajax` config) when the plugin is present', async () => {
-		const select2Calls = [];
-		window.jQuery.fn.select2 = jest.fn( function( config ) {
-			select2Calls.push( config );
-			return this;
-		} );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), buildOptions() );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		expect( select2Calls ).toHaveLength( 1 );
-		expect( select2Calls[ 0 ].ajax ).toBeUndefined();
-
-		delete window.jQuery.fn.select2;
-	} );
-
-	it( 'detach() restores the ORIGINAL <input> node in place, removing the <select>', async () => {
-		const input = document.getElementById( 'billing_city' );
-		const options = buildOptions();
-
-		const api = mod.attachRelatedListSettlement( input, options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		api.detach();
-
-		const restored = document.getElementById( 'billing_city' );
-		expect( restored ).toBe( input );
-		expect( restored.tagName ).toBe( 'INPUT' );
-	} );
-
-	it( 'issue #517 round 2 (critic MJ-2): a SYNCHRONOUS options.list() return does not throw — Promise.resolve() must still normalise it even without the old .then(null, …) swallow', async () => {
-		// The renderer contract never forbids options.list() returning a plain array
-		// synchronously; buildSelectField() calls strategy.fetchEntries('').then(…) directly,
-		// so a non-thenable return used to throw straight out of attach() once the swallow
-		// (and, with it, the Promise.resolve() wrapper) was removed.
-		const list = jest.fn( () => ( [
-			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
-		] ) );
-		const options = buildOptions( { list } );
-
-		expect( () => mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options ) ).not.toThrow();
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		const select = document.getElementById( 'billing_city' );
-
-		expect( select.options.length ).toBe( 1 );
-		expect( select.options[ 0 ].textContent ).toBe( 'Жуковский' );
 	} );
 } );
 
@@ -3663,326 +3484,3 @@ describe( 'ajax-select2 renderer — issue #528: allow_custom_settlement opt-in'
 	} );
 } );
 
-// -----------------------------------------------------------------------
-// issue #517 — related-list:settlement has no transport of its own; the honest local seam is
-// select2's own PUBLIC `language.noResults` message hook (never a private/underscored field,
-// never a re-derived matcher — see selectConfigFor()'s own docblock).
-// -----------------------------------------------------------------------
-
-describe( 'related-list settlement renderer — issue #517: onAbandon via the public language.noResults hook', () => {
-	let mod;
-
-	/**
-	 * Installs a minimal `jQuery.fn.select2` stub that records the config it was called with —
-	 * mirrors this file's OWN "initializes select2 in LOCAL mode" test above. Real select2 is
-	 * never present in jsdom (see the file docblock), so `config.language.noResults` and
-	 * `config.templateResult` are invoked DIRECTLY, the same way `selectConfigFor()`'s own
-	 * pure-builder suite already tests the ajax transport without a real select2 instance.
-	 * Round 3: also exposes `open()`/`close()`, dispatching the same `select2:open`/`opening`/
-	 * `closing`/`close` events real select2 fires — `recordAbandonCandidate()`'s MJ-4 branch
-	 * needs `dropdownOpen` tracking active for these tests to represent reality (a
-	 * `language.noResults` call ALWAYS happens while the dropdown is open — select2 has
-	 * nothing to render otherwise).
-	 *
-	 * @param {Object} $ jQuery.
-	 * @returns {Array<Object>}
-	 */
-	function installCapturingSelect2Stub( $ ) {
-		const calls = [];
-
-		$.fn.select2 = jest.fn( function( config ) {
-			calls.push( config );
-
-			return this;
-		} );
-
-		return calls;
-	}
-
-	function openDropdown() {
-		window.jQuery( '#billing_city' ).trigger( 'select2:opening' );
-		window.jQuery( '#billing_city' ).trigger( 'select2:open' );
-	}
-
-	function closeDropdown() {
-		window.jQuery( '#billing_city' ).trigger( 'select2:closing' );
-		window.jQuery( '#billing_city' ).trigger( 'select2:close' );
-	}
-
-	beforeEach( () => {
-		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
-		document.body.innerHTML = '<form><input type="text" id="billing_city" name="billing_city" value="" /></form>';
-	} );
-
-	afterEach( () => {
-		delete window.jQuery.fn.select2;
-	} );
-
-	it( 'records a call to language.noResults with a non-empty term but does NOT fire onAbandon until select2:close', async () => {
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:zh', value: 'Жуковский', label: 'Жуковский', level: 'settlement', record: { key: 'dadata:zh', label: 'Жуковский' } },
-		] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon, emptyText: 'Ничего не найдено' } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		expect( select2Calls ).toHaveLength( 1 );
-		expect( typeof select2Calls[ 0 ].language.noResults ).toBe( 'function' );
-
-		openDropdown();
-
-		const message = select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-		// The server-supplied string is still reused verbatim for the RENDERED message, even
-		// though the abandon report itself is deferred — never a hardcoded English literal.
-		expect( message ).toBe( 'Ничего не найдено' );
-	} );
-
-	it( 'fires onAbandon({query, resolved:true}) once select2:close follows a recorded language.noResults call', async () => {
-		const list = jest.fn( () => Promise.resolve( [] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
-
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
-		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
-	} );
-
-	it( 'a genuine pick clears the recorded candidate for related-list too — NOT the same race as ajax-select2\'s PROBE P2 (see note below)', async () => {
-		// NOTE, verified by mutation (round 3): unlike `ajax-select2` — where a real select2
-		// pick's own `<option>` never carries our `dataset.woodevKey` (see `handleChange()`'s
-		// own docblock), so resolution can ONLY happen via the LATE `select2:select` event,
-		// after `close` per the measured order — a `related-list:settlement` pick lands on a
-		// REAL, already-rendered `<option>` this file itself built (`applyEntries()` stamps
-		// `dataset.woodevKey` on every option regardless of strategy), so the NATIVE `change`
-		// handler (`handleChange()`) resolves it immediately, and `change` is FIRST in the
-		// measured order — well before `close`. So this test does not exercise the same
-		// close-before-select race PROBE P2 does (confirmed: mutating `handleSelect2Close`
-		// back to an inline fire does NOT turn this test red) — it only confirms the pick
-		// still clears the candidate here too, via the ordinary `resolveAndSelect()` path.
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:tver', value: 'Тверь', label: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
-		] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-
-		// The customer's search briefly matched nothing (recorded)...
-		select2Calls[ 0 ].language.noResults( { term: 'Тве' } );
-
-		// ...then they pick the real option that the local list always had.
-		const select = document.getElementById( 'billing_city' );
-
-		select.value = 'Тверь';
-		select.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-
-		closeDropdown();
-
-		window.jQuery( '#billing_city' ).trigger( window.jQuery.Event( 'select2:select', {
-			params: { data: { id: 'Тверь', text: 'Тверь', key: 'dadata:tver' } },
-		} ) );
-
-		await tick();
-
-		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
-		expect( onAbandon ).not.toHaveBeenCalled();
-	} );
-
-	// -----------------------------------------------------------------------
-	// CRITIC BL-2 (round 3, BLOCKER) — the related-list counterpart, using `templateResult`
-	// (select2's own public per-result rendering hook) as the "a match exists" signal, since
-	// `language.noResults` only ever reports the ZERO-match case.
-	// -----------------------------------------------------------------------
-
-	it( 'a matched render (templateResult) clears an earlier failed candidate — the local-strategy counterpart of BL-2', async () => {
-		const list = jest.fn( () => Promise.resolve( [
-			{ key: 'dadata:tver', value: 'Тверь', label: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
-		] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		expect( typeof select2Calls[ 0 ].templateResult ).toBe( 'function' );
-
-		openDropdown();
-
-		select2Calls[ 0 ].language.noResults( { term: 'Тве' } ); // recorded
-
-		// select2 is now about to render "Тверь" as a real matched row.
-		const rendered = select2Calls[ 0 ].templateResult( { id: 'Тверь', text: 'Тверь' } );
-
-		expect( rendered ).toBe( 'Тверь' ); // pure observation — the default rendering, unchanged
-
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-	} );
-
-	it( 'control: templateResult ignores select2\'s own AJAX loading placeholder — never clears on {loading:true}', async () => {
-		const list = jest.fn( () => Promise.resolve( [] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-		select2Calls[ 0 ].language.noResults( { term: 'Тве' } );
-
-		// This strategy is non-ajax and never produces a loading placeholder in practice —
-		// the guard is defensive, since `templateResult` is built by the SAME shared function
-		// the ajax branch could (in principle) also wire it through.
-		const rendered = select2Calls[ 0 ].templateResult( { loading: true, text: 'Searching…' } );
-
-		expect( rendered ).toBe( 'Searching…' );
-
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).toHaveBeenCalledTimes( 1 ); // the "Тве" candidate survived — correctly.
-	} );
-
-	it( 'detach() flushes a pending candidate immediately — never silently dropped on teardown (critic MJ-4)', async () => {
-		const list = jest.fn( () => Promise.resolve( [] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		const api = mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-
-		api.detach();
-
-		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
-		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
-	} );
-
-	it( 'control: select2:close with nothing recorded does nothing', async () => {
-		const list = jest.fn( () => Promise.resolve( [] ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-	} );
-
-	it( 'control: does NOT fire onAbandon for a blank term, even after select2:close — select2 never reports "no results" for an empty query in practice, but the guard is explicit', async () => {
-		const onAbandon = jest.fn();
-		const options = buildOptions( { onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		openDropdown();
-		select2Calls[ 0 ].language.noResults( { term: '' } );
-
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-	} );
-
-	it( 'control: does NOT fire onAbandon when the one-time region list load itself failed, even after select2:close — a transport error, never a completed search', async () => {
-		// See the ajax-select2 control above for why this is expected, not silently swallowed.
-		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
-
-		const list = jest.fn( () => Promise.reject( new Error( 'network down' ) ) );
-		const onAbandon = jest.fn();
-		const options = buildOptions( { list, onAbandon } );
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
-
-		expect( select2Calls ).toHaveLength( 1 );
-
-		openDropdown();
-		select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } );
-
-		closeDropdown();
-		await tick();
-
-		expect( onAbandon ).not.toHaveBeenCalled();
-
-		consoleSpy.mockRestore();
-	} );
-
-	it( 'installs no templateResult and no abandon side-effect when onAbandon is omitted — OPTIONAL, same as every other primitive — but STILL localizes language', async () => {
-		const list = jest.fn( () => Promise.resolve( [] ) );
-		const options = buildOptions( { list, emptyText: 'Ничего не найдено' } );
-
-		delete options.onAbandon;
-
-		const select2Calls = installCapturingSelect2Stub( window.jQuery );
-
-		mod.attachRelatedListSettlement( document.getElementById( 'billing_city' ), options );
-
-		await Promise.resolve().then( () => Promise.resolve() );
-
-		// `templateResult` is the abandon-observation half and stays absent — that half IS
-		// gated on `onAbandon`, and this test is what pins the gate.
-		expect( select2Calls[ 0 ].templateResult ).toBeUndefined();
-
-		// Issue #526: `language` is NOT gated on `onAbandon` and must be present anyway —
-		// this field renders to a customer whether or not anything observes its abandons,
-		// and select2's fallback messages are English. Calling `noResults` here proves the
-		// unwrapped (no side-effect) version is what got installed.
-		expect( typeof select2Calls[ 0 ].language.noResults ).toBe( 'function' );
-		expect( select2Calls[ 0 ].language.noResults( { term: 'Мухосранск' } ) )
-			.toBe( options.emptyText );
-	} );
-} );

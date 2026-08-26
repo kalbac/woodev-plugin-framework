@@ -1036,107 +1036,15 @@
 					};
 				},
 			};
-		} else if ( 'function' === typeof seed.onAbandon ) {
-			// related-list:settlement has no transport of its own to observe — the full,
-			// region-scoped list is already loaded (buildSelectField()'s own one-time
-			// fetchEntries('') call) and select2 filters it LOCALLY, with no network
-			// round-trip and no `ajax.transport` this file controls. `language.noResults` is
-			// select2's own PUBLIC, documented per-query message hook (select2/select2 docs,
-			// i18n.md; the same "language.*" callback family the CDEK reference
-			// (plugins-reference/woocommerce-edostavka/assets/js/frontend/city-select.js:220-222)
-			// already overrides for its own noResults string) — select2 calls it, with the
-			// CURRENT query params, exactly when the filtered result set is empty, and never
-			// for a blank term (an empty query always shows the full loaded list, never zero
-			// results). Reusing it here as an observation point is the honest seam this file's
-			// own docblock already commits to: no network, and no private/underscored select2
-			// field the way `activeAbort`'s own docblock explicitly refuses to touch.
-			//
-			// Issue #517 round 2 (MJ-1): `language.noResults` is a RENDER-TIME hook — select2
-			// calls it on every keystroke that still matches nothing, not once per search. So
-			// `seed.onAbandon` here is `recordAbandonCandidate` (see that function's own
-			// docblock), never a direct fire — calling straight through to
-			// `location-cascade.js`'s `onAbandonFor()` on every matching keystroke would consume
-			// `restoreClearedDescendants()`'s snapshot mid-typing, restoring a stale address
-			// before the customer finishes searching. The actual fire is deferred to
-			// `select2:close`, mirroring `location-typeahead.js`'s own blur-only timing.
-			//
-			// The returned string is never invented here: `seed.emptyText` is the SAME
-			// server-supplied "no results" text `location-cascade.js`'s `attachOne()` already
-			// resolves for every renderer at this node.
-			//
-			// Issue #526 changed the SHAPE of this, not its timing: `config.language` is now
-			// built for every strategy by `select2LanguageFor()` above, so this branch WRAPS
-			// the `noResults` already there instead of replacing the whole `language` object.
-			// Replacing it would silently drop the seven other WooCommerce-sourced messages.
-			// The wrapped callback keeps `select2LanguageFor()`'s own return value — the same
-			// `seed.emptyText`, now with `i18n_no_matches` behind it instead of `''`.
-			//
-			// The critic MN-4/MN-5 note that used to sit here asserted that «`ajax-select2`
-			// never wires `config.language` at all». That was a MEASUREMENT of the old code,
-			// and #526 made it false — it is removed rather than left to mislead the next
-			// reader (this file has been bitten three times by an inference left standing in a
-			// docblock as a fact).
-			//
-			// `select2LanguageFor()` OMITS `noResults` when neither `seed.emptyText` nor
-			// `i18n_no_matches` can answer (see its own docblock for why omission and not an
-			// `undefined`-returning callback). The abandon observation still has to happen in
-			// that case, so the wrap installs itself either way and returns `undefined` only
-			// when there was no string to begin with.
-			//
-			// KNOWN, ACCEPTED, and NOT unreachable — stated precisely because a re-critic
-			// refuted the first version of this comment, which called it impossible. Defining
-			// the key here costs select2's English fallback, so that one corner renders a
-			// BLANK zero-result message. Reaching it takes BOTH of two public filters used
-			// destructively at once: `woodev_location_i18n` emptying `noResults` (it is a
-			// hardcoded `__()` string otherwise) AND WooCommerce's own
-			// `woocommerce_get_script_data` suppressing `i18n_no_matches`. Neither default
-			// gets there. The trade is deliberate: the RECORD of an abandoned search is what
-			// #350/#517 exist for and outranks the message shown for it, and this branch is
-			// only reached at all when `onAbandon` is wired.
-			var localizedNoResults = config.language.noResults;
-
-			config.language.noResults = function( params ) {
-				var term = params && 'string' === typeof params.term ? params.term : '';
-
-				// `! seed.listLoadFailed`: see that flag's own docblock — a region whose
-				// FULL list never loaded reports zero matches for every term, but that is
-				// a transport failure, never a completed search proving the provider has
-				// nothing for this exact town.
-				if ( term && ! seed.listLoadFailed ) {
-					seed.onAbandon( { query: term, resolved: true } );
-				}
-
-				return localizedNoResults ? localizedNoResults( params ) : undefined;
-			};
-
-			// Critic BL-2 (round 3, BLOCKER) — the local/related-list counterpart of the
-			// `entries.length > 0` clear above: `language.noResults` only ever tells us about a
-			// ZERO-match render pass, never a matched one, so a candidate recorded for an
-			// earlier failed prefix (e.g. "Тве") would otherwise survive a LATER keystroke that
-			// DOES match (e.g. "Тверь", rendered as a real row) with nothing to clear it.
-			// `templateResult` is select2's own PUBLIC, documented per-result rendering hook
-			// (select2/select2 docs, dropdown.md) — called once for every row select2 is ABOUT
-			// TO RENDER, i.e. exactly the "a match exists for the current term" signal this
-			// layer needs, with no re-derivation of select2's own matching logic (unlike a
-			// custom `matcher`, which would risk diverging from select2's real default
-			// text-matching behaviour — a risk this file already refuses elsewhere for
-			// `activeAbort`'s private-field reasons, just a different flavour of it here).
-			// Returning `data.text` unchanged is EXACTLY select2's own default `templateResult`
-			// (per the docs: "if no template function is specified... text property... is
-			// used"), so this changes nothing about what renders — pure observation.
-			config.templateResult = function( data ) {
-				// `data.loading` is select2's own placeholder object for an in-flight AJAX
-				// page — never true for this LOCAL, non-ajax strategy, but guarded anyway since
-				// this config object is built by the SAME function the ajax branch shares.
-				if ( ! data || data.loading ) {
-					return data && data.text;
-				}
-
-				seed.onAbandon( null );
-
-				return data.text;
-			};
 		}
+
+		// The non-ajax (`related-list:settlement`) branch that used to sit here — a local,
+		// select2-side `noResults`/`templateResult` observation of a one-time-loaded list — was
+		// removed with `attachRelatedListSettlement()` itself (issue #529): the settlement axis
+		// never offers `related-list`
+		// ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::offered_field_modes_for()},
+		// operator decision 24.08.2026, issue #486), so `selectConfigFor()` is now only ever
+		// called with `strategy.ajax === true`.
 
 		return config;
 	}
@@ -1160,15 +1068,12 @@
 	 * @param {HTMLInputElement} input
 	 * @param {Object}           options   See the file docblock's shared contract.
 	 * @param {{ajax: boolean, fetchEntries: function(string, {signal?: AbortSignal}=): Promise<Array>}} strategy
-	 *   `ajax: false` — `fetchEntries()` is called ONCE (a static, region-scoped full list —
-	 *   `related-list` settlement); the `<select>` is populated with real `<option>` elements
-	 *   up front, and select2 (when present) gets NO `ajax` config at all — it search-filters
-	 *   the already-fetched options locally, which is exactly the "related list" UX (spec D7).
-	 *   `ajax: true` — `fetchEntries( term )` is wired as select2's OWN `ajax.transport`
-	 *   (`ajax-select2` mode); each response's entries are MERGED into the lookup map (never
-	 *   replaced — a later pick may resolve an item fetched several keystrokes ago), and
-	 *   nothing is pre-populated: the field starts genuinely empty, matching a live suggest
-	 *   search rather than a bounded list.
+	 *   `ajax: true` (the only value in production since issue #529 removed the `related-list`
+	 *   settlement mode's `ajax: false` strategy — see the file's own removed-section comment) —
+	 *   `fetchEntries( term )` is wired as select2's OWN `ajax.transport` (`ajax-select2` mode);
+	 *   each response's entries are MERGED into the lookup map (never replaced — a later pick
+	 *   may resolve an item fetched several keystrokes ago), and nothing is pre-populated: the
+	 *   field starts genuinely empty, matching a live suggest search rather than a bounded list.
 	 * @returns {{detach: function(): void, el: Element}|null}
 	 */
 	function buildSelectField( input, options, strategy ) {
@@ -1276,24 +1181,11 @@
 		var activeAbort = null;
 
 		/**
-		 * @type {boolean} Issue #517 (related-list:settlement's own transport-error guard):
-		 * `true` once the ONE-TIME full-list load below has settled having FAILED. Set
-		 * synchronously, in the SAME `.then()` callback that also calls `ensureSelect2()` for
-		 * the first (and only — this strategy never re-fetches) time, so `selectConfigFor()`'s
-		 * `language.noResults` hook — built inside that same `ensureSelect2()` call — always
-		 * reads this at its own final, settled value; never a race. A field whose region-scoped
-		 * list genuinely failed to load has zero options for a reason that says nothing about
-		 * whether the provider carries the customer's typed town — the same "never on a
-		 * transport error" exclusion `attachAjaxSelect2()`'s own `null`-vs-`[]` distinction
-		 * already enforces for the ajax strategy.
-		 */
-		var listLoadFailed = false;
-
-		/**
 		 * Applies a batch of `{key, label, level, record}` entries (Task 8/13's shared
 		 * `to_response_records()` wire shape) — either REPLACING the select's whole option set
-		 * (the static list strategy) or MERGING into the lookup map only, leaving the DOM to
-		 * select2's own remote-results rendering (the ajax strategy).
+		 * (the seeded initial-value/popular-list options, built once before select2 ever runs)
+		 * or MERGING into the lookup map only, leaving the DOM to select2's own remote-results
+		 * rendering (every per-keystroke ajax response).
 		 *
 		 * issue #461 BLOCKING 1: an entry whose derived field value is an EXPLICIT empty string
 		 * (`fieldValueFor()` found no component AND no usable label at this level —
@@ -1424,9 +1316,9 @@
 		/**
 		 * The NATIVE/no-select2 resolution path: reads the STABLE identity `applyEntries()`
 		 * stamped onto the selected `<option>`'s own `dataset` (issue #461 BLOCKING 2). Covers
-		 * `related-list:settlement` (select2, when present there, is LOCAL/non-ajax and wraps
-		 * these exact `<option>` elements without rebuilding them) and `ajax-select2` when no
-		 * select2/selectWoo ever loaded. Does NOT cover a real select2 AJAX pick — select2's own
+		 * `ajax-select2` when no select2/selectWoo ever loaded — the initial-value/popular-list
+		 * `<option>`s `buildSelectField()` seeds up front (above) are real DOM options carrying
+		 * this same `dataset` stamp. Does NOT cover a real select2 AJAX pick — select2's own
 		 * `SelectAdapter.prototype.option()` builds that `<option>` itself and copies only
 		 * `value`/`textContent`/`selected`/`disabled`/`title` onto it (selectWoo.full.js:3309-
 		 * 3327), never a custom `dataset` entry — see the `select2:select` binding below for that
@@ -1712,9 +1604,6 @@
 				// Issue #528: see the local `allowCustomSettlement` var's own docblock above.
 				allowCustomSettlement: allowCustomSettlement,
 				emptyText: 'string' === typeof options.emptyText ? options.emptyText : '',
-				// Issue #517: see `listLoadFailed`'s own docblock above — always `false` for the
-				// `ajax` strategy (never assigned there), meaningful only for `related-list:settlement`.
-				listLoadFailed: listLoadFailed,
 				// Issue #530: OPTIONAL, same discipline as `onAbandon` above — `location-cascade.js`'s
 				// `attachOne()` only hands this over when a level actually carries a popular list
 				// (currently `settlement`). Read LIVE by `selectConfigFor()`'s transport on every
@@ -1753,8 +1642,8 @@
 				// way — a round-trip at attach time would mean seconds of empty field (the
 				// rig's own `/suggest` measured 8.5s) plus a race with select2 init. `true`
 				// (REPLACE, not merge) is what actually builds the `<option>` DOM nodes —
-				// `applyEntries()`'s own docblock: the ajax `false` call `selectConfigFor()`'s
-				// transport makes is merge-only because select2 renders ITS OWN `<option>`s
+				// `applyEntries()`'s own docblock: every per-keystroke ajax response `selectConfigFor()`'s
+				// transport reports is merge-only because select2 renders ITS OWN `<option>`s
 				// for a remote result; this is the empty state BEFORE select2 ever runs, so
 				// it needs the real nodes. Safe to REPLACE here: `select` is still empty at
 				// this point in `buildSelectField()`, nothing to lose. Routed through the SAME
@@ -1806,19 +1695,6 @@
 			// mode is only ever offered by the store setting when the real plugin is expected to
 			// be present.
 			ensureSelect2();
-		} else {
-			strategy.fetchEntries( '' ).then(
-				function( entries ) {
-					applyEntries( entries, true );
-					ensureSelect2();
-				},
-				function( error ) {
-					logError( error );
-					listLoadFailed = true;
-					applyEntries( [], true );
-					ensureSelect2();
-				}
-			);
 		}
 
 		return {
@@ -1891,60 +1767,15 @@
 	}
 
 	// -------------------------------------------------------------------------
-	// related-list: settlement — select2 fed by the FULL per-region /location/list
+	// related-list: settlement — REMOVED (issue #529). The settlement axis has exactly two
+	// modes, `typeahead` and `ajax-select2` — `related-list` is clamped away unconditionally
+	// server-side ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::offered_field_modes_for()},
+	// operator decision 24.08.2026, issue #486), so no store configuration could ever reach
+	// this renderer. `attachRelatedListSettlement()` (PR #522/#517) and its `related-list:settlement`
+	// registration are gone with it, along with the non-ajax branches of `selectConfigFor()`/
+	// `buildSelectField()` below that existed only to serve it. `related-list:region` is a
+	// SEPARATE, reachable mode ({@see attachRelatedListRegion} above) and is untouched.
 	// -------------------------------------------------------------------------
-
-	/**
-	 * Attaches the `related-list` settlement (city) renderer — spec D7, Task 13: "the city
-	 * level in this mode is a select2 populated from `/location/list` scoped to the chosen
-	 * region." Scoped live at fetch time by `options.list` itself (the SAME live region-record-
-	 * key scoping the baseline typeahead's own `within` param already uses for this level —
-	 * country-wide when no region is selected yet, exactly like the suggest path).
-	 *
-	 * Issue #463: `options.list` — not a hand-rolled `options.fetchJson()` call against
-	 * `/location/list` — is what supplies entries here. `location-cascade.js`'s own `listFor()`
-	 * already stamps `entry.value` via `fieldValueFor()` before an entry ever reaches this file,
-	 * the SAME contract `options.fetch` already honours for `ajax-select2` (issue #455) — so
-	 * `buildSelectField()`'s shared `applyEntries()` never has to fall back to `entry.key` (the
-	 * raw provider key) for this renderer either.
-	 *
-	 * @param {Element} el
-	 * @param {Object}  options
-	 * @returns {{detach: function(): void, el: Element}|null}
-	 */
-	function attachRelatedListSettlement( el, options ) {
-		if ( ! el || 'INPUT' !== el.tagName ) {
-			return null;
-		}
-
-		return buildSelectField( el, options, {
-			ajax: false,
-			// Issue #517: a rejection is left to propagate, UNCAUGHT, straight to
-			// `buildSelectField()`'s own non-ajax `.then( success, error )` — which already
-			// logs and degrades to an empty list itself (previously dead code for this
-			// renderer, since this wrapper used to swallow every rejection right here) and, as
-			// of #517, also sets `listLoadFailed` so a genuinely failed list load can never be
-			// mistaken for the provider having nothing to offer.
-			//
-			// Round 2 correction (critic MJ-2): `Promise.resolve( … )` stays, even with the
-			// `.then( null, … )` swallow gone — it was doing a SECOND job the first pass of
-			// this diff missed: normalising a non-thenable return. `buildSelectField()` calls
-			// `strategy.fetchEntries('').then(…)` directly; the renderer contract this file's
-			// own docblock states never forbids `options.list()` returning a plain array
-			// synchronously (any test double or third-party `related-list` consumer could
-			// reasonably do so), and without this wrapper that throws `TypeError:
-			// …fetchEntries(...).then is not a function` straight out of `attach()`, leaving a
-			// bare `<select>` already swapped in for the `<input>` but never populated. Not
-			// reachable through this framework's own wiring (`location-cascade.js`'s
-			// `listFor()` always returns a real promise) — a contract regression for callers
-			// outside it, not a live bug in this repo, but a one-token fix.
-			fetchEntries: function() {
-				return Promise.resolve( options.list() );
-			},
-		} );
-	}
-
-	registry[ 'related-list:settlement' ] = attachRelatedListSettlement;
 
 	// -------------------------------------------------------------------------
 	// ajax-select2 — select2 remote data through the SAME /location/suggest fetch the
@@ -2011,7 +1842,6 @@
 	if ( typeof module !== 'undefined' && module.exports ) {
 		module.exports = {
 			attachRelatedListRegion: attachRelatedListRegion,
-			attachRelatedListSettlement: attachRelatedListSettlement,
 			attachAjaxSelect2: attachAjaxSelect2,
 			bindChangeBothWorlds: bindChangeBothWorlds,
 			selectConfigFor: selectConfigFor,
