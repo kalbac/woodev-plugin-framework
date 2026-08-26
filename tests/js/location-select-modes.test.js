@@ -3074,6 +3074,57 @@ describe( 'ajax-select2 renderer — issue #517: onAbandon fires on a completed,
 	} );
 
 	// -----------------------------------------------------------------------
+	// Issue #525: the PROBE P2 test above drives the FIXTURE's own `pick()` — if
+	// `tests/js/support/fake-select2.js` ever dispatched `select2:select` before
+	// `select2:close` (an inverted fixture), that test would stay GREEN regardless, because
+	// `resolveAndSelect()`'s synchronous clear of `pendingAbandon` protects a real pick under
+	// EITHER order. It is `fake-select2.test.js` that pins the fixture itself; THIS test pins
+	// `handleSelect2Close()`'s deferral independently of the fixture, by dispatching the four
+	// events by hand in the MEASURED order (mirrors `location-cascade.test.js`'s own hand-fired
+	// PROBE P2) — so a regression in the deferral is caught here even if the fixture were ever
+	// wrong at the same time.
+	// -----------------------------------------------------------------------
+
+	it( 'PROBE P2 (fixture-independent): a genuine pick clears the recorded candidate when select2:close and select2:select are dispatched by hand in the MEASURED order', async () => {
+		const fetchSpy = jest.fn()
+			.mockImplementationOnce( () => Promise.resolve( [       // "Тверь" — a real match, first
+				{ key: 'dadata:tver', value: 'Тверь', level: 'settlement', record: { key: 'dadata:tver', label: 'Тверь' } },
+			] ) )
+			.mockImplementationOnce( () => Promise.resolve( [] ) ); // "Тве" — zero results, recorded LAST
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		const firstQuery = instances[ 0 ].query( 'Тверь' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instances[ 0 ].query( 'Тве' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// Never `instances[ 0 ].pick()` — dispatch the pick's own events by hand, in the
+		// MEASURED order, so this test's claim does not depend on the fixture's own wiring.
+		const resultItem = firstQuery.success.mock.calls[ 0 ][ 0 ].results[ 0 ];
+		const $select = window.jQuery( '#shipping_city' );
+
+		$select.val( resultItem.id );
+		$select.trigger( 'change' );
+		$select.trigger( 'select2:closing' );
+		$select.trigger( 'select2:close' );
+		$select.trigger( window.jQuery.Event( 'select2:select', { params: { data: resultItem } } ) );
+
+		// The scheduled flush from `select2:close` would run on the next tick if nothing
+		// cancelled it — the claim under test is that the SYNCHRONOUS `select2:select` above
+		// already cancelled it before this tick runs.
+		await tick();
+
+		expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// -----------------------------------------------------------------------
 	// CRITIC BL-2 (round 3, BLOCKER) — a candidate recorded for an earlier FAILED term must
 	// not survive a LATER completed search on the same field that DID find something.
 	// -----------------------------------------------------------------------
