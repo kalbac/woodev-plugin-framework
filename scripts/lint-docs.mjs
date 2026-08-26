@@ -31,17 +31,35 @@ const size = ( p ) => ( existsSync( p ) ? statSync( p ).size : 0 );
 
 /* ------------------------------------------------------------------ *
  * 1. The session-start budget — the reason this gate exists.
+ *
+ * WHAT THE NUMBER MEANS. This is a governance ceiling on how much of a
+ * fresh agent's context is spent BEFORE it does any work — not a measured
+ * threshold of anyone's attention. The original 120 KB was a guess and was
+ * never derived from anything; #554 (operator decision, 27.08.2026) replaced
+ * it with a figure that has a basis:
+ *
+ *   200k-token context * 25% allowed for session-start reading = 50k tokens.
+ *   This corpus is mixed RU/EN markdown, ~3.5 bytes/token (estimate, not a
+ *   tokenizer measurement) => ~176 KB.
+ *
+ * WHY IT NEEDS HEADROOM. Growth was measured across s86 -> s96: the whole
+ * set grew +971 B/session, of which GOTCHAS.md was +851 B (88%). The other
+ * four files are flat — "state only, never history" holds them there. So the
+ * only file that needs real slack is the gotcha index; 96 KB is ~48 sessions
+ * at the measured rate. If this ever binds again, the fix is the structural
+ * one #554 also proposed: split GOTCHAS.md into per-tag indexes and read only
+ * the tag map at session start.
  * ------------------------------------------------------------------ */
 
 const START_SET = [
-	[ 'AGENTS.md', join( ROOT, 'AGENTS.md' ), 24 * 1024 ],
-	[ 'CLAUDE.md', join( ROOT, 'CLAUDE.md' ), 8 * 1024 ],
+	[ 'AGENTS.md', join( ROOT, 'AGENTS.md' ), 28 * 1024 ],
+	[ 'CLAUDE.md', join( ROOT, 'CLAUDE.md' ), 12 * 1024 ],
 	[ 'docs-internal/next-session-prompt.md', join( INTERNAL, 'next-session-prompt.md' ), 16 * 1024 ],
-	[ 'docs-internal/CURRENT-STATE.md', join( INTERNAL, 'CURRENT-STATE.md' ), 24 * 1024 ],
-	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 56 * 1024 ],
+	[ 'docs-internal/CURRENT-STATE.md', join( INTERNAL, 'CURRENT-STATE.md' ), 28 * 1024 ],
+	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 96 * 1024 ],
 ];
 
-const BUDGET = 120 * 1024;
+const BUDGET = 176 * 1024;
 let total = 0;
 
 for ( const [ label, path, limit ] of START_SET ) {

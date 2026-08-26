@@ -49,6 +49,37 @@ All expected files in `docs-internal/`:
 
 ---
 
+## Session-start reading budget
+
+Five files are read before any work begins, and `npm run lint:docs` caps both each one and their
+sum. **Operator decision, #554 (27.08.2026): the budget is 176 KB.**
+
+| File | Cap |
+|------|-----|
+| `AGENTS.md` | 28 KB |
+| `CLAUDE.md` | 12 KB |
+| `docs-internal/next-session-prompt.md` | 16 KB |
+| `docs-internal/CURRENT-STATE.md` | 28 KB |
+| `docs-internal/GOTCHAS.md` | 96 KB |
+| **Sum — the binding limit** | **176 KB** |
+
+**What the number means.** A governance ceiling on how much of a fresh agent's context is spent
+before it does anything — not a measured threshold of attention. The previous 120 KB was a guess with
+no derivation behind it. 176 KB has one: a 200k-token context, 25 % of it allowed for session-start
+reading = 50k tokens, and this mixed RU/EN markdown runs at roughly 3.5 bytes/token (an estimate, not
+a tokenizer measurement) → ~176 KB.
+
+**Where the growth actually comes from.** Measured across s86 → s96: the whole set grew **+971
+B/session**, of which `GOTCHAS.md` was **+851 B (88 %)**. The other four are flat — "state only,
+never history" holds them there. So `GOTCHAS.md` is the only file that needs real slack, and 96 KB is
+~48 sessions at that rate.
+
+**If it binds again, do not just raise it a second time.** The structural fix is the one #554 also
+proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map at
+session start, and open a tag under the task — which is what the protocol already tells you to do.
+
+---
+
 ## GOTCHAS.md Format
 
 One line per gotcha:
