@@ -898,15 +898,133 @@ describe( 'ajax transport — local narrowing while the real search runs (#539)'
 		expect( fetchEntries.mock.calls[ 0 ][ 0 ] ).toBe( 'Пушк' );
 	} );
 
-	it( 'the provider\'s own answer replaces the narrowed list when it lands', async () => {
+	// -----------------------------------------------------------------------
+	// Issue #539 PART 3 — the completed frame is the UNION of the locally-narrowed popular
+	// list and the provider's own answer, popular above the rest, never one replacing the
+	// other outright (that was this exact test, before part 3 — see git history).
+	// -----------------------------------------------------------------------
+
+	it( 'the provider\'s own answer JOINS the narrowed popular list — a popular match under a DIFFERENT key than the provider\'s own is never dropped', async () => {
 		const { config, settle } = buildAjax();
 		const { success } = run( config, 'Пушк' );
 
+		// The provider's own record for this same real-world city carries its OWN key
+		// (`s:9`, a fuller address) — a different identity than the popular cache's `p:2`,
+		// so this is a UNION, not a dedup: both survive.
 		settle( [ { key: 's:9', value: 'Пушкин, Санкт-Петербург, Россия', label: 'Пушкин, Санкт-Петербург, Россия', record: { label: 'Пушкин, Санкт-Петербург, Россия' } } ] );
 		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
 
 		expect( success ).toHaveBeenCalledTimes( 2 );
-		expect( success.mock.calls[ 1 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин, Санкт-Петербург, Россия' ] );
+		// Popular group (p:2, un-confirmed by the provider under ITS OWN key) first, the
+		// provider's own (non-popular) result after it.
+		expect( success.mock.calls[ 1 ][ 0 ].results.map( ( r ) => r.text ) )
+			.toEqual( [ 'Пушкин', 'Пушкин, Санкт-Петербург, Россия' ] );
+	} );
+
+	it( 'issue #539 point 1: an entry the provider ALSO returns under the SAME key appears exactly ONCE, using the provider\'s fresher record', async () => {
+		const { config, settle } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		// Same key as the popular cache's own p:2 — but the provider's live label differs,
+		// proving this is the PROVIDER's copy that survived, not a silent duplicate nor the
+		// stale cached one.
+		settle( [ { key: 'p:2', value: 'Пушкин, Ленинградская обл.', label: 'Пушкин, Ленинградская обл.', record: { label: 'Пушкин, Ленинградская обл.' } } ] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		const results = success.mock.calls[ 1 ][ 0 ].results;
+
+		expect( results ).toHaveLength( 1 );
+		expect( results[ 0 ] ).toEqual( { id: 'Пушкин, Ленинградская обл.', text: 'Пушкин, Ленинградская обл.', key: 'p:2' } );
+	} );
+
+	it( 'a provider superset that already confirms the popular match ranks it first (unchanged #530 partition) — no duplicate, no supplement needed', async () => {
+		const { config, settle } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		// The provider returns the popular entry SECOND in its own relevance order, plus an
+		// unrelated result. #530's own partition (untouched by part 3) still puts the
+		// popular-flagged one first.
+		settle( [
+			{ key: 'other:1', value: 'Пушкари', label: 'Пушкари', record: { label: 'Пушкари' } },
+			{ key: 'p:2', value: 'Пушкин', label: 'Пушкин', record: { label: 'Пушкин' } },
+		] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		const results = success.mock.calls[ 1 ][ 0 ].results;
+
+		expect( results.map( ( r ) => r.key ) ).toEqual( [ 'p:2', 'other:1' ] );
+	} );
+
+	it( 'issue #539 point 2/4: the provider answering EMPTY does not erase a popular match still on screen', async () => {
+		const { config, settle } = buildAjax();
+		const { success } = run( config, 'Пушк' );
+
+		settle( [] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		expect( success.mock.calls[ 1 ][ 0 ].results.map( ( r ) => r.text ) ).toEqual( [ 'Пушкин' ] );
+	} );
+
+	it( 'control: a level with NO popular list — the merged frame is unchanged, just the provider\'s own accepted entries', async () => {
+		const { config, settle } = buildAjax( { popular: undefined } );
+		const { success } = run( config, 'Пушк' );
+
+		settle( [ { key: 'other:1', value: 'Пушкари', label: 'Пушкари', record: { label: 'Пушкари' } } ] );
+		await Promise.resolve().then( () => Promise.resolve() ).then( () => Promise.resolve() );
+
+		// No synchronous narrowing paint at all (no popular list to narrow from) — the ONE
+		// success() call is the provider's own real answer.
+		expect( success ).toHaveBeenCalledTimes( 1 );
+		expect( success.mock.calls[ 0 ][ 0 ].results.map( ( r ) => r.key ) ).toEqual( [ 'other:1' ] );
+	} );
+
+	// -----------------------------------------------------------------------
+	// Issue #539 point 4 — the abandon signal now reads the MERGED frame, not raw provider
+	// `entries`: a popular rescue must behave like a real provider result for #528's purposes.
+	// -----------------------------------------------------------------------
+
+	it( 'a popular entry rescuing an otherwise-empty provider answer CLEARS a stale candidate, never records a new one', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const popular = jest.fn( () => [
+			{ key: 'p:2', value: 'Пушкин', label: 'Пушкин', record: { label: 'Пушкин' } },
+		] );
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries },
+			{
+				initialValue: '', placeholder: '', level: 'settlement',
+				applyEntries: ( entries ) => ( Array.isArray( entries ) ? entries : [] ),
+				popular, allowCustomSettlement: true, onAbandon,
+			}
+		);
+
+		config.ajax.transport( { data: { term: 'Пушк' } }, jest.fn(), jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// Never records the "nothing found" marker — the customer has a real, pickable
+		// popular option in front of them, even though the provider itself found nothing.
+		expect( onAbandon ).not.toHaveBeenCalledWith( { query: 'Пушк', resolved: true } );
+		// `recordAbandonCandidate`'s own CLEAR signal — a stale earlier candidate must not
+		// survive a search the popular list just rescued.
+		expect( onAbandon ).toHaveBeenCalledWith( null );
+	} );
+
+	it( 'control: no popular rescue available still fires the candidate exactly as before (#517 baseline unaffected)', async () => {
+		const fetchEntries = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries },
+			{
+				initialValue: '', placeholder: '', level: 'settlement',
+				applyEntries: ( entries ) => ( Array.isArray( entries ) ? entries : [] ),
+				popular: () => [], allowCustomSettlement: true, onAbandon,
+			}
+		);
+
+		config.ajax.transport( { data: { term: 'Выборг' } }, jest.fn(), jest.fn() );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Выборг', resolved: true } );
 	} );
 
 	it( 'a term NO popular entry matches shows the loading row ALONE — never an empty list, never "not found"', () => {

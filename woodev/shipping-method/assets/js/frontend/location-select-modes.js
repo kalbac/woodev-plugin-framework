@@ -800,6 +800,14 @@
 					// REPLACES the rendered list. The second, real answer therefore overwrites
 					// this one — read in the vendored source rather than assumed.
 					//
+					// Part 3 of this same card changed WHAT that second answer CONTAINS, not
+					// this mechanic: the `+9597 ms` line above is the measurement that motivated
+					// the narrowing fix and predates the merge — today that frame is the union of
+					// this narrowing and the provider's own accepted entries, popular above the
+					// rest (see the merge built just above `success()` in the `.then()` callback
+					// below), so a popular entry the customer already saw here does not vanish
+					// just because the provider did not re-confirm it.
+					//
 					// THE AJAX REQUEST STILL ALWAYS GOES OUT. Skipping it on a local hit was the
 					// card's own rejected first form: the popular list is ranking and an empty
 					// state, NEVER coverage (spec `2026-08-21-settlement-search-design.md` §4), so
@@ -913,6 +921,78 @@
 						// what keeps select2's own results and `dataByKey` from disagreeing.
 						var accepted = seed.applyEntries( entries, false );
 
+						// Issue #539 part 3: MERGE the provider's own answer with the locally-
+						// narrowed popular list, never replace one with the other — the previous
+						// round already established WHY the narrowed list has to keep showing
+						// while the request is in flight (the 9.6s rig measurement above); this is
+						// the same argument applied to the moment the request SETTLES. A popular
+						// entry the customer's typed term matches (`matchingPopular()`, the SAME
+						// call the narrowing branch above already makes — point 2 of the card: this
+						// must be the CURRENT term's matches, never the whole scoped list, and
+						// `term` can only have moved FORWARD since the narrowing ran, never gone
+						// stale backwards, because both read the one `term` this transport closure
+						// captured for its own single call) is a real, previously-resolved locality
+						// (this shop's own `popular` map is built from past orders, never invented)
+						// — the provider not re-confirming it for THIS specific search is not a
+						// reason to make it disappear from a frame the customer was already
+						// looking at.
+						//
+						// Issue #539 point 1 (dedup): `entry.key` is the join — the same stable
+						// identity `dataByKey`/`popularKeys` already key everything by, and both
+						// sides carry it (this layer's own wire shape, {@see toSelect2Result}).
+						// On overlap the PROVIDER's copy wins outright (never a field-by-field
+						// merge): `seed.popular()`'s entries are `Checkout_Config`'s static
+						// per-country snapshot ({@see popularFor} in location-cascade.js), while
+						// `entries` is what THIS search's live round-trip just answered — preferring
+						// the older cached copy over an answer that arrived seconds ago would keep a
+						// stale label/value alive for no reason. The `accepted = seed.applyEntries()`
+						// call above has ALREADY registered the provider's copy into `dataByKey` for
+						// every key it carries, so the popular entries run through `applyEntries()`
+						// below are pre-filtered to exclude any key `accepted` already owns — a
+						// popular entry sharing that key never re-registers (and so never
+						// overwrites) `dataByKey` with the older cached record.
+						var acceptedKeys = {};
+
+						accepted.forEach( function( item ) {
+							acceptedKeys[ item.key ] = true;
+						} );
+
+						var popularSupplement = 'function' === typeof seed.popular
+							? seed.applyEntries( matchingPopular( seed.popular(), term ).filter( function( item ) {
+								return item && item.key && ! acceptedKeys[ item.key ];
+							} ), false )
+							: [];
+
+						// Issue #530's own partition, UNCHANGED: which of the PROVIDER's own
+						// `accepted` entries are popular, decided against the FULL (never
+						// term-narrowed) popular list — this is what already ranked a provider
+						// result first when it also happened to be popular, and #539 does not
+						// touch that criterion, only ADDS coverage next to it. "A stable partition,
+						// never a re-sort of provider relevance within either group" (#530's own
+						// words) stays true for both halves of `accepted` below.
+						var popularKeys = {};
+
+						if ( 'function' === typeof seed.popular ) {
+							seed.popular().forEach( function( item ) {
+								if ( item && item.key ) {
+									popularKeys[ item.key ] = true;
+								}
+							} );
+						}
+
+						// Issue #539 point 3 (order): provider-confirmed popular rows keep THEIR
+						// OWN provider-relevance order (unchanged from #530), followed by the
+						// supplement in #530's OWN popularity order (`matchingPopular()` preserves
+						// `seed.popular()`'s own order) — lower-confidence than a row the provider
+						// just re-confirmed, but still a real, previously-resolved locality, so it
+						// outranks ordinary (non-popular) provider relevance. The non-popular REST
+						// keeps the provider's own relevance order, untouched, exactly as before.
+						var ranked = accepted.filter( function( item ) {
+							return !! popularKeys[ item.key ];
+						} ).concat( popularSupplement ).concat( accepted.filter( function( item ) {
+							return ! popularKeys[ item.key ];
+						} ) );
+
 						// Issue #517: this callback only ever runs for a COMPLETED, non-stale
 						// response (the `stale`/`isAbortError()` guards around this transport
 						// already excluded a cancelled/superseded request, and a genuine
@@ -969,9 +1049,40 @@
 						// free-typed settlement text just moves the rejection from the client
 						// to the server (the card's own measured finding). No candidate
 						// recorded, no flush, the address lock stands.
-						if ( entries && 0 === entries.length && term && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
+						//
+						// Issue #539 part 3 (the sharp edge): gated on `ranked.length`, the MERGED
+						// frame, in addition to `entries.length` — never in place of it.
+						// `entries.length` stays the signal for "did a transport error even
+						// happen" (`entries === null` still short-circuits both branches below,
+						// exactly as before: a response that never completed says nothing about
+						// whether the merged frame can be trusted). Before this round the two
+						// conditions were IDENTICAL: `accepted` (and so `ranked`) could only be
+						// non-empty when `entries` was, since `accepted` is `applyEntries()`'s
+						// filter OF `entries` — so keying this on `entries.length` cost nothing
+						// extra, "provider found zero" and "customer sees zero options" were the
+						// same event. The merge above breaks that equivalence ON PURPOSE: a
+						// popular entry can now put a real, previously-resolved locality on screen
+						// for a term the provider itself answered with nothing. Firing
+						// `onAbandon( { resolved: true } )` in that state would tell #528's
+						// machinery "no source can name this town", which is now false — the
+						// customer has a pickable option in front of them, and unlocking free-typed
+						// address entry alongside it is the exact server-side rejection #528's own
+						// docblock exists to avoid, reached from a new direction. Symmetrically,
+						// the CLEAR branch now also fires on `ranked.length > 0` alone (even when
+						// `entries.length` is still 0): a popular rescue clears a stale candidate
+						// from an earlier, truly-empty search exactly as a provider-confirmed
+						// result already did (critic BL-2, below) — the customer is not stuck
+						// either way, so no candidate should survive to fire on close.
+						//
+						// This does NOT reopen the accepted-vs-entries question critic MN-2 already
+						// settled: the FIRE branch still requires `entries.length === 0` (raw
+						// provider truth, never `accepted.length`) before it even asks about
+						// `ranked` — a response where the provider found rows this layer merely
+						// could not derive a value for (`entries.length > 0`, `accepted.length ===
+						// 0`) still can never fire, same as before that distinction existed at all.
+						if ( entries && 0 === entries.length && 0 === ranked.length && term && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
 							seed.onAbandon( { query: term, resolved: true } );
-						} else if ( entries && entries.length > 0 && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
+						} else if ( entries && ( entries.length > 0 || ranked.length > 0 ) && seed.allowCustomSettlement && 'function' === typeof seed.onAbandon ) {
 							// Critic BL-2 (round 3, BLOCKER): a candidate recorded for an EARLIER,
 							// failed intermediate term (e.g. "Тве") otherwise survives a LATER
 							// completed search that the provider actually answered (e.g. "Тверь",
@@ -980,38 +1091,14 @@
 							// in a town the provider demonstrably carries. `seed.onAbandon( null )`
 							// is `recordAbandonCandidate`'s own CLEAR signal (see that function's
 							// own docblock) — the candidate must always describe the LAST completed
-							// search, never a stale earlier one that a later search has already
-							// disproven. Gated on `entries.length`, the same provider-truth signal
-							// the fire branch above uses (never `accepted.length` — a row this
-							// layer merely couldn't derive a value for is not "the provider found
-							// nothing", see MN-2's own reasoning) — and, like the fire branch,
-							// never reached for a stale/aborted request (the `stale` guard above
-							// already returned) or a transport error (`entries === null` fails
-							// this same truthy check, so an error neither fires NOR clears —
+							// search, never a stale earlier one that a later search (or, as of
+							// #539 part 3, a popular rescue of that same later search) has already
+							// disproven. Never reached for a stale/aborted request (the `stale`
+							// guard above already returned) or a transport error (`entries === null`
+							// fails this same truthy check, so an error neither fires NOR clears —
 							// correct: it proves nothing either way).
 							seed.onAbandon( null );
 						}
-
-						// Issue #530: popular entries rank ABOVE the rest of this same completed
-						// search — a stable partition (never a re-sort of provider relevance
-						// within either group), read LIVE via `seed.popular()` so a region
-						// picked after select2 init still scopes it correctly (see that
-						// function's own docblock, `popularFor()` in location-cascade.js).
-						var popularKeys = {};
-
-						if ( 'function' === typeof seed.popular ) {
-							seed.popular().forEach( function( item ) {
-								if ( item && item.key ) {
-									popularKeys[ item.key ] = true;
-								}
-							} );
-						}
-
-						var ranked = accepted.filter( function( item ) {
-							return !! popularKeys[ item.key ];
-						} ).concat( accepted.filter( function( item ) {
-							return ! popularKeys[ item.key ];
-						} ) );
 
 						success( {
 							results: ranked.map( toSelect2Result ),
