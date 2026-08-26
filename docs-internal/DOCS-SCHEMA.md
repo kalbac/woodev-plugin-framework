@@ -93,6 +93,22 @@ interchangeable**, and what bounds each is a different thing:
 
 At the whole-set rate, 176 KB is ~61 sessions of headroom.
 
+**Why each per-file cap moved, and why one did not.** The card and the operator's decision were
+about the SUM. The per-file caps were raised by the agent, not by the operator — recorded here so
+nobody reads them as his call. The justification is per file, measured, not a uniform bump:
+
+| File | Was at / old cap | Rate | Sessions to red | Raised? |
+|---|---|---|---|---|
+| `GOTCHAS.md` | 55 323 / 57 344 | +851 B | **~2** | → 96 KB |
+| `CLAUDE.md` | 7 983 / 8 192 | +76 B | **~3** | → 12 KB |
+| `AGENTS.md` | 23 192 / 24 576 | +128 B | **~11** | → 28 KB |
+| `CURRENT-STATE.md` | 23 907 / 24 576 | −45 B | not growing, but sat **219 B** under at s86 | → 28 KB |
+| `next-session-prompt.md` | 10 532 / 16 384 | replaced each session | never | **no** |
+
+The last row is the point: a cap with 5.8 KB of slack on a file that cannot accumulate did not
+move. Raising the other four is the same defect #554 names — a red gate at session save, in the
+worst possible moment — caught at file scope instead of at the sum.
+
 **If it binds again, do not raise it a third time.** The structural fix is the one #554 also
 proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map
 at session start, and open a tag under the task — which is what the protocol already tells you to do.
