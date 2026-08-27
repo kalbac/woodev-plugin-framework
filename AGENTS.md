@@ -385,9 +385,16 @@ A code `TODO` must reference an issue (`// TODO(#123): …`) — never stand alo
 
 ### Lifecycle
 
-- An **agent-authored** card you are confident about goes straight to `Бэклог`. Parking it in `Инбокс`
-  only forces a re-triage of a decision already made. A card the **operator** authored stays in `Инбокс`
-  until he moves it — agents never promote his.
+- **An agent may move a card itself — but only a card that is already SETTLED.** The discriminator is
+  not who wrote it, it is **whether the card needs the operator's answer** (operator, 27.08.2026, #600):
+  - you filed it and it needs no answer from him → move it wherever it belongs, `Бэклог` included.
+    Parking a decision already made in `Инбокс` only forces a re-triage of it.
+  - the card is FOR HIM — it asks him to decide something → it stays in `Инбокс` and **he** moves it,
+    either to `Бэклог` or closed as `not planned`. This holds even when an AGENT wrote the card:
+    #600 was agent-authored and still belonged in `Инбокс`, because its whole content was a question
+    only he could answer.
+  The earlier wording keyed on authorship alone, which gets that last case wrong — do not simplify it
+  back.
 - **Take the card you are working on into `В работе`.** Work driven by a spec/plan rather than a card
   still needs one — create it and move it, so the board reflects reality.
 - Close via `Closes #N` in the implementing commit or PR (the board moves the card to `Готово` itself),
