@@ -121,7 +121,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		require_once dirname( __DIR__, 4 ) . '/tests/unit/Shipping/Rest_Api/wp-rest-controller-stub.php';
 	}
 
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-pickup-controller.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-handler.php';
 

@@ -21,7 +21,7 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
 }
 
-require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-field-source-controller.php';
 
 /**

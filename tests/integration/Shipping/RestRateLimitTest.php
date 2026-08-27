@@ -16,7 +16,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use Woodev\Framework\Shipping\Rest_Api\Rest_Rate_Limit_Trait;
+use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 use Woodev\Tests\Integration\TestCase;
 
 /**

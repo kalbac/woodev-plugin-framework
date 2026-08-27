@@ -27,6 +27,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 use Woodev\Framework\Shipping\Checkout\Checkout_Fields;
 
 if ( ! defined( 'ABSPATH' ) ) {

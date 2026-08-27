@@ -43,6 +43,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
