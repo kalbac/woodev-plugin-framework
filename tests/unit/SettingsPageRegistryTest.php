@@ -443,4 +443,145 @@ class SettingsPageRegistryTest extends TestCase {
 
 		return $ref->invokeArgs( $object, $args );
 	}
+	// -----------------------------------------------------------------------
+	// Issue #396 — the legacy redirect matched a SUBSTRING of the whole request URI.
+	//
+	// `$legacy_page` is an arbitrary provider-supplied string and `$request_uri` includes the
+	// query, so `strpos()` produced a redirect LOOP (a provider whose id appears inside its
+	// own legacy string matches the redirect TARGET too), sent a merchant to the wrong
+	// provider's tab (`shipping` is a prefix of `shipping-pro`), and hijacked unrelated admin
+	// URLs that merely contained the slug.
+	//
+	// Both halves are pure functions, so they are tested directly rather than through
+	// `maybe_redirect_legacy()`, which ends in `exit`.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Calls a private STATIC method.
+	 *
+	 * @param string $method method name.
+	 * @param array  $args   arguments.
+	 * @return mixed
+	 */
+	private function call_private_static( string $method, array $args = [] ) {
+		$ref = new \ReflectionMethod( Settings_Page_Registry::class, $method );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$ref->setAccessible( true );
+		}
+
+		return $ref->invokeArgs( null, $args );
+	}
+
+	/**
+	 * The shape providers actually register: the leading segment is the PAGE VALUE with no
+	 * `page=` in front of it. `parse_str()` alone reads it as an empty-valued argument named
+	 * `wc-settings`, which would match nothing.
+	 */
+	public function test_parse_admin_query_reads_the_leading_segment_as_the_page(): void {
+		$this->assertSame(
+			[
+				'page'    => 'wc-settings',
+				'tab'     => 'shipping',
+				'section' => 'quarry',
+			],
+			$this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=quarry' ] )
+		);
+	}
+
+	public function test_parse_admin_query_also_reads_an_ordinary_query_string(): void {
+		$this->assertSame(
+			[
+				'page' => 'wc-status',
+				'tab'  => 'logs',
+			],
+			$this->call_private_static( 'parse_admin_query', [ '?page=wc-status&tab=logs' ] )
+		);
+	}
+
+	public function test_parse_admin_query_returns_nothing_for_an_empty_string(): void {
+		$this->assertSame( [], $this->call_private_static( 'parse_admin_query', [ '' ] ) );
+	}
+
+	/**
+	 * Reproduction 1 from the card: the redirect TARGET used to match the needle, so every
+	 * request bounced again and the tab became unreachable behind "too many redirects".
+	 */
+	public function test_the_redirect_target_does_not_match_the_legacy_declaration(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$target   = $this->call_private_static( 'parse_admin_query', [ 'page=woodev-settings&tab=cdek' ] );
+
+		$this->assertFalse( $this->call_private_static( 'query_matches', [ $target, $expected ] ) );
+	}
+
+	/**
+	 * Reproduction 2a: `shipping` is a prefix of `shipping-pro`, so the narrower provider used
+	 * to swallow the broader one's legacy page.
+	 */
+	public function test_a_prefix_section_does_not_match_a_longer_one(): void {
+		$narrow  = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$request = $this->call_private_static( 'parse_admin_query', [ 'page=wc-settings&tab=shipping&section=cdek-pro' ] );
+
+		$this->assertFalse( $this->call_private_static( 'query_matches', [ $request, $narrow ] ) );
+	}
+
+	/**
+	 * Reproduction 2b, and the one a merchant reaches by clicking a log file: an unrelated
+	 * admin URL that merely CONTAINS the slug.
+	 */
+	public function test_an_unrelated_admin_url_containing_the_slug_does_not_match(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$request  = $this->call_private_static(
+			'parse_admin_query',
+			[ 'page=wc-status&tab=logs&log_file=cdek-2026-08-20.log' ]
+		);
+
+		$this->assertFalse( $this->call_private_static( 'query_matches', [ $request, $expected ] ) );
+	}
+
+	/**
+	 * The control every negative above needs: the legacy page itself STILL redirects. Without
+	 * it, all four would pass for a matcher that had stopped matching anything.
+	 */
+	public function test_control_the_real_legacy_page_still_matches(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$request  = $this->call_private_static( 'parse_admin_query', [ 'page=wc-settings&tab=shipping&section=cdek' ] );
+
+		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, $expected ] ) );
+	}
+
+	/**
+	 * SUBSET, not equality: a legacy URL carrying arguments the provider never declared is
+	 * still that legacy page.
+	 */
+	public function test_extra_request_arguments_do_not_prevent_a_match(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$request  = $this->call_private_static(
+			'parse_admin_query',
+			[ 'page=wc-settings&tab=shipping&section=cdek&paged=2&_wpnonce=abc' ]
+		);
+
+		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, $expected ] ) );
+	}
+
+	/**
+	 * Argument ORDER is not part of the identity — a merchant's bookmark may carry any order.
+	 */
+	public function test_argument_order_does_not_matter(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&section=cdek' ] );
+		$request  = $this->call_private_static( 'parse_admin_query', [ 'section=cdek&page=wc-settings&tab=shipping' ] );
+
+		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, $expected ] ) );
+	}
+
+	/**
+	 * An EMPTY declaration is a subset of everything, so `query_matches()` says true — which
+	 * is why `maybe_redirect_legacy()` refuses it before asking. Pinned here so the caller's
+	 * guard is not deleted as redundant by someone reading only this function.
+	 */
+	public function test_an_empty_declaration_matches_everything_which_is_why_the_caller_guards_it(): void {
+		$request = $this->call_private_static( 'parse_admin_query', [ 'page=anything' ] );
+
+		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, [] ] ) );
+	}
 }
