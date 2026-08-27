@@ -2953,9 +2953,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * method's docblock for why this is defence in depth, not a guarantee (#585).
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 the exception message is redacted through
-		 *              {@see \Woodev_API_Base::redact_secret_log_text()} before it is
-		 *              logged — #585.
 		 *
 		 * @param \Throwable $e       the caught exception.
 		 * @param string     $context short description of the failing call.

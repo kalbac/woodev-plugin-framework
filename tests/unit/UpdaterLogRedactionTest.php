@@ -71,15 +71,17 @@ class UpdaterLogRedactionTest extends TestCase {
 		$result = $this->call_private( $updater, 'get_version_from_remote' );
 
 		$this->assertFalse( $result );
-		$this->assertStringNotContainsString( self::SECRET, (string) $captured );
-		$this->assertStringContainsString( \Woodev_API_Base::SECRET_VALUE_MASK, (string) $captured );
-		$this->assertStringContainsString( 'get_version_from_remote failed', (string) $captured );
+		$this->assertSame(
+			'Woodev updater: get_version_from_remote failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
 	}
 
 	/**
-	 * Control: an exception message carrying NO secret must reach error_log()
-	 * byte-for-byte. Without this control, a redactor that blanked the whole
-	 * message would pass the test above too.
+	 * Control: an exception message carrying NO secret must reach the
+	 * rendered error_log() line byte-for-byte — asserted on the COMPLETE
+	 * rendered line, not merely a substring, so a redactor that mangled
+	 * anything else in the line could not pass silently.
 	 *
 	 * @return void
 	 */
@@ -111,7 +113,10 @@ class UpdaterLogRedactionTest extends TestCase {
 
 		$this->call_private( $updater, 'get_version_from_remote' );
 
-		$this->assertStringContainsString( 'carrier unreachable', (string) $captured );
+		$this->assertSame(
+			'Woodev updater: get_version_from_remote failed: carrier unreachable',
+			$captured
+		);
 	}
 
 	/* ----------------------------------------------------------------------- *

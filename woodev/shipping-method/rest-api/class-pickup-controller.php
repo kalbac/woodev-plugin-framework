@@ -1125,9 +1125,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * guarantee (#585).
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 the exception message is redacted through
-		 *              {@see \Woodev_API_Base::redact_secret_log_text()} before it is
-		 *              logged — #585.
 		 *
 		 * @param \Woodev_API_Exception $e       the caught carrier exception.
 		 * @param string                $context short description of the failing call.

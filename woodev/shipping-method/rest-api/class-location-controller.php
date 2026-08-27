@@ -1868,9 +1868,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		/**
 		 * Logs a swallowed provider exception's real message — same
 		 * swallowed-exception diagnostic convention
-		 * {@see Pickup_Controller::log_carrier_failure()} uses — and fires a
-		 * provider-agnostic action so an external consumer can observe a
-		 * degraded suggest/list call without parsing `error_log()` (#405).
+		 * {@see Pickup_Controller::log_carrier_failure()} uses, INCLUDING
+		 * routing the message through {@see \Woodev_API_Base::redact_secret_log_text()}
+		 * before it is logged: `$exception` comes from `Location_Provider::suggest()`/
+		 * `list_localities()`, a plugin extension seam wrapping a live
+		 * third-party SDK, so its message may never have passed through
+		 * `Woodev_API_Base`'s own redaction at all — see that method's
+		 * docblock for why this is defence in depth, not a guarantee (#585,
+		 * #593) — and fires a provider-agnostic action so an external
+		 * consumer can observe a degraded suggest/list call without parsing
+		 * `error_log()` (#405).
+		 *
+		 * The `do_action()` below hands the consumer the RAW, unredacted
+		 * `$exception` object on purpose — a consumer may legitimately need
+		 * the real exception (its class, its code, a chained previous
+		 * exception) for its own handling, and this action is not itself a
+		 * log boundary. But that also means redaction is NOT applied on this
+		 * path: a consumer that logs or serializes `$exception` (its message
+		 * included) reintroduces the exact disclosure this method's own
+		 * `error_log()` call just closed — redacting it before doing so is
+		 * that consumer's job, not this method's.
 		 *
 		 * NO admin-notice consumer ships for this action yet — #405's own card
 		 * raised the question ("заодно решить, нужно ли админское уведомление
@@ -1907,7 +1924,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					'[woodev] location %s (%s) failed: %s',
 					$operation,
 					$provider_id,
-					$exception->getMessage()
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
 				)
 			);
 
@@ -1916,11 +1933,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * fails and the REST layer degrades to its distinct 502 response
 			 * instead of the ordinary 200+empty one (#405).
 			 *
+			 * $exception is the RAW, unredacted failure — see this method's own
+			 * docblock. A listener that logs or serializes it must redact it
+			 * itself, e.g. via {@see \Woodev_API_Base::redact_secret_log_text()}.
+			 *
 			 * @since 2.0.2
 			 *
 			 * @param string     $provider_id The failing provider's own id.
 			 * @param string     $operation   One of `suggest`, `list`.
-			 * @param \Throwable $exception   The caught failure.
+			 * @param \Throwable $exception   The caught failure, UNREDACTED.
 			 */
 			do_action( 'woodev_location_provider_operation_failed', $provider_id, $operation, $exception );
 		}
