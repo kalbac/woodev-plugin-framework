@@ -213,8 +213,8 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 					throw new Woodev_Plugin_Exception( 'Invalid nonce.' );
 				}
 
-				$name    = isset( $_POST['name'] ) && is_string( $_POST['name'] ) ? trim( $_POST['name'] ) : '';
-				$message = isset( $_POST['message'] ) && is_string( $_POST['message'] ) ? trim( $_POST['message'] ) : '';
+				$name    = isset( $_POST['name'] ) && is_string( $_POST['name'] ) ? self::sanitize_log_field( $_POST['name'] ) : '';
+				$message = isset( $_POST['message'] ) && is_string( $_POST['message'] ) ? self::sanitize_log_field( $_POST['message'] ) : '';
 
 				if ( ! $message ) {
 					throw new Woodev_Plugin_Exception( 'A message is required.' );
@@ -234,6 +234,52 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			}
 		}
 
+
+		/**
+		 * Makes one posted field safe to put on a line of the plugin log (issue #402).
+		 *
+		 * THE LINE IS THE RECORD. A log file has no framing beyond the newline, so a value
+		 * carrying one does not get logged *containing* a line break — it APPENDS A LINE, and
+		 * the forged line is indistinguishable from anything the framework itself wrote. This
+		 * endpoint is registered for `nopriv` as well (`wp_ajax_nopriv_wc_{id}_log_script_event`)
+		 * and its only gate is a nonce the server prints into the front-end script, so every
+		 * guest on the checkout holds one. `trim()`, which is all this used to do, removes
+		 * leading and trailing whitespace and leaves every interior newline in place.
+		 *
+		 * Every C0/C1 control character is replaced, not just \n and \r: a bare \r
+		 * rewrites a line in a terminal, `\x1b` opens an ANSI escape, and `\x00` truncates
+		 * the string for anything reading it with C semantics. Replaced with a SPACE rather
+		 * than removed, so `A\nB` cannot silently become the single token `AB`.
+		 *
+		 * The cap is the other half of the same defect. An unauthenticated caller could
+		 * otherwise put a megabyte on one line; 500 characters is well past any real script
+		 * event (the longest this framework emits is a stack-free error string) and bounds
+		 * what a single request can cost. It does NOT bound how MANY requests arrive — that
+		 * is the flood half of #402, which needs a rate-limit policy rather than a cap, and
+		 * is filed separately.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value raw posted value.
+		 * @return string
+		 */
+		protected static function sanitize_log_field( string $value ): string {
+
+			$stripped = preg_replace( '/[\x00-\x1f\x7f-\x9f]+/u', ' ', $value );
+
+			// A malformed-UTF-8 payload makes the `/u` pass return NULL, and a caller who can
+			// post one is exactly the caller this function exists for. Fall back to the
+			// byte-wise pattern against the ORIGINAL value — never against the null result,
+			// which would quietly reduce every mis-encoded message to an empty string and
+			// hand the attacker a way to make this function do nothing.
+			$value = null !== $stripped ? $stripped : (string) preg_replace( '/[\x00-\x1f\x7f]+/', ' ', $value );
+
+			$value = trim( $value );
+
+			return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, 500 ) : substr( $value, 0, 500 );
+		}
 
 		/**
 		 * Adds a log entry.
