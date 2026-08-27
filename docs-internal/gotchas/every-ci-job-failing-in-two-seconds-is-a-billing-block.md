@@ -57,6 +57,22 @@ behaving correctly.
 What actually blocks is a **$0 spending budget**, GitHub's default overrun protection, and usage
 **resets on the 1st**. So "wait for the reset" is a real option, not just "go pay".
 
+### Local CI is a real option for a private repo — with one hard constraint
+
+`run-local-ci` (renamed from `@redwoodjs/agent-ci`; the CLI is `local-ci`) runs the SAME workflow
+YAML on GitHub's own official runner binary in Docker, so the version matrix genuinely expands —
+that is what separates it from `act` and from hand-rolled scripts.
+
+**It does not run on native Windows.** It dies on `tar (child): Cannot connect to C:` before
+reaching Docker, because its cache layer hands a `C:\...` path to a POSIX `tar`. Measured on
+**0.18.1 (27.08.2026)**, four releases after the 0.16.2 that first hit this — the bug is not
+fixed. Under **WSL** it works: `npx run-local-ci run --workflow .github/workflows/markdown-lint.yml`
+passed in 36 s with every step really executing. On 15 GB it prints
+`degraded mode: job resource hints exceed the available host capacity` and runs anyway.
+
+**Not measured, and the part that would decide it:** the heavy workflows — the PHP 7.4–8.3 matrix
+and three wp-env Docker stacks — on a box where RAM is already the binding constraint.
+
 ### The two measured sinks, for whoever tunes this
 
 `concurrency: cancel-in-progress` is already set on every workflow here — that saving is taken.
@@ -70,10 +86,27 @@ Both touch the merge gate, so both are an operator decision, not an agent's.
 
 ## What to do
 
-Nothing agent-side: it is an account setting. Do NOT merge on "the tests passed locally" — the
-project rule is every job green with state CLEAN, and s98 found a defect on the same night that
-only CI could see (the local PHP is 8.5, the CI floor is 7.4). Leave the PRs open, say so, and
-hand it over. After the block is lifted, `close`/`reopen` re-runs the checks.
+Do NOT merge on "the tests passed locally" — the project rule is every job green with state
+CLEAN, and s98 found a defect on the same night that only CI could see (the local PHP is 8.5,
+the CI floor is 7.4). Leave the PRs open, say so, and hand it over. After the block is lifted,
+`close`/`reopen` re-runs the checks.
+
+**HOW IT WAS RESOLVED HERE (27.08.2026, operator decision): the repo went PUBLIC again.** Public
+repositories on standard runners are free and consume no quota, so the block lifted immediately —
+measured, not assumed: the same `Markdown Lint` run that had failed in 2 s passed in 14 s right
+after the switch, and a full CI re-run went green (`JS Tests` 53 s, `Assets build parity` 42 s).
+
+The trade he accepted: `docs-internal/` is publicly readable again. Weighed against the fact that
+it had ALREADY been public from the repo's creation until 25.08 — the licensing/anti-piracy specs
+date from June — and that the repo has 0 forks, 0 watchers, 1 star. Going private on 25.08 closed
+a door on a room that had been photographed for months; the only genuinely new exposure was the
+three-day delta, which is checkout and location-layer work.
+
+**The option NOT taken, recorded so nobody re-derives it:** split `docs-internal/` into its own
+private repository and keep the code public. That is the only shape giving free CI *and* closed
+internals. Its cost is that the whole session protocol commits docs and code in ONE commit, so it
+would mean two repos, two commits, and rewriting every path in `CLAUDE.md`, `AGENTS.md`,
+`scripts/lint-docs.mjs` and the docs' own cross-links.
 
 ## Related
 

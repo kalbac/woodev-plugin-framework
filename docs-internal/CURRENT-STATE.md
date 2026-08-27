@@ -9,14 +9,20 @@
 **As of 2026-08-27 (s98).** `main` is at `c35700e`, tree clean. **Two PRs open, both deliberately
 unmerged:** #581 (needs a rig pass) and #582 (CI unavailable — see below).
 
-⛔ **GITHUB ACTIONS IS BLOCKED since `2026-08-27T02:49:17Z`** — the plan's **2000 monthly minutes
-are 90 % spent (1800/2000)** and a $0 Actions budget stops the rest. **Usage resets 01.09.2026**,
-so CI returns on its own in five days; raising the budget unblocks it sooner. Confirmed by the
-operator's own GitHub notification. Card **#583**.
+✅ **CI IS BACK. The repo is PUBLIC again since 27.08.2026 (operator decision)** — public
+repositories on standard runners are free and consume no quota, so the block lifted immediately.
+Measured: the same `Markdown Lint` run that failed in 2 s passed in 14 s straight after the
+switch. Card **#583** carries the whole account.
 
-Every job fails in two seconds, `Label PR` included, and has **no log at all** — it never started.
-The reason is visible only in `gh run view`, never in `gh pr checks`. Gotcha
-`every-ci-job-failing-in-two-seconds-is-a-billing-block`.
+What it was: the Free plan's **2000 monthly Actions minutes were 90 % spent (1800/2000)** and a
+$0 Actions budget stopped the rest, from `2026-08-27T02:49:17Z`. **s98 itself spent ≈1042 of
+those minutes (≈58 % of the month) in one night** — 187 runs, 27 billable minutes per full PR
+cycle. The private switch on 25.08 is what started metering them at all.
+
+The symptom is worth knowing because it reads as a red build: every job fails in two seconds,
+`Label PR` included, and has **no log at all** — it never started. The reason appears only in
+`gh run view`. Gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`, which also
+records the local-CI option (`run-local-ci`: WSL only, native Windows still broken at 0.18.1).
 
 **s98 itself spent ≈1042 of those minutes (≈58 % of the month) in one night** — 187 runs, 27
 billable minutes per full PR cycle, measured per job. At that rate the allowance covers two such
@@ -33,7 +39,7 @@ landed after.
 #551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
 collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
-**The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan).
+**The repo is PUBLIC again since 27.08.2026** (private 25.08–27.08). GitHub Pages is therefore available again — `docs.yml` is still disabled on `push` and one uncommented block from publishing.
 
 **`select2:close` fires BEFORE `select2:select`** — pinned by a test since #525.
 
