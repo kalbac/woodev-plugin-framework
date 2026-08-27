@@ -591,8 +591,21 @@ namespace Woodev\Tests\Unit {
 
 			$gateway = $this->debug_gateway( $plugin );
 
+			// add_debug_message()'s refund guard reads this global unconditionally, and
+			// mark_order_as_failed() reaches it. Set here rather than relied on: another test
+			// in this file sets it too, so leaving it out passes in one traversal order and
+			// errors in another.
+			$GLOBALS['wp_current_filter'] = [];
+
 			Functions\when( 'esc_html__' )->returnArg( 1 );
 			Functions\when( 'is_admin' )->justReturn( true );
+			// mark_order_as_failed() ends by showing the CUSTOMER a generic message through
+			// Woodev_Helper::wc_add_notice(), which is guarded by function_exists(). Stubbed
+			// explicitly rather than left to that guard: Brain Monkey DEFINES a stubbed
+			// function process-wide, so whether the guard is true here depends on whether some
+			// other test file stubbed it earlier in the same run. Without this the test passes
+			// or errors according to PHPUnit's traversal order — green locally, red on CI.
+			Functions\when( 'wc_add_notice' )->justReturn( null );
 
 			$gateway->mark_order_as_failed( $order, $raw, null );
 
