@@ -654,16 +654,24 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *   generates. This method over-redacts on purpose, which is right
 		 *   for a diagnostic line in a file and wrong for the note a human
 		 *   reads to understand a failed payment.
-		 * - BROWSER RESPONSES. Roughly a dozen sites hand a caught
-		 *   exception's message straight to `wp_send_json_error()` or into
-		 *   a `WP_Error` returned from REST. The #608 reasoning covers
-		 *   NINE of them outright — their reader is the shop admin. The
-		 *   remaining two differ not in the text but in WHO READS IT:
-		 *   {@see Woodev_Payment_Gateway_My_Payment_Methods} answers a
-		 *   logged-in CUSTOMER on their account page, and
-		 *   {@see Woodev_Script_Handler::ajax_log_event()} is registered
-		 *   for `nopriv`, so its reader need not be logged in at all.
-		 *   Open on #610 in that narrowed form.
+		 * - BROWSER RESPONSES, with ONE exception. Roughly a dozen sites
+		 *   hand a caught exception's message straight to
+		 *   `wp_send_json_error()` or into a `WP_Error` returned from
+		 *   REST, and they keep it. Settled on #610, 27.08.2026, by
+		 *   splitting them on WHO READS THEM rather than on how dangerous
+		 *   the text is:
+		 *   • nine have the shop admin as their reader, so #608's
+		 *     reasoning closes them unchanged;
+		 *   • {@see Woodev_Script_Handler::ajax_log_event()} is `nopriv`,
+		 *     but what it catches is this framework's own validation, and
+		 *     stripping the text outright is not available either — the
+		 *     response is a public seam a plugin's front end may act on.
+		 *     Left alone deliberately;
+		 *   • {@see Woodev_Payment_Gateway_My_Payment_Methods::ajax_save_payment_method()}
+		 *     is the ONE that does route through this method. Its reader
+		 *     is the CUSTOMER on their account page, and the call it wraps
+		 *     goes into the gateway's API. The merchant loses nothing:
+		 *     #594 already writes the full text to the log.
 		 *
 		 * Nothing here ENFORCES any of this. A new log boundary that skips
 		 * this method fails nothing and says nothing, which is exactly how
