@@ -647,21 +647,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *   one message whose whole job is to tell that author what they
 		 *   got wrong.
 		 * - `WC_Order` notes. Two payment-gateway sites also put the raw
-		 *   message into one. That is a different boundary with a
-		 *   different trade — shop staff read an order note to understand
-		 *   a failed payment, and this method's deliberate over-redaction
-		 *   would degrade it — so it is decided separately, not in
-		 *   passing.
+		 *   message into one, and that stays. **Operator decision,
+		 *   27.08.2026 (#608), closed as `not planned`:** the provider's
+		 *   answer has to reach the merchant, because the less detail an
+		 *   admin-side record carries, the more support requests it
+		 *   generates. This method over-redacts on purpose, which is right
+		 *   for a diagnostic line in a file and wrong for the note a human
+		 *   reads to understand a failed payment.
 		 * - BROWSER RESPONSES. Roughly a dozen sites hand a caught
 		 *   exception's message straight to `wp_send_json_error()` or into
-		 *   a `WP_Error` returned from REST. That is a THIRD boundary
-		 *   again, and it is not a smaller one: one of those sites
-		 *   ({@see Woodev_Script_Handler::ajax_log_event()}) is registered
-		 *   for `nopriv`, so its reader need not be logged in at all. Not
-		 *   in scope here — this method is named for LOG text and the
-		 *   trade for a message a human is meant to read is different —
-		 *   but recorded so its absence is not read as a sweep that missed
-		 *   them. Tracked separately.
+		 *   a `WP_Error` returned from REST. The #608 reasoning covers
+		 *   NINE of them outright — their reader is the shop admin. The
+		 *   remaining two differ not in the text but in WHO READS IT:
+		 *   {@see Woodev_Payment_Gateway_My_Payment_Methods} answers a
+		 *   logged-in CUSTOMER on their account page, and
+		 *   {@see Woodev_Script_Handler::ajax_log_event()} is registered
+		 *   for `nopriv`, so its reader need not be logged in at all.
+		 *   Open on #610 in that narrowed form.
 		 *
 		 * Nothing here ENFORCES any of this. A new log boundary that skips
 		 * this method fails nothing and says nothing, which is exactly how
