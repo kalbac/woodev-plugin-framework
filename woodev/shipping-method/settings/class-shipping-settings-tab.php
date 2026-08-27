@@ -373,10 +373,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		 * repeat call here only refreshes its settings reference, never double-adds a
 		 * filter.
 		 *
+		 * Registers via {@see Settings_Provider::create_with_sections()} (#570), not
+		 * {@see Settings_Provider::create()}: {@see self::build_sections()} always returns
+		 * real `Settings_Section` instances, so the typed factory costs nothing here and
+		 * turns a future regression in that method into a `TypeError` at this call site
+		 * instead of a section silently missing from the rendered tab.
+		 *
 		 * @internal bound to `init` priority 25 by {@see self::hook_once()}.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Boots {@see Checkout_Field_Policy} (Task 6, issue #362).
+		 * @since 2.0.2 Registers via `Settings_Provider::create_with_sections()` (#570).
 		 *
 		 * @return void
 		 */
@@ -392,11 +399,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			Checkout_Field_Policy::instance()->register( $this->get_field_settings() );
 
 			Settings_Page_Registry::instance()->register_service(
-				Settings_Provider::create(
+				Settings_Provider::create_with_sections(
 					self::SERVICE_ID,
 					__( 'Доставка', 'woodev-plugin-framework' ),
 					new Composite_Settings_Handler( self::SERVICE_ID, array_values( $children ) ),
-					$this->build_sections()
+					[],
+					...$this->build_sections()
 				)
 			);
 		}
