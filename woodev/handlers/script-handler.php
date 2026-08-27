@@ -270,15 +270,75 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 			$stripped = preg_replace( '/[\x00-\x1f\x7f-\x9f]+/u', ' ', $value );
 
 			// A malformed-UTF-8 payload makes the `/u` pass return NULL, and a caller who can
-			// post one is exactly the caller this function exists for. Fall back to the
+			// post one is exactly the caller this function exists for. Fall back to a
 			// byte-wise pattern against the ORIGINAL value — never against the null result,
 			// which would quietly reduce every mis-encoded message to an empty string and
 			// hand the attacker a way to make this function do nothing.
-			$value = null !== $stripped ? $stripped : (string) preg_replace( '/[\x00-\x1f\x7f]+/', ' ', $value );
+			//
+			// THE TWO PATTERNS MUST COVER THE SAME RANGE. This fallback used to stop at
+			//  and omit C1 (-), so on this branch a raw  — the single-byte
+			// ANSI CSI — was never replaced.
+			//
+			// MEASURED, and the measurement corrected the report it came from. A critic pass
+			// found the gap by probing the two patterns in ISOLATION. Driving the whole
+			// function instead shows the byte did not in fact reach the log: `mb_substr()` at
+			// the end rewrites invalid UTF-8, so `c328419b42` came out as `3f28413f42`. The
+			// gap was real and MASKED — by an optional extension doing sanitising work nobody
+			// asked it for. Without mbstring the old byte-wise cap did no such rewriting and
+			// the byte survived, which is the same defect as the cap's (see
+			// {@see self::cap_characters()}) wearing a different hat.
+			//
+			// So the rule is: this function must be correct on its own, never because an
+			// undeclared extension happens to be loaded.
+			//
+			// Without /u the class is BYTES, which is what this branch wants: the input is not
+			// valid UTF-8, so there are no codepoints to speak of, and a raw C1 byte is
+			// precisely what has to go.
+			$value = null !== $stripped ? $stripped : (string) preg_replace( '/[\x00-\x1f\x7f-\x9f]+/', ' ', $value );
 
 			$value = trim( $value );
 
-			return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, 500 ) : substr( $value, 0, 500 );
+			return self::cap_characters( $value, 500 );
+		}
+
+		/**
+		 * Caps `$value` to `$max` CHARACTERS without ever cutting a UTF-8 sequence in half.
+		 *
+		 * `mb_substr()` when mbstring is there. When it is not — and it is NOT a declared
+		 * requirement of this package, so "it is always there" was an assumption, not a fact —
+		 * the fallback used to be a byte-wise `substr()`, which cuts mid-character: 499 ASCII
+		 * characters followed by «я» came back as 500 bytes ending in a lone `0xd1`, i.e.
+		 * invalid UTF-8 written into the log. Found by a critic pass and reproduced.
+		 *
+		 * The regex fallback counts UTF-8 SEQUENCES rather than bytes, so it caps where
+		 * `mb_substr()` would and can only cut on a character boundary. `/u` is safe here
+		 * because everything reaching this point has already been through
+		 * {@see self::sanitize_log_field()}'s own malformed-input branch.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $value sanitised value.
+		 * @param int    $max   maximum length in characters.
+		 * @return string
+		 */
+		private static function cap_characters( string $value, int $max ) {
+
+			if ( function_exists( 'mb_substr' ) ) {
+				return mb_substr( $value, 0, $max );
+			}
+
+			$matched = [];
+
+			if ( preg_match( '/^.{0,' . (int) $max . '}/us', $value, $matched ) ) {
+				return $matched[0];
+			}
+
+			// Only reachable if the value is somehow still not valid UTF-8. Byte-cap rather
+			// than return it whole — an uncapped log line is the defect this exists for — and
+			// drop a trailing partial sequence so the result cannot itself be invalid.
+			return (string) preg_replace( '/[\x80-\xbf]+$/', '', substr( $value, 0, $max ) );
 		}
 
 		/**

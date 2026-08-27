@@ -614,10 +614,24 @@ final class Settings_Page_Registry {
 	 *
 	 * Handles the shape providers actually register, in which the leading segment is the PAGE
 	 * VALUE with no `page=` in front of it — `wc-settings&tab=shipping&section=quarry` means
-	 * `admin.php?page=wc-settings&tab=shipping&section=quarry`. `parse_str()` alone reads that
-	 * first segment as an empty-valued argument named `wc-settings`, which matches nothing.
-	 * Both the request side and the declaration side go through this one function, so the two
-	 * cannot disagree about it.
+	 * `admin.php?page=wc-settings&tab=shipping&section=quarry`. Both the request side and the
+	 * declaration side go through this one function, so the two cannot disagree about it.
+	 *
+	 * SPLIT BY HAND RATHER THAN THROUGH `parse_str()`, and that is not a stylistic choice —
+	 * `parse_str()` LOSES information, and every loss here widens the match into a false
+	 * positive. Found by a critic pass on the merged fix and reproduced:
+	 *
+	 * - It builds an ARRAY for `a[]=1`. Dropping the non-scalar (which the first version did)
+	 *   removed `a` from the declaration entirely, so a request carrying no `a` at all matched
+	 *   and redirected — measured: `wc-settings&tab=shipping&a[]=1` parsed to just
+	 *   `page`+`tab`, and `page=wc-settings&tab=shipping` then matched it.
+	 * - It NORMALISES keys, turning `.` and a space into `_`. So declaration `a.b=1` and
+	 *   request `a%20b=1` both became `a_b=1` and matched, despite being different arguments.
+	 *
+	 * Splitting on `&` and the first `=`, then decoding each half, keeps the key verbatim and
+	 * keeps an array-style argument as the literal key `a[]` — which then has to be present in
+	 * the request to match, as the contract says. A repeated argument keeps its LAST value,
+	 * which is what PHP does with a real query string, so the two sides still agree.
 	 *
 	 * @since 2.0.2
 	 *
@@ -631,20 +645,24 @@ final class Settings_Page_Registry {
 			return [];
 		}
 
-		$segments = explode( '&', $query );
-
-		if ( isset( $segments[0] ) && false === strpos( $segments[0], '=' ) && '' !== $segments[0] ) {
-			$segments[0] = 'page=' . $segments[0];
-		}
-
-		$parsed = [];
-		parse_str( implode( '&', $segments ), $parsed );
-
 		$args = [];
-		foreach ( $parsed as $key => $value ) {
-			if ( is_scalar( $value ) ) {
-				$args[ (string) $key ] = (string) $value;
+
+		foreach ( explode( '&', $query ) as $index => $segment ) {
+			if ( '' === $segment ) {
+				continue;
 			}
+
+			// The leading segment may be the page value with no `page=` in front of it.
+			if ( 0 === $index && false === strpos( $segment, '=' ) ) {
+				$segment = 'page=' . $segment;
+			}
+
+			$parts = explode( '=', $segment, 2 );
+			$key   = rawurldecode( $parts[0] );
+
+			// A repeated argument keeps the LAST value, which is what PHP itself does with a
+			// real query string, so the declaration and the request agree about it.
+			$args[ $key ] = isset( $parts[1] ) ? rawurldecode( str_replace( '+', ' ', $parts[1] ) ) : '';
 		}
 
 		return $args;

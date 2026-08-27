@@ -204,7 +204,21 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		 */
 		public function save( $user_id ) {
 
-			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified by save_profile_fields(), this method's only caller.
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- see the note below.
+			//
+			// A previous version of this comment said the nonce is verified by
+			// `save_profile_fields()`. It is NOT — that method checks only `is_supported()`
+			// and `current_user_can( 'manage_woocommerce' )`
+			// (`class-payment-gateway-admin-user-handler.php:140-150`). A critic pass caught
+			// the false claim; a wrong security note is worse than none, because the next
+			// reader stops looking.
+			//
+			// The real gate is WordPress core: `wp-admin/user-edit.php` and `profile.php` run
+			// `check_admin_referer( 'update-user_' . $user_id )` BEFORE firing
+			// `personal_options_update` / `edit_user_profile_update`, which are the only two
+			// hooks that reach `save_profile_fields()` and therefore this method. The marker
+			// read below is attacker-controllable POST data, so what it can do matters: its
+			// only effect is to make this method DO NOTHING, never to write anything.
 			if ( ! isset( $_POST[ $this->get_rendered_marker_name() ] ) ) {
 				return;
 			}

@@ -575,6 +575,55 @@ class SettingsPageRegistryTest extends TestCase {
 	}
 
 	/**
+	 * The MAJOR a critic pass found in the merged fix: `parse_str()` LOSES information, and
+	 * every loss here widens the match into a false positive.
+	 *
+	 * An array-style declaration built an ARRAY, the first version dropped every non-scalar,
+	 * and the argument vanished from the declaration entirely — so a request that does not
+	 * carry it AT ALL matched and redirected. Measured before the fix:
+	 * `wc-settings&tab=shipping&a[]=1` parsed to just `page` + `tab`.
+	 */
+	public function test_an_array_style_declaration_keeps_its_argument(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&tab=shipping&a[]=1' ] );
+
+		$this->assertArrayHasKey( 'a[]', $expected, 'the argument must survive parsing, not be dropped' );
+
+		$request = $this->call_private_static( 'parse_admin_query', [ 'page=wc-settings&tab=shipping' ] );
+
+		$this->assertFalse(
+			$this->call_private_static( 'query_matches', [ $request, $expected ] ),
+			'a request missing a declared argument must not match'
+		);
+	}
+
+	/**
+	 * The other half of the same MAJOR: `parse_str()` NORMALISES keys, turning `.` and a space
+	 * into `_`. Declaration `a.b=1` and request `a%20b=1` both became `a_b=1` and matched,
+	 * despite being different arguments.
+	 */
+	public function test_keys_that_parse_str_would_have_collapsed_stay_distinct(): void {
+		$dotted  = $this->call_private_static( 'parse_admin_query', [ 'p=x&a.b=1' ] );
+		$spaced  = $this->call_private_static( 'parse_admin_query', [ 'p=x&a%20b=1' ] );
+
+		$this->assertArrayHasKey( 'a.b', $dotted );
+		$this->assertArrayHasKey( 'a b', $spaced );
+		$this->assertFalse( $this->call_private_static( 'query_matches', [ $spaced, $dotted ] ) );
+	}
+
+	/**
+	 * The control for both: a scalar declaration with an ENCODED value still matches its own
+	 * request. Without it, the two tests above would pass for a parser that had stopped
+	 * decoding anything and simply never matched.
+	 */
+	public function test_control_an_encoded_scalar_value_still_matches(): void {
+		$expected = $this->call_private_static( 'parse_admin_query', [ 'wc-settings&section=a%20b' ] );
+		$request  = $this->call_private_static( 'parse_admin_query', [ 'page=wc-settings&section=a%20b&x=1' ] );
+
+		$this->assertSame( 'a b', $expected['section'] );
+		$this->assertTrue( $this->call_private_static( 'query_matches', [ $request, $expected ] ) );
+	}
+
+	/**
 	 * An EMPTY declaration is a subset of everything, so `query_matches()` says true — which
 	 * is why `maybe_redirect_legacy()` refuses it before asking. Pinned here so the caller's
 	 * guard is not deleted as redundant by someone reading only this function.
