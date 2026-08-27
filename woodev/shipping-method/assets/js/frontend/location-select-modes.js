@@ -296,6 +296,34 @@
 	 *   adapter default of 2 (`city-select.js:58`) — the closest real precedent for a
 	 *   locality-name search against the same DaData-shaped provider data this layer uses.
 	 *
+	 * THE GAP BELOW THIS FLOOR IS A DECISION, NOT AN OVERSIGHT (issue #523, closed 27.08.2026
+	 * ON A MEASUREMENT rather than on the guess the card refused to accept).
+	 *
+	 * A query shorter than the floor never reaches the transport at all, so #350's correction
+	 * — and, with it, #517's abandon report — cannot fire for it. select2 exposes no public
+	 * event carrying the raw search text below the floor; it lives in
+	 * `$el.data('select2').dropdown.$search`, an undocumented private field this file refuses
+	 * to reach into by its own policy ({@see activeAbort}'s docblock). `location-typeahead.js`
+	 * has no such gap because it closed it in its own `handleBlur()`, so select-mode fields
+	 * genuinely re-open a hole the plain widget does not have.
+	 *
+	 * REACHING IT NEEDS A SETTLEMENT WHOSE ENTIRE NAME IS ONE CHARACTER. Measured against the
+	 * live provider (`test-cdek`, `/location/list` scoped to four regions — `r81`, `r82`,
+	 * `r44`, `r45`): **1329 labels, 1212 of them unique, and the SHORTEST is 3 characters**
+	 * («Уни», «Воя», «Ныр», «Бор», «Лаж», «Кай», «Лум», «Зуи» — eight of them, all length 3).
+	 * Nothing at 1 or 2. The floor is 2, so the gap needs length 1: not one row in the sample
+	 * comes within two characters of it.
+	 *
+	 * The region level has no gap at all — its floor is select2's own 1, and a name of length
+	 * 0 does not exist.
+	 *
+	 * SCOPE OF THAT EVIDENCE, stated because it is not unlimited: one provider, four RU
+	 * regions. It says the gap is unreachable for Russian locality names, which is this
+	 * layer's whole market today; it does not prove a contract for every provider a plugin
+	 * might register. If one ever ships single-character locality names, this is the decision
+	 * to reopen — and the fix would be a public select2 seam, not a lower floor, because #461
+	 * is why the floor cannot simply drop.
+	 *
 	 * @param {string} level
 	 * @returns {number}
 	 */
