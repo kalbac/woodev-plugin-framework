@@ -765,7 +765,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			} catch ( Woodev_Payment_Gateway_Exception $e ) {
 
-				wp_send_json_error( $e->getMessage() );
+				// The ONE response boundary in this codebase whose reader is the CUSTOMER, not
+				// the merchant — this endpoint answers the account page's "Payment methods"
+				// screen. `update_token()` above calls into the gateway's API, so the caught
+				// exception can be thrown by a plugin-authored client wrapping a third-party
+				// SDK, carrying whatever that SDK put in its message.
+				//
+				// Operator decision, 27.08.2026 (#610): every OTHER response boundary here
+				// keeps its raw message, because their reader is the shop admin and the
+				// provider's answer has to reach them (#608). This one does not qualify, and
+				// the merchant loses nothing: #594 already writes the full text to the log.
+				wp_send_json_error( \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) );
 			}
 		}
 
