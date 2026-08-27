@@ -18,16 +18,20 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		protected $js_handler_base_class_name = '';
 
 		/**
-		 * Maximum nopriv log-event requests allowed per IP per rate-limit window (default 60s
-		 * window, see {@see \Woodev\Framework\Http\Rest_Rate_Limit_Trait::is_rate_limited()}).
+		 * Maximum nopriv log-event requests allowed per IP per rate-limit window.
 		 *
-		 * The trait's own default: this endpoint fires at most a handful of times per
-		 * pageview under normal conditions (a script-load error, at most) — the same
-		 * discrete/low-frequency shape as {@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller::RATE_LIMIT_MAX}
-		 * and {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::SUGGEST_RATE_LIMIT_MAX} /
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::LIST_RATE_LIMIT_MAX} —
-		 * three of the trait's eight existing buckets already land on 60/60s for exactly this
-		 * shape of workload, so it needs no new number of its own (issue #577).
+		 * The 60-SECOND window is inherited: {@see \Woodev\Framework\Http\Rest_Rate_Limit_Trait::is_rate_limited()}'s
+		 * `$window` parameter defaults to 60 and this call leaves it alone. The 60-REQUEST
+		 * budget is NOT inherited — `is_rate_limited()`'s `$max` has no default, so every
+		 * caller picks its own — and it is precedent-anchored, not measured: no production
+		 * traffic figure exists for this nopriv logging endpoint. It targets the trait's
+		 * nearest comparable public, read-shaped buckets —
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller::RATE_LIMIT_MAX},
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::SUGGEST_RATE_LIMIT_MAX}
+		 * and {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::LIST_RATE_LIMIT_MAX}
+		 * — all 60/min — against a 15-240/min spread across the trait's nine production
+		 * buckets, so 60 sits mid-range for a read-shaped budget rather than at either
+		 * extreme (issue #577).
 		 *
 		 * @since 2.0.2
 		 *
