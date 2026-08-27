@@ -1358,6 +1358,48 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertFalse( $service->promote_customer_record_to_explicit() );
 		}
 
+		public function test_promote_persists_a_served_default_the_store_could_not_promote(): void {
+			// Found while preparing the rig, and it is the ORDINARY case there,
+			// not a corner: the stored chain is EXPLICIT but gate-refused (the
+			// store switched provider), so get_customer_record() serves a freshly
+			// resolved default that could not be persisted — an implicit write is
+			// refused over an explicit record. promote_chain_to_explicit() then
+			// reads the stored chain, sees implicit === false and reports nothing
+			// to do, and the address would lock again on the next page load.
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$store   = new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() );
+			$service = new Location_Service( $registry, $store );
+
+			// An EXPLICIT record from a provider this registry does not know.
+			$store->set( $this->record( 'gone:picked-earlier' ), false );
+
+			$served = $service->get_customer_record();
+
+			$this->assertNotNull( $served, 'precondition: a default is served over the refused record' );
+			$this->assertSame( 'geo:by-ip', $served['record']->key() );
+			$this->assertTrue( $served['implicit'], 'precondition: what is served is a guess' );
+			$this->assertFalse( $store->get_chain()['implicit'], 'precondition: the STORED chain is explicit, so the flag-only path cannot fire' );
+
+			$this->assertTrue(
+				$service->promote_customer_record_to_explicit(),
+				'the served guess must be promoted even when the stored chain cannot be'
+			);
+
+			$after = $service->get_customer_record();
+
+			$this->assertSame( 'geo:by-ip', $after['record']->key(), 'the promoted record must be the one the customer was shown' );
+			$this->assertFalse( $after['implicit'], 'and it must survive a re-read as the customer own choice' );
+
+			\WC_Geolocation::$address = null;
+		}
+
 		public function test_promote_refuses_a_record_the_gate_itself_refuses(): void {
 			// Promotion is gated on get_customer_record(), not on the raw store.
 			// A record whose provider is no longer registered reads as ABSENT

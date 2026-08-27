@@ -1073,8 +1073,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * provider is switched back, when a guess the customer never made would
 		 * return as an explicit choice.
 		 *
-		 * Idempotent: an already-explicit record, or no record at all, returns
-		 * `false` and writes nothing, so callers need no precondition of their own.
+		 * TWO WRITES, because the served record and the STORED chain are not
+		 * always the same thing — found while preparing the rig, where it is the
+		 * ordinary case rather than a corner:
+		 *
+		 * 1. Normally the served record IS the stored chain, and
+		 *    {@see Customer_Location_Store::promote_chain_to_explicit()} moves
+		 *    the flag alone, preserving levels deeper than the current one.
+		 * 2. But when the stored chain is EXPLICIT and the gate refuses it (the
+		 *    store switched provider), {@see self::get_customer_record()} serves
+		 *    a freshly resolved default instead — and that default could not be
+		 *    persisted, because an implicit write is refused over an explicit
+		 *    record. The stored chain then still reads `implicit === false`, so
+		 *    step 1 reports "nothing to promote" and the customer's address
+		 *    would lock again on the next page load despite the pickup choice.
+		 *    Writing the SERVED record explicitly is correct here: the chain it
+		 *    would rebuild over is one nothing can currently read anyway.
+		 *
+		 * Idempotent: an already-explicit served record, or no record at all,
+		 * returns `false` and writes nothing, so callers need no precondition.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1087,7 +1104,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return false;
 			}
 
-			return $this->customer_store->promote_chain_to_explicit();
+			if ( $this->customer_store->promote_chain_to_explicit() ) {
+				return true;
+			}
+
+			return $this->set_customer_record( $entry['record'] );
 		}
 
 		/**
