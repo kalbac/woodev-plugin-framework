@@ -145,6 +145,40 @@ namespace Woodev\Tests\Unit {
 				$this->editor->get_rendered_marker_name_for_test()
 			);
 		}
+
+		/**
+		 * THE RENDER SIDE OF THE CONTRACT, and the gap a critic pass named: every test above
+		 * manufactures the marker in `$_POST` by hand, so deleting or renaming the hidden
+		 * input in the VIEW leaves all of them green while every ordinary admin token edit
+		 * silently does nothing — `save()` returns on an absent marker, which is the whole
+		 * point of it.
+		 *
+		 * The view is asserted directly rather than through `display()`, which reaches for a
+		 * real gateway and plugin to resolve its own path. What matters is that the file the
+		 * editor includes emits the SAME name `save()` looks for, so the two are compared.
+		 */
+		public function test_the_view_emits_exactly_the_marker_save_looks_for(): void {
+			$view = file_get_contents(
+				dirname( __DIR__, 2 ) . '/woodev/payment-gateway/admin/views/html-user-payment-token-editor.php'
+			);
+
+			$this->assertStringContainsString(
+				'name="<?php echo esc_attr( $rendered_marker_name ); ?>"',
+				$view,
+				'the view must print the marker input'
+			);
+
+			// And the variable it prints is the one display() sets from the accessor.
+			$editor = file_get_contents(
+				dirname( __DIR__, 2 ) . '/woodev/payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php'
+			);
+
+			$this->assertStringContainsString(
+				'$rendered_marker_name = $this->get_rendered_marker_name();',
+				$editor,
+				'display() must hand the view the name save() reads'
+			);
+		}
 	}
 
 }
