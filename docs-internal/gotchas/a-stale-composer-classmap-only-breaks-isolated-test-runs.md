@@ -73,9 +73,36 @@ After adding or renaming a framework class, run `php bin/generate-class-map.php`
 the map (Rule 3) — and run `composer dump-autoload` locally so the dev autoloader matches.
 Only the first is a commit; the second is local hygiene.
 
-**Also surfaced by the dump, not yet investigated:** two classes under `woodev/competitor/`
-are reported as PSR-4 non-compliant and **skipped** by Composer entirely
-(`class-wc-admin-notes-renderer.php`, `interface-competitor-notice-renderer.php`).
+## The other half, and the gate — s101 (#598)
+
+The line this file used to end on ("two classes under `woodev/competitor/` are reported as PSR-4
+non-compliant and skipped, not yet investigated") turned out to be the SECOND, worse shape of the
+same defect, and it was not two classes but **ten**.
+
+`composer.json` → `autoload.classmap` is a **hand-maintained directory list**. Two whole
+directories were never on it, `woodev/competitor` and `woodev/account`, so their ten classes were
+unreachable for Composer by ANY route — the classmap did not list them and PSR-4 structurally
+cannot map WordPress file naming. Measured: `grep -c "woodev/account\|woodev/competitor"
+vendor/composer/autoload_classmap.php` → **0**, and 1630 classes in the map against 1640 after.
+
+Note the asymmetry, because it is the whole reason this can happen:
+
+| Map | Built by | Can it drift? |
+|---|---|---|
+| `woodev/class-map.php` (runtime, shipped) | `bin/generate-class-map.php`, scanning the whole tree | **No** — and `ClassMapCompletenessTest` already guarded it |
+| `composer.json` → `autoload.classmap` (dev/test) | a human typing directory names | **Yes, silently** |
+
+`composer dump-autoload` warns about `competitor` but NOT about `account`: it only complains about
+PSR-4 near-misses, never about a directory nobody told it to scan. So the louder half of the
+defect was the half that was already visible.
+
+Production was never affected — shipped plugins boot through `woodev/class-map.php`, which had all
+ten.
+
+**Gated since #598:** `ClassMapCompletenessTest::test_every_framework_symbol_is_reachable_by_the_dev_autoloader()`
+walks every FQCN in the generated map through the registered Composer `ClassLoader` and fails on
+anything `findFile()` cannot resolve. Falsified when written: reverting the `composer.json` change
+makes it name exactly those ten with their paths.
 
 ## Related
 

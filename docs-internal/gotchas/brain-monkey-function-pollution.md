@@ -76,7 +76,34 @@ protected function wc_cart() { return function_exists( 'WC' ) && WC()->cart ? WC
 
 The probe overrides `wc_cart()`; the real `WC()` function is never touched, so nothing leaks.
 
+## How to FIND these before CI does — `--order-by=reverse` (s101)
+
+The failure mode of this whole class is that it depends on traversal order, and the default order
+is stable, so a polluted test is either always green or always red on a given machine. One flag
+changes the order and exposes the dependence:
+
+```bash
+rm -f .phpunit.result.cache
+./vendor/bin/phpunit --testsuite=Unit --order-by=reverse
+```
+
+**Measured in s101: one such run found TWO real defects in code written that same hour**, in a
+file whose ordinary run was green — a `wc_add_notice` left to the ambient `function_exists()`
+(CI's PHP 7.4 job caught that one first, and it read as a 7.4 incompatibility, which it was not),
+and a `$GLOBALS['wp_current_filter']` merely inherited from a sibling test in the same file.
+
+**Always run it with a CONTROL.** `main` itself is currently red in reverse order — 55 failures in
+`DadataApiClientTest` and `DadataProviderTest`, because `TranslationHandlerTest` stubs `get_locale`
+and `Dadata_Api_Client::current_locale()` branches on `function_exists( 'get_locale' )`. Tracked on
+**#606**. Without running the control on `main` you will attribute those to your own branch.
+
+That standing failure has a second consequence worth stating: **the unit suite is green by
+alphabetical accident.** `tests/unit/handlers/` sorts last only because it is lowercase; renaming
+it to `Handlers/` (which is what every other nested test directory does) reds 55 tests without
+touching a line of source.
+
 ## Related
 
 - [[ci-failing-gate-skips-dependent-jobs]] — this was one of the masked Unit failures
 - [[reflection-setaccessible-version-guard]] — another masked Unit failure (PHP-version-specific)
+- [[the-local-php-is-four-versions-above-the-ci-floor]] — the other "green here, red on CI", by version rather than by order
