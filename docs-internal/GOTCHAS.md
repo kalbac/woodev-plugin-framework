@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 222 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 223 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -178,6 +178,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/ci] **A PR's check rollup keeps SUPERSEDED failures under the same job name — `CLEAN` and "eight failures" can both be true; filter to the current run ids before counting.** → [a-check-rollup-keeps-superseded-failures-under-the-same-job-name](gotchas/a-check-rollup-keeps-superseded-failures-under-the-same-job-name.md) (s98)
 - [build/ci] **Every job failing in TWO SECONDS — including `Label PR` — is an Actions billing block, not a red build; the annotation is only in `gh run view`.** → [every-ci-job-failing-in-two-seconds-is-a-billing-block](gotchas/every-ci-job-failing-in-two-seconds-is-a-billing-block.md) (s98)
 - [build/ci] **A `pull_request` workflow can simply not fire on a CLEAN PR — only `PR Triage` shows up. Close and reopen; and COUNT the jobs (19 code-only, 20 with `.md`), never read the colour.** → [a-pull-request-workflow-can-simply-not-fire](gotchas/a-pull-request-workflow-can-simply-not-fire.md) (s97)
 - [build/composer] **Widening `autoload.classmap` breaks every EXISTING checkout until `composer dump-autoload` runs — nine "class not found" errors that read as a bad merge.** → [a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout](gotchas/a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout.md) (s91)
