@@ -22,8 +22,8 @@ log, which reads as a red build) live on card **#583** and in gotcha
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s101):**
-`composer check` **3057** / 7369 / **66 skipped**. Every step reconciles: 3025 at the start of
-s101, +1 (#607's dev-autoloader gate), +31 (#611's redaction tests) = 3057. Compare SKIPPED,
+`composer check` **3059** / 7375 / **66 skipped**. Every step reconciles: 3025 at the start of
+s101, +1 (#607's dev-autoloader gate), +31 (#611's redaction tests), +2 (#616) = 3059. Compare SKIPPED,
 always: 66 is the primary's number, and a worktree that skips more has silently run fewer
 contract guards.
 
@@ -59,19 +59,25 @@ release: #285, #247.
 
 **Filed in s101, all six:** **#606** (the unit suite is green by alphabetical accident — see the
 reverse-order warning above), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the
-documentation half was already done in s98), **#610** (a raw exception message reaching the
-browser — narrowed to two sites, see below), **#613** (act on #599's 49 FATAL/DISABLES sites —
+documentation half was already done in s98), **#613** (act on #599's 49 FATAL/DISABLES sites —
 triage first, and two of its questions are his). **#605** was filed and closed the same session,
-and **#608** was answered and closed by the operator while s101 was still running.
+and **#608** and **#610** were both answered by the operator while s101 was still running — #608
+closed by him, #610 answered, narrowed and then shipped (PR #616).
 
-**Operator decision, 27.08.2026 (#608, closed `not planned`): a WC_Order note KEEPS the raw text
-of a foreign exception.** «Ответ провайдера должен быть доступен магазинщику. Иначе чем менее
-детализирована запись в админке, тем больше обращений в поддержку.» That reasoning also settles
-NINE of #610's twelve sites, whose reader is likewise the shop admin. The two that survive differ
-not in the text but in WHO READS IT: `class-payment-gateway-my-payment-methods.php:768` answers a
-logged-in CUSTOMER, and `handlers/class-script-handler.php:262` is `nopriv`.
+**Operator decisions, 27.08.2026 — where a foreign exception's raw text may stand, decided on WHO
+READS IT rather than on how dangerous the text is:**
 
-**Closed in s101:** **#594**, **#598**, **#599**, **#605**. Closed in s100: **#559**, **#560**,
+| Boundary | Raw text? | Why |
+|---|---|---|
+| `WC_Order` note (**#608**, `not planned`) | **kept** | «Ответ провайдера должен быть доступен магазинщику. Иначе чем менее детализирована запись в админке, тем больше обращений в поддержку.» |
+| nine browser responses whose reader is the admin (**#610**) | **kept** | same reasoning |
+| `script-handler.php:262`, `nopriv` (**#610**) | **kept** | a plugin author's own exception text is not the framework's responsibility at a response boundary, and stripping it is not available either — the response is a public seam someone's front end may act on |
+| `my-payment-methods.php:768` (**#610**) | **REDACTED** | its reader is the CUSTOMER, and the call it wraps goes into the gateway's API. The merchant loses nothing — #594 writes the full text to the log |
+
+Every log sink redacts unconditionally (**#594**); the table above is about RESPONSE and NOTE
+boundaries only.
+
+**Closed in s101:** **#594**, **#598**, **#599**, **#605**, **#610**, and **#608** (by him, `not planned`). Closed in s100: **#559**, **#560**,
 **#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
 was decided, is the handoff's carry-over section — not this file.
 
@@ -229,9 +235,7 @@ oversight.
 7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
 8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
 
-🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#610** (сырой текст чужого исключения в
-ответе браузеру; девять админских мест закрыты доводом из #608, живыми остались ДВА — покупателю
-и анонимному вызывающему; примеры на карточке, жду его «да» на суженный вид), **#567** (язык msgid — 305 строк работы в одну сторону, замер на
+🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#567** (язык msgid — 305 строк работы в одну сторону, замер на
 карточке), **#437** (нужна беседа об объёме), **#474**, **#483**, **#511**, **#515**, **#331**,
 **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
 и #321, #322.
