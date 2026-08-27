@@ -29,9 +29,9 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller::RATE_LIMIT_MAX},
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::SUGGEST_RATE_LIMIT_MAX}
 		 * and {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::LIST_RATE_LIMIT_MAX}
-		 * — all 60/min — against a 15-240/min spread across the trait's nine production
-		 * buckets, so 60 sits mid-range for a read-shaped budget rather than at either
-		 * extreme (issue #577).
+		 * — all 60/min — against a 15-240/min spread across the nine buckets that predate
+		 * it, so 60 sits mid-range for a read-shaped budget rather than at either extreme
+		 * (issue #577).
 		 *
 		 * @since 2.0.2
 		 *
