@@ -201,6 +201,149 @@ final class TextDomainConsistencyTest extends TestCase {
 	}
 
 	/**
+	 * Pins {@see self::TRANSLATION_FUNCTIONS} against an INDEPENDENTLY WRITTEN list.
+	 *
+	 * This is the guard the generated per-wrapper cases below cannot be: they are generated
+	 * FROM that table, so deleting an entry deletes its own test and the suite stays green
+	 * with two fewer cases — which is exactly what happened when the critic's mutation
+	 * (unregistering `esc_html__`) was re-run against them. A table that silently shrinks
+	 * silently stops scanning, and the production assertion above runs on the same table.
+	 *
+	 * So the list is spelled out here, by hand, and the POSITIONS with it — a domain read
+	 * from the wrong slot is worse than one not read at all, because it silently becomes the
+	 * context or the count.
+	 *
+	 * Adding a wrapper means editing both places. That is the point: the second edit is where
+	 * somebody has to look up the real signature.
+	 */
+	public function test_the_wrapper_table_matches_the_gettext_functions_wordpress_actually_ships(): void {
+		$this->assertSame(
+			[
+				'__'         => 2,
+				'_e'         => 2,
+				'esc_html__' => 2,
+				'esc_html_e' => 2,
+				'esc_attr__' => 2,
+				'esc_attr_e' => 2,
+				'esc_xml__'  => 2,
+				'esc_xml_e'  => 2,
+				'_x'         => 3,
+				'_ex'        => 3,
+				'esc_html_x' => 3,
+				'esc_attr_x' => 3,
+				'esc_xml_x'  => 3,
+				'_n_noop'    => 3,
+				'_n'         => 4,
+				'_nx_noop'   => 4,
+				'_nx'        => 5,
+			],
+			self::TRANSLATION_FUNCTIONS,
+			'A wrapper dropped from this table stops being scanned everywhere, silently.'
+		);
+	}
+
+	/**
+	 * One BARE call per entry in {@see self::TRANSLATION_FUNCTIONS}, generated from that table
+	 * itself so the two cannot drift.
+	 *
+	 * The hand-written cases above only ever exercised `__`, `_x` and `_n` positively. An
+	 * independent critic pass proved what that costs: unregistering `esc_html__` from the
+	 * table left all nineteen of them GREEN, while the production assertion — which runs on
+	 * the same scanner — would then have waved every bare `esc_html__()` through. A false
+	 * green in the guard for a false-green defect.
+	 *
+	 * Generating the cases means a wrapper added to the table gets a positive case for free,
+	 * and one removed from it stops being scanned AND stops being tested in the same edit,
+	 * which is at least visible in the diff.
+	 *
+	 * @dataProvider provide_one_bare_call_per_wrapper
+	 *
+	 * @param string $wrapper  wrapper name.
+	 * @param string $source   a bare call to it, with no domain.
+	 */
+	public function test_every_supported_wrapper_is_recognised_when_called_bare( string $wrapper, string $source ): void {
+		$this->assertSame(
+			[ $wrapper ],
+			array_values( $this->extract_missing_domains( "<?php
+" . $source ) ),
+			sprintf( '%s() called with no domain must be reported; it is in TRANSLATION_FUNCTIONS.', $wrapper )
+		);
+	}
+
+	/**
+	 * The mirror control: the SAME call, with the framework domain in the SAME wrapper's own
+	 * domain slot, must be reported by neither scanner. Without it, the test above would pass
+	 * for a scanner that reported every call unconditionally, and this is also what pins the
+	 * domain POSITION per wrapper — the one thing a shared arity would get wrong.
+	 *
+	 * @dataProvider provide_one_domained_call_per_wrapper
+	 *
+	 * @param string $wrapper wrapper name.
+	 * @param string $source  a call to it carrying the framework domain.
+	 */
+	public function test_every_supported_wrapper_is_satisfied_by_a_domain_in_its_own_slot( string $wrapper, string $source ): void {
+		$this->assertSame( [], array_values( $this->extract_missing_domains( "<?php
+" . $source ) ), $wrapper );
+		$this->assertSame( [], array_values( $this->extract_wrong_domains( "<?php
+" . $source ) ), $wrapper );
+	}
+
+	/**
+	 * @return array<string, array{0:string, 1:string}>
+	 */
+	public function provide_one_bare_call_per_wrapper(): array {
+		$cases = [];
+
+		foreach ( self::TRANSLATION_FUNCTIONS as $wrapper => $position ) {
+			$cases[ $wrapper ] = [ $wrapper, sprintf( '%s( %s );', $wrapper, $this->arguments_before_domain( $position ) ) ];
+		}
+
+		return $cases;
+	}
+
+	/**
+	 * @return array<string, array{0:string, 1:string}>
+	 */
+	public function provide_one_domained_call_per_wrapper(): array {
+		$cases = [];
+
+		foreach ( self::TRANSLATION_FUNCTIONS as $wrapper => $position ) {
+			$cases[ $wrapper ] = [
+				$wrapper,
+				sprintf(
+					"%s( %s, '%s' );",
+					$wrapper,
+					$this->arguments_before_domain( $position ),
+					self::TEXT_DOMAIN
+				),
+			];
+		}
+
+		return $cases;
+	}
+
+	/**
+	 * Builds the `$position - 1` arguments that precede a wrapper's domain slot.
+	 *
+	 * `_n()`/`_nx()` take a COUNT among them, so the filler cannot be a string for every
+	 * slot — a numeric literal is used where the real signature wants the count. The scanner
+	 * reads only the domain slot, so the rest need only be syntactically valid and correctly
+	 * COUNTED; getting the count wrong is what would silently shift the domain.
+	 *
+	 * @param int $position 1-based position of the domain argument.
+	 * @return string
+	 */
+	private function arguments_before_domain( int $position ): string {
+		$arguments = [];
+
+		for ( $i = 1; $i < $position; $i++ ) {
+			$arguments[] = "'arg{$i}'";
+		}
+
+		return implode( ', ', $arguments );
+	}
+
+	/**
 	 * Guards the scanner itself.
 	 *
 	 * The scan above is only worth its runtime if it cannot be walked past, and the failure

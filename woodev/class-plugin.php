@@ -569,10 +569,21 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				// it, so it could never match a catalogue entry — untranslatable by
 				// construction, whatever domain it declared. sprintf() now wraps the
 				// translation, which is the only order that leaves a stable msgid.
+				//
+				// `esc_html()` on the SUBSTITUTION, not only on the template (critic, round 1
+				// of #569). Swapping the order alone would have escaped the template and then
+				// interpolated `get_plugin_name()` raw — the old inverted call at least
+				// escaped the finished string, so fixing the msgid without this would have
+				// traded an i18n defect for an escaping one. The name is a plugin-supplied
+				// value, so it gets escaped on its own before it reaches the template.
+				//
+				// The `<strong>` in the msgid is escaped by `esc_html__()` and therefore
+				// renders as literal text wherever this lands. That is PRE-EXISTING and is
+				// not decided here: the key has no JS consumer at all today, which is #568.
 				'license_prompt'   => sprintf(
 					/* translators: %s: plugin name. */
 					esc_html__( 'Для использования плагина <strong>"%s"</strong>, вам необходимо активировать вашу лицензию для этого сайта', 'woodev-plugin-framework' ),
-					$this->get_plugin_name()
+					esc_html( $this->get_plugin_name() )
 				),
 				'enter_license'    => esc_html__( 'Указать лицензию', 'woodev-plugin-framework' ),
 				'close'            => esc_html__( 'Закрыть', 'woodev-plugin-framework' ),
