@@ -6,33 +6,32 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-27 (s98).** `main` is at `1a5cebf`, tree clean. **One PR open:** #581, held for
-the operator's rig pass. #582 merged once the public switch brought CI back — 18 pass + 1 skip,
-state CLEAN.
+**As of 2026-08-27 (s99).** `main` is at `78ead18`. **One PR open:** #586 (#518), green and CLEAN,
+held for the operator's rig pass. Merged in s99: **#584** (#451) and **#581** (#397) — both 18 pass
++ 1 skip, state CLEAN.
 
-✅ **CI IS BACK. The repo is PUBLIC again since 27.08.2026 (operator decision)** — public
-repositories on standard runners are free and consume no quota, so the block lifted immediately.
-Measured: the same `Markdown Lint` run that failed in 2 s passed in 14 s straight after the
-switch. Card **#583** carries the whole account.
+⚠ **The main checkout is NOT on `main`** — it is on `fix/518-pickup-selection-lifts-the-implicit-flag`
+because the rig serves the working tree and #586 is waiting to be looked at. Leave it there until
+that pass is over.
 
-What it was: the Free plan's **2000 monthly Actions minutes were 90 % spent (1800/2000)** and a
-$0 Actions budget stopped the rest, from `2026-08-27T02:49:17Z`. **s98 itself spent ≈1042 of
-those minutes (≈58 % of the month) in one night** — 187 runs, 27 billable minutes per full PR
-cycle. The private switch on 25.08 is what started metering them at all.
+✅ **CI works and the repo is PUBLIC** (since 27.08.2026, operator decision) — public repositories
+on standard runners consume no quota, so the s98 billing block lifted the moment it was switched.
+The whole account, the cost measurement and the symptom (every job failing in two seconds with no
+log, which reads as a red build) live on card **#583** and in gotcha
+`every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
+in the global `CLAUDE.md` → «GitHub Actions budget».
 
-The symptom is worth knowing because it reads as a red build: every job fails in two seconds,
-`Label PR` included, and has **no log at all** — it never started. The reason appears only in
-`gh run view`. Gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`, which also
-records the local-CI option (`run-local-ci`: WSL only, native Windows still broken at 0.18.1).
+**Baselines on `main`, measured 27.08.2026 at `78ead18`:** `composer check` **2966** / 7139 /
+**66 skipped**; jest **1545** in 21 suites. Measured in a worktree, which is trustworthy here ONLY
+because SKIPPED came back as 66 — the primary's number (see the tooling note below); a worktree
+that skips more has silently run fewer contract guards.
 
-**s98 itself spent ≈1042 of those minutes (≈58 % of the month) in one night** — 187 runs, 27
-billable minutes per full PR cycle, measured per job. At that rate the allowance covers two such
-sessions a month. Everything merged in s98 up to and including #579 passed REAL green CI; the block
-landed after.
-
-**Baselines on `main`, measured in the PRIMARY checkout 27.08.2026 at `c35700e`:** `composer check`
-**2950** / 7111 / **66 skipped**; jest **1545** in 21 suites; Integration suite in the container
-**124** tests / 485 assertions.
+⚠ **Integration on `main` is NOT measured** and the number that used to sit here is gone rather
+than carried: the container serves the PRIMARY checkout, which is parked on the #518 branch for
+the rig. On that branch it is **126** tests / 494 assertions. Re-measure on `main` after #586
+lands. (s98's handoff recorded jest **1545** for `main`, but three of those tests belonged to the
+then-unmerged #581 — `main` was 1542 at the time. They are merged now, so 1545 is right today for
+a different reason than the one written down.)
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
 
@@ -143,7 +142,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **223**.
+Gotchas: **224**.
 
 ## Program status (high level)
 
@@ -203,28 +202,26 @@ oversight.
 
 ## Next Actions
 
-**⛔ Ждёт кнопки оператора — БЛОКИРУЮЩЕЕ:** **#583**, GitHub Actions заблокирован по биллингу
-с `02:49:17Z` 27.08.2026. Пока он не снят, **мержить нельзя ничего** — правило проекта требует
-зелёной CI по каждой джобе, и «локально зелено» его не заменяет. После разблокировки: `close`/
-`reopen` на **#581** и **#582**.
+✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
+27.08.2026 — история на **#583**; блока больше нет, и раздел выше это описывает.
 
-1. **#582** — фиксы по итогам критик-прохода (два MAJOR в уже смерженном коде). Локально всё
-   зелено, ждёт только CI.
-2. **#581** — ошибки полей мастера установки (#397). Видимый результат — красное поле; харнесса
-   на это в репо нет. **Нужен проход по ригу**, потом мерж.
-3. **#518** — выбор ПВЗ снимает «неявность» записи. Решено в s92, **не начато**. Видно
-   покупателю → строить можно, мержить нельзя без его прохода.
-4. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+1. **#586 (#518)** — выбор ПВЗ снимает «неявность» записи. **Построено и проверено на риге мной,
+   обе половины.** Зелёный, CLEAN. Видно покупателю → **ждёт прохода оператора**, потом мерж.
+   Риг под это переключён — см. «Local rig» ниже, там же как вернуть.
+2. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
    m6 и T3 закрыты в s98 (#563).
-5. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
+3. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
    про страно-слепой `provider_for_level()`, потом включать правило регистрации.
-6. **Остатки слоя локаций:** #356, #358, #361, #410. **Мелочи:** #444 ✅, #451 (единственная
-   не взятая из «мелочей»), #453 ✅.
-7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-8. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#583** (биллинг), **#567** (язык msgid —
-   305 строк работы в одну сторону, замер на карточке), **#570** (нетипизированный шов
-   `Settings_Provider::create()`), **#577** (частота nopriv-лога), **#559** (Orca не
-   супервизирует kilo), **#560** (`credential.helper` → `gh`), **#437** (нужна беседа об
+4. **Остатки слоя локаций:** #356, #358, #361, #410.
+5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+6. **#585 (НОВАЯ)** — границы логирования пишут текст ЧУЖИХ исключений сырым (швы расширения).
+   Найдено критиком при ревью #584; к reason-фразе отношения не имеет, лечится иначе.
+7. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#587 (НОВАЯ)** — политика `geoip` и опция
+   WooCommerce «Расположение клиента по умолчанию» молча конфликтуют по стране; вопрос поднял сам
+   оператор, на карточке замер, его предложение, два возражения и четыре варианта.
+   **#567** (язык msgid — 305 строк работы в одну сторону, замер на карточке), **#570**
+   (нетипизированный шов `Settings_Provider::create()`), **#577** (частота nopriv-лога), **#559**
+   (Orca не супервизирует kilo), **#560** (`credential.helper` → `gh`), **#437** (нужна беседа об
    объёме), **#474**, **#483**, **#511**, **#515**, **#331**, **#332**, **#374**.
    **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
 
@@ -240,8 +237,32 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (`c67de29`) — s95 left it there; PR #547 is NOT checked out, so the rig does NOT currently serve #539 part 3. Check out `feat/539-merge-popular-with-provider-results` before the operator's pass on it.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- **Rig location config, left as of 24.08.2026 — NOT the historical default.** Provider
+- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `fix/518-pickup-selection-lifts-the-implicit-flag` (s99) — leave it until the #586 pass is over, then return it to `main`.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
+- ⚠ **THE RIG IS CURRENTLY SWITCHED FOR #518 (s99) — restore it once that pass is over.** #518 is
+  reachable in exactly ONE configuration (`dadata` + `geoip`; measured on the card), so the rig had
+  to be moved off the settings described in the next bullet:
+
+  | Option | Restore to | Currently |
+  |---|---|---|
+  | `woodev_location_active_provider` | `test-cdek` | **`dadata`** |
+  | `woodev_location_field_mode_region` | `related-list` | **`ajax-select2`** (DaData cannot do `related-list`) |
+  | `woodev_location_default_locality_policy` | `fixed` | **`geoip`** |
+
+  `woodev_location_default_locality_record` was NOT touched — it returns to use on its own when the
+  policy goes back to `fixed`.
+
+  Plus a mu-plugin, **`wp-content/mu-plugins/zz-rig-geoip-ip.php`** (delete it to restore): on a
+  local rig `WC_Geolocation::get_ip_address()` sees `127.0.0.1`, DaData's `iplocate` cannot answer
+  that, so `geoip` resolves nothing and the IMPLICIT record #518 is entirely about never exists. It
+  pins a real Moscow IP via `HTTP_X_REAL_IP` (WC checks that first —
+  `class-wc-geolocation.php:83`), leaving `REMOTE_ADDR` alone.
+
+  **Restoring the options is not enough by itself:** a customer who already has a stored location
+  keeps it. Clear `woodev_customer_location` from user meta AND from the `wp_woocommerce_sessions`
+  rows (edit the row in place — deleting it drops the cart).
+
+- **Rig location config, the state to RESTORE to (left as of 24.08.2026) — NOT the historical
+  default.** Provider
   **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
   **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
   region-preset + settlement-search combination, which had never been run live. Options:
