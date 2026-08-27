@@ -7,7 +7,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
-use WP_UnitTestCase;
+use Woodev\Tests\Integration\TestCase;
 
 /**
  * Covers the no-argument construction path WooCommerce itself takes.
@@ -19,7 +19,7 @@ use WP_UnitTestCase;
  *
  * @since 2.0.2
  */
-class ShippingIntegrationConstructionTest extends WP_UnitTestCase {
+class ShippingIntegrationConstructionTest extends TestCase {
 
 	/**
 	 * WooCommerce constructs every registered integration with NO arguments, so the
