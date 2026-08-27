@@ -538,6 +538,12 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		/**
 		 * Gets the current version information from the remote site.
 		 *
+		 * @since 2.0.2 the caught exception's message is redacted through
+		 *              {@see Woodev_API_Base::redact_secret_log_text()} before it is
+		 *              logged: it may come from a response parser or the underlying
+		 *              HTTP transport rather than from `Woodev_API_Base` itself, so it
+		 *              may never have passed through that class's own redaction — #585.
+		 *
 		 * @return object|false
 		 */
 		private function get_version_from_remote() {
@@ -630,7 +636,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return $response;
 
 			} catch ( \Throwable $e ) {
-				error_log( 'Woodev updater: get_version_from_remote failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; the update flow must not break on API failure (OB-3 F2).
+				error_log( 'Woodev updater: get_version_from_remote failed: ' . Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; the update flow must not break on API failure (OB-3 F2).
 			}
 
 			return false;

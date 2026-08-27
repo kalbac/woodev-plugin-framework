@@ -192,6 +192,28 @@ class Pickup_Controller_Probe extends Pickup_Controller {
 }
 
 /**
+ * Bypasses only the rate limiter — unlike {@see Pickup_Controller_Probe}, this probe
+ * leaves `log_carrier_failure()` UNOVERRIDDEN, so tests built on it exercise the real
+ * method (and, through it, {@see \Woodev_API_Base::redact_secret_log_text()} — #585)
+ * instead of the probe's own capture-only stand-in.
+ */
+final class Pickup_Controller_Log_Redaction_Probe extends Pickup_Controller {
+
+	/**
+	 * Never rate-limits in unit tests.
+	 *
+	 * @param string $key_prefix transient key prefix (unused).
+	 * @param int    $max        requests allowed per window (unused).
+	 * @param int    $window     window length in seconds (unused).
+	 *
+	 * @return bool
+	 */
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		return false;
+	}
+}
+
+/**
  * Probe whose rate limiter is always TRIPPED, and which records the prefix and budget it
  * was asked for. The inverse of {@see Pickup_Controller_Probe}, which never limits — a
  * route's guard cannot be proven to exist by a probe that disables it, so the only way to
@@ -1741,5 +1763,95 @@ final class PickupControllerTest extends TestCase {
 		$this->assertNotNull( $captured );
 		$this->assertNull( $captured->get_record() );
 		$this->assertNull( $captured->get_resolved_identity() );
+	}
+
+	// -------------------------------------------------------------------------
+	// log_carrier_failure() — a foreign exception message is redacted before it
+	// reaches error_log(), through Woodev_API_Base::redact_secret_log_text() (#585).
+	// Uses Pickup_Controller_Log_Redaction_Probe (real log_carrier_failure(), only
+	// the rate limiter bypassed) — NOT Pickup_Controller_Probe, whose overridden
+	// log_carrier_failure() would bypass the code under test.
+	// -------------------------------------------------------------------------
+
+	public function test_log_carrier_failure_redacts_a_secret_in_a_foreign_exception_message(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				\Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) {
+				throw new \Woodev_API_Exception( 'carrier rejected api_key=LIVESECRET' );
+			},
+			static fn( string $id ) => null
+		);
+		$controller = new Pickup_Controller_Log_Redaction_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$controller->handle_points_request( new WP_REST_Request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertSame(
+			'[woodev] pickup points fetch failed for plugin "test-plugin": carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control: an exception message carrying NO secret must reach the
+	 * rendered error_log() line byte-for-byte — asserted on the COMPLETE
+	 * rendered line, not merely a substring, so a redactor that mangled
+	 * anything else in the line could not pass silently.
+	 */
+	public function test_log_carrier_failure_leaves_a_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				\Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$source = new Pickup_Controller_Test_Source(
+			Point_Source::STRATEGY_BULK,
+			static function ( Point_Query $query ) {
+				throw new \Woodev_API_Exception( 'carrier unreachable' );
+			},
+			static fn( string $id ) => null
+		);
+		$controller = new Pickup_Controller_Log_Redaction_Probe(
+			'test-plugin',
+			$source,
+			static fn() => 0,
+			static fn() => 'bacs',
+			static fn() => 'carrier_pickup'
+		);
+
+		$controller->handle_points_request( new WP_REST_Request( [ 'locality' => 'Москва' ] ) );
+
+		$this->assertSame(
+			'[woodev] pickup points fetch failed for plugin "test-plugin": carrier unreachable',
+			$captured
+		);
 	}
 }

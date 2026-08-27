@@ -596,6 +596,176 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			);
 		}
 
+
+		/**
+		 * Redacts a known secret param name out of arbitrary FREE-FORM log
+		 * text — an exception message, a diagnostic context string — for a
+		 * caller that has no {@see Woodev_API_Base} instance to reach
+		 * {@see self::redact_secret_query_params()} through, and may never
+		 * have one at all.
+		 *
+		 * {@see self::handle_response()} redacts everything this class itself
+		 * derives from a response, AT THE POINT it is assigned (#451), but
+		 * that only covers text `Woodev_API_Base` builds. A `Point_Source` /
+		 * carrier client is a plugin EXTENSION SEAM: it is free to throw any
+		 * `\Throwable` of its own, built from a live third-party SDK this
+		 * class never sees, and that message can reach a log boundary
+		 * without ever passing through this class at all (#585). This is
+		 * the seam those boundaries SHOULD route through, instead of each
+		 * hand-redacting the same free text independently — the current
+		 * ones are {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::log_carrier_failure()},
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::log_carrier_failure()},
+		 * {@see Woodev_Plugin_Updater::get_version_from_remote()}, and
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::log_failure()}.
+		 * That list is OPEN, not exhaustive — nothing in this class enforces
+		 * that every log boundary in the codebase routes through it; a #585
+		 * critic-round-2 sweep found several further caught-exception log
+		 * sinks that do not yet, tracked in issue #594 so the gap is visible
+		 * from the code, not only from the tracker.
+		 *
+		 * Reuses {@see self::redact_secret_query_params()} — the same
+		 * `name=value` / `<name>value</name>` free-text scan
+		 * {@see self::handle_response()} already runs over a
+		 * transport-thrown `WP_Error` message — so there is exactly ONE
+		 * implementation of "scan free text for a secret name" in this
+		 * codebase, never a second one duplicated for exception text. Two
+		 * consequences worth knowing before reading a redacted line:
+		 *
+		 * - It is a NAME-based scan, not a shape-based one: `api_key=VALUE`
+		 *   and `<api_key>VALUE</api_key>` are caught; `Authorization: Bearer
+		 *   VALUE`, a JSON `"api_key":"VALUE"` pair (colon, not `=`), a
+		 *   sentence like "the key VALUE was rejected", and a bare token with
+		 *   no name attached at all are NOT — there is no name for the scan
+		 *   to match against. Pinned both directions by
+		 *   ApiBaseLogTextRedactionTest.
+		 * - It runs over the WHOLE message, not just an isolated parameter:
+		 *   harmless prose that happens to contain `name=value` shape is
+		 *   masked too (`the retry token=next is enabled`), and the value
+		 *   match is greedy up to the next `&`/whitespace, so trailing
+		 *   punctuation attached to the value is consumed with it
+		 *   (`api_key=abc,` becomes `api_key=[REDACTED]`, comma included).
+		 *   For a diagnostic log line this over-redaction is the right
+		 *   trade against under-redaction, but it is a real, visible
+		 *   behaviour, not a hypothetical one.
+		 *
+		 * $extra_secret_names is merged with
+		 * {@see self::get_default_secret_param_names()} before redaction, and
+		 * the merged list can be extended further through the
+		 * {@see 'woodev_api_log_text_secret_param_names'} filter — a plugin
+		 * author whose own carrier uses an uncommon credential name can add
+		 * it there once, rather than passing $extra_secret_names at every
+		 * call site.
+		 *
+		 * Both $extra_secret_names and the filter's return value are
+		 * caller-supplied and are NOT trusted blindly: every member that is
+		 * not actually a `string` (an object, an array, `null`, a resource —
+		 * a #585 critic round 2 finding: `[ new stdClass() ]` from the
+		 * filter reached {@see self::canonicalize_secret_param_name()} and
+		 * threw an uncaught `\TypeError`) is dropped rather than passed
+		 * through, and if the filter hands back nothing usable at all — the
+		 * wrong type, or every member malformed — this falls back to
+		 * {@see self::get_default_secret_param_names()} rather than
+		 * redacting against an empty list. A misbehaving filter can degrade
+		 * this to the default list; it must never be able to fatal a log
+		 * call (a call already on an error path) or silently disable
+		 * redaction entirely.
+		 *
+		 * This is DEFENCE IN DEPTH over an OPEN list of boundaries — a new
+		 * call site can always be added later and forget to route through
+		 * this — and an OPEN set of secret names (see
+		 * {@see self::get_default_secret_param_names()}'s own docblock for
+		 * the same caveat), NOT a guarantee that every credential a foreign
+		 * exception carries is masked.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string             $text               free-form text to redact — typically a caught `\Throwable`'s `getMessage()`.
+		 * @param array<int, string> $extra_secret_names additional secret param names, beyond the default list, to also redact. Non-string members are dropped.
+		 * @return string
+		 */
+		public static function redact_secret_log_text( string $text, array $extra_secret_names = [] ): string {
+
+			$secret_names = array_merge( self::get_default_secret_param_names(), self::sanitize_secret_names( $extra_secret_names ) );
+
+			/**
+			 * Filters the secret param names {@see Woodev_API_Base::redact_secret_log_text()}
+			 * checks for, on top of the default list and any names the
+			 * caller passed directly via $extra_secret_names.
+			 *
+			 * The return value is validated, not trusted: a non-array return
+			 * is dropped entirely, and within an array each member survives
+			 * only if it is a `string` AND its canonicalized form (see
+			 * {@see self::canonicalize_secret_param_name()}) is non-empty —
+			 * a non-string member, `''`, whitespace-only, or a name made
+			 * entirely of characters canonicalization strips (e.g. `'---'`)
+			 * is just as unusable as a non-string and is dropped the same
+			 * way. If nothing usable survives, the whole return degrades to
+			 * the default secret-name list rather than throwing or disabling
+			 * redaction — see {@see Woodev_API_Base::redact_secret_log_text()}'s
+			 * own docblock.
+			 *
+			 * A plugin author whose carrier client uses an uncommon
+			 * credential name can add it here so every call site benefits,
+			 * instead of passing $extra_secret_names at each one.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int, string> $secret_names the names to redact; defaults plus $extra_secret_names.
+			 * @param string             $text         the text about to be redacted.
+			 */
+			$filtered_names = apply_filters( 'woodev_api_log_text_secret_param_names', $secret_names, $text );
+
+			$secret_names = is_array( $filtered_names ) ? self::sanitize_secret_names( $filtered_names ) : [];
+
+			if ( [] === $secret_names ) {
+				// The filter returned nothing usable at all (wrong type, empty,
+				// every member malformed) — fall back to the default list rather
+				// than redacting against an empty one. Degrading to the default
+				// is right; degrading to no redaction at all is not.
+				$secret_names = self::get_default_secret_param_names();
+			}
+
+			return self::redact_secret_query_params( $text, array_unique( $secret_names ) );
+		}
+
+		/**
+		 * Filters $names down to entries safely usable as a secret param
+		 * name. Drops anything that is not actually a `string` — an array,
+		 * an object, `null`, a resource — rather than letting it reach
+		 * {@see self::canonicalize_secret_param_name()} and throw a
+		 * `\TypeError`, AND drops any string whose canonicalized form is
+		 * empty (`''`, whitespace-only, or made entirely of characters
+		 * canonicalization strips, e.g. `'---'`) — such a name can never
+		 * match a real query param/header/tag, so keeping it around is
+		 * indistinguishable from silently discarding the whole list: it
+		 * masks the `[] === $secret_names` check in
+		 * {@see self::redact_secret_log_text()} that exists specifically to
+		 * fall back to the default denylist, so redaction runs against a
+		 * list that matches nothing and the secret goes to the log raw
+		 * (#585 critic round 3). Usability is decided AFTER
+		 * canonicalization, not before.
+		 *
+		 * Both {@see self::redact_secret_log_text()}'s $extra_secret_names
+		 * parameter and the `woodev_api_log_text_secret_param_names` filter
+		 * it runs are caller-supplied (one from PHP code, one from a plugin
+		 * hook) and either can hand back a malformed or unusable member.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string, mixed> $names candidate secret param names, possibly malformed or unusable.
+		 * @return array<int, string>
+		 */
+		private static function sanitize_secret_names( array $names ): array {
+			return array_values(
+				array_filter(
+					array_filter( $names, 'is_string' ),
+					static function ( string $name ): bool {
+						return '' !== self::canonicalize_secret_param_name( $name );
+					}
+				)
+			);
+		}
+
 		/**
 		 * Redacts a `path?query` or full URI string by PARSING its query string
 		 * structurally, instead of scanning the text with a regex — the fix for

@@ -952,6 +952,118 @@ final class LocationControllerTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------
+	// log_failure() — the fourth log boundary (#585, #593): a foreign
+	// exception message is redacted before it reaches error_log(), through
+	// Woodev_API_Base::redact_secret_log_text() — same mechanism as
+	// Pickup_Controller/Pickup_Handler/Woodev_Plugin_Updater. Uses the plain
+	// Location_Controller_Probe (bypasses only the rate limiter; log_failure()
+	// is private and untouched, so this exercises the real method).
+	// -------------------------------------------------------------------
+
+	public function test_suggest_provider_failure_redacts_a_secret_in_the_exception_message(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				\Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$provider = new Location_Controller_Fake_Provider(
+			static function () {
+				throw new \RuntimeException( 'carrier rejected api_key=LIVESECRET' );
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame(
+			'[woodev] location suggest (fake) failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control: an exception message carrying NO secret must reach the
+	 * rendered error_log() line byte-for-byte — asserted on the COMPLETE
+	 * rendered line, not merely a substring.
+	 */
+	public function test_suggest_provider_failure_leaves_a_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				\Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$provider = new Location_Controller_Fake_Provider(
+			static function () {
+				throw new \RuntimeException( 'wrong keys — upstream rejected the request' );
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame(
+			'[woodev] location suggest (fake) failed: wrong keys — upstream rejected the request',
+			$captured
+		);
+	}
+
+	/**
+	 * The do_action() fired alongside error_log() must still hand the
+	 * consumer the RAW, unredacted exception — the docblock's own contract:
+	 * that action is not itself a log boundary, and a consumer may need the
+	 * real exception object. Only error_log() redacts.
+	 */
+	public function test_suggest_provider_failure_action_still_receives_the_raw_unredacted_exception(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'error_log' )->justReturn( true );
+
+		$exception = new \RuntimeException( 'carrier rejected api_key=LIVESECRET' );
+		$provider  = new Location_Controller_Fake_Provider(
+			static function () use ( $exception ) {
+				throw $exception;
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$logged = [];
+		Functions\when( 'do_action' )->alias(
+			static function ( ...$args ) use ( &$logged ) {
+				$logged[] = $args;
+			}
+		);
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertCount( 1, $logged );
+		$this->assertSame( $exception, $logged[0][3], 'the action must still receive the raw exception object, unredacted' );
+		$this->assertSame( 'carrier rejected api_key=LIVESECRET', $logged[0][3]->getMessage() );
+	}
+
+	// -------------------------------------------------------------------
 	// /suggest — degradation: no provider for the level, and the whole
 	// layer inactive, BOTH collapse to 200 + empty (never 404/500)
 	// -------------------------------------------------------------------
