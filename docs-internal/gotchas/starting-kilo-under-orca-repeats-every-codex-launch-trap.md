@@ -86,7 +86,7 @@ name — for the reason in cause 3 above. Operator rule (27.08.2026): prefer a *
 variant; `kilo models | grep -i discount` lists what is on offer, and on that date it was exactly
 one. So the value to put in Arguments is:
 
-    --model kilo/openai/gpt-5.6-sol-discounted
+    --model luna
 
 kilo needs no permission flags on Windows: `~/.config/kilo/kilo.jsonc` already carries
 `"bash": "allow"` and friends. `--auto` is not required, and `external_directory: "ask"` is worth

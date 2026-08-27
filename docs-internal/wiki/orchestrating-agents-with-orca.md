@@ -261,7 +261,7 @@ revokes the capability, and a real `worker_done` arrives on `check --wait` — v
 free of `_orcaLifecycleRejection`.
 
 ```bash
-orca terminal create --worktree <sel> --command "kilo --model kilo/openai/gpt-5.6-sol-discounted"
+orca terminal create --worktree <sel> --command "kilo --model luna"
 orca terminal wait --terminal <H> --for tui-idle --timeout-ms 90000
 # READ THE BUFFER. The first send is lost while the welcome screen paints; re-send if the
 # prompt box is still empty. Same house rule as Codex: read back after every step.
@@ -307,7 +307,12 @@ Four facts that cost time, each measured:
 4. **`"autoupdate": false` in `~/.config/kilo/kilo.jsonc`** removes the startup update dialog that
    otherwise swallows the injected brief. Three tasks circuit-broke on it before it was found.
 
-Cost of a critic round on this setup: **$0.01–0.03**.
+**Cost — the number that actually moved the decision.** The `$0.01–0.03` first recorded here was
+a round over a SMALL task. A round over a large PR is **$1.5–3.5**, and across one evening plus one
+day (s99) sol-discounted totalled **$10** — half the monthly cost of the operator's Codex
+subscription. Operator decision 27.08.2026: **the model is `luna`**, far cheaper even without a
+discount. Measure against the bill, not against a per-round estimate taken on the smallest task
+that was handy.
 
 ## Traps
 

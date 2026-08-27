@@ -129,10 +129,13 @@ which is and stays **`2.0.2`** — «иначе врём потребителя�
 `2.0.2` was normalised down in #555; `2.0.0` and `2.0.1` are historical v2 tagging and were left
 alone — a separate question nobody has decided.
 
-**The critic is kilo, not Codex, until the subscription is paid.** Model
-`kilo/openai/gpt-5.6-sol-discounted` (operator: prefer discounted variants). **Orca cannot
-supervise it** — `--inject` revokes the capability before the worker reports, on every launch path
-including Orca's own UI. Dispatch WITHOUT `--inject`; full recipe in
+**The critic is kilo, not Codex, until the subscription is paid. Model `luna`** — operator decision
+27.08.2026, taken on COST against the BILL rather than a per-round estimate: sol-discounted ran to
+**$10 over one evening and one day**, half a month of his Codex subscription. Full figures and why
+the old $0.01–0.03 estimate misled: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+
+**Orca cannot supervise kilo** — `--inject` revokes the capability before the worker reports, on
+every launch path including Orca's own UI. Dispatch WITHOUT `--inject`; full recipe in
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md), open question
 on **#559**.
 
