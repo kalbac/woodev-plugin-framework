@@ -33,11 +33,40 @@ regression is selective; this is not.
 `gh run view <run-id>` (no flags) prints the annotation. `--log-failed` does **not** — there is no
 log, because no job ever started.
 
-## Why it can arrive without warning
+## Why it arrives without warning — measured, not guessed
 
-This repo went **private on 25.08.2026**. Actions minutes are free for public repositories and
-metered for private ones, so going private silently starts spending a monthly allowance that was
-previously irrelevant. Two days later it ran out.
+Two things compounded, and the second is the one an agent controls.
+
+**The counter got switched on.** This repo went **private on 25.08.2026**. Actions minutes are free
+for public repositories and metered for private ones, so going private silently starts spending a
+monthly allowance that was previously irrelevant.
+
+**Then one overnight session spent most of it.** s98 ran **187 workflow runs in a night**. Measured
+per-job from `started_at`/`completed_at`, rounded up to the minute the way GitHub bills:
+
+| | |
+|---|---|
+| one full PR cycle | **27 billable minutes** (CI 16 + Integration 10 + PR Triage 1) |
+| the night's total | **≈1042 minutes** |
+| the plan's monthly allowance | 2000, of which 1800 were used |
+
+So a single autonomous session consumed **~58 % of the month**. At that rate the allowance covers
+**two such sessions a month.** The block is not a fault to route around — it is the budget
+behaving correctly.
+
+What actually blocks is a **$0 spending budget**, GitHub's default overrun protection, and usage
+**resets on the 1st**. So "wait for the reset" is a real option, not just "go pay".
+
+### The two measured sinks, for whoever tunes this
+
+`concurrency: cancel-in-progress` is already set on every workflow here — that saving is taken.
+
+- **34 of 78** CI+Integration runs that night were `push` to `main`, i.e. re-running on `main`
+  exactly what the PR had just proven on the same tree. ≈440 min/month at that rate.
+- A commit touching only `docs-internal/**` ran the **full Integration matrix**: 27 minutes where
+  `paths-ignore` would have made it 1.
+
+Both touch the merge gate, so both are an operator decision, not an agent's.
 
 ## What to do
 
