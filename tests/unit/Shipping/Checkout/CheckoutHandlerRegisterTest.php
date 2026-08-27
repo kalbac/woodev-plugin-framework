@@ -44,10 +44,11 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 	/**
 	 * register() must wire all hooks: 2 filters (woocommerce_checkout_fields +
-	 * woocommerce_states) + 5 actions (checkout_process, order_processed,
-	 * wp_enqueue_scripts, rest_api_init, and the Task 12 `init` suppression check).
+	 * woocommerce_states) + 6 actions (checkout_process, order_processed,
+	 * wp_enqueue_scripts, rest_api_init, the Task 12 `init` suppression check,
+	 * and issue #518's `woodev_shipping_pickup_point_selected` listener).
 	 */
-	public function test_register_wires_all_six_hooks(): void {
+	public function test_register_wires_all_seven_hooks(): void {
 
 		Functions\expect( 'add_filter' )
 			->once()
@@ -57,8 +58,9 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->once()
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
+		// Six since issue #518 added `woodev_shipping_pickup_point_selected`.
 		Functions\expect( 'add_action' )
-			->times( 5 )
+			->times( 6 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
@@ -93,6 +95,68 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->with( 'woocommerce_checkout_process', \Mockery::type( 'array' ) );
 
 		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
+	}
+
+	/**
+	 * Issue #518: a confirmed pickup point promotes an implicit locality, so the
+	 * checkout's address lock stops holding a field the customer's point address
+	 * is about to be written into.
+	 *
+	 * The listener lives here rather than in the pickup controller so the location
+	 * layer stays the only writer of its own record.
+	 */
+	public function test_register_hooks_the_pickup_point_selected_listener(): void {
+
+		Functions\expect( 'add_filter' )->times( 3 )->withAnyArgs();
+		Functions\expect( 'add_action' )
+			->atLeast()->once()
+			->with( 'woodev_shipping_pickup_point_selected', \Mockery::type( 'array' ) );
+
+		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
+	}
+
+	/**
+	 * The #518 critic pass, MINOR: the wiring test above accepts ANY array
+	 * callback, so wiring the right hook to a wrong or empty method would pass
+	 * it. That is the "a test which prepares its own precondition does not test
+	 * the producer" trap — pin the CALLBACK and what it does, not just the hook
+	 * name.
+	 *
+	 * Asserts the registered callback is this exact method, and that calling it
+	 * promotes the customer's record.
+	 */
+	public function test_the_registered_callback_is_the_one_that_promotes_the_record(): void {
+
+		Functions\when( 'add_filter' )->justReturn( true );
+
+		$registered = [];
+
+		Functions\when( 'add_action' )->alias(
+			static function ( $hook, $callback = null ) use ( &$registered ) {
+				$registered[ $hook ] = $callback;
+
+				return true;
+			}
+		);
+
+		$service = \Mockery::mock( \Woodev\Framework\Shipping\Location\Location_Service::class );
+		$service->shouldReceive( 'promote_customer_record_to_explicit' )
+			->once()
+			->andReturn( true );
+
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->register();
+
+		$this->assertArrayHasKey( 'woodev_shipping_pickup_point_selected', $registered );
+		$this->assertSame(
+			[ $handler, 'handle_pickup_point_selected' ],
+			$registered['woodev_shipping_pickup_point_selected'],
+			'the hook must carry THIS method — a right hook on a wrong method is the defect this catches'
+		);
+
+		// Fire it exactly as the pickup controller's do_action() would. The
+		// Mockery `once()` expectation above is the assertion.
+		call_user_func( $registered['woodev_shipping_pickup_point_selected'] );
 	}
 
 	/**
@@ -218,7 +282,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
 		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 12 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -241,7 +305,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
 		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 12 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -259,7 +323,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_ignores_non_native_fields(): void {
 
 		Functions\expect( 'add_filter' )->times( 6 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 10 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 12 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();

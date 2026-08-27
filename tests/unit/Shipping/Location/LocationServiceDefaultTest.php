@@ -1297,5 +1297,128 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 				$registry->get_offered_default_locality_policies()
 			);
 		}
+
+		// -------------------------------------------------------------------
+		// promote_customer_record_to_explicit() — issue #518
+		//
+		// A confirmed pickup point answers the "please choose your locality"
+		// prompt the checkout's address lock represents, even though the
+		// locality field was never touched (operator decision, s92). The
+		// locality itself does not change; only its standing does.
+		// -------------------------------------------------------------------
+
+		public function test_promote_turns_a_geoip_guess_into_the_customer_s_own_record(): void {
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$this->assertTrue( $service->get_customer_record()['implicit'], 'precondition: the seeded default is a guess' );
+
+			$this->assertTrue( $service->promote_customer_record_to_explicit() );
+
+			$promoted = $service->get_customer_record();
+
+			$this->assertFalse( $promoted['implicit'], 'the guess must stop being a guess' );
+			$this->assertSame( 'geo:by-ip', $promoted['record']->key(), 'and it must still be the SAME locality' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_promote_is_a_no_op_when_the_record_is_already_the_customer_s_own(): void {
+			// The control: without it, a promotion that simply reported success
+			// unconditionally would pass the test above.
+			$provider = new Default_Test_Fake_Provider( 'fake', static fn() => [] );
+
+			$this->stub_default_locality_options( 'fake' );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+			$service->set_customer_record( $this->record( 'fake:picked' ) );
+
+			$this->assertFalse( $service->promote_customer_record_to_explicit() );
+			$this->assertFalse( $service->get_customer_record()['implicit'] );
+			$this->assertSame( 'fake:picked', $service->get_customer_record()['record']->key() );
+		}
+
+		public function test_promote_is_a_no_op_when_there_is_no_record_at_all(): void {
+			$provider = new Default_Test_Fake_Provider( 'fake', static fn() => [] );
+
+			$this->stub_default_locality_options( 'fake', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_OFF );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$this->assertNull( $service->get_customer_record(), 'precondition: nothing is stored and nothing resolves' );
+			$this->assertFalse( $service->promote_customer_record_to_explicit() );
+		}
+
+		public function test_promote_persists_a_served_default_the_store_could_not_promote(): void {
+			// Found while preparing the rig, and it is the ORDINARY case there,
+			// not a corner: the stored chain is EXPLICIT but gate-refused (the
+			// store switched provider), so get_customer_record() serves a freshly
+			// resolved default that could not be persisted — an implicit write is
+			// refused over an explicit record. promote_chain_to_explicit() then
+			// reads the stored chain, sees implicit === false and reports nothing
+			// to do, and the address would lock again on the next page load.
+			$located  = $this->record( 'geo:by-ip' );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$store   = new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() );
+			$service = new Location_Service( $registry, $store );
+
+			// An EXPLICIT record from a provider this registry does not know.
+			$store->set( $this->record( 'gone:picked-earlier' ), false );
+
+			$served = $service->get_customer_record();
+
+			$this->assertNotNull( $served, 'precondition: a default is served over the refused record' );
+			$this->assertSame( 'geo:by-ip', $served['record']->key() );
+			$this->assertTrue( $served['implicit'], 'precondition: what is served is a guess' );
+			$this->assertFalse( $store->get_chain()['implicit'], 'precondition: the STORED chain is explicit, so the flag-only path cannot fire' );
+
+			$this->assertTrue(
+				$service->promote_customer_record_to_explicit(),
+				'the served guess must be promoted even when the stored chain cannot be'
+			);
+
+			$after = $service->get_customer_record();
+
+			$this->assertSame( 'geo:by-ip', $after['record']->key(), 'the promoted record must be the one the customer was shown' );
+			$this->assertFalse( $after['implicit'], 'and it must survive a re-read as the customer own choice' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_promote_refuses_a_record_the_gate_itself_refuses(): void {
+			// Promotion is gated on get_customer_record(), not on the raw store.
+			// A record whose provider is no longer registered reads as ABSENT
+			// everywhere today (#346/#333/#352); promoting it would leave a
+			// guess the customer never made waiting to come back as an explicit
+			// choice the day that provider is switched back on.
+			$provider = new Default_Test_Fake_Provider( 'fake', static fn() => [] );
+
+			$this->stub_default_locality_options( 'fake' );
+			$registry = $this->activate( [ $provider ] );
+
+			$store   = new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() );
+			$service = new Location_Service( $registry, $store );
+
+			$store->set( $this->record( 'gone:orphan' ), true );
+
+			$this->assertNull( $service->get_customer_record(), 'precondition: the gate refuses this record' );
+			$this->assertFalse( $service->promote_customer_record_to_explicit() );
+			$this->assertTrue( $store->get_chain()['implicit'], 'the refused record must still be flagged a guess' );
+		}
 	}
 }

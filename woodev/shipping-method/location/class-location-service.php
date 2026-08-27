@@ -1054,6 +1054,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		}
 
 		/**
+		 * Records that the customer's stored location is no longer a default
+		 * GUESS — without changing which location it is (issue #518).
+		 *
+		 * The store's default-locality policy seeds a record for a customer who
+		 * has picked nothing, flagged `implicit`, and spec §4.6/D11 says such a
+		 * record "must never suppress a please-choose-your-locality prompt". The
+		 * checkout's address lock IS such a prompt. But the pickup map mounts on
+		 * that same implicit locality and lets the customer choose a point inside
+		 * it — and choosing a point is evidence the locality is right, so the
+		 * prompt has been answered even though the locality field was never
+		 * touched (operator decision, s92).
+		 *
+		 * Gated on {@see self::get_customer_record()} rather than the raw store
+		 * so a record the gate currently REFUSES (wrong provider or country —
+		 * #346/#333/#352) is never promoted. Such a record reads as absent
+		 * everywhere today; promoting it would leave a landmine for the day the
+		 * provider is switched back, when a guess the customer never made would
+		 * return as an explicit choice.
+		 *
+		 * TWO WRITES, because the served record and the STORED chain are not
+		 * always the same thing — found while preparing the rig, where it is the
+		 * ordinary case rather than a corner:
+		 *
+		 * 1. Normally the served record IS the stored chain, and
+		 *    {@see Customer_Location_Store::promote_chain_to_explicit()} moves
+		 *    the flag alone, preserving levels deeper than the current one.
+		 * 2. But when the stored chain is EXPLICIT and the gate refuses it (the
+		 *    store switched provider), {@see self::get_customer_record()} serves
+		 *    a freshly resolved default instead — and that default could not be
+		 *    persisted, because an implicit write is refused over an explicit
+		 *    record. The stored chain then still reads `implicit === false`, so
+		 *    step 1 reports "nothing to promote" and the customer's address
+		 *    would lock again on the next page load despite the pickup choice.
+		 *    Writing the SERVED record explicitly is correct here: the chain it
+		 *    would rebuild over is one nothing can currently read anyway.
+		 *
+		 * Idempotent: an already-explicit served record, or no record at all,
+		 * returns `false` and writes nothing, so callers need no precondition.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool `true` when a guess was actually promoted.
+		 */
+		public function promote_customer_record_to_explicit(): bool {
+			$entry = $this->get_customer_record();
+
+			if ( null === $entry || true !== $entry['implicit'] ) {
+				return false;
+			}
+
+			if ( $this->customer_store->promote_chain_to_explicit() ) {
+				return true;
+			}
+
+			return $this->set_customer_record( $entry['record'] );
+		}
+
+		/**
 		 * Resolves the store-level default locality (Task 14; spec D11, §4.6):
 		 * `off` -> `null`; `fixed` -> the merchant-picked record (re-resolved
 		 * through the current provider first when a provider switch stranded
