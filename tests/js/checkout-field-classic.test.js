@@ -1281,3 +1281,162 @@ describe( 'location-owned fields are not reverted by the §8 takeover (#466)', (
 		expect( el.value ).toBe( 'Москва' );
 	} );
 } );
+
+// -----------------------------------------------------------------------
+// Issue #473 — the SAME ownership rule as #466, in this file's OTHER whole-store loop.
+//
+// The `updated_checkout` subscriber walks every field in the store and, when the DOM is empty
+// but the store is not, writes the stored value back with a BARE `$field.val( stored )`. On a
+// `<select>` the cascade built, a bare write selects nothing unless a matching `<option>`
+// happens to exist: `selectedIndex` stays -1, `.value` stays '', and the field drops out of
+// the POST. That is the #447/#455/#462 mechanism, and it is why the cascade routes its own
+// writes through `applyValueToElement()` instead.
+//
+// Honest about reachability, because the card was: driven to fire with hand-set inputs
+// (Codex, 23.08.2026), NOT reproduced through any live path in four rig scenarios (s89) —
+// the cascade's own `updated_checkout` restore gets there first. The setup below therefore
+// constructs that state deliberately, exactly as the probe did, and pins that the §8
+// subscriber keeps its hands off it.
+// -----------------------------------------------------------------------
+
+describe( 'location-owned fields are not written by the §8 updated_checkout restore (#473)', () => {
+
+	const CONFIG_473 = 'woodev_checkout_field_config_473';
+
+	/**
+	 * Both city fields are EMPTY `<select>`s carrying no matching option — the state the
+	 * probe had to construct, and the only one in which the restore branch's gate
+	 * (`! $field.val()`) opens at all.
+	 *
+	 * @returns {void}
+	 */
+	function boot473() {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<div class="woocommerce-billing-fields__field-wrapper">
+					<p id="billing_country_field" class="form-row">
+						<select id="billing_country" name="billing_country">
+							<option value="RU" selected>Россия</option>
+						</select>
+					</p>
+					<p id="billing_city_field" class="form-row">
+						<select id="billing_city" name="billing_city"><option value=""></option></select>
+					</p>
+				</div>
+				<div class="woocommerce-shipping-fields__field-wrapper">
+					<p id="shipping_city_field" class="form-row">
+						<select id="shipping_city" name="shipping_city"><option value=""></option></select>
+					</p>
+				</div>
+				<div id="shipping_method"></div>
+				<button type="submit" id="place_order"></button>
+			</form>
+		`;
+
+		global.jQuery = require( 'jquery' );
+		global.$      = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		window[ CONFIG_473 ] = {
+			endpoint: ENDPOINT,
+			nonce:    'test-nonce',
+			i18n:     { placeholder: 'Выберите…' },
+			fields:   {
+				// The control: an ordinary options-backed field this adapter DOES own.
+				billing_city:  { source_kind: 'options' },
+				shipping_city: { source_kind: 'location', location_level: 'settlement', section: 'shipping' },
+			},
+			takeover: {},
+		};
+
+		ajaxCalls = stubAjax();
+
+		require( '../../woodev/shipping-method/assets/js/frontend/checkout-field-classic.js' );
+
+		jest.runAllTimers();
+	}
+
+	afterEach( () => {
+		delete window[ CONFIG_473 ];
+	} );
+
+	/**
+	 * Records every `$( ... ).val( x )` WRITE against `#shipping_city`.
+	 *
+	 * The DOM cannot answer this question on its own, and that is the defect, not a gap in
+	 * the test: a bare `.val()` write to a `<select>` with no matching `<option>` changes
+	 * NOTHING observable — `selectedIndex` stays -1, `.value` stays '', no option appears.
+	 * Asserting on the DOM would therefore pass with or without the fix (it did, on the first
+	 * draft of this test). So the write itself is the observable, which is exactly how the
+	 * s89 rig measurement was taken.
+	 *
+	 * @returns {Array<*>} the values written, in order.
+	 */
+	function recordValWrites( fieldId ) {
+		const writes   = [];
+		const original = global.jQuery.fn.val;
+
+		global.jQuery.fn.val = function ( ...args ) {
+			if ( args.length && this[ 0 ] && this[ 0 ].id === fieldId ) {
+				writes.push( args[ 0 ] );
+			}
+
+			return original.apply( this, args );
+		};
+
+		return writes;
+	}
+
+	it( 'does NOT bare-write a location-owned <select> whose store holds a value the DOM lost', () => {
+		boot473();
+
+		const store = window.WoodevCheckoutFieldStore.getStoreForField( 'shipping_city' );
+
+		store.setValue( 'shipping_city', 'Москва' );
+
+		const el = document.getElementById( 'shipping_city' );
+
+		el.value = '';
+
+		const writes = recordValWrites( 'shipping_city' );
+
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		expect( writes ).toEqual( [] );
+
+		// And the consequence the write would have had, pinned alongside: nothing appeared,
+		// so nothing could have been silently lost either.
+		expect( Array.prototype.map.call( el.options, ( o ) => o.value ) ).not.toContain( 'Москва' );
+	} );
+
+	it( 'control: the SAME pass does write to a field this adapter owns', () => {
+		boot473();
+
+		const store = window.WoodevCheckoutFieldStore.getStoreForField( 'billing_city' );
+
+		store.setValue( 'billing_city', 'Тверь' );
+
+		const el = document.getElementById( 'billing_city' );
+
+		el.value = '';
+
+		const writes = recordValWrites( 'billing_city' );
+
+		global.jQuery( document.body ).trigger( 'updated_checkout' );
+
+		// Without this control, `toEqual( [] )` above would also pass for a subscriber that
+		// had stopped restoring ANYTHING — or for a spy that never installed.
+		expect( writes ).toEqual( [ 'Тверь' ] );
+
+		// With an empty `takeover` map the adapter reverts this one to a plain text `<input>`
+		// on boot (the #466 tests assert the same), so here the bare write lands and reads
+		// back. That is the restore working as intended for a field this adapter owns — and
+		// also why a bare write is only ever a defect on a `<select>` somebody ELSE built.
+		expect( el.tagName ).toBe( 'INPUT' );
+		expect( global.jQuery( el ).val() ).toBe( 'Тверь' );
+	} );
+} );
