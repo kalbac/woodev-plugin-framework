@@ -46,8 +46,10 @@ collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **Open cards after s100:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
 language — the operator's four rules are on the card, and so is s100's measurement showing the
-`.pot` has been dead since 07.12.2023), **#594** (the remaining `error_log(getMessage())` sinks,
-triaged foreign-vs-ours), **#353**, the locations leftovers **#356/#358/#361/#410**, **#589**,
+`.pot` has been dead since 07.12.2023), **#594**, **#598**, **#599** (all three filed in s100 —
+remaining `error_log(getMessage())` sinks; `woodev/competitor` missing from composer's classmap;
+audit filters for unvalidated returns), **#600** (board README vs `AGENTS.md` on triage — his
+call), **#353**, the locations leftovers **#356/#358/#361/#410**, **#589**,
 **#437** (needs a scope conversation — do NOT take autonomously), and the standing list #474,
 #483, #511, #515, #331, #332, #374. Deferred to release: #285, #247. Closed in s100: **#559**,
 **#560**, **#570**, **#577**, **#585**, **#587**, **#593**. Which are COMMITMENTS, and where
@@ -186,17 +188,13 @@ Gotchas: **227**.
 - [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
 
-### The private spell, 25.08–27.08.2026 — over, and what it left behind
+### The private spell, 25.08–27.08.2026 — over
 
-The repo went private on 25.08 and PUBLIC again on 27.08. What survives from that episode:
-**all 433 `docs-internal` files were already public** before it, so hiding one file was theatre —
-that was the measurement that ended it. **0 forks**, nothing detached. **History was NOT hidden
-retroactively** for anyone who had already cloned; nothing was rewritten and no rewrite was asked
-for. `next-session-prompt.md` is tracked; only the gate's `.prev` snapshot stays ignored.
-
-**GitHub Pages is available again** — being private is what killed it (Pages needs Pro on a
-private repo and the account is Free; the API 404'd). `docs.yml` is still disabled on `push` and
-one uncommented block away from publishing, which is now a choice rather than a limitation.
+Repo is PUBLIC again (see the top of this file), so **GitHub Pages is available** — `docs.yml` is
+still disabled on `push` and one uncommented block from publishing, which is now a choice rather
+than a limitation. What the episode settled: all 433 `docs-internal` files were already public
+before it, so hiding one file was theatre — that measurement is what ended it. 0 forks, nothing
+detached, no history rewritten. Detail → `sessions/s99.md`, card #583.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
 
