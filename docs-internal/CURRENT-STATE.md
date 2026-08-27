@@ -6,8 +6,9 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-27 (s98).** `main` is at `c35700e`, tree clean. **Two PRs open, both deliberately
-unmerged:** #581 (needs a rig pass) and #582 (CI unavailable — see below).
+**As of 2026-08-27 (s98).** `main` is at `1a5cebf`, tree clean. **One PR open:** #581, held for
+the operator's rig pass. #582 merged once the public switch brought CI back — 18 pass + 1 skip,
+state CLEAN.
 
 ✅ **CI IS BACK. The repo is PUBLIC again since 27.08.2026 (operator decision)** — public
 repositories on standard runners are free and consume no quota, so the block lifted immediately.
@@ -30,8 +31,8 @@ sessions a month. Everything merged in s98 up to and including #579 passed REAL 
 landed after.
 
 **Baselines on `main`, measured in the PRIMARY checkout 27.08.2026 at `c35700e`:** `composer check`
-**2938** / 7082 / **66 skipped**; jest **1545** in 21 suites; Integration suite in the container
-**124** tests / 485 assertions. (PR #582 takes `composer check` to **2950** / 7111 when it lands.)
+**2950** / 7111 / **66 skipped**; jest **1545** in 21 suites; Integration suite in the container
+**124** tests / 485 assertions.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
 
