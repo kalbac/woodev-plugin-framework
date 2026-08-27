@@ -286,7 +286,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				} catch ( Woodev_Plugin_Exception $e ) {
 
 					if ( $this->get_gateway()->debug_log() ) {
-						$this->get_gateway()->get_plugin()->log( $e->getMessage(), $this->get_gateway()->get_id() );
+						$this->get_gateway()->get_plugin()->log( \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ), $this->get_gateway()->get_id() );
 					}
 
 					return false;

@@ -612,16 +612,33 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * class never sees, and that message can reach a log boundary
 		 * without ever passing through this class at all (#585). This is
 		 * the seam those boundaries SHOULD route through, instead of each
-		 * hand-redacting the same free text independently — the current
-		 * ones are {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::log_carrier_failure()},
-		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::log_carrier_failure()},
-		 * {@see Woodev_Plugin_Updater::get_version_from_remote()}, and
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::log_failure()}.
-		 * That list is OPEN, not exhaustive — nothing in this class enforces
-		 * that every log boundary in the codebase routes through it; a #585
-		 * critic-round-2 sweep found several further caught-exception log
-		 * sinks that do not yet, tracked in issue #594 so the gap is visible
-		 * from the code, not only from the tracker.
+		 * hand-redacting the same free text independently. As of #594 every
+		 * log sink in `woodev/` that writes a caught exception's message
+		 * does route through it: the #585 sweep found four, #594's card
+		 * listed eleven more (the setup-wizard and settings-page REST
+		 * controllers, the location resolution cache, the shipment
+		 * handler, the licensing/updater command transport), and #594's
+		 * own re-sweep found three beyond that card — in
+		 * `woodev/payment-gateway/`, which write through
+		 * {@see Woodev_Plugin::log()} rather than `error_log()` and were
+		 * therefore invisible to a sweep keyed on `error_log`. Grep for
+		 * the SINK, not for one spelling of it.
+		 *
+		 * That the list is complete TODAY is a fact about today, not a
+		 * guarantee. Nothing here enforces that a NEW log boundary routes
+		 * through this, and nothing fails when one does not — the omission
+		 * is silent, which is exactly how those fourteen survived #585.
+		 * Ask it of every new `catch` that logs: can this `\Throwable`
+		 * have been thrown by somebody else's code?
+		 *
+		 * ORDER NOTES ARE DELIBERATELY NOT COVERED. Two of the
+		 * payment-gateway sites also put the raw message into a
+		 * `WC_Order` note ({@see Woodev_Payment_Gateway::mark_order_as_failed()}
+		 * and {@see Woodev_Payment_Gateway_Abstract_Payment_Handler::mark_order_as_failed()}),
+		 * which is a different boundary with a different trade: an order
+		 * note is what shop staff read to understand a failed payment, and
+		 * this method's deliberate over-redaction would degrade it. Tracked
+		 * separately rather than decided here.
 		 *
 		 * Reuses {@see self::redact_secret_query_params()} — the same
 		 * `name=value` / `<name>value</name>` free-text scan

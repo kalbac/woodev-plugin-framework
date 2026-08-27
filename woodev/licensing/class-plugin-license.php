@@ -377,7 +377,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 					}
 				} catch ( \Throwable $throwable ) {
 					// Ruled containment boundary (s8-p5 critic #4b) — loud-but-contained.
-					error_log( 'Woodev licensing: pull-command/ack consumption failed: ' . $throwable->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
+					error_log( 'Woodev licensing: pull-command/ack consumption failed: ' . \Woodev_API_Base::redact_secret_log_text( $throwable->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- ruled loud-but-contained boundary (s8-p5 #4b).
 				}
 
 				return $license_data;

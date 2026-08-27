@@ -154,7 +154,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 						} catch ( \Throwable $e ) {
 							// Unexpected failure (e.g. a third-party hook on update_option threw):
 							// log for traceability and return a generic 500 — never leak internals.
-							error_log( sprintf( '[woodev] setup wizard save_step failed on "%s": %s', $sid, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
+							error_log( sprintf( '[woodev] setup wizard save_step failed on "%s": %s', $sid, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
 							return new WP_Error(
 								'woodev_setup_server_error',
 								__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
@@ -175,7 +175,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				} catch ( \Exception $e ) {
 					// on_save is the plugin's own callback; surface its message as a 400
 					// (settings are already persisted — on_save must be idempotent), and log.
-					error_log( sprintf( '[woodev] setup wizard on_save failed for step "%s": %s', $step_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an on_save failure.
+					error_log( sprintf( '[woodev] setup wizard on_save failed for step "%s": %s', $step_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an on_save failure.
 					return new WP_Error( 'woodev_setup_step_failed', $e->getMessage(), [ 'status' => 400 ] );
 				}
 			}
@@ -203,7 +203,7 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 				$this->wizard->complete_setup( $state );
 			} catch ( \Throwable $e ) {
 				// Never report success if the completion option was not persisted.
-				error_log( sprintf( '[woodev] setup wizard complete failed: %s', $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a completion persistence failure.
+				error_log( sprintf( '[woodev] setup wizard complete failed: %s', \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a completion persistence failure.
 				return new WP_Error(
 					'woodev_setup_complete_failed',
 					__( 'Не удалось сохранить статус настройки. Попробуйте ещё раз.', 'woodev-plugin-framework' ),

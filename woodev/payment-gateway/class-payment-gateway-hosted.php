@@ -397,7 +397,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 						sprintf(
 							'%1$s processing error: %2$s',
 							( $response && $response->is_ipn() ) ? 'IPN' : 'Redirect-back',
-							$e->getMessage()
+							\Woodev_API_Base::redact_secret_log_text( $e->getMessage() )
 						),
 						$this->get_id()
 					);
