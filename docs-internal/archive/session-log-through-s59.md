@@ -1,10 +1,21 @@
-# Session log archive — s0 through s49
+# Session log archive — s0 through s59
 
 > Split out of `SESSION-LOG.md` in s96 (26.08.2026): that file is the session INDEX and carries its
-> own 48 KB gate, which ~95 paragraph-length entries had filled. Nothing was rewritten — these are
-> the original lines, newest first. Each still points at its own `sessions/sNN.md`, which is where
-> the detail has always lived.
+> own 48 KB gate, which ~95 paragraph-length entries had filled. Extended to s59 in s99, when the
+> gate fired again — the recent entries are paragraphs, so the index refills faster than sessions
+> are added. Nothing was rewritten — these are the original lines, newest first. Each still points
+> at its own `sessions/sNN.md`, which is where the detail has always lived.
 
+- **[s59](sessions/s59.md)** — 2026-08-09 — накопление точек #234: замер вместо мнения, критик до кода и после
+- **[s58](sessions/s58.md)** — 2026-08-09 — живая Почта на риге: три дефекта от оператора, все закрыты
+- **[s57](sessions/s57.md)** — 2026-08-08 — (продолжение, утро) — 2026-08-08 — #226 живой источник Почты РФ, PR #229 смерджен
+- **[s56](sessions/s56.md)** — 2026-08-08 — viewport прогнан впервые с s46; 4 PR смерджено, #221 открыт
+- **[s55](sessions/s55.md)** — 2026-08-07 — АВТОНОМНАЯ ОВЕРНАЙТ: #177 СМЕРДЖЕН, ОЧЕРЕДЬ ЗАКРЫТА ЦЕЛИКОМ
+- **[s54](sessions/s54.md)** — 2026-08-07 — #168 + #167 + #179 СДЕЛАНЫ; МЕРДЖ СТОИТ НА АВАРИИ GITHUB ACTIONS
+- **[s53](sessions/s53.md)** — 2026-08-06 — #169: ВЕСЬ БРАУЗЕРНЫЙ СЛОЙ + РИГ. ЗАДАЧИ 6-14 ЗАКРЫТЫ, PR НЕ ОТКРЫТ
+- **[s52](sessions/s52.md)** — 2026-08-06 — #169 МЕХАНИЗМ ВЫБРАННОГО ПВЗ: БРЕЙНШТОРМ + СПЕКА + ПЛАН + PHP-СЛОЙ
+- **[s51](sessions/s51.md)** — 2026-08-05 — ЧЕТЫРЕ КРУГА LIVE-REVIEW ОПЕРАТОРА, КАРТА ПРИНЯТА И СМЕРДЖЕНА
+- **[s50](sessions/s50.md)** — 2026-08-04 — продолжение (2026-08-04) — ПЛАН ИСПОЛНЕН ЦЕЛИКОМ (T2…T20), РИГ НАШЁЛ СЕМЬ ДЕФЕКТОВ ПОВЕРХ ЗЕЛЁНЫХ ТЕСТОВ
 - **[s49](sessions/s49.md)** — 2026-08-02 — КАРТА ЗАРАБОТАЛА НА РИГЕ: пять причин «пустой карты», четыре починены
 - **[s48](sessions/s48.md)** — 2026-08-01 — SP-5 ПЕРЕДЕЛКА КАРТЫ: ВСЕ 23 ЗАДАЧИ ПЛАНА ПОСТРОЕНЫ, НЕ СМЕРДЖЕНО
 - **[s47](sessions/s47.md)** — 2026-08-01 — Pickup map rework: brainstorm, spec, plan, ADR (no code)

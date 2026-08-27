@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 224 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 225 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -109,6 +109,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/phpunit] **`phpunit a.php b.php` runs only `a.php` — the rest are dropped silently, so a multi-file FALSIFICATION run can prove a third of what it claims. Also always pass `--testsuite=Unit`.** → [phpunit-takes-one-path-and-silently-ignores-the-rest](gotchas/phpunit-takes-one-path-and-silently-ignores-the-rest.md) (s99)
 - [testing/*] **A test that manufactures its own precondition never tests whoever produces it — delete the view's hidden input and all four guard tests stay green.** → [a-test-that-manufactures-its-own-precondition-never-tests-the-producer](gotchas/a-test-that-manufactures-its-own-precondition-never-tests-the-producer.md) (s98)
 - [testing/*] **`preg_match( '//u', $s )` returns FALSE, not 0, on invalid UTF-8 — and raw bytes written as escapes get re-encoded into valid UTF-8 by the tooling.** → [preg-match-u-returns-false-not-zero-on-invalid-utf8](gotchas/preg-match-u-returns-false-not-zero-on-invalid-utf8.md) (s98)
 - [testing/*] **The local PHP is 8.5 and the CI floor is 7.4 — a green `composer check` here is evidence about 8.5 only (`setAccessible()` is the worked case).** → [the-local-php-is-four-versions-above-the-ci-floor](gotchas/the-local-php-is-four-versions-above-the-ci-floor.md) (s98)

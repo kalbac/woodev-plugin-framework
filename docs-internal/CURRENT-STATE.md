@@ -142,7 +142,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **224**.
+Gotchas: **225**.
 
 ## Program status (high level)
 
