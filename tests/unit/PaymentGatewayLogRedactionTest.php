@@ -23,8 +23,10 @@
  *         Redaction lives in add_debug_message() itself, so a later caller cannot forget.
  *
  * Sites 1, 2 and 4 also write the RAW (unredacted) exception message into a WC_Order note —
- * that is deliberate (shop staff need the real failure reason), tracked on #608, and site 4's
- * test asserts it explicitly so a later change to it is a visible choice, not a side effect.
+ * deliberate, and SETTLED by the operator on 27.08.2026 (#608, closed `not planned`): the
+ * provider's answer has to reach the merchant, because the less detail an admin-side record
+ * carries, the more support requests it generates. Site 4's test asserts it explicitly, so a
+ * later change to it is a visible choice rather than a side effect.
  *
  * @package Woodev\Tests\Unit
  */
@@ -554,9 +556,12 @@ namespace Woodev\Tests\Unit {
 		 * catch hands it one. Driving it here proves the indirect route is closed,
 		 * not merely the method it ends in.
 		 *
-		 * The WC_Order note this also writes is asserted to keep the RAW message —
-		 * that is the deliberate, separately-tracked decision (#608), and pinning it
-		 * means a later change to it is a visible choice rather than a side effect.
+		 * The WC_Order note this also writes is asserted to keep the RAW message. That
+		 * is now a SETTLED operator decision, not a deferred one: #608 was closed as
+		 * `not planned` on 27.08.2026 because the provider's answer has to reach the
+		 * merchant — the less detail an admin-side record carries, the more support
+		 * requests it generates. Pinning it means a later change to it is a visible
+		 * choice rather than a side effect.
 		 *
 		 * @return void
 		 */

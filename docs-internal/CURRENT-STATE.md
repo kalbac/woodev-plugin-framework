@@ -58,11 +58,18 @@ autonomously), and the standing list #474, #483, #511, #515, #331, #332, #374. D
 release: #285, #247.
 
 **Filed in s101, all six:** **#606** (the unit suite is green by alphabetical accident — see the
-reverse-order warning above), **#608** (order notes carry a foreign exception's raw text — his
-call), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the documentation half was already
-done in s98), **#610** (~12 sites hand a raw exception message to the browser, one of them
-`nopriv` — his call), **#613** (act on #599's 49 FATAL/DISABLES sites — triage first, and two of
-its questions are his). **#605** was filed and closed the same session.
+reverse-order warning above), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the
+documentation half was already done in s98), **#610** (a raw exception message reaching the
+browser — narrowed to two sites, see below), **#613** (act on #599's 49 FATAL/DISABLES sites —
+triage first, and two of its questions are his). **#605** was filed and closed the same session,
+and **#608** was answered and closed by the operator while s101 was still running.
+
+**Operator decision, 27.08.2026 (#608, closed `not planned`): a WC_Order note KEEPS the raw text
+of a foreign exception.** «Ответ провайдера должен быть доступен магазинщику. Иначе чем менее
+детализирована запись в админке, тем больше обращений в поддержку.» That reasoning also settles
+NINE of #610's twelve sites, whose reader is likewise the shop admin. The two that survive differ
+not in the text but in WHO READS IT: `class-payment-gateway-my-payment-methods.php:768` answers a
+logged-in CUSTOMER, and `handlers/class-script-handler.php:262` is `nopriv`.
 
 **Closed in s101:** **#594**, **#598**, **#599**, **#605**. Closed in s100: **#559**, **#560**,
 **#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
@@ -126,16 +133,10 @@ flakiness, the three field modes and their Russian labels — is one line each u
 `[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
 anyway. Scan the tag for your task; do not keep a second copy here.
 
-**✅ #405 IS rig-verified as of s95 — and the s83 note that said otherwise was measuring the wrong
-thing.** The `test-cdek` fixture reads its credentials from the WooCommerce integration settings
-array (`woocommerce_woodev_test_shipping_method_settings`), NOT from the same-looking standalone
-`woodev_location_cdek_client_id` option, which nothing reads. Every earlier bogus-key probe wrote
-the decoy. Written correctly, the provider throws exactly as #405's contract promises. Two further
-masks: a cached `woodev_test_cdek_token` short-circuits `token()` before credentials are consulted,
-and the REGION level answers from `woodev_test_cdek_regions_{country}` without touching the network
-— so on this rig (region axis `related-list`) the region level can never demonstrate a credential
-failure at all. Full measurement table + control:
-gotcha `the-cdek-fixture-credentials-are-not-the-option-they-look-like`.
+**✅ #405 IS rig-verified as of s95** — the s83 note that said otherwise was writing a decoy
+option. Before probing `test-cdek` credentials on the rig, read the gotcha
+`the-cdek-fixture-credentials-are-not-the-option-they-look-like`: it carries the real option name,
+two further masks, the measurement table and the control.
 
 **Operator decision, #409 and again #546 (27.08.2026):** `@since` records the **planned release**,
 which is and stays **`2.0.2`** — «иначе врём потребителям, у нас по факту ещё даже 2.0.0 не было».
@@ -228,9 +229,9 @@ oversight.
 7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
 8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
 
-🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#608** (сырой текст чужого исключения в
-примечании к заказу — редактировать ли и каким сканом), **#610** (то же в ответе браузеру, ~12
-мест, одно из них `nopriv`), **#567** (язык msgid — 305 строк работы в одну сторону, замер на
+🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#610** (сырой текст чужого исключения в
+ответе браузеру; девять админских мест закрыты доводом из #608, живыми остались ДВА — покупателю
+и анонимному вызывающему; примеры на карточке, жду его «да» на суженный вид), **#567** (язык msgid — 305 строк работы в одну сторону, замер на
 карточке), **#437** (нужна беседа об объёме), **#474**, **#483**, **#511**, **#515**, **#331**,
 **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
 и #321, #322.
