@@ -67,6 +67,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public const FILTER_REGION_ANCESTOR_CACHE_TTL = 'woodev_location_region_ancestor_cache_ttl';
 
 		/**
+		 * Filter tag: the result of this reconciliation step for a geoip-located
+		 * record whose own country disagrees with {@see self::customer_shipping_country()}
+		 * (#587) — see {@see self::resolve_geoip_default()} for the refusal this filter
+		 * runs on top of. This is NOT necessarily the final answer served to the
+		 * customer: a value that overrides the refusal here can still be refused
+		 * later by {@see self::get_customer_record()}'s staleness gate. Receives the
+		 * refusal (`null`) plus the refused record and the country it was compared
+		 * against, purely as a diagnostic/override seam — nothing in this codebase
+		 * consumes it yet (project preference: extension hooks are not gated on
+		 * having a consumer).
+		 *
+		 * The return is validated: only a {@see Location_Record} instance or `null`
+		 * is accepted from a hooked callback. Anything else degrades to `null` — the
+		 * refusal stands, silently and safely.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const FILTER_GEOIP_COUNTRY_MISMATCH = 'woodev_location_geoip_country_mismatch';
+
+		/**
 		 * Transient key prefix {@see self::cached_region_lookup()} stores under
 		 * — `self::class`-owned, mirrors the naming
 		 * {@see \Woodev_Test_Cdek_Location_Provider}'s own `REGIONS_TRANSIENT_PREFIX`
@@ -1422,7 +1443,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * An unresolvable IP resolves to `null` the same way every other
 		 * `locate()` miss does — see that method's own docblock.
 		 *
+		 * A located record whose own {@see Location_Record::country()} disagrees
+		 * with {@see self::customer_shipping_country()} is refused (#587): `null`,
+		 * deliberately. `customer_shipping_country()` — the LIVE WooCommerce
+		 * customer's shipping country when one is set, falling back to
+		 * {@see self::resolve_default_country()}'s store-setting/`RU` floor only
+		 * when it is not — is the SAME authority {@see self::is_customer_record_stale()}
+		 * rule (b) already checks a record's country against. This is deliberately
+		 * NOT `resolve_default_country()` alone: that method is only the
+		 * checkout-field-less store-wide floor, and its own docblock is explicit
+		 * that the live field is each CALLER's job, never that method's — it is
+		 * not itself an authority on where the customer currently is.
+		 *
+		 * This is not a new rule this method invents: this method's direct caller
+		 * is {@see self::resolve_default()} — `public` and callable on its own;
+		 * {@see self::get_customer_record()} reaches this method only indirectly,
+		 * through that call, and already runs every freshly-resolved default —
+		 * BEFORE it is ever persisted or served — through
+		 * {@see self::is_customer_record_stale()}'s same rule (b) (that gate's own
+		 * FIX 1, adversarial review finding, s78). A located record whose country
+		 * disagreed with `customer_shipping_country()` was therefore already
+		 * refused before this change; this method now states that ONE rule
+		 * explicitly, at the point the record is produced, instead of leaving it
+		 * implicit inside a gate that also independently checks provider
+		 * ownership (rule (a), unrelated to country).
+		 *
+		 * This does NOT close the underlying report in full: when WooCommerce's
+		 * own `woocommerce_default_customer_address` setting is `base` (WooCommerce
+		 * never geolocates the live customer), `customer_shipping_country()` falls
+		 * straight through to `resolve_default_country()` — the store's own base
+		 * country — so a foreign visitor's geoip record is refused there too, and
+		 * the merchant still gets no record and no signal. That remainder is the
+		 * deliberate scope of variant A (operator decision, 27.08.2026, #587): the
+		 * country-resolution chain itself stays untouched; only the refusal the
+		 * existing rule already produced is now stated where it happens, instead
+		 * of merely being an effect of a gate reached one call away.
+		 *
+		 * {@see self::FILTER_GEOIP_COUNTRY_MISMATCH} makes this specific refusal
+		 * observable/overridable.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 States explicitly, at the point a geoip record is produced,
+		 *              the country refusal {@see self::get_customer_record()}
+		 *              already applied via {@see self::is_customer_record_stale()}
+		 *              rule (b) (#587) — filterable via
+		 *              {@see self::FILTER_GEOIP_COUNTRY_MISMATCH}.
 		 *
 		 * @return Location_Record|null
 		 */
@@ -1437,7 +1502,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			return $this->locate( $ip );
+			$record = $this->locate( $ip );
+
+			if ( null === $record ) {
+				return null;
+			}
+
+			$country = $this->customer_shipping_country();
+
+			if ( $record->country() !== $country ) {
+				/**
+				 * Filters the result of this reconciliation step for a
+				 * geoip-located record whose own country disagreed with
+				 * {@see self::customer_shipping_country()} (#587) — see
+				 * {@see self::FILTER_GEOIP_COUNTRY_MISMATCH} for the full
+				 * rationale. Purely a diagnostic/override seam: nothing in
+				 * this codebase consumes it yet.
+				 *
+				 * The return is validated: only a {@see Location_Record}
+				 * instance or `null` is accepted. Anything else a hooked
+				 * callback returns — `false`, a string, an array, an
+				 * unrelated object — degrades to `null`: the refusal stands,
+				 * silently and safely, instead of being passed through to a
+				 * caller typed `?Location_Record`.
+				 *
+				 * @since 2.0.2
+				 * @since 2.0.2 The return is now validated; an unusable value
+				 *              degrades to the refusal instead of propagating
+				 *              (#587).
+				 *
+				 * @param Location_Record|null $resolved The chain's own answer —
+				 *                                        always `null`.
+				 * @param Location_Record      $record   The refused record,
+				 *                                        unmodified.
+				 * @param string                $country  The country of authority
+				 *                                        the record's own country
+				 *                                        was compared against.
+				 */
+				$filtered = apply_filters( self::FILTER_GEOIP_COUNTRY_MISMATCH, null, $record, $country );
+
+				return $filtered instanceof Location_Record ? $filtered : null;
+			}
+
+			return $record;
 		}
 
 		/**
