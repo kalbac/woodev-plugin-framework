@@ -564,11 +564,31 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		protected function get_admin_js_strings() {
 			return array(
 				'admin_url'        => admin_url( 'admin-ajax.php', 'relative' ),
-				'license_prompt'   => esc_html__( sprintf( 'Для использования плагина <strong>"%s"</strong>, вам необходимо активировать вашу лицензию для этого сайта', $this->get_plugin_name() ) ),
-				'enter_license'    => esc_html__( 'Указать лицензию' ),
-				'close'            => esc_html__( 'Закрыть' ),
+				// #444: `esc_html__( sprintf( … ) )` had the two the wrong way round. The
+				// msgid was assembled at runtime with the plugin's own name already inside
+				// it, so it could never match a catalogue entry — untranslatable by
+				// construction, whatever domain it declared. sprintf() now wraps the
+				// translation, which is the only order that leaves a stable msgid.
+				//
+				// `esc_html()` on the SUBSTITUTION, not only on the template (critic, round 1
+				// of #569). Swapping the order alone would have escaped the template and then
+				// interpolated `get_plugin_name()` raw — the old inverted call at least
+				// escaped the finished string, so fixing the msgid without this would have
+				// traded an i18n defect for an escaping one. The name is a plugin-supplied
+				// value, so it gets escaped on its own before it reaches the template.
+				//
+				// The `<strong>` in the msgid is escaped by `esc_html__()` and therefore
+				// renders as literal text wherever this lands. That is PRE-EXISTING and is
+				// not decided here: the key has no JS consumer at all today, which is #568.
+				'license_prompt'   => sprintf(
+					/* translators: %s: plugin name. */
+					esc_html__( 'Для использования плагина <strong>"%s"</strong>, вам необходимо активировать вашу лицензию для этого сайта', 'woodev-plugin-framework' ),
+					esc_html( $this->get_plugin_name() )
+				),
+				'enter_license'    => esc_html__( 'Указать лицензию', 'woodev-plugin-framework' ),
+				'close'            => esc_html__( 'Закрыть', 'woodev-plugin-framework' ),
 				'admin_nonce'      => wp_create_nonce( 'woodev-admin' ),
-				'load_error_text'  => esc_html__( 'Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и попробуйте снова.' ),
+				'load_error_text'  => esc_html__( 'Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и попробуйте снова.', 'woodev-plugin-framework' ),
 				'license_page_url' => esc_url( $this->get_license_instance()->get_license_settings_url() ),
 			);
 		}

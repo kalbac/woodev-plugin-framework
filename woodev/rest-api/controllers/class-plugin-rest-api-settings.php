@@ -83,7 +83,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 		public function get_items_permissions_check( $request ) {
 
 			if ( ! $this->check_manager_permissions( 'read' ) ) {
-				return new WP_Error( 'wc_rest_cannot_view', __( 'Sorry, you cannot list resources.' ), [ 'status' => rest_authorization_required_code() ] );
+				return new WP_Error( 'wc_rest_cannot_view', __( 'Sorry, you cannot list resources.', 'woodev-plugin-framework' ), [ 'status' => rest_authorization_required_code() ] );
 			}
 
 			return true;
@@ -125,7 +125,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 				return new WP_Error(
 					'wc_rest_setting_not_found',
 					sprintf(
-						__( 'Setting %s does not exist' ),
+						__( 'Setting %s does not exist', 'woodev-plugin-framework' ),
 						$setting_id
 					),
 					[ 'status' => 404 ]
@@ -142,7 +142,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 		public function update_item_permissions_check( $request ) {
 
 			if ( ! $this->check_manager_permissions( 'edit' ) ) {
-				return new WP_Error( 'wc_rest_cannot_edit', __( 'Sorry, you cannot edit this resource.' ), [ 'status' => rest_authorization_required_code() ] );
+				return new WP_Error( 'wc_rest_cannot_edit', __( 'Sorry, you cannot edit this resource.', 'woodev-plugin-framework' ), [ 'status' => rest_authorization_required_code() ] );
 			}
 
 			return true;
@@ -188,7 +188,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 				return new WP_Error(
 					'wc_rest_setting_could_not_update',
 					sprintf(
-						__( 'Could not update setting: %s' ),
+						__( 'Could not update setting: %s', 'woodev-plugin-framework' ),
 						$e->getMessage()
 					),
 					[ 'status' => $e->getCode() ?: 400 ]
@@ -247,78 +247,78 @@ if ( ! class_exists( 'Woodev_REST_API_Settings' ) ) :
 				'type'       => 'object',
 				'properties' => [
 					'id'          => [
-						'description' => __( 'Unique identifier of the setting.' ),
+						'description' => __( 'Unique identifier of the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'type'        => [
-						'description' => __( 'The type of the setting.' ),
+						'description' => __( 'The type of the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 						'enum'        => $this->settings->get_setting_types(),
 						'readonly'    => true,
 					],
 					'name'        => [
-						'description' => __( 'The name of the setting.' ),
+						'description' => __( 'The name of the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'description' => [
-						'description' => __( 'The description of the setting. It may or may not be used for display.' ),
+						'description' => __( 'The description of the setting. It may or may not be used for display.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'is_multi'    => [
-						'description' => __( 'Whether the setting stores an array of values or a single value.' ),
+						'description' => __( 'Whether the setting stores an array of values or a single value.', 'woodev-plugin-framework' ),
 						'type'        => 'boolean',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'options'     => [
-						'description' => __( 'A list of valid options, used for validation before storing the value.' ),
+						'description' => __( 'A list of valid options, used for validation before storing the value.', 'woodev-plugin-framework' ),
 						'type'        => 'array',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'default'     => [
-						'description' => __( 'Optional default value for the setting.' ),
+						'description' => __( 'Optional default value for the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 						'readonly'    => true,
 					],
 					'value'       => [
-						'description' => __( 'The value of the setting.' ),
+						'description' => __( 'The value of the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'string',
 						'context'     => [ 'view', 'edit' ],
 					],
 					'control'     => [
-						'description' => __( 'Optional object that defines how the user will interact with and update the setting.' ),
+						'description' => __( 'Optional object that defines how the user will interact with and update the setting.', 'woodev-plugin-framework' ),
 						'type'        => 'object',
 						'properties'  => [
 							'type'        => [
-								'description' => __( 'The type of the control.' ),
+								'description' => __( 'The type of the control.', 'woodev-plugin-framework' ),
 								'type'        => 'string',
 								'context'     => [ 'view', 'edit' ],
 								'enum'        => $this->settings->get_control_types(),
 								'readonly'    => true,
 							],
 							'name'        => [
-								'description' => __( "The name of the control. Inherits the setting's name." ),
+								'description' => __( "The name of the control. Inherits the setting's name.", 'woodev-plugin-framework' ),
 								'type'        => 'string',
 								'context'     => [ 'view', 'edit' ],
 								'readonly'    => true,
 							],
 							'description' => [
-								'description' => __( "The description of the control. Inherits the setting's description." ),
+								'description' => __( "The description of the control. Inherits the setting's description.", 'woodev-plugin-framework' ),
 								'type'        => 'string',
 								'context'     => [ 'view', 'edit' ],
 								'readonly'    => true,
 							],
 							'options'     => [
-								'description' => __( 'A list of key/value pairs defining the display value of each setting option. The keys should match the options defined in the base setting for validation.' ),
+								'description' => __( 'A list of key/value pairs defining the display value of each setting option. The keys should match the options defined in the base setting for validation.', 'woodev-plugin-framework' ),
 								'type'        => 'array',
 								'context'     => [ 'view', 'edit' ],
 								'readonly'    => true,

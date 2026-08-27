@@ -19,7 +19,7 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 		 */
 		public function pack() {
 			if ( ! $this->items || count( $this->items ) === 0 ) {
-				throw new Woodev_Packer_Exception( __( 'Нет товаров для упаковки!' ) );
+				throw new Woodev_Packer_Exception( __( 'Нет товаров для упаковки!', 'woodev-plugin-framework' ) );
 			}
 
 			$this->packages = [];
