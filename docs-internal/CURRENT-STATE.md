@@ -6,13 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-27 (s99).** `main` is at `78ead18`. **One PR open:** #586 (#518), green and CLEAN,
-held for the operator's rig pass. Merged in s99: **#584** (#451) and **#581** (#397) — both 18 pass
-+ 1 skip, state CLEAN.
+**As of 2026-08-27 (s100).** `main` is at `0c6ea89`, tree clean, **no open PRs**. Merged in s100:
+**#591** (#587), **#592** (#585 **and** #593), **#595** (#570), **#596** (#577) — every job pass,
+state CLEAN on all four. Also closed on the operator's answers: **#559**, **#560**.
 
-⚠ **The main checkout is NOT on `main`** — it is on `fix/518-pickup-selection-lifts-the-implicit-flag`
-because the rig serves the working tree and #586 is waiting to be looked at. Leave it there until
-that pass is over.
+✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
+so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026, operator decision) — public repositories
 on standard runners consume no quota, so the s98 billing block lifted the moment it was switched.
@@ -21,19 +20,20 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 27.08.2026 at `78ead18`:** `composer check` **2966** / 7139 /
-**66 skipped**; jest **1545** in 21 suites. Measured in a worktree, which is trustworthy here ONLY
-because SKIPPED came back as 66 — the primary's number (see the tooling note below); a worktree
-that skips more has silently run fewer contract guards.
+**Baselines on `main`, measured 27.08.2026 at `c0844fc` IN THE PRIMARY CHECKOUT (s100):**
+`composer check` **3025** / 7254 / **66 skipped**. Every step reconciles: 2978 before the batch,
++6 (#591), +34 (#592), +4 (#595), +3 (#596) = 3025. Compare SKIPPED, always: 66 is the primary's
+number, and a worktree that skips more has silently run fewer contract guards.
 
-⚠ **Integration on `main` is NOT measured** and the number that used to sit here is gone rather
-than carried: the container serves the PRIMARY checkout, which is parked on the #518 branch for
-the rig. On that branch it is **126** tests / 494 assertions. Re-measure on `main` after #586
-lands. (s98's handoff recorded jest **1545** for `main`, but three of those tests belonged to the
-then-unmerged #581 — `main` was 1542 at the time. They are merged now, so 1545 is right today for
-a different reason than the one written down.)
+✅ **Integration on `main` IS measured now (s100, `0c6ea89`, primary checkout): 126 tests / 494
+assertions, OK.** This closes the gap s99's handoff carried — it could not be measured then
+because the container serves the PRIMARY checkout and that was parked on the #518 branch.
+
+✅ **jest on `main` (s100, `0c6ea89`): 1548 tests in 21 suites.** Run from bash with `--roots`,
+never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
+s92's figures rode into two handoffs wrong (`sessions/s93.md`); s100 caught the same shape again.
 
 ⚠ **A green unit suite is NOT sufficient where our code meets someone else's contract** — s96's
 #551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
@@ -41,14 +41,17 @@ collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **The repo is PUBLIC again since 27.08.2026** (private 25.08–27.08). GitHub Pages is therefore available again — `docs.yml` is still disabled on `push` and one uncommented block from publishing.
 
-**`select2:close` fires BEFORE `select2:select`** — pinned by a test since #525.
-
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s98:** #514 (m4/m5 only — UI), #518, #559, #560, and the ones s98 filed —
-#567, #570, #573, #577, #583. Everything else s98 touched is closed. Which are COMMITMENTS, and
-where each was decided, is the handoff's carry-over section — not this file.
+**Open cards after s100:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
+language — the operator's four rules are on the card, and so is s100's measurement showing the
+`.pot` has been dead since 07.12.2023), **#594** (the remaining `error_log(getMessage())` sinks,
+triaged foreign-vs-ours), **#353**, the locations leftovers **#356/#358/#361/#410**, **#589**,
+**#437** (needs a scope conversation — do NOT take autonomously), and the standing list #474,
+#483, #511, #515, #331, #332, #374. Deferred to release: #285, #247. Closed in s100: **#559**,
+**#560**, **#570**, **#577**, **#585**, **#587**, **#593**. Which are COMMITMENTS, and where
+each was decided, is the handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -64,11 +67,10 @@ where each was decided, is the handoff's carry-over section — not this file.
   checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
   Detail on the card and in the spec's own status banner.
 
-**The repo is PRIVATE since 25.08.2026** and GitHub Pages is retired with it (Free plan). TS was
-measured and scoped: `src/` only (#542), never the raw-served frontend.
+**TS was measured and scoped: `src/` only (#542), never the raw-served frontend.** (The repo's
+private spell ran 25.08–27.08 only; it is PUBLIC again — see the top of this file. The old
+«PRIVATE, Pages retired» wording lived here and contradicted that.)
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
-s92's figures rode into two handoffs wrong. Detail: `sessions/s93.md`.
 
 **#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
 «Список с поиском». ON → select2 `tags`; OFF → #517's abandon mechanism is gated off and the address
@@ -145,7 +147,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **225**.
+Gotchas: **227**.
 
 ## Program status (high level)
 
@@ -184,14 +186,17 @@ Gotchas: **225**.
 - [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
 
-### The repo is PRIVATE since 25.08.2026 — GitHub Pages is gone with it
+### The private spell, 25.08–27.08.2026 — over, and what it left behind
 
-Operator decision, once measured that hiding one file was theatre: **all 433 `docs-internal` files
-were already public.** Measured consequences: **Pages is dead** (needs Pro for a private repo, the
-account is Free; the API 404s), so `docs.yml` is disabled on `push` and left runnable by hand —
-publishing is one uncommented block away. **0 forks**, nothing detached. **History is NOT hidden
-retroactively** for anyone who already cloned it; nothing was rewritten and no rewrite was asked
-for. `next-session-prompt.md` is **tracked again**; only the gate's `.prev` snapshot stays ignored.
+The repo went private on 25.08 and PUBLIC again on 27.08. What survives from that episode:
+**all 433 `docs-internal` files were already public** before it, so hiding one file was theatre —
+that was the measurement that ended it. **0 forks**, nothing detached. **History was NOT hidden
+retroactively** for anyone who had already cloned; nothing was rewritten and no rewrite was asked
+for. `next-session-prompt.md` is tracked; only the gate's `.prev` snapshot stays ignored.
+
+**GitHub Pages is available again** — being private is what killed it (Pages needs Pro on a
+private repo and the account is Free; the API 404'd). `docs.yml` is still disabled on `push` and
+one uncommented block away from publishing, which is now a choice rather than a limitation.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
 
@@ -240,29 +245,26 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 ## Local rig
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `fix/518-pickup-selection-lifts-the-implicit-flag` (s99) — leave it until the #586 pass is over, then return it to `main`.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ⚠ **THE RIG IS CURRENTLY SWITCHED FOR #518 (s99) — restore it once that pass is over.** #518 is
-  reachable in exactly ONE configuration (`dadata` + `geoip`; measured on the card), so the rig had
-  to be moved off the settings described in the next bullet:
+- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
+- ✅ **The rig is BACK in its standard state — measured 27.08.2026 (s100), not inferred.** The #518
+  pass is over and everything the s99 detour changed has been put back. Read straight off the
+  container:
 
-  | Option | Restore to | Currently |
-  |---|---|---|
-  | `woodev_location_active_provider` | `test-cdek` | **`dadata`** |
-  | `woodev_location_field_mode_region` | `related-list` | **`ajax-select2`** (DaData cannot do `related-list`) |
-  | `woodev_location_default_locality_policy` | `fixed` | **`geoip`** |
+  | Option | Value |
+  |---|---|
+  | `woodev_location_active_provider` | `test-cdek` |
+  | `woodev_location_field_mode_region` | `related-list` |
+  | `woodev_location_field_mode_settlement` | `ajax-select2` |
+  | `woodev_location_default_locality_policy` | `fixed` |
+  | `woodev_location_default_locality_record` | `test-cdek:44` (Москва) |
+  | `woodev_location_allow_custom_settlement` | `no` |
 
-  `woodev_location_default_locality_record` was NOT touched — it returns to use on its own when the
-  policy goes back to `fixed`.
+  `wp-content/mu-plugins/` holds only `zz-rig-test-pickup-shipping.php` and `zz-rig-yandex-key.php`
+  — the temporary `zz-rig-geoip-ip.php` is gone.
 
-  Plus a mu-plugin, **`wp-content/mu-plugins/zz-rig-geoip-ip.php`** (delete it to restore): on a
-  local rig `WC_Geolocation::get_ip_address()` sees `127.0.0.1`, DaData's `iplocate` cannot answer
-  that, so `geoip` resolves nothing and the IMPLICIT record #518 is entirely about never exists. It
-  pins a real Moscow IP via `HTTP_X_REAL_IP` (WC checks that first —
-  `class-wc-geolocation.php:83`), leaving `REMOTE_ADDR` alone.
-
-  **Restoring the options is not enough by itself:** a customer who already has a stored location
-  keeps it. Clear `woodev_customer_location` from user meta AND from the `wp_woocommerce_sessions`
-  rows (edit the row in place — deleting it drops the cart).
+  **Switching it again** (`geoip` needs `dadata` + a pinned non-local IP; restoring options is not
+  enough because a stored customer location survives): gotcha
+  `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
 
 - **Rig location config, the state to RESTORE to (left as of 24.08.2026) — NOT the historical
   default.** Provider

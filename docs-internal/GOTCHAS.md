@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 225 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 228 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -110,6 +110,7 @@
 
 ### [testing/*] — Testing patterns
 - [testing/phpunit] **`phpunit a.php b.php` runs only `a.php` — the rest are dropped silently, so a multi-file FALSIFICATION run can prove a third of what it claims. Also always pass `--testsuite=Unit`.** → [phpunit-takes-one-path-and-silently-ignores-the-rest](gotchas/phpunit-takes-one-path-and-silently-ignores-the-rest.md) (s99)
+- [testing/isolated-run] **A stale Composer classmap breaks ONLY isolated test runs — the full suite is identical before and after, and the primary checkout has the same gap as any worktree.** → [a-stale-composer-classmap-only-breaks-isolated-test-runs](gotchas/a-stale-composer-classmap-only-breaks-isolated-test-runs.md) (s100)
 - [testing/*] **A test that manufactures its own precondition never tests whoever produces it — delete the view's hidden input and all four guard tests stay green.** → [a-test-that-manufactures-its-own-precondition-never-tests-the-producer](gotchas/a-test-that-manufactures-its-own-precondition-never-tests-the-producer.md) (s98)
 - [testing/*] **`preg_match( '//u', $s )` returns FALSE, not 0, on invalid UTF-8 — and raw bytes written as escapes get re-encoded into valid UTF-8 by the tooling.** → [preg-match-u-returns-false-not-zero-on-invalid-utf8](gotchas/preg-match-u-returns-false-not-zero-on-invalid-utf8.md) (s98)
 - [testing/*] **The local PHP is 8.5 and the CI floor is 7.4 — a green `composer check` here is evidence about 8.5 only (`setAccessible()` is the worked case).** → [the-local-php-is-four-versions-above-the-ci-floor](gotchas/the-local-php-is-four-versions-above-the-ci-floor.md) (s98)
@@ -287,6 +288,7 @@
 - [shipping/warehouse-identity] **Warehouse identity: storage row id ≠ carrier-unique id.** → [warehouse-storage-id-vs-carrier-id](gotchas/warehouse-storage-id-vs-carrier-id.md)
 
 ### [i18n/*] — Localization
+- [i18n/catalogue-audit] **Comparing a `.po` against a compiled `.mo` by bare msgid undercounts — a `msgctxt` entry is keyed `context + EOT + msgid`, and an older `.mo` mtime is not evidence of desync.** → [comparing-a-po-against-a-compiled-mo-by-bare-msgid-undercounts](gotchas/comparing-a-po-against-a-compiled-mo-by-bare-msgid-undercounts.md) (s100)
 - [i18n/russian-source-plural-n] **`_n()` with Russian source strings renders wrong plural forms without a translation catalog.** → [russian-source-i18n-plural-n](gotchas/russian-source-i18n-plural-n.md) (s7)
 
 ### [autodev/*] — Adversarial dev loop tooling
@@ -298,7 +300,7 @@
 
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/git] **`git push` hangs forever and SILENTLY under Git Credential Manager — it is waiting on a GUI dialog nobody can see. `fetch` works, which hides it.** → [git-push-hangs-silently-under-credential-manager](gotchas/git-push-hangs-silently-under-credential-manager.md) (s97)
-- [tooling/orca] **`terminal create --command "bash"` on Windows lands in WSL (`bash` = `System32ash.exe`), and the resulting git failure reads as "Orca runs agents in WSL" — which is false.** → [orca-terminal-command-bash-lands-in-wsl-on-windows](gotchas/orca-terminal-command-bash-lands-in-wsl-on-windows.md) (s97)
+- [tooling/orca] **`terminal create --command "bash"` on Windows lands in WSL (`bash` = `System32\bash.exe`), and the resulting git failure reads as "Orca runs agents in WSL" — which is false.** → [orca-terminal-command-bash-lands-in-wsl-on-windows](gotchas/orca-terminal-command-bash-lands-in-wsl-on-windows.md) (s97)
 - [tooling/orca] **Launching kilo under Orca: the agent id is `kilo`, its update dialog eats the injected brief, and `--inject` revokes the capability before the worker can report — dispatch WITHOUT `--inject`.** → [starting-kilo-under-orca-repeats-every-codex-launch-trap](gotchas/starting-kilo-under-orca-repeats-every-codex-launch-trap.md) (s97)
 - [tooling/git] **A newly-untracked file is DELETED by checking out an older branch that still tracks it, and back. `.gitignore` does not protect it.** → [an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it](gotchas/an-untracked-file-is-deleted-by-a-checkout-of-a-branch-that-tracks-it.md) (s93)
 
@@ -328,6 +330,7 @@
 - [tooling/git-merge] **Stacked PRs: GitHub CLOSES (never retargets) a downstream PR when its base branch is deleted; `ci.yml` never runs on a PR whose base isn't `main`.** → [stacked-pr-github-mechanics](gotchas/stacked-pr-github-mechanics.md) (s80)
 - [tooling/git-checkout] **`git checkout <ref> -- .` overwrites the whole working tree and silently reverts newer merges — use `git show <ref>:<path>`.** → [git-checkout-ref-dot-overwrites-the-primary-checkout](gotchas/git-checkout-ref-dot-overwrites-the-primary-checkout.md) (s89)
 - [tooling/orca] **Reusing a worker's terminal for a follow-up task needs `--worktree` too, or `worker-start` rejects it as a mismatch.** → [reusing-a-worker-terminal-needs-its-worktree-too](gotchas/reusing-a-worker-terminal-needs-its-worktree-too.md) (s89)
+- [tooling/git-credentials] **Git Credential Manager hangs an agent's `git push` silently — no output, no prompt; fix with `gh auth setup-git`, which writes the empty entry a hand-rolled config does not.** → [git-credential-manager-hangs-silently-in-an-agent-session](gotchas/git-credential-manager-hangs-silently-in-an-agent-session.md) (s100)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
