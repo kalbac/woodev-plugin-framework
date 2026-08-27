@@ -79,7 +79,9 @@ This project has **two documentation directories** with different audiences, pub
 2. Follow format rules in `docs-internal/DOCS-SCHEMA.md`
 3. Session logs and gotchas excluded from markdownlint (in `.markdownlintignore`)
 4. All files tracked in git — never gitignore docs-internal/ (the only ignored path is the gate's
-   generated `next-session-prompt.md.prev` snapshot). **This repo is PRIVATE** since 25.08.2026
+   generated `next-session-prompt.md.prev` snapshot). **This repo is PUBLIC again** since
+   27.08.2026 — it was private 25.08–27.08, and the switch back lifted the Actions billing block
+   (public repos on standard runners consume no quota). Card #583.
 
 **What goes here:**
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
@@ -213,6 +215,14 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   GitHub closing keyword (`closes`/`fixes`/`resolves #N`) anywhere except alone on its own line —
   GitHub executes those literally even inside a quote, and s81 closed three cards that way while
   merely describing plans. A deliberate `Closes #123` on its own line still works.
+- **Point github.com at `gh` once per machine: `gh auth setup-git`.** Git for Windows ships
+  `credential.helper = manager` in its SYSTEM config, and Git Credential Manager blocks forever
+  waiting for an interactive prompt nobody can answer — so an agent's `git push` hangs with no
+  output, no error and no prompt (#560, operator decision 27.08.2026). The override is scoped to
+  github.com, so every other host keeps using GCM. Do NOT hand-roll it as
+  `git config credential.helper '!gh auth git-credential'` — that leaves `manager` first in the
+  chain and it still hangs; `gh auth setup-git` writes the empty entry that clears it. Gotcha:
+  `git-credential-manager-hangs-silently-in-an-agent-session`.
 - Never run `npx jest` directly — it loses the wp-scripts jsdom environment and scans agent worktrees inside the repo (gotchas `npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`)
 - Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
 - **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.

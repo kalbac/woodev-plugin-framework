@@ -1,5 +1,7 @@
 # Orchestrating agents with Orca — Woodev Framework Wiki
-> Compiled reference. Last compiled: 2026-08-20 (s83, first Orca capability pass).
+> Compiled reference. Last compiled: 2026-08-27 (s100: four measured recipe fixes — pointer-not-paste,
+> the canary/one-line-body conflict, `worker-release` leaving a terminal spent, and briefing a fresh
+> worker into an existing worktree). Earlier passes: s83 (first capability pass), s97, s99.
 
 This project runs inside the Orca app, so Orca's runtime — not raw `git worktree` or an ad-hoc
 PTY — is the source of truth for worktrees, agent terminals and multi-agent coordination. This
@@ -325,6 +327,39 @@ that was handy.
   transfer, and orchestration lifecycle commands are wrong for it. Supervised orchestration is
   only for when someone actually waits on the result — which is the case for everything in this
   article.
+- **Hand a critic a POINTER, never a pasted brief (s100).** Sending a 5.6 KB brief with
+  `terminal send --text "<the whole brief>" --enter` reached the PTY and echoed into the
+  scrollback, but never submitted — three sends in a row sat unconsumed while kilo's welcome screen
+  was still painting. Writing the brief to a scratchpad file and sending a 216-byte
+  `Read the file <path> in full and do exactly what it says` submitted first time, every time
+  afterwards. Four critics in s100 ran this way; the one exception still needed one re-send.
+  **Always read the buffer back:** an idle footer with the welcome tips still visible means the
+  prompt was NOT consumed, and re-sending the same one-liner fixes it.
+- **Require the canary IN THE REPORT BODY, and say so explicitly (s100).** A brief that says «say
+  CANARY as the first word of your report» AND «write `--body` as a single line» conflicts, and the
+  critic drops the canary — which reads exactly like the fabrication the canary exists to catch. It
+  happened once in s100: the canary was absent, the critic had in fact read the file (it quoted the
+  word back when asked), and the review was sound. Cost: one round-trip and a re-verification.
+  Word the instruction so the canary survives a one-line body.
+- **`worker-release` reporting `retained` still leaves the terminal unusable (s100).** Releasing two
+  settled workers returned `state: retained, reason: identity_unproven, processAction: none` — which
+  reads as «nothing was touched». Both agent terminals were gone from `terminal list` moments later,
+  and the next `worker-start --terminal <that handle>` failed with `terminal_not_writable`. Treat a
+  released dispatch's terminal as spent regardless of what the receipt says: start the follow-up with
+  `--worktree <the exact existing worktree> --agent claude`, which creates a fresh terminal in the
+  same checkout and reruns no setup.
+- **A fresh worker in an existing worktree needs its brief adjusted.** «You are already activated on
+  this worktree» is false for it, and so is «start from origin/main» — its branch is checked out with
+  the previous rounds committed. Tell it to read `git log --oneline origin/main..HEAD` first, or it
+  may re-derive work that is already there.
+- **Do not `worker-release` a dispatch you are still sending work to (s100).** A tiny follow-up sent
+  with `terminal send` onto an ALREADY-SETTLED dispatch's ids looks like it works — the worker does
+  the job and pushes the commit — but releasing that dispatch revokes its capability, so the later
+  `worker_done` comes back as `Rejected worker_done: … capability is revoked`
+  (`_orcaLifecycleRejection: dispatch_capability_invalid`). The report body is still readable inside
+  the rejection envelope, which is exactly why this is easy to miss. Either create a NEW task and
+  dispatch for the follow-up, or hold the release until the worker has reported. Same family as the
+  kilo `--inject` revocation, different cause.
 
 ## Related
 
