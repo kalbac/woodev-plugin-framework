@@ -116,6 +116,50 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	}
 
 	/**
+	 * The #518 critic pass, MINOR: the wiring test above accepts ANY array
+	 * callback, so wiring the right hook to a wrong or empty method would pass
+	 * it. That is the "a test which prepares its own precondition does not test
+	 * the producer" trap — pin the CALLBACK and what it does, not just the hook
+	 * name.
+	 *
+	 * Asserts the registered callback is this exact method, and that calling it
+	 * promotes the customer's record.
+	 */
+	public function test_the_registered_callback_is_the_one_that_promotes_the_record(): void {
+
+		Functions\when( 'add_filter' )->justReturn( true );
+
+		$registered = [];
+
+		Functions\when( 'add_action' )->alias(
+			static function ( $hook, $callback = null ) use ( &$registered ) {
+				$registered[ $hook ] = $callback;
+
+				return true;
+			}
+		);
+
+		$service = \Mockery::mock( \Woodev\Framework\Shipping\Location\Location_Service::class );
+		$service->shouldReceive( 'promote_customer_record_to_explicit' )
+			->once()
+			->andReturn( true );
+
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier', $service );
+		$handler->register();
+
+		$this->assertArrayHasKey( 'woodev_shipping_pickup_point_selected', $registered );
+		$this->assertSame(
+			[ $handler, 'handle_pickup_point_selected' ],
+			$registered['woodev_shipping_pickup_point_selected'],
+			'the hook must carry THIS method — a right hook on a wrong method is the defect this catches'
+		);
+
+		// Fire it exactly as the pickup controller's do_action() would. The
+		// Mockery `once()` expectation above is the assertion.
+		call_user_func( $registered['woodev_shipping_pickup_point_selected'] );
+	}
+
+	/**
 	 * register() wires woocommerce_checkout_order_processed action.
 	 */
 	public function test_register_hooks_checkout_order_processed(): void {

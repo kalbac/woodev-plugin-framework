@@ -5424,6 +5424,13 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		} );
 	}
 
+	// These dispatch the announcement DIRECTLY, so on their own they say nothing about
+	// pickup-mount.js announcing BEFORE it writes — and if it announced after, the field
+	// would still be disabled at the moment of the write. That half of the contract is
+	// pinned where it belongs, in the module that owns it: pickup-mount.test.js's
+	// «announces BEFORE it writes» test asserts `[ 'announced', 'city-changed' ]`.
+	// Verified by mutation during the #518 critic pass — moving the announcement after
+	// the writes fails that test and only that test.
 	function announcePickupAddressWrite( fields ) {
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
 			detail: { fields: fields },
