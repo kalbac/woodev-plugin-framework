@@ -124,7 +124,7 @@ comment-only mentions — see coverage note above; this matches the brief's own 
 | WRONG-DATA | 1 |
 | GUARDED | 27 |
 | HARMLESS | 1 |
-| UNKNOWN | 2 |
+| UNKNOWN | 2 (both RESOLVED to FATAL after this report — see the note below) |
 | **Total** | **40** |
 
 ## What was wrong in the brief
@@ -142,3 +142,25 @@ comment-only mentions — see coverage note above; this matches the brief's own 
   (`class-shipping-method.php:246`/`:261`, `$rate->to_array()`) sits **outside** every directory
   the brief called out by name (`location/`, `pickup/`, `map/`), in the shipping-method base class
   itself.
+
+## Both UNKNOWN rows resolved to FATAL (same day, by measurement)
+
+This worker could not settle `class-shipping-method.php:149` and
+`settings/class-shipping-integration.php:110` because WooCommerce's source is not in this
+checkout. It IS in the rig container. Read there:
+
+```
+woocommerce.latest-stable/includes/abstracts/abstract-wc-shipping-method.php:565
+    return apply_filters( ..., array_map( [ $this, 'set_defaults' ], $this->instance_form_fields ) );
+
+woocommerce.latest-stable/includes/abstracts/abstract-wc-settings-api.php:67
+    return apply_filters( ..., array_map( [ $this, 'set_defaults' ], $this->form_fields ) );
+
+$ php -r 'array_map("strval", "not-an-array");'
+TypeError: array_map(): Argument #2 ($array) must be of type array, string given
+```
+
+Both filters write straight into the property WooCommerce then hands to `array_map()`, so a
+non-array return is a **FATAL on the admin settings screen**, not a silent empty form. Verdict for
+both rows: **FATAL**. The worker's instinct to mark them UNKNOWN rather than guess was right — the
+answer simply lived outside its reach.
