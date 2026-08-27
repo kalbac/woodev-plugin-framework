@@ -87,6 +87,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping\Order {
 
+	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Location_Record;
@@ -99,6 +100,13 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	 * @covers \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::enroll_popular_settlement
 	 */
 	final class AbstractShipmentHandlerEnrollmentTest extends TestCase {
+
+		/**
+		 * The secret an enrolment failure's exception message embeds — #594.
+		 *
+		 * @var string
+		 */
+		private const SECRET = 'LIVESECRET';
 
 		protected function setUp(): void {
 			parent::setUp();
@@ -237,6 +245,91 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$result = $handler->export( $order, $record, $provider );
 
 			$this->assertSame( 'CARRIER-1', $result, 'export() must still report success — enrolment failing must not undo a real export.' );
+		}
+
+		// -------------------------------------------------------------------
+		// #594: enroll() is framework code (weak case per the triage), but its
+		// caught \Throwable's message is still logged verbatim otherwise — pin
+		// that it is routed through Woodev_API_Base::redact_secret_log_text()
+		// before reaching error_log().
+		// -------------------------------------------------------------------
+
+		public function test_export_redacts_a_secret_in_the_logged_enrolment_failure(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'enroll' )->once()->with( $provider, $record )->andThrow(
+				new \RuntimeException( 'carrier rejected api_key=' . self::SECRET )
+			);
+
+			$handler = $this->handler( $store );
+			$order   = Mockery::mock( '\WC_Order' );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			$result = $handler->export( $order, $record, $provider );
+
+			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertSame(
+				sprintf(
+					'[woodev] popular-settlements enrolment failed for provider "%s": %s',
+					$provider->get_id(),
+					'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+				),
+				$captured
+			);
+		}
+
+		/**
+		 * Control: an enrolment failure message carrying NO secret must reach
+		 * the rendered error_log() line byte-for-byte.
+		 */
+		public function test_export_leaves_an_enrolment_failure_message_without_a_secret_untouched(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'enroll' )->once()->with( $provider, $record )->andThrow(
+				new \RuntimeException( 'carrier API timeout' )
+			);
+
+			$handler = $this->handler( $store );
+			$order   = Mockery::mock( '\WC_Order' );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			$result = $handler->export( $order, $record, $provider );
+
+			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertSame(
+				sprintf(
+					'[woodev] popular-settlements enrolment failed for provider "%s": %s',
+					$provider->get_id(),
+					'carrier API timeout'
+				),
+				$captured
+			);
 		}
 
 		public function test_export_is_a_no_op_when_the_settlement_is_unknown(): void {

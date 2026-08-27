@@ -120,6 +120,274 @@ class UpdaterLogRedactionTest extends TestCase {
 	}
 
 	/* ----------------------------------------------------------------------- *
+	 * Site 2: the pull-command consumption boundary — the inner catch around
+	 * Woodev_License_Command_Dispatcher::consume_pull_commands() inside
+	 * get_version_from_remote(). Triggered here via a throwing wp_json_encode()
+	 * (consume_pull_commands() normalises the response through it first), which
+	 * is a foreign-enough source to embed a secret the same way a malformed
+	 * response body could.
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * A secret embedded in the pull-command consumption failure's message
+	 * must be redacted before it reaches error_log().
+	 *
+	 * @return void
+	 */
+	public function test_get_version_from_remote_redacts_a_secret_in_a_pull_command_consumption_failure(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function () {
+				throw new \Exception( 'carrier rejected api_key=' . self::SECRET );
+			}
+		);
+
+		$updater = $this->make_updater( [], 'woodev-test-plugin', false );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturnUsing(
+			static function () {
+				$response = Mockery::mock();
+				$response->shouldReceive( 'get_response_data' )->andReturn( (object) array() );
+				return $response;
+			}
+		);
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertFalse( $result );
+		$this->assertSame(
+			'Woodev updater: pull-command consumption failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control: a pull-command consumption failure message carrying NO secret
+	 * must reach the rendered error_log() line byte-for-byte.
+	 *
+	 * @return void
+	 */
+	public function test_get_version_from_remote_leaves_a_pull_command_failure_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_option' )->justReturn( false );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function () {
+				throw new \Exception( 'malformed license_commands payload' );
+			}
+		);
+
+		$updater = $this->make_updater( [], 'woodev-test-plugin', false );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturnUsing(
+			static function () {
+				$response = Mockery::mock();
+				$response->shouldReceive( 'get_response_data' )->andReturn( (object) array() );
+				return $response;
+			}
+		);
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertFalse( $result );
+		$this->assertSame(
+			'Woodev updater: pull-command consumption failed: malformed license_commands payload',
+			$captured
+		);
+	}
+
+	/* ----------------------------------------------------------------------- *
+	 * Site 3: the ack-confirmation boundary — the catch around the ack store's
+	 * confirm_received() call inside get_version_from_remote(). Triggered by
+	 * making update_option() throw when Woodev_License_Command_Acks persists
+	 * the drained store (confirm_received() -> save() -> update_option()).
+	 * ----------------------------------------------------------------------- */
+
+	/**
+	 * A secret embedded in the ack-confirmation failure's message must be
+	 * redacted before it reaches error_log().
+	 *
+	 * @return void
+	 */
+	public function test_get_version_from_remote_redacts_a_secret_in_an_ack_confirmation_failure(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
+
+		$nonce         = str_repeat( 'a', 32 );
+		$pending_entry = array(
+			'nonce'    => $nonce,
+			'status'   => 'executed',
+			'terminal' => true,
+			'protocol' => 1,
+			'ts'       => time(),
+		);
+		$ack_stored    = array( $pending_entry );
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $ack_stored;
+				}
+				return false;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					throw new \Exception( 'carrier rejected api_key=' . self::SECRET );
+				}
+				return true;
+			}
+		);
+
+		$updater = $this->make_updater( [], 'woodev-test-plugin', false );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturnUsing(
+			static function () use ( $nonce ) {
+				$response = Mockery::mock();
+				$response->shouldReceive( 'get_response_data' )->andReturn( (object) array( 'acks_received' => array( $nonce ) ) );
+				return $response;
+			}
+		);
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertFalse( $result );
+		$this->assertSame(
+			'Woodev updater: ack confirmation failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control: an ack-confirmation failure message carrying NO secret must
+	 * reach the rendered error_log() line byte-for-byte.
+	 *
+	 * @return void
+	 */
+	public function test_get_version_from_remote_leaves_an_ack_confirmation_failure_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'wp_json_encode' )->alias(
+			static function ( $data, $options = 0, $depth = 512 ) {
+				return json_encode( $data, $options, $depth );
+			}
+		);
+
+		$nonce         = str_repeat( 'a', 32 );
+		$pending_entry = array(
+			'nonce'    => $nonce,
+			'status'   => 'executed',
+			'terminal' => true,
+			'protocol' => 1,
+			'ts'       => time(),
+		);
+		$ack_stored    = array( $pending_entry );
+
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) use ( &$ack_stored ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					return $ack_stored;
+				}
+				return false;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( $name ) {
+				if ( \Woodev_License_Command_Acks::OPTION_NAME === $name ) {
+					throw new \Exception( 'storage backend unavailable' );
+				}
+				return true;
+			}
+		);
+
+		$updater = $this->make_updater( [], 'woodev-test-plugin', false );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturnUsing(
+			static function () use ( $nonce ) {
+				$response = Mockery::mock();
+				$response->shouldReceive( 'get_response_data' )->andReturn( (object) array( 'acks_received' => array( $nonce ) ) );
+				return $response;
+			}
+		);
+		$this->set_private( $updater, 'api_handler', $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_private( $updater, 'get_version_from_remote' );
+
+		$this->assertFalse( $result );
+		$this->assertSame(
+			'Woodev updater: ack confirmation failed: storage backend unavailable',
+			$captured
+		);
+	}
+
+	/* ----------------------------------------------------------------------- *
 	 * Helpers — mirror UpdaterKeylessPollingTest.php's minimal-updater builder.
 	 * ----------------------------------------------------------------------- */
 

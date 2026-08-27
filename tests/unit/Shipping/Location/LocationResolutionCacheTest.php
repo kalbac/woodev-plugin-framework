@@ -178,6 +178,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 		private const STORAGE_KEY = 'woodev_location_resolution_cache';
 
+		/**
+		 * The secret a foreign adapter's exception message embeds — #594.
+		 *
+		 * @var string
+		 */
+		private const SECRET = 'LIVESECRET';
+
 		private function record( string $key = 'dadata:fias-1' ): Location_Record {
 			return Location_Record::from_array(
 				[
@@ -351,6 +358,96 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( $exception, $caught_again );
 			$this->assertSame( 2, $adapter->calls, 'a subsequent call must retry the adapter, not skip it' );
 			$this->assertFalse( $cache->has( $plugin, $record ) );
+		}
+
+		// -------------------------------------------------------------------
+		// #594: the rethrown \Throwable's message is a FOREIGN adapter's own
+		// message (spec: Location_Adapter is supplied by the participating
+		// plugin) — it must be redacted through Woodev_API_Base's own
+		// redaction before it reaches error_log(), since it never passed
+		// through that class's redaction itself.
+		// -------------------------------------------------------------------
+
+		public function test_a_throwing_adapter_redacts_a_secret_in_the_logged_message(): void {
+			$exception = new \RuntimeException( 'carrier rejected api_key=' . self::SECRET );
+			$adapter   = new Location_Resolution_Cache_Spy_Adapter( null, $exception );
+			$plugin    = $this->plugin( $adapter, true, 'test_plugin' );
+			$cache     = new Location_Resolution_Cache_Probe( new Location_Resolution_Cache_Fake_Session() );
+			$record    = $this->record( 'dadata:fias-1' );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					\Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			try {
+				$cache->resolve_for( $plugin, $record );
+				$this->fail( 'expected the adapter exception to propagate' );
+			} catch ( \RuntimeException $e ) {
+				$this->assertSame( $exception, $e );
+			}
+
+			$this->assertSame(
+				sprintf(
+					'[woodev] location adapter "%s" (plugin "%s") resolve() failed for locality "%s": %s',
+					get_class( $adapter ),
+					'test_plugin',
+					$record->key(),
+					'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+				),
+				$captured
+			);
+		}
+
+		/**
+		 * Control: a thrown message carrying NO secret must reach the rendered
+		 * error_log() line byte-for-byte — asserted on the COMPLETE rendered
+		 * line, not merely a substring, so a redactor that mangled anything
+		 * else in the line could not pass silently.
+		 */
+		public function test_a_throwing_adapter_without_a_secret_logs_the_message_untouched(): void {
+			$exception = new \RuntimeException( 'carrier API timeout' );
+			$adapter   = new Location_Resolution_Cache_Spy_Adapter( null, $exception );
+			$plugin    = $this->plugin( $adapter, true, 'test_plugin' );
+			$cache     = new Location_Resolution_Cache_Probe( new Location_Resolution_Cache_Fake_Session() );
+			$record    = $this->record( 'dadata:fias-1' );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					\Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			try {
+				$cache->resolve_for( $plugin, $record );
+				$this->fail( 'expected the adapter exception to propagate' );
+			} catch ( \RuntimeException $e ) {
+				$this->assertSame( $exception, $e );
+			}
+
+			$this->assertSame(
+				sprintf(
+					'[woodev] location adapter "%s" (plugin "%s") resolve() failed for locality "%s": %s',
+					get_class( $adapter ),
+					'test_plugin',
+					$record->key(),
+					'carrier API timeout'
+				),
+				$captured
+			);
 		}
 
 		public function test_a_throwing_adapter_recovers_on_retry_once_the_underlying_condition_clears(): void {

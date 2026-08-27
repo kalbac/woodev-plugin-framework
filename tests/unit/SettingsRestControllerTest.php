@@ -7,8 +7,10 @@ use Woodev\Framework\Shipping\Settings\Shipping_Tool;
 use Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry;
 use Woodev\Framework\Shipping\Settings\Tool_Result;
 
+require_once dirname( __DIR__, 2 ) . '/woodev/api/class-api-base.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/rest-api/controllers/class-rest-api-settings-page.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/settings-page/interface-connection-test.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tools-registry.php';
@@ -49,6 +51,41 @@ class SettingsRestControllerTest extends TestCase {
 		$section->shouldReceive( 'get_setting_ids' )->andReturn( $setting_ids );
 
 		return $section;
+	}
+
+	/**
+	 * A connection-block section: `id`, `is_connection() === true`, and its declared
+	 * setting ids — the subset {@see \Woodev_REST_API_Settings_Page::test_connection()}
+	 * actually looks for, distinct from {@see self::section()}'s plain settings section.
+	 */
+	private function connection_section( string $id, array $setting_ids ) {
+		$section = Mockery::mock();
+		$section->shouldReceive( 'get_id' )->andReturn( $id );
+		$section->shouldReceive( 'is_connection' )->andReturn( true );
+		$section->shouldReceive( 'get_setting_ids' )->andReturn( $setting_ids );
+
+		return $section;
+	}
+
+	/**
+	 * Sets up a single expected `error_log()` call and writes its argument into
+	 * the caller's `$captured` variable, passed by reference.
+	 *
+	 * @param mixed $captured Written by reference as soon as error_log() is called.
+	 * @return void
+	 */
+	private function expect_one_error_log_call( &$captured ): void {
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
 	}
 
 	public function test_get_schema_returns_registry_tabs(): void {
@@ -168,6 +205,165 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertSame( 'cdek', $response['provider'] );
 	}
 
+	// -----------------------------------------------------------------------
+	// #594 — every log sink that renders a caught exception's getMessage() now
+	// routes it through \Woodev_API_Base::redact_secret_log_text() first, since
+	// the \Throwable can come from a Settings Handler / carrier client the
+	// plugin registers, which never passed through Woodev_API_Base's own
+	// redaction. REDACTION test: a secret in the message reaches error_log()
+	// masked. CONTROL test: a message with no secret reaches error_log()
+	// byte-for-byte. Both assert the COMPLETE RENDERED LINE, never a
+	// substring, per the standing operator rule.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * save()'s catch of \Throwable around the handler's update_value() call —
+	 * foreign because the handler is a Settings Handler the plugin registers.
+	 */
+	public function test_save_redacts_a_secret_in_a_foreign_persist_exception_message(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'secret' )->andThrow(
+			new \Exception( 'carrier rejected api_key=LIVESECRET' )
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'api_key' ] ) ] );
+		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'api_key' => 'secret' ] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_server_error', $result->get_error_code() );
+		$this->assertSame(
+			'[woodev] settings save failed on "api_key": carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control for the save() persist site: no secret in the message, rendered
+	 * line untouched byte-for-byte.
+	 */
+	public function test_save_leaves_a_persist_exception_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$handler = Mockery::mock();
+		$handler->shouldReceive( 'filter_visible_values' )->andReturnUsing( static fn( $values ) => $values );
+		$handler->shouldReceive( 'validate_values' )->once()->andReturn( [] );
+		$handler->shouldReceive( 'update_value' )->once()->with( 'api_key', 'secret' )->andThrow(
+			new \Exception( 'options table write failed' )
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->section( [ 'api_key' ] ) ] );
+		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$controller->save( $this->request( [ 'provider_id' => 'cdek', 'values' => [ 'api_key' => 'secret' ] ] ) );
+
+		$this->assertSame(
+			'[woodev] settings save failed on "api_key": options table write failed',
+			$captured
+		);
+	}
+
+	// ----- test_connection() -----
+	//
+	// HIGHEST RISK SITE IN THE WHOLE CARD: this is literally the code that
+	// checks a carrier's credentials, so a credential in the exception text is
+	// the expected case, not an exotic one.
+
+	/**
+	 * test_connection()'s catch of \Throwable around the handler's test_connection()
+	 * call — foreign because the handler is a Settings Handler / carrier client the
+	 * plugin registers.
+	 */
+	public function test_connection_redacts_a_secret_in_a_foreign_exception_message(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$handler = Mockery::mock( '\Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_setting' )->with( 'api_key' )->andReturn( null );
+		$handler->shouldReceive( 'get_value' )->with( 'api_key' )->andReturn( 'K' );
+		$handler->shouldReceive( 'test_connection' )->once()->with( 'main', [ 'api_key' => 'K' ] )->andThrow(
+			new \Exception( 'carrier rejected api_key=LIVESECRET' )
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->connection_section( 'main', [ 'api_key' ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->test_connection(
+			$this->request( [ 'provider_id' => 'cdek', 'connection_id' => 'main', 'values' => [] ] )
+		);
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_connection_error', $result->get_error_code() );
+		$this->assertSame(
+			'[woodev] connection test failed for cdek/main: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control for the connection-test site: no secret in the message, rendered
+	 * line untouched byte-for-byte. Without this, a redactor that returned ''
+	 * or mangled the line would pass silently.
+	 */
+	public function test_connection_leaves_a_message_without_a_secret_untouched(): void {
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+
+		$handler = Mockery::mock( '\Woodev_Settings_Connection_Test' );
+		$handler->shouldReceive( 'get_setting' )->with( 'api_key' )->andReturn( null );
+		$handler->shouldReceive( 'get_value' )->with( 'api_key' )->andReturn( 'K' );
+		$handler->shouldReceive( 'test_connection' )->once()->with( 'main', [ 'api_key' => 'K' ] )->andThrow(
+			new \Exception( 'carrier endpoint unreachable' )
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_handler' )->andReturn( $handler );
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->connection_section( 'main', [ 'api_key' ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'cdek' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$controller->test_connection(
+			$this->request( [ 'provider_id' => 'cdek', 'connection_id' => 'main', 'values' => [] ] )
+		);
+
+		$this->assertSame(
+			'[woodev] connection test failed for cdek/main: carrier endpoint unreachable',
+			$captured
+		);
+	}
+
 	// ----- run_tool() (#505) -----
 
 	public function test_run_tool_unknown_provider_is_404(): void {
@@ -280,6 +476,95 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertSame( 'woodev_settings_tool_error', $result->get_error_code() );
 		$this->assertSame( 500, $result->get_error_data()['status'] );
 	}
+
+	/**
+	 * run_tool()'s catch of \Throwable around the Shipping_Tools_Registry::run() call —
+	 * foreign because the tool callback is registered by the plugin.
+	 */
+	public function test_run_tool_redacts_a_secret_in_a_foreign_exception_message(): void {
+		$tool = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ): Tool_Result {
+				throw new \RuntimeException( 'carrier rejected api_key=LIVESECRET' );
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $tool ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'shipping', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_tool_error', $result->get_error_code() );
+		$this->assertSame(
+			'[woodev] shipping tool run failed for shipping/sweep: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control for the run_tool() site: no secret in the message, rendered line
+	 * untouched byte-for-byte.
+	 */
+	public function test_run_tool_leaves_a_message_without_a_secret_untouched(): void {
+		$tool = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ): Tool_Result {
+				throw new \RuntimeException( 'boom' );
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$provider = Mockery::mock();
+		$provider->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $tool ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'shipping' )->andReturn( $provider );
+
+		$captured = null;
+		$this->expect_one_error_log_call( $captured );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$controller->run_tool( $this->request( [ 'provider_id' => 'shipping', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertSame(
+			'[woodev] shipping tool run failed for shipping/sweep: boom',
+			$captured
+		);
+	}
+
 	/**
 	 * #514 T3. The `break 2` scoping in run_tool() only ever refused ids that existed
 	 * NOWHERE — the previous 404 test passed for that trivial reason. This one gives the id
