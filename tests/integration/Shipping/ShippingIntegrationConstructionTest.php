@@ -76,4 +76,122 @@ class ShippingIntegrationConstructionTest extends TestCase {
 
 		$this->assertSame( $plugin->get_id_underscored(), $integration->id );
 	}
+	/**
+	 * Issue #391 — the test-environment feature was dead, and silently.
+	 *
+	 * `private array $environments = []` is a TYPED property with an initialiser, so it is
+	 * never unset and the `! isset( $this->environments )` guard around the seeding branch
+	 * could never open. `get_environments()` therefore returned `[]` forever:
+	 * `init_form_fields()` gates the environment selector on `count( … ) > 1` (so `0 > 1`,
+	 * never rendered) and `get_environment_name()` fell through to the raw id.
+	 *
+	 * `Woodev_Payment_Gateway` runs the identical idiom correctly only because its property
+	 * carries neither type nor initialiser (`class-payment-gateway.php:141`) — which is why
+	 * this survived a copy-paste review.
+	 *
+	 * Integration rather than unit: `esc_html_x()` is a real WordPress call, and the point is
+	 * what a constructed integration actually reports.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_get_environments_carries_production(): void {
+
+		$integration = new \Woodev_Test_Cdek_Integration();
+
+		$environments = $integration->get_environments();
+
+		$this->assertNotSame( [], $environments, 'the seeding branch must actually run' );
+		$this->assertArrayHasKey( \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION, $environments );
+	}
+
+	/**
+	 * The consequence, pinned separately from the cause. `get_environment_name()` takes NO
+	 * argument — it resolves whatever `get_environment()` reads from the saved options — and
+	 * with an EMPTY environment set its `isset()` lookup always missed, so it returned the raw
+	 * id `production` instead of the label. That reads as a display bug three layers away from
+	 * the property that caused it.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_get_environment_name_resolves_the_current_environment_to_its_label(): void {
+
+		$integration = new \Woodev_Test_Cdek_Integration();
+		$production  = \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION;
+
+		$this->assertSame( $production, $integration->get_environment(), 'the default with nothing saved' );
+
+		$this->assertNotSame(
+			$production,
+			$integration->get_environment_name(),
+			'the current environment must resolve to a label, not fall through to the id'
+		);
+		$this->assertSame( $integration->get_environments()[ $production ], $integration->get_environment_name() );
+	}
+
+	/**
+	 * The control: the fall-through is still there for an id the set does NOT carry. Without
+	 * it, the assertion above would pass for a method that had stopped looking anything up and
+	 * simply returned a constant label.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_control_get_environment_name_falls_through_for_an_unknown_id(): void {
+
+		$integration = new \Woodev_Test_Cdek_Integration();
+
+		$integration->update_option( 'environment', 'no-such-environment' );
+
+		$this->assertSame( 'no-such-environment', $integration->get_environment_name() );
+
+		$integration->update_option( 'environment', \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION );
+	}
+
+
+	/**
+	 * Issue #399 — `add_support()` announced itself on `wc_payment_gateway_{id}_supports_{x}`,
+	 * copied wholesale from the payment gateway. Its own sibling `remove_support()` already
+	 * used `woodev_shipping_integration_…`, which is what proves the prefix was a mistake
+	 * rather than a decision.
+	 *
+	 * Both hooks are asserted in one test, because the pairing is the point: a subscriber
+	 * has to be able to hear both halves in the same namespace.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_support_hooks_fire_in_the_shipping_integration_namespace(): void {
+
+		$integration = new \Woodev_Test_Cdek_Integration();
+		$id          = $integration->id;
+		$heard       = [];
+
+		$record = static function () use ( &$heard ): void {
+			$heard[] = current_action();
+		};
+
+		$added   = 'woodev_shipping_integration_' . $id . '_supports_widgets';
+		$removed = 'woodev_shipping_integration_' . $id . '_removed_support_widgets';
+		$legacy  = 'wc_payment_gateway_' . $id . '_supports_widgets';
+
+		add_action( $added, $record );
+		add_action( $removed, $record );
+		add_action( $legacy, $record );
+
+		$integration->add_support( 'widgets' );
+		$integration->remove_support( 'widgets' );
+
+		remove_action( $added, $record );
+		remove_action( $removed, $record );
+		remove_action( $legacy, $record );
+
+		$this->assertSame( [ $added, $removed ], $heard );
+		$this->assertNotContains( $legacy, $heard, 'the payment-gateway namespace must be silent' );
+	}
 }

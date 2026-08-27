@@ -37,9 +37,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		/** @var null|Shipping_Plugin the parent plugin class */
 		protected ?Shipping_Plugin $plugin;
 
-		/** @var array associative array of environment id to display name, defaults to 'production' => 'Production' */
-		private array $environments = [];
-
 		/** @var string configuration option: whether to use a sibling plugins' connection/authentication settings */
 		private string $inherit_settings;
 
@@ -239,7 +236,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 					 * @param Shipping_Integration $instance instance
 					 * @param string $name of supported feature being added
 					 */
-					do_action( 'wc_payment_gateway_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
+					// Issue #399. This was `wc_payment_gateway_…`, copied from the payment
+					// gateway along with the rest of this method. The prefix is proved wrong
+					// by this class's OWN sibling: `remove_support()` already fires
+					// `woodev_shipping_integration_…`. A shipping integration announcing
+					// itself in the payment-gateway namespace both misleads an integrator —
+					// the only way to hear it was to subscribe to a payment hook — and
+					// collides outright if a shipping integration's id matches a gateway's.
+					//
+					// Hook names are a release-blocking contract (ADR-005), so this is
+					// renamed rather than aliased ONLY because it is provably unheard:
+					// `add_support()` and `remove_support()` have no caller anywhere in this
+					// repository, so no subscriber can exist for a hook that never fires.
+					// The verb `_supports_` matches `Shipping_Method` and the gateway; the
+					// prefix now matches this class.
+					do_action( 'woodev_shipping_integration_' . $this->get_id() . '_supports_' . str_replace( '-', '_', $name ), $this, $name );
 				}
 			}
 
@@ -299,20 +310,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 		}
 
 		/**
-		 * Gets the set of environments supported by this plugin.  All shipping methods support at least the production environment
+		 * Gets the set of environments supported by this plugin. Every shipping integration
+		 * supports at least the production environment.
+		 *
+		 * ISSUE #391: this used to memoize into `private array $environments = []` behind an
+		 * `! isset( $this->environments )` guard — and a TYPED property with an initialiser is
+		 * never unset, so the seeding branch could not run and this returned `[]` forever.
+		 * `Woodev_Payment_Gateway` uses the identical idiom and works only because its
+		 * property is declared `private $environments;` with neither type nor initialiser
+		 * (`class-payment-gateway.php:141`), leaving `isset()` false on the first call.
+		 *
+		 * The consequence was the whole test-environment feature: `init_form_fields()` gates
+		 * the environment selector on `count( $this->get_environments() ) > 1`, which was
+		 * `0 > 1`, so the selector never rendered — and `get_environment_name()` fell through
+		 * to returning the raw id instead of a label.
+		 *
+		 * The memo is GONE rather than repaired. It guarded a single array literal, the
+		 * property was private with no setter and no other reader, and a stale memo is a
+		 * footgun a subclass override would have to work around.
+		 *
+		 * A PLUGIN DECLARES MORE ENVIRONMENTS BY OVERRIDING THIS METHOD. That is the only
+		 * seam WooCommerce's construction model leaves: it instantiates every registered
+		 * integration with NO arguments ({@see self::__construct()}), so the gateway's
+		 * `$args['environments']` route is not available here.
 		 *
 		 * @since 1.5.0
-		 * @return array associative array of environment id to name supported by this plugin
+		 *
+		 * @return array<string, string> environment id => display name.
 		 */
 		public function get_environments(): array {
 
-			if ( ! isset( $this->environments ) ) {
-				$this->environments = [
-					self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ),
-				];
-			}
-
-			return $this->environments;
+			return [
+				self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ),
+			];
 		}
 
 
