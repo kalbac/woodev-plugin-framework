@@ -533,9 +533,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			self::remove_hooked_instances( 'wp_login', Customer_Location_Store::class, 'handle_wp_login' );
 			self::remove_hooked_instances( 'woocommerce_states', self::class, 'inject_related_list_states' );
 
-			// The popular-settlements pair, added in #488 slice 2. Every callback `add_hooks()`
-			// registers must be removable here or an integration test keeps a stale registry
-			// instance alive across a reset (Codex critic, final pass on #488 slice 2).
+			// The popular-settlements pair, added in #488 slice 2. Every INSTANCE-BOUND callback
+			// `add_hooks()` registers must be removable here, or an integration test keeps a stale
+			// registry instance alive across a reset (Codex critic, final pass on #488 slice 2).
+			//
+			// The rule is about INSTANCES, not about callbacks in general — a distinction #514/m1 asked
+			// for once `add_hooks()` grew its first callback that is deliberately NOT removed here. A
+			// callback bound as a CLASS+METHOD pair (`[ Some_Class::class, 'method' ]`) holds no instance
+			// to strand: WordPress keys it by that string, so a repeat `add_hooks()` on a fresh instance
+			// overwrites rather than accumulates, and this reset has nothing to detach. Removing one here
+			// would be worse than pointless — it would tear down a registration the fixture plugin makes
+			// at `plugins_loaded`, which `WP_UnitTestCase` restores from its hook snapshot regardless.
+			//
+			// Today there is exactly one such callback: the `Shipping_Tools_Registry::FILTER_TOOLS`
+			// filter, whose site in {@see self::add_hooks()} carries the same reasoning. A future
+			// callback added INSTANCE-bound belongs in the list below.
 			self::remove_hooked_instances( 'init', self::class, 'maybe_install_popular_settlements_table' );
 			self::remove_hooked_instances( 'woocommerce_checkout_order_processed', self::class, 'handle_checkout_order_processed_for_popular_settlements' );
 
