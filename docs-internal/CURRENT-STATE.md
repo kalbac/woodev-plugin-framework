@@ -6,9 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-27 (s100).** `main` is at `0c6ea89`, tree clean, **no open PRs**. Merged in s100:
-**#591** (#587), **#592** (#585 **and** #593), **#595** (#570), **#596** (#577) — every job pass,
-state CLEAN on all four. Also closed on the operator's answers: **#559**, **#560**.
+**As of 2026-08-28 (s101).** `main` clean, **no open PRs**. Merged in s101: **#607**
+(#598 + #605), **#611** (#594), **#612** (#599) — every job pass, state CLEAN on all three.
+s100 merged **#591** (#587), **#592** (#585 and #593), **#595** (#570), **#596** (#577) and
+closed **#559**, **#560** on the operator's answers.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -20,40 +21,52 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 27.08.2026 at `c0844fc` IN THE PRIMARY CHECKOUT (s100):**
-`composer check` **3025** / 7254 / **66 skipped**. Every step reconciles: 2978 before the batch,
-+6 (#591), +34 (#592), +4 (#595), +3 (#596) = 3025. Compare SKIPPED, always: 66 is the primary's
-number, and a worktree that skips more has silently run fewer contract guards.
+**Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s101):**
+`composer check` **3057** / 7369 / **66 skipped**. Every step reconciles: 3025 at the start of
+s101, +1 (#607's dev-autoloader gate), +31 (#611's redaction tests) = 3057. Compare SKIPPED,
+always: 66 is the primary's number, and a worktree that skips more has silently run fewer
+contract guards.
 
-✅ **Integration on `main` IS measured now (s100, `0c6ea89`, primary checkout): 126 tests / 494
-assertions, OK.** This closes the gap s99's handoff carried — it could not be measured then
-because the container serves the PRIMARY checkout and that was parked on the #518 branch.
+⚠ **`--order-by=reverse` is RED on `main` — 55 failures, and they are real.** Not a flake:
+`TranslationHandlerTest` stubs `get_locale`, Brain Monkey defines it process-wide, and
+`Dadata_Api_Client::current_locale()` branches on `function_exists( 'get_locale' )`. The unit
+suite is green by ALPHABETICAL ACCIDENT — `tests/unit/handlers/` sorts last only because it is
+lowercase. Card **#606**. Always run the reverse-order control on `main` before attributing such
+failures to a branch.
 
-✅ **jest on `main` (s100, `0c6ea89`): 1548 tests in 21 suites.** Run from bash with `--roots`,
+✅ **Integration on `main` (s101, primary checkout): 126 tests / 494 assertions, OK** — unchanged
+from s100's number, re-measured rather than copied forward.
+
+✅ **jest on `main` (s101): 1548 tests in 21 suites.** Run from bash with `--roots`,
 never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
 s92's figures rode into two handoffs wrong (`sessions/s93.md`); s100 caught the same shape again.
 
 ⚠ **A green unit suite is NOT sufficient where our code meets someone else's contract** — s96's
-#551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
+card #551, round 1, was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
 collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
-
-**The repo is PUBLIC again since 27.08.2026** (private 25.08–27.08). GitHub Pages is therefore available again — `docs.yml` is still disabled on `push` and one uncommented block from publishing.
 
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s100:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
+**Open cards after s101:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
 language — the operator's four rules are on the card, and so is s100's measurement showing the
-`.pot` has been dead since 07.12.2023), **#594**, **#598**, **#599** (all three filed in s100 —
-remaining `error_log(getMessage())` sinks; `woodev/competitor` missing from composer's classmap;
-audit filters for unvalidated returns), **#600** (board README vs `AGENTS.md` on triage — his
-call), **#353**, the locations leftovers **#356/#358/#361/#410**, **#589**,
-**#437** (needs a scope conversation — do NOT take autonomously), and the standing list #474,
-#483, #511, #515, #331, #332, #374. Deferred to release: #285, #247. Closed in s100: **#559**,
-**#560**, **#570**, **#577**, **#585**, **#587**, **#593**. Which are COMMITMENTS, and where
-each was decided, is the handoff's carry-over section — not this file.
+`.pot` has been dead since 07.12.2023), **#353**, the locations leftovers
+**#356/#358/#361/#410**, **#589**, **#437** (needs a scope conversation — do NOT take
+autonomously), and the standing list #474, #483, #511, #515, #331, #332, #374. Deferred to
+release: #285, #247.
+
+**Filed in s101, all six:** **#606** (the unit suite is green by alphabetical accident — see the
+reverse-order warning above), **#608** (order notes carry a foreign exception's raw text — his
+call), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the documentation half was already
+done in s98), **#610** (~12 sites hand a raw exception message to the browser, one of them
+`nopriv` — his call), **#613** (act on #599's 49 FATAL/DISABLES sites — triage first, and two of
+its questions are his). **#605** was filed and closed the same session.
+
+**Closed in s101:** **#594**, **#598**, **#599**, **#605**. Closed in s100: **#559**, **#560**,
+**#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
+was decided, is the handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -69,10 +82,7 @@ each was decided, is the handoff's carry-over section — not this file.
   checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
   Detail on the card and in the spec's own status banner.
 
-**TS was measured and scoped: `src/` only (#542), never the raw-served frontend.** (The repo's
-private spell ran 25.08–27.08 only; it is PUBLIC again — see the top of this file. The old
-«PRIVATE, Pages retired» wording lived here and contradicted that.)
-
+**TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
 **#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
 «Список с поиском». ON → select2 `tags`; OFF → #517's abandon mechanism is gated off and the address
@@ -149,7 +159,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **227**.
+Gotchas: **230**.
 
 ## Program status (high level)
 
@@ -188,14 +198,6 @@ Gotchas: **227**.
 - [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
 
-### The private spell, 25.08–27.08.2026 — over
-
-Repo is PUBLIC again (see the top of this file), so **GitHub Pages is available** — `docs.yml` is
-still disabled on `push` and one uncommented block from publishing, which is now a choice rather
-than a limitation. What the episode settled: all 433 `docs-internal` files were already public
-before it, so hiding one file was theatre — that measurement is what ended it. 0 forks, nothing
-detached, no history rewritten. Detail → `sessions/s99.md`, card #583.
-
 ### Public-docs API staleness — DEFERRED (operator decision)
 
 `docs/` (GH Pages) still teaches the v1 positional `register_plugin( '1.4.0', ... )`, which in v2 is
@@ -209,27 +211,29 @@ oversight.
 ## Next Actions
 
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
-27.08.2026 — история на **#583**; блока больше нет, и раздел выше это описывает.
+27.08.2026 — история на **#583**.
 
-1. **#586 (#518)** — выбор ПВЗ снимает «неявность» записи. **Построено и проверено на риге мной,
-   обе половины.** Зелёный, CLEAN. Видно покупателю → **ждёт прохода оператора**, потом мерж.
-   Риг под это переключён — см. «Local rig» ниже, там же как вернуть.
-2. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+1. **#606** — юнит-суита зелёная по алфавитной случайности; `--order-by=reverse` на `main` даёт
+   55 падений. Порядок работ внутри карточки: снять зависимость от порядка → гейт → и только
+   потом переименовать `tests/unit/handlers/`. Не-UI, мержится само.
+2. **#613** — 49 мест из аудита #599 (40 FATAL + 9 DISABLES). **Сначала триаж**, потом правки;
+   две развилки внутри — оператора. Чекаутные пути и `payment-tokens-handler.php:700` первыми.
+3. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
    m6 и T3 закрыты в s98 (#563).
-3. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
+4. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
    про страно-слепой `provider_for_level()`, потом включать правило регистрации.
-4. **Остатки слоя локаций:** #356, #358, #361, #410.
-5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-6. **#585 (НОВАЯ)** — границы логирования пишут текст ЧУЖИХ исключений сырым (швы расширения).
-   Найдено критиком при ревью #584; к reason-фразе отношения не имеет, лечится иначе.
-7. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#587 (НОВАЯ)** — политика `geoip` и опция
-   WooCommerce «Расположение клиента по умолчанию» молча конфликтуют по стране; вопрос поднял сам
-   оператор, на карточке замер, его предложение, два возражения и четыре варианта.
-   **#567** (язык msgid — 305 строк работы в одну сторону, замер на карточке), **#570**
-   (нетипизированный шов `Settings_Provider::create()`), **#577** (частота nopriv-лога), **#559**
-   (Orca не супервизирует kilo), **#560** (`credential.helper` → `gh`), **#437** (нужна беседа об
-   объёме), **#474**, **#483**, **#511**, **#515**, **#331**, **#332**, **#374**.
-   **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
+5. **Остатки слоя локаций:** #356, #358, #361, #410.
+6. **#609** — гейт на расхождение локальный PHP / матрица CI. Документная половина сделана ещё
+   в s98, живёт только гейт.
+7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
+
+🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#608** (сырой текст чужого исключения в
+примечании к заказу — редактировать ли и каким сканом), **#610** (то же в ответе браузеру, ~12
+мест, одно из них `nopriv`), **#567** (язык msgid — 305 строк работы в одну сторону, замер на
+карточке), **#437** (нужна беседа об объёме), **#474**, **#483**, **#511**, **#515**, **#331**,
+**#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
+и #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
