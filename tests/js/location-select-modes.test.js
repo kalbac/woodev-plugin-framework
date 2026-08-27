@@ -3602,3 +3602,158 @@ describe( 'ajax-select2 renderer — issue #528: allow_custom_settlement opt-in'
 	} );
 } );
 
+
+// -----------------------------------------------------------------------
+// Issues #527 and #532 point 2 — the two remaining holes in "every transition that
+// invalidates a pending candidate cancels its timer, and nothing schedules a timer that
+// cannot fire". Both were recorded as MINOR with reachability explicitly NOT established;
+// both are closed here by construction rather than by proving reachability, so neither
+// invariant depends on an answer this repo cannot measure (selectWoo is not vendored).
+// -----------------------------------------------------------------------
+
+describe( 'ajax-select2 renderer — issues #527/#532: abandon-flush scheduling', () => {
+	let mod;
+
+	beforeEach( () => {
+		mod = require( '../../woodev/shipping-method/assets/js/frontend/location-select-modes.js' );
+		document.body.innerHTML = '<input type="text" id="shipping_city" name="shipping_city" value="" />';
+	} );
+
+	afterEach( () => {
+		delete window.jQuery.fn.select2;
+	} );
+
+	// Issue #527. The candidate must SURVIVE the cancel — a customer who reopens the list and
+	// then leaves it again is still abandoning the same unmatched term.
+	it( '#527: select2:open cancels the flush select2:close scheduled — and the next close still fires it', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Мухосранск' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		// close → open inside ONE task: exactly the pair the fix exists for.
+		instances[ 0 ].close();
+		instances[ 0 ].open();
+		await tick();
+
+		expect( onAbandon ).not.toHaveBeenCalled();
+
+		instances[ 0 ].close();
+		await tick();
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+		expect( onAbandon ).toHaveBeenCalledWith( { query: 'Мухосранск', resolved: true } );
+	} );
+
+	// The control the test above needs: without the reopen, the very same sequence DOES fire on
+	// the first close. Otherwise "not called" above would pass for a mechanism that never fires.
+	it( 'control (#527): the same recorded candidate fires on the FIRST close when no open intervenes', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Мухосранск' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		instances[ 0 ].close();
+		await tick();
+
+		expect( onAbandon ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	// Issue #532 point 2. Asserted by COUNTING `setTimeout` calls across the close itself,
+	// not by observing that nothing fired — "nothing fired" was already true before the fix
+	// (`fireAbandonNow()` found `pendingAbandon === null` and returned), which is precisely
+	// why the issue records the old answer as "a timer IS set and does nothing".
+	it( '#532: a close with no recorded candidate schedules no timer at all', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].open();
+
+		const setTimeoutSpy = jest.spyOn( window, 'setTimeout' );
+
+		instances[ 0 ].close();
+
+		const scheduled = setTimeoutSpy.mock.calls.length;
+
+		setTimeoutSpy.mockRestore();
+
+		expect( scheduled ).toBe( 0 );
+		await tick();
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+
+	// The control for the assertion above: with a candidate recorded, the SAME close does
+	// schedule exactly one timer. Without this, `toBe( 0 )` would pass for a close handler that
+	// had stopped scheduling anything at all.
+	it( 'control (#532): a close WITH a recorded candidate schedules exactly one timer', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( { fetch: fetchSpy, onAbandon, node: { level: 'settlement', fieldId: 'shipping_city' } } );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Мухосранск' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const setTimeoutSpy = jest.spyOn( window, 'setTimeout' );
+
+		instances[ 0 ].close();
+
+		const scheduled = setTimeoutSpy.mock.calls.length;
+
+		setTimeoutSpy.mockRestore();
+
+		expect( scheduled ).toBe( 1 );
+	} );
+
+	// #532's OTHER half — the option-OFF case it was actually filed about — reached through the
+	// same gate rather than through a second one.
+	it( '#532: with the option OFF a close schedules nothing, because no candidate is ever recorded', async () => {
+		const fetchSpy = jest.fn( () => Promise.resolve( [] ) );
+		const onAbandon = jest.fn();
+		const options = buildOptions( {
+			fetch: fetchSpy,
+			onAbandon,
+			node: { level: 'settlement', fieldId: 'shipping_city' },
+			location: { endpoints: { list: LIST_URL }, mode: 'ajax-select2', allowCustomSettlement: false },
+		} );
+
+		const instances = installFakeSelect2( window.jQuery );
+
+		mod.attachAjaxSelect2( document.getElementById( 'shipping_city' ), options );
+
+		instances[ 0 ].query( 'Тьмутаракань' );
+		await Promise.resolve().then( () => Promise.resolve() );
+
+		const setTimeoutSpy = jest.spyOn( window, 'setTimeout' );
+
+		instances[ 0 ].close();
+
+		const scheduled = setTimeoutSpy.mock.calls.length;
+
+		setTimeoutSpy.mockRestore();
+
+		expect( scheduled ).toBe( 0 );
+		await tick();
+		expect( onAbandon ).not.toHaveBeenCalled();
+	} );
+} );

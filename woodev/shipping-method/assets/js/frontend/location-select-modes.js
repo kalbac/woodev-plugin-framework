@@ -1581,6 +1581,21 @@
 		function handleSelect2Open() {
 			dropdownOpen = true;
 
+			// Issue #527: re-opening the list is one of the transitions that invalidates a
+			// scheduled flush, and it was the only one that did not cancel it — a pick
+			// ({@see resolveAndSelect}) and teardown (`detach()`) both already did. If a
+			// `close` and an `open` land inside the SAME JS task, the macrotask
+			// {@see scheduleAbandonFlush} queued would otherwise run with the dropdown open
+			// again, reporting an abandonment the customer is in the middle of undoing.
+			//
+			// Whether a real browser can produce that close→open pair within one task was
+			// NOT established — selectWoo is not vendored here, so the question could only be
+			// answered from memory of upstream sources, which this project does not accept as
+			// evidence. Cancelling unconditionally settles it without needing the answer: the
+			// candidate itself is deliberately NOT cleared, so the next `close`
+			// re-schedules it and a customer who reopens and leaves again is still reported.
+			cancelScheduledAbandonFlush();
+
 			// Issue #540. select2 4.x exposes NO config option for the search box's own
 			// placeholder (`placeholder` names the closed control), so the attribute has to be
 			// set once the dropdown exists — `select2:open` is the documented public event for
@@ -1648,6 +1663,35 @@
 		function handleSelect2Close() {
 			dropdownOpen = false;
 			cancelScheduledAbandonFlush();
+			scheduleAbandonFlush();
+		}
+
+		/**
+		 * Queues {@see fireAbandonNow} on the next macrotask — the deferral the enclosing
+		 * `select2:close` docblock explains at length. Extracted from that handler in #532 so
+		 * the GATE sits where the scheduling happens rather than only where the candidate is
+		 * recorded: with nothing pending there is nothing a flush could fire, so queueing a
+		 * macrotask per close is pure ceremony.
+		 *
+		 * Issue #532 point 2 asked the narrower question — a close under a merchant who left
+		 * «Разрешить использовать города не из списка» OFF still queued a timer, because the
+		 * option is checked at `selectConfigFor()`'s recording call sites and nowhere else.
+		 * `null === pendingAbandon` answers that case and every other one it belongs to (the
+		 * option ON but no search completed, a search that DID return results and cleared the
+		 * candidate), without this function having to learn about the option at all.
+		 *
+		 * Safe because a candidate recorded AFTER this point never needs this timer:
+		 * {@see recordAbandonCandidate} fires immediately whenever `dropdownOpen` is already
+		 * `false`, and this function only ever runs from `handleSelect2Close`, which sets that
+		 * flag false first (MJ-4's own reasoning, from that function's docblock).
+		 *
+		 * @returns {void}
+		 */
+		function scheduleAbandonFlush() {
+			if ( null === pendingAbandon ) {
+				return;
+			}
+
 			abandonFlushTimer = setTimeout( function() {
 				abandonFlushTimer = null;
 				fireAbandonNow();
