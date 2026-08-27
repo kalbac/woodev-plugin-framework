@@ -613,32 +613,51 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * without ever passing through this class at all (#585). This is
 		 * the seam those boundaries SHOULD route through, instead of each
 		 * hand-redacting the same free text independently. As of #594 every
-		 * log sink in `woodev/` that writes a caught exception's message
-		 * does route through it: the #585 sweep found four, #594's card
-		 * listed eleven more (the setup-wizard and settings-page REST
-		 * controllers, the location resolution cache, the shipment
-		 * handler, the licensing/updater command transport), and #594's
-		 * own re-sweep found three beyond that card — in
-		 * `woodev/payment-gateway/`, which write through
-		 * {@see Woodev_Plugin::log()} rather than `error_log()` and were
-		 * therefore invisible to a sweep keyed on `error_log`. Grep for
-		 * the SINK, not for one spelling of it.
+		 * APPLICATION-LOG sink in `woodev/` that writes a caught
+		 * exception's message routes through it. Getting to that took
+		 * three sweeps, each finding what the previous one's grep could
+		 * not see:
 		 *
-		 * That the list is complete TODAY is a fact about today, not a
-		 * guarantee. Nothing here enforces that a NEW log boundary routes
-		 * through this, and nothing fails when one does not — the omission
-		 * is silent, which is exactly how those fourteen survived #585.
-		 * Ask it of every new `catch` that logs: can this `\Throwable`
-		 * have been thrown by somebody else's code?
+		 * - #585 found four, all spelled `error_log(`.
+		 * - #594's card listed eleven more, also `error_log(` — the
+		 *   setup-wizard and settings-page REST controllers, the location
+		 *   resolution cache, the shipment handler, the licensing/updater
+		 *   command transport.
+		 * - #594's own re-sweep found three in `woodev/payment-gateway/`
+		 *   spelled `$plugin->log(`, invisible to a grep for `error_log`.
+		 * - #594's CRITIC found a fourth spelling the re-sweep still
+		 *   missed: {@see Woodev_Payment_Gateway::add_debug_message()},
+		 *   which reaches the same WooCommerce logger INDIRECTLY. Two
+		 *   catches hand it a foreign message. It is redacted AT THE SINK
+		 *   rather than at those call sites, so a later caller cannot
+		 *   forget.
 		 *
-		 * ORDER NOTES ARE DELIBERATELY NOT COVERED. Two of the
-		 * payment-gateway sites also put the raw message into a
-		 * `WC_Order` note ({@see Woodev_Payment_Gateway::mark_order_as_failed()}
-		 * and {@see Woodev_Payment_Gateway_Abstract_Payment_Handler::mark_order_as_failed()}),
-		 * which is a different boundary with a different trade: an order
-		 * note is what shop staff read to understand a failed payment, and
-		 * this method's deliberate over-redaction would degrade it. Tracked
-		 * separately rather than decided here.
+		 * Read that list as a warning, not a certificate: each sweep was
+		 * keyed on one spelling and each was wrong about being finished.
+		 * Grep for the SINK, not for one spelling of it.
+		 *
+		 * DELIBERATELY OUT OF SCOPE, so their absence is not mistaken for
+		 * an oversight:
+		 *
+		 * - `_doing_it_wrong()` in `woodev/settings-api/` (two sites)
+		 *   carries a caught exception's message and WordPress may route
+		 *   it to the PHP error log. It is a DEVELOPER-misuse marker: the
+		 *   exception is the framework's own validation complaining about
+		 *   the plugin author's arguments, and masking it would blunt the
+		 *   one message whose whole job is to tell that author what they
+		 *   got wrong.
+		 * - `WC_Order` notes. Two payment-gateway sites also put the raw
+		 *   message into one. That is a different boundary with a
+		 *   different trade — shop staff read an order note to understand
+		 *   a failed payment, and this method's deliberate over-redaction
+		 *   would degrade it — so it is decided separately, not in
+		 *   passing.
+		 *
+		 * Nothing here ENFORCES any of this. A new log boundary that skips
+		 * this method fails nothing and says nothing, which is exactly how
+		 * the later fourteen survived #585. Ask it of every new `catch`
+		 * that logs: can this `\Throwable` have been thrown by somebody
+		 * else's code?
 		 *
 		 * Reuses {@see self::redact_secret_query_params()} — the same
 		 * `name=value` / `<name>value</name>` free-text scan

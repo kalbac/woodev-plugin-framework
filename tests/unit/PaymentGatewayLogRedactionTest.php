@@ -14,10 +14,17 @@
  *         catch of Exception.
  * Site 3: Woodev_Payment_Gateway_Payment_Tokens_Handler::remove_token()'s catch of
  *         Woodev_Plugin_Exception.
+ * Site 4: Woodev_Payment_Gateway::add_debug_message() — the INDIRECT sink, found by the
+ *         #594 critic after the re-sweep above had already declared the job finished. The
+ *         caller writes add_debug_message() and the WooCommerce logger is two frames
+ *         further down, so a grep for `error_log(` and a grep for `->log(` BOTH miss it.
+ *         Two catches hand it a foreign message: mark_order_as_failed() (called with one
+ *         caught by Woodev_Payment_Gateway_Hosted) and the token handler's get_tokens().
+ *         Redaction lives in add_debug_message() itself, so a later caller cannot forget.
  *
- * Both site 1 and site 2 also write the RAW (unredacted) exception message into a WC_Order
- * note — that is deliberate (shop staff need the real failure reason) and tracked separately;
- * this file does not touch or assert on that behavior.
+ * Sites 1, 2 and 4 also write the RAW (unredacted) exception message into a WC_Order note —
+ * that is deliberate (shop staff need the real failure reason), tracked on #608, and site 4's
+ * test asserts it explicitly so a later change to it is a visible choice, not a side effect.
  *
  * @package Woodev\Tests\Unit
  */
@@ -123,6 +130,49 @@ namespace {
 			 * @return void
 			 */
 			protected function do_invalid_transaction_response( $order, $response ) {}
+		}
+	}
+
+	/* ------------------------------------------------------------------- *
+	 * Site 4 test double — a bare concrete Woodev_Payment_Gateway.
+	 *
+	 * add_debug_message() and mark_order_as_failed() are inherited unchanged;
+	 * this exists only because the base class is abstract. Nothing about the
+	 * behaviour under test is overridden.
+	 * ------------------------------------------------------------------- */
+
+	if ( ! class_exists( 'Woodev_Test_Gateway_For_Debug_Message', false ) ) {
+		/**
+		 * Concrete gateway test double for the site 4 redaction tests.
+		 */
+		class Woodev_Test_Gateway_For_Debug_Message extends \Woodev_Payment_Gateway {
+
+			/**
+			 * Declared here because WC_Payment_Gateway owns `$id` in production and the
+			 * stub standing in for it in this suite declares no properties at all.
+			 *
+			 * @var string
+			 */
+			public $id;
+
+			/**
+			 * Skips the real constructor (settings/hooks bootstrap).
+			 */
+			public function __construct() {}
+
+			/**
+			 * @return array
+			 */
+			protected function get_method_form_fields(): array {
+				return [];
+			}
+
+			/**
+			 * @return string
+			 */
+			public function get_method_title() {
+				return 'Test Gateway';
+			}
 		}
 	}
 
@@ -459,6 +509,155 @@ namespace Woodev\Tests\Unit {
 
 			$this->assertFalse( $result );
 			$this->assertSame( $expected_log_line, $captured );
+		}
+
+		/* ----------------------------------------------------------------------- *
+		 * Site 4 — Woodev_Payment_Gateway::add_debug_message(), the INDIRECT sink.
+		 *
+		 * Found by the #594 critic after two sweeps had already declared the job
+		 * finished. It is a fourth spelling of "this text reaches the log": the
+		 * caller writes add_debug_message(), and the WooCommerce logger is two
+		 * frames further down, so a grep for `error_log(` and a grep for `->log(`
+		 * both miss it. Two catch blocks hand it a FOREIGN message —
+		 * Woodev_Payment_Gateway::mark_order_as_failed() (called with one caught by
+		 * Woodev_Payment_Gateway_Hosted) and the token handler's get_tokens().
+		 *
+		 * Redaction lives in add_debug_message() itself rather than at those two
+		 * call sites, so it is asserted there: it covers every present caller and
+		 * every future one.
+		 * ----------------------------------------------------------------------- */
+
+		/**
+		 * @return void
+		 */
+		public function test_add_debug_message_redacts_a_secret_before_the_logger(): void {
+			$this->assert_add_debug_message_logs(
+				'carrier rejected api_key=' . self::SECRET,
+				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK
+			);
+		}
+
+		/**
+		 * The control: a message with no secret reaches the logger byte-for-byte, so
+		 * the assertion above could not pass for a redactor that mangled or emptied
+		 * everything it was handed.
+		 *
+		 * @return void
+		 */
+		public function test_add_debug_message_leaves_a_message_without_a_secret_untouched(): void {
+			$this->assert_add_debug_message_logs( 'carrier unreachable', 'carrier unreachable' );
+		}
+
+		/**
+		 * mark_order_as_failed() is the path by which a foreign exception message
+		 * actually REACHES add_debug_message() in production: the hosted gateway's
+		 * catch hands it one. Driving it here proves the indirect route is closed,
+		 * not merely the method it ends in.
+		 *
+		 * The WC_Order note this also writes is asserted to keep the RAW message —
+		 * that is the deliberate, separately-tracked decision (#608), and pinning it
+		 * means a later change to it is a visible choice rather than a side effect.
+		 *
+		 * @return void
+		 */
+		public function test_mark_order_as_failed_redacts_the_log_but_not_the_order_note(): void {
+			$raw = 'carrier rejected api_key=' . self::SECRET;
+
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					),
+					'test-debug-gateway'
+				);
+
+			$notes = [];
+			$order = Mockery::mock();
+			$order->shouldReceive( 'has_status' )->with( 'failed' )->andReturn( true );
+			$order->shouldReceive( 'add_order_note' )->once()->with(
+				Mockery::on(
+					static function ( $note ) use ( &$notes ) {
+						$notes[] = $note;
+						return true;
+					}
+				)
+			);
+
+			$gateway = $this->debug_gateway( $plugin );
+
+			Functions\when( 'esc_html__' )->returnArg( 1 );
+			Functions\when( 'is_admin' )->justReturn( true );
+
+			$gateway->mark_order_as_failed( $order, $raw, null );
+
+			$this->assertSame(
+				'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+				$captured,
+				'the log must not carry the secret'
+			);
+			$this->assertCount( 1, $notes );
+			$this->assertStringContainsString(
+				$raw,
+				$notes[0],
+				'the order note deliberately keeps the raw message — see #608'
+			);
+		}
+
+		/**
+		 * Drives the real add_debug_message() with debug mode on LOG and asserts
+		 * what reached the plugin's logger.
+		 *
+		 * @param string $message  what the caller hands in.
+		 * @param string $expected what the logger must receive.
+		 * @return void
+		 */
+		private function assert_add_debug_message_logs( string $message, string $expected ): void {
+			$captured = null;
+			$plugin   = Mockery::mock();
+			$plugin->shouldReceive( 'log' )
+				->once()
+				->with(
+					Mockery::on(
+						static function ( $logged ) use ( &$captured ) {
+							$captured = $logged;
+							return true;
+						}
+					),
+					'test-debug-gateway'
+				);
+
+			$gateway = $this->debug_gateway( $plugin );
+
+			// The refund-notice guard reads this global unconditionally.
+			$GLOBALS['wp_current_filter'] = [];
+			Functions\when( 'is_admin' )->justReturn( true );
+
+			$gateway->add_debug_message( $message, 'error' );
+
+			$this->assertSame( $expected, $captured );
+		}
+
+		/**
+		 * A gateway in DEBUG_MODE_LOG whose plugin is the given capture mock.
+		 *
+		 * @param object $plugin the capturing plugin double.
+		 * @return \Woodev_Payment_Gateway
+		 */
+		private function debug_gateway( $plugin ): \Woodev_Payment_Gateway {
+			$gateway = new \Woodev_Test_Gateway_For_Debug_Message();
+
+			$gateway->id = 'test-debug-gateway';
+
+			$this->set_private( $gateway, 'debug_mode', \Woodev_Payment_Gateway::DEBUG_MODE_LOG );
+			$this->set_private( $gateway, 'plugin', $plugin );
+
+			return $gateway;
 		}
 
 		/* ----------------------------------------------------------------------- *
