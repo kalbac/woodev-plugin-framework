@@ -692,9 +692,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			 * checks for, on top of the default list and any names the
 			 * caller passed directly via $extra_secret_names.
 			 *
-			 * The return value is validated, not trusted: a non-array return,
-			 * or an array whose members are not all strings, degrades to the
-			 * default secret-name list rather than throwing or disabling
+			 * The return value is validated, not trusted: a non-array return
+			 * is dropped entirely, and within an array each member survives
+			 * only if it is a `string` AND its canonicalized form (see
+			 * {@see self::canonicalize_secret_param_name()}) is non-empty —
+			 * a non-string member, `''`, whitespace-only, or a name made
+			 * entirely of characters canonicalization strips (e.g. `'---'`)
+			 * is just as unusable as a non-string and is dropped the same
+			 * way. If nothing usable survives, the whole return degrades to
+			 * the default secret-name list rather than throwing or disabling
 			 * redaction — see {@see Woodev_API_Base::redact_secret_log_text()}'s
 			 * own docblock.
 			 *
@@ -724,23 +730,40 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		/**
 		 * Filters $names down to entries safely usable as a secret param
-		 * name, dropping anything that is not actually a `string` — an
-		 * array, an object, `null`, a resource — rather than letting it
-		 * reach {@see self::canonicalize_secret_param_name()} and throw a
-		 * `\TypeError`. Both {@see self::redact_secret_log_text()}'s
-		 * $extra_secret_names parameter and the
-		 * `woodev_api_log_text_secret_param_names` filter it runs are
-		 * caller-supplied (one from PHP code, one from a plugin hook) and
-		 * either can hand back a malformed member — a logging call must
-		 * never fatal on that (#585 critic round 2).
+		 * name. Drops anything that is not actually a `string` — an array,
+		 * an object, `null`, a resource — rather than letting it reach
+		 * {@see self::canonicalize_secret_param_name()} and throw a
+		 * `\TypeError`, AND drops any string whose canonicalized form is
+		 * empty (`''`, whitespace-only, or made entirely of characters
+		 * canonicalization strips, e.g. `'---'`) — such a name can never
+		 * match a real query param/header/tag, so keeping it around is
+		 * indistinguishable from silently discarding the whole list: it
+		 * masks the `[] === $secret_names` check in
+		 * {@see self::redact_secret_log_text()} that exists specifically to
+		 * fall back to the default denylist, so redaction runs against a
+		 * list that matches nothing and the secret goes to the log raw
+		 * (#585 critic round 3). Usability is decided AFTER
+		 * canonicalization, not before.
+		 *
+		 * Both {@see self::redact_secret_log_text()}'s $extra_secret_names
+		 * parameter and the `woodev_api_log_text_secret_param_names` filter
+		 * it runs are caller-supplied (one from PHP code, one from a plugin
+		 * hook) and either can hand back a malformed or unusable member.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<int|string, mixed> $names candidate secret param names, possibly malformed.
+		 * @param array<int|string, mixed> $names candidate secret param names, possibly malformed or unusable.
 		 * @return array<int, string>
 		 */
 		private static function sanitize_secret_names( array $names ): array {
-			return array_values( array_filter( $names, 'is_string' ) );
+			return array_values(
+				array_filter(
+					array_filter( $names, 'is_string' ),
+					static function ( string $name ): bool {
+						return '' !== self::canonicalize_secret_param_name( $name );
+					}
+				)
+			);
 		}
 
 		/**

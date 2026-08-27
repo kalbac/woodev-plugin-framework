@@ -223,6 +223,85 @@ final class ApiBaseLogTextRedactionTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// BLOCKING (#585 critic round 3) — a canonically-empty name ('', '   ',
+	// '---') survives `is_string` and made the filter's return NON-empty,
+	// which meant the `[] === $secret_names` fallback to the default list
+	// never fired: the filter's own `['']` "won" over the defaults, and
+	// nothing in that list could ever match a real param name, so the
+	// secret went to the log raw. Usability is now decided AFTER
+	// canonicalization, not before.
+	// -------------------------------------------------------------------------
+
+	public function test_a_filter_returning_only_an_empty_string_falls_back_to_defaults_and_still_redacts(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				if ( 'woodev_api_log_text_secret_param_names' === $tag ) {
+					return [ '' ];
+				}
+				return $value;
+			}
+		);
+
+		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
+
+		$this->assertSame(
+			'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$result,
+			'a filter returning only a canonically-empty name must fall back to the default list, never leak raw'
+		);
+	}
+
+	public function test_a_filter_returning_only_a_whitespace_only_string_falls_back_to_defaults_and_still_redacts(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				if ( 'woodev_api_log_text_secret_param_names' === $tag ) {
+					return [ '   ' ];
+				}
+				return $value;
+			}
+		);
+
+		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
+
+		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+	}
+
+	public function test_a_filter_returning_only_a_separators_only_string_falls_back_to_defaults_and_still_redacts(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				if ( 'woodev_api_log_text_secret_param_names' === $tag ) {
+					return [ '---' ];
+				}
+				return $value;
+			}
+		);
+
+		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected api_key=' . self::SECRET );
+
+		$this->assertSame( 'carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+	}
+
+	/**
+	 * The over-correction guard: a filter mixing a canonically-empty member
+	 * WITH a real extra name must still apply that real name — dropping
+	 * unusable members must not turn into ignoring the whole filter return.
+	 */
+	public function test_a_filter_mixing_an_empty_name_with_a_real_extra_name_still_applies_the_real_name(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $tag, $value = null ) {
+				if ( 'woodev_api_log_text_secret_param_names' === $tag ) {
+					return [ '', 'dadata_key' ];
+				}
+				return $value;
+			}
+		);
+
+		$result = \Woodev_API_Base::redact_secret_log_text( 'carrier rejected dadata_key=' . self::SECRET );
+
+		$this->assertSame( 'carrier rejected dadata_key=' . \Woodev_API_Base::SECRET_VALUE_MASK, $result );
+	}
+
+	// -------------------------------------------------------------------------
 	// Pinned COVERAGE — the two shapes the scan DOES catch, exact rendered
 	// output. Both cases the critic confirmed ARE redacted.
 	// -------------------------------------------------------------------------
