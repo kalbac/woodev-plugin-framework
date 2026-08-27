@@ -123,7 +123,16 @@ class SettingsSectionTest extends TestCase {
 		$section    = $reflection->newInstanceWithoutConstructor();
 
 		foreach ( [ 'id' => 'tools', 'label' => 'Инструменты', 'setting_ids' => [], 'description' => '', 'is_connection' => false, 'action_label' => '', 'is_tools' => true, 'tools' => [ $conforming, 'not-a-tool' ] ] as $property => $value ) {
-			$reflection->getProperty( $property )->setValue( $section, $value );
+			$handle = $reflection->getProperty( $property );
+
+			// Required below PHP 8.1, a deprecated no-op from 8.5. CI runs 7.4 through 8.3, and
+			// omitting it passed locally on 8.x while failing both lower jobs with
+			// `ReflectionException: Cannot access non-public member`.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$handle->setAccessible( true );
+			}
+
+			$handle->setValue( $section, $value );
 		}
 
 		$this->assertTrue( $section->is_tools() );
@@ -141,7 +150,16 @@ class SettingsSectionTest extends TestCase {
 		$section    = $reflection->newInstanceWithoutConstructor();
 
 		foreach ( [ 'id' => 'tools', 'label' => 'Инструменты', 'setting_ids' => [], 'description' => '', 'is_connection' => false, 'action_label' => '', 'is_tools' => true, 'tools' => [ $first, $second ] ] as $property => $value ) {
-			$reflection->getProperty( $property )->setValue( $section, $value );
+			$handle = $reflection->getProperty( $property );
+
+			// Required below PHP 8.1, a deprecated no-op from 8.5. CI runs 7.4 through 8.3, and
+			// omitting it passed locally on 8.x while failing both lower jobs with
+			// `ReflectionException: Cannot access non-public member`.
+			if ( PHP_VERSION_ID < 80100 ) {
+				$handle->setAccessible( true );
+			}
+
+			$handle->setValue( $section, $value );
 		}
 
 		$this->assertSame( [ $first, $second ], $section->get_tools() );
