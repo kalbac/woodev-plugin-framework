@@ -1299,6 +1299,69 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		// -------------------------------------------------------------------
+		// resolve_geoip_default() country reconciliation — issue #587
+		//
+		// A located record whose own country disagrees with
+		// resolve_default_country() is refused (null), deliberately, instead
+		// of being silently caught two layers away by
+		// is_customer_record_stale() rule (b).
+		// -------------------------------------------------------------------
+
+		public function test_policy_geoip_record_matching_the_default_country_is_returned(): void {
+			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'RU' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service  = $this->service( $registry );
+			$resolved = $service->resolve_default();
+
+			$this->assertNotNull( $resolved, 'the store base location is RU (setUp) and the record is RU — no disagreement' );
+			$this->assertSame( 'geo:by-ip', $resolved->key() );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_policy_geoip_record_whose_country_disagrees_with_the_default_is_refused(): void {
+			// setUp() stubs wc_get_base_location() to RU, so resolve_default_country()
+			// answers RU — a BY-located record disagrees with that authority.
+			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'BY' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$this->assertNull(
+				$service->resolve_default(),
+				'a geoip hit outside resolve_default_country() must be refused, not returned'
+			);
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_policy_geoip_locate_miss_still_resolves_to_null(): void {
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => null );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$service = $this->service( $registry );
+
+			$this->assertNull( $service->resolve_default(), 'no located record at all is unchanged: null' );
+
+			\WC_Geolocation::$address = null;
+		}
+
+		// -------------------------------------------------------------------
 		// promote_customer_record_to_explicit() — issue #518
 		//
 		// A confirmed pickup point answers the "please choose your locality"

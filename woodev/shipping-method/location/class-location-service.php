@@ -1422,7 +1422,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * An unresolvable IP resolves to `null` the same way every other
 		 * `locate()` miss does — see that method's own docblock.
 		 *
+		 * A located record whose own {@see Location_Record::country()} disagrees
+		 * with {@see self::resolve_default_country()} is refused (#587): `null`,
+		 * deliberately. `resolve_default_country()` is this layer's OWN authority
+		 * on "which country the customer is in" — a geoip hit that lands outside
+		 * it names a country this layer does not believe the customer is in, and
+		 * is not usable as the default locality regardless of what the provider
+		 * says. Before this change the same refusal happened anyway, but silently
+		 * and two layers away: {@see self::is_customer_record_stale()} rule (b)
+		 * compares a stored record's country against the ambient customer
+		 * country and reads a mismatch as stale, i.e. absent. This method now
+		 * states that rule at the one place that actually decides it, instead of
+		 * leaving it an emergent side effect of the staleness gate.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Refuses a located record whose country disagrees with
+		 *              {@see self::resolve_default_country()} (#587) — the same
+		 *              refusal {@see self::is_customer_record_stale()} rule (b)
+		 *              used to produce silently.
 		 *
 		 * @return Location_Record|null
 		 */
@@ -1437,7 +1454,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			return $this->locate( $ip );
+			$record = $this->locate( $ip );
+
+			if ( null === $record ) {
+				return null;
+			}
+
+			if ( $record->country() !== $this->resolve_default_country() ) {
+				return null;
+			}
+
+			return $record;
 		}
 
 		/**
