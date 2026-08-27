@@ -596,6 +596,78 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			);
 		}
 
+
+		/**
+		 * Redacts a known secret param name out of arbitrary FREE-FORM log
+		 * text — an exception message, a diagnostic context string — for a
+		 * caller that has no {@see Woodev_API_Base} instance to reach
+		 * {@see self::redact_secret_query_params()} through, and may never
+		 * have one at all.
+		 *
+		 * {@see self::handle_response()} redacts everything this class itself
+		 * derives from a response, AT THE POINT it is assigned (#451), but
+		 * that only covers text `Woodev_API_Base` builds. A `Point_Source` /
+		 * carrier client is a plugin EXTENSION SEAM: it is free to throw any
+		 * `\Throwable` of its own, built from a live third-party SDK this
+		 * class never sees, and that message can reach a log boundary —
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::log_carrier_failure()},
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::log_carrier_failure()},
+		 * {@see Woodev_Plugin_Updater::get_version_from_remote()} — without
+		 * ever passing through this class at all (#585). This is the ONE
+		 * seam those boundaries (and any future one) route through, instead
+		 * of each hand-redacting the same free text independently.
+		 *
+		 * Reuses {@see self::redact_secret_query_params()} — the same
+		 * `name=value` / `<name>value</name>` free-text scan
+		 * {@see self::handle_response()} already runs over a
+		 * transport-thrown `WP_Error` message — so there is exactly ONE
+		 * implementation of "scan free text for a secret name" in this
+		 * codebase, never a second one duplicated for exception text.
+		 *
+		 * $extra_secret_names is merged with
+		 * {@see self::get_default_secret_param_names()} before redaction, and
+		 * the merged list can be extended further through the
+		 * {@see 'woodev_api_log_text_secret_param_names'} filter — a plugin
+		 * author whose own carrier uses an uncommon credential name can add
+		 * it there once, rather than passing $extra_secret_names at every
+		 * call site.
+		 *
+		 * This is DEFENCE IN DEPTH over an OPEN list of boundaries — a new
+		 * call site can always be added later and forget to route through
+		 * this — and an OPEN set of secret names (see
+		 * {@see self::get_default_secret_param_names()}'s own docblock for
+		 * the same caveat), NOT a guarantee that every credential a foreign
+		 * exception carries is masked.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string             $text               free-form text to redact — typically a caught `\Throwable`'s `getMessage()`.
+		 * @param array<int, string> $extra_secret_names additional secret param names, beyond the default list, to also redact.
+		 * @return string
+		 */
+		public static function redact_secret_log_text( string $text, array $extra_secret_names = [] ): string {
+
+			$secret_names = array_merge( self::get_default_secret_param_names(), $extra_secret_names );
+
+			/**
+			 * Filters the secret param names {@see Woodev_API_Base::redact_secret_log_text()}
+			 * checks for, on top of the default list and any names the
+			 * caller passed directly via $extra_secret_names.
+			 *
+			 * A plugin author whose carrier client uses an uncommon
+			 * credential name can add it here so every call site benefits,
+			 * instead of passing $extra_secret_names at each one.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<int, string> $secret_names the names to redact; defaults plus $extra_secret_names.
+			 * @param string             $text         the text about to be redacted.
+			 */
+			$secret_names = (array) apply_filters( 'woodev_api_log_text_secret_param_names', $secret_names, $text );
+
+			return self::redact_secret_query_params( $text, array_unique( $secret_names ) );
+		}
+
 		/**
 		 * Redacts a `path?query` or full URI string by PARSING its query string
 		 * structurally, instead of scanning the text with a regex — the fix for

@@ -1117,7 +1117,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * rather than letting the carrier's (fake, but credential-shaped) message reach
 		 * the real test-suite stderr.
 		 *
+		 * `$e->getMessage()` is routed through {@see \Woodev_API_Base::redact_secret_log_text()}
+		 * before it is logged: `$e` came out of `Point_Source::fetch_details()`, a
+		 * plugin extension seam wrapping a live third-party carrier client, so its
+		 * message may never have passed through `Woodev_API_Base`'s own redaction at
+		 * all — see that method's docblock for why this is defence in depth, not a
+		 * guarantee (#585).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 the exception message is redacted through
+		 *              {@see \Woodev_API_Base::redact_secret_log_text()} before it is
+		 *              logged — #585.
 		 *
 		 * @param \Woodev_API_Exception $e       the caught carrier exception.
 		 * @param string                $context short description of the failing call.
@@ -1132,7 +1142,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 					'[woodev] pickup %s failed for plugin "%s": %s',
 					$context,
 					$this->plugin_id,
-					$e->getMessage()
+					\Woodev_API_Base::redact_secret_log_text( $e->getMessage() )
 				)
 			);
 		}

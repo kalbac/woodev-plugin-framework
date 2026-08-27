@@ -2947,7 +2947,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * outage apart from an unexpected error — a merchant reading the log needs to know
 		 * whether to blame the carrier or file a plugin bug.
 		 *
+		 * `$e->getMessage()` is routed through {@see \Woodev_API_Base::redact_secret_log_text()}
+		 * before it is logged: whichever `\Throwable` this is, its message may never
+		 * have passed through `Woodev_API_Base`'s own redaction at all — see that
+		 * method's docblock for why this is defence in depth, not a guarantee (#585).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 the exception message is redacted through
+		 *              {@see \Woodev_API_Base::redact_secret_log_text()} before it is
+		 *              logged — #585.
 		 *
 		 * @param \Throwable $e       the caught exception.
 		 * @param string     $context short description of the failing call.
@@ -2965,7 +2973,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					$context,
 					$this->plugin_id,
 					$kind,
-					$e->getMessage()
+					\Woodev_API_Base::redact_secret_log_text( $e->getMessage() )
 				)
 			);
 		}

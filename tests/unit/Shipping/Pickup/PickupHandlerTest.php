@@ -3997,6 +3997,72 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$handler->validate_posted_point( 'P1', 'bacs', 0 );
 		}
 
+		/**
+		 * A foreign `\Throwable` — one that never passed through `Woodev_API_Base`
+		 * at all — carrying a secret must have it redacted before it reaches
+		 * `error_log()`, through {@see \Woodev_API_Base::redact_secret_log_text()}
+		 * (#585).
+		 */
+		public function test_log_carrier_failure_redacts_a_secret_in_a_foreign_exception_message(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					\Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_throwing( new \Woodev_API_Exception( 'carrier rejected api_key=LIVESECRET' ) ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+			$handler->validate_posted_point( 'P1', 'bacs', 0 );
+
+			$this->assertStringNotContainsString( 'LIVESECRET', (string) $captured );
+			$this->assertStringContainsString( \Woodev_API_Base::SECRET_VALUE_MASK, (string) $captured );
+		}
+
+		/**
+		 * Control: an exception message carrying NO secret must reach `error_log()`
+		 * byte-for-byte. Without this control, a redactor that blanked the whole
+		 * message would pass the test above too.
+		 */
+		public function test_log_carrier_failure_leaves_a_message_without_a_secret_untouched(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$captured = null;
+			Functions\expect( 'error_log' )
+				->once()
+				->with(
+					\Mockery::on(
+						static function ( $message ) use ( &$captured ) {
+							$captured = $message;
+							return true;
+						}
+					)
+				);
+
+			$handler = new Pickup_Handler(
+				'p',
+				'f',
+				$this->source_throwing( new \Woodev_API_Exception( 'carrier unreachable' ) ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+			$handler->validate_posted_point( 'P1', 'bacs', 0 );
+
+			$this->assertStringContainsString( 'carrier unreachable', (string) $captured );
+		}
+
 		// -------------------------------------------------------------------------
 		// fetch memoization — only one carrier call per point id, per instance
 		// -------------------------------------------------------------------------
