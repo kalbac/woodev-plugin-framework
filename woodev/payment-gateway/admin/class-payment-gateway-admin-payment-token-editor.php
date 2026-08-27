@@ -131,6 +131,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			$columns = $this->get_columns();
 			$actions = $this->get_actions();
 
+			// Issue #393: the view prints this as a hidden input, so a POST can tell "this
+			// editor was on the form" from "this editor was never rendered".
+			$rendered_marker_name = $this->get_rendered_marker_name();
+
 			include $this->get_gateway()->get_plugin()->get_payment_gateway_framework_path() . '/admin/views/html-user-payment-token-editor.php';
 		}
 
@@ -161,11 +165,49 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 
 
 		/**
+		 * The hidden input name that marks this editor as having been RENDERED (issue #393).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_rendered_marker_name() {
+			return $this->get_input_name() . '_rendered';
+		}
+
+		/**
 		 * Save the token editor.
+		 *
+		 * DOES NOTHING WHEN THIS EDITOR WAS NOT ON THE SUBMITTED FORM (issue #393).
+		 *
+		 * The data loss this prevents: `Admin_User_Handler::display_token_editors()` SKIPS an
+		 * editor whose gateway supports a customer id when the customer has none saved yet
+		 * (`continue`), while `save_tokens()` calls this method on EVERY registered editor
+		 * unconditionally. This method then read a missing `$_POST` section as `array()` and
+		 * handed it to `update_tokens()` — which reads an empty array as "the admin removed
+		 * every token". So opening such a customer's profile and pressing «Обновить
+		 * пользователя» for any unrelated reason, a display-name typo included, deleted every
+		 * saved card they had with that gateway. The same happened on any
+		 * `edit_user_profile_update` / `personal_options_update` fired without token fields.
+		 *
+		 * A MARKER IS REQUIRED BECAUSE ABSENCE IS AMBIGUOUS, and this is the whole reason the
+		 * fix is not a one-line `isset()` guard on the tokens key. An editor rendered with
+		 * ZERO rows posts no token inputs either — identical to one never rendered — so
+		 * "no tokens key" cannot distinguish "the admin deleted the last card" (which must
+		 * persist) from "this table was skipped" (which must not touch anything). The hidden
+		 * marker the view prints answers exactly that question and nothing else.
+		 *
+		 * Permissions are not the issue here and never were: `save_profile_fields()` is
+		 * correctly gated on `manage_woocommerce`. This is data loss, not an access hole.
 		 *
 		 * @param int $user_id the user ID
 		 */
 		public function save( $user_id ) {
+
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified by save_profile_fields(), this method's only caller.
+			if ( ! isset( $_POST[ $this->get_rendered_marker_name() ] ) ) {
+				return;
+			}
 
 			$tokens = ( isset( $_POST[ $this->get_input_name() ] ) ) ? $_POST[ $this->get_input_name() ] : array();
 
