@@ -29,11 +29,13 @@
     },
     "autoload": {
         "classmap": [
+            "woodev/account",
             "woodev/admin",
             "woodev/api",
             "woodev/box-packer",
             "woodev/box-packer/interfaces",
             "woodev/compatibility",
+            "woodev/competitor",
             "woodev/handlers",
             "woodev/http",
             "woodev/licensing",
@@ -71,7 +73,11 @@
         "psr-4": {
             "Woodev\\Tests\\Unit\\": "tests/unit/",
             "Woodev\\Tests\\Integration\\": "tests/integration/"
-        }
+        },
+        "exclude-from-classmap": [
+            "tests/unit/Shipping/Rest_Api/wc-geolocation-stub.php",
+            "tests/unit/Shipping/Rest_Api/wp-rest-controller-stub.php"
+        ]
     },
     "scripts": {
         "phpcs":       "./vendor/bin/phpcs",
