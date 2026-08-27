@@ -41,6 +41,39 @@ why each of these fixtures exists and what breaks if it is removed.
 
 - **dev `:8973` — LIVE YANDEX bulk ON.** `WOODEV_TEST_PICKUP_LIVE_YANDEX=1` wins over `WOODEV_TEST_PICKUP_LIVE_POCHTA=false` and `WOODEV_TEST_PICKUP_STRATEGY=viewport`; the rig serves 812 live Yandex points (Moscow). The DaData token and `clean_secret` are both configured. Fixture is active only when both live flags are false. `WOODEV_TEST_POCHTA_ACCOUNT_ID` / `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` (operator-supplied Отправка credentials — never committed) let `WOODEV_TEST_PICKUP_EMBEDDED=1` drive the live Почта widget; that switch is currently OFF.
 
+## Why the location axes are set the way they are
+
+**The values themselves live in [../CURRENT-STATE.md](../CURRENT-STATE.md), read off the
+container. This section is only the WHY**, moved here from that file in s101 when it outgrew its
+budget.
+
+The combination left as of 24.08.2026 is **not** the historical default. It is provider
+`test-cdek`, region axis «Предустановленный список» (`related-list`), settlement axis «Список с
+поиском» (`ajax-select2`) — set deliberately so the operator can exercise the
+region-preset + settlement-search pairing, which had never been run live before. The options are
+`woodev_location_active_provider`, `woodev_location_field_mode_region`,
+`woodev_location_field_mode_settlement`.
+
+Two further values were MEASURED on 26.08.2026 because the s93 handoff had them wrong:
+`woodev_location_default_locality_policy` = `fixed` («Москва», `test-cdek:44`) and
+`woodev_location_allow_custom_settlement` = `no`. That second one matters in a specific way: with
+it `no`, #528's tag row is correctly ABSENT on the rig — and it was read as a regression once
+before anyone checked the option. **Read the option, never a doc, before calling a missing tag row
+a bug.**
+
+### Switching back to the older default
+
+The older default is provider `dadata` with BOTH axes on `ajax-select2`. Two consequences, both
+by design:
+
+- **DaData structurally cannot offer `related-list`** — it is a capability it does not have — so
+  switching the provider back silently removes «Предустановленный список» from the region select
+  as well.
+- A customer record whose level the new provider does not own reads as **ABSENT** (s78): the
+  chain empties and the address field locks until the customer re-picks. The record is NOT
+  deleted — restoring the provider brings it straight back (verified). If a rig session suddenly
+  "loses" its locality, check the active provider before suspecting a bug.
+
 ## Related
 
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — the rig's current values

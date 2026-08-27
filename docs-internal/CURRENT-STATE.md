@@ -22,8 +22,8 @@ log, which reads as a red build) live on card **#583** and in gotcha
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s101):**
-`composer check` **3059** / 7375 / **66 skipped**. Every step reconciles: 3025 at the start of
-s101, +1 (#607's dev-autoloader gate), +31 (#611's redaction tests), +2 (#616) = 3059. Compare SKIPPED,
+`composer check` **3071** / 7388 / **66 skipped**. Every step reconciles: 3025 at the start of
+s101, +1 (#607), +31 (#611), +2 (#616), +12 (#619) = 3071. Compare SKIPPED,
 always: 66 is the primary's number, and a worktree that skips more has silently run fewer
 contract guards.
 
@@ -220,11 +220,14 @@ oversight.
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
 27.08.2026 — история на **#583**.
 
-1. **#606** — юнит-суита зелёная по алфавитной случайности; `--order-by=reverse` на `main` даёт
+1. **#613, транш 2** — триаж оператор дал (граница как есть, `is_available` → HARMLESS), транш 1
+   отгружен в **PR #619** (шесть мест, где цену платит покупатель). Осталось **~36 FATAL и 8
+   DISABLES** на админских и фоновых путях — вопросов к оператору там нет. Отдельно ждёт его
+   слова `payment-tokens-handler.php:700`: предложенная в отчёте правка НЕВЕРНА (ключ по
+   умолчанию — md5-хеш, проверка `str_contains($user_id)` отвергала бы свой же ключ).
+2. **#606** — юнит-суита зелёная по алфавитной случайности; `--order-by=reverse` на `main` даёт
    55 падений. Порядок работ внутри карточки: снять зависимость от порядка → гейт → и только
    потом переименовать `tests/unit/handlers/`. Не-UI, мержится само.
-2. **#613** — 49 мест из аудита #599 (40 FATAL + 9 DISABLES). **Сначала триаж**, потом правки;
-   две развилки внутри — оператора. Чекаутные пути и `payment-tokens-handler.php:700` первыми.
 3. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
    m6 и T3 закрыты в s98 (#563).
 4. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
@@ -273,24 +276,13 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
   enough because a stored customer location survives): gotcha
   `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
 
-- **Rig location config, the state to RESTORE to (left as of 24.08.2026) — NOT the historical
-  default.** Provider
-  **`test-cdek`**; region axis **«Предустановленный список»** (`related-list`); settlement axis
-  **«Список с поиском»** (`ajax-select2`). Set deliberately so the operator can exercise the
-  region-preset + settlement-search combination, which had never been run live. Options:
-  `woodev_location_active_provider`, `woodev_location_field_mode_region`,
-  `woodev_location_field_mode_settlement`. **Also measured 26.08.2026, because the s93 handoff had
-  it wrong: `woodev_location_default_locality_policy` = `fixed` («Москва», `test-cdek:44`) and
-  `woodev_location_allow_custom_settlement` = `no`.** The handoff records that second option as
-  `yes`; it is not, so #528's tag row is correctly ABSENT on the rig — read as a regression once
-  before it was checked. Read the option, never a doc, before calling a missing tag row a bug.
-  Back to the older default: provider `dadata` and both
-  axes `ajax-select2`. Note **DaData can never offer `related-list`** — the capability it
-  structurally cannot have — so switching the provider back silently removes «Предустановленный
-  список» from the region select too. Switching the provider also makes a customer record whose
-  level the new provider does not own read as ABSENT (by design, s78): the chain empties and the
-  address locks until re-picked.
-- **Switching the provider now has a visible consequence** (s78, by design): a customer record from the provider that no longer owns its level reads as ABSENT, so the chain empties and the address field locks until the customer re-picks. The record is NOT deleted — restoring the provider brings it straight back (verified). If a rig session suddenly "loses" its locality, check the active provider before suspecting a bug.
+- **The option VALUES the rig must be restored to are the table above** — read them off the
+  container, never off a doc (the s93 handoff had two of them wrong, and a correctly-absent
+  #528 tag row was read as a regression once because of it). Why each value is set the way it
+  is, and what changes when the provider is switched back to `dadata`: [wiki/local-rig.md](wiki/local-rig.md).
+  One consequence worth knowing before you switch anything: **DaData structurally cannot offer
+  `related-list`**, so moving the provider back silently removes «Предустановленный список» from
+  the region select.
 - **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
