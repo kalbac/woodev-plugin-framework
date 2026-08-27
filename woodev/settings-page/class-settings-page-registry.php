@@ -528,6 +528,32 @@ final class Settings_Page_Registry {
 	/**
 	 * Redirects a provider's legacy settings URL to its new tab.
 	 *
+	 * MATCHES ON PARSED QUERY ARGUMENTS, NOT ON A SUBSTRING (issue #396). This used to ask
+	 * `strpos( $request_uri, $legacy_page )`, with `$legacy_page` an arbitrary string supplied
+	 * by the provider and `$request_uri` the whole URI including its query. Two things went
+	 * wrong with that, and both are reachable with the shapes providers actually register:
+	 *
+	 * 1. A REDIRECT LOOP. A provider whose id appears inside its own legacy string — `cdek`
+	 *    with `legacy_page` containing `cdek` — produces a target URL,
+	 *    `admin.php?page=woodev-settings&tab=cdek`, that ALSO contains the needle. The next
+	 *    request matched again, redirected again, and the tab became unreachable behind the
+	 *    browser's "too many redirects".
+	 * 2. THE WRONG PROVIDER'S TAB, or a page belonging to nobody here. `shipping` is a prefix
+	 *    of `shipping-pro`, so the narrower provider's legacy page matched the broader one
+	 *    first. And any unrelated admin URL merely CONTAINING the slug was hijacked —
+	 *    `admin.php?page=wc-status&tab=logs&log_file=cdek-2026-08-20.log` is the card's own
+	 *    example, and it is a real URL a merchant reaches by clicking a log file.
+	 *
+	 * The match is now: every argument the provider declared must be present in the request
+	 * with the SAME value. Order-independent, extra request arguments are ignored (a legacy
+	 * URL carrying `&paged=2` still redirects), and a value can no longer match a fragment of
+	 * an unrelated one.
+	 *
+	 * The loop is closed from the other end too, and separately: a request already on
+	 * {@see self::PAGE_SLUG} returns immediately. That is belt-and-braces rather than the
+	 * fix — the argument match alone stops case 1 — but a redirect loop is the failure that
+	 * locks a merchant out of the page entirely, so it is worth two guards.
+	 *
 	 * @internal
 	 *
 	 * @since 2.0.2
@@ -545,6 +571,13 @@ final class Settings_Page_Registry {
 			return;
 		}
 
+		$request_args = self::parse_admin_query( (string) wp_parse_url( $request_uri, PHP_URL_QUERY ) );
+
+		// Never redirect away from the destination — see the docblock's second guard.
+		if ( isset( $request_args['page'] ) && self::PAGE_SLUG === $request_args['page'] ) {
+			return;
+		}
+
 		foreach ( $this->collect_entries() as $entry ) {
 			$provider    = $entry['provider'];
 			$legacy_page = $provider->get_legacy_page();
@@ -553,7 +586,14 @@ final class Settings_Page_Registry {
 				continue;
 			}
 
-			if ( false === strpos( $request_uri, $legacy_page ) ) {
+			$expected = self::parse_admin_query( $legacy_page );
+
+			// A declaration that parses to nothing must never match everything.
+			if ( [] === $expected ) {
+				continue;
+			}
+
+			if ( ! self::query_matches( $request_args, $expected ) ) {
 				continue;
 			}
 
@@ -567,6 +607,69 @@ final class Settings_Page_Registry {
 			);
 			exit;
 		}
+	}
+
+	/**
+	 * Parses an admin query string into `arg => value`.
+	 *
+	 * Handles the shape providers actually register, in which the leading segment is the PAGE
+	 * VALUE with no `page=` in front of it — `wc-settings&tab=shipping&section=quarry` means
+	 * `admin.php?page=wc-settings&tab=shipping&section=quarry`. `parse_str()` alone reads that
+	 * first segment as an empty-valued argument named `wc-settings`, which matches nothing.
+	 * Both the request side and the declaration side go through this one function, so the two
+	 * cannot disagree about it.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string $query query string, with or without a leading `?`.
+	 * @return array<string, string>
+	 */
+	private static function parse_admin_query( string $query ): array {
+		$query = ltrim( $query, '?' );
+
+		if ( '' === $query ) {
+			return [];
+		}
+
+		$segments = explode( '&', $query );
+
+		if ( isset( $segments[0] ) && false === strpos( $segments[0], '=' ) && '' !== $segments[0] ) {
+			$segments[0] = 'page=' . $segments[0];
+		}
+
+		$parsed = [];
+		parse_str( implode( '&', $segments ), $parsed );
+
+		$args = [];
+		foreach ( $parsed as $key => $value ) {
+			if ( is_scalar( $value ) ) {
+				$args[ (string) $key ] = (string) $value;
+			}
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Whether every declared argument is present in the request with the same value.
+	 *
+	 * SUBSET, not equality: a legacy URL carrying extra arguments the provider never declared
+	 * (`&paged=2`, `&_wpnonce=…`) is still that legacy page and must still redirect.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param array<string, string> $request  parsed request arguments.
+	 * @param array<string, string> $expected parsed declaration.
+	 * @return bool
+	 */
+	private static function query_matches( array $request, array $expected ): bool {
+		foreach ( $expected as $key => $value ) {
+			if ( ! isset( $request[ $key ] ) || $request[ $key ] !== $value ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
