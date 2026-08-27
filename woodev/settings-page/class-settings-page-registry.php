@@ -190,22 +190,14 @@ final class Settings_Page_Registry {
 				$entry['is_tools'] = true;
 				$entry['tools']    = [];
 
-				// Never `to_array()`-adjacent shortcuts here — the callback lives only
-				// on Shipping_Tool itself, and to_array() is the one place that omits
-				// it. A non-conforming entry is rejected the same way the FILTER_TOOLS
-				// filter door rejects one (Shipping_Tools_Registry::collect()) — a
-				// fatal here would take down the whole settings page for every tab,
-				// not just this section's tools.
+				// No instanceof gate here any more (#514 m6): Settings_Section::create_tools()
+				// is the only door into an is_tools section and it drops non-conforming
+				// entries itself, so get_tools() cannot carry one by the time this runs. The
+				// guard used to live here and NOT on the other consumer of the same array
+				// (Woodev_REST_API_Settings_Page::run_tool()), which is what moving it to the
+				// constructor fixes — one validation point closes both readers, instead of
+				// each of them re-asking and one of them forgetting to.
 				foreach ( $section->get_tools() as $tool ) {
-					if ( ! $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
-						_doing_it_wrong(
-							__METHOD__,
-							'A Settings_Section tools entry does not implement Shipping_Tool; it was ignored.',
-							'2.0.2'
-						);
-						continue;
-					}
-
 					$entry['tools'][] = $tool->to_array();
 				}
 			}

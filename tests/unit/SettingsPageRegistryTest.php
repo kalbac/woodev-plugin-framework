@@ -161,7 +161,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -185,7 +185,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'shipping',
 			'Доставка',
 			$handler,
-			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $tool ] ) ]
+			[ Settings_Section::create_tools( 'tools', 'Инструменты', [ $tool ] ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -220,12 +220,20 @@ class SettingsPageRegistryTest extends TestCase {
 	}
 
 	/**
-	 * m3: the direct-construction door guards the same way the FILTER_TOOLS
-	 * filter door does (Shipping_Tools_Registry::collect()) — a non-conforming
-	 * entry is rejected and logged, the rest of the list still registers,
+	 * m3, moved to its final home in #514 m6: the direct-construction door guards the same
+	 * way the FILTER_TOOLS filter door does (Shipping_Tools_Registry::collect()) — a
+	 * non-conforming entry is rejected and logged, the rest of the list still registers,
 	 * rather than a page-wide fatal on `$tool->to_array()`.
+	 *
+	 * The rejection now happens inside Settings_Section::create_tools() rather than in this
+	 * loop, so this test pins the END-TO-END consequence: whatever a caller passes, what
+	 * build_sections() emits carries only conforming tools. The gate's own behaviour is
+	 * pinned at its own door in SettingsSectionTest.
 	 */
 	public function test_build_sections_rejects_a_non_conforming_tool_entry(): void {
+		// Raised by create_tools() below, not by build_sections() — the point of the move.
+		Functions\expect( '_doing_it_wrong' )->once();
+
 		$handler   = $this->make_connection_handler();
 		$conforming = Shipping_Tool::create(
 			'sweep',
@@ -238,10 +246,8 @@ class SettingsPageRegistryTest extends TestCase {
 			'shipping',
 			'Доставка',
 			$handler,
-			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $conforming, 'not-a-tool' ] ) ]
+			[ Settings_Section::create_tools( 'tools', 'Инструменты', [ $conforming, 'not-a-tool' ] ) ]
 		);
-
-		Functions\expect( '_doing_it_wrong' )->once();
 
 		$registry = Settings_Page_Registry::instance();
 		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
@@ -263,7 +269,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'widget', 'Виджет ЛК', [], '', true, 'Подключить' ) ]
+			[ Settings_Section::create_connection( 'widget', 'Виджет ЛК', [], 'Подключить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -286,7 +292,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -301,7 +307,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();

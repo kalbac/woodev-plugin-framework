@@ -265,7 +265,7 @@ class SettingsPageRestTest extends TestCase {
 			'Carrier',
 			$handler,
 			[
-				Settings_Section::create( 'api', 'API', [ 'mode', 'token' ], '', true, 'Проверить' ),
+				Settings_Section::create_connection( 'api', 'API', [ 'mode', 'token' ], 'Проверить', '' ),
 			]
 		);
 
@@ -329,7 +329,7 @@ class SettingsPageRestTest extends TestCase {
 			'Carrier',
 			$handler,
 			[
-				Settings_Section::create( 'api', 'API', [ 'token' ], '', true, 'Проверить' ),
+				Settings_Section::create_connection( 'api', 'API', [ 'token' ], 'Проверить', '' ),
 			]
 		);
 
