@@ -273,6 +273,25 @@ orca orchestration check --wait --types worker_done --timeout-ms 180000
 orca orchestration check --ack <deliveryId> --json
 ```
 
+**The `worker_done` line MUST carry `--payload '{"taskId":"..."}'`** (s99). The command as written
+above delivers the body fine, but Orca answers `Rejected worker_done: worker_done requires taskId`
+and wraps the report in a rejection envelope. The findings still arrive and are still readable —
+which is exactly why this is easy to miss — but the task never settles. Put the payload in the
+literal line you hand the critic:
+
+```bash
+orca orchestration send --type worker_done --to dispatch:<D>   --subject "..." --body "<findings>" --payload "{\"taskId\":\"<T>\"}" --outcome succeeded
+```
+
+**`check --wait` replays the oldest UNACKNOWLEDGED batch first** (s99). Waiting for a new critic's
+report will hand you the PREVIOUS one again, verbatim, if you never acked it — and it looks like
+the new agent answered instantly with someone else's findings. Check the `subject`, which carries
+the task id. Ack with `orca orchestration check --ack <deliveryId>` and wait again.
+
+**`check --wait --json` does not emit one JSON document.** It streams `{"_keepalive":true,...}`
+lines every 15 s and the real object last, so `json.load()` on the whole output fails with
+"Extra data". Strip the keepalive lines, or parse only the final object.
+
 Four facts that cost time, each measured:
 
 1. **The agent id is `kilo`,** not `kilocode` — Orca's settings label it "Kilocode" but the CLI
