@@ -330,15 +330,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			$tools = Shipping_Tools_Registry::instance()->get_tools();
 
 			if ( [] !== $tools ) {
-				$sections[] = Settings_Section::create(
+				$sections[] = Settings_Section::create_tools(
 					'tools',
 					__( 'Инструменты', 'woodev-plugin-framework' ),
-					[],
-					__( 'Действия над данными раздела «Доставка» — не настройки, а то, что можно выполнить прямо сейчас.', 'woodev-plugin-framework' ),
-					false,
-					'',
-					true,
-					$tools
+					$tools,
+					__( 'Действия над данными раздела «Доставка» — не настройки, а то, что можно выполнить прямо сейчас.', 'woodev-plugin-framework' )
 				);
 			}
 

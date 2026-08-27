@@ -403,8 +403,8 @@ function woodev_test_plugin_init() {
 						\Woodev\Framework\Settings\Settings_Section::create( 'general', 'Общие', [ 'api_key', 'mode' ], 'Основные параметры подключения к API перевозчика.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'order', 'Форма заказа', [ 'enabled', 'markup', 'calc_type', 'rate', 'formula', 'methods', 'max_weight', 'comment', 'note' ], 'Как тариф и способы доставки отображаются покупателю при оформлении.' ),
 						\Woodev\Framework\Settings\Settings_Section::create( 'misc', 'Прочее', [ 'manager_email', 'secret', 'brand_color', 'start_date', 'support_phone', 'tracking_url' ] ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'api', 'Подключение', [ 'conn_login', 'conn_password', 'conn_token' ], 'Учётные данные для доступа к API перевозчика.', true, 'Проверить подключение' ),
-						\Woodev\Framework\Settings\Settings_Section::create( 'widget', 'Виджет ЛК', [], 'Регистрация экземпляра магазина в личном кабинете перевозчика.', true, 'Подключить' ),
+						\Woodev\Framework\Settings\Settings_Section::create_connection( 'api', 'Подключение', [ 'conn_login', 'conn_password', 'conn_token' ], 'Проверить подключение', 'Учётные данные для доступа к API перевозчика.' ),
+						\Woodev\Framework\Settings\Settings_Section::create_connection( 'widget', 'Виджет ЛК', [], 'Подключить', 'Регистрация экземпляра магазина в личном кабинете перевозчика.' ),
 					],
 					[
 						'legacy_page' => 'wc-settings&tab=shipping&section=quarry',

@@ -113,12 +113,53 @@ final class Settings_Provider {
 	/**
 	 * Returns the section grouping.
 	 *
+	 * FILTERS ON READ, for the same reason {@see Settings_Section::get_tools()} does: this
+	 * method has always DOCUMENTED `Settings_Section[]` while `create()` took an untyped
+	 * array and stored it verbatim, so the return type was a promise nothing kept.
+	 *
+	 * That mattered once the section's own guarantee moved onto its accessor. A caller can
+	 * hand `create()` any object that merely LOOKS like a section — `is_tools()` returning
+	 * true, `get_tools()` returning junk — and it never passes through
+	 * `Settings_Section::get_tools()` at all. Reproduced through the public `create()`, no
+	 * reflection needed: `build_sections()` fatals with
+	 * `Call to a member function to_array() on string`, and `run_tool()` with
+	 * `Call to a member function get_id() on string` — a whole-settings-page fatal for every
+	 * tab, from one plugin's malformed descriptor.
+	 *
+	 * With this filter every link in the chain is class-checked, and each check is nameable:
+	 * `Settings_Page_Registry::get_provider(): ?Settings_Provider` and
+	 * `build_sections( Settings_Provider $provider )` are enforced by PHP itself; this method
+	 * filters the sections; `Settings_Section::get_tools()` filters the tools. No reader has
+	 * to repeat a CLASS check, which is what #514 m6 was for.
+	 *
+	 * WHAT A CLASS FILTER BUYS, AND WHAT IT DOES NOT. `instanceof` answers "is this the type I
+	 * publish", which is what stops a duck-typed impostor. It does NOT answer "was this object
+	 * ever constructed": an instance hand-built past its own constructor with
+	 * `newInstanceWithoutConstructor()` is a real one, passes here, and then fatals on its
+	 * first typed-property read with `must not be accessed before initialization`. That is
+	 * true of EVERY class in PHP with typed properties, it is true identically on `main`
+	 * (measured — `build_sections()` fatals at `$section->get_id()` before it ever reaches a
+	 * tool, so no tools guard ever protected against it), and no `instanceof` anywhere can
+	 * change it. The guarantee here is the CLASS, deliberately, and that is the whole of it.
+	 *
+	 * Silent, like the tools filter and for the same reason: the actionable notice belongs at
+	 * the registration call. Unlike tools, there is no `create_sections()` to put one in —
+	 * `create()` takes the array untyped as its published seam — so a louder refusal here
+	 * would be a contract change, and that is #570, not this fix.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return Settings_Section[]
 	 */
 	public function get_sections(): array {
-		return $this->sections;
+		return array_values(
+			array_filter(
+				$this->sections,
+				static function ( $section ): bool {
+					return $section instanceof Settings_Section;
+				}
+			)
+		);
 	}
 
 	/**

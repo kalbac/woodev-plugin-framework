@@ -11,6 +11,13 @@ use Woodev\Framework\Shipping\Settings\Tool_Result;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
 
+// #566: this file USES Shipping_Tool and Tool_Result but used to rely on another test file
+// having loaded them first. `phpunit.xml` sets executionOrder="depends,defects", so that
+// order is not fixed — the full run passed by luck and `phpunit tests/unit/SettingsPageRegistryTest.php`
+// alone failed. Required explicitly, exactly as SettingsRestControllerTest already does.
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
+
 class SettingsPageRegistryTest extends TestCase {
 
 	// ----- capability resolution (4 rules) -----
@@ -161,7 +168,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -185,7 +192,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'shipping',
 			'Доставка',
 			$handler,
-			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $tool ] ) ]
+			[ Settings_Section::create_tools( 'tools', 'Инструменты', [ $tool ] ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -220,12 +227,20 @@ class SettingsPageRegistryTest extends TestCase {
 	}
 
 	/**
-	 * m3: the direct-construction door guards the same way the FILTER_TOOLS
-	 * filter door does (Shipping_Tools_Registry::collect()) — a non-conforming
-	 * entry is rejected and logged, the rest of the list still registers,
+	 * m3, moved to its final home in #514 m6: the direct-construction door guards the same
+	 * way the FILTER_TOOLS filter door does (Shipping_Tools_Registry::collect()) — a
+	 * non-conforming entry is rejected and logged, the rest of the list still registers,
 	 * rather than a page-wide fatal on `$tool->to_array()`.
+	 *
+	 * The rejection now happens inside Settings_Section::create_tools() rather than in this
+	 * loop, so this test pins the END-TO-END consequence: whatever a caller passes, what
+	 * build_sections() emits carries only conforming tools. The gate's own behaviour is
+	 * pinned at its own door in SettingsSectionTest.
 	 */
 	public function test_build_sections_rejects_a_non_conforming_tool_entry(): void {
+		// Raised by create_tools() below, not by build_sections() — the point of the move.
+		Functions\expect( '_doing_it_wrong' )->once();
+
 		$handler   = $this->make_connection_handler();
 		$conforming = Shipping_Tool::create(
 			'sweep',
@@ -238,16 +253,72 @@ class SettingsPageRegistryTest extends TestCase {
 			'shipping',
 			'Доставка',
 			$handler,
-			[ Settings_Section::create( 'tools', 'Инструменты', [], '', false, '', true, [ $conforming, 'not-a-tool' ] ) ]
+			[ Settings_Section::create_tools( 'tools', 'Инструменты', [ $conforming, 'not-a-tool' ] ) ]
 		);
-
-		Functions\expect( '_doing_it_wrong' )->once();
 
 		$registry = Settings_Page_Registry::instance();
 		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
 
 		$this->assertCount( 1, $sections[0]['tools'] );
 		$this->assertSame( 'sweep', $sections[0]['tools'][0]['id'] );
+	}
+
+	/**
+	 * #514 m6, critic round 2 — the END-TO-END half the section-level tests could not prove.
+	 *
+	 * `build_sections()` dereferences `$tool->to_array()` with no guard of its own, so its
+	 * safety is entirely borrowed from the two accessors above it. This drives a REAL
+	 * `Settings_Provider` carrying a duck-typed section (built through the public `create()`,
+	 * no reflection) all the way through, which is the exact shape that fatalled with
+	 * `Call to a member function to_array() on string` before `get_sections()` filtered.
+	 */
+	public function test_build_sections_survives_a_provider_carrying_a_duck_typed_section(): void {
+		$handler  = $this->make_connection_handler();
+		$real     = Settings_Section::create( 'general', 'Общие', [ 'token' ] );
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[
+				$real,
+				new class() {
+					public function is_tools(): bool {
+						return true;
+					}
+
+					public function is_connection(): bool {
+						return false;
+					}
+
+					public function get_tools(): array {
+						return [ 'not-a-tool' ];
+					}
+
+					public function get_id(): string {
+						return 'tools';
+					}
+
+					public function get_label(): string {
+						return 'Инструменты';
+					}
+
+					public function get_description(): string {
+						return '';
+					}
+
+					public function get_setting_ids(): array {
+						return [];
+					}
+				},
+			]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		// The impostor never reaches this loop at all, so nothing here can dereference it.
+		$this->assertCount( 1, $sections );
+		$this->assertSame( 'general', $sections[0]['id'] );
 	}
 
 	/**
@@ -263,7 +334,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'widget', 'Виджет ЛК', [], '', true, 'Подключить' ) ]
+			[ Settings_Section::create_connection( 'widget', 'Виджет ЛК', [], 'Подключить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -286,7 +357,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();
@@ -301,7 +372,7 @@ class SettingsPageRegistryTest extends TestCase {
 			'carrier',
 			'Перевозчик',
 			$handler,
-			[ Settings_Section::create( 'api', 'Подключение', [ 'token' ], '', true, 'Проверить' ) ]
+			[ Settings_Section::create_connection( 'api', 'Подключение', [ 'token' ], 'Проверить', '' ) ]
 		);
 
 		$registry = Settings_Page_Registry::instance();

@@ -190,22 +190,24 @@ final class Settings_Page_Registry {
 				$entry['is_tools'] = true;
 				$entry['tools']    = [];
 
-				// Never `to_array()`-adjacent shortcuts here — the callback lives only
-				// on Shipping_Tool itself, and to_array() is the one place that omits
-				// it. A non-conforming entry is rejected the same way the FILTER_TOOLS
-				// filter door rejects one (Shipping_Tools_Registry::collect()) — a
-				// fatal here would take down the whole settings page for every tab,
-				// not just this section's tools.
+				// No instanceof gate here any more (#514 m6). Not because construction is
+				// controlled -- it is not, reflection and unserialisation both bypass the
+				// private constructor -- but because the ACCESSORS now filter to their own
+				// declared types: Settings_Provider::get_sections() to Settings_Section, and
+				// Settings_Section::get_tools() to Shipping_Tool. A wrong-class value cannot
+				// reach this loop.
+				//
+				// An object of the RIGHT class that was never constructed still fatals on its
+				// first typed-property read, here and everywhere else in PHP. That is not
+				// what this gate was ever for: $section->get_id() a few lines up would fatal
+				// on such a section first, identically on main, so no tools guard here ever
+				// protected against it.
+				//
+				// The guard used to live here and NOT on the other consumer of the same
+				// array (Woodev_REST_API_Settings_Page::run_tool()), which is the asymmetry
+				// this closes: one guarantee per type, at the accessor that publishes it,
+				// instead of each reader re-asking and one of them forgetting to.
 				foreach ( $section->get_tools() as $tool ) {
-					if ( ! $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
-						_doing_it_wrong(
-							__METHOD__,
-							'A Settings_Section tools entry does not implement Shipping_Tool; it was ignored.',
-							'2.0.2'
-						);
-						continue;
-					}
-
 					$entry['tools'][] = $tool->to_array();
 				}
 			}

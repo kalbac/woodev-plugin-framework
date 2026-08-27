@@ -54,7 +54,21 @@ final class Settings_Section {
 	private array $tools = [];
 
 	/**
-	 * Use the named constructor instead.
+	 * Use one of the named constructors instead — {@see self::create()},
+	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
+	 * site has to NAME the kind it is building rather than spell it out in positional
+	 * booleans; that is all privacy buys here.
+	 *
+	 * It does NOT make those three the only way this object comes into existence, and an
+	 * earlier draft of this docblock claimed it did.
+	 * `ReflectionClass::newInstanceWithoutConstructor()` skips it entirely, and there is no
+	 * `__unserialize()` to validate a hydrated one. Validation therefore lives in TWO places
+	 * on purpose: {@see self::create_tools()} refuses a bad descriptor loudly, where the
+	 * author who can fix it is standing, and {@see self::get_tools()} filters on read, which
+	 * is what makes the CLASS of the returned elements a guarantee for every reader.
+	 *
+	 * The positional shape here stays deliberately dumb: it assigns, and decides nothing.
+	 * Naming the kind is the named constructors' job.
 	 *
 	 * @since 2.0.2
 	 */
@@ -70,22 +84,100 @@ final class Settings_Section {
 	}
 
 	/**
-	 * Builds a section.
+	 * Builds an ORDINARY section — a labelled group of setting fields.
+	 *
+	 * One of three named constructors, one per section KIND (#514 m6). The kind used to be
+	 * spelled out at the call site as a run of positional booleans and spacer arguments
+	 * (`create( 'tools', …, [], …, false, '', true, $tools )`), which let a caller set
+	 * `is_connection` and `is_tools` at once.
+	 *
+	 * MEASURED, because the obvious guess is wrong: such a section does NOT fail to render.
+	 * `src/settings-page/section-view.js` tests `is_connection` first and returns, so a
+	 * dual-kind section renders as a connection block and its tools are silently dropped —
+	 * a section that quietly loses half of what it declared, which is worse than one that
+	 * visibly fails. The kinds are mutually exclusive, so each gets its own entry point and
+	 * no call site can name two.
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param string                                                        $id            section id.
-	 * @param string                                                        $label         section label.
-	 * @param string[]                                                      $setting_ids   referenced setting ids.
-	 * @param string                                                        $description   optional description shown under the sub-tab.
-	 * @param bool                                                          $is_connection whether this section is a self-contained connection block.
-	 * @param string                                                        $action_label  label for the block's primary action button.
-	 * @param bool                                                          $is_tools      whether this section is a registry-backed tools block (#505).
-	 * @param array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool> $tools      tool descriptors, only meaningful when `$is_tools` is true.
+	 * @param string   $id          section id.
+	 * @param string   $label       section label.
+	 * @param string[] $setting_ids referenced setting ids. An EMPTY list means the section
+	 *                              declares zero fields — never "all of them"; see
+	 *                              {@see Settings_Page_Registry::build_sections()} for why
+	 *                              that differs from the handler-level convention.
+	 * @param string   $description optional description shown under the sub-tab.
 	 * @return self
 	 */
-	public static function create( string $id, string $label, array $setting_ids, string $description = '', bool $is_connection = false, string $action_label = '', bool $is_tools = false, array $tools = [] ): self {
-		return new self( $id, $label, $setting_ids, $description, $is_connection, $action_label, $is_tools, $tools );
+	public static function create( string $id, string $label, array $setting_ids, string $description = '' ): self {
+		return new self( $id, $label, $setting_ids, $description );
+	}
+
+	/**
+	 * Builds a CONNECTION section — a self-contained block whose primary output is an action
+	 * button, with zero or more credential fields above it.
+	 *
+	 * `$action_label` is required and sits ahead of `$description` on purpose: a connection
+	 * block with no button label renders a nameless button, so it is not an optional detail
+	 * the way a description is.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string   $id           section id.
+	 * @param string   $label        section label.
+	 * @param string[] $setting_ids  referenced setting ids; may be empty (a handshake block
+	 *                               such as a carrier's LK widget has no input fields at all).
+	 * @param string   $action_label label for the block's primary action button.
+	 * @param string   $description  optional description shown under the sub-tab.
+	 * @return self
+	 */
+	public static function create_connection( string $id, string $label, array $setting_ids, string $action_label, string $description = '' ): self {
+		return new self( $id, $label, $setting_ids, $description, true, $action_label );
+	}
+
+	/**
+	 * Builds a TOOLS section — a registry-backed block of actions over the tab's data (#505).
+	 *
+	 * Takes no setting ids: a tools block is fields-less by construction, which is what the
+	 * whole kind means.
+	 *
+	 * This is the LOUD half of tool validation (#514 m6, critic N3): a non-conforming entry
+	 * is dropped here with a notice naming the call site, exactly as the `FILTER_TOOLS`
+	 * filter door drops one
+	 * ({@see \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::collect()}) — never
+	 * thrown, because a fatal on this path takes down the settings page for every tab, not
+	 * just this section.
+	 *
+	 * It is NOT the only door, and it is not what makes the type safe for readers: privacy
+	 * does not survive reflection or unserialisation. {@see self::get_tools()} carries that
+	 * guarantee. What this method adds is the diagnosis — the read-side filter cannot name a
+	 * call site, because an object that bypassed this method has none to name.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string                                                        $id          section id.
+	 * @param string                                                        $label       section label.
+	 * @param array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool> $tools       tool descriptors; anything else is dropped with a notice.
+	 * @param string                                                        $description optional description shown under the sub-tab.
+	 * @return self
+	 */
+	public static function create_tools( string $id, string $label, array $tools, string $description = '' ): self {
+		$conforming = [];
+
+		foreach ( $tools as $tool ) {
+			if ( ! $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool ) {
+				_doing_it_wrong(
+					__METHOD__,
+					'A Settings_Section tools entry does not implement Shipping_Tool; it was ignored.',
+					'2.0.2'
+				);
+				continue;
+			}
+
+			$conforming[] = $tool;
+		}
+
+		return new self( $id, $label, [], $description, false, '', true, $conforming );
 	}
 
 	/**
@@ -168,11 +260,47 @@ final class Settings_Section {
 	/**
 	 * Returns the tool descriptors. Empty unless {@see self::is_tools()}.
 	 *
+	 * FILTERS ON READ, and that is what makes the return type a guarantee rather than a
+	 * hope. {@see self::create_tools()} already refuses a non-conforming entry loudly, but
+	 * constructor privacy is not what keeps this array clean: `ReflectionClass::
+	 * newInstanceWithoutConstructor()` builds this `final` class without running the
+	 * constructor at all, and `ReflectionProperty` then writes `$tools` directly —
+	 * reproduced, and the removed `build_sections()` loop body fatals on it with
+	 * `Call to a member function to_array() on string`. Unserialisation is the same story:
+	 * there is no `__unserialize()` here to validate anything.
+	 *
+	 * So the write-side check cannot be the only one. Doing it HERE serves every reader from
+	 * one place — {@see Settings_Page_Registry::build_sections()} and
+	 * `Woodev_REST_API_Settings_Page::run_tool()`, which never had a check of its own — which
+	 * is what #514 m6 (critic N3) asked for: one place that validates both paths, rather than
+	 * each reader re-asking and one of them forgetting to.
+	 *
+	 * WHAT A CLASS FILTER BUYS, AND WHAT IT DOES NOT. `instanceof` answers "is this the type I
+	 * publish", which is what stops a duck-typed impostor. It does NOT answer "was this object
+	 * ever constructed": an instance hand-built past its own constructor with
+	 * `newInstanceWithoutConstructor()` is a real one, passes here, and then fatals on its
+	 * first typed-property read with `must not be accessed before initialization`. That is
+	 * true of EVERY class in PHP with typed properties, it is true identically on `main`
+	 * (measured — `build_sections()` fatals at `$section->get_id()` before it ever reaches a
+	 * tool, so no tools guard ever protected against it), and no `instanceof` anywhere can
+	 * change it. The guarantee here is the CLASS, deliberately, and that is the whole of it.
+	 *
+	 * Silent by design. The actionable notice belongs at the registration call, where the
+	 * author who can fix it is standing; a drop here means the object never went through
+	 * that door, so there is no call site to name.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
 	 */
 	public function get_tools(): array {
-		return $this->tools;
+		return array_values(
+			array_filter(
+				$this->tools,
+				static function ( $tool ): bool {
+					return $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool;
+				}
+			)
+		);
 	}
 }

@@ -280,4 +280,106 @@ class SettingsRestControllerTest extends TestCase {
 		$this->assertSame( 'woodev_settings_tool_error', $result->get_error_code() );
 		$this->assertSame( 500, $result->get_error_data()['status'] );
 	}
+	/**
+	 * #514 T3. The `break 2` scoping in run_tool() only ever refused ids that existed
+	 * NOWHERE — the previous 404 test passed for that trivial reason. This one gives the id
+	 * a real home: `sweep` is registered in the tools registry AND declared by provider B,
+	 * so a request naming provider A must still 404, and B's callback must not run.
+	 *
+	 * Both halves matter. Without the registration, `Shipping_Tools_Registry::run()` would
+	 * refuse the id by itself and the test would pass with the controller's scoping deleted.
+	 */
+	public function test_run_tool_refuses_a_tool_declared_by_a_different_provider(): void {
+		$ran  = false;
+		$tool = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ) use ( &$ran ): Tool_Result {
+				$ran = true;
+
+				return Tool_Result::success( 'Готово' );
+			}
+		);
+
+		// The id IS live in the registry — this is what makes the refusal the controller's
+		// own work rather than the registry's.
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		// Provider A declares a tools section, just not THIS tool.
+		$other = Shipping_Tool::create(
+			'recount',
+			'Пересчитать',
+			'',
+			'Пересчитать',
+			static fn( array $args ): Tool_Result => Tool_Result::success()
+		);
+
+		$provider_a = Mockery::mock();
+		$provider_a->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $other ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'tab-a' )->andReturn( $provider_a );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$result     = $controller->run_tool( $this->request( [ 'provider_id' => 'tab-a', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'woodev_settings_unknown_tool', $result->get_error_code() );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+		$this->assertFalse( $ran, "the other provider's callback must never run" );
+	}
+
+	/**
+	 * The control for the test above: the SAME registered tool, requested at the provider
+	 * that actually declares it, does run. Without this, the 404 assertion would pass for a
+	 * run_tool() that refuses everything.
+	 */
+	public function test_control_the_same_tool_runs_at_the_provider_that_declares_it(): void {
+		Functions\when( 'rest_ensure_response' )->returnArg( 1 );
+
+		$ran  = false;
+		$tool = Shipping_Tool::create(
+			'sweep',
+			'Проверить',
+			'',
+			'Проверить',
+			static function ( array $args ) use ( &$ran ): Tool_Result {
+				$ran = true;
+
+				return Tool_Result::success( 'Готово' );
+			}
+		);
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) use ( $tool ) {
+				if ( Shipping_Tools_Registry::FILTER_TOOLS === $tag ) {
+					return [ $tool ];
+				}
+
+				return $default;
+			}
+		);
+
+		$provider_b = Mockery::mock();
+		$provider_b->shouldReceive( 'get_sections' )->andReturn( [ $this->tools_section( [ $tool ] ) ] );
+
+		$registry = Mockery::mock();
+		$registry->shouldReceive( 'get_provider' )->with( 'tab-b' )->andReturn( $provider_b );
+
+		$controller = new \Woodev_REST_API_Settings_Page( $registry );
+		$response   = $controller->run_tool( $this->request( [ 'provider_id' => 'tab-b', 'tool_id' => 'sweep', 'args' => [] ] ) );
+
+		$this->assertTrue( $ran );
+		$this->assertTrue( $response['success'] );
+	}
 }
