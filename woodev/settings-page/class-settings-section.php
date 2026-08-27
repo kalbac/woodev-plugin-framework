@@ -81,9 +81,14 @@ final class Settings_Section {
 	 * One of three named constructors, one per section KIND (#514 m6). The kind used to be
 	 * spelled out at the call site as a run of positional booleans and spacer arguments
 	 * (`create( 'tools', …, [], …, false, '', true, $tools )`), which let a caller set
-	 * `is_connection` and `is_tools` at once and silently get a section that is neither
-	 * shape the React side knows how to render. The kinds are mutually exclusive, so each
-	 * one gets its own entry point and no call site can name two.
+	 * `is_connection` and `is_tools` at once.
+	 *
+	 * MEASURED, because the obvious guess is wrong: such a section does NOT fail to render.
+	 * `src/settings-page/section-view.js` tests `is_connection` first and returns, so a
+	 * dual-kind section renders as a connection block and its tools are silently dropped —
+	 * a section that quietly loses half of what it declared, which is worse than one that
+	 * visibly fails. The kinds are mutually exclusive, so each gets its own entry point and
+	 * no call site can name two.
 	 *
 	 * @since 2.0.2
 	 *
@@ -244,11 +249,37 @@ final class Settings_Section {
 	/**
 	 * Returns the tool descriptors. Empty unless {@see self::is_tools()}.
 	 *
+	 * FILTERS ON READ, and that is what makes the return type a guarantee rather than a
+	 * hope. {@see self::create_tools()} already refuses a non-conforming entry loudly, but
+	 * constructor privacy is not what keeps this array clean: `ReflectionClass::
+	 * newInstanceWithoutConstructor()` builds this `final` class without running the
+	 * constructor at all, and `ReflectionProperty` then writes `$tools` directly —
+	 * reproduced, and the removed `build_sections()` loop body fatals on it with
+	 * `Call to a member function to_array() on string`. Unserialisation is the same story:
+	 * there is no `__unserialize()` here to validate anything.
+	 *
+	 * So the write-side check cannot be the only one. Doing it HERE closes every door for
+	 * every reader at once — {@see Settings_Page_Registry::build_sections()} and
+	 * `Woodev_REST_API_Settings_Page::run_tool()`, which never had a check of its own —
+	 * which is what #514 m6 (critic N3) actually asked for: one place that validates both
+	 * paths, rather than each reader re-asking and one of them forgetting to.
+	 *
+	 * Silent by design. The actionable notice belongs at the registration call, where the
+	 * author who can fix it is standing; a drop here means the object never went through
+	 * that door, so there is no call site to name.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return array<int, \Woodev\Framework\Shipping\Settings\Shipping_Tool>
 	 */
 	public function get_tools(): array {
-		return $this->tools;
+		return array_values(
+			array_filter(
+				$this->tools,
+				static function ( $tool ): bool {
+					return $tool instanceof \Woodev\Framework\Shipping\Settings\Shipping_Tool;
+				}
+			)
+		);
 	}
 }

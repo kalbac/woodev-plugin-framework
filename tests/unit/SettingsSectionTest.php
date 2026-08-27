@@ -104,6 +104,50 @@ class SettingsSectionTest extends TestCase {
 	}
 
 	/**
+	 * The critic's BLOCKER on #514 m6, promoted to a permanent test.
+	 *
+	 * Constructor privacy is NOT what keeps `$tools` clean.
+	 * `ReflectionClass::newInstanceWithoutConstructor()` builds this `final` class without
+	 * running the constructor, and `ReflectionProperty` then writes the array directly.
+	 * With the validation living only in `create_tools()`, that object reached both readers
+	 * of `get_tools()` and fatalled `Settings_Page_Registry::build_sections()` with
+	 * `Call to a member function to_array() on string` — a whole-settings-page fatal, for
+	 * every tab, from one plugin's descriptor.
+	 *
+	 * Reproduced before the fix; this pins the answer. `get_tools()` filters on READ, so the
+	 * hydration route no longer matters to any reader.
+	 */
+	public function test_get_tools_filters_a_descriptor_hydrated_past_the_constructor(): void {
+		$conforming = $this->make_tool( 'sweep' );
+		$reflection = new \ReflectionClass( Settings_Section::class );
+		$section    = $reflection->newInstanceWithoutConstructor();
+
+		foreach ( [ 'id' => 'tools', 'label' => 'Инструменты', 'setting_ids' => [], 'description' => '', 'is_connection' => false, 'action_label' => '', 'is_tools' => true, 'tools' => [ $conforming, 'not-a-tool' ] ] as $property => $value ) {
+			$reflection->getProperty( $property )->setValue( $section, $value );
+		}
+
+		$this->assertTrue( $section->is_tools() );
+		$this->assertSame( [ $conforming ], $section->get_tools() );
+	}
+
+	/**
+	 * The control: the same reflection route with a wholly conforming list returns it intact.
+	 * Without it, the assertion above would also pass for a `get_tools()` that returned `[]`.
+	 */
+	public function test_control_get_tools_returns_a_conforming_hydrated_list_intact(): void {
+		$first      = $this->make_tool( 'a' );
+		$second     = $this->make_tool( 'b' );
+		$reflection = new \ReflectionClass( Settings_Section::class );
+		$section    = $reflection->newInstanceWithoutConstructor();
+
+		foreach ( [ 'id' => 'tools', 'label' => 'Инструменты', 'setting_ids' => [], 'description' => '', 'is_connection' => false, 'action_label' => '', 'is_tools' => true, 'tools' => [ $first, $second ] ] as $property => $value ) {
+			$reflection->getProperty( $property )->setValue( $section, $value );
+		}
+
+		$this->assertSame( [ $first, $second ], $section->get_tools() );
+	}
+
+	/**
 	 * Builds a minimal conforming tool descriptor.
 	 */
 	private function make_tool( string $id ): Shipping_Tool {
