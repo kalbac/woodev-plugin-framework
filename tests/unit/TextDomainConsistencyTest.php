@@ -119,6 +119,88 @@ final class TextDomainConsistencyTest extends TestCase {
 	}
 
 	/**
+	 * Issue #444. A call with NO domain argument is the same silent failure as a WRONG one:
+	 * WordPress looks the string up in its own `default` domain, where core's strings live
+	 * and ours never will, misses, and returns the original untranslated. No PHP warning, no
+	 * log line, no failing test — which is exactly how 26 of them accumulated across 7 files
+	 * while #421's sibling assertion above stood guard over the wrong-domain case only.
+	 *
+	 * The scanner already knew: it computed `null === $domain_token` and deliberately
+	 * `continue`d, with a comment saying so. Reporting it is the whole fix.
+	 */
+	public function test_every_translation_call_declares_a_text_domain_at_all(): void {
+		$root     = dirname( __DIR__, 2 );
+		$offences = [];
+
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $root . '/woodev', \FilesystemIterator::SKIP_DOTS )
+		);
+
+		foreach ( $iterator as $file ) {
+			if ( 'php' !== strtolower( $file->getExtension() ) ) {
+				continue;
+			}
+
+			$relative = str_replace( DIRECTORY_SEPARATOR, '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
+
+			foreach ( $this->extract_missing_domains( (string) file_get_contents( $file->getPathname() ) ) as $line => $wrapper ) {
+				$offences[] = sprintf( '%s:%d calls %s() with no text domain', $relative, $line, $wrapper );
+			}
+		}
+
+		sort( $offences );
+
+		$this->assertSame(
+			[],
+			$offences,
+			"A gettext call with no domain falls back to WordPress's own 'default' domain and is never translated:
+" . implode( "
+", $offences )
+		);
+	}
+
+	/**
+	 * Guards the missing-domain scanner the same way the wrong-domain one is guarded, and for
+	 * the same reason: the failure that matters is the FALSE GREEN.
+	 *
+	 * @dataProvider provide_missing_domain_cases
+	 *
+	 * @param string             $source   PHP source to scan.
+	 * @param array<int, string> $expected Wrapper names the scanner must report, in order.
+	 */
+	public function test_the_scanner_reports_exactly_these_missing_domains( string $source, array $expected ): void {
+		$this->assertSame( $expected, array_values( $this->extract_missing_domains( "<?php
+" . $source ) ) );
+	}
+
+	/**
+	 * @return array<string, array{0:string, 1:array<int, string>}>
+	 */
+	public function provide_missing_domain_cases(): array {
+		return [
+			'bare call is reported'            => [ "__( 'text' );", [ '__' ] ],
+			'correct domain is not'            => [ "__( 'text', 'woodev-plugin-framework' );", [] ],
+			'wrong domain is the OTHER defect' => [ "__( 'text', 'wrong-domain' );", [] ],
+			'borrowed domain is not missing'   => [ "__( 'WooCommerce', 'woocommerce' );", [] ],
+			'named domain is not missing'      => [ "__( domain: 'woodev-plugin-framework', text: 'x' );", [] ],
+			'named text only is missing'       => [ "__( text: 'x' );", [ '__' ] ],
+			'context wrapper, no domain'       => [ "_x( 'text', 'context' );", [ '_x' ] ],
+			'context wrapper, with domain'     => [ "_x( 'text', 'context', 'woodev-plugin-framework' );", [] ],
+			'plural wrapper, no domain'        => [ "_n( 'one', 'many', \$n );", [ '_n' ] ],
+			'trailing comma is not an arg'     => [ "__( 'text', );", [ '__' ] ],
+			'nested call in first argument'    => [ "__( sprintf( '%s, %s', \$a, \$b ) );", [ '__' ] ],
+			'method of the same name'          => [ "\$obj->__( 'text' );", [] ],
+			'static of the same name'          => [ "Klass::__( 'text' );", [] ],
+			'root-qualified, no domain'        => [ "\__( 'text' );", [ '__' ] ],
+			'namespaced look-alike'            => [ "Foo\__( 'text' );", [] ],
+			'case-insensitive wrapper name'    => [ "_X( 'text', 'ctx' );", [ '_x' ] ],
+			'first-class callable is not one'  => [ "\$fn = __( ... );", [] ],
+			'spread is unverifiable, not miss' => [ "__( ...\$args );", [] ],
+			'declaration is not a call'        => [ "function __( \$t ) {}", [] ],
+		];
+	}
+
+	/**
 	 * Guards the scanner itself.
 	 *
 	 * The scan above is only worth its runtime if it cannot be walked past, and the failure
@@ -214,8 +296,36 @@ final class TextDomainConsistencyTest extends TestCase {
 	 * @return array<int, string>
 	 */
 	private function extract_wrong_domains( string $source ): array {
-		$tokens = token_get_all( $source );
-		$found  = [];
+		return $this->scan( $source )['wrong'];
+	}
+
+	/**
+	 * Returns `line number => wrapper name` for every translation call in $source that passes
+	 * NO domain argument at all — the #444 defect, and a different one from a WRONG domain.
+	 *
+	 * WordPress then looks the string up in its own `default` domain, where core's own
+	 * strings live and ours never will. The lookup misses, the original is returned
+	 * untranslated, and nothing anywhere reports it. A wrong domain and an absent one produce
+	 * the identical silent failure; the only reason they were separate assertions is that
+	 * #421 fixed one and #444 fixed the other.
+	 *
+	 * @param string $source
+	 * @return array<int, string>
+	 */
+	private function extract_missing_domains( string $source ): array {
+		return $this->scan( $source )['missing'];
+	}
+
+	/**
+	 * Walks $source once and classifies every gettext call.
+	 *
+	 * @param string $source
+	 * @return array{wrong: array<int, string>, missing: array<int, string>}
+	 */
+	private function scan( string $source ): array {
+		$tokens  = token_get_all( $source );
+		$found   = [];
+		$missing = [];
 
 		foreach ( $tokens as $index => $token ) {
 			$wrapper = $this->gettext_wrapper_at( $tokens, $index );
@@ -252,9 +362,12 @@ final class TextDomainConsistencyTest extends TestCase {
 
 			$domain_token = $this->domain_argument( $call, self::TRANSLATION_FUNCTIONS[ $wrapper ] );
 
-			// No domain argument at all: WordPress falls back to its own `default` domain.
-			// A real defect, but a different one, and not this test's assertion.
+			// No domain argument at all: WordPress falls back to its own `default` domain,
+			// where our string will never be. Collected separately from a WRONG domain
+			// because they are different defects with different fixes (#421 vs #444), but
+			// no longer SKIPPED — skipping it is what let 26 of these accumulate unseen.
 			if ( null === $domain_token ) {
+				$missing[ $token[2] ] = $wrapper;
 				continue;
 			}
 
@@ -277,7 +390,10 @@ final class TextDomainConsistencyTest extends TestCase {
 			}
 		}
 
-		return $found;
+		return [
+			'wrong'   => $found,
+			'missing' => $missing,
+		];
 	}
 
 	/**

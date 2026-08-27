@@ -170,7 +170,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 					$message = sprintf(
 					/* translators: Placeholders: %s - plugin name */
-						__( '%s may behave unexpectedly because the following PHP configuration settings are required:' ),
+						__( '%s may behave unexpectedly because the following PHP configuration settings are required:', 'woodev-plugin-framework' ),
 						'<strong>' . esc_html( $this->get_plugin()->get_plugin_name() ) . '</strong>'
 					);
 

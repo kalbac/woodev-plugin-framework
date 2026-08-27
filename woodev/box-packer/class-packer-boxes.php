@@ -14,7 +14,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		public function pack() {
 
 			if ( ! $this->items || count( $this->items ) === 0 ) {
-				throw new Woodev_Packer_Exception( __( 'No items to pack!' ) );
+				throw new Woodev_Packer_Exception( __( 'No items to pack!', 'woodev-plugin-framework' ) );
 			}
 
 			$this->packages = array();
