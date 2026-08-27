@@ -124,12 +124,31 @@ if ( ! class_exists( 'Woodev_REST_API_Setup' ) ) :
 							// update_value() validates (throws Woodev_Plugin_Exception) AND persists.
 							$handler->update_value( $sid, $values[ $sid ] );
 						} catch ( \Woodev_Plugin_Exception $e ) {
+							// Issue #397: `errors`, a MAP of setting id => message — not
+							// `field`, a bare id. The client has always read
+							// `err.data.errors` (`src/setup-wizard/app.js`'s `goNext()`),
+							// so under the old key the map was `null` on every response and
+							// `setFieldErrors()` was never called from the server side at
+							// all. Every layer below it was already wired and working:
+							// `app.js` passes `serverErrors` to `StepView`, which puts each
+							// message on `schema.serverError` for its field. The mechanism
+							// was dead on one key.
+							//
+							// `errors` is also what this framework's OTHER settings surface
+							// returns (`Woodev_REST_API_Settings_Page::save()`'s
+							// `woodev_settings_invalid` carries the same shape), so the
+							// wizard was the outlier rather than the client.
+							//
+							// Still ONE entry: this returns on the first failing setting, so
+							// only one can be known. Collecting every failure would change
+							// what gets persisted before the refusal — the loop persists as
+							// it goes — and that is a separate decision.
 							return new WP_Error(
 								'woodev_setup_invalid',
 								$e->getMessage(),
 								[
 									'status' => $e->getCode() ?: 400,
-									'field' => $sid,
+									'errors' => [ $sid => $e->getMessage() ],
 								]
 							);
 						} catch ( \Throwable $e ) {
