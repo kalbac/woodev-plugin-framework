@@ -6,11 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-26 (s96).** `main` is at `6e4478b`, tree clean, **no open PRs.** Merged this
-session: **#547** (#539 part 3, accepted by the operator on the rig) and **#552** (#551 + #553).
+**As of 2026-08-27 (s97).** `main` is at `6f6f32a`, tree clean, **no open PRs.** Merged this
+session: **#555** (#546), **#556** (#554), **#557** (gotchas + the kilo recipe) and **#558**
+(#514 m1+m2).
 
-**Baselines on `main`, measured in the PRIMARY checkout 26.08.2026 at `6e4478b`:** `composer check`
-**2828** / 6921 / **66 skipped**; jest **1535** in 21 suites.
+**Baselines on `main`, measured in the PRIMARY checkout 27.08.2026 at `6f6f32a`:** `composer check`
+**2828** / 6921 / **66 skipped**; jest **1535** in 21 suites; Integration suite in the container
+**120** tests / 477 assertions.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
 
@@ -25,9 +27,9 @@ collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards:** #523, #524, #527, #532, #546 (`@since` drift — operator decision), #554 (docs
-reading budget — operator decision). Which are COMMITMENTS, and where each was decided, is the
-handoff's carry-over section — not this file.
+**Open cards:** #523, #524, #527, #532, #514 (m4/m5 only — UI), #559 (Orca cannot supervise kilo
+— operator decision), #560 (`credential.helper` → `gh` — his machine, his decision), #561. Which
+are COMMITMENTS, and where each was decided, is the handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -59,11 +61,6 @@ pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-sele
 **#541's cause was an ASYMMETRY between the two select renderers, not the `/select` queue** — new
 seam `options.onResolving()`, a pick announced by LEVEL. Detail → `sessions/s94.md`; the two
 near-miss frames it taught → gotcha `an-empty-list-while-the-search-runs-is-not-a-zero-result`.
-
-**Open cards after s95:** #523, #524, #527, #532, #539 (part 3 built, in PR #547, awaiting the
-operator), #546 (NEW — the `@since` drift, in `Инбокс`, needs his decision). **Closed in s95:**
-#512, #525, #529, #531, #542. Which are COMMITMENTS, and where each was decided, is the handoff's
-carry-over section — not this file.
 
 ## ⚠ The checkout location layer
 
@@ -107,8 +104,18 @@ and the REGION level answers from `woodev_test_cdek_regions_{country}` without t
 failure at all. Full measurement table + control:
 gotcha `the-cdek-fixture-credentials-are-not-the-option-they-look-like`.
 
-**Operator decision, #409 (closed):** `@since` records the **planned release** (`2.0.2`); `VERSION`
-records the **released** one (`2.0.1`) and lags on purpose (#285).
+**Operator decision, #409 and again #546 (27.08.2026):** `@since` records the **planned release**,
+which is and stays **`2.0.2`** — «иначе врём потребителям, у нас по факту ещё даже 2.0.0 не было».
+`VERSION` records the **released** one (`2.0.1`) and lags on purpose (#285). Every `@since` above
+`2.0.2` was normalised down in #555; `2.0.0` and `2.0.1` are historical v2 tagging and were left
+alone — a separate question nobody has decided.
+
+**The critic is kilo, not Codex, until the subscription is paid.** Model
+`kilo/openai/gpt-5.6-sol-discounted` (operator: prefer discounted variants). **Orca cannot
+supervise it** — `--inject` revokes the capability before the worker reports, on every launch path
+including Orca's own UI. Dispatch WITHOUT `--inject`; full recipe in
+[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md), open question
+on **#559**.
 
 **Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
 `node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
@@ -176,24 +183,22 @@ oversight.
 
 ## Next Actions
 
-**Ждёт кнопки оператора: PR #547** (#539 часть 3) — 18/18 зелёные, UI, ручной проход на риге.
-⚠ Риг стоит на `main` — чтобы смотреть #547, сперва переключить дерево на
-`feat/539-merge-popular-with-provider-results`.
+**Ждёт кнопки оператора: пусто.** Открытых PR нет.
 
-1. **#437** — окружающий редизайн поиска НП. Спека `specs/2026-08-21-settlement-search-design.md`.
-   Самый крупный оставшийся. 🙋 **Оператор пометил: нужна беседа об объёме, автономно НЕ брать.**
-2. **#546 (в Инбоксе, новая)** — `@since` разошёлся: 1460 докблоков говорят `2.0.2`, слой локаций
-   ставит `2.1.0`, `AGENTS.md` говорит `2.0.2`. Развилка про планируемый релиз — только оператор.
-3. **#518** — выбор ПВЗ снимает «неявность». Решено 25.08, **не начато**.
-4. **#514** — остаток ревью #505. ⚠ Карточка СМЕШАННАЯ: m1/m2 не-UI, а m4 (контраст WCAG AA) и
-   m5 (ширина селектора) — UI. Разделить на два PR, иначе не-UI половина застрянет в ожидании рига.
-5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-6. **Хвосты:** #527, #532, #523, #524.
-7. **#473** — достижимая половина через `isLocationOwnedField()`. **Мелочи:** #444, #451, #453.
+1. **#518** — выбор ПВЗ снимает «неявность» записи. Решено в s92, **не начато**. Видно
+   покупателю → **строить можно, мержить нельзя** без его прохода по ригу.
+2. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+   m1/m2 закрыты в s97 (#558); m6 (восьмиаргументный конструктор) и T3 (REST-тест) не тронуты.
+3. **Хвосты:** #527, #532, #523, #524.
+4. **#473** — достижимая половина через `isLocationOwnedField()`. **Мелочи:** #444, #451, #453.
    **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-8. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-9. 🙋 **НЕ брать автономно:** **#437**, **#474**, **#483**, **#511**, **#515**, **#546**, **#331**,
-   **#332**, **#374** (его прямая просьба). **Отложено до релиза:** #285, #247.
+5. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
+6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+7. **#561** — `ShippingIntegrationConstructionTest` мимо общей базы. В `Бэклог`, мелко.
+8. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#559** (Orca не супервизирует kilo —
+   ждать фикса / писать в апстрим / зафиксировать обход), **#560** (`credential.helper` → `gh`
+   на его машине), **#437** (его пометка: нужна беседа об объёме), **#474**, **#483**, **#511**,
+   **#515**, **#331**, **#332**, **#374** (прямая просьба). **Отложено до релиза:** #285, #247.
    **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
