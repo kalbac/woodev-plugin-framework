@@ -472,7 +472,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway $gateway gateway object
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
+
+			// See Woodev_Payment_Gateway::get_order()'s guard (#613).
+			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
 

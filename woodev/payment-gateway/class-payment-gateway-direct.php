@@ -515,7 +515,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 *
 			 * @since 1.0.0
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order', $order, $this );
+
+			// See Woodev_Payment_Gateway::get_order()'s guard — this one sits directly on
+			// process_payment(), the highest-traffic path in the gateway (#613).
+			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
 
