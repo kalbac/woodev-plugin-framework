@@ -298,7 +298,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				 */
 				$custom_actions = apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_table_method_actions', [], $token, $this );
 
-				$item['actions'] = array_merge( $new_actions, $item['actions'], $custom_actions );
+				// array_merge() throws a TypeError on a non-array since PHP 8, and this renders
+				// on the CUSTOMER's account page — degrade to no custom actions rather than a
+				// white screen on someone else's site (#613).
+				$item['actions'] = array_merge( $new_actions, $item['actions'], is_array( $custom_actions ) ? $custom_actions : [] );
 			}
 
 			return $item;
@@ -341,7 +344,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			 *
 			 * @param Woodev_Payment_Gateway_My_Payment_Methods $instance my payment methods instance
 			 */
-			$columns = apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_table_headers', $columns, $this );
+			$filtered_columns = apply_filters( 'wc_' . $this->get_plugin()->get_id() . '_my_payment_methods_table_headers', $columns, $this );
+
+			// array_key_exists() throws a TypeError on a non-array since PHP 8, and this renders
+			// on the CUSTOMER's account page — degrade to the unfiltered columns (#613).
+			$columns = is_array( $filtered_columns ) ? $filtered_columns : $columns;
 
 			// backwards compatibility for 3rd parties using the filter with the old column keys
 			if ( array_key_exists( 'expiry', $columns ) ) {

@@ -1413,7 +1413,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway $instance payment gateway instance
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_base', $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_base', $order, $this );
+
+			// A plugin that returns something other than a WC_Order here fatals the CUSTOMER's
+			// checkout, not its own admin screen — every caller dereferences this immediately.
+			// Degrade to the unfiltered order rather than throwing: the framework's standing
+			// rule for a filter return is a safe default, never a fatal and never a disabled
+			// protection (#613, from the #599 audit).
+			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
 		/**
@@ -1520,7 +1527,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway $instance instance
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_capture', $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_capture', $order, $this );
+
+			// See get_order()'s guard: degrade to the unfiltered order (#613).
+			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
 		/**
