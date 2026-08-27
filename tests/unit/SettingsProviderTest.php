@@ -133,4 +133,68 @@ class SettingsProviderTest extends TestCase {
 			}
 		};
 	}
+
+	// -----------------------------------------------------------------------
+	// #570. `create()` stays the permissive legacy seam covered above — a wrong-typed
+	// section is accepted and dropped later, silently, by `get_sections()`. These cover
+	// `create_with_sections()`, the loud counterpart: a variadic `Settings_Section` parameter
+	// PHP itself refuses to accept the wrong type for, before a provider is ever built.
+	// -----------------------------------------------------------------------
+
+	public function test_create_with_sections_produces_a_provider_equivalent_to_create(): void {
+		$handler = $this->make_handler( 'cdek' );
+		$first   = Settings_Section::create( 'general', 'Общие', [ 'api_key' ] );
+		$second  = Settings_Section::create( 'advanced', 'Дополнительно', [ 'mode' ] );
+		$args    = [
+			'capability'        => 'manage_woocommerce',
+			'legacy_option_key' => 'woocommerce_cdek_settings',
+			'legacy_page'       => 'wc-settings&tab=shipping&section=cdek',
+			'supports'          => [ 'fields' => true ],
+		];
+
+		$via_create = Settings_Provider::create( 'cdek', 'СДЭК', $handler, [ $first, $second ], $args );
+		$via_typed  = Settings_Provider::create_with_sections( 'cdek', 'СДЭК', $handler, $args, $first, $second );
+
+		$this->assertSame( $via_create->get_id(), $via_typed->get_id() );
+		$this->assertSame( $via_create->get_label(), $via_typed->get_label() );
+		$this->assertSame( $via_create->get_handler(), $via_typed->get_handler() );
+		$this->assertSame( $via_create->get_sections(), $via_typed->get_sections() );
+		$this->assertSame( [ $first, $second ], $via_typed->get_sections() );
+		$this->assertSame( $via_create->get_declared_capability(), $via_typed->get_declared_capability() );
+		$this->assertSame( $via_create->get_legacy_option_key(), $via_typed->get_legacy_option_key() );
+		$this->assertSame( $via_create->get_legacy_page(), $via_typed->get_legacy_page() );
+		$this->assertTrue( $via_typed->supports( 'fields' ) );
+	}
+
+	public function test_create_with_sections_accepts_zero_sections(): void {
+		$provider = Settings_Provider::create_with_sections( 'svc', 'Сервис', $this->make_handler( 'svc' ), [] );
+
+		$this->assertSame( [], $provider->get_sections() );
+	}
+
+	/**
+	 * The whole point: PHP's own signature refuses a non-`Settings_Section` argument, with
+	 * a `TypeError`, before this method's body ever runs — nothing in this test asserts an
+	 * `instanceof` check we wrote; it asserts that we wrote no such check and let PHP do it.
+	 */
+	public function test_create_with_sections_rejects_a_non_section_argument(): void {
+		$real = Settings_Section::create( 'general', 'Общие', [ 'api_key' ] );
+
+		$this->expectException( \TypeError::class );
+
+		Settings_Provider::create_with_sections( 'cdek', 'СДЭК', $this->make_handler( 'cdek' ), [], $real, 'not-a-section-at-all' );
+	}
+
+	/**
+	 * The control for the two tests above: `create()` is untouched by this change and still
+	 * accepts — and later silently drops — the exact same wrong-typed value that
+	 * `create_with_sections()` now refuses outright.
+	 */
+	public function test_control_create_still_silently_drops_a_non_section(): void {
+		$real = Settings_Section::create( 'general', 'Общие', [ 'api_key' ] );
+
+		$provider = Settings_Provider::create( 'cdek', 'СДЭК', $this->make_handler( 'cdek' ), [ $real, 'not-a-section-at-all' ] );
+
+		$this->assertSame( [ $real ], $provider->get_sections() );
+	}
 }

@@ -62,18 +62,71 @@ final class Settings_Provider {
 	}
 
 	/**
-	 * Builds a provider descriptor.
+	 * Builds a provider descriptor from an UNTYPED section list — the permissive legacy seam.
+	 *
+	 * `$sections` is stored verbatim; nothing here checks that its elements are actually
+	 * `Settings_Section` instances. A wrong-typed entry is not rejected here — it is dropped
+	 * later, silently, on read, by {@see self::get_sections()}, which is documented
+	 * `Settings_Section[]` but only ever RETURNS a class-checked subset of what was stored
+	 * here. That silence is deliberate (#514 m6): a fatal on the read path takes down the
+	 * whole settings page, not just the offending tab.
+	 *
+	 * The cost is diagnostic: a caller who makes this mistake does not see an error, they
+	 * see a MISSING section, and that costs as much to track down as any other silent loss
+	 * (#570). Prefer {@see self::create_with_sections()}, which refuses the wrong type
+	 * loudly, at this call site, enforced by PHP's own signature rather than a runtime
+	 * check. This method stays exactly as it is: every production call site already passes
+	 * real `Settings_Section` objects, and an untyped published seam some caller may still
+	 * depend on is a reason to leave it alone, not to change it.
 	 *
 	 * @since 2.0.2
 	 *
 	 * @param string                    $id       tab id; blank falls back to the handler id.
 	 * @param string                    $label    tab label.
 	 * @param \Woodev_Abstract_Settings $handler  settings handler.
-	 * @param Settings_Section[]        $sections section grouping.
+	 * @param Settings_Section[]        $sections section grouping; a non-`Settings_Section`
+	 *                                            entry is accepted here and dropped later by
+	 *                                            {@see self::get_sections()} without notice.
 	 * @param array<string,mixed>       $args     optional: capability, legacy_option_key, legacy_page, supports.
 	 * @return self
 	 */
 	public static function create( string $id, string $label, $handler, array $sections, array $args = [] ): self {
+		return new self( $id, $label, $handler, $sections, $args );
+	}
+
+
+	/**
+	 * Builds a provider descriptor from TYPED sections — the loud counterpart to
+	 * {@see self::create()} (#570).
+	 *
+	 * `$sections` is a variadic, typed parameter: PHP itself refuses a call that passes
+	 * anything other than a `Settings_Section` for one of them — a `TypeError`, raised at
+	 * this call site, before a `Settings_Provider` is ever built. No `instanceof` check runs
+	 * in this method's body; the signature IS the check. That is deliberately unlike
+	 * {@see Settings_Section::create_tools()}, whose tool entries arrive as an untyped array
+	 * with no per-element type to declare in a signature, so that method filters at runtime
+	 * and reports with `_doing_it_wrong()` instead — there is no PHP-native way to make an
+	 * untyped array's contents loud, only a variadic typed parameter achieves that.
+	 *
+	 * `$args` sits ahead of `$sections` here, unlike in {@see self::create()}: a variadic
+	 * parameter must be the last one a PHP signature allows, so making `$sections` typed and
+	 * variadic requires it to trail `$args`, not lead it.
+	 *
+	 * An empty call (`create_with_sections( $id, $label, $handler, $args )`) is valid — a
+	 * provider legitimately has zero sections (see {@see self::create()}'s own tests) — a
+	 * variadic parameter accepts zero arguments same as it accepts many.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param string                    $id          tab id; blank falls back to the handler id.
+	 * @param string                    $label       tab label.
+	 * @param \Woodev_Abstract_Settings $handler     settings handler.
+	 * @param array<string,mixed>       $args        optional: capability, legacy_option_key, legacy_page, supports.
+	 * @param Settings_Section          ...$sections section grouping; a non-`Settings_Section`
+	 *                                               argument is a `TypeError`, not a silent drop.
+	 * @return self
+	 */
+	public static function create_with_sections( string $id, string $label, $handler, array $args = [], Settings_Section ...$sections ): self {
 		return new self( $id, $label, $handler, $sections, $args );
 	}
 
@@ -143,9 +196,10 @@ final class Settings_Provider {
 	 * change it. The guarantee here is the CLASS, deliberately, and that is the whole of it.
 	 *
 	 * Silent, like the tools filter and for the same reason: the actionable notice belongs at
-	 * the registration call. Unlike tools, there is no `create_sections()` to put one in —
-	 * `create()` takes the array untyped as its published seam — so a louder refusal here
-	 * would be a contract change, and that is #570, not this fix.
+	 * the registration call. `create()` keeps the array untyped as its published legacy
+	 * seam — this filter is what still guards a reader against whatever slips through it —
+	 * but the loud refusal now has somewhere to live: {@see self::create_with_sections()}
+	 * (#570) rejects a wrong-typed section at the call site, via PHP's own signature.
 	 *
 	 * @since 2.0.2
 	 *
