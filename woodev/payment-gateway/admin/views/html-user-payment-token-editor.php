@@ -1,9 +1,10 @@
 <?php
 /**
  * @var string $title
- * @var array $columns
- * @var int $id
- * @var int $user_id
+ * @var array  $columns
+ * @var int    $id
+ * @var int    $user_id
+ * @var string $rendered_marker_name hidden marker input name, {@see Woodev_Payment_Gateway_Admin_Payment_Token_Editor::get_rendered_marker_name()}
  */
 ?>
 
@@ -12,6 +13,17 @@
 	<th><?php echo esc_html( $title ); ?></th>
 
 	<td class="forminp">
+
+		<?php
+		/*
+		 * Issue #393: says "this editor WAS on the form", which the token rows themselves
+		 * cannot. An editor rendered with zero rows posts no token inputs at all — exactly
+		 * like an editor that was never rendered — so without this marker `save()` could not
+		 * tell "the admin deleted the last card" from "this table was skipped", and treated
+		 * both as the former. See that method's docblock for the data loss that produced.
+		 */
+		?>
+		<input type="hidden" name="<?php echo esc_attr( $rendered_marker_name ); ?>" value="1" />
 
 		<table class="woodev_payment_gateway_token_editor widefat" data-gateway-id="<?php echo esc_attr( $id ); ?>">
 
