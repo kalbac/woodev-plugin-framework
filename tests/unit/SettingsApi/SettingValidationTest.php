@@ -146,6 +146,76 @@ class SettingValidationTest extends TestCase {
 		$this->assertNotNull( $setting->get_validation_error( 'Зелёный' ) );
 	}
 
+	// -----------------------------------------------------------------------
+	// Issue #453 — a TYPE_STRING setting whose option map is keyed numerically.
+	//
+	// PHP casts a numeric string array key to int, so `[ '1' => 'Один' ]` stores int(1).
+	// #387 made the key comparison STRICT on purpose, so a TYPE_STRING value — already a
+	// string by the time coerce_value() is done with it — can never match. The setting
+	// rejects the exact option it renders. Decided per the card's option 2: refuse LOUDLY
+	// at registration, where the person who can fix it is standing, rather than leave a
+	// merchant with a save that will not take.
+	//
+	// The rejection itself is deliberately unchanged — the notice is the whole
+	// intervention — so #387's hole stays exactly as closed. The controls below are what
+	// prove that, and the card demanded both sides explicitly.
+	// -----------------------------------------------------------------------
+
+	public function test_string_setting_with_numeric_option_keys_warns_at_registration(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ '1' => 'Один', '2' => 'Два' ] );
+
+		// The behaviour the notice is about, pinned so the notice is not mistaken for a fix:
+		// the value the list offers is still refused.
+		$this->assertNotNull( $setting->get_validation_error( '1' ) );
+	}
+
+	public function test_control_flat_string_list_does_not_warn(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ 'red', 'green', 'blue' ] );
+
+		// Keys ARE 0,1,2 here — numeric by construction. A flat TYPE_STRING list validates
+		// by VALUE, so it is not the shape the guard is about, and #387's index refusal is
+		// re-asserted right here so a future widening of the guard cannot quietly undo it.
+		$this->assertNull( $setting->get_validation_error( 'green' ) );
+		$this->assertNotNull( $setting->get_validation_error( '1' ) );
+	}
+
+	public function test_control_string_map_with_non_numeric_keys_does_not_warn(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ 'red' => 'Красный', 'green' => 'Зелёный' ] );
+
+		$this->assertNull( $setting->get_validation_error( 'green' ) );
+	}
+
+	public function test_control_integer_setting_with_numeric_keys_does_not_warn(): void {
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$setting = $this->make( 'integer', 'select' );
+		$setting->set_options( [ 1 => 'Один', 2 => 'Два' ] );
+
+		// An int value against int keys matches — this combination is correct, and warning
+		// on it would punish the shape #387's own test suite already blesses.
+		$this->assertNull( $setting->get_validation_error( '1' ) );
+	}
+
+	public function test_string_map_with_a_gap_is_still_caught(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		// Keys 0 and 2 are not `range( 0, 1 )`, so this is NOT a flat list — it is an
+		// author-declared numeric map, and the trap applies to it in full.
+		$setting = $this->make( 'string', 'select' );
+		$setting->set_options( [ 0 => 'Ноль', 2 => 'Два' ] );
+
+		$this->assertNotNull( $setting->get_validation_error( '2' ) );
+	}
+
 	public function test_checkbox_required_is_noop(): void {
 		$setting = $this->make( 'boolean', 'checkbox', true );
 		$this->assertNull( $setting->get_validation_error( false ) );

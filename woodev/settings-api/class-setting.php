@@ -375,7 +375,60 @@ if ( ! class_exists( 'Woodev_Setting' ) ) :
 				}
 			}
 
+			$this->guard_numeric_keys_on_a_string_enum( $options );
+
 			$this->options = $options;
+		}
+
+		/**
+		 * Warns a plugin author who registered a STRING setting whose option map has numeric
+		 * keys — a combination this framework cannot accept a value for (issue #453).
+		 *
+		 * PHP silently casts a numeric string array key to `int`, so
+		 * `set_options( [ '1' => 'Один' ] )` stores `int(1)`. `get_validation_error()` compares
+		 * a TYPE_STRING value — which `coerce_value()` has already made a string — against
+		 * those keys STRICTLY (issue #387, deliberately: the lenient `array_key_exists()` it
+		 * replaced is what let a positional index masquerade as a key). `'1' === 1` is false,
+		 * so the setting rejects the exact value it renders in its own list.
+		 *
+		 * The refusal is raised HERE, at registration, rather than left to surface as a save
+		 * failure for the merchant: the person who can fix it is the one calling this method,
+		 * and a save-time rejection tells them nothing. The options are NOT dropped — the
+		 * notice is the whole intervention, so nothing about validation changes and #387's
+		 * hole stays exactly as closed as it was.
+		 *
+		 * A FLAT list is not affected and must not warn: `set_options( [ 'red', 'green' ] )`
+		 * has keys `0, 1` by construction, and a TYPE_STRING flat list is validated by VALUE,
+		 * never by key ({@see self::is_flat_options_list()}). Nor is a non-string setting:
+		 * a TYPE_INTEGER enum keyed `[ 0 => 'Zero' ]` compares an int value to int keys and
+		 * matches.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array $options the options about to be stored.
+		 * @return void
+		 */
+		private function guard_numeric_keys_on_a_string_enum( array $options ): void {
+
+			if ( self::TYPE_STRING !== $this->type || self::is_flat_options_list( $options ) ) {
+				return;
+			}
+
+			$numeric = array_filter( array_keys( $options ), 'is_int' );
+
+			if ( empty( $numeric ) ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				__METHOD__,
+				sprintf(
+					'Setting "%s" is TYPE_STRING but its options are keyed numerically (%s). PHP casts such keys to int, and a string value can never match one, so the setting will reject every option it offers. Use non-numeric keys, or register the setting as TYPE_INTEGER.',
+					$this->id,
+					implode( ', ', $numeric )
+				),
+				'2.0.2'
+			);
 		}
 
 		/**
