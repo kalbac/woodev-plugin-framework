@@ -148,6 +148,20 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              raw request URI it was given in the error message, and that
 		 *              message is what {@see Woodev_Plugin_Updater::get_version_from_remote()}
 		 *              (and any other caller) ends up logging — see #395 (Blocking 2).
+		 * @since 2.0.2 the HTTP reason phrase is redacted through the same routine, AT
+		 *              ASSIGNMENT rather than at each place it is logged — see #451.
+		 *              The phrase is attacker-influenced free text off the wire (a
+		 *              provider is free to echo a request param back in it), and it
+		 *              leaves this class by two unrelated routes: the broadcast
+		 *              (`get_response_data_for_broadcast()`'s `message`, consumed by
+		 *              {@see Woodev_Plugin::log_api_request()}) and the text of a
+		 *              thrown {@see Woodev_API_Exception}, which callers log directly.
+		 *              Redacting per logging boundary would have to cover both and
+		 *              every boundary added later; redacting here cannot be forgotten.
+		 *              Safe because the phrase has no behavioural reader — measured on
+		 *              #451, its only three consumers are those two exception sites and
+		 *              the broadcast, all of them diagnostic text. Nothing compares it,
+		 *              branches on it, or returns it as data.
 		 *
 		 * @param array|WP_Error $response response data
 		 * @throws Woodev_API_Exception network issues, timeouts, API errors, etc
@@ -163,7 +177,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			}
 
 			$this->response_code     = wp_remote_retrieve_response_code( $response );
-			$this->response_message  = wp_remote_retrieve_response_message( $response );
+			$this->response_message  = self::redact_secret_query_params(
+				(string) wp_remote_retrieve_response_message( $response ),
+				$this->get_secret_param_names()
+			);
 			$this->raw_response_body = wp_remote_retrieve_body( $response );
 
 			$response_headers = wp_remote_retrieve_headers( $response );
