@@ -11,9 +11,9 @@ the four questions on card #599 for every site it found.
 | Slice | Sites | FATAL | DISABLES | WRONG-DATA | GUARDED | HARMLESS | UNKNOWN |
 |---|---|---|---|---|---|---|---|
 | `payment-gateway/` | 70 | 12 | 8 | 8 | 4 | 38 | 0 |
-| `shipping-method/` | 40 | 8 | 1 | 1 | 27 | 1 | 2 |
+| `shipping-method/` | 40 | **10** | 1 | 1 | 27 | 1 | **0** |
 | everything else | 49 | 20 | 0 | 6 | 15 | 8 | 0 |
-| **total** | **159** | **40** | **9** | **15** | **46** | **47** | **2** |
+| **total** | **159** | **42** | **9** | **15** | **46** | **47** | **0** |
 
 The card said 162. The real number is **159**: three of the grep hits are `apply_filters` written
 inside docblock prose, not calls. Worker B caught that and said so rather than padding its table.
@@ -65,8 +65,14 @@ The card is explicit that each site is a separate decision, and that stands. In 
   `time-exceeded` and friends are documented intentional override points; a filter that turns off a
   *protection* is a different thing from one that turns off a *behaviour*, and the line between
   them is the operator's to draw.
-- **Two `UNKNOWN` rows** in `shipping-method/` hand an unvalidated return to an untyped property
-  that only vendor WooCommerce code consumes. Neither confirmed nor cleared from inside this repo.
+- ~~Two `UNKNOWN` rows in `shipping-method/`.~~ **RESOLVED the same day, by measurement.** The
+  worker could not settle them because WooCommerce's source is not in this checkout — it is in
+  the rig container. Both filters write into a property WooCommerce then hands to `array_map()`
+  (`abstract-wc-shipping-method.php:565`, `abstract-wc-settings-api.php:67`), and
+  `array_map()` on a non-array is a `TypeError` in PHP 8. Verdict for both:
+  **FATAL**, on the admin settings screen. The totals above carry the corrected figures.
+  Marking them UNKNOWN rather than guessing was the right call — the answer simply lived
+  outside the worker's reach.
 
 ## The per-site tables
 
