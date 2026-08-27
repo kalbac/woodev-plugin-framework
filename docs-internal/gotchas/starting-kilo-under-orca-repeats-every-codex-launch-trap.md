@@ -65,16 +65,23 @@ If the session has gone stale, **release and relaunch** rather than retrying int
 orca orchestration worker-release --dispatch <dispatch_id> --json
 ```
 
-**The model must be set in Orca's Agent Arguments — there is no CLI route.** This is not a
-preference; it is the only configuration that works, and s97 proved it by elimination:
+**`--inject` does not work for kilo on ANY launch path.** The operator settled this by creating a
+worktree with the Kilocode agent from Orca's own UI — the path an agent cannot take — and it
+behaved exactly like `worker-start --agent kilo`:
 
-| Route | Model reaches kilo? | `--inject` / `worker_done`? |
-|---|---|---|
-| `worker-start --agent kilo --model <id>` | **No** — `--help` says the flag serves Claude, Codex and Cursor only; the receipt comes back `launch.effective.model: null` | yes |
-| `terminal create --command "kilo --model <id>"` | yes | **No** — `dispatch --inject` answers `no recognized agent detected`; Orca only recognises agents it launched with `--agent` |
-| `--model <id>` in Settings → Agents → Kilocode → **Arguments** | yes | yes |
+| Route | Orca recognises the agent? | `dispatch --inject` returns | Model reaches kilo? |
+|---|---|---|---|
+| `terminal create --command "kilo --model <id>"` | **no** | `no recognized agent detected` | yes |
+| `worker-start --agent kilo` | yes | **`agent_prompt_stalled`** | no — `launch.effective.model: null` |
+| **Orca UI → Create worktree → Agent: Kilocode** | yes | **`agent_prompt_stalled`** | last-used |
 
-Only the third gives both. Set it to a **provider-qualified** id — `kilo/…`, never a bare model
+The UI row is the one that closes the question: the launch is not the problem. In that run the
+worker read the brief, worked 17.7 s and reported correctly — and Orca had already revoked the
+capability. So do not go hunting for a better launch incantation; use the no-`--inject` recipe.
+
+The model still has to come from somewhere, and only two places supply it: `--command`, or
+Settings → Agents → Kilocode → **Arguments**. `worker-start --model` never does. Use a
+**provider-qualified** id — `kilo/…`, never a bare model
 name — for the reason in cause 3 above. Operator rule (27.08.2026): prefer a **discounted**
 variant; `kilo models | grep -i discount` lists what is on offer, and on that date it was exactly
 one. So the value to put in Arguments is:

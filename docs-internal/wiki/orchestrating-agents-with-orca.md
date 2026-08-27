@@ -250,6 +250,12 @@ measurement, not by guessing: `--timeout-ms 240000`, an explicit `terminal wait 
 a fresh terminal, kilo 7.5.5, `autoupdate: false`, and re-injecting into an already-running
 terminal. None of them changes it.
 
+**And it is not the launch method.** The operator created a worktree with the Kilocode agent from
+Orca's own UI — the one path an agent cannot take, and therefore the only real control available.
+It behaved identically to `worker-start --agent kilo`: recognised as an agent, `--inject` returned
+`agent_prompt_stalled`, the worker read the brief, worked 17.7 s, reported correctly, and the
+capability had already been revoked. Do not go looking for a better launch incantation.
+
 **The recipe: dispatch WITHOUT `--inject`.** Orca then makes no judgement about delivery, never
 revokes the capability, and a real `worker_done` arrives on `check --wait` — verified, payload
 free of `_orcaLifecycleRejection`.
