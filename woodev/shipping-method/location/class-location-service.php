@@ -67,13 +67,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		public const FILTER_REGION_ANCESTOR_CACHE_TTL = 'woodev_location_region_ancestor_cache_ttl';
 
 		/**
-		 * Filter tag: the FINAL answer for a geoip-located record whose own country
-		 * disagrees with {@see self::customer_shipping_country()} (#587) — see
-		 * {@see self::resolve_geoip_default()} for the refusal this filter runs on top
-		 * of. Receives the refusal (`null`) plus the refused record and the country it
-		 * was compared against, purely as a diagnostic/override seam — nothing in this
-		 * codebase consumes it yet (project preference: extension hooks are not gated
-		 * on having a consumer).
+		 * Filter tag: the result of this reconciliation step for a geoip-located
+		 * record whose own country disagrees with {@see self::customer_shipping_country()}
+		 * (#587) — see {@see self::resolve_geoip_default()} for the refusal this filter
+		 * runs on top of. This is NOT necessarily the final answer served to the
+		 * customer: a value that overrides the refusal here can still be refused
+		 * later by {@see self::get_customer_record()}'s staleness gate. Receives the
+		 * refusal (`null`) plus the refused record and the country it was compared
+		 * against, purely as a diagnostic/override seam — nothing in this codebase
+		 * consumes it yet (project preference: extension hooks are not gated on
+		 * having a consumer).
+		 *
+		 * The return is validated: only a {@see Location_Record} instance or `null`
+		 * is accepted from a hooked callback. Anything else degrades to `null` — the
+		 * refusal stands, silently and safely.
 		 *
 		 * @since 2.0.2
 		 * @var string
@@ -1448,9 +1455,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * that the live field is each CALLER's job, never that method's — it is
 		 * not itself an authority on where the customer currently is.
 		 *
-		 * This is not a new rule this method invents: this method's only caller,
-		 * {@see self::get_customer_record()}, already runs every freshly-resolved
-		 * default — BEFORE it is ever persisted or served — through
+		 * This is not a new rule this method invents: this method's direct caller
+		 * is {@see self::resolve_default()} — `public` and callable on its own;
+		 * {@see self::get_customer_record()} reaches this method only indirectly,
+		 * through that call, and already runs every freshly-resolved default —
+		 * BEFORE it is ever persisted or served — through
 		 * {@see self::is_customer_record_stale()}'s same rule (b) (that gate's own
 		 * FIX 1, adversarial review finding, s78). A located record whose country
 		 * disagreed with `customer_shipping_country()` was therefore already
@@ -1503,13 +1512,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			if ( $record->country() !== $country ) {
 				/**
-				 * Filters the final answer for a geoip-located record whose own
-				 * country disagreed with {@see self::customer_shipping_country()}
-				 * (#587) — see {@see self::FILTER_GEOIP_COUNTRY_MISMATCH} for the
-				 * full rationale. Purely a diagnostic/override seam: nothing in
+				 * Filters the result of this reconciliation step for a
+				 * geoip-located record whose own country disagreed with
+				 * {@see self::customer_shipping_country()} (#587) — see
+				 * {@see self::FILTER_GEOIP_COUNTRY_MISMATCH} for the full
+				 * rationale. Purely a diagnostic/override seam: nothing in
 				 * this codebase consumes it yet.
 				 *
+				 * The return is validated: only a {@see Location_Record}
+				 * instance or `null` is accepted. Anything else a hooked
+				 * callback returns — `false`, a string, an array, an
+				 * unrelated object — degrades to `null`: the refusal stands,
+				 * silently and safely, instead of being passed through to a
+				 * caller typed `?Location_Record`.
+				 *
 				 * @since 2.0.2
+				 * @since 2.0.2 The return is now validated; an unusable value
+				 *              degrades to the refusal instead of propagating
+				 *              (#587).
 				 *
 				 * @param Location_Record|null $resolved The chain's own answer —
 				 *                                        always `null`.
@@ -1519,7 +1539,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				 *                                        the record's own country
 				 *                                        was compared against.
 				 */
-				return apply_filters( self::FILTER_GEOIP_COUNTRY_MISMATCH, null, $record, $country );
+				$filtered = apply_filters( self::FILTER_GEOIP_COUNTRY_MISMATCH, null, $record, $country );
+
+				return $filtered instanceof Location_Record ? $filtered : null;
 			}
 
 			return $record;

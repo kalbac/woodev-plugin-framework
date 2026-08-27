@@ -1392,6 +1392,71 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			\WC_Geolocation::$address = null;
 		}
 
+		/**
+		 * Location_Service::FILTER_GEOIP_COUNTRY_MISMATCH's return is
+		 * validated (#587 round 3): a hooked callback returning something
+		 * other than a Location_Record instance or null must not raise a
+		 * TypeError against resolve_geoip_default()'s `?Location_Record`
+		 * return type — it must degrade to the refusal instead.
+		 */
+		public function test_geoip_country_mismatch_filter_returning_a_string_degrades_to_null(): void {
+			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'BY' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					if ( Location_Service::FILTER_GEOIP_COUNTRY_MISMATCH === $tag ) {
+						return 'not-a-location-record';
+					}
+
+					return $default;
+				}
+			);
+
+			$service = $this->service( $registry );
+
+			$this->assertNull(
+				$service->resolve_default(),
+				'a filter returning a string must not throw and must degrade to the refusal'
+			);
+
+			\WC_Geolocation::$address = null;
+		}
+
+		public function test_geoip_country_mismatch_filter_returning_false_degrades_to_null(): void {
+			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'BY' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			Functions\when( 'apply_filters' )->alias(
+				static function ( string $tag, $default = null ) {
+					if ( Location_Service::FILTER_GEOIP_COUNTRY_MISMATCH === $tag ) {
+						return false;
+					}
+
+					return $default;
+				}
+			);
+
+			$service = $this->service( $registry );
+
+			$this->assertNull(
+				$service->resolve_default(),
+				'a filter returning false must not throw and must degrade to the refusal'
+			);
+
+			\WC_Geolocation::$address = null;
+		}
+
 		public function test_policy_geoip_locate_miss_still_resolves_to_null(): void {
 			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => null );
 
