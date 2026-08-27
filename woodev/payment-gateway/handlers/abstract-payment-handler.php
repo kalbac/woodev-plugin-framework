@@ -210,7 +210,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 			} catch ( Exception $exception ) {
 
-				$this->get_gateway()->get_plugin()->log( 'Error handling approved transaction: ' . $exception->getMessage() );
+				$this->get_gateway()->get_plugin()->log( 'Error handling approved transaction: ' . \Woodev_API_Base::redact_secret_log_text( $exception->getMessage() ) );
 
 				if ( $order instanceof WC_Order ) {
 					$order->add_order_note(

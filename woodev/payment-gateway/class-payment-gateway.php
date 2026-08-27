@@ -3413,6 +3413,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				return;
 			}
 
+			// Redacted ONCE, AT THE SINK, rather than at each call site. This method is the
+			// gateway's debug boundary and its callers include catch blocks that hand it a
+			// FOREIGN exception's message: mark_order_as_failed() hands it one caught by
+			// Woodev_Payment_Gateway_Hosted, and the token handler's get_tokens() catch hands
+			// it another. Redacting here means a call site added later cannot forget (#594).
+			//
+			// Applied BEFORE the branch below, so it covers the storefront notice as well as
+			// the log — with debug_checkout on, that notice renders to whoever is at the
+			// checkout, which is a worse place for a credential than a log file. Both paths
+			// here are diagnostics a merchant opts into, so over-redacting them costs nothing
+			// that matters. See Woodev_API_Base::redact_secret_log_text() for what the scan
+			// does and does not catch.
+			$message = \Woodev_API_Base::redact_secret_log_text( (string) $message );
+
 			// add log message to WC logger if log/both is enabled
 			if ( $this->debug_log() ) {
 				$this->get_plugin()->log( $message, $this->get_id() );

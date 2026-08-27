@@ -612,16 +612,62 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * class never sees, and that message can reach a log boundary
 		 * without ever passing through this class at all (#585). This is
 		 * the seam those boundaries SHOULD route through, instead of each
-		 * hand-redacting the same free text independently — the current
-		 * ones are {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::log_carrier_failure()},
-		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::log_carrier_failure()},
-		 * {@see Woodev_Plugin_Updater::get_version_from_remote()}, and
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::log_failure()}.
-		 * That list is OPEN, not exhaustive — nothing in this class enforces
-		 * that every log boundary in the codebase routes through it; a #585
-		 * critic-round-2 sweep found several further caught-exception log
-		 * sinks that do not yet, tracked in issue #594 so the gap is visible
-		 * from the code, not only from the tracker.
+		 * hand-redacting the same free text independently. As of #594 every
+		 * APPLICATION-LOG sink in `woodev/` that writes a caught
+		 * exception's message routes through it. Getting to that took
+		 * three sweeps, each finding what the previous one's grep could
+		 * not see:
+		 *
+		 * - #585 found four, all spelled `error_log(`.
+		 * - #594's card listed eleven more, also `error_log(` — the
+		 *   setup-wizard and settings-page REST controllers, the location
+		 *   resolution cache, the shipment handler, the licensing/updater
+		 *   command transport.
+		 * - #594's own re-sweep found three in `woodev/payment-gateway/`
+		 *   spelled `$plugin->log(`, invisible to a grep for `error_log`.
+		 * - #594's CRITIC found a fourth spelling the re-sweep still
+		 *   missed: {@see Woodev_Payment_Gateway::add_debug_message()},
+		 *   which reaches the same WooCommerce logger INDIRECTLY. Two
+		 *   catches hand it a foreign message. It is redacted AT THE SINK
+		 *   rather than at those call sites, so a later caller cannot
+		 *   forget.
+		 *
+		 * Read that list as a warning, not a certificate: each sweep was
+		 * keyed on one spelling and each was wrong about being finished.
+		 * Grep for the SINK, not for one spelling of it.
+		 *
+		 * DELIBERATELY OUT OF SCOPE, so their absence is not mistaken for
+		 * an oversight:
+		 *
+		 * - `_doing_it_wrong()` in `woodev/settings-api/` (two sites)
+		 *   carries a caught exception's message and WordPress may route
+		 *   it to the PHP error log. It is a DEVELOPER-misuse marker: the
+		 *   exception is the framework's own validation complaining about
+		 *   the plugin author's arguments, and masking it would blunt the
+		 *   one message whose whole job is to tell that author what they
+		 *   got wrong.
+		 * - `WC_Order` notes. Two payment-gateway sites also put the raw
+		 *   message into one. That is a different boundary with a
+		 *   different trade — shop staff read an order note to understand
+		 *   a failed payment, and this method's deliberate over-redaction
+		 *   would degrade it — so it is decided separately, not in
+		 *   passing.
+		 * - BROWSER RESPONSES. Roughly a dozen sites hand a caught
+		 *   exception's message straight to `wp_send_json_error()` or into
+		 *   a `WP_Error` returned from REST. That is a THIRD boundary
+		 *   again, and it is not a smaller one: one of those sites
+		 *   ({@see Woodev_Script_Handler::ajax_log_event()}) is registered
+		 *   for `nopriv`, so its reader need not be logged in at all. Not
+		 *   in scope here — this method is named for LOG text and the
+		 *   trade for a message a human is meant to read is different —
+		 *   but recorded so its absence is not read as a sweep that missed
+		 *   them. Tracked separately.
+		 *
+		 * Nothing here ENFORCES any of this. A new log boundary that skips
+		 * this method fails nothing and says nothing, which is exactly how
+		 * the later fourteen survived #585. Ask it of every new `catch`
+		 * that logs: can this `\Throwable` have been thrown by somebody
+		 * else's code?
 		 *
 		 * Reuses {@see self::redact_secret_query_params()} — the same
 		 * `name=value` / `<name>value</name>` free-text scan

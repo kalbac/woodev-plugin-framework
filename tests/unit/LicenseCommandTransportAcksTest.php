@@ -54,6 +54,14 @@ class LicenseCommandTransportAcksTest extends TestCase {
 	private const NOW = 1_700_000_000;
 
 	/**
+	 * The secret a pull-command/ack consumption failure's exception message
+	 * embeds — #594.
+	 *
+	 * @var string
+	 */
+	private const SECRET = 'LIVESECRET';
+
+	/**
 	 * dispatch() now consumes pull commands on EVERY successful response (critic
 	 * ruling s8-p5 #1) — consume_pull_commands() normalises object-shaped payloads
 	 * via wp_json_encode, so it must be stubbed for all dispatch-path tests.
@@ -1076,5 +1084,109 @@ class LicenseCommandTransportAcksTest extends TestCase {
 		$this->assertNotEmpty( $ack_stored, 'The executed ack is recorded for the next drain.' );
 		$this->assertSame( str_repeat( 'a', 32 ), $ack_stored[0]['nonce'] );
 		$this->assertSame( 'executed', $ack_stored[0]['status'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// #594: dispatch()'s pull-command/ack consumption boundary — the catch
+	// wrapping Woodev_License_Command_Dispatcher::consume_pull_commands() /
+	// the acks_received drain must route a caught \Throwable's message
+	// through Woodev_API_Base::redact_secret_log_text() before error_log().
+	// Triggered here via a throwing wp_json_encode() (consume_pull_commands()
+	// normalises the response through it first) — a foreign-enough source to
+	// embed a secret the same way a malformed response body could.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A secret embedded in the pull-command/ack consumption failure's message
+	 * must be redacted before it reaches error_log().
+	 *
+	 * @return void
+	 */
+	public function test_dispatch_redacts_a_secret_in_a_pull_command_consumption_failure(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		$ack_stored = false;
+		$this->stub_option_io( $ack_stored );
+
+		Functions\when( 'wp_json_encode' )->alias(
+			static function () {
+				throw new \Exception( 'carrier rejected api_key=' . self::SECRET );
+			}
+		);
+
+		$response = Mockery::mock();
+		$response->shouldReceive( 'get_response_data' )->andReturn( (object) array() );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturn( $response );
+
+		$engine = $this->make_license_engine( $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_dispatch( $engine, 'check_license', 'KEY-123' );
+
+		$this->assertSame( $response, $result );
+		$this->assertSame(
+			'Woodev licensing: pull-command/ack consumption failed: carrier rejected api_key=' . \Woodev_API_Base::SECRET_VALUE_MASK,
+			$captured
+		);
+	}
+
+	/**
+	 * Control: a pull-command/ack consumption failure message carrying NO
+	 * secret must reach the rendered error_log() line byte-for-byte.
+	 *
+	 * @return void
+	 */
+	public function test_dispatch_leaves_a_pull_command_consumption_failure_message_without_a_secret_untouched(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		$ack_stored = false;
+		$this->stub_option_io( $ack_stored );
+
+		Functions\when( 'wp_json_encode' )->alias(
+			static function () {
+				throw new \Exception( 'malformed license_commands payload' );
+			}
+		);
+
+		$response = Mockery::mock();
+		$response->shouldReceive( 'get_response_data' )->andReturn( (object) array() );
+
+		$api_handler = Mockery::mock();
+		$api_handler->shouldReceive( 'make_request' )->once()->andReturn( $response );
+
+		$engine = $this->make_license_engine( $api_handler );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				Mockery::on(
+					static function ( $message ) use ( &$captured ) {
+						$captured = $message;
+						return true;
+					}
+				)
+			);
+
+		$result = $this->call_dispatch( $engine, 'check_license', 'KEY-123' );
+
+		$this->assertSame( $response, $result );
+		$this->assertSame(
+			'Woodev licensing: pull-command/ack consumption failed: malformed license_commands payload',
+			$captured
+		);
 	}
 }

@@ -248,7 +248,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 					sprintf(
 						'[woodev] popular-settlements enrolment failed for provider "%s": %s',
 						$provider->get_id(),
-						$throwable->getMessage()
+						\Woodev_API_Base::redact_secret_log_text( $throwable->getMessage() )
 					)
 				); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; enrolment is a ranking side-effect and must never undo/fail an export whose carrier order already exists.
 			}

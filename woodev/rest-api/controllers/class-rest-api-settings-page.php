@@ -198,7 +198,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 				try {
 					$handler->update_value( (string) $setting_id, $value );
 				} catch ( \Throwable $e ) {
-					error_log( sprintf( '[woodev] settings save failed on "%s": %s', $setting_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
+					error_log( sprintf( '[woodev] settings save failed on "%s": %s', $setting_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected persistence failure.
 					return new WP_Error(
 						'woodev_settings_server_error',
 						__( 'Внутренняя ошибка сервера. Попробуйте ещё раз.', 'woodev-plugin-framework' ),
@@ -302,7 +302,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			try {
 				$result = $handler->test_connection( $connection_id, $merged );
 			} catch ( \Throwable $e ) {
-				error_log( sprintf( '[woodev] connection test failed for %s/%s: %s', $provider_id, $connection_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
+				error_log( sprintf( '[woodev] connection test failed for %s/%s: %s', $provider_id, $connection_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
 				return new WP_Error(
 					'woodev_settings_connection_error',
 					__( 'Ошибка при проверке подключения.', 'woodev-plugin-framework' ),
@@ -375,7 +375,7 @@ if ( ! class_exists( 'Woodev_REST_API_Settings_Page' ) ) :
 			try {
 				$result = \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::instance()->run( $tool_id, $args );
 			} catch ( \Throwable $e ) {
-				error_log( sprintf( '[woodev] shipping tool run failed for %s/%s: %s', $provider_id, $tool_id, $e->getMessage() ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
+				error_log( sprintf( '[woodev] shipping tool run failed for %s/%s: %s', $provider_id, $tool_id, \Woodev_API_Base::redact_secret_log_text( $e->getMessage() ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for an unexpected callback failure.
 				return new WP_Error(
 					'woodev_settings_tool_error',
 					__( 'Ошибка при выполнении инструмента.', 'woodev-plugin-framework' ),

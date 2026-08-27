@@ -169,7 +169,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Resoluti
 						get_class( $adapter ),
 						$plugin_id,
 						$locality_key,
-						$throwable->getMessage()
+						\Woodev_API_Base::redact_secret_log_text( $throwable->getMessage() )
 					)
 				); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- loud-but-contained boundary; a transient adapter failure must never be cached, and the caller decides how to handle the exception (spec: throw = retryable).
 
