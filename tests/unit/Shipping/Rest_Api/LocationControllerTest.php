@@ -93,7 +93,7 @@ if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
 	}
 }
 
-require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/class-location-controller.php';
 
 /**

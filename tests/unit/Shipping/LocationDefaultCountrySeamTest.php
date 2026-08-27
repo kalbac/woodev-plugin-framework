@@ -41,7 +41,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		require_once dirname( __DIR__ ) . '/Shipping/Rest_Api/wp-rest-controller-stub.php';
 	}
 
-	require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
+	require_once dirname( __DIR__, 3 ) . '/woodev/http/trait-rest-rate-limit.php';
 	require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/rest-api/class-location-controller.php';
 
 	/**

@@ -2,28 +2,38 @@
 /**
  * Woodev REST Rate-Limit + Param-Hygiene Trait
  *
- * Shared by the framework's public, guest-reachable `woodev/v1` REST controllers
- * ({@see Field_Source_Controller}, {@see Pickup_Controller}) so the per-IP rate limit,
- * client-IP resolution and free-text param capping exist in exactly one place, with
- * exactly one copy of the security caveats that go with them. Both consumers are
- * public, unauthenticated endpoints, but they serve different workloads (a cascade
- * dropdown fired once on user selection vs. a map firing continuously while the
- * customer pans/zooms) — this trait owns only the mechanism; each consumer supplies
- * its own key prefix and budget per call, so one workload never consumes another's.
+ * Shared by every public, guest-reachable Woodev endpoint that needs a per-IP budget — the
+ * framework's public `woodev/v1` REST controllers ({@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller},
+ * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}, {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller})
+ * as well as plain `admin-ajax.php` handlers such as {@see \Woodev_Script_Handler::ajax_log_event()} — so the
+ * per-IP rate limit, client-IP resolution and free-text param capping exist in exactly one
+ * place, with exactly one copy of the security caveats that go with them. Consumers differ in
+ * transport (WP-REST vs. admin-ajax) and workload (a cascade dropdown fired once on user
+ * selection vs. a map firing continuously while the customer pans/zooms vs. a script-error
+ * event fired at most a handful of times per pageview) — this trait owns only the mechanism;
+ * each consumer supplies its own key prefix and budget per call, so one workload never
+ * consumes another's.
+ *
+ * Lives outside the `Shipping` namespace deliberately (issue #577): the mechanism is general —
+ * nothing about fixed-window per-IP throttling is shipping-specific — so pulling it into a
+ * shipping-only namespace would be backwards coupling for a global-namespace consumer like
+ * `Woodev_Script_Handler`. `Http` names what every consumer actually has in common: an inbound
+ * request from an untrusted, possibly-guest caller, whether that request lands on a WP-REST
+ * route or on `admin-ajax.php`.
  *
  * @since 2.0.2
  */
 
-namespace Woodev\Framework\Shipping\Rest_Api;
+namespace Woodev\Framework\Http;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
 
-if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_Trait' ) ) :
+if ( ! trait_exists( '\\Woodev\\Framework\\Http\\Rest_Rate_Limit_Trait' ) ) :
 
 	/**
-	 * Rate-limit + param-hygiene helpers for a public REST controller.
+	 * Rate-limit + param-hygiene helpers for a public, guest-reachable Woodev endpoint.
 	 *
 	 * @since 2.0.2
 	 */
@@ -377,7 +387,7 @@ if ( ! trait_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Rest_Rate_Limit_T
 				: null;
 
 			/**
-			 * Filters the address a public Woodev REST route buckets its rate limit under.
+			 * Filters the address a public Woodev route buckets its rate limit under.
 			 *
 			 * THE TRUSTED-PROXY BOUNDARY HOOK. The framework cannot know which forwarding
 			 * header an install's own edge rewrites, and guessing is what makes a header-derived

@@ -1,7 +1,7 @@
 <?php
 /**
- * Tests for Rest_Rate_Limit_Trait — the fixed-window rate limit shared by
- * Field_Source_Controller and Pickup_Controller.
+ * Tests for Rest_Rate_Limit_Trait — the fixed-window rate limit shared by every
+ * public, guest-reachable Woodev endpoint (REST controllers and admin-ajax handlers alike).
  *
  * Pins three separate bug fixes this trait now carries:
  *
@@ -18,20 +18,22 @@
  *    requests all read the same count and all passed. The counter is now incremented FIRST
  *    and the returned value compared, over an atomic primitive.
  *
- * @package Woodev\Tests\Unit\Shipping\Rest_Api
+ * @package Woodev\Tests\Unit\Http
  */
 
-namespace Woodev\Tests\Unit\Shipping\Rest_Api;
+namespace Woodev\Tests\Unit\Http;
 
 use Brain\Monkey\Functions;
 use Woodev\Tests\Unit\TestCase;
 
-require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/rest-api/trait-rest-rate-limit.php';
+require_once dirname( __DIR__, 3 ) . '/woodev/http/trait-rest-rate-limit.php';
 
 // A `\WC_Geolocation` double, so the tests can drive the header-derived address the trait
-// no longer trusts on its own. Global namespace (see the stub file's own docblock).
+// no longer trusts on its own. Global namespace (see the stub file's own docblock). Lives
+// beside the Shipping REST controller tests that also need it — it is not specific to this
+// trait's own new home, so it did not move with the trait.
 if ( ! class_exists( '\\WC_Geolocation' ) ) {
-	require_once __DIR__ . '/wc-geolocation-stub.php';
+	require_once dirname( __DIR__ ) . '/Shipping/Rest_Api/wc-geolocation-stub.php';
 }
 
 /**
@@ -42,7 +44,7 @@ if ( ! class_exists( '\\WC_Geolocation' ) ) {
  * ordering are both genuinely exercised.
  */
 final class Rest_Rate_Limit_Trait_Fixture {
-	use \Woodev\Framework\Shipping\Rest_Api\Rest_Rate_Limit_Trait;
+	use \Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 
 	/** @var int|null frozen clock, or null to use the real one. */
 	public ?int $now = null;
@@ -81,7 +83,7 @@ final class Rest_Rate_Limit_Trait_Fixture {
 }
 
 /**
- * @covers \Woodev\Framework\Shipping\Rest_Api\Rest_Rate_Limit_Trait
+ * @covers \Woodev\Framework\Http\Rest_Rate_Limit_Trait
  */
 final class RestRateLimitTraitTest extends TestCase {
 

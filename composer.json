@@ -35,6 +35,7 @@
             "woodev/box-packer/interfaces",
             "woodev/compatibility",
             "woodev/handlers",
+            "woodev/http",
             "woodev/licensing",
             "woodev/payment-gateway",
             "woodev/licensing/updater",

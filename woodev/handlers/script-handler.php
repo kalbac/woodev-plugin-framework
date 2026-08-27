@@ -12,9 +12,28 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 	 */
 	abstract class Woodev_Script_Handler {
 
+		use \Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 
 		/** @var string JS handler base class name */
 		protected $js_handler_base_class_name = '';
+
+		/**
+		 * Maximum nopriv log-event requests allowed per IP per rate-limit window (default 60s
+		 * window, see {@see \Woodev\Framework\Http\Rest_Rate_Limit_Trait::is_rate_limited()}).
+		 *
+		 * The trait's own default: this endpoint fires at most a handful of times per
+		 * pageview under normal conditions (a script-load error, at most) — the same
+		 * discrete/low-frequency shape as {@see \Woodev\Framework\Shipping\Rest_Api\Field_Source_Controller::RATE_LIMIT_MAX}
+		 * and {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::SUGGEST_RATE_LIMIT_MAX} /
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::LIST_RATE_LIMIT_MAX} —
+		 * three of the trait's eight existing buckets already land on 60/60s for exactly this
+		 * shape of workload, so it needs no new number of its own (issue #577).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		protected const LOG_RATE_LIMIT_MAX = 60;
 
 		/**
 		 * Script_Handler constructor.
@@ -209,6 +228,13 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 
 			try {
 
+				// Gate 1: rate-limit — a flooded window short-circuits with no further work.
+				// Own key prefix (issue #577): this bucket must never share a budget with a
+				// shipping REST route's, or one workload could exhaust the other's.
+				if ( $this->is_rate_limited( 'woodev_script_log_rl_', self::LOG_RATE_LIMIT_MAX ) ) {
+					throw new Woodev_Plugin_Exception( 'Too many requests. Please slow down.' );
+				}
+
 				if ( ! wp_verify_nonce( Woodev_Helper::get_posted_value( 'security' ), 'wc-' . $this->get_id_dasherized() . '-log-script-event' ) ) {
 					throw new Woodev_Plugin_Exception( 'Invalid nonce.' );
 				}
@@ -255,8 +281,9 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 * otherwise put a megabyte on one line; 500 characters is well past any real script
 		 * event (the longest this framework emits is a stack-free error string) and bounds
 		 * what a single request can cost. It does NOT bound how MANY requests arrive — that
-		 * is the flood half of #402, which needs a rate-limit policy rather than a cap, and
-		 * is filed separately.
+		 * is the flood half of #402, which needed a rate-limit policy rather than a cap; see
+		 * {@see self::ajax_log_event()}'s own {@see \Woodev\Framework\Http\Rest_Rate_Limit_Trait}
+		 * gate (issue #577).
 		 *
 		 * @internal
 		 *
