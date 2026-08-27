@@ -19,9 +19,18 @@
  * point the value enters the object — and then check BOTH exits. Redacting per
  * boundary would have had to cover both, plus every boundary added later.
  *
- * That is only safe because the phrase has no behavioural reader: measured on
- * #451, its only consumers are the broadcast and two exception sites, all
- * diagnostic text. Nothing compares it, branches on it, or returns it as data.
+ * The phrase DOES have a behavioural reader — `plugins-reference/` ships one,
+ * woocommerce-edostavka's DaData client, which branches on
+ * `str_starts_with( strtolower( $message ), 'unauthorized' )`. What makes
+ * assignment safe is not the absence of such a reader but the SHAPE of the
+ * redaction: it replaces only the value after a secret `name=`, or between
+ * `<name></name>`, and leaves every other byte in place. The last two tests
+ * here pin that, because it is the property the donor plugin depends on.
+ *
+ * Scope note: these doubles stop at the payload builder and the exception
+ * constructor. They do not run `do_action()`, `Woodev_Plugin::log_api_request()`
+ * or the licensing logger, so what they prove is that the value handed to those
+ * consumers is already redacted — not that the loggers themselves behave.
  *
  * @package Woodev\Tests\Unit\Api
  */
@@ -260,5 +269,58 @@ final class ApiBaseResponseMessageRedactionTest extends TestCase {
 		$api = $this->handle( '' );
 
 		$this->assertSame( '', $api->get_response_message_for_test() );
+	}
+
+	// -------------------------------------------------------------------------
+	// The invariant a behavioural reader depends on — #451 critic pass.
+	//
+	// woocommerce-edostavka's DaData client (plugins-reference/) picks which
+	// message the merchant sees with
+	// `str_starts_with( strtolower( $phrase ), 'unauthorized' )`. Redaction runs
+	// before that branch once the donor is migrated onto this framework, so the
+	// branch is only safe if redaction cannot rewrite the LEADING text.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The realistic case: an `Unauthorized` phrase that also carries a secret.
+	 * The secret goes, the prefix the donor branches on stays.
+	 *
+	 * @return void
+	 */
+	public function test_redaction_preserves_a_leading_prefix_a_caller_branches_on(): void {
+
+		$api    = $this->handle( 'Unauthorized token=' . self::SECRET . ' scope' );
+		$phrase = (string) $api->get_response_message_for_test();
+
+		$this->assertStringNotContainsString( self::SECRET, $phrase );
+		$this->assertTrue(
+			0 === strpos( strtolower( $phrase ), 'unauthorized' ),
+			'redaction must not disturb the leading text: a downstream prefix test branches on it'
+		);
+		$this->assertStringEndsWith( ' scope', $phrase, 'text after the masked value must survive too' );
+	}
+
+	/**
+	 * The adversarial case: a phrase that BEGINS with a secret pair. Redaction
+	 * rewrites the value here, but it cannot flip the prefix test either way,
+	 * because such a phrase does not start with `unauthorized` before redaction
+	 * and does not start with it after — the param NAME is preserved.
+	 *
+	 * @return void
+	 */
+	public function test_a_phrase_beginning_with_a_secret_pair_cannot_flip_the_prefix_test(): void {
+
+		$raw = 'token=' . self::SECRET . ' unauthorized';
+
+		$api    = $this->handle( $raw );
+		$phrase = (string) $api->get_response_message_for_test();
+
+		$this->assertStringNotContainsString( self::SECRET, $phrase );
+		$this->assertSame(
+			0 === strpos( strtolower( $raw ), 'unauthorized' ),
+			0 === strpos( strtolower( $phrase ), 'unauthorized' ),
+			'the prefix test must return the same answer before and after redaction'
+		);
+		$this->assertStringStartsWith( 'token=', $phrase, 'the param name itself is never masked, only its value' );
 	}
 }

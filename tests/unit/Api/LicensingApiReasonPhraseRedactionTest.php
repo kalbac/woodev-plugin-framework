@@ -13,6 +13,14 @@
  * seeding the field and asserting the throw echoes it. Seeding would only
  * have proved the two halves separately; this proves the whole path.
  *
+ * The message does not stop at a log, either: {@see Woodev_REST_API_License}'s
+ * `respond()` returns a caught Throwable's message to the caller as a
+ * WP_Error, so the React licence page shows it to an administrator.
+ *
+ * Scope note: the double bypasses the constructor and the broadcast, so this
+ * proves the exception is BUILT from a redacted value. It does not exercise
+ * the updater's `error_log()` call or the REST responder themselves.
+ *
  * @package Woodev\Tests\Unit\Api
  */
 
