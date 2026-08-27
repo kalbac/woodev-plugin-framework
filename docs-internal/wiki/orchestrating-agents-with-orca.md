@@ -229,6 +229,67 @@ brief; if the code disagrees, the code wins.** In s84 it produced a correction i
 report — a third AJAX handler with the same hole, a preflight check that existed but was never
 consumed, and a "the brief's baseline is stale" that turned out to be the skipped-test gap above.
 
+## kilo as the critic — the recipe that actually returns an event (s97)
+
+Codex was unreachable for a stretch (unpaid subscription), and kilo — reached through the same
+Kilo Gateway balance — took the critic seat. Getting it to behave as a supervised Orca worker took
+a full elimination pass; this is the outcome, so nobody repeats it.
+
+**Orca cannot detect that kilo's TUI accepted a prompt.** `dispatch --inject` types the brief,
+kilo receives it and works — and Orca, seeing no signal it recognises, declares
+`agent_prompt_stalled`, settles the dispatch as failed and **revokes the capability**. Eight to
+twelve seconds later the worker finishes and its `worker_done` is rejected:
+
+```
+$ orca orchestration send ... --type worker_done ... --outcome succeeded
+Dispatch ctx_c6a9d9f6223a capability is revoked.
+```
+
+Reproduced three times. Delivery succeeded every time; detection failed every time. Ruled out by
+measurement, not by guessing: `--timeout-ms 240000`, an explicit `terminal wait --for tui-idle`,
+a fresh terminal, kilo 7.5.5, `autoupdate: false`, and re-injecting into an already-running
+terminal. None of them changes it.
+
+**And it is not the launch method.** The operator created a worktree with the Kilocode agent from
+Orca's own UI — the one path an agent cannot take, and therefore the only real control available.
+It behaved identically to `worker-start --agent kilo`: recognised as an agent, `--inject` returned
+`agent_prompt_stalled`, the worker read the brief, worked 17.7 s, reported correctly, and the
+capability had already been revoked. Do not go looking for a better launch incantation.
+
+**The recipe: dispatch WITHOUT `--inject`.** Orca then makes no judgement about delivery, never
+revokes the capability, and a real `worker_done` arrives on `check --wait` — verified, payload
+free of `_orcaLifecycleRejection`.
+
+```bash
+orca terminal create --worktree <sel> --command "kilo --model kilo/openai/gpt-5.6-sol-discounted"
+orca terminal wait --terminal <H> --for tui-idle --timeout-ms 90000
+# READ THE BUFFER. The first send is lost while the welcome screen paints; re-send if the
+# prompt box is still empty. Same house rule as Codex: read back after every step.
+T=$(orca orchestration task-create --spec "…")
+D=$(orca orchestration dispatch --task $T --to <H>)          # <- no --inject
+orca terminal send --terminal <H> --text "<brief> + the literal worker_done line carrying $T and $D" --enter
+orca orchestration check --wait --types worker_done --timeout-ms 180000
+# check replays the oldest FIFO batch until acknowledged:
+orca orchestration check --ack <deliveryId> --json
+```
+
+Four facts that cost time, each measured:
+
+1. **The agent id is `kilo`,** not `kilocode` — Orca's settings label it "Kilocode" but the CLI
+   takes the command. `--agent kilocode` → `agent_unconfigured`.
+2. **`--model` never reaches kilo.** `worker-start --help` says the flag serves Claude, Codex and
+   Cursor; for kilo the receipt returns `launch.effective.model: null`. Pin it with `--command`,
+   or put it in Orca → Settings → Agents → Kilocode → Arguments. Without a pin kilo starts on its
+   LAST USED model — which is how a worker silently ended up on the `openai/…` route whose OAuth
+   token had expired, while `kilo/openai/…` on the Kilo Gateway worked fine. **Always name the
+   provider prefix.**
+3. **Operator rule: prefer a discounted variant.** `kilo models | grep -i discount`. On
+   27.08.2026 there was exactly one, and the status bar confirms it: `GPT-5.6 Sol (50% off)`.
+4. **`"autoupdate": false` in `~/.config/kilo/kilo.jsonc`** removes the startup update dialog that
+   otherwise swallows the injected brief. Three tasks circuit-broke on it before it was found.
+
+Cost of a critic round on this setup: **$0.01–0.03**.
+
 ## Traps
 
 - **`terminal wait --for tui-idle` lies.** It counts an open dialog as idle. Check the
