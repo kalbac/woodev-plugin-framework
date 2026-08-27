@@ -652,6 +652,16 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *   a failed payment, and this method's deliberate over-redaction
 		 *   would degrade it — so it is decided separately, not in
 		 *   passing.
+		 * - BROWSER RESPONSES. Roughly a dozen sites hand a caught
+		 *   exception's message straight to `wp_send_json_error()` or into
+		 *   a `WP_Error` returned from REST. That is a THIRD boundary
+		 *   again, and it is not a smaller one: one of those sites
+		 *   ({@see Woodev_Script_Handler::ajax_log_event()}) is registered
+		 *   for `nopriv`, so its reader need not be logged in at all. Not
+		 *   in scope here — this method is named for LOG text and the
+		 *   trade for a message a human is meant to read is different —
+		 *   but recorded so its absence is not read as a sweep that missed
+		 *   them. Tracked separately.
 		 *
 		 * Nothing here ENFORCES any of this. A new log boundary that skips
 		 * this method fails nothing and says nothing, which is exactly how
