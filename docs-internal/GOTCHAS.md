@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 216 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 217 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -106,6 +106,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/*] **The local PHP is 8.5 and the CI floor is 7.4 — a green `composer check` here is evidence about 8.5 only (`setAccessible()` is the worked case).** → [the-local-php-is-four-versions-above-the-ci-floor](gotchas/the-local-php-is-four-versions-above-the-ci-floor.md) (s98)
 - [testing/*] **Measure a gate only where the gate can actually fire — an AND-ed precondition you did not control answers for you.** → [measure-a-gate-where-the-gate-can-actually-fire](gotchas/measure-a-gate-where-the-gate-can-actually-fire.md) (s78)
 - [testing/*] **A `perl -0pi` newline-pattern mutation silently misses a CRLF file — and this tree is LF, so a CRLF file means Serena flipped it (root cause corrected s82).** → [perl-multiline-mutation-silently-misses-crlf-files](gotchas/perl-multiline-mutation-silently-misses-crlf-files.md) (s78, corrected s82)
 - [testing/measurement] **A cached token makes an invalid-credential test PASS — you tested the cache, not the credential.** → [a-cached-token-makes-an-invalid-credential-test-pass](gotchas/a-cached-token-makes-an-invalid-credential-test-pass.md) (s82)
