@@ -184,6 +184,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 1.5.0
 		 * @since 2.0.2 Added the `init:21` WC Address Autocomplete suppression hook
 		 *              (location-provider layer Task 12).
+		 * @since 2.0.2 Listens for `woodev_shipping_pickup_point_selected` so a
+		 *              confirmed pickup point promotes an implicit locality —
+		 *              issue #518.
 		 *
 		 * @return void
 		 */
@@ -196,6 +199,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
+			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'handle_pickup_point_selected' ] );
 
 			$this->guard_native_field_conflicts();
 		}
@@ -253,6 +257,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			// Short-circuit ONLY for the sentinel; every other value is left to WC's own
 			// resolution, so this filter cannot drift away from WC's behaviour over time.
 			return '*' === $customer->{$getter}() ? '' : $value;
+		}
+
+		/**
+		 * A confirmed pickup point answers the "please choose your locality"
+		 * prompt the address lock exists to be (issue #518).
+		 *
+		 * The store's default-locality policy can seed a locality for a customer
+		 * who picked nothing. Spec §4.6/D11 says such an implicit record must not
+		 * suppress that prompt, so {@see \Woodev\Framework\Shipping\Location\Location_Service}
+		 * keeps it flagged and the checkout keeps the address field locked. The
+		 * pickup map, however, mounts on that same locality and lets the customer
+		 * choose a point INSIDE it — and then writes the point's address into the
+		 * field that is still locked. A disabled input is not serialized, so
+		 * WooCommerce refuses the order for an empty required field while the
+		 * customer is looking at an address sitting in it, with nothing on screen
+		 * pointing at the locality as the cause.
+		 *
+		 * Choosing a point is evidence the locality is right, so the prompt has
+		 * been answered even though the locality field was never touched — the
+		 * operator settled that reading in s92. Promoting the record here is what
+		 * makes it true SERVER-side: the browser lifts its own lock as well, but a
+		 * local-only flip would be undone by the next page load, which re-reads
+		 * `implicit` from the server.
+		 *
+		 * Hooked rather than called from the pickup controller so the location
+		 * layer stays the only writer of its own record — and so a plugin can
+		 * reach the same seam.
+		 *
+		 * Fires only for an ALLOWED selection: the action itself is gated on the
+		 * post-filter verdict (see {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::handle_select_request()}),
+		 * so a point a domain filter refused never promotes anything.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function handle_pickup_point_selected(): void {
+			$this->location_service()->promote_customer_record_to_explicit();
 		}
 
 		/**

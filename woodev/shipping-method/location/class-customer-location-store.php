@@ -215,6 +215,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		}
 
 		/**
+		 * Clears the `implicit` flag on the chain that is already stored, leaving
+		 * the chain itself — every record, which level is `current`, and
+		 * `saved_at` — exactly as it was.
+		 *
+		 * This exists because {@see self::set()} cannot express the operation
+		 * (issue #518). An explicit `set()` does drop the flag, but it also
+		 * REBUILDS the chain: `rebuild_chain()` discards every level deeper than
+		 * the record it is given. Re-writing the settlement record to promote it
+		 * would therefore delete the customer's `address` level — which, at the
+		 * one moment this is called, is the pickup point's address that was just
+		 * written. The flag is the only thing that should move.
+		 *
+		 * `saved_at` is deliberately preserved rather than restamped: it records
+		 * when the customer's LOCATION was last decided, and promotion does not
+		 * decide a new one — it records that an existing one is no longer a
+		 * guess. Restamping it would make a promoted record look freshly picked
+		 * to {@see self::is_customer_record_stale()}'s callers.
+		 *
+		 * Refuses (returns `false`, touching nothing) when there is no stored
+		 * chain, or when the stored chain is already explicit — so a caller may
+		 * fire this unconditionally.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool `true` when the flag was actually cleared.
+		 */
+		public function promote_chain_to_explicit(): bool {
+			$chain = $this->get_chain();
+
+			if ( null === $chain || false === $chain['implicit'] ) {
+				return false;
+			}
+
+			if ( ! isset( $chain['records'][ $chain['current'] ] ) ) {
+				// A chain whose `current` level names no record is corrupt. Reads
+				// already degrade such a blob to `null` (see self::parse_stored_chain());
+				// this guard keeps the WRITE side equally incapable of persisting one.
+				return false;
+			}
+
+			if ( is_user_logged_in() ) {
+				$this->persist( get_current_user_id(), $chain['records'], $chain['current'], false, $chain['saved_at'] );
+
+				return true;
+			}
+
+			$session = $this->session();
+
+			if ( null === $session ) {
+				return false;
+			}
+
+			$this->persist( null, $chain['records'], $chain['current'], false, $chain['saved_at'] );
+
+			return self::session_will_survive( $session );
+		}
+
+		/**
 		 * Rebuilds the chain (`level => Location_Record`) that {@see self::set()}
 		 * should persist: `$new_record` at its own level, plus whichever
 		 * previously-stored SHALLOWER records survive the ancestor-compatibility

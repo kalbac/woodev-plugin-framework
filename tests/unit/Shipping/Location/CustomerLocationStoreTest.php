@@ -479,6 +479,102 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		// -------------------------------------------------------------------
+		// promote_chain_to_explicit() — issue #518
+		//
+		// A confirmed pickup point is evidence the implicit locality it was
+		// chosen inside is right, so the record stops being a guess WITHOUT
+		// becoming a different record. set() cannot express that: an explicit
+		// set() does drop the flag, but rebuild_chain() also discards every
+		// level deeper than the record it is handed — which at that exact
+		// moment is the pickup point's own address.
+		// -------------------------------------------------------------------
+
+		public function test_promote_clears_the_implicit_flag_without_moving_the_record(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->record( 'dadata:guess' ), true );
+
+			$this->assertTrue( $store->promote_chain_to_explicit() );
+
+			$read = $store->get();
+
+			$this->assertFalse( $read['implicit'], 'the guess must stop being a guess' );
+			$this->assertSame( 'dadata:guess', $read['record']->key(), 'and it must still be the SAME locality' );
+		}
+
+		public function test_promote_keeps_a_deeper_level_that_an_explicit_set_would_have_dropped(): void {
+			// The reason this method exists at all. Promoting by re-writing the
+			// settlement record through set() would rebuild the chain and delete
+			// the address level — the pickup point's address, at the one moment
+			// the customer is looking at it.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->record( 'dadata:guess', Location_Record::LEVEL_SETTLEMENT ), true );
+			$store->set( $this->record( 'dadata:guess-street', Location_Record::LEVEL_ADDRESS ), true );
+
+			$before = $store->get_chain();
+
+			$this->assertArrayHasKey( 'address', $before['records'], 'precondition: both levels are stored' );
+
+			$this->assertTrue( $store->promote_chain_to_explicit() );
+
+			$after = $store->get_chain();
+
+			$this->assertFalse( $after['implicit'] );
+			$this->assertSame(
+				array_keys( $before['records'] ),
+				array_keys( $after['records'] ),
+				'promotion must move the FLAG and nothing else'
+			);
+			$this->assertSame( $before['current'], $after['current'] );
+		}
+
+		public function test_promote_preserves_saved_at_rather_than_restamping_it(): void {
+			// saved_at records when the LOCATION was last decided. Promotion does
+			// not decide a new one, and restamping would make a promoted record
+			// look freshly picked to the staleness rules.
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->record( 'dadata:guess' ), true );
+
+			$before = $store->get_chain()['saved_at'];
+
+			$this->assertTrue( $store->promote_chain_to_explicit() );
+
+			$this->assertSame( $before, $store->get_chain()['saved_at'] );
+		}
+
+		public function test_promote_is_a_no_op_on_an_already_explicit_record(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$store->set( $this->record( 'dadata:real-choice' ), false );
+
+			$this->assertFalse(
+				$store->promote_chain_to_explicit(),
+				'nothing to promote must report false so a caller can fire it unconditionally'
+			);
+			$this->assertSame( 'dadata:real-choice', $store->get()['record']->key() );
+			$this->assertFalse( $store->get()['implicit'] );
+		}
+
+		public function test_promote_is_a_no_op_when_nothing_is_stored(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			$this->assertFalse( $store->promote_chain_to_explicit() );
+			$this->assertNull( $store->get() );
+		}
+
+		// -------------------------------------------------------------------
 		// wp_login migration
 		// -------------------------------------------------------------------
 

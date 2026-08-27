@@ -1869,6 +1869,25 @@
 	 * `entry.resolved` for these exact values only, so the very next genuine manual edit
 	 * invalidates normally.
 	 *
+	 * IT ALSO ANSWERS THE LOCALITY PROMPT (issue #518). The map can mount on an IMPLICIT
+	 * locality — the store's default-locality policy seeds one for a customer who picked
+	 * nothing, and {@see isAddressLocked} deliberately refuses to unlock off it, because
+	 * spec §4.6/D11 says a guess must never suppress a "please choose your locality"
+	 * prompt. The address field is therefore still LOCKED at the moment this write lands,
+	 * and a disabled input is not serialized into the checkout POST: the customer would see
+	 * their point's address sitting in a grey field and WooCommerce refuse the order for an
+	 * empty required field, with nothing on screen pointing at the locality as the cause.
+	 *
+	 * Choosing a point inside a locality is evidence that locality is right, so the prompt
+	 * has been answered even though the field was never touched (operator decision, s92).
+	 * The record stops being a guess and the lock is re-evaluated.
+	 *
+	 * The server is told the same thing INDEPENDENTLY, not from here: the pickup selection's
+	 * own round-trip promotes the stored record (`Checkout_Handler::handle_pickup_point_selected()`,
+	 * on `woodev_shipping_pickup_point_selected`). This flip is the same fact applied to the
+	 * page already open — without it the field stays locked until a reload, and without the
+	 * server half the reload would lock it again.
+	 *
 	 * @internal
 	 *
 	 * @param {CustomEvent} event `detail: { fields: { fieldId: value } }`.
@@ -1882,6 +1901,8 @@
 		}
 
 		entries.forEach( function( entry ) {
+			var touched = false;
+
 			Object.keys( fields ).forEach( function( fieldId ) {
 				// Another entry's section, or not a cascade field at all (the announcement
 				// names WooCommerce field ids, which only PARTLY overlap this entry's chain).
@@ -1889,9 +1910,46 @@
 					return;
 				}
 
+				touched = true;
+
 				writeSilently( entry, fieldId, String( fields[ fieldId ] ) );
 			} );
+
+			// Only for an entry this announcement actually wrote into — the other
+			// address column's entry did not gain any evidence about its own locality.
+			if ( touched ) {
+				promoteSettlementRecord( entry );
+			}
 		} );
+	}
+
+	/**
+	 * Marks the entry's settlement record as the customer's own rather than the store's
+	 * default GUESS, and re-evaluates the address lock (issue #518).
+	 *
+	 * Clears `implicitSource` alongside `implicit` rather than leaving it behind: it is
+	 * only ever meaningful WHILE a record is implicit ({@see defaultLocalitySource}), and a
+	 * stale `'fixed'`/`'geoip'` on an explicit record would be a value no reader has a rule
+	 * for. {@see settlementRecordIsImplicit} reads both, so leaving either behind would
+	 * make the answer depend on which one a future edit happens to consult.
+	 *
+	 * A no-op when there is no settlement record, or when it is already explicit — so the
+	 * caller needs no precondition, and a second pickup selection costs nothing.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function promoteSettlementRecord( entry ) {
+		var record = entry.records.settlement;
+
+		if ( ! record || ! record.implicit ) {
+			return;
+		}
+
+		record.implicit = false;
+		record.implicitSource = null;
+
+		refreshAddressLock( entry );
 	}
 
 	/**
@@ -3694,10 +3752,19 @@
 	 * BEFORE this rule existed (an address picked while no settlement ever was — exactly what
 	 * #337 is about): there the restored value is greyed out and left behind on submit, and the
 	 * recovery is the one the rule asks for anyway — picking the settlement, which clears the
-	 * descendants and unlocks the field for a fresh pick. The announced pickup-address write
-	 * ({@see handlePickupAddressReplacing}) is not a counter-example either: it only ever
-	 * follows a pickup SELECTION, which the pickup layer refuses to persist without a settlement
-	 * key at all (gotcha `an-empty-domain-key-is-not-a-key`) — i.e. only ever while unlocked.
+	 * descendants and unlocks the field for a fresh pick.
+	 *
+	 * The announced pickup-address write ({@see handlePickupAddressReplacing}) WAS listed here
+	 * as a third non-counter-example, on the reasoning that it only follows a pickup selection,
+	 * which the pickup layer refuses to persist without a settlement key at all (gotcha
+	 * `an-empty-domain-key-is-not-a-key`) — "i.e. only ever while unlocked". That inference was
+	 * WRONG, and being written here as a fact is what kept it from being checked (issue #518):
+	 * having a settlement key is not the same as being unlocked, because this lock also refuses
+	 * to open off an IMPLICIT record ({@see settlementRecordIsImplicit}). A store-defaulted
+	 * locality has a perfectly good key — the pickup layer persists against it happily — while
+	 * the address stays locked. That intersection is real, and it is now handled at the source:
+	 * {@see promoteSettlementRecord} makes the record explicit when the point is chosen, so by
+	 * the time the write lands the field genuinely is unlocked.
 	 *
 	 * @param {Object} entry
 	 * @returns {void}

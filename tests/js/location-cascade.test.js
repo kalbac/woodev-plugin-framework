@@ -5404,6 +5404,74 @@ describe( 'the address field is locked until a settlement is picked (#337)', () 
 		expect( addressField().disabled ).toBe( false );
 	} );
 
+	// ISSUE #518 — the intersection #502/#509 created and a stale docblock in
+	// `refreshAddressLock()` claimed could not exist ("a pickup selection only ever happens
+	// while unlocked"). It can: an implicit record has a perfectly good settlement key, so the
+	// pickup layer persists against it happily, while THIS lock still refuses to open off it.
+	// The point's address then lands in a disabled input, which WooCommerce does not serialize
+	// — the order is refused for an empty required field with nothing pointing at the locality.
+	//
+	// Operator decision (s92): choosing a point inside a locality is evidence that locality is
+	// right, so the prompt this lock represents has been answered.
+	function bootLockedBehindAnImplicitDefault() {
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:implicit-seed', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:implicit-seed', level: 'settlement' } },
+			implicit: true,
+			// #536: a `geoip` guess still blocks the lock; only `fixed` was exempted.
+			defaultLocality: { policy: 'geoip' },
+		} );
+	}
+
+	function announcePickupAddressWrite( fields ) {
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: fields },
+			bubbles: true,
+		} ) );
+	}
+
+	it( 'a confirmed pickup point unlocks an address field held behind an implicit default (#518)', () => {
+		bootLockedBehindAnImplicitDefault();
+
+		expect( addressField().disabled ).toBe( true );
+
+		announcePickupAddressWrite( { billing_address_1: 'ул. Пункта Выдачи, 1' } );
+
+		// The field the point's address is about to be written into must be serializable by
+		// the time that write lands — this is the whole defect.
+		expect( addressField().disabled ).toBe( false );
+		expect( addressField().classList.contains( 'woodev-location-locked' ) ).toBe( false );
+	} );
+
+	it( 'leaves the lock alone when the announcement names no field of THIS entry (#518 control)', () => {
+		// The other address column's entry gained no evidence about its own locality, so a
+		// promotion there would be unlocking off someone else's pickup selection.
+		bootLockedBehindAnImplicitDefault();
+
+		announcePickupAddressWrite( { shipping_address_1: 'ул. Пункта Выдачи, 1' } );
+
+		expect( addressField().disabled ).toBe( true );
+	} );
+
+	it( 'is a no-op where #536 already left the field unlocked — a `fixed` default (#518 control)', () => {
+		// Without this control the test above would also pass for a change that simply
+		// unlocked on every announcement regardless of the record's state.
+		boot( {
+			region: true, settlement: true, address: true,
+			current: { key: 'dadata:fixed-seed', level: 'settlement' },
+			chain: { settlement: { key: 'dadata:fixed-seed', level: 'settlement' } },
+			implicit: true,
+			defaultLocality: { policy: 'fixed' },
+		} );
+
+		expect( addressField().disabled ).toBe( false );
+
+		announcePickupAddressWrite( { billing_address_1: 'ул. Пункта Выдачи, 1' } );
+
+		expect( addressField().disabled ).toBe( false );
+	} );
+
 	it( 'unlocks once the customer picks a settlement over an implicit default (#502)', async () => {
 		boot( {
 			region: true, settlement: true, address: true,
