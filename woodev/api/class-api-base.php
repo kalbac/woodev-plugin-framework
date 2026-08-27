@@ -148,6 +148,40 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 *              raw request URI it was given in the error message, and that
 		 *              message is what {@see Woodev_Plugin_Updater::get_version_from_remote()}
 		 *              (and any other caller) ends up logging — see #395 (Blocking 2).
+		 * @since 2.0.2 the HTTP reason phrase is redacted through the same routine, AT
+		 *              ASSIGNMENT rather than at each place it is logged — see #451.
+		 *              The phrase is attacker-influenced free text off the wire, and it
+		 *              leaves this class by several unrelated routes: the broadcast
+		 *              (`get_response_data_for_broadcast()`'s `message`), the text of a
+		 *              thrown {@see Woodev_API_Exception} in the licensing API and in
+		 *              the DaData client, and — through any subclass — wherever those
+		 *              exceptions are caught. Those boundaries are numerous and, via the
+		 *              plugin extension seams, EXTENSIBLE, so redacting per boundary
+		 *              cannot be made complete for this field. Assignment is the one
+		 *              place a later boundary cannot bypass.
+		 *
+		 *              Two consequences, deliberately taken (both raised by the #451
+		 *              critic pass, neither one hypothetical):
+		 *
+		 *              1. The phrase DOES have a behavioural reader. `plugins-reference/`
+		 *                 ships one: woocommerce-edostavka's DaData client branches on
+		 *                 `str_starts_with( strtolower( $message ), 'unauthorized' )` to
+		 *                 pick which message the merchant sees. That branch is safe here
+		 *                 and provably so, not incidentally: redaction only ever replaces
+		 *                 the VALUE after a secret `name=`, or between `<name></name>`,
+		 *                 and leaves every other byte — the name included — in place. For
+		 *                 the prefix test to flip, the phrase would have to BEGIN with a
+		 *                 secret `name=`, and such a phrase does not begin with
+		 *                 `unauthorized` either before or after redaction. Pinned by
+		 *                 ApiBaseResponseMessageRedactionTest.
+		 *              2. The phrase is not log-only: {@see Woodev_REST_API_License}'s
+		 *                 `respond()` returns a caught Throwable's message to the admin
+		 *                 as a WP_Error, so a phrase like `Policy requires password=8`
+		 *                 reaches an administrator as `password=` plus the mask, losing a
+		 *                 legitimate detail that merely looks like a credential. That is
+		 *                 the same trade this class already accepts for request bodies
+		 *                 (#395) and response bodies (#427), and an admin-visible string
+		 *                 is if anything MORE likely to be pasted into a support ticket.
 		 *
 		 * @param array|WP_Error $response response data
 		 * @throws Woodev_API_Exception network issues, timeouts, API errors, etc
@@ -163,7 +197,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			}
 
 			$this->response_code     = wp_remote_retrieve_response_code( $response );
-			$this->response_message  = wp_remote_retrieve_response_message( $response );
+			$this->response_message  = self::redact_secret_query_params(
+				(string) wp_remote_retrieve_response_message( $response ),
+				$this->get_secret_param_names()
+			);
 			$this->raw_response_body = wp_remote_retrieve_body( $response );
 
 			$response_headers = wp_remote_retrieve_headers( $response );

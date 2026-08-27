@@ -265,6 +265,52 @@ final class DadataApiClientTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// #451 — the reason phrase this client embeds in its exception message is
+	// free text off the wire, and the message reaches error_log() through
+	// Pickup_Controller. Redaction happens at assignment in
+	// Woodev_API_Base::handle_response(), so what this pins is that the client
+	// really reads the redacted field rather than the raw phrase.
+	// -------------------------------------------------------------------------
+
+	public function test_a_reason_phrase_carrying_a_secret_never_reaches_the_exception_message(): void {
+		$secret = 'super-secret-token-value';
+
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 500 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '' );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'provider said token=' . $secret );
+		Functions\when( 'wp_safe_remote_request' )->justReturn( [] );
+
+		try {
+			( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+			$this->fail( 'A 500 response must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertStringNotContainsString(
+				$secret,
+				$e->getMessage(),
+				'the exception text is handed to error_log() by Pickup_Controller — it must not carry the secret'
+			);
+		}
+	}
+
+	public function test_an_ordinary_reason_phrase_still_reaches_the_exception_message(): void {
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 500 );
+		Functions\when( 'wp_remote_retrieve_body' )->justReturn( '' );
+		Functions\when( 'wp_remote_retrieve_response_message' )->justReturn( 'Internal Server Error' );
+		Functions\when( 'wp_safe_remote_request' )->justReturn( [] );
+
+		try {
+			( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+			$this->fail( 'A 500 response must throw.' );
+		} catch ( \Woodev_API_Exception $e ) {
+			$this->assertStringContainsString(
+				'Internal Server Error',
+				$e->getMessage(),
+				'control: the message really is built from the reason phrase, so the test above proves redaction and not an empty field'
+			);
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Response language (operator, s70) — DaData answers in Russian by default and
 	// transliterates the WHOLE payload for `en`, while `fias_id` stays put, so the
 	// locale may switch at any time without stranding a stored locality.
