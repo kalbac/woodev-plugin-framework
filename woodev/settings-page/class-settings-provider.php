@@ -113,12 +113,43 @@ final class Settings_Provider {
 	/**
 	 * Returns the section grouping.
 	 *
+	 * FILTERS ON READ, for the same reason {@see Settings_Section::get_tools()} does: this
+	 * method has always DOCUMENTED `Settings_Section[]` while `create()` took an untyped
+	 * array and stored it verbatim, so the return type was a promise nothing kept.
+	 *
+	 * That mattered once the section's own guarantee moved onto its accessor. A caller can
+	 * hand `create()` any object that merely LOOKS like a section — `is_tools()` returning
+	 * true, `get_tools()` returning junk — and it never passes through
+	 * `Settings_Section::get_tools()` at all. Reproduced through the public `create()`, no
+	 * reflection needed: `build_sections()` fatals with
+	 * `Call to a member function to_array() on string`, and `run_tool()` with
+	 * `Call to a member function get_id() on string` — a whole-settings-page fatal for every
+	 * tab, from one plugin's malformed descriptor.
+	 *
+	 * With this filter the whole chain is typed end to end, and every link is checkable:
+	 * `Settings_Page_Registry::get_provider(): ?Settings_Provider` and
+	 * `build_sections( Settings_Provider $provider )` are enforced by PHP itself; this method
+	 * guarantees the sections; `Settings_Section::get_tools()` guarantees the tools. No reader
+	 * has to re-ask, which is what #514 m6 was for.
+	 *
+	 * Silent, like the tools filter and for the same reason: the actionable notice belongs at
+	 * the registration call. Unlike tools, there is no `create_sections()` to put one in —
+	 * `create()` takes the array untyped as its published seam — so a louder refusal here
+	 * would be a contract change, and that is #570, not this fix.
+	 *
 	 * @since 2.0.2
 	 *
 	 * @return Settings_Section[]
 	 */
 	public function get_sections(): array {
-		return $this->sections;
+		return array_values(
+			array_filter(
+				$this->sections,
+				static function ( $section ): bool {
+					return $section instanceof Settings_Section;
+				}
+			)
+		);
 	}
 
 	/**

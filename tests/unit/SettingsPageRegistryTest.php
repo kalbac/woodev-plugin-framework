@@ -11,6 +11,13 @@ use Woodev\Framework\Shipping\Settings\Tool_Result;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/settings-api/class-connection-result.php';
 
+// #566: this file USES Shipping_Tool and Tool_Result but used to rely on another test file
+// having loaded them first. `phpunit.xml` sets executionOrder="depends,defects", so that
+// order is not fixed — the full run passed by luck and `phpunit tests/unit/SettingsPageRegistryTest.php`
+// alone failed. Required explicitly, exactly as SettingsRestControllerTest already does.
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-shipping-tool.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/shipping-method/settings/class-tool-result.php';
+
 class SettingsPageRegistryTest extends TestCase {
 
 	// ----- capability resolution (4 rules) -----
@@ -254,6 +261,64 @@ class SettingsPageRegistryTest extends TestCase {
 
 		$this->assertCount( 1, $sections[0]['tools'] );
 		$this->assertSame( 'sweep', $sections[0]['tools'][0]['id'] );
+	}
+
+	/**
+	 * #514 m6, critic round 2 — the END-TO-END half the section-level tests could not prove.
+	 *
+	 * `build_sections()` dereferences `$tool->to_array()` with no guard of its own, so its
+	 * safety is entirely borrowed from the two accessors above it. This drives a REAL
+	 * `Settings_Provider` carrying a duck-typed section (built through the public `create()`,
+	 * no reflection) all the way through, which is the exact shape that fatalled with
+	 * `Call to a member function to_array() on string` before `get_sections()` filtered.
+	 */
+	public function test_build_sections_survives_a_provider_carrying_a_duck_typed_section(): void {
+		$handler  = $this->make_connection_handler();
+		$real     = Settings_Section::create( 'general', 'Общие', [ 'token' ] );
+		$provider = Settings_Provider::create(
+			'shipping',
+			'Доставка',
+			$handler,
+			[
+				$real,
+				new class() {
+					public function is_tools(): bool {
+						return true;
+					}
+
+					public function is_connection(): bool {
+						return false;
+					}
+
+					public function get_tools(): array {
+						return [ 'not-a-tool' ];
+					}
+
+					public function get_id(): string {
+						return 'tools';
+					}
+
+					public function get_label(): string {
+						return 'Инструменты';
+					}
+
+					public function get_description(): string {
+						return '';
+					}
+
+					public function get_setting_ids(): array {
+						return [];
+					}
+				},
+			]
+		);
+
+		$registry = Settings_Page_Registry::instance();
+		$sections = $this->call_private( $registry, 'build_sections', [ $provider ] );
+
+		// The impostor never reaches this loop at all, so nothing here can dereference it.
+		$this->assertCount( 1, $sections );
+		$this->assertSame( 'general', $sections[0]['id'] );
 	}
 
 	/**

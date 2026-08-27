@@ -76,10 +76,10 @@ class SettingsSectionTest extends TestCase {
 	}
 
 	/**
-	 * #514 m6 / critic N3: create_tools() is THE validation door. Both readers of
-	 * get_tools() — Settings_Page_Registry::build_sections() and
-	 * Woodev_REST_API_Settings_Page::run_tool() — depend on it, and the second one never
-	 * had a gate of its own.
+	 * #514 m6 / critic N3: create_tools() is the LOUD half of tool validation — it names the
+	 * offending call site, which the read-side filter in get_tools() cannot. It is not the
+	 * only door (see that method's own test below), and the guarantee both readers of
+	 * get_tools() rely on is the accessor's, not this one's.
 	 */
 	public function test_create_tools_drops_a_non_conforming_entry_and_keeps_the_rest(): void {
 		$conforming = $this->make_tool( 'sweep' );

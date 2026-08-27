@@ -190,13 +190,17 @@ final class Settings_Page_Registry {
 				$entry['is_tools'] = true;
 				$entry['tools']    = [];
 
-				// No instanceof gate here any more (#514 m6): Settings_Section::create_tools()
-				// is the only door into an is_tools section and it drops non-conforming
-				// entries itself, so get_tools() cannot carry one by the time this runs. The
-				// guard used to live here and NOT on the other consumer of the same array
-				// (Woodev_REST_API_Settings_Page::run_tool()), which is what moving it to the
-				// constructor fixes — one validation point closes both readers, instead of
-				// each of them re-asking and one of them forgetting to.
+				// No instanceof gate here any more (#514 m6). Not because construction is
+				// controlled -- it is not, reflection and unserialisation both bypass the
+				// private constructor -- but because the ACCESSORS now guarantee their own
+				// declared types: Settings_Provider::get_sections() filters to
+				// Settings_Section, and Settings_Section::get_tools() filters to
+				// Shipping_Tool. Both links are the reason this loop can dereference freely.
+				//
+				// The guard used to live here and NOT on the other consumer of the same
+				// array (Woodev_REST_API_Settings_Page::run_tool()), which is the asymmetry
+				// this closes: one guarantee per type, at the accessor that publishes it,
+				// instead of each reader re-asking and one of them forgetting to.
 				foreach ( $section->get_tools() as $tool ) {
 					$entry['tools'][] = $tool->to_array();
 				}

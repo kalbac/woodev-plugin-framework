@@ -55,9 +55,17 @@ final class Settings_Section {
 
 	/**
 	 * Use one of the named constructors instead — {@see self::create()},
-	 * {@see self::create_connection()} or {@see self::create_tools()}. Being private is what
-	 * makes those three the ONLY doors into this type, which is in turn what lets
-	 * `create_tools()` be the single validation point for tool descriptors (#514 m6).
+	 * {@see self::create_connection()} or {@see self::create_tools()}. Private so that a call
+	 * site has to NAME the kind it is building rather than spell it out in positional
+	 * booleans; that is all privacy buys here.
+	 *
+	 * It does NOT make those three the only way this object comes into existence, and an
+	 * earlier draft of this docblock claimed it did.
+	 * `ReflectionClass::newInstanceWithoutConstructor()` skips it entirely, and there is no
+	 * `__unserialize()` to validate a hydrated one. Validation therefore lives in TWO places
+	 * on purpose: {@see self::create_tools()} refuses a bad descriptor loudly, where the
+	 * author who can fix it is standing, and {@see self::get_tools()} filters on read, which
+	 * is what actually makes the type a guarantee for every reader.
 	 *
 	 * The positional shape here stays deliberately dumb: it assigns, and decides nothing.
 	 * Naming the kind is the named constructors' job.
@@ -133,14 +141,17 @@ final class Settings_Section {
 	 * Takes no setting ids: a tools block is fields-less by construction, which is what the
 	 * whole kind means.
 	 *
-	 * THIS IS THE VALIDATION DOOR for tool descriptors (#514 m6, critic N3). The private
-	 * constructor makes it the only way to build a section at all, so filtering here is what
-	 * lets BOTH consumers of `get_tools()` — {@see Settings_Page_Registry::build_sections()}
-	 * and `Woodev_REST_API_Settings_Page::run_tool()` — read the array without re-asking.
-	 * A non-conforming entry is dropped exactly as the `FILTER_TOOLS` filter door drops one
-	 * ({@see \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::collect()}), never
-	 * thrown: a fatal on this path takes down the settings page for every tab, not just this
-	 * section.
+	 * This is the LOUD half of tool validation (#514 m6, critic N3): a non-conforming entry
+	 * is dropped here with a notice naming the call site, exactly as the `FILTER_TOOLS`
+	 * filter door drops one
+	 * ({@see \Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::collect()}) — never
+	 * thrown, because a fatal on this path takes down the settings page for every tab, not
+	 * just this section.
+	 *
+	 * It is NOT the only door, and it is not what makes the type safe for readers: privacy
+	 * does not survive reflection or unserialisation. {@see self::get_tools()} carries that
+	 * guarantee. What this method adds is the diagnosis — the read-side filter cannot name a
+	 * call site, because an object that bypassed this method has none to name.
 	 *
 	 * @since 2.0.2
 	 *
