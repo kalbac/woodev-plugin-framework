@@ -1302,9 +1302,16 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		// resolve_geoip_default() country reconciliation — issue #587
 		//
 		// A located record whose own country disagrees with
-		// resolve_default_country() is refused (null), deliberately, instead
-		// of being silently caught two layers away by
-		// is_customer_record_stale() rule (b).
+		// customer_shipping_country() — the SAME authority
+		// is_customer_record_stale() rule (b) already compares against — is
+		// refused (null), deliberately, instead of the refusal only ever
+		// happening implicitly inside get_customer_record()'s own gate
+		// (that gate's FIX 1, s78). None of these fixtures stub `WC()`, so
+		// customer_shipping_country() falls straight through to
+		// resolve_default_country() -> the RU floor setUp() stubs via
+		// wc_get_base_location() — see the dedicated test below for the
+		// case where a LIVE customer country (the ordinary case) disagrees
+		// with that floor and must still win.
 		// -------------------------------------------------------------------
 
 		public function test_policy_geoip_record_matching_the_default_country_is_returned(): void {
@@ -1319,15 +1326,16 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service  = $this->service( $registry );
 			$resolved = $service->resolve_default();
 
-			$this->assertNotNull( $resolved, 'the store base location is RU (setUp) and the record is RU — no disagreement' );
+			$this->assertNotNull( $resolved, 'no live customer country stubbed, so the RU floor applies, and the record is RU — no disagreement' );
 			$this->assertSame( 'geo:by-ip', $resolved->key() );
 
 			\WC_Geolocation::$address = null;
 		}
 
 		public function test_policy_geoip_record_whose_country_disagrees_with_the_default_is_refused(): void {
-			// setUp() stubs wc_get_base_location() to RU, so resolve_default_country()
-			// answers RU — a BY-located record disagrees with that authority.
+			// setUp() stubs wc_get_base_location() to RU, and no live customer
+			// country is stubbed here, so customer_shipping_country() falls
+			// through to that RU floor — a BY-located record disagrees with it.
 			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'BY' ] );
 			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
 
@@ -1340,8 +1348,46 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertNull(
 				$service->resolve_default(),
-				'a geoip hit outside resolve_default_country() must be refused, not returned'
+				'a geoip hit outside customer_shipping_country() must be refused, not returned'
 			);
+
+			\WC_Geolocation::$address = null;
+		}
+
+		/**
+		 * The control the round-2 fix exists to pin: resolve_geoip_default()
+		 * must compare against customer_shipping_country() (the LIVE
+		 * WooCommerce shipping country when one is set), NOT
+		 * resolve_default_country() alone. Store base RU (setUp), the LIVE
+		 * customer country stubbed to BY (same test seam as
+		 * LocationServiceTest's own country-gate tests — see
+		 * Location_Service::customer_shipping_country()'s own docblock), and
+		 * a BY-located record: this is the ordinary case of a foreign
+		 * visitor whose WooCommerce install geolocates
+		 * (`woocommerce_default_customer_address = 'geolocation'`), and the
+		 * record must still be served — comparing against the RU floor
+		 * instead would regress exactly this configuration.
+		 */
+		public function test_policy_geoip_record_matching_the_live_customer_country_is_returned_even_when_it_disagrees_with_the_store_base(): void {
+			$located  = $this->record( 'geo:by-ip', Location_Record::LEVEL_SETTLEMENT, [ 'country' => 'BY' ] );
+			$provider = new Default_Test_Fake_Locate_Provider( 'geo', static fn() => $located );
+
+			$this->stub_default_locality_options( 'geo', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_GEOIP );
+			$registry = $this->activate( [ $provider ] );
+
+			\WC_Geolocation::$address = '203.0.113.5';
+
+			$store   = new Default_Test_Customer_Store_Probe( new Default_Test_Fake_Session() );
+			$service = new class( $registry, $store ) extends Location_Service {
+				protected function customer_shipping_country(): string {
+					return 'BY';
+				}
+			};
+
+			$resolved = $service->resolve_default();
+
+			$this->assertNotNull( $resolved, 'the LIVE customer country (BY) matches the record; the store base (RU) must not override it' );
+			$this->assertSame( 'geo:by-ip', $resolved->key() );
 
 			\WC_Geolocation::$address = null;
 		}
