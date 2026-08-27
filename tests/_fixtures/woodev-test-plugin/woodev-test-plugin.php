@@ -167,13 +167,13 @@ $woodev_test_plugin_bootstrap->register_loader_definition( woodev_test_plugin_lo
 function woodev_test_plugin_init() {
 
 	/**
-	 * Minimal setup wizard (one content step) so the woodev/v1 setup routes
-	 * register for integration coverage.
+	 * Minimal setup wizard — one content step plus one SETTINGS step, so the
+	 * woodev/v1 setup routes register AND the save/validate path is reachable.
 	 */
 	class Woodev_Test_Setup_Wizard extends \Woodev\Framework\Setup\Setup_Wizard {
 
 		/**
-		 * Registers a single content step.
+		 * Registers the wizard's steps.
 		 *
 		 * @return void
 		 */
@@ -184,6 +184,26 @@ function woodev_test_plugin_init() {
 				static function (): string {
 					return '<p>Welcome</p>';
 				}
+			);
+
+			// A SETTINGS step, so the wizard's save/validate path is exercisable at all —
+			// a content step has no setting ids, so Woodev_REST_API_Setup::save_step()'s
+			// validation loop never runs and no field can ever report an error (#397).
+			//
+			// `support_phone` is the field that makes the SERVER's error reachable. The
+			// client mirrors the validation rules (src/components/validate.js) and blocks
+			// the advance before any request when it finds a fault of its own, so a rule
+			// both sides share can never produce a server-side field error. This one is
+			// carried by a plugin-supplied PHP validate callback, which has no JS
+			// equivalent: Field_Schema marks it `server_validated`, the client enforces
+			// only `required` on it, and the server stays the authority for the format.
+			// `manager_email` is the control — a shared rule the CLIENT catches first.
+			$this->register_step(
+				'contacts',
+				'Контакты',
+				[ 'manager_email', 'support_phone' ],
+				null,
+				'Проверка полей: e-mail валидируется на клиенте, телефон — только на сервере.'
 			);
 		}
 	}

@@ -412,3 +412,83 @@ test( 'a flat-array option submits its own value, not its array index', () => {
 
 	expect( submitted ).toBe( 'green' );
 } );
+
+// -----------------------------------------------------------------------
+// Issue #397 — `schema.serverError` is the leaf of the setup wizard's per-field error chain,
+// and it had NO coverage anywhere. The chain is:
+//
+//   app.js:187      e.data.errors            → setFieldErrors( map )
+//   app.js:279      serverErrors: fieldErrors → StepView
+//   step-view.js:86 schema.serverError = serverErrors[ id ]
+//   control-field.js:349                      → the message on screen
+//
+// The break was at the server end (it sent `field`, a bare id, not `errors`, a map), which
+// #397 fixes on the PHP side. But "every layer below is already wired and working" was an
+// assertion nobody had tested, so the last link is pinned here.
+// -----------------------------------------------------------------------
+
+test( 'a server-supplied schema.serverError is shown even when nothing was touched and errors are hidden', () => {
+	render(
+		createElement( ControlField, {
+			settingId: 'token',
+			schema: {
+				type: 'string',
+				name: 'Токен',
+				controlType: 'text',
+				serverError: 'Неверный токен.',
+			},
+			value: 'bad',
+			onChange: () => {},
+			// The state a fresh server rejection arrives in: the field has not been touched,
+			// and client-side errors are not being revealed.
+			showErrors: false,
+		} )
+	);
+
+	expect( screen.getByText( 'Неверный токен.' ) ).toBeInTheDocument();
+} );
+
+test( 'schema.serverError takes precedence over a client-side validation message', () => {
+	render(
+		createElement( ControlField, {
+			settingId: 'token',
+			schema: {
+				type: 'string',
+				name: 'Токен',
+				controlType: 'text',
+				required: true,
+				serverError: 'Сервер отказал.',
+			},
+			// Empty AND required, so the client has a message of its own to offer.
+			value: '',
+			onChange: () => {},
+			showErrors: true,
+		} )
+	);
+
+	// The server knows something the client cannot — that is the whole reason the field is
+	// marked `server_validated` — so its message must win.
+	expect( screen.getByText( 'Сервер отказал.' ) ).toBeInTheDocument();
+} );
+
+test( 'control: with no serverError the client message is what shows', () => {
+	render(
+		createElement( ControlField, {
+			settingId: 'token',
+			schema: {
+				type: 'string',
+				name: 'Токен',
+				controlType: 'text',
+				required: true,
+			},
+			value: '',
+			onChange: () => {},
+			showErrors: true,
+		} )
+	);
+
+	// Without this, the two tests above would pass for a component that rendered every
+	// string handed to it and had no precedence rule at all.
+	expect( screen.queryByText( 'Сервер отказал.' ) ).not.toBeInTheDocument();
+	expect( screen.getByText( /обязательн/i ) ).toBeInTheDocument();
+} );
