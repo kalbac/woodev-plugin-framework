@@ -6,13 +6,18 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-27 (s97).** `main` is at `6f6f32a`, tree clean, **no open PRs.** Merged this
-session: **#555** (#546), **#556** (#554), **#557** (gotchas + the kilo recipe) and **#558**
-(#514 m1+m2).
+**As of 2026-08-27 (s98).** `main` is at `c35700e`, tree clean. **Two PRs open, both deliberately
+unmerged:** #581 (needs a rig pass) and #582 (CI unavailable — see below).
 
-**Baselines on `main`, measured in the PRIMARY checkout 27.08.2026 at `6f6f32a`:** `composer check`
-**2828** / 6921 / **66 skipped**; jest **1535** in 21 suites; Integration suite in the container
-**120** tests / 477 assertions.
+⛔ **GITHUB ACTIONS IS BLOCKED ON BILLING since `2026-08-27T02:49:17Z`** (#583, `Инбокс`, the
+operator's account). Every job fails in two seconds, `Label PR` included — the annotation is only
+visible in `gh run view`, never in `gh pr checks`. Everything merged in s98 up to and including
+#579 passed REAL green CI; the block landed after. Gotcha
+`every-ci-job-failing-in-two-seconds-is-a-billing-block`.
+
+**Baselines on `main`, measured in the PRIMARY checkout 27.08.2026 at `c35700e`:** `composer check`
+**2938** / 7082 / **66 skipped**; jest **1545** in 21 suites; Integration suite in the container
+**124** tests / 485 assertions. (PR #582 takes `composer check` to **2950** / 7111 when it lands.)
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
 
@@ -27,9 +32,9 @@ collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards:** #523, #524, #527, #532, #514 (m4/m5 only — UI), #559 (Orca cannot supervise kilo
-— operator decision), #560 (`credential.helper` → `gh` — his machine, his decision), #561. Which
-are COMMITMENTS, and where each was decided, is the handoff's carry-over section — not this file.
+**Open cards after s98:** #514 (m4/m5 only — UI), #518, #559, #560, and the ones s98 filed —
+#567, #570, #573, #577, #583. Everything else s98 touched is closed. Which are COMMITMENTS, and
+where each was decided, is the handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -75,8 +80,8 @@ ownership rather than a name heuristic. Gotcha:
 | **#437** | **The next big one, not started.** Spec `specs/2026-08-21-settlement-search-design.md`; its popular-settlements half was split out into #488, whose STORAGE/verification/tools side is done — the client-facing list is #530. Measured 24.08: a region-scoped settlement list returns exactly **500** = `LIST_HARD_CAP` — what disproved #404 and killed the settlement `related-list` mode (#486). |
 | ~~**#488**~~ | **CLOSED (D1-D8).** The one fact still load-bearing: `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure THROWS. History: `sessions/s89.md`-`s92.md`. |
 | ~~**#512**~~ | **DONE — #548 (s95).** Surviving contract fact: `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key — documented on both methods and PINNED by a test. The `VARCHAR(191)` length question was measured and closed with no guard (100+ chars of headroom). |
-| **#518** | **DECIDED 25.08 — a pickup selection lifts the implicit flag.** `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
-| **#473** | **Did NOT reproduce in s89** — the gate `! $field.val()` never opened across four driven scenarios; the measurement is on the issue. The card's OTHER half — the unconditional `maybeInitSelect2()` on a field the cascade owns — is reachable without it and is what should be fixed (`isLocationOwnedField()` is already in that file). |
+| **#518** | **DECIDED 25.08, still NOT started — the one carried-over build item.** A pickup selection lifts the implicit flag. `handlePickupAddressReplacing()` must make the settlement record EXPLICIT, not merely refresh the lock (`settlementRecordIsImplicit()` would still answer `true`). Measure whether the server needs the same write: a local-only flip re-locks the address after a reload. Not observed live — the critic derived it from the code. |
+| ~~**#473**~~ | **CLOSED in s98 (#571).** The ownership guard now sits at the top of the `updated_checkout` loop, as it already did in `applyTakeover()`. Two facts worth keeping: the bare `$field.val()` restore is reachable in principle but was NOT reproduced live in four rig scenarios (the cascade's own restore gets there first), and the card's SECOND half — a second select2 from `maybeInitSelect2()` — **cannot happen at all**: it acts on `source_kind === 'suggest'`, ownership tests `'location'`, and `source_kind` is a single scalar (`class-field.php:265,315`). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
 | **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
 
@@ -123,7 +128,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **216**.
+Gotchas: **222**.
 
 ## Program status (high level)
 
@@ -183,23 +188,30 @@ oversight.
 
 ## Next Actions
 
-**Ждёт кнопки оператора: пусто.** Открытых PR нет.
+**⛔ Ждёт кнопки оператора — БЛОКИРУЮЩЕЕ:** **#583**, GitHub Actions заблокирован по биллингу
+с `02:49:17Z` 27.08.2026. Пока он не снят, **мержить нельзя ничего** — правило проекта требует
+зелёной CI по каждой джобе, и «локально зелено» его не заменяет. После разблокировки: `close`/
+`reopen` на **#581** и **#582**.
 
-1. **#518** — выбор ПВЗ снимает «неявность» записи. Решено в s92, **не начато**. Видно
-   покупателю → **строить можно, мержить нельзя** без его прохода по ригу.
-2. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
-   m1/m2 закрыты в s97 (#558); m6 (восьмиаргументный конструктор) и T3 (REST-тест) не тронуты.
-3. **Хвосты:** #527, #532, #523, #524.
-4. **#473** — достижимая половина через `isLocationOwnedField()`. **Мелочи:** #444, #451, #453.
-   **Остаток ревью 27B:** #391, #393, #396, #397, #399, #400, #402.
-5. **Остатки слоя локаций:** #353, #356, #358, #361, #410.
-6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-7. **#561** — `ShippingIntegrationConstructionTest` мимо общей базы. В `Бэклог`, мелко.
-8. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#559** (Orca не супервизирует kilo —
-   ждать фикса / писать в апстрим / зафиксировать обход), **#560** (`credential.helper` → `gh`
-   на его машине), **#437** (его пометка: нужна беседа об объёме), **#474**, **#483**, **#511**,
-   **#515**, **#331**, **#332**, **#374** (прямая просьба). **Отложено до релиза:** #285, #247.
-   **Старое:** #289, #270, #310, #318, #321, #322.
+1. **#582** — фиксы по итогам критик-прохода (два MAJOR в уже смерженном коде). Локально всё
+   зелено, ждёт только CI.
+2. **#581** — ошибки полей мастера установки (#397). Видимый результат — красное поле; харнесса
+   на это в репо нет. **Нужен проход по ригу**, потом мерж.
+3. **#518** — выбор ПВЗ снимает «неявность» записи. Решено в s92, **не начато**. Видно
+   покупателю → строить можно, мержить нельзя без его прохода.
+4. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+   m6 и T3 закрыты в s98 (#563).
+5. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
+   про страно-слепой `provider_for_level()`, потом включать правило регистрации.
+6. **Остатки слоя локаций:** #356, #358, #361, #410. **Мелочи:** #444 ✅, #451 (единственная
+   не взятая из «мелочей»), #453 ✅.
+7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+8. 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#583** (биллинг), **#567** (язык msgid —
+   305 строк работы в одну сторону, замер на карточке), **#570** (нетипизированный шов
+   `Settings_Provider::create()`), **#577** (частота nopriv-лога), **#559** (Orca не
+   супервизирует kilo), **#560** (`credential.helper` → `gh`), **#437** (нужна беседа об
+   объёме), **#474**, **#483**, **#511**, **#515**, **#331**, **#332**, **#374**.
+   **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318, #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 

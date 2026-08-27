@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 217 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 222 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,8 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
+- [php/parse-str] **`parse_str()` LOSES information (arrays, key normalisation), so a subset match built on it silently widens into a false positive.** → [parse-str-loses-information-so-never-compare-queries-with-it](gotchas/parse-str-loses-information-so-never-compare-queries-with-it.md) (s98)
 - [php/dependency-function-check-bug] **get_missing_php_functions() uses extension_loaded instead of function_exists.** → [dependency-function-check-bug](gotchas/dependency-function-check-bug.md) (s2)
 - [php/namespace-migration-legacy-psr4] **Legacy Woodev_* vs PSR-4 Woodev\Framework\*.** → [namespace-migration-legacy-psr4](gotchas/namespace-migration-legacy-psr4.md) (s2)
 - [php/gateway-type-methods-required] **Never blanket-ignore `Call to an undefined method` on a class hierarchy.** → [gateway-type-methods-required](gotchas/gateway-type-methods-required.md) (s3; recurred 2026-05-31; re-audited 2026-06-01)
@@ -106,6 +108,8 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/*] **A test that manufactures its own precondition never tests whoever produces it — delete the view's hidden input and all four guard tests stay green.** → [a-test-that-manufactures-its-own-precondition-never-tests-the-producer](gotchas/a-test-that-manufactures-its-own-precondition-never-tests-the-producer.md) (s98)
+- [testing/*] **`preg_match( '//u', $s )` returns FALSE, not 0, on invalid UTF-8 — and raw bytes written as escapes get re-encoded into valid UTF-8 by the tooling.** → [preg-match-u-returns-false-not-zero-on-invalid-utf8](gotchas/preg-match-u-returns-false-not-zero-on-invalid-utf8.md) (s98)
 - [testing/*] **The local PHP is 8.5 and the CI floor is 7.4 — a green `composer check` here is evidence about 8.5 only (`setAccessible()` is the worked case).** → [the-local-php-is-four-versions-above-the-ci-floor](gotchas/the-local-php-is-four-versions-above-the-ci-floor.md) (s98)
 - [testing/*] **Measure a gate only where the gate can actually fire — an AND-ed precondition you did not control answers for you.** → [measure-a-gate-where-the-gate-can-actually-fire](gotchas/measure-a-gate-where-the-gate-can-actually-fire.md) (s78)
 - [testing/*] **A `perl -0pi` newline-pattern mutation silently misses a CRLF file — and this tree is LF, so a CRLF file means Serena flipped it (root cause corrected s82).** → [perl-multiline-mutation-silently-misses-crlf-files](gotchas/perl-multiline-mutation-silently-misses-crlf-files.md) (s78, corrected s82)
@@ -174,6 +178,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/ci] **Every job failing in TWO SECONDS — including `Label PR` — is an Actions billing block, not a red build; the annotation is only in `gh run view`.** → [every-ci-job-failing-in-two-seconds-is-a-billing-block](gotchas/every-ci-job-failing-in-two-seconds-is-a-billing-block.md) (s98)
 - [build/ci] **A `pull_request` workflow can simply not fire on a CLEAN PR — only `PR Triage` shows up. Close and reopen; and COUNT the jobs (19 code-only, 20 with `.md`), never read the colour.** → [a-pull-request-workflow-can-simply-not-fire](gotchas/a-pull-request-workflow-can-simply-not-fire.md) (s97)
 - [build/composer] **Widening `autoload.classmap` breaks every EXISTING checkout until `composer dump-autoload` runs — nine "class not found" errors that read as a bad merge.** → [a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout](gotchas/a-widened-autoload-classmap-needs-dump-autoload-in-every-existing-checkout.md) (s91)
 - [build/ci] **All three integration jobs red at once on a docs-only PR — it is an `api.github.com` 504 inside the wp-env image build, not your change.** → [integration-jobs-die-on-a-github-api-504-not-on-your-code](gotchas/integration-jobs-die-on-a-github-api-504-not-on-your-code.md) (s87)
