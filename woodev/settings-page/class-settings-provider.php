@@ -126,11 +126,21 @@ final class Settings_Provider {
 	 * `Call to a member function get_id() on string` — a whole-settings-page fatal for every
 	 * tab, from one plugin's malformed descriptor.
 	 *
-	 * With this filter the whole chain is typed end to end, and every link is checkable:
+	 * With this filter every link in the chain is class-checked, and each check is nameable:
 	 * `Settings_Page_Registry::get_provider(): ?Settings_Provider` and
 	 * `build_sections( Settings_Provider $provider )` are enforced by PHP itself; this method
-	 * guarantees the sections; `Settings_Section::get_tools()` guarantees the tools. No reader
-	 * has to re-ask, which is what #514 m6 was for.
+	 * filters the sections; `Settings_Section::get_tools()` filters the tools. No reader has
+	 * to repeat a CLASS check, which is what #514 m6 was for.
+	 *
+	 * WHAT A CLASS FILTER BUYS, AND WHAT IT DOES NOT. `instanceof` answers "is this the type I
+	 * publish", which is what stops a duck-typed impostor. It does NOT answer "was this object
+	 * ever constructed": an instance hand-built past its own constructor with
+	 * `newInstanceWithoutConstructor()` is a real one, passes here, and then fatals on its
+	 * first typed-property read with `must not be accessed before initialization`. That is
+	 * true of EVERY class in PHP with typed properties, it is true identically on `main`
+	 * (measured — `build_sections()` fatals at `$section->get_id()` before it ever reaches a
+	 * tool, so no tools guard ever protected against it), and no `instanceof` anywhere can
+	 * change it. The guarantee here is the CLASS, deliberately, and that is the whole of it.
 	 *
 	 * Silent, like the tools filter and for the same reason: the actionable notice belongs at
 	 * the registration call. Unlike tools, there is no `create_sections()` to put one in —

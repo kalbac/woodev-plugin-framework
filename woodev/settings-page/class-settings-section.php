@@ -65,7 +65,7 @@ final class Settings_Section {
 	 * `__unserialize()` to validate a hydrated one. Validation therefore lives in TWO places
 	 * on purpose: {@see self::create_tools()} refuses a bad descriptor loudly, where the
 	 * author who can fix it is standing, and {@see self::get_tools()} filters on read, which
-	 * is what actually makes the type a guarantee for every reader.
+	 * is what makes the CLASS of the returned elements a guarantee for every reader.
 	 *
 	 * The positional shape here stays deliberately dumb: it assigns, and decides nothing.
 	 * Naming the kind is the named constructors' job.
@@ -269,11 +269,21 @@ final class Settings_Section {
 	 * `Call to a member function to_array() on string`. Unserialisation is the same story:
 	 * there is no `__unserialize()` here to validate anything.
 	 *
-	 * So the write-side check cannot be the only one. Doing it HERE closes every door for
-	 * every reader at once — {@see Settings_Page_Registry::build_sections()} and
-	 * `Woodev_REST_API_Settings_Page::run_tool()`, which never had a check of its own —
-	 * which is what #514 m6 (critic N3) actually asked for: one place that validates both
-	 * paths, rather than each reader re-asking and one of them forgetting to.
+	 * So the write-side check cannot be the only one. Doing it HERE serves every reader from
+	 * one place — {@see Settings_Page_Registry::build_sections()} and
+	 * `Woodev_REST_API_Settings_Page::run_tool()`, which never had a check of its own — which
+	 * is what #514 m6 (critic N3) asked for: one place that validates both paths, rather than
+	 * each reader re-asking and one of them forgetting to.
+	 *
+	 * WHAT A CLASS FILTER BUYS, AND WHAT IT DOES NOT. `instanceof` answers "is this the type I
+	 * publish", which is what stops a duck-typed impostor. It does NOT answer "was this object
+	 * ever constructed": an instance hand-built past its own constructor with
+	 * `newInstanceWithoutConstructor()` is a real one, passes here, and then fatals on its
+	 * first typed-property read with `must not be accessed before initialization`. That is
+	 * true of EVERY class in PHP with typed properties, it is true identically on `main`
+	 * (measured — `build_sections()` fatals at `$section->get_id()` before it ever reaches a
+	 * tool, so no tools guard ever protected against it), and no `instanceof` anywhere can
+	 * change it. The guarantee here is the CLASS, deliberately, and that is the whole of it.
 	 *
 	 * Silent by design. The actionable notice belongs at the registration call, where the
 	 * author who can fix it is standing; a drop here means the object never went through

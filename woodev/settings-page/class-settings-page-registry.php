@@ -192,10 +192,16 @@ final class Settings_Page_Registry {
 
 				// No instanceof gate here any more (#514 m6). Not because construction is
 				// controlled -- it is not, reflection and unserialisation both bypass the
-				// private constructor -- but because the ACCESSORS now guarantee their own
-				// declared types: Settings_Provider::get_sections() filters to
-				// Settings_Section, and Settings_Section::get_tools() filters to
-				// Shipping_Tool. Both links are the reason this loop can dereference freely.
+				// private constructor -- but because the ACCESSORS now filter to their own
+				// declared types: Settings_Provider::get_sections() to Settings_Section, and
+				// Settings_Section::get_tools() to Shipping_Tool. A wrong-class value cannot
+				// reach this loop.
+				//
+				// An object of the RIGHT class that was never constructed still fatals on its
+				// first typed-property read, here and everywhere else in PHP. That is not
+				// what this gate was ever for: $section->get_id() a few lines up would fatal
+				// on such a section first, identically on main, so no tools guard here ever
+				// protected against it.
 				//
 				// The guard used to live here and NOT on the other consumer of the same
 				// array (Woodev_REST_API_Settings_Page::run_tool()), which is the asymmetry
