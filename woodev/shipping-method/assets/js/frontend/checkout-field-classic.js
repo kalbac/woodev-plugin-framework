@@ -1262,6 +1262,40 @@
 				var fields = store.allFields()
 
 				Object.keys( fields ).forEach( function( fieldId ) {
+					// Issue #473. The location cascade owns its fields end-to-end
+					// ({@see isLocationOwnedField}), and that ownership has to hold in BOTH of
+					// this file's whole-store loops — `applyTakeover()` has carried the same
+					// guard since #466. One guard at the top of the body rather than one per
+					// branch, so a future branch added here inherits it instead of having to
+					// remember.
+					//
+					// WHAT IS ACTUALLY REACHABLE, measured rather than assumed, because the
+					// card named two defects and only one of them exists:
+					//
+					// - The RESTORE below is real. `$field.val( stored )` is a BARE write, and
+					//   on a `<select>` the cascade built it selects nothing unless a matching
+					//   `<option>` happens to exist — `selectedIndex` stays -1, `.value` stays
+					//   '', and the field drops out of the POST. That is the #447/#455/#462
+					//   mechanism, and it is exactly why the cascade routes its own writes
+					//   through `applyValueToElement()`. Driven to fire with hand-set inputs
+					//   (Codex, 23.08.2026); NOT reproduced through any live path in four rig
+					//   scenarios (s89), because the cascade's own `updated_checkout` restore
+					//   gets there first. So: reachable in principle, never observed live —
+					//   and skipping it costs nothing, since that cascade restore is the one
+					//   that handles a `<select>` correctly.
+					//
+					// - The second `select2` the card also reports is NOT reachable, and the
+					//   code says so plainly: `maybeInitSelect2()` acts only on
+					//   `source_kind === 'suggest'`, `isLocationOwnedField()` tests
+					//   `source_kind === 'location'`, and `source_kind` is a single scalar set
+					//   by either `set_source()` or `source_location()`
+					//   (`class-field.php:265,315`) — never both. The call below has always
+					//   been a no-op for these fields. The guard covers it for symmetry, not
+					//   because it fires.
+					if( isLocationOwnedField( entry, fieldId ) ) {
+						return
+					}
+
 					var $field = $( '#' + fieldId )
 
 					// Restore is a SAFETY NET, not an overwrite: only put the stored value back
