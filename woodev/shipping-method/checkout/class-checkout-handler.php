@@ -1387,7 +1387,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return string
 		 */
 		protected function placeholder_label(): string {
-			return __( 'Выберите…', 'woodev-plugin-framework' );
+			return __( 'Select…', 'woodev-plugin-framework' );
 		}
 
 		/**
@@ -1584,7 +1584,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 								'' !== $supplied
 									? $supplied
 									: __(
-										'Для этого способа доставки нужно выбрать пункт выдачи заказов.',
+										'This shipping method requires you to choose a pickup point.',
 										'woodev-plugin-framework'
 									)
 							);
@@ -1926,11 +1926,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			if ( ! empty( $field['is_pickup_slot'] ) ) {
-				return __( 'Вы не выбрали пункт выдачи заказов.', 'woodev-plugin-framework' );
+				return __( 'You have not chosen a pickup point.', 'woodev-plugin-framework' );
 			}
 
 			/* translators: %s: checkout field label */
-			return sprintf( __( 'Укажите значение поля «%s».', 'woodev-plugin-framework' ), self::message_label( $field ) );
+			return sprintf( __( 'Please fill in the “%s” field.', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
 
 		/**
@@ -1987,7 +1987,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			/* translators: %s: checkout field label */
-			return sprintf( __( 'Поле «%s» заполнено некорректно.', 'woodev-plugin-framework' ), self::message_label( $field ) );
+			return sprintf( __( 'The “%s” field is filled in incorrectly.', 'woodev-plugin-framework' ), self::message_label( $field ) );
 		}
 
 		/**

@@ -98,7 +98,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 					'reason'  => sprintf(
 						/* translators: 1: cart weight in kg, 2: point weight limit in kg */
 						__(
-							'Вес заказа %1$s кг превышает ограничение пункта выдачи — %2$s кг.',
+							'The order weight of %1$s kg exceeds the pickup point limit of %2$s kg.',
 							'woodev-plugin-framework'
 						),
 						number_format_i18n( $cart_weight / 1000, 2 ),
@@ -118,8 +118,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker'
 				$verdict = [
 					'allowed' => false,
 					'reason'  => __(
-						'В этом пункте выдачи недоступна оплата при получении.'
-						. ' Выберите другой пункт или другой способ оплаты.',
+						'This pickup point does not accept cash on delivery.'
+						. ' Choose another point or another payment method.',
 						'woodev-plugin-framework'
 					),
 				];

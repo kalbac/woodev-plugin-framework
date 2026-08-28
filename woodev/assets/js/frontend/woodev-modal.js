@@ -337,8 +337,8 @@
 
 		this._modalId = opts.modalId || '';
 		this._title = opts.title || '';
-		this._closeLabel = opts.closeLabel || 'Закрыть';
-		this._retryLabel = opts.retryLabel || 'Повторить';
+		this._closeLabel = opts.closeLabel || 'Close';
+		this._retryLabel = opts.retryLabel || 'Try again';
 		this._returnFocusTo = opts.returnFocusTo || null;
 		this._context = opts.context || {};
 		this._width = opts.width || null;

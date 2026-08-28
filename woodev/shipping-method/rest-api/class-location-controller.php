@@ -1454,7 +1454,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			return [
 				'cancelled' => true,
 				'reason'    => 'stale_record',
-				'message'   => __( 'Данные не актуальны, выберите заново', 'woodev-plugin-framework' ),
+				'message'   => __( 'This information is out of date, please choose again', 'woodev-plugin-framework' ),
 				'current'   => null,
 				'persisted' => false,
 				'chain'     => $chain_block['chain'],

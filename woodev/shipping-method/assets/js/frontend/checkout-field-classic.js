@@ -173,7 +173,7 @@
 	 * @returns {boolean} Было ли восстановлено прежнее значение.
 	 */
 	function placeholderText( config ) {
-		return config && config.i18n && config.i18n.placeholder ? config.i18n.placeholder : 'Выберите…'
+		return config && config.i18n && config.i18n.placeholder ? config.i18n.placeholder : 'Select…'
 	}
 
 	function fillSelect( $select, options, previous, placeholder ) {

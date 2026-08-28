@@ -1134,52 +1134,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		public function get_js_config(): array {
 			$strings = [
-				'modalTitle'     => __( 'Выберите пункт выдачи', 'woodev-plugin-framework' ),
-				'close'          => __( 'Закрыть', 'woodev-plugin-framework' ),
-				'select'         => __( 'Выбрать этот пункт', 'woodev-plugin-framework' ),
-				'loading'        => __( 'Загрузка пунктов выдачи…', 'woodev-plugin-framework' ),
+				'modalTitle'     => __( 'Choose a pickup point', 'woodev-plugin-framework' ),
+				'close'          => __( 'Close', 'woodev-plugin-framework' ),
+				'select'         => __( 'Choose this point', 'woodev-plugin-framework' ),
+				'loading'        => __( 'Loading pickup points…', 'woodev-plugin-framework' ),
 				'error'          => __(
-					'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
+					'Could not load pickup points. Please try again.',
 					'woodev-plugin-framework'
 				),
-				'noResults'      => __( 'Поиск не дал результатов.', 'woodev-plugin-framework' ),
+				'noResults'      => __( 'No results found.', 'woodev-plugin-framework' ),
 				'blocked'        => __(
-					'Этот пункт выдачи недоступен для вашего заказа.',
+					'This pickup point is not available for your order.',
 					'woodev-plugin-framework'
 				),
 				// Consumed by the mount script (Task 12), not by the modal shell or the map
 				// provider — see Pickup_Mount's own docblock for why it reads these keys.
-				'trigger'        => __( 'Выбрать пункт выдачи', 'woodev-plugin-framework' ),
-				'retry'          => __( 'Повторить', 'woodev-plugin-framework' ),
+				'trigger'        => __( 'Select a pickup point', 'woodev-plugin-framework' ),
+				'retry'          => __( 'Try again', 'woodev-plugin-framework' ),
 				'upstreamError'  => __(
-					'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
+					'The pickup point service is temporarily unavailable. Please try again later.',
 					'woodev-plugin-framework'
 				),
 				'rateLimited'    => __(
-					'Слишком много запросов. Подождите немного и попробуйте снова.',
+					'Too many requests. Please wait a moment and try again.',
 					'woodev-plugin-framework'
 				),
 				'notFound'       => __(
-					'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
+					'This pickup point can no longer be found. Please choose another one.',
 					'woodev-plugin-framework'
 				),
 				// Consumed by the map provider scripts (Tasks 13/14), not by this handler or
 				// the modal shell — a missing key here renders BLANK in the provider's UI
 				// rather than throwing, so every one must stay exact: the provider reads them
 				// by name, never falls back to a hardcoded default.
-				'drawerTitle'    => __( 'Пункты выдачи в этой области', 'woodev-plugin-framework' ),
+				'drawerTitle'    => __( 'Pickup points in this area', 'woodev-plugin-framework' ),
 				// The sidebar toggle's SECOND name (#168): it opens the drawer when closed
 				// (`drawerTitle` above) and collapses it back to the map when open. Also the
 				// visible text of the mobile open-list bar, the one state that renders it.
-				'showMap'        => __( 'Показать карту', 'woodev-plugin-framework' ),
-				'howToGet'       => __( 'Как добраться', 'woodev-plugin-framework' ),
-				'paymentMethods' => __( 'Способы оплаты', 'woodev-plugin-framework' ),
-				'workTime'       => __( 'Часы работы', 'woodev-plugin-framework' ),
-				'phone'          => __( 'Телефон', 'woodev-plugin-framework' ),
-				'maxWeight'      => __( 'Максимальный вес', 'woodev-plugin-framework' ),
-				'allTypes'       => __( 'Все типы пунктов', 'woodev-plugin-framework' ),
+				'showMap'        => __( 'Show map', 'woodev-plugin-framework' ),
+				'howToGet'       => __( 'Getting there', 'woodev-plugin-framework' ),
+				'paymentMethods' => __( 'Payment methods', 'woodev-plugin-framework' ),
+				'workTime'       => __( 'Opening hours', 'woodev-plugin-framework' ),
+				'phone'          => __( 'Phone', 'woodev-plugin-framework' ),
+				'maxWeight'      => __( 'Maximum weight', 'woodev-plugin-framework' ),
+				'allTypes'       => __( 'All point types', 'woodev-plugin-framework' ),
 				'detailsError'   => __(
-					'Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать.',
+					'Could not load the pickup point details. You can still choose it.',
 					'woodev-plugin-framework'
 				),
 				// Consumed by the panels (Tasks 12-15), not by this handler or the modal
@@ -1187,26 +1187,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// keys above.
 				// Task 15 (spec V-12): the point card's "Адрес" section title. Distinct
 				// from `yourAddress` below, which labels the SEARCH field, not a card section.
-				'address'          => __( 'Адрес', 'woodev-plugin-framework' ),
-				'services'         => __( 'Услуги', 'woodev-plugin-framework' ),
-				'yourAddress'      => __( 'Ваш адрес', 'woodev-plugin-framework' ),
+				'address'          => __( 'Address', 'woodev-plugin-framework' ),
+				'services'         => __( 'Services', 'woodev-plugin-framework' ),
+				'yourAddress'      => __( 'Your address', 'woodev-plugin-framework' ),
 				/* translators: %s: the searched address. */
-				'nearestTo'        => __( 'Ближайшие к «%s»', 'woodev-plugin-framework' ),
-				'resetSearch'      => __( 'Сбросить', 'woodev-plugin-framework' ),
+				'nearestTo'        => __( 'Nearest to “%s”', 'woodev-plugin-framework' ),
+				'resetSearch'      => __( 'Reset', 'woodev-plugin-framework' ),
 				'nothingNearby'    => __(
-					'Рядом с этим адресом пунктов выдачи нет.',
+					'There are no pickup points near this address.',
 					'woodev-plugin-framework'
 				),
-				'showNearest'      => __( 'Показать ближайший', 'woodev-plugin-framework' ),
-				'continueCheckout' => __( 'Продолжить оформление заказа', 'woodev-plugin-framework' ),
+				'showNearest'      => __( 'Show the nearest', 'woodev-plugin-framework' ),
+				'continueCheckout' => __( 'Continue to checkout', 'woodev-plugin-framework' ),
 				'zoomIn'           => __(
-					'Приблизьте карту, чтобы увидеть пункты выдачи',
+					'Zoom in to see pickup points',
 					'woodev-plugin-framework'
 				),
-				'sectionPoints'    => __( 'Пункты выдачи', 'woodev-plugin-framework' ),
-				'sectionAddresses' => __( 'Адреса', 'woodev-plugin-framework' ),
-				'filterTypes'      => __( 'Тип пунктов', 'woodev-plugin-framework' ),
-				'emptyInView'      => __( 'В этой области пунктов выдачи нет', 'woodev-plugin-framework' ),
+				'sectionPoints'    => __( 'Pickup points', 'woodev-plugin-framework' ),
+				'sectionAddresses' => __( 'Addresses', 'woodev-plugin-framework' ),
+				'filterTypes'      => __( 'Point type', 'woodev-plugin-framework' ),
+				'emptyInView'      => __( 'No pickup points in this area', 'woodev-plugin-framework' ),
 				// Task 17 (spec V-5): a genuinely empty LOCALITY, distinct from `emptyInView`
 				// (a viewport-strategy "none in THIS VIEW" statement) and from `noResults`
 				// (a search found nothing) — an empty result is domain language (Russian Post
@@ -1214,17 +1214,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// map passes through the filter below rather than the framework guessing at
 				// carrier-specific wording itself.
 				'emptyLocality'    => __(
-					'В выбранном населённом пункте нет пунктов выдачи',
+					'There are no pickup points in the selected locality',
 					'woodev-plugin-framework'
 				),
 				// The checkout trigger's second state (Task 20) — a customer who has
 				// already chosen a point sees this instead of `trigger`.
-				'triggerChange'    => __( 'Выбрать другой пункт выдачи', 'woodev-plugin-framework' ),
+				'triggerChange'    => __( 'Choose a different pickup point', 'woodev-plugin-framework' ),
 				// The chosen-address block's label (issue #274 item 2) — consumed by the mount
 				// script, not by the modal shell or the map provider, exactly like `trigger`/
 				// `triggerChange` above. Mirrors the reference plugins' own wording (Yandex:
 				// «Выбранный ПВЗ:»; this framework is carrier-agnostic, so it says "point").
-				'chosenPointAddress' => __( 'Выбранный пункт выдачи:', 'woodev-plugin-framework' ),
+				'chosenPointAddress' => __( 'Chosen pickup point:', 'woodev-plugin-framework' ),
 				// Issue #308 item 4 (adversarial review of #274 item 3): with a field mounting
 				// a trigger into BOTH placements at once, the two buttons share the exact same
 				// visible text — a screen-reader user tabbing between them hears two identical
@@ -1233,29 +1233,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// `placementAriaContext()` — these feed `aria-label` only, appended to the
 				// visible text, never replacing it), so nothing here changes what a sighted
 				// customer reads.
-				'triggerReviewContext' => __( 'в сводке заказа', 'woodev-plugin-framework' ),
-				'triggerRateContext'   => __( 'у выбранного способа доставки', 'woodev-plugin-framework' ),
+				'triggerReviewContext' => __( 'in the order summary', 'woodev-plugin-framework' ),
+				'triggerRateContext'   => __( 'next to the selected shipping method', 'woodev-plugin-framework' ),
 				// Task 14 (spec V-13): the zoom control's two `aria-label`s. Distinct from
 				// `zoomIn` above, which labels the unrelated "zoom in to see points" bbox
 				// message — reusing it here would have mislabelled the button with a full
 				// sentence about a different situation.
-				'zoomInLabel'      => __( 'Приблизить карту', 'woodev-plugin-framework' ),
-				'zoomOutLabel'     => __( 'Отдалить карту', 'woodev-plugin-framework' ),
+				'zoomInLabel'      => __( 'Zoom in', 'woodev-plugin-framework' ),
+				'zoomOutLabel'     => __( 'Zoom out', 'woodev-plugin-framework' ),
 				// Task 4: the three states of the server round-trip behind a confirmed
 				// selection. `selectFailed` is deliberately NOT the generic `error` string
 				// above: that one is worded for a failed points FETCH ("не удалось загрузить
 				// пункты") and, shown under a button the customer has just pressed to CONFIRM
 				// a point, would describe the wrong operation entirely.
-				'confirming'       => __( 'Проверяем…', 'woodev-plugin-framework' ),
+				'confirming'       => __( 'Checking…', 'woodev-plugin-framework' ),
 				// Issue #223: a SEPARATE CTA state from `confirming` above — the card reads this
 				// while the viewport strategy's own lazy detail fetch (issue #219) is in flight for
 				// the point currently shown, checking whether the sparse listing's
 				// permissive-by-omission verdict still holds, NOT while a confirmation is already
 				// on its way to the server. See `pickup-panels.js`'s own `setVerdictPending()`
 				// docblock for why the two states are tracked, and released, independently.
-				'checkingAvailability' => __( 'Проверяем доступность…', 'woodev-plugin-framework' ),
+				'checkingAvailability' => __( 'Checking availability…', 'woodev-plugin-framework' ),
 				'selectFailed'     => __(
-					'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+					'Could not confirm your choice. Please try again.',
 					'woodev-plugin-framework'
 				),
 				// #297: the `ownsChrome` counterpart of `selectFailed` above. Under an embedded
@@ -1270,13 +1270,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// (see {@see selectionErrorKey()} on the JS side, which picks this key over
 				// `selectFailed` precisely when `panels` is null).
 				'selectFailedEmbedded' => __(
-					'Не удалось подтвердить выбор. Выберите пункт ещё раз.',
+					'Could not confirm your choice. Please choose a point again.',
 					'woodev-plugin-framework'
 				),
 				// A 403 on the select route is not the customer's fault and not retryable in
 				// place — the page's nonce has outlived the session it was minted for.
 				'stalePage'        => __(
-					'Страница устарела. Обновите её и выберите пункт выдачи заново.',
+					'This page is out of date. Refresh it and choose a pickup point again.',
 					'woodev-plugin-framework'
 				),
 			];
@@ -3014,7 +3014,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		private static function default_blocked_message(): string {
 			return __(
-				'Этот пункт выдачи недоступен для вашего заказа. Пожалуйста, выберите другой пункт выдачи.',
+				'This pickup point is not available for your order. Please choose another pickup point.',
 				'woodev-plugin-framework'
 			);
 		}
@@ -3028,7 +3028,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		private static function point_unavailable_message(): string {
 			return __(
-				'Выбранный пункт выдачи больше недоступен. Пожалуйста, выберите пункт выдачи заново.',
+				'The chosen pickup point is no longer available. Please choose a pickup point again.',
 				'woodev-plugin-framework'
 			);
 		}
@@ -3043,7 +3043,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 */
 		private static function outage_blocked_message(): string {
 			return __(
-				'Не удалось проверить пункт выдачи. Пожалуйста, повторите оформление заказа через несколько минут.',
+				'Could not verify the pickup point. Please try placing your order again in a few minutes.',
 				'woodev-plugin-framework'
 			);
 		}

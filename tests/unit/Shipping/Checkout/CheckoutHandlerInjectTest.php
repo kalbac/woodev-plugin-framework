@@ -114,7 +114,7 @@ class CheckoutHandlerInjectTest extends TestCase {
 		$out = $handler->inject( [ 'billing' => [] ] );
 		// A placeholder empty option (with a "choose…" label) is prepended so WC always
 		// renders the <select> and never shows a blank first row.
-		$this->assertSame( [ '' => 'Выберите…', '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
+		$this->assertSame( [ '' => 'Select…', '77' => 'Москва' ], $out['billing']['billing_state']['options'] );
 	}
 
 	public function test_inject_skips_options_for_dependent_field(): void {
@@ -241,7 +241,7 @@ class CheckoutHandlerInjectTest extends TestCase {
 		] );
 		$out = ( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'billing' => [] ] );
 
-		$this->assertSame( [ '' => 'Выберите…' ], $out['billing']['billing_city']['options'] );
+		$this->assertSame( [ '' => 'Select…' ], $out['billing']['billing_city']['options'] );
 	}
 
 	/**

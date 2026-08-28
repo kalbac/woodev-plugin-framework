@@ -277,7 +277,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 		);
 
 		$this->assertSame(
-			[ [ 'Вы не выбрали пункт выдачи заказов.', 'error' ] ],
+			[ [ 'You have not chosen a pickup point.', 'error' ] ],
 			$captured,
 			'exactly one notice — the backstop must not repeat the per-field loop\'s notice'
 		);
@@ -298,7 +298,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_for_a_pickup_slot_field_names_the_choice_not_a_field(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Вы не выбрали пункт выдачи заказов.', 'error' );
+			->with( 'You have not chosen a pickup point.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )
@@ -318,7 +318,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_for_an_ordinary_field_keeps_the_field_template(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Укажите значение поля «Город».', 'error' );
+			->with( 'Please fill in the “Город” field.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_city' )->set_required( true )->set_error_label( 'Город' )->to_array(),
@@ -410,7 +410,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_invalid_message_keeps_the_framework_template_when_no_override_was_supplied(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Поле «Город» заполнено некорректно.', 'error' );
+			->with( 'The “Город” field is filled in incorrectly.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_city' )
@@ -494,7 +494,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 		// it fires precisely when the field's own condition did not match, so it is the
 		// one that can explain WHY a point is needed. Both dropped «значение поля».
 		$this->assertSame(
-			[ [ 'Для этого способа доставки нужно выбрать пункт выдачи заказов.', 'error' ] ],
+			[ [ 'This shipping method requires you to choose a pickup point.', 'error' ] ],
 			$captured,
 			'the backstop must fire ALONE — no additional notice from the per-field loop'
 		);
@@ -508,7 +508,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_prefers_error_label_over_label_and_id(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Укажите значение поля «Пункт выдачи».', 'error' );
+			->with( 'Please fill in the “Пункт выдачи” field.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )->set_required( true )->set_error_label( 'Пункт выдачи' )->to_array(),
@@ -524,7 +524,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_required_message_falls_back_to_id_without_error_label_or_label(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Укажите значение поля «carrier_pickup_point».', 'error' );
+			->with( 'Please fill in the “carrier_pickup_point” field.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )->set_required( true )->to_array(),
@@ -540,7 +540,7 @@ class CheckoutHandlerValidateTest extends TestCase {
 	public function test_invalid_message_prefers_error_label(): void {
 		\Brain\Monkey\Functions\expect( 'wc_add_notice' )
 			->once()
-			->with( 'Поле «Пункт выдачи» заполнено некорректно.', 'error' );
+			->with( 'The “Пункт выдачи” field is filled in incorrectly.', 'error' );
 
 		$fields = Checkout_Fields::from_array( [
 			Field::create( 'carrier_pickup_point' )
