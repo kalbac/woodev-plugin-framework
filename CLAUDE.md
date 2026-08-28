@@ -55,11 +55,22 @@ Sessions run inside the Orca app, so Orca owns worktrees, agent terminals and mu
 coordination. **Substantial work goes through Orca orchestration: worker = Sonnet 5, critic =
 Codex, nobody accepts their own work.**
 
-**The critic-only restriction on Codex is LIFTED (operator, 24.08.2026).** It was a BUDGET
-measure — one overnight session burned 45% of the weekly Codex allowance by running it as worker,
-planner and critic at once (21.08.2026), and Codex was capped to the critic role until 27.08. That
-premise is gone: the operator spent one of his accumulated weekly-limit resets and the allowance is
-back to 0% used. Codex may be a worker again.
+**The critic-only restriction on Codex is LIFTED (operator, 24.08.2026), and the subscription was
+renewed 29.08.2026** — Codex is a full worker again, smoke-tested through Orca rather than assumed.
+The operator's instruction is explicit: *use it, to balance token spend between it and the Claude
+agents.* A paid resource left idle is a loss, not a saving.
+
+**Which model, and it is a two-step choice.** First who gets the task, then what it runs on:
+
+| | |
+|---|---|
+| routine, well-bounded work against a plan | a **Sonnet 5** subagent |
+| a second pair of hands, independent implementation, criticism | **Codex** |
+| a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
+| coordination, gates, git, synthesis | **Opus 5** (this session) |
+
+Inside Codex: **`Terra` for the harder tasks, `Luna` for the simpler ones, and never `Sol` — it is
+too expensive** (operator, 29.08.2026). Default to `Terra` unless the task is plainly small.
 
 **Two caps from that same decision STAY, because they were never about the budget:**
 
