@@ -233,6 +233,11 @@ consumed, and a "the brief's baseline is stale" that turned out to be the skippe
 
 ## kilo as the critic — the recipe that actually returns an event (s97)
 
+> **Status, 28.08.2026 (s102): Codex is back, the subscription was renewed, and it is the default
+> critic again — smoke-tested through Orca, not assumed.** Everything below stays as the FALLBACK
+> recipe: it is what you need the day Codex is unreachable again, and every measurement in it was
+> paid for once already. Do not delete it, and do not follow it while Codex works.
+
 Codex was unreachable for a stretch (unpaid subscription), and kilo — reached through the same
 Kilo Gateway balance — took the critic seat. Getting it to behave as a supervised Orca worker took
 a full elimination pass; this is the outcome, so nobody repeats it.
