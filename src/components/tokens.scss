@@ -13,9 +13,22 @@ $accent-soft:   rgba(6, 174, 221, 0.10);
 $accent-soft-2: rgba(6, 174, 221, 0.07);
 
 // Status colors (kept from the license page — not folded into the accent).
-$ok:    #00a32a;
-$warn:  #dba617;
-$error: #d63638;
+//
+// $ok / $error are the SIGNAL colors: dots, borders, and solid fills where the
+// text sitting on them is white. They are NOT safe as body-text colors — #00a32a
+// is 3.35:1 on white and 2.91:1 on its own 12% tint, both under the 4.5:1 WCAG AA
+// floor for 13px text (#514 m4, measured).
+//
+// So text gets its own, darker pair. The rule they encode: the token for TEXT in
+// a tinted panel must be darker than the token for the dot or the border. Values
+// are WordPress core's green-700 / red-700 — and #b32d2e is not a new colour
+// here, it is the bespoke red the plugins page used before it was folded into
+// $error.
+$ok:         #00a32a;
+$warn:       #dba617;
+$error:      #d63638;
+$ok-text:    #00733c; // 5.97:1 on white, 5.19:1 on the $ok tint.
+$error-text: #b32d2e; // 6.30:1 on white, 5.30:1 on the $error tint.
 
 // Neutrals / layout.
 $divider:   #eef0f2;
