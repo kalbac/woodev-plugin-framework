@@ -297,12 +297,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			/**
 			 * Filters the shipping method classes before registration.
 			 *
+			 * A return that is not an array is discarded and the plugin's own
+			 * class list is used instead. A non-array value here does not fatal —
+			 * `foreach` on it is a silent no-op — but it makes every shipping
+			 * method vanish from checkout with nothing in the logs, which is worse.
+			 *
 			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the plugin's own class
+			 *              list is used instead of trusting the return's type.
 			 *
 			 * @param array $method_classes shipping method class names
 			 * @param Shipping_Plugin $plugin plugin instance
 			 */
-			$classes = apply_filters( 'woodev_shipping_plugin_method_classes', $this->get_shipping_method_classes(), $this );
+			$filtered_classes = apply_filters( 'woodev_shipping_plugin_method_classes', $this->get_shipping_method_classes(), $this );
+
+			$classes = is_array( $filtered_classes ) ? $filtered_classes : $this->get_shipping_method_classes();
 
 			foreach ( $classes as $class ) {
 
@@ -342,12 +351,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			/**
 			 * Filters the final registered methods array.
 			 *
+			 * A return that is not an array is discarded and the methods
+			 * registered so far are returned instead — this method's `array`
+			 * return type makes any other return a fatal `TypeError` on every
+			 * cart/checkout shipping calculation.
+			 *
 			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the pre-filter methods
+			 *              are returned instead of trusting the return's type.
 			 *
 			 * @param array $methods registered methods
 			 * @param Shipping_Plugin $plugin plugin instance
 			 */
-			return apply_filters( 'woodev_shipping_plugin_registered_methods', $methods, $this );
+			$filtered_methods = apply_filters( 'woodev_shipping_plugin_registered_methods', $methods, $this );
+
+			return is_array( $filtered_methods ) ? $filtered_methods : $methods;
 		}
 
 		/**
@@ -1165,10 +1183,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			 *
 			 * Allow actors to filter accepted currencies.
 			 *
+			 * A return that is not an array is discarded and the plugin's own
+			 * configured currencies are returned instead — this method's `array`
+			 * return type makes any other return a fatal `TypeError`.
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the pre-filter
+			 *              currencies are returned instead of trusting the
+			 *              return's type.
+			 *
 			 * @param array $currencies Accepted currency codes
 			 * @param Shipping_Plugin $plugin Plugin instance
 			 */
-			return apply_filters( sprintf( 'woodev_shipping_plugin_%s_accepted_currencies', $this->get_id_underscored() ), $this->currencies, $this );
+			$filtered_currencies = apply_filters( sprintf( 'woodev_shipping_plugin_%s_accepted_currencies', $this->get_id_underscored() ), $this->currencies, $this );
+
+			return is_array( $filtered_currencies ) ? $filtered_currencies : $this->currencies;
 		}
 
 		/**
@@ -1184,10 +1213,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			 *
 			 * Allow actors to filter accepted countries.
 			 *
+			 * A return that is not an array is discarded and the plugin's own
+			 * configured countries are returned instead — this method's `array`
+			 * return type makes any other return a fatal `TypeError`, and this
+			 * getter sits on the checkout availability path
+			 * ({@see \Woodev\Framework\Shipping\Shipping_Method::is_available_for_package()}).
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the pre-filter
+			 *              countries are returned instead of trusting the return's
+			 *              type.
+			 *
 			 * @param array $countries Accepted country codes
 			 * @param Shipping_Plugin $plugin Plugin instance
 			 */
-			return apply_filters( sprintf( 'woodev_shipping_plugin_%s_accepted_countries', $this->get_id_underscored() ), $this->countries, $this );
+			$filtered_countries = apply_filters( sprintf( 'woodev_shipping_plugin_%s_accepted_countries', $this->get_id_underscored() ), $this->countries, $this );
+
+			return is_array( $filtered_countries ) ? $filtered_countries : $this->countries;
 		}
 	}
 

@@ -146,7 +146,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				];
 			}
 
-			$this->instance_form_fields = apply_filters( 'woodev_shipping_method_' . $this->get_id() . '_form_fields', $this->instance_form_fields, $this );
+			/**
+			 * Shipping Method Instance Form Fields Filter.
+			 *
+			 * Allow actors to modify the instance form fields shown on the admin
+			 * settings screen.
+			 *
+			 * A return that is not an array is discarded and the fields built above
+			 * are kept instead — WooCommerce hands `$instance_form_fields` to
+			 * `array_map()` when rendering the settings screen, and a non-array
+			 * value there is a fatal `TypeError`.
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the pre-filter fields
+			 *              are kept instead of trusting the return's type.
+			 *
+			 * @param array $instance_form_fields the instance form fields built above
+			 * @param Shipping_Method $method Method instance
+			 */
+			$filtered_form_fields = apply_filters( 'woodev_shipping_method_' . $this->get_id() . '_form_fields', $this->instance_form_fields, $this );
+
+			if ( is_array( $filtered_form_fields ) ) {
+				$this->instance_form_fields = $filtered_form_fields;
+			}
 		}
 
 		/**
@@ -237,13 +259,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * `woodev_shipping_method_calculated_rate` filter below, where a cache
 			 * can persist freshly computed rates.
 			 *
+			 * A return that is neither `null` nor a {@see Shipping_Rate} instance is
+			 * discarded and treated as `null` — rate calculation proceeds normally
+			 * rather than handing a malformed value to the code below, which is a
+			 * fatal `Error` on a truthy non-`Shipping_Rate` return.
+			 *
 			 * @since 1.5.0
+			 * @since 2.0.2 A return that is neither `null` nor a {@see Shipping_Rate}
+			 *              is discarded instead of being trusted by truthiness.
 			 *
 			 * @param Shipping_Rate|null $rate Cached rate to use, or null to calculate normally
 			 * @param array $package Package data
 			 * @param Shipping_Method $method Method instance
 			 */
-			$rate = apply_filters( 'woodev_shipping_method_pre_calculate_rate', null, $package, $this );
+			$pre_calculated_rate = apply_filters( 'woodev_shipping_method_pre_calculate_rate', null, $package, $this );
+
+			$rate = $pre_calculated_rate instanceof Shipping_Rate ? $pre_calculated_rate : null;
 
 			if ( null === $rate ) {
 				$rate = $this->calculate_rate( $package );
@@ -254,11 +285,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * Allow actors to modify the calculated rate before it's added.
 			 *
+			 * A return that is neither `null` nor a {@see Shipping_Rate} instance is
+			 * discarded and the pre-filter rate is kept, so a misbehaving actor
+			 * degrades to "no rate added" (if the pre-filter rate was also null)
+			 * rather than fatalling while a customer is calculating shipping.
+			 *
+			 * @since 2.0.2 A return that is neither `null` nor a {@see Shipping_Rate}
+			 *              is discarded; the pre-filter rate is kept instead of
+			 *              trusting the return by truthiness.
+			 *
 			 * @param Shipping_Rate|null $rate Calculated rate or null
 			 * @param array $package Package data
 			 * @param Shipping_Method $method Method instance
 			 */
-			$rate = apply_filters( 'woodev_shipping_method_calculated_rate', $rate, $package, $this );
+			$filtered_rate = apply_filters( 'woodev_shipping_method_calculated_rate', $rate, $package, $this );
+
+			if ( null === $filtered_rate || $filtered_rate instanceof Shipping_Rate ) {
+				$rate = $filtered_rate;
+			}
 
 			if ( $rate ) {
 				/**
@@ -389,11 +433,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 *
 			 * Allow actors to modify method availability for a package.
 			 *
+			 * A return that is not a `bool` is discarded and the pre-filter
+			 * availability is kept instead — this method's `bool` return type
+			 * makes any other return a fatal `TypeError` while a customer is at
+			 * checkout.
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-`bool` return is discarded; the pre-filter
+			 *              availability is kept instead of trusting the return's
+			 *              type.
+			 *
 			 * @param bool $is_available Whether method is available
 			 * @param array $package Package data
 			 * @param Shipping_Method $method Method instance
 			 */
-			return apply_filters( 'woodev_shipping_' . $this->id . '_is_available', $is_available, $package, $this );
+			$filtered_is_available = apply_filters( 'woodev_shipping_' . $this->id . '_is_available', $is_available, $package, $this );
+
+			return is_bool( $filtered_is_available ) ? $filtered_is_available : $is_available;
 		}
 
 		/**
