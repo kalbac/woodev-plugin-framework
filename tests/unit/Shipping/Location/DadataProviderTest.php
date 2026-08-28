@@ -29,6 +29,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
+use Woodev\Framework\Shipping\Location\Providers\Dadata_Api_Client;
 use Woodev\Framework\Shipping\Location\Providers\Dadata_Provider;
 use Woodev\Framework\Settings\Settings_Page_Registry;
 use Woodev\Tests\Unit\TestCase;
@@ -427,7 +428,7 @@ final class DadataProviderTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	public function test_provider_id_matches_the_registry_default_provider_id(): void {
-		$this->assertSame( Location_Provider_Registry::DEFAULT_PROVIDER_ID, ( new Dadata_Provider() )->get_id() );
+		$this->assertSame( Location_Provider_Registry::DEFAULT_PROVIDER_ID, ( self::provider() )->get_id() );
 	}
 
 	/**
@@ -439,7 +440,7 @@ final class DadataProviderTest extends TestCase {
 	 * weight, since `tooltip` alone already carries the explanation.
 	 */
 	public function test_every_declared_field_has_a_tooltip_and_a_link_bearing_description(): void {
-		foreach ( ( new Dadata_Provider() )->get_settings_fields() as $id => $field ) {
+		foreach ( ( self::provider() )->get_settings_fields() as $id => $field ) {
 			$this->assertNotSame( '', $field['tooltip'] ?? '', "Field \"{$id}\" has an empty tooltip." );
 			$this->assertStringContainsString(
 				'<a href=',
@@ -463,7 +464,7 @@ final class DadataProviderTest extends TestCase {
 			}
 		);
 
-		$this->assertTrue( ( new Dadata_Provider() )->is_configured() );
+		$this->assertTrue( ( self::provider() )->is_configured() );
 	}
 
 	/**
@@ -475,7 +476,7 @@ final class DadataProviderTest extends TestCase {
 	public function test_get_countries_defaults_to_the_nine_served_countries(): void {
 		$this->assertSame(
 			[ 'RU', 'BY', 'KZ', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'TM' ],
-			( new Dadata_Provider() )->get_countries()
+			( self::provider() )->get_countries()
 		);
 	}
 
@@ -490,11 +491,11 @@ final class DadataProviderTest extends TestCase {
 			}
 		);
 
-		$this->assertSame( [ 'RU', 'BY', 'KZ' ], ( new Dadata_Provider() )->get_countries() );
+		$this->assertSame( [ 'RU', 'BY', 'KZ' ], ( self::provider() )->get_countries() );
 	}
 
 	public function test_dadata_serves_all_three_suggest_levels(): void {
-		$this->assertSame( Location_Record::LEVELS, ( new Dadata_Provider() )->get_suggest_levels() );
+		$this->assertSame( Location_Record::LEVELS, ( self::provider() )->get_suggest_levels() );
 	}
 
 	// -------------------------------------------------------------------------
@@ -510,7 +511,7 @@ final class DadataProviderTest extends TestCase {
 	 * no committed fixture captures a KZ/UZ address-level response).
 	 */
 	public function test_get_suggest_levels_is_unnarrowed_for_ru_and_osm_tier_countries(): void {
-		$provider = new Dadata_Provider();
+		$provider = self::provider();
 
 		foreach ( [ 'RU', 'BY', 'KZ', 'UZ' ] as $country ) {
 			$this->assertSame( Location_Record::LEVELS, $provider->get_suggest_levels( $country ), "country: $country" );
@@ -525,7 +526,7 @@ final class DadataProviderTest extends TestCase {
 	 * here per fixture per country).
 	 */
 	public function test_get_suggest_levels_excludes_address_for_geonames_tier_countries(): void {
-		$provider = new Dadata_Provider();
+		$provider = self::provider();
 
 		foreach ( [ 'AM', 'AZ', 'KG', 'TJ', 'TM' ] as $country ) {
 			$this->assertSame(
@@ -537,7 +538,7 @@ final class DadataProviderTest extends TestCase {
 	}
 
 	public function test_get_suggest_levels_narrowing_is_case_insensitive_and_trims_whitespace(): void {
-		$provider = new Dadata_Provider();
+		$provider = self::provider();
 
 		$this->assertSame(
 			[ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ],
@@ -553,7 +554,7 @@ final class DadataProviderTest extends TestCase {
 	 * of the existing contract.
 	 */
 	public function test_get_suggest_levels_without_a_country_stays_unnarrowed(): void {
-		$this->assertSame( Location_Record::LEVELS, ( new Dadata_Provider() )->get_suggest_levels() );
+		$this->assertSame( Location_Record::LEVELS, ( self::provider() )->get_suggest_levels() );
 	}
 
 	/**
@@ -563,7 +564,7 @@ final class DadataProviderTest extends TestCase {
 	 * cover at all.
 	 */
 	public function test_get_suggest_levels_is_empty_for_an_uncovered_country(): void {
-		$this->assertSame( [], ( new Dadata_Provider() )->get_suggest_levels( 'US' ) );
+		$this->assertSame( [], ( self::provider() )->get_suggest_levels( 'US' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -572,32 +573,32 @@ final class DadataProviderTest extends TestCase {
 
 	public function test_is_not_configured_without_a_token(): void {
 		$this->set_token( '' );
-		$this->assertFalse( ( new Dadata_Provider() )->is_configured() );
+		$this->assertFalse( ( self::provider() )->is_configured() );
 	}
 
 	public function test_is_configured_with_a_token(): void {
 		$this->set_token( 'tok' );
-		$this->assertTrue( ( new Dadata_Provider() )->is_configured() );
+		$this->assertTrue( ( self::provider() )->is_configured() );
 	}
 
 	public function test_capabilities_do_not_include_normalize_without_a_secret(): void {
 		$this->set_token( 'tok', '' );
-		$this->assertNotContains( 'normalize', ( new Dadata_Provider() )->get_capabilities() );
+		$this->assertNotContains( 'normalize', ( self::provider() )->get_capabilities() );
 	}
 
 	public function test_capabilities_include_normalize_with_a_secret_configured(): void {
 		$this->set_token( 'tok', 'sec' );
-		$this->assertContains( 'normalize', ( new Dadata_Provider() )->get_capabilities() );
+		$this->assertContains( 'normalize', ( self::provider() )->get_capabilities() );
 	}
 
 	public function test_capabilities_never_include_list(): void {
 		$this->set_token( 'tok', 'sec' );
-		$this->assertNotContains( 'list', ( new Dadata_Provider() )->get_capabilities() );
+		$this->assertNotContains( 'list', ( self::provider() )->get_capabilities() );
 	}
 
 	public function test_capabilities_include_locate_regardless_of_secret(): void {
 		$this->set_token( 'tok', '' );
-		$this->assertContains( 'locate', ( new Dadata_Provider() )->get_capabilities() );
+		$this->assertContains( 'locate', ( self::provider() )->get_capabilities() );
 	}
 
 	// -------------------------------------------------------------------------
@@ -608,21 +609,21 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$this->assertSame( [], ( new Dadata_Provider() )->suggest( '  ', Location_Scope::for_country( 'RU', 'region' ) ) );
+		$this->assertSame( [], ( self::provider() )->suggest( '  ', Location_Scope::for_country( 'RU', 'region' ) ) );
 	}
 
 	public function test_suggest_returns_empty_when_unconfigured_without_any_http_call(): void {
 		$this->set_token( '' );
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$this->assertSame( [], ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', 'region' ) ) );
+		$this->assertSame( [], ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', 'region' ) ) );
 	}
 
 	public function test_suggest_at_region_level_maps_a_record(): void {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		$records = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$this->assertCount( 1, $records );
 		$record = $records[0];
@@ -638,7 +639,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
-		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$body = $this->last_request_body();
 		$this->assertSame( [ 'value' => 'region' ], $body['from_bound'] );
@@ -649,7 +650,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::suggest_address_fixture() ) );
 
-		( new Dadata_Provider() )->suggest( 'Хабаровская', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
+		( self::provider() )->suggest( 'Хабаровская', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
 
 		$body = $this->last_request_body();
 		$this->assertSame( [ 'value' => 'street' ], $body['from_bound'] );
@@ -660,7 +661,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
 
-		( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		( self::provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$body = $this->last_request_body();
 		$this->assertSame( [ 'value' => 'city' ], $body['from_bound'] );
@@ -673,7 +674,7 @@ final class DadataProviderTest extends TestCase {
 		$real   = self::settlement_suggestion( '4' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ $noise, $real ] ] ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 1, $records, 'the fias_level=65 row must be filtered out' );
 		$this->assertSame( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f', $records[0]->key() );
@@ -693,7 +694,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::settlement_suggestion_at_level_1_federal_city() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 1, $records, 'a federal-city row (region_fias_id === city_fias_id) at fias_level=1 must survive' );
 		$this->assertSame( 'г Москва', $records[0]->label() );
@@ -705,7 +706,7 @@ final class DadataProviderTest extends TestCase {
 		$row['suggestions'][0]['data']['city_fias_id'] = 'a-different-fias-id-than-region';
 		$this->stub_http_response( 200, (string) json_encode( $row ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 0, $records, 'fias_level=1 with region_fias_id !== city_fias_id is finer than settlement (e.g. a district) and must be rejected' );
 	}
@@ -716,7 +717,7 @@ final class DadataProviderTest extends TestCase {
 		$row['suggestions'][0]['data']['city_district'] = 'Москворечье-Сабурово';
 		$this->stub_http_response( 200, (string) json_encode( $row ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 0, $records, 'a city_district is finer than a settlement, even on an otherwise-federal-city row' );
 	}
@@ -735,7 +736,7 @@ final class DadataProviderTest extends TestCase {
 
 		$this->stub_http_response( 200, (string) json_encode( $row ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 0, $records );
 	}
@@ -753,7 +754,7 @@ final class DadataProviderTest extends TestCase {
 		$fixture = self::load_dadata_fixture( 'ru-settlement-moscow-duplicate.json' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Москв', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Москв', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 9, $records, '10 raw rows minus the 1 city-district row' );
 
@@ -770,7 +771,7 @@ final class DadataProviderTest extends TestCase {
 		$fixture = [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ];
 		$this->stub_http_response( 200, (string) json_encode( $fixture ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$record = $records[0];
 		$this->assertSame( '350000', $record->postcode() );
@@ -784,7 +785,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertSame( [ 'name' => 'Краснодарский', 'type' => 'край' ], $records[0]->region() );
 	}
@@ -795,10 +796,10 @@ final class DadataProviderTest extends TestCase {
 		unset( $no_fias['suggestions'][0]['data']['fias_id'] );
 
 		$this->stub_http_response( 200, (string) json_encode( $no_fias ) );
-		$records_a = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		$records_a = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$this->stub_http_response( 200, (string) json_encode( $no_fias ) );
-		$records_b = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		$records_b = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$this->assertCount( 1, $records_a );
 		$this->assertStringStartsWith( 'dadata:', $records_a[0]->key() );
@@ -814,10 +815,10 @@ final class DadataProviderTest extends TestCase {
 
 		$region_fixture = self::region_level_suggestion_fixture();
 		$this->stub_http_response( 200, (string) json_encode( $region_fixture ) );
-		$region_record = ( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) )[0];
+		$region_record = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) )[0];
 
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
-		( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::within( $region_record, Location_Record::LEVEL_SETTLEMENT ) );
+		( self::provider() )->suggest( 'Красн', Location_Scope::within( $region_record, Location_Record::LEVEL_SETTLEMENT ) );
 
 		$body = $this->last_request_body();
 		$this->assertTrue( $body['restrict_value'] );
@@ -850,7 +851,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
-		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 
 		$body = $this->last_request_body();
 		$this->assertSame( [ [ 'country_iso_code' => 'RU' ] ], $body['locations'] );
@@ -861,7 +862,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
-		( new Dadata_Provider() )->suggest( 'Мин', Location_Scope::for_country( 'BY', Location_Record::LEVEL_REGION ) );
+		( self::provider() )->suggest( 'Мин', Location_Scope::for_country( 'BY', Location_Record::LEVEL_REGION ) );
 
 		$body = $this->last_request_body();
 		$this->assertSame( [ [ 'country_iso_code' => 'BY' ] ], $body['locations'] );
@@ -880,7 +881,7 @@ final class DadataProviderTest extends TestCase {
 		$this->stub_http_response( 500, '' );
 
 		try {
-			( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+			( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 			$this->fail( 'Expected Location_Provider_Exception was not thrown.' );
 		} catch ( Location_Provider_Exception $exception ) {
 			// expected
@@ -900,7 +901,7 @@ final class DadataProviderTest extends TestCase {
 		$this->stub_http_response( 401, '' );
 
 		try {
-			( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+			( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 			$this->fail( 'Expected Location_Provider_Exception was not thrown.' );
 		} catch ( Location_Provider_Exception $exception ) {
 			// expected
@@ -921,7 +922,7 @@ final class DadataProviderTest extends TestCase {
 
 		$this->expectException( Location_Provider_Exception::class );
 
-		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 	}
 
 	/**
@@ -935,7 +936,7 @@ final class DadataProviderTest extends TestCase {
 
 		$this->expectException( Location_Provider_Exception::class );
 
-		( new Dadata_Provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
+		( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -990,7 +991,7 @@ final class DadataProviderTest extends TestCase {
 		$fixture = self::load_dadata_fixture( $filenames[ $country . ':' . $level ] );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'q', Location_Scope::for_country( $country, $level ) );
+		$records = ( self::provider() )->suggest( 'q', Location_Scope::for_country( $country, $level ) );
 
 		$this->assertNotEmpty( $records );
 		$this->assertSame(
@@ -1012,7 +1013,7 @@ final class DadataProviderTest extends TestCase {
 		$fixture = self::load_dadata_fixture( 'am-address-empty-tier2.json' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => $fixture['response']['suggestions'] ] ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Ереван Абовяна', Location_Scope::for_country( 'AM', Location_Record::LEVEL_ADDRESS ) );
+		$records = ( self::provider() )->suggest( 'Ереван Абовяна', Location_Scope::for_country( 'AM', Location_Record::LEVEL_ADDRESS ) );
 
 		$this->assertSame( [], $records );
 	}
@@ -1036,7 +1037,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::iplocate_fixture() ) );
 
-		$record = ( new Dadata_Provider() )->locate( '1.2.3.4' );
+		$record = ( self::provider() )->locate( '1.2.3.4' );
 
 		$this->assertNotNull( $record );
 		$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $record->level() );
@@ -1048,21 +1049,21 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( [] ) );
 
-		$this->assertNull( ( new Dadata_Provider() )->locate( '1.2.3.4' ) );
+		$this->assertNull( ( self::provider() )->locate( '1.2.3.4' ) );
 	}
 
 	public function test_locate_returns_null_when_unconfigured(): void {
 		$this->set_token( '' );
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
-		$this->assertNull( ( new Dadata_Provider() )->locate( '1.2.3.4' ) );
+		$this->assertNull( ( self::provider() )->locate( '1.2.3.4' ) );
 	}
 
 	public function test_locate_http_failure_degrades_to_null_and_is_logged(): void {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 500, '' );
 
-		$this->assertNull( ( new Dadata_Provider() )->locate( '1.2.3.4' ) );
+		$this->assertNull( ( self::provider() )->locate( '1.2.3.4' ) );
 		$this->assertTrue( $this->failure_was_logged( 'locate' ) );
 	}
 
@@ -1074,7 +1075,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok', 'sec' );
 		$this->stub_http_response( 200, (string) json_encode( [ self::clean_result_fixture() ] ) );
 
-		$record = ( new Dadata_Provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
+		$record = ( self::provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
 
 		$this->assertNotNull( $record );
 		$this->assertSame( 'г Москва, ул Сухонская, д 11, кв 89', $record->label() );
@@ -1087,7 +1088,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok', 'sec' );
 		$this->stub_http_response( 200, (string) json_encode( [ self::clean_result_fixture() ] ) );
 
-		( new Dadata_Provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
+		( self::provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
 
 		$body = json_decode( (string) $this->last_request['args']['body'], true );
 		$this->assertSame( [ 'мск сухонска 11/-89' ], $body );
@@ -1098,7 +1099,7 @@ final class DadataProviderTest extends TestCase {
 		// No X-Secret header configured -> DaData rejects the Clean API call.
 		$this->stub_http_response( 401, '' );
 
-		$this->assertNull( ( new Dadata_Provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) ) );
+		$this->assertNull( ( self::provider() )->normalize( 'мск сухонска 11/-89', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) ) );
 		$this->assertTrue( $this->failure_was_logged( 'normalize' ) );
 	}
 
@@ -1108,7 +1109,7 @@ final class DadataProviderTest extends TestCase {
 		$fixture['result'] = '';
 		$this->stub_http_response( 200, (string) json_encode( [ $fixture ] ) );
 
-		$this->assertNull( ( new Dadata_Provider() )->normalize( 'garbage', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) ) );
+		$this->assertNull( ( self::provider() )->normalize( 'garbage', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1117,14 +1118,14 @@ final class DadataProviderTest extends TestCase {
 
 	public function test_capabilities_include_resolve_key_regardless_of_secret(): void {
 		$this->set_token( 'tok', '' );
-		$this->assertContains( 'resolve_key', ( new Dadata_Provider() )->get_capabilities() );
+		$this->assertContains( 'resolve_key', ( self::provider() )->get_capabilities() );
 	}
 
 	public function test_resolve_key_maps_a_settlement_record(): void {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
 
-		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f' );
+		$record = ( self::provider() )->resolve_key( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f' );
 
 		$this->assertNotNull( $record );
 		$this->assertSame( 'dadata:7dfa745e-aa19-4688-b121-b655c11e482f', $record->key() );
@@ -1139,7 +1140,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::region_level_suggestion_fixture() ) );
 
-		$record = ( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		$record = ( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 
 		$this->assertNotNull( $record );
 		$this->assertSame( Location_Record::LEVEL_REGION, $record->level() );
@@ -1149,7 +1150,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
 
-		$this->assertNull( ( new Dadata_Provider() )->resolve_key( 'dadata:no-such-fias-id' ) );
+		$this->assertNull( ( self::provider() )->resolve_key( 'dadata:no-such-fias-id' ) );
 	}
 
 	/**
@@ -1164,7 +1165,7 @@ final class DadataProviderTest extends TestCase {
 		$this->stub_http_response( 200, '{"suggestions":[null]}' );
 
 		$this->expectException( Location_Provider_Exception::class );
-		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 	}
 
 	public function test_resolve_key_throws_rather_than_returns_null_when_unconfigured(): void {
@@ -1172,7 +1173,7 @@ final class DadataProviderTest extends TestCase {
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
 		$this->expectException( Location_Provider_Exception::class );
-		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 	}
 
 	public function test_resolve_key_throws_rather_than_returns_null_on_an_http_failure(): void {
@@ -1182,7 +1183,7 @@ final class DadataProviderTest extends TestCase {
 		$this->expectException( Location_Provider_Exception::class );
 
 		try {
-			( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+			( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 		} finally {
 			$this->assertTrue( $this->failure_was_logged( 'resolve_key' ) );
 		}
@@ -1193,7 +1194,7 @@ final class DadataProviderTest extends TestCase {
 		Functions\expect( 'wp_safe_remote_request' )->never();
 
 		$this->expectException( \InvalidArgumentException::class );
-		( new Dadata_Provider() )->resolve_key( 'test-cdek:44' );
+		( self::provider() )->resolve_key( 'test-cdek:44' );
 	}
 
 	// ---- HIGH 1 (round 2 critic): `null` must mean ONLY "confirmed gone" —
@@ -1207,7 +1208,7 @@ final class DadataProviderTest extends TestCase {
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ [ 'value' => 'Some Value' ] ] ] ) );
 
 		$this->expectException( Location_Provider_Exception::class );
-		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 	}
 
 	public function test_resolve_key_throws_rather_than_returns_null_for_a_row_that_fails_record_validation(): void {
@@ -1234,7 +1235,7 @@ final class DadataProviderTest extends TestCase {
 		);
 
 		$this->expectException( Location_Provider_Exception::class );
-		( new Dadata_Provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
+		( self::provider() )->resolve_key( 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5' );
 	}
 
 	// ---- HIGH 2 (round 2 critic): a DERIVED key (no native fias_id was ever
@@ -1255,7 +1256,7 @@ final class DadataProviderTest extends TestCase {
 		$this->assertTrue( Locality_Key::is_derived( $derived_key ), 'sanity: this fixture must actually produce a derived key' );
 
 		$this->expectException( Location_Provider_Exception::class );
-		( new Dadata_Provider() )->resolve_key( $derived_key );
+		( self::provider() )->resolve_key( $derived_key );
 	}
 
 	public function test_resolve_key_resolves_a_real_fias_id_that_happens_to_be_twenty_hex_characters(): void {
@@ -1271,7 +1272,7 @@ final class DadataProviderTest extends TestCase {
 		$key = Locality_Key::compose( Dadata_Provider::PROVIDER_ID, '0123456789abcdef0123' );
 		$this->assertFalse( Locality_Key::is_derived( $key ), 'sanity: a composed key is never derived, regardless of its shape' );
 
-		$record = ( new Dadata_Provider() )->resolve_key( $key );
+		$record = ( self::provider() )->resolve_key( $key );
 
 		$this->assertNotNull( $record );
 		$this->assertSame( $key, $record->key() );
@@ -1331,7 +1332,7 @@ final class DadataProviderTest extends TestCase {
 		);
 
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Provider() )->suggest( 'Юнус', Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS ) );
+		( self::provider() )->suggest( 'Юнус', Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS ) );
 
 		$locations = $this->last_request_body()['locations'];
 
@@ -1360,7 +1361,7 @@ final class DadataProviderTest extends TestCase {
 		);
 
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Provider() )->suggest( 'Абая', Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS ) );
+		( self::provider() )->suggest( 'Абая', Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS ) );
 
 		$locations = $this->last_request_body()['locations'];
 
@@ -1427,7 +1428,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::address_suggestion_with_nested_settlement() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Ленина', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
+		$records = ( self::provider() )->suggest( 'Ленина', Location_Scope::for_country( 'RU', Location_Record::LEVEL_ADDRESS ) );
 
 		$this->assertCount( 1, $records );
 		$this->assertSame(
@@ -1479,7 +1480,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::address_suggestion_foreign_osm_ids() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Юнус', Location_Scope::for_country( 'UZ', Location_Record::LEVEL_ADDRESS ) );
+		$records = ( self::provider() )->suggest( 'Юнус', Location_Scope::for_country( 'UZ', Location_Record::LEVEL_ADDRESS ) );
 
 		$this->assertCount( 1, $records );
 		// region_fias_id and city_fias_id carry the SAME 'relation:2216724' value
@@ -1526,7 +1527,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::settlement_suggestion_with_own_id_repeated() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Красн', Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 1, $records );
 		$this->assertSame( 'dadata:own-guid-krasnodar', $records[0]->key(), 'sanity: this row keys by city_fias_id' );
@@ -1577,7 +1578,7 @@ final class DadataProviderTest extends TestCase {
 		$this->set_token( 'tok' );
 		$this->stub_http_response( 200, (string) json_encode( self::suggestion_without_its_own_fias_id() ) );
 
-		$records = ( new Dadata_Provider() )->suggest( 'Гюмр', Location_Scope::for_country( 'AM', Location_Record::LEVEL_SETTLEMENT ) );
+		$records = ( self::provider() )->suggest( 'Гюмр', Location_Scope::for_country( 'AM', Location_Record::LEVEL_SETTLEMENT ) );
 
 		$this->assertCount( 1, $records );
 		$this->assertNotSame( '', $records[0]->key(), 'sanity: a row with no fias_id still gets a derived key' );
@@ -1595,5 +1596,35 @@ final class DadataProviderTest extends TestCase {
 			$records[0]->is_within( 'dadata:relation:1746396' ),
 			'the city id is answerable as an ancestor even though the row keys by a derived id'
 		);
+	}
+
+	/**
+	 * A provider whose HTTP client has its locale seam PINNED to `''` — the
+	 * "express no opinion" value {@see Dadata_Api_Client::with_language()} reads as
+	 * "send no `language` key", which is what every assertion in this class expects.
+	 *
+	 * Deliberately a seam and not `Functions\when( 'get_locale' )`: a Brain Monkey
+	 * stub DEFINES the function for the whole PHP process and PHP cannot un-define
+	 * it, so it survives into every later test class and flips
+	 * {@see Dadata_Api_Client::current_locale()}'s `function_exists()` branch. Left
+	 * unpinned, this class passes only while `tests/unit/handlers/` happens to be
+	 * traversed LAST — which it is only because the directory name is lowercase.
+	 * Under `--order-by=reverse` that accident reverses and 55 tests in this layer
+	 * turn red (issue #606).
+	 *
+	 * @return Dadata_Provider
+	 */
+	private static function provider(): Dadata_Provider {
+		return new class extends Dadata_Provider {
+
+			protected function make_client( string $token, string $secret ): Dadata_Api_Client {
+				return new class( $token, $secret ) extends Dadata_Api_Client {
+
+					protected function current_locale(): string {
+						return '';
+					}
+				};
+			}
+		};
 	}
 }

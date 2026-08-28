@@ -12,10 +12,12 @@
  * anything the framework itself wrote. The old code ran `trim()`, which strips leading and
  * trailing whitespace and leaves every interior newline exactly where it is.
  *
- * @package Woodev\Tests\Unit
+ * @package Woodev\Tests\Unit\Handlers
  */
 
-namespace Woodev\Tests\Unit;
+namespace Woodev\Tests\Unit\Handlers;
+
+use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 3 ) . '/woodev/handlers/script-handler.php';
 

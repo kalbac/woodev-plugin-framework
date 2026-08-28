@@ -21,10 +21,12 @@
  * `ajax_log_event()` is actually WIRED to the real trait, with the real prefix and the real
  * ceiling, end to end.
  *
- * @package Woodev\Tests\Unit
+ * @package Woodev\Tests\Unit\Handlers
  */
 
-namespace Woodev\Tests\Unit;
+namespace Woodev\Tests\Unit\Handlers;
+
+use Woodev\Tests\Unit\TestCase;
 
 use Brain\Monkey\Functions;
 

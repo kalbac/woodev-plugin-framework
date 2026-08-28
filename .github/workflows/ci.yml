@@ -172,6 +172,26 @@ jobs:
       - name: Run unit tests
         run: composer test:unit
 
+      # Traversal-order gate (#606). Until s102 this suite was green by
+      # ALPHABETICAL ACCIDENT: `tests/unit/handlers/` was traversed last only
+      # because the directory name was lowercase, and `--order-by=reverse` gave
+      # 55 failures in the location layer. Mechanism: gotcha
+      # `brain-monkey-function-pollution` — Brain Monkey DEFINES a stubbed
+      # function process-wide, so code branching on `function_exists()` behaves
+      # differently depending on which test class ran first.
+      #
+      # `reverse` rather than `random`, deliberately: it is deterministic, so a
+      # failure reproduces locally with the same command. `random` sweeps the
+      # order space more widely but makes CI nondeterministic — a failure on an
+      # unrelated PR with no recorded seed is not debuggable.
+      #
+      # Target platform version only: the gate catches process pollution, which
+      # does not vary by PHP version, so five runs would answer the same
+      # question five times over.
+      - name: Run unit tests in reverse order (order-dependence gate, #606)
+        if: matrix.php == '8.1'
+        run: vendor/bin/phpunit --testsuite=Unit --order-by=reverse --do-not-cache-result
+
   # ===========================================================================
   # JS-тесты (wp-scripts test-unit-js — jsdom, наш jest owner).
   # НИКОГДА не подменять на `npx jest` — без конфига wp-scripts jest падает
