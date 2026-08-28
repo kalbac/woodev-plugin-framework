@@ -179,7 +179,7 @@ final class ConstraintCheckerTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		$verdict = ( new Constraint_Checker() )->check( $this->point( [ 'max_weight' => 15000 ] ), 'bacs', 20500 );
 		$this->assertSame(
-			'Вес заказа 20.50 кг превышает ограничение пункта выдачи — 15.00 кг.',
+			'The order weight of 20.50 kg exceeds the pickup point limit of 15.00 kg.',
 			$verdict['reason']
 		);
 	}
@@ -188,7 +188,7 @@ final class ConstraintCheckerTest extends TestCase {
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		$verdict = ( new Constraint_Checker() )->check( $this->point( [ 'accepts_cod' => false ] ), 'cod', 0 );
 		$this->assertSame(
-			'В этом пункте выдачи недоступна оплата при получении. Выберите другой пункт или другой способ оплаты.',
+			'This pickup point does not accept cash on delivery. Choose another point or another payment method.',
 			$verdict['reason']
 		);
 	}
@@ -210,8 +210,8 @@ final class ConstraintCheckerTest extends TestCase {
 		);
 		$verdict = ( new Constraint_Checker() )->check( $point, 'cod', 20000 );
 		$this->assertFalse( $verdict['allowed'] );
-		$this->assertStringContainsString( 'Вес заказа', $verdict['reason'] );
-		$this->assertStringNotContainsString( 'оплата при получении', $verdict['reason'] );
+		$this->assertStringContainsString( 'The order weight', $verdict['reason'] );
+		$this->assertStringNotContainsString( 'cash on delivery', $verdict['reason'] );
 	}
 
 	// ---- mutation-resistance: explicit true, and custom COD method lists ----

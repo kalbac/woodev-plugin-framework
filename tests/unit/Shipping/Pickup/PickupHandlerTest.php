@@ -3254,15 +3254,15 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// and non-empty, so a presence-only check cannot catch it. Pinning the exact
 			// string per key is what does.
 			$expected = [
-				'drawerTitle'    => 'Пункты выдачи в этой области',
-				'howToGet'       => 'Как добраться',
-				'paymentMethods' => 'Способы оплаты',
-				'workTime'       => 'Часы работы',
-				'phone'          => 'Телефон',
-				'maxWeight'      => 'Максимальный вес',
-				'allTypes'       => 'Все типы пунктов',
-				'detailsError'   => 'Не удалось загрузить подробности о пункте выдачи.'
-					. ' Вы всё ещё можете его выбрать.',
+				'drawerTitle'    => 'Pickup points in this area',
+				'howToGet'       => 'Getting there',
+				'paymentMethods' => 'Payment methods',
+				'workTime'       => 'Opening hours',
+				'phone'          => 'Phone',
+				'maxWeight'      => 'Maximum weight',
+				'allTypes'       => 'All point types',
+				'detailsError'   => 'Could not load the pickup point details.'
+					. ' You can still choose it.',
 			];
 
 			foreach ( $expected as $key => $value ) {
@@ -3306,76 +3306,76 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$i18n = $this->make_handler()->get_js_config()['i18n'];
 
 			$expected = [
-				'modalTitle'       => 'Выберите пункт выдачи',
-				'close'            => 'Закрыть',
-				'select'           => 'Выбрать этот пункт',
-				'loading'          => 'Загрузка пунктов выдачи…',
-				'error'            => 'Не удалось загрузить пункты выдачи. Попробуйте ещё раз.',
-				'noResults'        => 'Поиск не дал результатов.',
-				'blocked'          => 'Этот пункт выдачи недоступен для вашего заказа.',
-				'trigger'          => 'Выбрать пункт выдачи',
-				'retry'            => 'Повторить',
-				'upstreamError'    => 'Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже.',
-				'rateLimited'      => 'Слишком много запросов. Подождите немного и попробуйте снова.',
-				'notFound'         => 'Этот пункт выдачи больше не найден. Пожалуйста, выберите другой.',
-				'drawerTitle'      => 'Пункты выдачи в этой области',
+				'modalTitle'       => 'Choose a pickup point',
+				'close'            => 'Close',
+				'select'           => 'Choose this point',
+				'loading'          => 'Loading pickup points…',
+				'error'            => 'Could not load pickup points. Please try again.',
+				'noResults'        => 'No results found.',
+				'blocked'          => 'This pickup point is not available for your order.',
+				'trigger'          => 'Select a pickup point',
+				'retry'            => 'Try again',
+				'upstreamError'    => 'The pickup point service is temporarily unavailable. Please try again later.',
+				'rateLimited'      => 'Too many requests. Please wait a moment and try again.',
+				'notFound'         => 'This pickup point can no longer be found. Please choose another one.',
+				'drawerTitle'      => 'Pickup points in this area',
 				// #168: the sidebar toggle's second name — `drawerTitle` names it while the
 				// drawer is closed, this one while it is open (and it is the visible text of
 				// the mobile open-list bar, the one state that renders a label at all).
-				'showMap'          => 'Показать карту',
-				'howToGet'         => 'Как добраться',
-				'paymentMethods'   => 'Способы оплаты',
-				'workTime'         => 'Часы работы',
-				'phone'            => 'Телефон',
-				'maxWeight'        => 'Максимальный вес',
-				'allTypes'         => 'Все типы пунктов',
-				'detailsError'     => 'Не удалось загрузить подробности о пункте выдачи.'
-					. ' Вы всё ещё можете его выбрать.',
+				'showMap'          => 'Show map',
+				'howToGet'         => 'Getting there',
+				'paymentMethods'   => 'Payment methods',
+				'workTime'         => 'Opening hours',
+				'phone'            => 'Phone',
+				'maxWeight'        => 'Maximum weight',
+				'allTypes'         => 'All point types',
+				'detailsError'     => 'Could not load the pickup point details.'
+					. ' You can still choose it.',
 				// The twelve Task 8 panel keys.
 				// The Task 15 (spec V-12) card-section key.
-				'address'          => 'Адрес',
-				'services'         => 'Услуги',
-				'yourAddress'      => 'Ваш адрес',
-				'nearestTo'        => 'Ближайшие к «%s»',
-				'resetSearch'      => 'Сбросить',
-				'nothingNearby'    => 'Рядом с этим адресом пунктов выдачи нет.',
-				'showNearest'      => 'Показать ближайший',
-				'continueCheckout' => 'Продолжить оформление заказа',
-				'zoomIn'           => 'Приблизьте карту, чтобы увидеть пункты выдачи',
-				'sectionPoints'    => 'Пункты выдачи',
-				'sectionAddresses' => 'Адреса',
-				'filterTypes'      => 'Тип пунктов',
-				'emptyInView'      => 'В этой области пунктов выдачи нет',
+				'address'          => 'Address',
+				'services'         => 'Services',
+				'yourAddress'      => 'Your address',
+				'nearestTo'        => 'Nearest to “%s”',
+				'resetSearch'      => 'Reset',
+				'nothingNearby'    => 'There are no pickup points near this address.',
+				'showNearest'      => 'Show the nearest',
+				'continueCheckout' => 'Continue to checkout',
+				'zoomIn'           => 'Zoom in to see pickup points',
+				'sectionPoints'    => 'Pickup points',
+				'sectionAddresses' => 'Addresses',
+				'filterTypes'      => 'Point type',
+				'emptyInView'      => 'No pickup points in this area',
 				// The Task 17 (spec V-5) key: a genuinely empty LOCALITY, distinct from
 				// `emptyInView` (a viewport statement) and `noResults` (search found nothing).
-				'emptyLocality'    => 'В выбранном населённом пункте нет пунктов выдачи',
+				'emptyLocality'    => 'There are no pickup points in the selected locality',
 				// The Task 8B trigger-state key.
-				'triggerChange'    => 'Выбрать другой пункт выдачи',
+				'triggerChange'    => 'Choose a different pickup point',
 				// The chosen-address block's label (issue #274 item 2).
-				'chosenPointAddress' => 'Выбранный пункт выдачи:',
+				'chosenPointAddress' => 'Chosen pickup point:',
 				// The two triggers' distinguishing aria-label context (issue #308 item 4) --
 				// never shown to a sighted customer, see pickup-mount.js's own
 				// `placementAriaContext()`.
-				'triggerReviewContext' => 'в сводке заказа',
-				'triggerRateContext'   => 'у выбранного способа доставки',
+				'triggerReviewContext' => 'in the order summary',
+				'triggerRateContext'   => 'next to the selected shipping method',
 				// The Task 14 (spec V-13) zoom control keys.
-				'zoomInLabel'      => 'Приблизить карту',
-				'zoomOutLabel'     => 'Отдалить карту',
+				'zoomInLabel'      => 'Zoom in',
+				'zoomOutLabel'     => 'Zoom out',
 				// The Task 4 confirmation keys — the server round-trip's three states.
 				// `selectFailed` is deliberately not `error`: that one describes a failed
 				// points FETCH, not a refused confirmation.
-				'confirming'       => 'Проверяем…',
+				'confirming'       => 'Checking…',
 				// Issue #223: a SEPARATE CTA state from `confirming` above. That one is shown
 				// while a confirmation is already travelling to the server; this one while the
 				// viewport strategy's lazy detail fetch (#219) is still deciding whether the
 				// sparse listing's permissive-by-omission verdict even holds. Two different
 				// questions, two independently released locks -- see `setVerdictPending()`.
-				'checkingAvailability' => 'Проверяем доступность…',
-				'selectFailed'     => 'Не удалось подтвердить выбор. Попробуйте ещё раз.',
+				'checkingAvailability' => 'Checking availability…',
+				'selectFailed'     => 'Could not confirm your choice. Please try again.',
 				// #297: the `ownsChrome` counterpart — never promises a repeat of an action the
 				// carrier's own widget (not the framework) controls. See class-pickup-handler.php.
-				'selectFailedEmbedded' => 'Не удалось подтвердить выбор. Выберите пункт ещё раз.',
-				'stalePage'        => 'Страница устарела. Обновите её и выберите пункт выдачи заново.',
+				'selectFailedEmbedded' => 'Could not confirm your choice. Please choose a point again.',
+				'stalePage'        => 'This page is out of date. Refresh it and choose a pickup point again.',
 			];
 
 			$this->assertSame(
@@ -3709,8 +3709,8 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			// Pins that the ACTUAL Constraint_Checker reason is forwarded, not a mutant that
 			// always substitutes the generic default_blocked_message() fallback instead.
 			$this->assertSame(
-				'В этом пункте выдачи недоступна оплата при получении.'
-				. ' Выберите другой пункт или другой способ оплаты.',
+				'This pickup point does not accept cash on delivery.'
+				. ' Choose another point or another payment method.',
 				$captured[0][0]
 			);
 		}
@@ -3790,7 +3790,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertFalse( $handler->validate_posted_point( 'unknown', 'bacs', 0 ) );
 			$this->assertCount( 1, $captured );
 			$this->assertSame(
-				'Выбранный пункт выдачи больше недоступен. Пожалуйста, выберите пункт выдачи заново.',
+				'The chosen pickup point is no longer available. Please choose a pickup point again.',
 				$captured[0][0]
 			);
 			$this->assertSame( 'error', $captured[0][1] );

@@ -73,7 +73,7 @@ class PresetsTest extends TestCase {
 
 	public function test_pickup_field_sets_a_default_error_label(): void {
 		$a = Pickup_Field::create( 'carrier_pickup_point', [ 'carrier_pickup' ] )->to_array();
-		$this->assertSame( 'Пункт выдачи', $a['error_label'] );
+		$this->assertSame( 'Pickup point', $a['error_label'] );
 	}
 
 	public function test_pickup_field_leaves_the_visual_label_unset(): void {

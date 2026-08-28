@@ -77,7 +77,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Presets\\Pickup_F
 			return Field::create( $id )
 				->set_type( 'hidden' )
 				->set_required( $required_spec )
-				->set_error_label( __( 'Пункт выдачи', 'woodev-plugin-framework' ) )
+				->set_error_label( __( 'Pickup point', 'woodev-plugin-framework' ) )
 				->mark_pickup_slot();
 		}
 	}

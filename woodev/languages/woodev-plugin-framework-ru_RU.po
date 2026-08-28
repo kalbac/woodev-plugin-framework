@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Woodev Framework\n"
-"POT-Creation-Date: 2023-12-07 22:55+0300\n"
+"POT-Creation-Date: 2026-08-28T22:02:59+00:00\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Maksim <maksim@martirosoff.ru>\n"
 "Language-Team: Woodev <info@woodev.ru>\n"
@@ -9,241 +9,125 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 "X-Poedit-SourceCharset: UTF-8\n"
-"X-Poedit-KeywordsList: __;_e;_x:1,2c;_ex:1,2c;_n:1,2;_nx:1,2,4c;_n_noop:1,2;"
-"_nx_noop:1,2,3c;esc_attr__;esc_attr_e;esc_html__;esc_html_e\n"
+"X-Poedit-KeywordsList: __;_e;_x:1,2c;_ex:1,2c;_n:1,2;_nx:1,2,4c;_n_noop:1,2;_nx_noop:1,2,3c;esc_attr__;esc_attr_e;esc_html__;esc_html_e\n"
 "X-Poedit-Basepath: ..\n"
 "X-Generator: Poedit 1.6.10\n"
 "X-Poedit-SearchPath-0: .\n"
 
-#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
-#: admin/abstract-plugin-admin-setup-wizard.php:147
-#, php-format
-msgid ""
-"Thanks for installing %1$s! To get started, take a minute to %2$sread the "
-"documentation%3$s :)"
+#: account/class-account-connection.php:319
+msgid "Аккаунт не подключён."
 msgstr ""
-"Спасибо за установку плагина %1$s! Для начала, уделите минутку %2$sна "
-"изучение документации%3$s :)"
 
-#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
-#: admin/abstract-plugin-admin-setup-wizard.php:173
-#, php-format
-msgid ""
-"Thanks for installing %1$s! To get started, take a minute to complete these "
-"%2$squick and easy setup steps%3$s :)"
+#: account/class-account-connection.php:326
+msgid "Не удалось подготовить запрос."
 msgstr ""
-"Спасибо за установку плагина %1$s! Для начала, уделите минутку на выполнение "
-"нескольких %2$sбыстрых и простых шагов настройки%3$s :)"
 
-#: admin/abstract-plugin-admin-setup-wizard.php:197
-msgid "Setup"
-msgstr "Установка"
-
-#. translators: Placeholders: %s - plugin name
-#: admin/abstract-plugin-admin-setup-wizard.php:259
-#, php-format
-msgid "%s &rsaquo; Setup"
-msgstr "%s &rsaquo; Установка"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:306
-msgid "Oops! An error occurred, please try again."
-msgstr "Ой! Произошла ошибка. Пожалуйста, попробуйте еще раз."
-
-#: admin/abstract-plugin-admin-setup-wizard.php:352
-msgctxt "enhanced select"
-msgid "No matches found"
-msgstr "Совпания не найдены"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:353
-msgctxt "enhanced select"
-msgid "Loading failed"
-msgstr "Неудачная загрузка"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:354
-msgctxt "enhanced select"
-msgid "Please enter 1 or more characters"
-msgstr "Пожалуйста введите минимум 1 символ"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:355
-msgctxt "enhanced select"
-msgid "Please enter %qty% or more characters"
-msgstr "Введите %qty% или более символов"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:356
-msgctxt "enhanced select"
-msgid "Please delete 1 character"
-msgstr "Пожалуйста удалите один символ"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:357
-msgctxt "enhanced select"
-msgid "Please delete %qty% characters"
-msgstr "Пожалуйста удалите %qty% символов"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:358
-msgctxt "enhanced select"
-msgid "You can only select 1 item"
-msgstr "Вы можете выбрать только один элемент"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:359
-msgctxt "enhanced select"
-msgid "You can only select %qty% items"
-msgstr "Вы можете выбрать только %qty% символов"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:360
-msgctxt "enhanced select"
-msgid "Loading more results&hellip;"
-msgstr "Загружаем ещё результаты&hellip;"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:361
-msgctxt "enhanced select"
-msgid "Searching&hellip;"
-msgstr "Идёт поиск&hellip;"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:451
-msgid "Ready!"
-msgstr "Готово!"
-
-#. translators: Placeholder: %s - plugin name
-#: admin/abstract-plugin-admin-setup-wizard.php:538
-#, php-format
-msgid "Welcome to %s!"
-msgstr "Добро пожаловать в %s!"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:549
-msgid ""
-"This quick setup wizard will help you configure the basic settings and get "
-"you started."
+#: account/class-account-connection.php:375
+msgid "Сервер woodev.ru вернул ошибку."
 msgstr ""
-"Этот мастер быстрой настройки поможет вам настроить основные параметры и "
-"начать работу."
 
-#: admin/abstract-plugin-admin-setup-wizard.php:561
-#, php-format
-msgid "%s is ready!"
-msgstr "%s готов к использованию!"
+#: account/class-account-connection.php:463
+msgid "Не удалось начать подключение. Попробуйте позже."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:607
-msgid "Next step"
-msgstr "Следующий шаг"
+#: account/class-account-connection.php:524
+msgid "Подключение отклонено: вы не подтвердили передачу данных аккаунта woodev.ru."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:634
-msgid "You can also:"
-msgstr "Вы так же можете:"
+#: account/class-account-connection.php:536
+msgid "Сессия подключения истекла. Попробуйте снова."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:677
-#: admin/abstract-plugin-admin-setup-wizard.php:706
-msgid "View the Docs"
-msgstr "Посмотреть документацию"
+#: account/class-account-connection.php:541
+msgid "Не удалось завершить подключение."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:678
-msgid "See more setup options"
-msgstr "Посмотреть дополнительные параметры настройки"
+#: account/class-account-connection.php:701
+msgid "Аккаунт woodev.ru успешно подключён."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:679
-msgid "Learn more about customizing the plugin"
-msgstr "Узнайте больше о настройке плагина"
+#: account/class-account-connection.php:715
+msgid "Не удалось подключить аккаунт woodev.ru. Попробуйте снова."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:702
-msgid "Review Your Settings"
-msgstr "Просмотреть свои настройки"
+#: account/class-account-installer.php:34
+msgid "Некорректный идентификатор плагина."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:710
-msgid "Leave a Review"
-msgstr "Оставить отзыв"
+#: account/class-account-installer.php:44
+msgid "Аккаунт woodev.ru не подключён."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:733
-msgid "Continue"
-msgstr "Продолжить"
+#: account/class-account-installer.php:65
+msgid "Не удалось получить корректную ссылку на плагин."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:830
-msgid "required"
-msgstr "обязательно"
+#: account/class-account-installer.php:160
+msgid "Механизм установки недоступен."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:832
-msgid "optional"
-msgstr "опционально"
+#: account/class-account-installer.php:183
+msgid "Не удалось установить плагин."
+msgstr ""
 
-#: admin/abstract-plugin-admin-setup-wizard.php:858
-msgid "Choose an option"
-msgstr "Выберите вариант"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:983
-msgid "Return to the WordPress Dashboard"
-msgstr "Вернуться в админку Wordpress"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:986
-msgid "Not right now"
-msgstr "Не сейчас"
-
-#: admin/abstract-plugin-admin-setup-wizard.php:989
-msgid "Skip this step"
-msgstr "Пропустить этот шаг"
-
-#: admin/class-admin-pages.php:54 admin/class-admin-pages.php:55
+#: admin/class-admin-pages.php:67
+#: admin/class-admin-pages.php:68
 msgid "Woodev"
 msgstr "Woodev"
 
-#: admin/class-admin-pages.php:68
+#: admin/class-admin-pages.php:81
 msgid "Woodev license keys"
 msgstr "Лицензионные ключи Woodev"
 
-#: admin/class-admin-pages.php:69
+#: admin/class-admin-pages.php:82
 msgid "Licenses"
 msgstr "Лицензии"
 
-#: admin/class-admin-pages.php:118
-#, php-format
-msgid ""
-"To use Woodev plugins, please provide your valid license key and activate it "
-"below. License key was sending to your email after purchase. Also, you can "
-"get key on <a href=\"%s\" target=\"_blank\">your account page</a>."
+#: admin/class-admin-pages.php:163
+msgid "Лицензии Woodev"
 msgstr ""
-"Чтобы использовать плагины Woodev, предоставьте действующий лицензионный "
-"ключ и активируйте его ниже. Лицензионный ключ был отправлен на вашу "
-"электронную почту после покупки. Так же, вы можете получить ключ на <a href="
-"\"%s\" target=\"_blank\">странице вашего аккаунта</a>."
 
-#: admin/class-admin-pages.php:133
-msgid "Save changes"
-msgstr "Сохранить изменения"
+#: admin/class-admin-pages.php:225
+#: admin/class-admin-pages.php:342
+#: admin/class-plugin-install-tab.php:39
+msgid "Плагины Woodev"
+msgstr ""
 
-#: admin/class-admin-pages.php:149
-msgid "Woodev all plugins"
-msgstr "Все плагины Woodev"
+#: admin/class-admin-pages.php:226
+msgid "Плагины"
+msgstr ""
 
-#: admin/class-admin-pages.php:150
-msgid "Plugins"
-msgstr "Плагины"
+#: admin/class-ui-kit-gallery-page.php:82
+#: admin/class-ui-kit-gallery-page.php:83
+msgid "UI Kit"
+msgstr ""
 
-#: admin/pages/views/html-admin-page-plugins.php:17
-msgid "Woodev Plugins"
-msgstr "Плагины Woodev"
+#: admin/class-ui-kit-gallery-page.php:105
+msgid "Woodev UI Kit"
+msgstr ""
 
-#: admin/pages/views/html-admin-page-plugins.php:18
-msgid "Improve your Wordpress website with our extensions."
-msgstr "Улучшайте свой Wordpress сайт с помощью наших расширений."
+#: admin/class-ui-kit-gallery-page.php:108
+msgid "Для этой страницы нужен JavaScript."
+msgstr ""
 
-#: admin/pages/views/html-admin-page-plugins.php:24
-msgid "Search for extensions"
-msgstr "Найти плагин"
+#: bootstrap.php:117
+msgid "Неизвестный плагин"
+msgstr ""
 
-#: admin/pages/views/html-admin-page-plugins.php:41
-msgid "All"
-msgstr "Все категории"
+#: bootstrap.php:157
+msgctxt "coordinating conjunction for a list of items: a, b и c"
+msgid "и"
+msgstr ""
 
-#: admin/pages/views/html-admin-page-plugins.php:86
-#, php-format
-msgid "Buy by %d RUB"
-msgstr "Купить за %d руб"
-
-#: admin/pages/views/html-admin-page-plugins.php:86
-msgid "Free download"
-msgstr "Скачать бесплатно"
-
+#. translators: %s — list of plugin names.
 #: bootstrap.php:167
+#, php-format
+msgid "Следующие плагины собраны для устаревшей версии фреймворка Woodev и поэтому были отключены: %s. Пожалуйста, обновите их."
+msgstr ""
+
+#: bootstrap.php:328
 #, php-format
 msgid "Deactivated %d plugin"
 msgid_plural "Deactivated %d plugins"
@@ -251,29 +135,48 @@ msgstr[0] "Деактивирован %d плагин"
 msgstr[1] "Деактивировано %d плагина"
 msgstr[2] "Деактивировано %d плагинов"
 
-#: bootstrap.php:168
+#: bootstrap.php:329
 msgid "Deactivated one plugin"
 msgstr "Один плагин деактивирован"
 
-#: bootstrap.php:190
-#, php-format
-msgid ""
-"%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date "
-"and incompatible with the"
-msgid_plural ""
-"%1$sAttention!%2$s The plugins %3$s were disabled because they are out of "
-"date and incompatible with the"
-msgstr[0] ""
-"%1$sВнимание!%2$s Плагин %3$s был отключен, поскольку он устарел и "
-"несовместим с"
-msgstr[1] ""
-"%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и "
-"несовместимы с"
-msgstr[2] ""
-"%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и "
-"несовместимы с"
+#: box-packer/class-packer-boxes.php:17
+#: box-packer/class-packer-dispatcher.php:62
+#: box-packer/class-packer-separatly.php:41
+#: box-packer/class-packer-single-box.php:31
+msgid "No items to pack!"
+msgstr "Нет элементов для упаковки!"
 
-#: bootstrap.php:198
+#. translators: %s: algorithm ID
+#: box-packer/class-packer-dispatcher.php:80
+#, php-format
+msgid "Unknown packing algorithm: %s"
+msgstr ""
+
+#: box-packer/class-packer-dispatcher.php:95
+msgid "Virtual box (minimal size)"
+msgstr ""
+
+#: box-packer/class-packer-dispatcher.php:96
+msgid "Each item in a separate box"
+msgstr ""
+
+#: box-packer/class-packer-dispatcher.php:97
+msgid "Single box (items stacked along one axis)"
+msgstr ""
+
+#: box-packer/class-packer-virtual-box.php:22
+msgid "Нет товаров для упаковки!"
+msgstr ""
+
+#: class-framework-resolver.php:246
+#, php-format
+msgid "%1$sAttention!%2$s The plugin %3$s was disabled because it is out of date and incompatible with the"
+msgid_plural "%1$sAttention!%2$s The plugins %3$s were disabled because they are out of date and incompatible with the"
+msgstr[0] "%1$sВнимание!%2$s Плагин %3$s был отключен, поскольку он устарел и несовместим с"
+msgstr[1] "%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и несовместимы с"
+msgstr[2] "%1$sВнимание!%2$s Плагины %3$s были отключены, поскольку они устарели и несовместимы с"
+
+#: class-framework-resolver.php:259
 #, php-format
 msgid " newer plugin %s."
 msgid_plural " newer plugins %s."
@@ -281,15 +184,12 @@ msgstr[0] " новым плагином %s."
 msgstr[1] " новыми плагинами %s."
 msgstr[2] " новыми плагинами %s."
 
-#: bootstrap.php:209
+#: class-framework-resolver.php:271
 #, php-format
-msgid ""
-"To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s"
-msgstr ""
-"Чтобы решить это, пожалуйста, %1$sобновите%2$s (рекомендуется) или "
-"%1$sдеактивируйте%2$s"
+msgid "To resolve this, please %1$supdate%2$s (recommended) or %1$sdeactivate%2$s"
+msgstr "Чтобы решить это, пожалуйста, %1$sобновите%2$s (рекомендуется) или %1$sдеактивируйте%2$s"
 
-#: bootstrap.php:214
+#: class-framework-resolver.php:276
 #, php-format
 msgid " the plugin %1$s, or %2$sdeactivate%3$s"
 msgid_plural " the plugins %1$s, or %2$sdeactivate%3$s"
@@ -297,7 +197,7 @@ msgstr[0] " плагин %1$s, или %2$sдективируйте%3$s"
 msgstr[1] " плагины %1$s, или %2$sдективируйте%3$s"
 msgstr[2] " плагины %1$s, или %2$sдективируйте%3$s"
 
-#: bootstrap.php:222
+#: class-framework-resolver.php:289
 #, php-format
 msgid " the plugin %s."
 msgid_plural " the plugins %s."
@@ -305,72 +205,63 @@ msgstr[0] " плагин %s."
 msgstr[1] " плагины %s."
 msgstr[2] " плагины %s."
 
-#: bootstrap.php:240
-msgid ""
-"The following plugins are inactive because they require a newer version of "
-"WooCommerce:"
+#: class-framework-resolver.php:307
+msgid "The following plugins are inactive because they require a newer version of PHP:"
 msgstr ""
-"Следующие плагины неактивны, поскольку для них требуется более новая версия "
-"WooCommerce:"
 
-#: bootstrap.php:240
-msgid ""
-"The following plugin is inactive because it requires a newer version of "
-"WooCommerce:"
+#: class-framework-resolver.php:307
+msgid "The following plugin is inactive because it requires a newer version of PHP:"
 msgstr ""
-"Следующий плагин неактивен, поскольку для него требуется более новая версия "
-"WooCommerce:"
+
+#: class-framework-resolver.php:310
+#, php-format
+msgid "%1$s requires PHP %2$s or newer"
+msgstr ""
+
+#: class-framework-resolver.php:317
+msgid "The following plugins are inactive because they require a newer version of WooCommerce:"
+msgstr "Следующие плагины неактивны, поскольку для них требуется более новая версия WooCommerce:"
+
+#: class-framework-resolver.php:317
+msgid "The following plugin is inactive because it requires a newer version of WooCommerce:"
+msgstr "Следующий плагин неактивен, поскольку для него требуется более новая версия WooCommerce:"
 
 #. translators: Placeholders: %1$s - plugin name, %2$s - WooCommerce version number
-#: bootstrap.php:245
+#: class-framework-resolver.php:321
 #, php-format
 msgid "%1$s requires WooCommerce %2$s or newer"
 msgstr "%1$s требуется версия WooCommerce %2$s или выше"
 
 #. translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag
-#: bootstrap.php:249
+#: class-framework-resolver.php:325
 #, php-format
 msgid "Please %1$supdate WooCommerce%2$s"
 msgstr "Пожалуйста %1$sобновите WooCommerce%2$s"
 
-#: bootstrap.php:255
-msgid ""
-"The following plugins are inactive because they require a newer version of "
-"WordPress:"
-msgstr ""
-"Следующие плагины неактивны, поскольку для них требуется более новая версия "
-"WordPress:"
+#: class-framework-resolver.php:329
+msgid "The following plugins are inactive because they require a newer version of WordPress:"
+msgstr "Следующие плагины неактивны, поскольку для них требуется более новая версия WordPress:"
 
-#: bootstrap.php:255
-msgid ""
-"The following plugin is inactive because it requires a newer version of "
-"WordPress:"
-msgstr ""
-"Следующий плагин неактивен, поскольку для него требуется более новая версия "
-"WordPress:"
+#: class-framework-resolver.php:329
+msgid "The following plugin is inactive because it requires a newer version of WordPress:"
+msgstr "Следующий плагин неактивен, поскольку для него требуется более новая версия WordPress:"
 
-#: bootstrap.php:260
+#: class-framework-resolver.php:333
 #, php-format
 msgid "%1$s requires WordPress %2$s or newer"
 msgstr "%1$s требуется версия WordPress %2$s или выше"
 
-#: bootstrap.php:265
+#: class-framework-resolver.php:337
 #, php-format
 msgid "Please %1$supdate WordPress%2$s"
 msgstr "Пожалуйста %1$sобновите WordPress%2$s"
 
-#: box-packer/class-packer-boxes.php:17
-#: box-packer/class-packer-separatly.php:31
-#: box-packer/class-packer-single-box.php:31
-msgid "No items to pack!"
-msgstr "Нет элементов для упаковки!"
-
-#: class-helper.php:384
+#: class-helper.php:402
 msgctxt "coordinating conjunction for a list of items: a, b, and c"
 msgid "and"
 msgstr "и"
 
-#: class-helper.php:426
+#: class-helper.php:444
 #, php-format
 msgid "%1$s or %2$s"
 msgid_plural "%1$s, or %2$s"
@@ -378,7 +269,7 @@ msgstr[0] "%1$s или %2$s"
 msgstr[1] "%1$s, или %2$s"
 msgstr[2] "%1$s, или %2$s"
 
-#: class-helper.php:431
+#: class-helper.php:449
 #, php-format
 msgid "%1$s and %2$s"
 msgid_plural "%1$s, and %2$s"
@@ -386,582 +277,474 @@ msgstr[0] "%1$s и %2$s"
 msgstr[1] "%1$s, и %2$s"
 msgstr[2] "%1$s, и %2$s"
 
-#: class-lifecycle.php:332
+#: class-lifecycle.php:357
 msgid "Awesome"
 msgstr "Потресающе"
 
-#: class-lifecycle.php:333
+#: class-lifecycle.php:358
 msgid "Fantastic"
 msgstr "Фантастика"
 
-#: class-lifecycle.php:334
+#: class-lifecycle.php:359
 msgid "Amazing"
 msgstr "Восхитительно"
 
-#: class-lifecycle.php:335
+#: class-lifecycle.php:360
 msgid "Wow"
 msgstr "Вау"
 
-#: class-lifecycle.php:336
+#: class-lifecycle.php:361
 msgid "Wonderful"
 msgstr "Чудестно"
 
-#: class-lifecycle.php:337
+#: class-lifecycle.php:362
 msgid "Perfect"
 msgstr "Привосходно"
 
-#: class-lifecycle.php:338
+#: class-lifecycle.php:363
 msgid "Congratulations"
 msgstr "Поздравляем"
 
 #. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag
-#: class-lifecycle.php:345
+#: class-lifecycle.php:370
 #, php-format
-msgid ""
-"Are you having a great experience with %1$s so far? Please consider "
-"%2$sleaving a review%3$s! If things aren't going quite as expected, we're "
-"happy to help -- please %4$sreach out to our support team%5$s."
+msgid "Are you having a great experience with %1$s so far? Please consider %2$sleaving a review%3$s! If things aren't going quite as expected, we're happy to help -- please %4$sreach out to our support team%5$s."
+msgstr "У вас уже есть хороший опыт в использовании плагина  %1$s? Если вас не затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
+
+#. translators: %s: plugin name.
+#: class-plugin.php:585
+#, php-format
+msgid "Для использования плагина <strong>\"%s\"</strong>, вам необходимо активировать вашу лицензию для этого сайта"
 msgstr ""
-"У вас уже есть хороший опыт в использовании плагина  %1$s? Если вас не "
-"затруднит %2$sоставьте отзыв%3$s! Если что-то пойдет не так, как ожидалось, "
-"мы будем рады помочь — %4$sобратитесь в нашу службу поддержки%5$s."
 
-#: class-plugin-compatibility.php:176
-msgid "WooCommerce"
-msgstr "WooCommerce"
-
-#: class-plugin.php:462
+#: class-plugin.php:588
 msgid "Указать лицензию"
 msgstr ""
 
-#: class-plugin.php:463
+#: class-plugin.php:589
 msgid "Закрыть"
 msgstr ""
 
-#: class-plugin.php:465
-msgid ""
-"Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и "
-"попробуйте снова."
+#: class-plugin.php:591
+msgid "Во время загрузки данных о лицензии произошла ошибка. Закройте это окно и попробуйте снова."
 msgstr ""
 
-#: class-plugin.php:482
-msgid "Once Weekly"
-msgstr "Раз в неделю"
-
-#: class-plugin.php:871
+#: class-woocommerce-plugin.php:121
 #, php-format
 msgid "%1$s - A minimum of %2$s is required."
 msgstr "%1$s - Необходимо минимум %2$s."
 
-#: class-plugin.php:880
+#: class-woocommerce-plugin.php:130
 #, php-format
 msgid "Set as %1$s - %2$s is required."
 msgstr "Установлено %1$s - требуется %2$s."
 
-#: class-woodev-plugin-dependencies.php:117
+#. translators: Placeholders: %1$s - plugin name, %2$s - a PHP extension/comma-separated list of PHP extensions
+#: class-woodev-plugin-dependencies.php:119
 #, php-format
-msgid ""
-"%1$s requires the %2$s PHP extension to function. Contact your host or "
-"server administrator to install and configure the missing extension."
-msgid_plural ""
-"%1$s requires the following PHP extensions to function: %2$s. Contact your "
-"host or server administrator to install and configure the missing extensions."
-msgstr[0] ""
-"Для плагина %1$s требуется PHP расширение %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить отсутствующее расширение."
-msgstr[1] ""
-"Для плагина %1$s требуются PHP расширения %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить отсутствующие расширения."
-msgstr[2] ""
-"Для плагина %1$s требуются PHP расширения %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить отсутствующие расширения."
+msgid "%1$s requires the %2$s PHP extension to function. Contact your host or server administrator to install and configure the missing extension."
+msgid_plural "%1$s requires the following PHP extensions to function: %2$s. Contact your host or server administrator to install and configure the missing extensions."
+msgstr[0] "Для плагина %1$s требуется PHP расширение %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить отсутствующее расширение."
+msgstr[1] "Для плагина %1$s требуются PHP расширения %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить отсутствующие расширения."
+msgstr[2] "Для плагина %1$s требуются PHP расширения %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить отсутствующие расширения."
 
-#: class-woodev-plugin-dependencies.php:143
+#. translators: Placeholders: %1$s - plugin name, %2$s - a PHP function/comma-separated list of PHP functions
+#: class-woodev-plugin-dependencies.php:145
 #, php-format
-msgid ""
-"%1$s requires the %2$s PHP function to exist.  Contact your host or server "
-"administrator to install and configure the missing function."
-msgid_plural ""
-"%1$s requires the following PHP functions to exist: %2$s.  Contact your host "
-"or server administrator to install and configure the missing functions."
-msgstr[0] ""
-"Для плагина %1$s требуется PHP функция: %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить недостающую функцию."
-msgstr[1] ""
-"Для плагина %1$s требуются PHP функции: %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить недостающие функции."
-msgstr[2] ""
-"Для плагина %1$s требуются PHP функции: %2$s. Обратитесь к администратору "
-"хостинга или сервера, чтобы установить и настроить недостающие функции."
+msgid "%1$s requires the %2$s PHP function to exist.  Contact your host or server administrator to install and configure the missing function."
+msgid_plural "%1$s requires the following PHP functions to exist: %2$s.  Contact your host or server administrator to install and configure the missing functions."
+msgstr[0] "Для плагина %1$s требуется PHP функция: %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить недостающую функцию."
+msgstr[1] "Для плагина %1$s требуются PHP функции: %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить недостающие функции."
+msgstr[2] "Для плагина %1$s требуются PHP функции: %2$s. Обратитесь к администратору хостинга или сервера, чтобы установить и настроить недостающие функции."
 
 #. translators: Placeholders: %s - plugin name
-#: class-woodev-plugin-dependencies.php:170
+#: class-woodev-plugin-dependencies.php:173
 #, php-format
-msgid ""
-"%s may behave unexpectedly because the following PHP configuration settings "
-"are required:"
-msgstr ""
-"Плагин %s может вести себя не стабильно, поскольку требуются следующие "
-"параметры конфигурации PHP:"
+msgid "%s may behave unexpectedly because the following PHP configuration settings are required:"
+msgstr "Плагин %s может вести себя не стабильно, поскольку требуются следующие параметры конфигурации PHP:"
 
-#. translators: Placeholders: %s - a PHP setting value
-#: class-woodev-plugin-dependencies.php:184
+#: class-woodev-plugin-dependencies.php:187
 #, php-format
 msgid "%s or higher"
 msgstr "%s или выше"
 
-#: class-woodev-plugin-dependencies.php:194
-msgid ""
-"Please contact your hosting provider or server administrator to configure "
-"these settings."
-msgstr ""
-"Пожалуйста, свяжитесь с вашим хостинг-провайдером или администратором "
-"сервера, чтобы настроить эти параметры."
+#: class-woodev-plugin-dependencies.php:197
+msgid "Please contact your hosting provider or server administrator to configure these settings."
+msgstr "Пожалуйста, свяжитесь с вашим хостинг-провайдером или администратором сервера, чтобы настроить эти параметры."
 
 #. translators: Placeholders: %1$s - <strong>, %2$s - </strong>
-#: class-woodev-plugin-dependencies.php:214
+#: class-woodev-plugin-dependencies.php:217
 #, php-format
 msgid ""
-"Hey there! We've noticed that your server is running %1$san outdated version "
-"of PHP%2$s, which is the programming language that WooCommerce and its "
-"extensions are built on.\n"
-"\t\t\t\t\tThe PHP version that is currently used for your site is no longer "
-"maintained, nor %1$sreceives security updates%2$s; newer versions are faster "
-"and more secure.\n"
-"\t\t\t\t\tAs a result, %3$s no longer supports this version and you should "
-"upgrade PHP as soon as possible.\n"
-"\t\t\t\t\tYour hosting provider can do this for you. %4$sHere are some "
-"resources to help you upgrade%5$s and to explain PHP versions further."
-msgstr ""
-"Привет! Мы заметили, что на вашем сервере установлена %1$sустаревшая версия "
-"PHP%2$s — языка программирования, на котором построены WooCommerce и его "
-"расширения. Версия PHP, которая в настоящее время используется для вашего "
-"сайта, больше не поддерживается и %1$sне получает обновлений безопасности"
-"%2$s. Более новые версии быстрее и безопаснее. В результате, плагин %3$s "
-"больше не поддерживает эту версию, и вам следует обновить PHP как можно "
-"скорее. Ваш хостинг-провайдер может сделать это за вас. %4$sНаша поддежка "
-"может помоч вам выполнить обновление%5$s и более подробно объяснить версии "
-"PHP."
+"Hey there! We've noticed that your server is running %1$san outdated version of PHP%2$s, which is the programming language that WooCommerce and its extensions are built on.\n"
+"\t\t\t\t\tThe PHP version that is currently used for your site is no longer maintained, nor %1$sreceives security updates%2$s; newer versions are faster and more secure.\n"
+"\t\t\t\t\tAs a result, %3$s no longer supports this version and you should upgrade PHP as soon as possible.\n"
+"\t\t\t\t\tYour hosting provider can do this for you. %4$sHere are some resources to help you upgrade%5$s and to explain PHP versions further."
+msgstr "Привет! Мы заметили, что на вашем сервере установлена %1$sустаревшая версия PHP%2$s — языка программирования, на котором построены WooCommerce и его расширения. Версия PHP, которая в настоящее время используется для вашего сайта, больше не поддерживается и %1$sне получает обновлений безопасности%2$s. Более новые версии быстрее и безопаснее. В результате, плагин %3$s больше не поддерживает эту версию, и вам следует обновить PHP как можно скорее. Ваш хостинг-провайдер может сделать это за вас. %4$sНаша поддежка может помоч вам выполнить обновление%5$s и более подробно объяснить версии PHP."
 
-#: handlers/blocks-handler.php:122
+#: handlers/blocks-handler.php:121
 msgctxt "Button label"
 msgid "Edit the Checkout Page"
 msgstr "Редактировать страницу оформления заказа"
 
 #. translators: Context: WordPress blocks and shortcodes. Placeholders: %1$s - Plugin name, %2$s - opening HTML <a> tag, %3$s - closing HTML </a> tag, %4$s - opening HTML <a> tag, %5$s - `[woocommerce_checkout]` shortcode tag, %6$s - closing HTML </a> tag
-#: handlers/blocks-handler.php:127
+#: handlers/blocks-handler.php:126
 #, php-format
-msgid ""
-"%1$s is not yet compatible with the Checkout block. We recommend "
-"%2$sfollowing this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
-msgstr ""
-"%1$s ещё не совместим с Checkout block. Мы рекомендуем %2$sпосмотреть эту "
-"документацию%3$s чтобы вернуться к %4$s%5$s шорткоду%6$s."
+msgid "%1$s is not yet compatible with the Checkout block. We recommend %2$sfollowing this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
+msgstr "%1$s ещё не совместим с Checkout block. Мы рекомендуем %2$sпосмотреть эту документацию%3$s чтобы вернуться к %4$s%5$s шорткоду%6$s."
 
-#: handlers/blocks-handler.php:153
+#: handlers/blocks-handler.php:152
 msgctxt "Button label"
 msgid "Edit the Cart Page"
 msgstr "Редактировать страницу Корзины"
 
 #. translators: Context: WordPress blocks and shortcodes. Placeholders: %1$s - Plugin name, %2$s - opening HTML <a> tag, %3$s - closing HTML </a> tag, %4$s - opening HTML <a> tag, %5$s - `[woocommerce_cart]` shortcode tag, %6$s - closing HTML </a> tag
-#: handlers/blocks-handler.php:158
+#: handlers/blocks-handler.php:157
 #, php-format
-msgid ""
-"%1$s is not yet compatible with the Cart block. We recommend %2$sfollowing "
-"this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
-msgstr ""
-"%1$s ещё не совместим с Cart block. Мы рекомендуем %2$sпосмотреть эту "
-"документацию%3$s чтобы вернуться к %4$s%5$s шорткоду%6$s."
+msgid "%1$s is not yet compatible with the Cart block. We recommend %2$sfollowing this guide%3$s to revert to the %4$s%5$s shortcode%6$s."
+msgstr "%1$s ещё не совместим с Cart block. Мы рекомендуем %2$sпосмотреть эту документацию%3$s чтобы вернуться к %4$s%5$s шорткоду%6$s."
 
-#: licensing/api/class-licensing-api.php:134
-#: licensing/class-plugin-license.php:177
+#: handlers/class-cron-handler.php:109
+msgid "Once Weekly"
+msgstr "Раз в неделю"
+
+#: licensing/api/class-licensing-api.php:189
+#: licensing/class-plugin-license.php:334
 msgid "Cannot get license data"
 msgstr "Не удалось получить данные лицензии"
 
+#: licensing/api/class-rest-api-license.php:143
+msgid "Недостаточно прав для управления лицензиями."
+msgstr ""
+
+#: licensing/api/class-rest-api-license.php:301
+msgid "Плагин с указанным идентификатором не найден."
+msgstr ""
+
+#: licensing/api/class-rest-api-license.php:332
+#: assets/build/license-page/index.js:1
+msgid "Не удалось выполнить запрос к серверу лицензий."
+msgstr ""
+
 #: licensing/class-license-messages.php:64
-msgid "plugin"
-msgstr "плагин"
-
-#: licensing/class-license-messages.php:146
-#, php-format
-msgid "This appears to be an invalid license key for %s."
-msgstr "Похоже, указан неверный лицензионный ключ для %s."
-
-#: licensing/class-license-messages.php:154
-msgid ""
-"The key you entered belongs to a bundle, please use the product specific "
-"license key."
+msgid "плагина"
 msgstr ""
-"Введенный вами ключ принадлежит набору плагинов, используйте лицензионный "
-"ключ для конкретного плагина."
 
-#: licensing/class-license-messages.php:158
-msgid "Your license key has been deactivated."
-msgstr "Ваш лицензионный ключ деактивирован."
-
-#: licensing/class-license-messages.php:166
-msgid "Unlicensed: currently not receiving updates."
-msgstr "Нелицензированный: в настоящее время плагин не будет работать."
-
-#: licensing/class-license-messages.php:181
-msgid "License key never expires."
-msgstr ""
-"Срок действия лицензионного ключа никогда не истекает (пожизненная лицензия)."
-
-#: licensing/class-license-messages.php:186
+#: licensing/class-license-messages.php:283
 #, php-format
-msgid ""
-"Your license key expires soon! It expires on %1$s. %2$sRenew your key%3$s "
-"before it expires."
+msgid "Похоже, это неверный лицензионный ключ для %s."
 msgstr ""
-"Срок действия вашего лицензионного ключа скоро истечет! Срок его действия "
-"истекает %1$s. %2$sОбновите ключ%3$s до истечения срока его действия."
 
-#: licensing/class-license-messages.php:193
+#: licensing/class-license-messages.php:291
+msgid "Введённый ключ относится к комплекту. Используйте ключ конкретного товара."
+msgstr ""
+
+#: licensing/class-license-messages.php:295
+msgid "Лицензионный ключ деактивирован."
+msgstr ""
+
+#. translators: 1. opening link tag; 2. closing link tag.
+#: licensing/class-license-messages.php:305
 #, php-format
-msgid "Your license key expires on %s."
-msgstr "Срок действия вашего лицензионного ключа истекает %s."
+msgid "Без лицензии: функционал плагина ограничен. Обратитесь в %1$sподдержку%2$s."
+msgstr ""
+
+#: licensing/class-license-messages.php:323
+msgid "Бессрочный лицензионный ключ."
+msgstr ""
+
+#: licensing/class-license-messages.php:328
+#, php-format
+msgid "Срок действия ключа скоро истекает — %1$s. %2$sПродлите ключ%3$s заранее."
+msgstr ""
+
+#: licensing/class-license-messages.php:335
+#, php-format
+msgid "Срок действия ключа — до %s."
+msgstr ""
 
 #. translators: 1. license expiration date; 2. opening link tag; 3. closing link tag.
-#: licensing/class-license-messages.php:206
+#: licensing/class-license-messages.php:348
 #, php-format
-msgid ""
-"Your license key expired on %1$s. Please %2$srenew your license key%3$s."
+msgid "Срок действия ключа истёк %1$s. %2$sПродлите лицензионный ключ%3$s."
 msgstr ""
-"Срок действия вашего лицензионного ключа истек %1$s. Пожалуйста, "
-"%2$sобновите лицензионный ключ%3$s."
 
 #. translators: 1. opening link tag; 2. closing link tag.
-#: licensing/class-license-messages.php:215
+#: licensing/class-license-messages.php:357
 #, php-format
-msgid "Your license key has expired. Please %1$srenew your license key%2$s."
+msgid "Срок действия лицензионного ключа истёк. %1$sПродлите ключ%2$s."
 msgstr ""
-"Срок действия вашего лицензионного ключа истек. Пожалуйста, %1$sобновите "
-"лицензионный ключ%2$s."
 
 #. translators: 1. opening link tag; 2. closing link tag.
-#: licensing/class-license-messages.php:238
+#: licensing/class-license-messages.php:383
 #, php-format
-msgid ""
-"Your license key has been disabled. Please %1$scontact support%2$s for more "
-"information."
+msgid "Лицензионный ключ отключён. %1$sОбратитесь в поддержку%2$s за подробностями."
 msgstr ""
-"Ваш лицензионный ключ отключен. Пожалуйста, %1$sсвяжитесь со службой "
-"поддержки%2$s для получения дополнительной информации."
 
 #. translators: 1. opening link tag; 2 closing link tag.
-#: licensing/class-license-messages.php:260
+#: licensing/class-license-messages.php:408
 #, php-format
-msgid ""
-"Your license key has reached its activation limit. %1$sView possible upgrades"
-"%2$s now."
+msgid "Достигнут лимит активаций ключа. %1$sПосмотрите варианты расширения%2$s."
 msgstr ""
-"Ваш лицензионный ключ достиг предела активации. %1$sПросмотрите возможные "
-"обновления%2$s прямо сейчас."
 
 #. translators: 1. the plugin name; 2. opening link tag; 3. closing link tag.
-#: licensing/class-license-messages.php:281
+#: licensing/class-license-messages.php:432
 #, php-format
-msgid ""
-"Your %1$s license key is not active for this URL. Please %2$svisit your "
-"account page%3$s to manage your license keys."
+msgid "Ключ %1$s не активирован для этого адреса. %2$sПерейдите в личный кабинет%3$s, чтобы управлять ключами."
 msgstr ""
-"Ваш лицензионный ключ %1$s не активен для этого сайта. Пожалуйста, "
-"%2$sперейдите на страницу своей учетной записи%3$s, чтобы управлять своими "
-"лицензионными ключами."
 
 #. translators: 1. opening link tag; 2. closing link tag.
-#: licensing/class-license-messages.php:296
+#: licensing/class-license-messages.php:447
 #, php-format
-msgid "Invalid license. Please %1$svisit your account page%2$s and verify it."
+msgid "Лицензия недействительна. %1$sПерейдите в личный кабинет%2$s и проверьте её."
 msgstr ""
-"Недействительная лицензия. Пожалуйста, %1$sперейдите на страницу своей "
-"учетной записи%2$s и подтвердите ее."
 
-#: licensing/class-plugin-license-settings.php:73
-msgid "Enter your valid license key"
-msgstr "Введите действующий лицензионный ключ"
-
-#: licensing/class-plugin-license-settings.php:76
-msgid "Before change your license key you have to deactivate current license"
+#: licensing/class-plugin-license.php:248
+msgid "Лицензия не найдена"
 msgstr ""
-"Прежде чем изменить лицензионный ключ, вам необходимо деактивировать текущую "
-"лицензию."
 
-#: licensing/class-plugin-license-settings.php:84
-msgid "Verify"
-msgstr "Проверить"
-
-#: licensing/class-plugin-license-settings.php:108
-#, php-format
-msgid ""
-"To receive updates and support, please enter your valid license key for "
-"<strong>%s</strong>"
+#: licensing/class-plugin-license.php:249
+msgid "URL сайта не передан"
 msgstr ""
-"Чтобы получать обновления и поддержку, введите действительный лицензионный "
-"ключ для <strong>%s</strong>."
 
-#: licensing/class-plugin-license-settings.php:123
-msgid "Deactivate"
-msgstr "Деактивировать"
+#: licensing/class-plugin-license.php:250
+msgid "Это родительский ключ комплекта"
+msgstr ""
 
-#: licensing/class-plugin-license-settings.php:137
-msgid "Allow to upload a beta version"
-msgstr "Разрешить загрузку бета версий плагина."
+#: licensing/class-plugin-license.php:251
+#: licensing/class-plugin-license.php:252
+#: assets/build/license-page/index.js:1
+msgid "Ключ отозван"
+msgstr ""
 
-#: licensing/class-plugin-license.php:123
-msgid "License does not exist"
-msgstr "Лицензия не существует"
+#: licensing/class-plugin-license.php:253
+msgid "Лимит активаций исчерпан"
+msgstr ""
 
-#: licensing/class-plugin-license.php:124
-msgid "Site URL is not provided"
-msgstr "URL сайта не указан"
+#: licensing/class-plugin-license.php:254
+msgid "Срок лицензии истёк"
+msgstr ""
 
-#: licensing/class-plugin-license.php:125
-msgid "Attempting to activate a bundles parent license"
-msgstr "Попытка активировать родительскую лицензию для группы плагинов"
+#: licensing/class-plugin-license.php:255
+#: licensing/class-plugin-license.php:257
+msgid "Ключ не подходит для этого плагина"
+msgstr ""
 
-#: licensing/class-plugin-license.php:126
-msgid "License key revoked"
-msgstr "Лицензионный ключ отозван"
+#: licensing/class-plugin-license.php:256
+msgid "Неверный идентификатор плагина"
+msgstr ""
 
-#: licensing/class-plugin-license.php:127
-msgid "No activations left"
-msgstr "Активаций не осталось"
+#: licensing/class-plugin-license.php:258
+msgid "Сайт не активирован для этой лицензии"
+msgstr ""
 
-#: licensing/class-plugin-license.php:128
-msgid "License has expired"
-msgstr "Срок действия лицензии истек"
+#: licensing/class-plugin-license.php:259
+msgid "Неверный лицензионный ключ"
+msgstr ""
 
-#: licensing/class-plugin-license.php:129
-#: licensing/class-plugin-license.php:131
-msgid "License is not valid for this plugin"
-msgstr "Лицензия недействительна для этого плагина."
+#: licensing/class-plugin-license.php:260
+msgid "Лицензия активна"
+msgstr ""
 
-#: licensing/class-plugin-license.php:130
-msgid "Invalid plugin ID"
-msgstr "Неверный ID плагина"
+#: licensing/class-plugin-license.php:263
+#: assets/build/license-page/index.js:1
+msgid "Неизвестный статус"
+msgstr ""
 
-#: licensing/class-plugin-license.php:132
-msgid "Site is not active for this license"
-msgstr "Сайт не активен для этой лицензии"
+#: licensing/class-plugin-license.php:445
+msgid "Лицензионный ключ не указан."
+msgstr ""
 
-#: licensing/class-plugin-license.php:133
-msgid "License key does not match"
-msgstr "Лицензионный ключ не соответствует"
+#: licensing/class-plugin-license.php:468
+msgid "Не удалось получить данные лицензии. Попробуйте ещё раз."
+msgstr ""
 
-#: licensing/class-plugin-license.php:134
-msgid "License is valid"
-msgstr "Лицензия действительна"
+#: licensing/class-plugin-license.php:520
+#: assets/build/license-page/index.js:1
+msgid "Не удалось деактивировать лицензию. Попробуйте ещё раз."
+msgstr ""
 
-#: licensing/class-plugin-license.php:137
-msgid "Unknown license status"
-msgstr "Неизвестный статус лицензии"
-
-#: licensing/class-plugin-license.php:267
-msgid "Nonce verification failed"
-msgstr "Проверка nonce не удалась"
-
-#: licensing/class-plugin-license.php:267
-#: licensing/class-plugin-license.php:290
-#: licensing/updater/class-plugin-updater.php:473
-msgid "Error"
-msgstr "Ошибка"
-
-#: licensing/class-plugin-license.php:309
+#: licensing/class-plugin-license.php:727
 msgid "License key was not provided."
 msgstr "Лицензионный ключ не был предоставлен."
 
-#: licensing/class-plugin-license.php:316
-#: licensing/class-plugin-license.php:386
+#: licensing/class-plugin-license.php:734
+#: licensing/class-plugin-license.php:803
 msgid "Cannot get license data. Please try again."
 msgstr "Невозможно получить данные лицензии. Пожалуйста, попробуйте еще раз."
 
-#: licensing/class-plugin-license.php:349
+#: licensing/class-plugin-license.php:768
 #, php-format
-msgid ""
-"Your license key for %s is not valid. The key is not existing, or linked "
-"customer was deleted. Please provide another license key to continue to get "
-"support and updates."
-msgstr ""
-"Ваш лицензионный ключ для %s недействителен. Ключ не существует или "
-"связанный клиент был удален. Укажите другой действующий лицензионный ключ, "
-"чтобы продолжать использовать плагин, получать поддержку и обновления."
+msgid "Your license key for %s is not valid. The key is not existing, or linked customer was deleted. Please provide another license key to continue to get support and updates."
+msgstr "Ваш лицензионный ключ для %s недействителен. Ключ не существует или связанный клиент был удален. Укажите другой действующий лицензионный ключ, чтобы продолжать использовать плагин, получать поддержку и обновления."
 
-#: licensing/class-plugin-license.php:352
+#: licensing/class-plugin-license.php:771
 msgid "Cannot verify license key. Please try again."
-msgstr ""
-"Невозможно проверить лицензионный ключ. Пожалуйста, попробуйте еще раз."
+msgstr "Невозможно проверить лицензионный ключ. Пожалуйста, попробуйте еще раз."
 
-#: licensing/class-plugin-license.php:397
+#: licensing/class-plugin-license.php:822
 #, php-format
-msgid ""
-"Your license key for %s is not valid. The key is not existing, or linked "
-"customer was deleted. Please provide another key to continue to get support "
-"and updates."
-msgstr ""
-"Ваш лицензионный ключ для %s недействителен. Ключ не существует или "
-"связанный клиент был удален. Укажите другой действующий лицензионный ключ, "
-"чтобы продолжать использовать плагин, получать поддержку и обновления."
+msgid "Your license key for %s is not valid. The key is not existing, or linked customer was deleted. Please provide another key to continue to get support and updates."
+msgstr "Ваш лицензионный ключ для %s недействителен. Ключ не существует или связанный клиент был удален. Укажите другой действующий лицензионный ключ, чтобы продолжать использовать плагин, получать поддержку и обновления."
 
-#: licensing/class-plugin-license.php:437
+#: licensing/class-plugin-license.php:876
 #, php-format
-msgid ""
-"You have invalid or expired license keys for %1$s. %2$sActivate License%3$s"
-msgstr ""
-"У вас есть недействительные или просроченные лицензионные ключи для %1$s. "
-"%2$sАктивировать лицензию%3$s"
+msgid "You have invalid or expired license keys for %1$s. %2$sActivate License%3$s"
+msgstr "У вас есть недействительные или просроченные лицензионные ключи для %1$s. %2$sАктивировать лицензию%3$s"
 
-#: licensing/class-plugin-license.php:461
+#: licensing/class-plugin-license.php:905
 msgid "Enter valid license key for automatic updates."
 msgstr "Введите действующий лицензионный ключ для автоматического обновления."
 
-#: licensing/class-plugin-license.php:494
+#: licensing/class-plugin-license.php:928
 msgid "Attention! Please Backup your site before updating."
-msgstr ""
-"Внимание! Пожалуйста, сделайте резервную копию вашего сайта перед "
-"обновлением."
+msgstr "Внимание! Пожалуйста, сделайте резервную копию вашего сайта перед обновлением."
 
-#: licensing/class-plugin-license.php:496
+#: licensing/class-plugin-license.php:930
 #, php-format
-msgid ""
-"The latest version of %1$s%2$s %3$s%4$s includes massive changes across "
-"different areas of the plugin with revamped code structure for optimized "
-"performance. We would highly recommend you to backup your entire site before "
-"updating the plugin & test it on your staging website. %5$sContact our "
-"Support%6$s if you encounter any kind of errors or if you need any kind of "
-"assistance."
-msgstr ""
-"Последняя версия %1$s%2$s %3$s%4$s включает значительные изменения в "
-"различных областях плагина с обновленной структурой кода для оптимизации "
-"производительности. Мы настоятельно рекомендуем вам сделать резервную копию "
-"всего вашего сайта перед обновлением плагина и протестировать его на своем "
-"тестовом сайте. %5$sСвяжитесь с нашей службой поддержки%6$s, если у вас "
-"возникнут какие-либо ошибки или вам понадобится какая-либо помощь."
+msgid "The latest version of %1$s%2$s %3$s%4$s includes massive changes across different areas of the plugin with revamped code structure for optimized performance. We would highly recommend you to backup your entire site before updating the plugin & test it on your staging website. %5$sContact our Support%6$s if you encounter any kind of errors or if you need any kind of assistance."
+msgstr "Последняя версия %1$s%2$s %3$s%4$s включает значительные изменения в различных областях плагина с обновленной структурой кода для оптимизации производительности. Мы настоятельно рекомендуем вам сделать резервную копию всего вашего сайта перед обновлением плагина и протестировать его на своем тестовом сайте. %5$sСвяжитесь с нашей службой поддержки%6$s, если у вас возникнут какие-либо ошибки или вам понадобится какая-либо помощь."
 
-#: licensing/class-plugin-license.php:507
+#: licensing/class-plugin-license.php:941
 #, php-format
-msgid ""
-"We also recommend that you %1$sread the documentation%2$s after updating the "
-"plugin."
-msgstr ""
-"Мы также рекомендуем вам %1$sпрочитать документацию%2$s после обновления "
-"плагина."
+msgid "We also recommend that you %1$sread the documentation%2$s after updating the plugin."
+msgstr "Мы также рекомендуем вам %1$sпрочитать документацию%2$s после обновления плагина."
 
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:92
-msgid ""
-"Are you sure you wish to process this capture? The action cannot be undone."
+#. translators: 1: plugin name, 2: support URL
+#: licensing/commands/class-license-command-deactivate-plugin.php:307
+#, php-format
+msgid "Плагин %1$s отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru или <a href=\"%2$s\">свяжитесь с нами</a>."
 msgstr ""
-"Вы уверены, что хотите выполнить эту операцию? Данное действие нельзя "
-"отменить."
 
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:95
-msgid ""
-"Something went wrong, and the capture could no be completed. Please try "
-"again."
+#. translators: %s: plugin name
+#: licensing/commands/class-license-command-deactivate-plugin.php:314
+#, php-format
+msgid "Плагин %s отключён: лицензия недействительна для этого сайта. Проверьте статус лицензии в личном кабинете на woodev.ru."
 msgstr ""
-"Что-то пошло не так, и операция не может быть завершена. Пожалуйста, "
-"попробуйте еще раз."
 
-#. translators: verb, as in "Capture credit card charge".
-#. Used when an amount has been pre-authorized before, but funds have not yet been captured (taken) from the card.
-#. Capturing the charge will take the money from the credit card and put it in the merchant's pockets.
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:133
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:205
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:268
+#. translators: the plugin name.
+#: licensing/updater/class-plugin-updater.php:276
+#, php-format
+msgid "There is a new version of %1$s available."
+msgstr "Доступна новая версия %1$s."
+
+#: licensing/updater/class-plugin-updater.php:282
+msgid "Contact your network administrator to install the update."
+msgstr "Обратитесь к сетевому администратору, чтобы установить обновление."
+
+#. translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate.
+#: licensing/updater/class-plugin-updater.php:287
+#, php-format
+msgid "%1$sView version %2$s details%3$s."
+msgstr "%1$sПосмотреть сведения о версии %2$s%3$s."
+
+#: licensing/updater/class-plugin-updater.php:295
+#, php-format
+msgid "%1$sView version %2$s details%3$s or %4$supdate now%5$s."
+msgstr "%1$sПосмотреть сведения о версии %2$s%3$s или %4$sобновить сейчас%5$s."
+
+#: licensing/updater/class-plugin-updater.php:306
+msgid "Update now."
+msgstr "Обновить сейчас."
+
+#: licensing/updater/class-plugin-updater.php:521
+msgid "You do not have permission to install plugin updates"
+msgstr "У вас нет разрешения на установку обновлений плагина."
+
+#: licensing/updater/class-plugin-updater.php:521
+msgid "Error"
+msgstr "Ошибка"
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:97
+msgid "Are you sure you wish to process this capture? The action cannot be undone."
+msgstr "Вы уверены, что хотите выполнить эту операцию? Данное действие нельзя отменить."
+
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:100
+msgid "Something went wrong, and the capture could no be completed. Please try again."
+msgstr "Что-то пошло не так, и операция не может быть завершена. Пожалуйста, попробуйте еще раз."
+
+#. translators: verb, as in "Capture credit card charge". Used when an amount has been pre-authorized before, but funds have not yet been captured (taken) from the card. Capturing the charge will take the money from the credit card and put it in the merchant's pockets.
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:139
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:212
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:274
 msgid "Capture Charge"
 msgstr "Списание средств"
 
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:257
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:263
 msgid "This charge has been fully captured."
 msgstr "Этот платёж был полностью списан."
 
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:259
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:265
 msgid "This charge can no longer be captured."
 msgstr "Этот платёж больше нельзя списать."
 
-#: payment-gateway/admin/class-payment-gateway-admin-order.php:261
+#: payment-gateway/admin/class-payment-gateway-admin-order.php:267
 msgid "This charge cannot be captured."
 msgstr "Этот платёж нельзя списать."
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:72
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:101
 msgid "Are you sure you want to remove this token?"
 msgstr "Вы уверены, что хотите удалить этот токен?"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:82
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:111
 msgid "Invalid token data"
 msgstr "Некорректные данные токена"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:86
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:115
 msgid "An error occurred. Please try again."
 msgstr "Произошла ошибка. Пожалуйста, попробуйте еще раз."
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:424
-#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:264
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:598
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:270
 #, php-format
 msgid "(%s)"
 msgstr "(%s)"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:451
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:801
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:629
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:677
 msgid "Default"
 msgstr "По умолчанию"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:482
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:515
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:667
 msgid "Token ID"
 msgstr "Идентификатор токена"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:487
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:672
 msgid "Card Type"
 msgstr "Тип карты"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:492
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:528
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:677
 msgid "Last Four"
 msgstr "Последние четыре"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:499
-#: payment-gateway/class-payment-gateway-payment-form.php:308
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:684
+#: payment-gateway/class-payment-gateway-payment-form.php:306
 msgid "Expiration (MM/YY)"
 msgstr "Срок действия (ММ/ГГ)"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:520
-#: payment-gateway/class-payment-gateway-payment-form.php:410
-msgid "Account Type"
-msgstr "Тип аккаунта"
-
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:523
-msgid "Checking"
-msgstr "Проверка"
-
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:524
-msgid "Savings"
-msgstr "Сохранение"
-
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:615
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:779
 msgid "Refresh"
 msgstr "Обновить"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:617
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:781
 msgid "Add New"
 msgstr "Добавить новый"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:620
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:269
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:784
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:286
 msgid "Save"
 msgstr "Сохранить"
 
-#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:640
+#: payment-gateway/admin/class-payment-gateway-admin-payment-token-editor.php:804
 msgid "Remove"
 msgstr "Удалить"
 
-#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:189
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:195
 #, php-format
 msgid "%s Payment Tokens"
 msgstr "%s Платёжные токены"
 
-#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:261
+#: payment-gateway/admin/class-payment-gateway-admin-user-handler.php:267
 msgid "Customer ID"
 msgstr "ID Покупателя"
 
@@ -971,7 +754,7 @@ msgstr "Этот раздел содержит параметры конфигу
 
 #. translators: environment as in a software environment (test/production)
 #: payment-gateway/admin/views/html-admin-gateway-status.php:34
-#: payment-gateway/class-payment-gateway.php:973
+#: payment-gateway/class-payment-gateway.php:992
 msgid "Environment"
 msgstr "Среда"
 
@@ -988,7 +771,8 @@ msgid "Displays whether or not tokenization is enabled for this gateway."
 msgstr "Отображает, включена ли токенизация для этого шлюза."
 
 #: payment-gateway/admin/views/html-admin-gateway-status.php:56
-#: payment-gateway/class-payment-gateway.php:905
+#: payment-gateway/class-payment-gateway.php:924
+#: shipping-method/settings/class-shipping-integration.php:96
 msgid "Debug Mode"
 msgstr "Режим отладки"
 
@@ -1005,12 +789,12 @@ msgid "Display at Checkout"
 msgstr "На странице оформления заказа"
 
 #: payment-gateway/admin/views/html-admin-gateway-status.php:64
-#: payment-gateway/class-payment-gateway.php:913
+#: payment-gateway/class-payment-gateway.php:932
 msgid "Save to Log"
 msgstr "Сохранять в лог"
 
 #: payment-gateway/admin/views/html-admin-gateway-status.php:66
-#: payment-gateway/class-payment-gateway.php:911
+#: payment-gateway/class-payment-gateway.php:930
 msgid "Off"
 msgstr "Выключено"
 
@@ -1041,6 +825,8 @@ msgstr "Списать %s"
 
 #: payment-gateway/admin/views/html-order-partial-capture.php:52
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:553
+#: shipping-method/admin/class-shipping-admin-order.php:331
+#: shipping-method/admin/class-warehouse-admin.php:329
 msgid "Cancel"
 msgstr "Отмена"
 
@@ -1048,1053 +834,2176 @@ msgstr "Отмена"
 msgid "-- Select an option --"
 msgstr "-- Выберите вариант --"
 
-#: payment-gateway/admin/views/html-user-payment-token-editor.php:42
+#: payment-gateway/admin/views/html-user-payment-token-editor.php:57
 msgid "No saved payment tokens"
 msgstr "Нет сохраненных платежных токенов"
 
-#: payment-gateway/admin/views/html-user-profile-field-customer-id.php:14
+#: payment-gateway/admin/views/html-user-profile-field-customer-id.php:13
 msgid "The gateway customer ID for the user. Only edit this if necessary."
-msgstr ""
-"Идентификатор клиента для данного шлюза. Изменяйте только при необходимости."
+msgstr "Идентификатор клиента для данного шлюза. Изменяйте только при необходимости."
 
 #: payment-gateway/class-payment-gateway-direct.php:32
-msgid ""
-"Payment error, please try another payment method or contact us to complete "
-"your transaction."
-msgstr ""
-"Ошибка оплаты, попробуйте другой способ оплаты или свяжитесь с нами, чтобы "
-"завершить транзакцию."
+msgid "Payment error, please try another payment method or contact us to complete your transaction."
+msgstr "Ошибка оплаты, попробуйте другой способ оплаты или свяжитесь с нами, чтобы завершить транзакцию."
 
-#: payment-gateway/class-payment-gateway-direct.php:132
-#: payment-gateway/class-payment-gateway.php:444
+#: payment-gateway/class-payment-gateway-direct.php:130
+#: payment-gateway/class-payment-gateway.php:481
 msgid "Card expiration date is invalid"
 msgstr "Срок действия карты недействителен"
 
-#: payment-gateway/class-payment-gateway-direct.php:156
-#: payment-gateway/class-payment-gateway.php:437
+#: payment-gateway/class-payment-gateway-direct.php:154
+#: payment-gateway/class-payment-gateway.php:474
 msgid "Card number is missing"
 msgstr "Номер карты отсутствует"
 
-#: payment-gateway/class-payment-gateway-direct.php:162
-#: payment-gateway/class-payment-gateway.php:440
+#: payment-gateway/class-payment-gateway-direct.php:160
+#: payment-gateway/class-payment-gateway.php:477
 msgid "Card number is invalid (wrong length)"
 msgstr "Неверный номер карты (неправильная длина)"
 
-#: payment-gateway/class-payment-gateway-direct.php:167
-#: payment-gateway/class-payment-gateway.php:439
+#: payment-gateway/class-payment-gateway-direct.php:165
+#: payment-gateway/class-payment-gateway.php:476
 msgid "Card number is invalid (only digits allowed)"
 msgstr "Номер карты недействителен (разрешены только цифры)"
 
-#: payment-gateway/class-payment-gateway-direct.php:172
-#: payment-gateway/class-payment-gateway.php:438
+#: payment-gateway/class-payment-gateway-direct.php:170
+#: payment-gateway/class-payment-gateway.php:475
 msgid "Card number is invalid"
 msgstr "Номер карты недействителен"
 
-#: payment-gateway/class-payment-gateway-direct.php:199
-#: payment-gateway/class-payment-gateway.php:442
+#: payment-gateway/class-payment-gateway-direct.php:196
+#: payment-gateway/class-payment-gateway.php:479
 msgid "Card security code is invalid (only digits are allowed)"
 msgstr "Код безопасности карты недействителен (допускаются только цифры)"
 
-#: payment-gateway/class-payment-gateway-direct.php:205
-#: payment-gateway/class-payment-gateway.php:443
+#: payment-gateway/class-payment-gateway-direct.php:202
+#: payment-gateway/class-payment-gateway.php:480
 msgid "Card security code is invalid (must be 3 or 4 digits)"
-msgstr ""
-"Код безопасности карты недействителен (должен состоять из 3 или 4 цифр)"
+msgstr "Код безопасности карты недействителен (должен состоять из 3 или 4 цифр)"
 
-#: payment-gateway/class-payment-gateway-direct.php:211
-#: payment-gateway/class-payment-gateway.php:441
+#: payment-gateway/class-payment-gateway-direct.php:207
+#: payment-gateway/class-payment-gateway.php:478
 msgid "Card security code is missing"
 msgstr "Код безопасности карты отсутствует"
 
-#: payment-gateway/class-payment-gateway-direct.php:239
-#: payment-gateway/class-payment-gateway.php:453
-msgid "Routing Number is missing"
-msgstr "Отсутствует номер маршрутизации."
-
-#: payment-gateway/class-payment-gateway-direct.php:246
-#: payment-gateway/class-payment-gateway.php:454
-msgid "Routing Number is invalid (only digits are allowed)"
-msgstr "Номер маршрутизации недействителен (допускаются только цифры)."
-
-#: payment-gateway/class-payment-gateway-direct.php:252
-#: payment-gateway/class-payment-gateway.php:455
-msgid "Routing number is invalid (must be 9 digits)"
-msgstr "Номер маршрутизации недействителен (должен состоять из 9 цифр)."
-
-#: payment-gateway/class-payment-gateway-direct.php:261
-#: payment-gateway/class-payment-gateway.php:450
-msgid "Account Number is missing"
-msgstr "Номер счета отсутствует."
-
-#: payment-gateway/class-payment-gateway-direct.php:268
-#: payment-gateway/class-payment-gateway.php:451
-msgid "Account Number is invalid (only digits are allowed)"
-msgstr "Номер счета недействителен (допускаются только цифры)."
-
-#: payment-gateway/class-payment-gateway-direct.php:274
-#: payment-gateway/class-payment-gateway.php:452
-msgid "Account number is invalid (must be between 5 and 17 digits)"
-msgstr "Номер счета недействителен (должен содержать от 5 до 17 цифр)."
-
-#: payment-gateway/class-payment-gateway-direct.php:281
-#: payment-gateway/class-payment-gateway.php:449
-msgid "Drivers license number is invalid"
-msgstr "Номер водительского удостоверения недействителен"
-
-#: payment-gateway/class-payment-gateway-direct.php:287
-#: payment-gateway/class-payment-gateway.php:445
-msgid "Check Number is invalid (only digits are allowed)"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway-direct.php:464
+#: payment-gateway/class-payment-gateway-direct.php:385
 msgid "Unknown error"
 msgstr "Неизвестная ошибка"
 
-#: payment-gateway/class-payment-gateway-direct.php:473
+#: payment-gateway/class-payment-gateway-direct.php:393
 #, php-format
 msgid "Payment method address could not be updated. %s"
 msgstr ""
 
-#. translators: Placeholders: %1$s - payment method title, %2$s - payment account type (savings/checking) (may or may not be available), %3$s - last four digits of the account
-#: payment-gateway/class-payment-gateway-direct.php:646
-#: payment-gateway/class-payment-gateway.php:2237
-#, php-format
-msgid "%1$s Check Transaction Approved: %2$s account ending in %3$s"
-msgstr ""
-
-#. translators: Placeholders: %s - check number
-#: payment-gateway/class-payment-gateway-direct.php:651
-#: payment-gateway/class-payment-gateway.php:2242
-#, php-format
-msgid "Check number %s"
-msgstr "Проверочный номер %s"
-
-#. translators: Placeholders: %s - transaction ID
-#: payment-gateway/class-payment-gateway-direct.php:656
-#: payment-gateway/class-payment-gateway-direct.php:739
-#: payment-gateway/class-payment-gateway.php:1699
-#: payment-gateway/class-payment-gateway.php:1904
-#: payment-gateway/class-payment-gateway.php:2207
-#: payment-gateway/class-payment-gateway.php:2247
-#: payment-gateway/class-payment-gateway.php:2293
-#: payment-gateway/handlers/capture.php:162
-#, php-format
-msgid "(Transaction ID %s)"
-msgstr "(ID транзакции %s)"
-
 #. translators: Placeholders: %1$s - payment method title, %2$s - environment ("Test"), %3$s - transaction type (authorization/charge), %4$s - card type (mastercard, visa, ...), %5$s - last four digits of the card
-#: payment-gateway/class-payment-gateway-direct.php:718
+#: payment-gateway/class-payment-gateway-direct.php:568
 #, php-format
 msgid "%1$s %2$s %3$s Approved: %4$s ending in %5$s"
 msgstr "%1$s %2$s %3$s подтверждён: %4$s заканчивается на %5$s"
 
-#. translators: Placeholders: %s - credit card expiry date
+#: payment-gateway/class-payment-gateway-direct.php:570
+#: payment-gateway/class-payment-gateway.php:2214
+msgctxt "noun, software environment"
+msgid "Test"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:571
+#: payment-gateway/class-payment-gateway.php:2215
+#: payment-gateway/class-payment-gateway.php:2709
+msgctxt "credit card transaction type"
+msgid "Authorization"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-direct.php:571
+#: payment-gateway/class-payment-gateway.php:2215
+#: payment-gateway/class-payment-gateway.php:2708
+msgctxt "noun, credit card transaction type"
+msgid "Charge"
+msgstr ""
+
 #. translators: Placeholders: %s - expiry date
-#. translators: Placeholders: %s - credit card expiry date
-#: payment-gateway/class-payment-gateway-direct.php:731
-#: payment-gateway/class-payment-gateway-payment-form.php:636
-#: payment-gateway/class-payment-gateway.php:2199
+#: payment-gateway/class-payment-gateway-direct.php:581
+#: payment-gateway/class-payment-gateway-payment-form.php:547
+#: payment-gateway/class-payment-gateway.php:2233
 #, php-format
 msgid "(expires %s)"
 msgstr "(истекает %s)"
 
+#. translators: Placeholders: %s - transaction ID
+#: payment-gateway/class-payment-gateway-direct.php:589
+#: payment-gateway/class-payment-gateway.php:1718
+#: payment-gateway/class-payment-gateway.php:1925
+#: payment-gateway/class-payment-gateway.php:2241
+#: payment-gateway/class-payment-gateway.php:2299
+#: payment-gateway/handlers/capture.php:164
+#, php-format
+msgid "(Transaction ID %s)"
+msgstr "(ID транзакции %s)"
+
 #. translators: Placeholders: %s - failure message
-#: payment-gateway/class-payment-gateway-direct.php:801
+#: payment-gateway/class-payment-gateway-direct.php:647
 #, php-format
 msgid "Tokenization Request Failed: %s"
 msgstr ""
 
 #. translators: Placeholders: %1$s - payment method title, %2$s - failure message
-#: payment-gateway/class-payment-gateway-direct.php:812
+#: payment-gateway/class-payment-gateway-direct.php:658
 #, php-format
 msgid "%1$s Tokenization Request Failed: %2$s"
 msgstr ""
 
 #. translators: This is a message describing that the transaction in question only performed a credit card authorization and did not capture any funds.
-#: payment-gateway/class-payment-gateway-direct.php:833
-#: payment-gateway/class-payment-gateway.php:1439
-#: payment-gateway/handlers/abstract-payment-handler.php:237
+#: payment-gateway/class-payment-gateway-direct.php:679
+#: payment-gateway/class-payment-gateway.php:1453
+#: payment-gateway/handlers/abstract-payment-handler.php:249
 msgid "Authorization only transaction"
 msgstr ""
 
 #. translators: Placeholders: %s - failure message. Payment method as in a specific credit card, e-check or bank account
-#: payment-gateway/class-payment-gateway-direct.php:863
+#: payment-gateway/class-payment-gateway-direct.php:709
 #, php-format
 msgid "Oops, adding your new payment method failed: %s"
 msgstr ""
 
-#. translators: Payment method as in a specific credit card. Placeholders: %1$s - card type (visa, mastercard, ...), %2$s - last four digits of the card, %3$s - card expiry date
-#: payment-gateway/class-payment-gateway-direct.php:905
+#: payment-gateway/class-payment-gateway-direct.php:752
 #, php-format
 msgid "Nice! New payment method added: %1$s ending in %2$s (expires %3$s)"
 msgstr ""
 
-#. translators: Payment method as in a specific e-check account. Placeholders: %1$s - account type (checking/savings), %2$s - last four digits of the account
-#: payment-gateway/class-payment-gateway-direct.php:915
-#, php-format
-msgid "Nice! New payment method added: %1$s account ending in %2$s"
-msgstr ""
-
 #. translators: Payment method as in a specific credit card, e-check or bank account
-#: payment-gateway/class-payment-gateway-direct.php:922
+#: payment-gateway/class-payment-gateway-direct.php:760
 msgid "Nice! New payment method added."
 msgstr ""
 
 #. translators: Placeholders: %1$s - site title, %2$s - customer email. Payment method as in a specific credit card, e-check or bank account
-#: payment-gateway/class-payment-gateway-direct.php:1042
+#: payment-gateway/class-payment-gateway-direct.php:891
 #, php-format
 msgid "%1$s - Add Payment Method for %2$s"
 msgstr "%1$s - Добавить платёжный метод для %2$s"
 
-#: payment-gateway/class-payment-gateway-helper.php:150
-#: payment-gateway/class-payment-gateway-helper.php:180
+#: payment-gateway/class-payment-gateway-helper.php:148
+#: payment-gateway/class-payment-gateway-helper.php:176
 msgid "Loan"
 msgstr "Кредит"
 
-#: payment-gateway/class-payment-gateway-helper.php:151
+#: payment-gateway/class-payment-gateway-helper.php:149
 msgid "Installment"
 msgstr "Рассрочка"
 
-#: payment-gateway/class-payment-gateway-helper.php:175
+#: payment-gateway/class-payment-gateway-helper.php:173
 msgid "PayPal"
 msgstr "PayPal"
 
-#: payment-gateway/class-payment-gateway-helper.php:176
-msgid "Checking Account"
-msgstr "Проверка аккаунта"
-
-#: payment-gateway/class-payment-gateway-helper.php:177
-msgid "Savings Account"
-msgstr "Сохранение аккаунта"
-
-#: payment-gateway/class-payment-gateway-helper.php:178
+#: payment-gateway/class-payment-gateway-helper.php:174
 msgid "Credit / Debit Card"
 msgstr "Банковская карта"
 
-#: payment-gateway/class-payment-gateway-helper.php:179
+#: payment-gateway/class-payment-gateway-helper.php:175
 msgid "Bank Account"
 msgstr "Банковский счёт"
 
-#: payment-gateway/class-payment-gateway-hosted.php:278
+#: payment-gateway/class-payment-gateway-helper.php:185
+msgctxt "payment method type"
+msgid "Account"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:218
+#: payment-gateway/class-payment-gateway.php:2929
+msgctxt "credit card type"
+msgid "Visa"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:222
+#: payment-gateway/class-payment-gateway.php:2930
+msgctxt "credit card type"
+msgid "MasterCard"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:226
+#: payment-gateway/class-payment-gateway.php:2931
+msgctxt "credit card type"
+msgid "American Express"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:230
+msgctxt "credit card type"
+msgid "Diners Club"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:234
+#: payment-gateway/class-payment-gateway.php:2932
+msgctxt "credit card type"
+msgid "Discover"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:238
+#: payment-gateway/class-payment-gateway.php:2934
+msgctxt "credit card type"
+msgid "JCB"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:242
+msgctxt "credit card type"
+msgid "CarteBleue"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:246
+msgctxt "credit card type"
+msgid "Maestro"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:250
+msgctxt "credit card type"
+msgid "Laser"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-helper.php:254
+#: payment-gateway/class-payment-gateway.php:2935
+msgctxt "credit card type"
+msgid "MIR"
+msgstr ""
+
+#: payment-gateway/class-payment-gateway-hosted.php:283
 msgid "Thank you for your order, please click the button below to pay."
 msgstr "Спасибо за ваш заказ, пожалуйста, нажмите кнопку ниже, чтобы оплатить."
 
-#: payment-gateway/class-payment-gateway-hosted.php:279
-msgid ""
-"Thank you for your order. We are now redirecting you to complete payment."
-msgstr ""
-"Спасибо за ваш заказ. Теперь мы перенаправляем вас для завершения оплаты."
+#: payment-gateway/class-payment-gateway-hosted.php:284
+msgid "Thank you for your order. We are now redirecting you to complete payment."
+msgstr "Спасибо за ваш заказ. Теперь мы перенаправляем вас для завершения оплаты."
 
-#: payment-gateway/class-payment-gateway-hosted.php:280
+#: payment-gateway/class-payment-gateway-hosted.php:285
 msgid "Pay Now"
 msgstr "Оплатить сейчас"
 
-#: payment-gateway/class-payment-gateway-hosted.php:281
+#: payment-gateway/class-payment-gateway-hosted.php:286
 msgid "Cancel Order"
 msgstr "Отменить заказ"
 
 #. translators: Placeholders: %s - a WooCommerce order ID
-#: payment-gateway/class-payment-gateway-hosted.php:421
-#: payment-gateway/handlers/abstract-hosted-payment-handler.php:270
+#: payment-gateway/class-payment-gateway-hosted.php:430
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:276
 #, php-format
 msgid "Could not find order %s"
 msgstr "Не удалось найти заказ %s"
 
 #. translators: Placeholders: %s - payment gateway title (such as Authorize.net, Braintree, etc)
-#: payment-gateway/class-payment-gateway-hosted.php:490
-#: payment-gateway/handlers/abstract-payment-handler.php:171
+#: payment-gateway/class-payment-gateway-hosted.php:496
+#: payment-gateway/handlers/abstract-payment-handler.php:174
 #, php-format
 msgid "%s duplicate transaction received"
 msgstr "%s получен дубликат транзакции"
 
-#: payment-gateway/class-payment-gateway-hosted.php:493
-#: payment-gateway/handlers/abstract-payment-handler.php:174
+#: payment-gateway/class-payment-gateway-hosted.php:500
+#: payment-gateway/handlers/abstract-payment-handler.php:178
 #, php-format
 msgid "Order %s is already paid for."
 msgstr "Заказ %s уже оплачен."
 
-#. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - payment method name (mastercard, bank account, etc), %3$s - last four digits of the card/account, %4$s - card/account expiry date
-#: payment-gateway/class-payment-gateway-hosted.php:576
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:760
+#: payment-gateway/class-payment-gateway-hosted.php:585
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:809
 #, php-format
 msgid "%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)"
 msgstr ""
 
-#. translators: Placeholders: %1$s - payment gateway title (such as CyberSouce, NETbilling, etc), %2$s - account type (checking/savings - may or may not be available), %3$s - last four digits of the account
-#: payment-gateway/class-payment-gateway-hosted.php:587
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:771
-#, php-format
-msgid "%1$s eCheck Payment Method Saved: %2$s account ending in %3$s"
-msgstr ""
-
-#. translators: Placeholders: %s - payment gateway title (such as CyberSouce, NETbilling, etc)
-#: payment-gateway/class-payment-gateway-hosted.php:596
+#: payment-gateway/class-payment-gateway-hosted.php:598
 #, php-format
 msgid "%s Payment Method Saved"
 msgstr ""
 
 #. translators: Placeholders: %s - a failed tokenization API error
-#: payment-gateway/class-payment-gateway-hosted.php:605
+#: payment-gateway/class-payment-gateway-hosted.php:607
 #, php-format
 msgid "Tokenization failed. %s"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:265
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:282
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:552
+#: shipping-method/admin/class-warehouse-admin.php:271
 msgid "Edit"
 msgstr "Редактировать"
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:307
-#: payment-gateway/class-payment-gateway.php:858
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:321
+#: payment-gateway/class-payment-gateway.php:877
+#: shipping-method/class-shipping-method.php:104
 msgid "Title"
 msgstr "Заголовок"
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:310
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:324
 msgid "Details"
 msgstr "Детали"
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:313
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:327
 msgid "Default?"
 msgstr "По умолчанию?"
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:554
-msgid ""
-"Oops, there was an error updating your payment method. Please try again."
-msgstr ""
-"К сожалению, при обновлении способа оплаты произошла ошибка. Пожалуйста, "
-"попробуйте еще раз."
+msgid "Oops, there was an error updating your payment method. Please try again."
+msgstr "К сожалению, при обновлении способа оплаты произошла ошибка. Пожалуйста, попробуйте еще раз."
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:555
 msgid "Are you sure you want to delete this payment method?"
 msgstr ""
 
-#. translators: Payment method as in a specific credit card, eCheck or bank account
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:630
+#. translators: Payment method as in a specific credit card or stored bank transfer account
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:614
 msgid "You do not have any saved payment methods."
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:776
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:652
 msgid "Nickname"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:997
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:836
 msgid "Oops, you took too long, please try again."
 msgstr "К сожалению, вы потратили слишком много времени, попробуйте еще раз."
 
-#: payment-gateway/class-payment-gateway-my-payment-methods.php:1008
+#: payment-gateway/class-payment-gateway-my-payment-methods.php:847
 msgid "There was an error with your request, please try again."
 msgstr "В вашем запросе произошла ошибка, попробуйте еще раз."
 
-#: payment-gateway/class-payment-gateway-payment-form.php:290
+#: payment-gateway/class-payment-gateway-payment-form.php:288
 msgid "Card Number"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:311
+#: payment-gateway/class-payment-gateway-payment-form.php:309
 msgid "MM / YY"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:330
+#: payment-gateway/class-payment-gateway-payment-form.php:328
 msgid "Card Security Code"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:333
+#: payment-gateway/class-payment-gateway-payment-form.php:331
 msgid "CSC"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:370
-msgid "Where do I find this?"
-msgstr "Где мне это найти?"
-
-#: payment-gateway/class-payment-gateway-payment-form.php:375
-msgid "Routing Number"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway-payment-form.php:393
-msgid "Account Number"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway-payment-form.php:452
+#: payment-gateway/class-payment-gateway-payment-form.php:380
 msgid "TEST MODE ENABLED"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:476
-msgid "Sample Check"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway-payment-form.php:542
+#: payment-gateway/class-payment-gateway-payment-form.php:451
 msgid "Manage Payment Methods"
 msgstr "Управление методами оплаты"
 
-#: payment-gateway/class-payment-gateway-payment-form.php:673
+#: payment-gateway/class-payment-gateway-payment-form.php:585
 msgid "Use a new card"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:673
-msgid "Use a new bank account"
-msgstr ""
-
 #. translators: account as in customer's account on the eCommerce site
-#: payment-gateway/class-payment-gateway-payment-form.php:730
+#: payment-gateway/class-payment-gateway-payment-form.php:642
 msgid "Securely Save to Account"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway-payment-form.php:842
+#: payment-gateway/class-payment-gateway-payment-form.php:737
 msgid "Payment Info"
 msgstr "Информация платежа"
 
-#. translators: Placeholders: %1$s - plugin name, %2$s - <a> tag, %3$s - </a> tag
-#: payment-gateway/class-payment-gateway-plugin.php:415
+#: payment-gateway/class-payment-gateway-plugin.php:414
 #, php-format
-msgid ""
-"%1$s: WooCommerce is not being forced over SSL; your customers' payment data "
-"may be at risk. %2$sVerify your site URLs here%3$s"
-msgstr ""
-"%1$s: WooCommerce не принудительно использует SSL; платежные данные ваших "
-"клиентов могут быть под угрозой. %2$sПодтвердите URL своего сайта здесь%3$s"
+msgid "%1$s: WooCommerce is not being forced over SSL; your customers' payment data may be at risk. %2$sVerify your site URLs here%3$s"
+msgstr "%1$s: WooCommerce не принудительно использует SSL; платежные данные ваших клиентов могут быть под угрозой. %2$sПодтвердите URL своего сайта здесь%3$s"
 
 #. translators: Placeholders: %s - payment gateway name
-#: payment-gateway/class-payment-gateway-plugin.php:432
+#: payment-gateway/class-payment-gateway-plugin.php:434
 #, php-format
-msgid ""
-"%s will soon require TLS 1.2 support to process transactions and your server "
-"environment may need to be updated. Please contact your hosting provider to "
-"confirm that your site can send and receive TLS 1.2 connections and request "
-"they make any necessary updates."
-msgstr ""
-"%s скоро потребуется поддержка TLS 1.2 для обработки транзакций, и, "
-"возможно, потребуется обновить вашу серверную среду. Обратитесь к своему "
-"хостинг-провайдеру, чтобы подтвердить, что ваш сайт может отправлять и "
-"получать соединения TLS 1.2, и запросить необходимые обновления."
+msgid "%s will soon require TLS 1.2 support to process transactions and your server environment may need to be updated. Please contact your hosting provider to confirm that your site can send and receive TLS 1.2 connections and request they make any necessary updates."
+msgstr "%s скоро потребуется поддержка TLS 1.2 для обработки транзакций, и, возможно, потребуется обновить вашу серверную среду. Обратитесь к своему хостинг-провайдеру, чтобы подтвердить, что ваш сайт может отправлять и получать соединения TLS 1.2, и запросить необходимые обновления."
 
-#: payment-gateway/class-payment-gateway-plugin.php:486
+#. translators: Placeholders: %1$s - plugin name, %2$s - a currency/comma-separated list of currencies, %3$s - <a> tag, %4$s - </a> tag
+#: payment-gateway/class-payment-gateway-plugin.php:491
 #, php-format
-msgid ""
-"%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept "
-"%2$s to enable this gateway for checkout."
-msgid_plural ""
-"%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to "
-"accept one of %2$s to enable this gateway for checkout."
+msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this gateway for checkout."
+msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this gateway for checkout."
 msgstr[0] ""
 msgstr[1] ""
 msgstr[2] ""
 
 #. translators: Placeholders: %1$s - payment gateway name, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: payment-gateway/class-payment-gateway-plugin.php:517
+#: payment-gateway/class-payment-gateway-plugin.php:527
 #, php-format
-msgid ""
-"Heads up! %1$s is currently configured to log transaction data for debugging "
-"purposes. If you are not experiencing any problems with payment processing, "
-"we recommend %2$sturning off Debug Mode%3$s"
-msgstr ""
-"Обратите внимание! %1$s в настоящее время настроен на регистрацию данных "
-"транзакций в целях отладки. Если у вас нет проблем с обработкой платежей, мы "
-"рекомендуем %2$sотключить режим отладки%3$s."
+msgid "Heads up! %1$s is currently configured to log transaction data for debugging purposes. If you are not experiencing any problems with payment processing, we recommend %2$sturning off Debug Mode%3$s"
+msgstr "Обратите внимание! %1$s в настоящее время настроен на регистрацию данных транзакций в целях отладки. Если у вас нет проблем с обработкой платежей, мы рекомендуем %2$sотключить режим отладки%3$s."
 
 #. translators: Placeholders: %s - gateway name
-#: payment-gateway/class-payment-gateway-plugin.php:566
+#: payment-gateway/class-payment-gateway-plugin.php:581
 #, php-format
 msgid "%s is not configured"
 msgstr "%s не настроен"
 
-#: payment-gateway/class-payment-gateway-plugin.php:577
+#: payment-gateway/class-payment-gateway-plugin.php:593
 msgid "Configure"
 msgstr "Настроить"
 
-#: payment-gateway/class-payment-gateway-plugin.php:578
+#: payment-gateway/class-payment-gateway-plugin.php:594
 msgid "Dismiss"
 msgstr "Пропустить"
 
-#: payment-gateway/class-payment-gateway.php:315
+#: payment-gateway/class-payment-gateway.php:346
 msgid "you successfully processed a payment!"
 msgstr "вы успешно обработали платеж!"
 
-#: payment-gateway/class-payment-gateway.php:320
+#: payment-gateway/class-payment-gateway.php:354
 msgid "you successfully processed a refund!"
 msgstr "вы успешно оформили возврат!"
 
-#: payment-gateway/class-payment-gateway.php:446
-msgid "Check Number is missing"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway.php:447
-msgid "Drivers license state is missing"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway.php:448
-msgid "Drivers license number is missing"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway.php:642
+#: payment-gateway/class-payment-gateway.php:668
 msgid "Continue to Payment"
 msgstr "Продолжить оплату"
 
-#: payment-gateway/class-payment-gateway.php:642
+#: payment-gateway/class-payment-gateway.php:668
 msgid "Place order"
 msgstr "Оплатить"
 
-#: payment-gateway/class-payment-gateway.php:670
+#: payment-gateway/class-payment-gateway.php:696
 msgid "Thank you for your order."
 msgstr "Спасибо за ваш заказ."
 
-#: payment-gateway/class-payment-gateway.php:813
+#: payment-gateway/class-payment-gateway.php:837
 msgid "Credit Card"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:815
-msgid "eCheck"
-msgstr ""
-
-#: payment-gateway/class-payment-gateway.php:831
+#: payment-gateway/class-payment-gateway.php:852
 msgid "Pay securely using your credit card."
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:833
-msgid "Pay securely using your checking account."
-msgstr ""
-
-#: payment-gateway/class-payment-gateway.php:851
+#: payment-gateway/class-payment-gateway.php:870
 msgid "Enable / Disable"
 msgstr "Вкл/Выкл"
 
-#: payment-gateway/class-payment-gateway.php:852
+#: payment-gateway/class-payment-gateway.php:871
 msgid "Enable this gateway"
 msgstr "Включить этот метод оплаты"
 
-#: payment-gateway/class-payment-gateway.php:860
+#: payment-gateway/class-payment-gateway.php:879
 msgid "Payment method title that the customer will see during checkout."
-msgstr ""
-"Название способа оплаты, которое покупатель увидит при оформлении заказа."
+msgstr "Название способа оплаты, которое покупатель увидит при оформлении заказа."
 
-#: payment-gateway/class-payment-gateway.php:865
+#: payment-gateway/class-payment-gateway.php:884
+#: shipping-method/class-shipping-method.php:114
 msgid "Description"
 msgstr "Описание"
 
-#: payment-gateway/class-payment-gateway.php:867
+#: payment-gateway/class-payment-gateway.php:886
 msgid "Payment method description that the customer will see during checkout."
-msgstr ""
-"Описание способа оплаты, которое покупатель увидит при оформлении заказа."
+msgstr "Описание способа оплаты, которое покупатель увидит при оформлении заказа."
 
-#: payment-gateway/class-payment-gateway.php:896
+#: payment-gateway/class-payment-gateway.php:915
 msgid "Detailed Decline Messages"
 msgstr "Сообщения о статусе платежа"
 
-#: payment-gateway/class-payment-gateway.php:898
-msgid ""
-"Check to enable detailed decline messages to the customer during checkout "
-"when possible, rather than a generic decline message."
-msgstr ""
-"Включите эту опцию если хотите показывать покупателям более детализированную "
-"информацию об их платеже, если она доступна."
+#: payment-gateway/class-payment-gateway.php:917
+msgid "Check to enable detailed decline messages to the customer during checkout when possible, rather than a generic decline message."
+msgstr "Включите эту опцию если хотите показывать покупателям более детализированную информацию об их платеже, если она доступна."
 
 #. translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag
-#: payment-gateway/class-payment-gateway.php:908
+#: payment-gateway/class-payment-gateway.php:927
 #, php-format
-msgid ""
-"Show Detailed Error Messages and API requests/responses on the checkout page "
-"and/or save them to the %1$sdebug log%2$s"
-msgstr ""
-"Показывать подробные сообщения о запросах и ответов API на странице "
-"оформления заказа и/или сохранять их %1$sв журнале отладки%2$s"
+msgid "Show Detailed Error Messages and API requests/responses on the checkout page and/or save them to the %1$sdebug log%2$s"
+msgstr "Показывать подробные сообщения о запросах и ответов API на странице оформления заказа и/или сохранять их %1$sв журнале отладки%2$s"
 
-#: payment-gateway/class-payment-gateway.php:912
+#: payment-gateway/class-payment-gateway.php:931
 msgid "Show on Checkout Page"
 msgstr "Показывать на странице оформления заказа"
 
 #. translators: show debugging information on both checkout page and in the log
-#: payment-gateway/class-payment-gateway.php:915
+#: payment-gateway/class-payment-gateway.php:934
 msgid "Both"
 msgstr "Оба варианта"
 
-#: payment-gateway/class-payment-gateway.php:976
+#: payment-gateway/class-payment-gateway.php:995
 msgid "Select the gateway environment to use for transactions."
 msgstr "Выберите среду окружения для транзакций."
 
-#: payment-gateway/class-payment-gateway.php:1024
+#: payment-gateway/class-payment-gateway.php:1043
 msgid "Connection Settings"
 msgstr "Настройки соединения"
 
-#: payment-gateway/class-payment-gateway.php:1030
+#: payment-gateway/class-payment-gateway.php:1049
 msgid "Share connection settings"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:1032
+#: payment-gateway/class-payment-gateway.php:1051
 msgid "Use connection/authentication settings from other gateway"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:1035
+#: payment-gateway/class-payment-gateway.php:1054
 msgid "Disabled because the other gateway is using these settings"
-msgstr ""
-"Отключено потому что другой платёжный шлюх уже использует эти настройки"
+msgstr "Отключено потому что другой платёжный шлюх уже использует эти настройки"
 
-#: payment-gateway/class-payment-gateway.php:1052
+#: payment-gateway/class-payment-gateway.php:1071
 msgid "Card Verification (CSC)"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:1053
+#: payment-gateway/class-payment-gateway.php:1072
 msgid "Display the Card Security Code (CV2) field on checkout"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:1061
+#: payment-gateway/class-payment-gateway.php:1080
 msgid "Saved Card Verification"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:1062
+#: payment-gateway/class-payment-gateway.php:1081
 msgid "Display the Card Security Code field when paying with a saved card"
 msgstr ""
 
 #. translators: Placeholders: %1$s - site title, %2$s - order number
-#: payment-gateway/class-payment-gateway.php:1394
+#: payment-gateway/class-payment-gateway.php:1403
 #, php-format
 msgid "%1$s - Order %2$s"
 msgstr "%1$s - заказ %2$s"
 
 #. translators: Placeholders: %1$s - site title, %2$s - order number. Definitions: Capture as in capture funds from a credit card.
-#: payment-gateway/class-payment-gateway.php:1506
+#: payment-gateway/class-payment-gateway.php:1520
 #, php-format
 msgid "%1$s - Capture for Order %2$s"
 msgstr "%1$s - списание за заказ %2$s"
 
 #. translators: Placeholders: %1$s - site title, %2$s - order number
-#: payment-gateway/class-payment-gateway.php:1635
+#: payment-gateway/class-payment-gateway.php:1651
 #, php-format
 msgid "%1$s - Refund for Order %2$s"
 msgstr "%1$s - возврат за заказ %2$s"
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - a monetary amount
-#: payment-gateway/class-payment-gateway.php:1690
+#: payment-gateway/class-payment-gateway.php:1706
 #, php-format
 msgid "%1$s Refund in the amount of %2$s approved."
 msgstr "%1$s Возврат средств в размере %2$s одобрен."
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - error code, %3$s - error message
-#: payment-gateway/class-payment-gateway.php:1718
+#: payment-gateway/class-payment-gateway.php:1737
 #, php-format
 msgid "%1$s Refund Failed: %2$s - %3$s"
 msgstr "Ошибка возврата %1$s: %2$s - %3$s"
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Robokassa etc), %2$s - error message
-#: payment-gateway/class-payment-gateway.php:1726
+#: payment-gateway/class-payment-gateway.php:1745
 #, php-format
 msgid "%1$s Refund Failed: %2$s"
 msgstr "Ошибка возврата %1$s: %2$s"
 
 #. translators: Placeholders: %s - payment gateway title (such as Tinkoff, Robokassa etc)
-#: payment-gateway/class-payment-gateway.php:1744
+#: payment-gateway/class-payment-gateway.php:1763
 #, php-format
 msgid "%s Order completely refunded."
 msgstr "%s Заказ полностью возмещен."
 
-#: payment-gateway/class-payment-gateway.php:1788
-msgid ""
-"Oops, you cannot partially void this order. Please use the full order amount."
-msgstr ""
-"К сожалению, вы не можете частично аннулировать этот заказ. Пожалуйста, "
-"используйте полную сумму заказа."
+#: payment-gateway/class-payment-gateway.php:1807
+msgid "Oops, you cannot partially void this order. Please use the full order amount."
+msgstr "К сожалению, вы не можете частично аннулировать этот заказ. Пожалуйста, используйте полную сумму заказа."
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - error code, %3$s - error message. Void as in to void an order.
-#: payment-gateway/class-payment-gateway.php:1866
+#: payment-gateway/class-payment-gateway.php:1884
 #, php-format
 msgid "%1$s Void Failed: %2$s - %3$s"
 msgstr ""
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - error message. Void as in to void an order.
-#: payment-gateway/class-payment-gateway.php:1874
+#: payment-gateway/class-payment-gateway.php:1892
 #, php-format
 msgid "%1$s Void Failed: %2$s"
 msgstr ""
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - a monetary amount. Void as in to void an order.
-#: payment-gateway/class-payment-gateway.php:1895
+#: payment-gateway/class-payment-gateway.php:1913
 #, php-format
 msgid "%1$s Void in the amount of %2$s approved."
 msgstr ""
 
+#: payment-gateway/class-payment-gateway.php:2017
+msgctxt "hash before order number"
+msgid "#"
+msgstr ""
+
 #. translators: Placeholders: %1$s - status code, %2$s - status message
 #. translators: Placeholders: %1$s - payment request response status code, %2$s - payment request response status message
-#: payment-gateway/class-payment-gateway.php:1992
-#: payment-gateway/handlers/abstract-payment-handler.php:120
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:136
+#: payment-gateway/class-payment-gateway.php:2038
+#: payment-gateway/handlers/abstract-payment-handler.php:123
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:139
 #, php-format
 msgid "Status code %1$s: %2$s"
 msgstr "Код статуса %1$s: %2$s"
 
 #. translators: Placeholders: %s - status code
 #. translators: Placeholders: %s - payment request response status code
-#: payment-gateway/class-payment-gateway.php:1995
-#: payment-gateway/handlers/abstract-payment-handler.php:123
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:139
+#: payment-gateway/class-payment-gateway.php:2041
+#: payment-gateway/handlers/abstract-payment-handler.php:126
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:142
 #, php-format
 msgid "Status code: %s"
 msgstr "Код статуса: %s"
 
 #. translators: Placeholders; %s - status message
 #. translators: Placeholders: %s - payment request response status message
-#: payment-gateway/class-payment-gateway.php:1998
-#: payment-gateway/handlers/abstract-payment-handler.php:126
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:142
+#: payment-gateway/class-payment-gateway.php:2044
+#: payment-gateway/handlers/abstract-payment-handler.php:129
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:145
 #, php-format
 msgid "Status message: %s"
 msgstr "Текст статуса: %s"
 
-#: payment-gateway/class-payment-gateway.php:2003
-#: payment-gateway/handlers/abstract-payment-handler.php:131
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:149
+#: payment-gateway/class-payment-gateway.php:2049
+#: payment-gateway/handlers/abstract-payment-handler.php:134
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:152
 #, php-format
 msgid "Transaction ID %s"
 msgstr "ID транзакции %s"
 
 #. translators: Placeholders: %1$s - payment method title, %2$s - environment ("Test"), %3$s - transaction type (authorization/charge)
-#: payment-gateway/class-payment-gateway.php:2178
+#: payment-gateway/class-payment-gateway.php:2212
 #, php-format
 msgid "%1$s %2$s %3$s Approved"
 msgstr "%1$s %2$s %3$s Одобрен"
 
 #. translators: Placeholders: %1$s - credit card type (MasterCard, Visa, etc...), %2$s - last four digits of the card
-#: payment-gateway/class-payment-gateway.php:2188
+#: payment-gateway/class-payment-gateway.php:2222
 #, php-format
 msgid "%1$s ending in %2$s"
 msgstr "%1$s заканчивается на %2$s"
 
-#: payment-gateway/class-payment-gateway.php:2273
+#: payment-gateway/class-payment-gateway.php:2267
 #, php-format
 msgid "%s the loan was successfully Approved"
 msgstr "%s кредит был успешно одобрен"
 
-#: payment-gateway/class-payment-gateway.php:2276
+#: payment-gateway/class-payment-gateway.php:2270
 #, php-format
 msgid "The loan type: %s"
 msgstr "Тип кредита: %s"
 
-#: payment-gateway/class-payment-gateway.php:2280
+#: payment-gateway/class-payment-gateway.php:2275
 #, php-format
 msgid "Total amount: %s"
 msgstr "Итоговая сумма: %s"
 
-#: payment-gateway/class-payment-gateway.php:2286
+#: payment-gateway/class-payment-gateway.php:2287
 #, php-format
 msgid "Down payment: %s"
 msgstr "Первоначальный взнос: %s"
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - message (probably reason for the transaction being held for review)
-#: payment-gateway/class-payment-gateway.php:2325
+#: payment-gateway/class-payment-gateway.php:2329
 #, php-format
 msgid "%1$s Transaction Held for Review (%2$s)"
 msgstr "%1$s Транзакция на рассмотрении (%2$s)"
 
-#: payment-gateway/class-payment-gateway.php:2362
-#: payment-gateway/handlers/abstract-payment-handler.php:230
-msgid ""
-"Your order has been received and is being reviewed. Thank you for your "
-"business."
-msgstr ""
-"Ваш заказ принят и находится на рассмотрении. Спасибо что покупаете у нас."
+#: payment-gateway/class-payment-gateway.php:2371
+#: payment-gateway/handlers/abstract-payment-handler.php:242
+msgid "Your order has been received and is being reviewed. Thank you for your business."
+msgstr "Ваш заказ принят и находится на рассмотрении. Спасибо что покупаете у нас."
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - error message; e.g. Order Note: [Payment method] Payment failed [error]
-#: payment-gateway/class-payment-gateway.php:2406
+#: payment-gateway/class-payment-gateway.php:2447
 #, php-format
 msgid "%1$s Payment Failed (%2$s)"
 msgstr "Ошибка платежа %1$s (%2$s)"
 
-#: payment-gateway/class-payment-gateway.php:2423
-#: payment-gateway/handlers/abstract-hosted-payment-handler.php:175
-msgid ""
-"An error occurred, please try again or try an alternate form of payment."
+#: payment-gateway/class-payment-gateway.php:2464
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:180
+msgid "An error occurred, please try again or try an alternate form of payment."
 msgstr "Произошла ошибка. Повторите попытку или выберите другой способ оплаты."
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - message/error
-#: payment-gateway/class-payment-gateway.php:2439
+#: payment-gateway/class-payment-gateway.php:2480
 #, php-format
 msgid "%1$s Transaction Cancelled (%2$s)"
 msgstr "Транзакция %1$s отменена (%2$s)"
 
-#: payment-gateway/class-payment-gateway.php:2666
+#: payment-gateway/class-payment-gateway.php:2703
 msgid "Transaction Type"
 msgstr "Тип транзакции"
 
-#: payment-gateway/class-payment-gateway.php:2668
-msgid ""
-"Select how transactions should be processed. Charge submits all transactions "
-"for settlement, Authorization simply authorizes the order total for capture "
-"later."
-msgstr ""
-"Выберите способ обработки транзакций. Charge отправляет все транзакции для "
-"расчета, авторизация просто авторизует общую сумму заказа для последующего "
-"списания."
+#: payment-gateway/class-payment-gateway.php:2705
+msgid "Select how transactions should be processed. Charge submits all transactions for settlement, Authorization simply authorizes the order total for capture later."
+msgstr "Выберите способ обработки транзакций. Charge отправляет все транзакции для расчета, авторизация просто авторизует общую сумму заказа для последующего списания."
 
-#: payment-gateway/class-payment-gateway.php:2679
+#: payment-gateway/class-payment-gateway.php:2716
 msgid "Charge Virtual-Only Orders"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2681
-msgid ""
-"If the order contains exclusively virtual items, enable this to immediately "
-"charge, rather than authorize, the transaction."
+#: payment-gateway/class-payment-gateway.php:2718
+msgid "If the order contains exclusively virtual items, enable this to immediately charge, rather than authorize, the transaction."
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2689
+#: payment-gateway/class-payment-gateway.php:2726
 msgid "Enable Partial Capture"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2691
+#: payment-gateway/class-payment-gateway.php:2728
 msgid "Allow orders to be partially captured multiple times."
 msgstr "Разрешить частичное списание несколько раз."
 
-#: payment-gateway/class-payment-gateway.php:2700
-msgctxt ""
-"coordinating conjunction for a list of order statuses: on-hold, processing, "
-"or completed"
+#: payment-gateway/class-payment-gateway.php:2737
+msgctxt "coordinating conjunction for a list of order statuses: on-hold, processing, or completed"
 msgid "or"
 msgstr "или"
 
-#: payment-gateway/class-payment-gateway.php:2703
+#: payment-gateway/class-payment-gateway.php:2740
 msgid "Capture Paid Orders"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2706
+#: payment-gateway/class-payment-gateway.php:2743
 #, php-format
 msgid "Automatically capture orders when they are changed to %s."
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2707
+#: payment-gateway/class-payment-gateway.php:2744
 msgid "a paid status"
 msgstr "статус оплаты"
 
-#: payment-gateway/class-payment-gateway.php:2863
+#: payment-gateway/class-payment-gateway.php:2897
 msgid "Accepted Card Logos"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2865
-msgid ""
-"These are the card logos that are displayed to customers as accepted during "
-"checkout."
-msgstr ""
-"Это логотипы карт, которые отображаются покупателям как  доступные для "
-"оплаты во время оформления заказа."
+#: payment-gateway/class-payment-gateway.php:2899
+msgid "These are the card logos that are displayed to customers as accepted during checkout."
+msgstr "Это логотипы карт, которые отображаются покупателям как  доступные для оплаты во время оформления заказа."
 
 #. translators: Placeholders: %1$s - <strong> tag, %2$s - </strong> tag
-#: payment-gateway/class-payment-gateway.php:2868
+#: payment-gateway/class-payment-gateway.php:2902
 #, php-format
-msgid ""
-"This setting %1$sdoes not%2$s change which card types the gateway will "
-"accept. Accepted cards are configured from your payment processor account."
+msgid "This setting %1$sdoes not%2$s change which card types the gateway will accept. Accepted cards are configured from your payment processor account."
+msgstr "Этот параметр %1$sне%2$s меняет типы карт, которые принимает шлюз. Принимаемые карты настраиваются из вашей учетной записи платежного аккаунта."
+
+#: payment-gateway/class-payment-gateway.php:2933
+msgctxt "credit card type"
+msgid "Diners"
 msgstr ""
-"Этот параметр %1$sне%2$s меняет типы карт, которые принимает шлюз. "
-"Принимаемые карты настраиваются из вашей учетной записи платежного аккаунта."
 
 #. translators: http://www.cybersource.com/products/payment_security/payment_tokenization/ and https://en.wikipedia.org/wiki/Tokenization_(data_security)
-#: payment-gateway/class-payment-gateway.php:2955
+#: payment-gateway/class-payment-gateway.php:2989
 msgid "Tokenization"
 msgstr ""
 
-#: payment-gateway/class-payment-gateway.php:2956
-msgid ""
-"Allow customers to securely save their payment details for future checkout."
+#: payment-gateway/class-payment-gateway.php:2990
+msgid "Allow customers to securely save their payment details for future checkout."
+msgstr "Позволять клиентам безопасно сохранять свои платежные реквизиты для будущих покупок."
+
+#: payment-gateway/class-payment-gateway.php:3218
+#: shipping-method/settings/class-shipping-integration.php:366
+msgctxt "software environment"
+msgid "Production"
 msgstr ""
-"Позволять клиентам безопасно сохранять свои платежные реквизиты для будущих "
-"покупок."
 
 #. translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag
-#: payment-gateway/class-payment-gateway.php:3730
+#: payment-gateway/class-payment-gateway.php:3582
 #, php-format
-msgid ""
-"Heads up! %1$s is not fully configured and cannot accept payments. Please "
-"%2$sreview the documentation%3$s and configure the %4$sgateway settings%5$s."
-msgstr ""
-"Обратите внимание! %1$s настроен не полностью и не может принимать платежи. "
-"Пожалуйста, %2$sознакомьтесь с документацией%3$s и настройте %4$sпараметры "
-"шлюза%5$s."
+msgid "Heads up! %1$s is not fully configured and cannot accept payments. Please %2$sreview the documentation%3$s and configure the %4$sgateway settings%5$s."
+msgstr "Обратите внимание! %1$s настроен не полностью и не может принимать платежи. Пожалуйста, %2$sознакомьтесь с документацией%3$s и настройте %4$sпараметры шлюза%5$s."
 
-#: payment-gateway/handlers/abstract-hosted-payment-handler.php:141
-msgid ""
-"There was a problem processing your order and it is being placed on hold for "
-"review. Please contact us to complete the transaction."
+#: payment-gateway/handlers/abstract-hosted-payment-handler.php:146
+msgid "There was a problem processing your order and it is being placed on hold for review. Please contact us to complete the transaction."
+msgstr "При обработке вашего заказа возникла проблема, и он приостановлен для проверки. Пожалуйста, свяжитесь с нами, чтобы завершить оплату."
+
+#: payment-gateway/handlers/abstract-payment-handler.php:218
+#, php-format
+msgid "Payment processing error: %s"
 msgstr ""
-"При обработке вашего заказа возникла проблема, и он приостановлен для "
-"проверки. Пожалуйста, свяжитесь с нами, чтобы завершить оплату."
 
 #. translators: Placeholders: %s - payment gateway title
-#: payment-gateway/handlers/abstract-payment-handler.php:313
+#: payment-gateway/handlers/abstract-payment-handler.php:325
 #, php-format
 msgid "%s Transaction Held for Review"
 msgstr "%sтранзакция задержана для проверки"
 
 #. translators: Placeholders: %s - payment gateway title
-#: payment-gateway/handlers/abstract-payment-handler.php:378
+#: payment-gateway/handlers/abstract-payment-handler.php:397
 #, php-format
 msgid "%s Payment Failed"
 msgstr "%s Payment Failed"
 
 #. translators: Placeholders: %s - payment gateway title
-#: payment-gateway/handlers/abstract-payment-handler.php:403
+#: payment-gateway/handlers/abstract-payment-handler.php:422
 #, php-format
 msgid "%s Transaction Cancelled"
 msgstr "%s платёж отменён"
 
-#: payment-gateway/handlers/capture.php:122
+#: payment-gateway/handlers/capture.php:121
 msgid "Order cannot be captured"
 msgstr ""
 
-#: payment-gateway/handlers/capture.php:127
+#: payment-gateway/handlers/capture.php:126
 msgid "Transaction authorization has expired"
 msgstr ""
 
-#: payment-gateway/handlers/capture.php:132
+#: payment-gateway/handlers/capture.php:131
 msgid "Transaction has already been fully captured"
 msgstr ""
 
-#: payment-gateway/handlers/capture.php:137
+#: payment-gateway/handlers/capture.php:136
 msgid "Transaction cannot be captured"
 msgstr ""
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card.
-#: payment-gateway/handlers/capture.php:153
+#: payment-gateway/handlers/capture.php:152
 #, php-format
 msgid "%1$s Capture of %2$s Approved"
 msgstr ""
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - failure message. Definitions: "capture" as in capturing funds from a credit card.
-#: payment-gateway/handlers/capture.php:193
+#: payment-gateway/handlers/capture.php:203
 #, php-format
 msgid "%1$s Capture Failed: %2$s"
 msgstr ""
 
-#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:144
+#: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:147
 msgid "Unknown Error"
 msgstr "Неизвестная ошибка"
 
-#. translators: the plugin name.
-#: licensing/updater/class-plugin-updater.php:249
-#, php-format
-msgid "There is a new version of %1$s available."
-msgstr "Доступна новая версия %1$s."
-
-#: licensing/updater/class-plugin-updater.php:255
-msgid "Contact your network administrator to install the update."
-msgstr "Обратитесь к сетевому администратору, чтобы установить обновление."
-
-#. translators: 1. opening anchor tag, do not translate 2. the new plugin version 3. closing anchor tag, do not translate.
-#: licensing/updater/class-plugin-updater.php:260
-#, php-format
-msgid "%1$sView version %2$s details%3$s."
-msgstr "%1$sПосмотреть сведения о версии %2$s%3$s."
-
-#: licensing/updater/class-plugin-updater.php:268
-#, php-format
-msgid "%1$sView version %2$s details%3$s or %4$supdate now%5$s."
-msgstr "%1$sПосмотреть сведения о версии %2$s%3$s или %4$sобновить сейчас%5$s."
-
-#: licensing/updater/class-plugin-updater.php:279
-msgid "Update now."
-msgstr "Обновить сейчас."
-
-#: licensing/updater/class-plugin-updater.php:473
-msgid "You do not have permission to install plugin updates"
-msgstr "У вас нет разрешения на установку обновлений плагина."
-
-#: rest-api/controllers/class-plugin-rest-api-settings.php:48
-msgid "Unique identifier for the resource."
-msgstr "Уникальный идентификатор ресурса."
-
-#: rest-api/controllers/class-plugin-rest-api-settings.php:77
+#: rest-api/controllers/class-plugin-rest-api-settings.php:86
 msgid "Sorry, you cannot list resources."
 msgstr "Извините, вы не можете перечислить ресурсы."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:119
+#: rest-api/controllers/class-plugin-rest-api-settings.php:128
 #, php-format
 msgid "Setting %s does not exist"
 msgstr "Параметр %s не существует"
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:136
+#: rest-api/controllers/class-plugin-rest-api-settings.php:145
 msgid "Sorry, you cannot edit this resource."
 msgstr "Извините, вы не можете редактировать этот ресурс."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:163
+#: rest-api/controllers/class-plugin-rest-api-settings.php:191
 #, php-format
 msgid "Could not update setting: %s"
 msgstr "Не удалось обновить настройки: %s"
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:224
+#: rest-api/controllers/class-plugin-rest-api-settings.php:250
 msgid "Unique identifier of the setting."
 msgstr "Уникальный идентификатор настройки."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:230
+#: rest-api/controllers/class-plugin-rest-api-settings.php:256
 msgid "The type of the setting."
 msgstr "Тип настройки."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:237
+#: rest-api/controllers/class-plugin-rest-api-settings.php:263
 msgid "The name of the setting."
 msgstr "Название настройки."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:243
+#: rest-api/controllers/class-plugin-rest-api-settings.php:269
 msgid "The description of the setting. It may or may not be used for display."
-msgstr ""
-"Описание настройки. Он может использоваться или не использоваться для "
-"отображения."
+msgstr "Описание настройки. Он может использоваться или не использоваться для отображения."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:249
+#: rest-api/controllers/class-plugin-rest-api-settings.php:275
 msgid "Whether the setting stores an array of values or a single value."
 msgstr "Сохраняет ли параметр массив значений или одно значение."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:255
+#: rest-api/controllers/class-plugin-rest-api-settings.php:281
 msgid "A list of valid options, used for validation before storing the value."
-msgstr ""
-"Список допустимых параметров, используемых для проверки перед сохранением "
-"значения."
+msgstr "Список допустимых параметров, используемых для проверки перед сохранением значения."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:261
+#: rest-api/controllers/class-plugin-rest-api-settings.php:287
 msgid "Optional default value for the setting."
 msgstr "Необязательное значение по умолчанию для параметра."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:267
+#: rest-api/controllers/class-plugin-rest-api-settings.php:293
 msgid "The value of the setting."
 msgstr "Значение настройки."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:272
-msgid ""
-"Optional object that defines how the user will interact with and update the "
-"setting."
-msgstr ""
-"Необязательный объект, который определяет, как пользователь будет "
-"взаимодействовать с параметром и обновлять его."
+#: rest-api/controllers/class-plugin-rest-api-settings.php:298
+msgid "Optional object that defines how the user will interact with and update the setting."
+msgstr "Необязательный объект, который определяет, как пользователь будет взаимодействовать с параметром и обновлять его."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:276
+#: rest-api/controllers/class-plugin-rest-api-settings.php:302
 msgid "The type of the control."
 msgstr "Тип элемента управления."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:283
+#: rest-api/controllers/class-plugin-rest-api-settings.php:309
 msgid "The name of the control. Inherits the setting's name."
 msgstr "Имя элемента управления. Наследует имя параметра."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:289
+#: rest-api/controllers/class-plugin-rest-api-settings.php:315
 msgid "The description of the control. Inherits the setting's description."
 msgstr "Описание элемента управления. Наследует описание параметра."
 
-#: rest-api/controllers/class-plugin-rest-api-settings.php:295
-msgid ""
-"A list of key/value pairs defining the display value of each setting option. "
-"The keys should match the options defined in the base setting for validation."
+#: rest-api/controllers/class-plugin-rest-api-settings.php:321
+msgid "A list of key/value pairs defining the display value of each setting option. The keys should match the options defined in the base setting for validation."
+msgstr "Список пар ключ/значение, определяющих отображаемое значение каждого параметра настройки. Ключи должны соответствовать параметрам, определенным в базовой настройке для проверки."
+
+#: rest-api/controllers/class-rest-api-account.php:125
+msgid "Недостаточно прав для управления подключением аккаунта."
 msgstr ""
-"Список пар ключ/значение, определяющих отображаемое значение каждого "
-"параметра настройки. Ключи должны соответствовать параметрам, определенным в "
-"базовой настройке для проверки."
+
+#: rest-api/controllers/class-rest-api-account.php:148
+msgid "Недостаточно прав для установки плагинов."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-extensions.php:127
+msgid "Недостаточно прав для просмотра каталога плагинов."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:162
+#: rest-api/controllers/class-rest-api-settings-page.php:241
+#: rest-api/controllers/class-rest-api-settings-page.php:341
+msgid "Неизвестная вкладка настроек."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:188
+#: assets/build/settings-page/index.js:1
+msgid "Проверьте правильность заполнения полей."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:204
+#: rest-api/controllers/class-rest-api-setup.php:160
+msgid "Внутренняя ошибка сервера. Попробуйте ещё раз."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:251
+msgid "Проверка подключения для этого раздела недоступна."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:268
+msgid "Неизвестный блок подключения."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:308
+msgid "Ошибка при проверке подключения."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:364
+msgid "Неизвестный инструмент."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-settings-page.php:381
+msgid "Ошибка при выполнении инструмента."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-setup.php:107
+msgid "Неизвестный шаг."
+msgstr ""
+
+#: rest-api/controllers/class-rest-api-setup.php:209
+msgid "Не удалось сохранить статус настройки. Попробуйте ещё раз."
+msgstr ""
+
+#: settings-api/abstract-class-settings.php:371
+#: settings-api/class-setting.php:506
+#: settings-api/class-setting.php:600
+msgid "Обязательное поле."
+msgstr ""
+
+#: settings-api/class-setting.php:615
+msgid "Неверное значение."
+msgstr ""
+
+#: settings-api/class-setting.php:624
+msgid "Введите корректный email."
+msgstr ""
+
+#: settings-api/class-setting.php:630
+msgid "Введите корректный URL (с http:// или https://)."
+msgstr ""
+
+#: settings-api/class-setting.php:636
+msgid "Введите корректный номер телефона."
+msgstr ""
+
+#: settings-api/class-setting.php:643
+msgid "Введите число."
+msgstr ""
+
+#: settings-api/class-setting.php:648
+#, php-format
+msgid "Значение не меньше %s."
+msgstr ""
+
+#: settings-api/class-setting.php:651
+#, php-format
+msgid "Значение не больше %s."
+msgstr ""
+
+#: settings-api/class-setting.php:658
+#, php-format
+msgid "Недопустимое значение для типа %s."
+msgstr ""
+
+#: settings-api/class-setting.php:684
+#, php-format
+msgid "Значение должно быть одним из: %s."
+msgstr ""
 
 #: settings-api/register-settings/class-register-settings-fields.php:71
 msgid "Admin note: Option attributes are not set for all select controls."
-msgstr ""
-"Примечание для администратора. Атрибуты параметров не установлены для всех "
-"выбранных элементов управления."
+msgstr "Примечание для администратора. Атрибуты параметров не установлены для всех выбранных элементов управления."
 
-#: utilities/class-woodev-background-job-handler.php:592
+#: settings-page/class-settings-page-registry.php:432
+#: settings-page/class-settings-page-registry.php:455
+msgid "Настройки Woodev"
+msgstr ""
+
+#: settings-page/class-settings-page-registry.php:433
+#: setup/class-setup-wizard.php:671
+msgid "Настройки"
+msgstr ""
+
+#: settings-page/class-settings-page-registry.php:458
+msgid "Для страницы настроек нужен JavaScript. Включите его и обновите страницу."
+msgstr ""
+
+#: setup/class-setup-wizard.php:412
+#: setup/class-setup-wizard.php:487
+msgid "Для мастера настройки нужен JavaScript. Включите его и обновите страницу."
+msgstr ""
+
+#: setup/class-setup-wizard.php:447
+msgid "У вас нет прав для доступа к этой странице."
+msgstr ""
+
+#. translators: %s step id
+#: setup/class-setup-wizard.php:564
+#, php-format
+msgid "Setup wizard step \"%s\" declares setting ids but none resolved — ensure the plugin returns a settings handler from get_settings_handler()."
+msgstr ""
+
+#: setup/class-setup-wizard.php:588
+#: assets/build/setup-wizard/index.js:2
+msgid "Готово"
+msgstr ""
+
+#: setup/class-setup-wizard.php:643
+msgid "Документация"
+msgstr ""
+
+#: setup/class-setup-wizard.php:644
+msgid "Тонкая настройка"
+msgstr ""
+
+#: setup/class-setup-wizard.php:645
+msgid "Подробнее о возможностях плагина."
+msgstr ""
+
+#: setup/class-setup-wizard.php:646
+msgid "Читать"
+msgstr ""
+
+#: setup/class-setup-wizard.php:680
+msgid "Оставить отзыв"
+msgstr ""
+
+#. translators: %s plugin name
+#: setup/class-setup-wizard.php:728
+#, php-format
+msgid "Завершите настройку %s."
+msgstr ""
+
+#: setup/class-setup-wizard.php:733
+msgid "Запустить мастер настройки"
+msgstr ""
+
+#: setup/class-setup-wizard.php:750
+msgid "Настройка"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:149
+msgid "Carrier order ID"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:150
+msgid "Tracking number"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:151
+msgid "Chosen pickup point"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:163
+#: shipping-method/admin/class-shipping-admin-order.php:168
+msgid "Shipment"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:321
+msgid "Export"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:326
+msgid "Track"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:389
+msgid "You do not have permission to manage this shipment."
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:104
+msgid "Carrier ID"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:105
+msgid "Name"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:106
+#: shipping-method/pickup/class-pickup-handler.php:1190
+msgid "Address"
+msgstr "Адрес"
+
+#: shipping-method/admin/class-warehouse-admin.php:107
+msgid "Latitude"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:108
+msgid "Longitude"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:109
+msgid "Contact name"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:110
+msgid "Contact phone"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:111
+msgid "Contact email"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:190
+#: shipping-method/admin/class-warehouse-admin.php:353
+#: shipping-method/admin/class-warehouse-admin.php:397
+msgid "You do not have permission to manage warehouses."
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:197
+msgid "Warehouses"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:222
+msgid "Stored warehouses"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:229
+msgid "Actions"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:235
+msgid "No warehouses stored yet."
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:277
+msgid "Delete"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:299
+msgid "Edit warehouse"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:300
+msgid "Add warehouse"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:326
+msgid "Save warehouse"
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:422
+msgid "Warehouse saved."
+msgstr ""
+
+#: shipping-method/admin/class-warehouse-admin.php:424
+msgid "Warehouse deleted."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:27
+msgid "Курьерская доставка"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:29
+msgid "Самовывоз"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:31
+msgid "Почтовая доставка"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:44
+msgid "This section contains configuration settings for this shipping method."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:65
+msgid "Идентификатор метода"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:66
+msgid "The WooCommerce shipping method identifier used in shipping zones."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:71
+msgid "Тип доставки"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:72
+msgid "How this method delivers orders (courier, pickup or postal)."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:77
+msgid "Окружение"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:78
+msgid "The WordPress environment type of this site."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:83
+msgid "Режим отладки"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:84
+msgid "Whether debug logging is enabled for this shipping method."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:86
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:104
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:114
+msgid "N/A"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:91
+msgid "Настроен"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:92
+msgid "Whether the method has the credentials/settings it needs to operate."
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:111
+msgid "API доступен"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-shipping-method-status.php:112
+msgid "Whether the carrier API integration is wired up for this plugin."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-config.php:517
+msgid "No results found. Try changing your search."
+msgstr "Поиск не дал результатов. Попробуйте изменить запрос."
+
+#: shipping-method/checkout/class-checkout-config.php:528
+msgid "Address not found — enter it manually."
+msgstr "Адрес не найден — введите вручную."
+
+#: shipping-method/checkout/class-checkout-config.php:540
+msgid "Could not save your choice — please try again."
+msgstr "Не удалось сохранить выбор — попробуйте ещё раз."
+
+#: shipping-method/checkout/class-checkout-config.php:553
+msgid "The suggestions service is unavailable. Try again later or enter the address manually."
+msgstr "Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную."
+
+#: shipping-method/checkout/class-checkout-config.php:567
+#: shipping-method/checkout/class-checkout-handler.php:1390
+msgid "Select…"
+msgstr "Выберите…"
+
+#: shipping-method/checkout/class-checkout-config.php:585
+msgid "Start typing a name"
+msgstr "Начните вводить название"
+
+#: shipping-method/checkout/class-checkout-config.php:593
+msgid "The selected locality is not in the list — pick it from the suggestions."
+msgstr "Выбранный населённый пункт не найден в списке — выберите его из подсказки."
+
+#: shipping-method/checkout/class-checkout-field-settings.php:124
+msgid "Поле «Город» было изменено сторонним кодом (снята обязательность / удалено); фреймворк восстановил его — оформление заказа зависит от этого поля."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:198
+msgid "Единый порядок и формат полей адреса"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:206
+msgid "Приводит порядок и формат полей адреса на чекауте к единому стандарту фреймворка вместо порядка, который задаёт тема или сторонний плагин."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:214
+msgid "Страна"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:216
+#: shipping-method/checkout/class-checkout-field-settings.php:236
+#: shipping-method/checkout/class-checkout-field-settings.php:256
+#: shipping-method/checkout/class-checkout-field-settings.php:276
+#: shipping-method/checkout/class-checkout-field-settings.php:331
+msgid "Показывать"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:217
+msgid "Скрывать"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:226
+msgid "Показывать ли поле «Страна» на чекауте. «Скрывать» доступно только когда магазин доставляет ровно в одну страну — тогда она подставляется автоматически и покупателю нечего выбирать."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:234
+msgid "Регион"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:237
+#: shipping-method/checkout/class-checkout-field-settings.php:278
+#: shipping-method/checkout/class-checkout-field-settings.php:332
+msgid "Удалять"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:246
+msgid "«Удалять» полностью убирает поле «Регион» из формы чекаута — его значение никогда не попадёт в заказ, а настройки «Тип поля Регион» ниже перестают действовать (поле нечем управлять). «Показывать» оставляет обычное поле региона."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:254
+msgid "Адрес"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:257
+#: shipping-method/checkout/class-checkout-field-settings.php:277
+msgid "Скрывать для методов ПВЗ"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:266
+msgid "«Скрывать для методов ПВЗ» прячет поле «Адрес» на чекауте, пока выбран способ доставки до пункта выдачи, но его значение всё равно может уйти в заказ (например, адрес, записанный из выбранного пункта, если это включено в разделе «Карта»). Работает только на классическом чекауте."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:274
+msgid "Индекс"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:287
+msgid "«Скрывать для методов ПВЗ» прячет поле «Индекс» при выборе пункта выдачи, но его значение всё ещё может уйти в заказ; «Удалять» убирает поле из формы совсем, и его значение никогда не попадёт в заказ. Первый вариант работает только на классическом чекауте, второй — на обоих."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:305
+msgid "Недоступно на блочном чекауте: эта опция работает через скрипт классической формы оформления."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:310
+msgid "Доступно, когда магазин доставляет ровно в одну страну (WooCommerce → Настройки → Общие → Доставка в)."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:337
+msgid "Значение «Скрывать для методов ПВЗ» недоступно на блочном чекауте."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-handler.php:1586
+msgid "This shipping method requires you to choose a pickup point."
+msgstr "Для этого способа доставки нужно выбрать пункт выдачи заказов."
+
+#: shipping-method/checkout/class-checkout-handler.php:1929
+msgid "You have not chosen a pickup point."
+msgstr "Вы не выбрали пункт выдачи заказов."
+
+#. translators: %s: checkout field label
+#: shipping-method/checkout/class-checkout-handler.php:1933
+#, php-format
+msgid "Please fill in the “%s” field."
+msgstr "Укажите значение поля «%s»."
+
+#. translators: %s: checkout field label
+#: shipping-method/checkout/class-checkout-handler.php:1990
+#, php-format
+msgid "The “%s” field is filled in incorrectly."
+msgstr "Поле «%s» заполнено некорректно."
+
+#: shipping-method/checkout/presets/class-pickup-field.php:80
+msgid "Pickup point"
+msgstr "Пункт выдачи"
+
+#. translators: %d - number of days
+#: shipping-method/class-shipping-helper.php:227
+#, php-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: %1$d - minimum days, %2$d - maximum days
+#: shipping-method/class-shipping-helper.php:231
+#, php-format
+msgid "%1$d-%2$d days"
+msgstr ""
+
+#: shipping-method/class-shipping-method-postal.php:43
+msgid "Postal delivery settings"
+msgstr ""
+
+#: shipping-method/class-shipping-method-postal.php:47
+msgid "Require postal code"
+msgstr ""
+
+#: shipping-method/class-shipping-method-postal.php:49
+msgid "Require postal code for rate calculation"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:106
+msgid "Shipping method title that the customer will see during checkout."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:116
+msgid "Shipping method description that the customer will see during checkout."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:119
+msgid "Enter description here"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:128
+msgid "Shipping class"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:133
+msgid "Select the shipping class that this method applies to."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:140
+msgid "Packing algorithm"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:145
+msgid "How cart items are combined into parcels before rate calculation."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:192
+msgid "Courier delivery"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:194
+msgid "Pickup delivery"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:196
+msgid "Postal delivery"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:213
+msgid "Delivery by courier to customer address."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:215
+msgid "Delivery to pickup point."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:217
+msgid "Delivery to postal office."
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:621
+msgid "Any shipping class"
+msgstr ""
+
+#: shipping-method/class-shipping-method.php:622
+msgid "No shipping class"
+msgstr ""
+
+#: shipping-method/class-shipping-plugin.php:535
+#, php-format
+msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout."
+msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: %1$s - plugin name, %2$s - list of accepted countries, %3$s - opening <a> tag, %4$s - closing </a> tag
+#: shipping-method/class-shipping-plugin.php:567
+#, php-format
+msgid "%1$s поддерживает доставку только в %2$s. %3$sНастройте%4$s WooCommerce для использования поддерживаемой страны."
+msgid_plural "%1$s поддерживает доставку в одну из следующих стран: %2$s. %3$sНастройте%4$s WooCommerce для использования одной из поддерживаемых стран."
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+
+#. translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag
+#: shipping-method/class-shipping-plugin.php:603
+#, php-format
+msgid "Внимание! %1$s работает в режиме отладки и записывает данные в лог. Если у вас нет проблем с доставкой, рекомендуем %2$sотключить режим отладки%3$s."
+msgstr ""
+
+#. translators: %1$s - shipping method title, %2$s - opening <a> tag, %3$s - closing </a> tag
+#: shipping-method/class-shipping-plugin.php:640
+#, php-format
+msgid "%1$s не настроен. Пожалуйста, %2$sзавершите настройку%3$s для начала работы."
+msgstr ""
+
+#. translators: %1$s - location provider name, %2$s - opening <a> tag, %3$s - closing </a> tag
+#: shipping-method/class-shipping-plugin.php:713
+#, php-format
+msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1252
+msgid "Текст с подсказками"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1253
+msgid "Предустановленный список"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1254
+msgid "Список с поиском"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1645
+msgid "Отключено"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1646
+msgid "Фиксированная локация"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:1647
+msgid "По IP-адресу покупателя"
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:2419
+msgid "Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит."
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:2429
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново."
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:2468
+msgid "Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:272
+msgid "Провайдер локаций"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:281
+msgid "От выбранного провайдера зависит, откуда на чекауте берутся подсказки городов и адресов, и какие типы полей ниже вообще доступны — не каждый провайдер умеет отдавать готовый список для локального выбора."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:319
+msgid "Тип поля Регион"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:336
+msgid "Как покупатель выбирает регион. «Текст с подсказками» — обычное поле, варианты появляются по мере ввода. «Предустановленный список» — весь список регионов загружается один раз, дальнейший поиск идёт в браузере без обращений к серверу. «Список с поиском» — раскрывающийся список, который запрашивает варианты у провайдера на каждый введённый символ."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:344
+msgid "Тип поля НП"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:360
+msgid "Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). «Предустановленный список» доступен здесь, только если для «Региона» тоже выбран «Предустановленный список»: этот режим обещает список, загруженный целиком, — а по всей стране такой список слишком велик, чтобы гарантированно загрузиться полностью, тогда как по одному региону это, как правило, так. Пока регион не выбран, список показывает пункты по всей стране, но не обязательно все; после выбора региона сужается до него и становится полным — поле при этом остаётся доступным, блокировки нет."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:385
+msgid "Разрешить использовать города не из списка"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:397
+msgid "Покупатель сможет оставить в поле населённого пункта значение, которого нет у службы доставки. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться. По умолчанию выключено."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:416
+msgid "Подсказки для адреса"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:424
+msgid "Показывать подсказки при вводе улицы и дома на чекауте. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:445
+msgid "Локация по умолчанию"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:454
+msgid "Что подставляется в поля региона и города до того, как покупатель начал сам вводить адрес. «Отключено» — ничего не подставляется. «Фиксированная локация» — всегда один и тот же город, выбранный вами ниже. «По IP-адресу покупателя» — город определяется по IP каждого покупателя; доступно только пока провайдер умеет геолоцировать."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:482
+msgid "Зафиксированная локация"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:495
+msgid "Город, который подставляется покупателю по умолчанию при политике «Фиксированная локация». Выбирается через поиск и сохраняется как готовая запись — вписывать его вручную не нужно."
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:526
+msgid "Зафиксированная локация требует повторного выбора"
+msgstr ""
+
+#: shipping-method/location/class-location-settings.php:682
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Зафиксированная локация выбрана для другого провайдера — выберите её заново или верните прежнего провайдера."
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:77
+msgid "Проверить актуальность популярных городов"
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:78
+msgid "Перепроверяет каждую запись списка популярных городов у выбранного провайдера через его API и обновляет или удаляет устаревшие."
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:79
+#: assets/build/license-page/index.js:1
+msgid "Проверить"
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:88
+msgid "Очистить список популярных городов"
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:89
+msgid "Удаляет весь список популярных городов выбранного провайдера. Список начнёт заполняться заново по мере поступления новых заказов."
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:90
+msgid "Очистить"
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:113
+#: shipping-method/location/class-popular-settlements-tools.php:154
+msgid "Выбранный провайдер недоступен или не поддерживает эту операцию."
+msgstr ""
+
+#. translators: 1: checked count, 2: unchanged count, 3: updated count, 4: deleted count, 5: failed count.
+#: shipping-method/location/class-popular-settlements-tools.php:121
+#, php-format
+msgid "Проверено: %1$d. Без изменений: %2$d. Обновлено: %3$d. Удалено: %4$d. Ошибок: %5$d."
+msgstr ""
+
+#. translators: %d: number of deleted rows.
+#: shipping-method/location/class-popular-settlements-tools.php:162
+#, php-format
+msgid "Удалено записей: %d."
+msgstr ""
+
+#: shipping-method/location/class-popular-settlements-tools.php:226
+msgid "Провайдер"
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-api-client.php:495
+msgid "DaData API: неверный токен или секретный ключ."
+msgstr ""
+
+#. translators: 1: HTTP response code, 2: response message
+#: shipping-method/location/providers/class-dadata-api-client.php:503
+#, php-format
+msgid "Ошибка DaData API (%1$d): %2$s"
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:215
+msgid "DaData"
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:318
+msgid "Токен API DaData"
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:323
+msgid "API-ключ сервиса DaData (Suggestions API) — без него подсказки городов и адресов на чекауте работать не будут."
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:324
+msgid "Получить токен можно в <a href=\"https://dadata.ru/profile/#info\" target=\"_blank\" rel=\"noopener noreferrer\">личном кабинете DaData</a>."
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:330
+msgid "Секретный ключ DaData (Clean API)"
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:332
+msgid "Секретный ключ платного тарифа DaData Clean API — нужен только для нормализации свободно введённых адресов; без него подсказки на чекауте продолжают работать как обычно."
+msgstr ""
+
+#: shipping-method/location/providers/class-dadata-provider.php:333
+msgid "Ключ доступен там же — в <a href=\"https://dadata.ru/profile/#info\" target=\"_blank\" rel=\"noopener noreferrer\">личном кабинете DaData</a>, на вкладке Clean API."
+msgstr ""
+
+#: shipping-method/map/class-embedded-map-provider.php:190
+msgid "Встроенный виджет перевозчика"
+msgstr ""
+
+#: shipping-method/map/class-yandex-map-provider.php:215
+msgid "Яндекс.Карты"
+msgstr ""
+
+#: shipping-method/map/class-yandex-map-provider.php:264
+msgid "Ключ API Яндекс.Карт"
+msgstr ""
+
+#: shipping-method/map/class-yandex-map-provider.php:285
+msgid "Если не указан, используется общий ключ поставщика плагина. Общий ключ расходует одну квоту на все магазины и может быть заблокирован. Рекомендуем указать собственный ключ."
+msgstr ""
+
+#. translators: %s: URL to instructions for obtaining a Yandex Maps API key.
+#: shipping-method/map/class-yandex-map-provider.php:298
+#, php-format
+msgid "Инструкция по получению ключа: %s."
+msgstr ""
+
+#. translators: 1: cart weight in kg, 2: point weight limit in kg
+#: shipping-method/pickup/class-constraint-checker.php:100
+#, php-format
+msgid "The order weight of %1$s kg exceeds the pickup point limit of %2$s kg."
+msgstr "Вес заказа %1$s кг превышает ограничение пункта выдачи — %2$s кг."
+
+#: shipping-method/pickup/class-constraint-checker.php:120
+msgid "This pickup point does not accept cash on delivery. Choose another point or another payment method."
+msgstr "В этом пункте выдачи недоступна оплата при получении. Выберите другой пункт или другой способ оплаты."
+
+#: shipping-method/pickup/class-pickup-handler.php:1137
+msgid "Choose a pickup point"
+msgstr "Выберите пункт выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1138
+msgid "Close"
+msgstr "Закрыть"
+
+#: shipping-method/pickup/class-pickup-handler.php:1139
+msgid "Choose this point"
+msgstr "Выбрать этот пункт"
+
+#: shipping-method/pickup/class-pickup-handler.php:1140
+msgid "Loading pickup points…"
+msgstr "Загрузка пунктов выдачи…"
+
+#: shipping-method/pickup/class-pickup-handler.php:1141
+msgid "Could not load pickup points. Please try again."
+msgstr "Не удалось загрузить пункты выдачи. Попробуйте ещё раз."
+
+#: shipping-method/pickup/class-pickup-handler.php:1145
+msgid "No results found."
+msgstr "Поиск не дал результатов."
+
+#: shipping-method/pickup/class-pickup-handler.php:1146
+msgid "This pickup point is not available for your order."
+msgstr "Этот пункт выдачи недоступен для вашего заказа."
+
+#: shipping-method/pickup/class-pickup-handler.php:1152
+msgid "Select a pickup point"
+msgstr "Выбрать пункт выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1153
+msgid "Try again"
+msgstr "Повторить"
+
+#: shipping-method/pickup/class-pickup-handler.php:1154
+msgid "The pickup point service is temporarily unavailable. Please try again later."
+msgstr "Сервис пунктов выдачи временно недоступен. Попробуйте ещё раз позже."
+
+#: shipping-method/pickup/class-pickup-handler.php:1158
+msgid "Too many requests. Please wait a moment and try again."
+msgstr "Слишком много запросов. Подождите немного и попробуйте снова."
+
+#: shipping-method/pickup/class-pickup-handler.php:1162
+msgid "This pickup point can no longer be found. Please choose another one."
+msgstr "Этот пункт выдачи больше не найден. Пожалуйста, выберите другой."
+
+#: shipping-method/pickup/class-pickup-handler.php:1170
+msgid "Pickup points in this area"
+msgstr "Пункты выдачи в этой области"
+
+#: shipping-method/pickup/class-pickup-handler.php:1174
+msgid "Show map"
+msgstr "Показать карту"
+
+#: shipping-method/pickup/class-pickup-handler.php:1175
+msgid "Getting there"
+msgstr "Как добраться"
+
+#: shipping-method/pickup/class-pickup-handler.php:1176
+msgid "Payment methods"
+msgstr "Способы оплаты"
+
+#: shipping-method/pickup/class-pickup-handler.php:1177
+msgid "Opening hours"
+msgstr "Часы работы"
+
+#: shipping-method/pickup/class-pickup-handler.php:1178
+msgid "Phone"
+msgstr "Телефон"
+
+#: shipping-method/pickup/class-pickup-handler.php:1179
+msgid "Maximum weight"
+msgstr "Максимальный вес"
+
+#: shipping-method/pickup/class-pickup-handler.php:1180
+msgid "All point types"
+msgstr "Все типы пунктов"
+
+#: shipping-method/pickup/class-pickup-handler.php:1181
+msgid "Could not load the pickup point details. You can still choose it."
+msgstr "Не удалось загрузить подробности о пункте выдачи. Вы всё ещё можете его выбрать."
+
+#: shipping-method/pickup/class-pickup-handler.php:1191
+msgid "Services"
+msgstr "Услуги"
+
+#: shipping-method/pickup/class-pickup-handler.php:1192
+msgid "Your address"
+msgstr "Ваш адрес"
+
+#. translators: %s: the searched address.
+#: shipping-method/pickup/class-pickup-handler.php:1194
+#, php-format
+msgid "Nearest to “%s”"
+msgstr "Ближайшие к «%s»"
+
+#: shipping-method/pickup/class-pickup-handler.php:1195
+msgid "Reset"
+msgstr "Сбросить"
+
+#: shipping-method/pickup/class-pickup-handler.php:1196
+msgid "There are no pickup points near this address."
+msgstr "Рядом с этим адресом пунктов выдачи нет."
+
+#: shipping-method/pickup/class-pickup-handler.php:1200
+msgid "Show the nearest"
+msgstr "Показать ближайший"
+
+#: shipping-method/pickup/class-pickup-handler.php:1201
+msgid "Continue to checkout"
+msgstr "Продолжить оформление заказа"
+
+#: shipping-method/pickup/class-pickup-handler.php:1202
+msgid "Zoom in to see pickup points"
+msgstr "Приблизьте карту, чтобы увидеть пункты выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1206
+msgid "Pickup points"
+msgstr "Пункты выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1207
+msgid "Addresses"
+msgstr "Адреса"
+
+#: shipping-method/pickup/class-pickup-handler.php:1208
+msgid "Point type"
+msgstr "Тип пунктов"
+
+#: shipping-method/pickup/class-pickup-handler.php:1209
+msgid "No pickup points in this area"
+msgstr "В этой области пунктов выдачи нет"
+
+#: shipping-method/pickup/class-pickup-handler.php:1216
+msgid "There are no pickup points in the selected locality"
+msgstr "В выбранном населённом пункте нет пунктов выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1222
+msgid "Choose a different pickup point"
+msgstr "Выбрать другой пункт выдачи"
+
+#: shipping-method/pickup/class-pickup-handler.php:1227
+msgid "Chosen pickup point:"
+msgstr "Выбранный пункт выдачи:"
+
+#: shipping-method/pickup/class-pickup-handler.php:1236
+msgid "in the order summary"
+msgstr "в сводке заказа"
+
+#: shipping-method/pickup/class-pickup-handler.php:1237
+msgid "next to the selected shipping method"
+msgstr "у выбранного способа доставки"
+
+#: shipping-method/pickup/class-pickup-handler.php:1242
+msgid "Zoom in"
+msgstr "Приблизить карту"
+
+#: shipping-method/pickup/class-pickup-handler.php:1243
+msgid "Zoom out"
+msgstr "Отдалить карту"
+
+#: shipping-method/pickup/class-pickup-handler.php:1249
+msgid "Checking…"
+msgstr "Проверяем…"
+
+#: shipping-method/pickup/class-pickup-handler.php:1256
+msgid "Checking availability…"
+msgstr "Проверяем доступность…"
+
+#: shipping-method/pickup/class-pickup-handler.php:1257
+msgid "Could not confirm your choice. Please try again."
+msgstr "Не удалось подтвердить выбор. Попробуйте ещё раз."
+
+#: shipping-method/pickup/class-pickup-handler.php:1272
+msgid "Could not confirm your choice. Please choose a point again."
+msgstr "Не удалось подтвердить выбор. Выберите пункт ещё раз."
+
+#: shipping-method/pickup/class-pickup-handler.php:1278
+msgid "This page is out of date. Refresh it and choose a pickup point again."
+msgstr "Страница устарела. Обновите её и выберите пункт выдачи заново."
+
+#: shipping-method/pickup/class-pickup-handler.php:1524
+msgid "Акцентный цвет карты"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-handler.php:1527
+msgid "Цвет кнопок, активных пунктов и кластеров на карте пунктов выдачи."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-handler.php:3016
+msgid "This pickup point is not available for your order. Please choose another pickup point."
+msgstr "Этот пункт выдачи недоступен для вашего заказа. Пожалуйста, выберите другой пункт выдачи."
+
+#: shipping-method/pickup/class-pickup-handler.php:3030
+msgid "The chosen pickup point is no longer available. Please choose a pickup point again."
+msgstr "Выбранный пункт выдачи больше недоступен. Пожалуйста, выберите пункт выдачи заново."
+
+#: shipping-method/pickup/class-pickup-handler.php:3045
+msgid "Could not verify the pickup point. Please try placing your order again in a few minutes."
+msgstr "Не удалось проверить пункт выдачи. Пожалуйста, повторите оформление заказа через несколько минут."
+
+#: shipping-method/pickup/class-pickup-map-settings.php:97
+msgid "Расположение кнопки выбора пункта выдачи"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:99
+msgid "В строке выбранного метода"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:100
+msgid "После списка методов"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:109
+msgid "«В строке выбранного метода» — кнопка стоит прямо рядом с названием способа доставки в списке. «После списка методов» — одна общая кнопка выносится под весь список способов доставки."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:117
+msgid "Заполнять адрес доставки адресом пункта выдачи"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:125
+msgid "Когда включено, после выбора пункта выдачи его адрес подставляется в поля доставки на чекауте вместо адреса, который до этого ввёл покупатель."
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:133
+msgid "Закрывать карту сразу после выбора пункта"
+msgstr ""
+
+#: shipping-method/pickup/class-pickup-map-settings.php:141
+msgid "Когда включено, карта пунктов выдачи закрывается сама сразу после выбора точки. Выключено — покупатель закрывает карту вручную."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:132
+#: shipping-method/rest-api/abstract-warehouses-controller.php:621
+msgid "Storage row id of the warehouse."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:182
+msgid "Sorry, you are not allowed to do that."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:335
+msgid "The warehouse could not be created."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:407
+msgid "The warehouse could not be deleted."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:581
+msgid "Invalid warehouse id."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:627
+msgid "Carrier-unique warehouse id."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:632
+msgid "Human-readable name."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:637
+msgid "Full one-line postal address."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:642
+msgid "Latitude in decimal degrees."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:647
+msgid "Longitude in decimal degrees."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:652
+msgid "Contact person name."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:657
+msgid "Contact phone."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:662
+msgid "Contact email."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:667
+msgid "Working-hours descriptors."
+msgstr ""
+
+#: shipping-method/rest-api/abstract-warehouses-controller.php:672
+msgid "Original carrier payload (escape hatch)."
+msgstr ""
+
+#: shipping-method/rest-api/class-field-source-controller.php:181
+msgid "Too many requests. Please slow down."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:590
+#: shipping-method/rest-api/class-pickup-controller.php:493
+msgid "Страница оформления заказа устарела. Обновите её и попробуйте снова."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:689
+msgid "У вас нет прав для выполнения этого действия."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:833
+msgid "Слишком короткий или слишком длинный поисковый запрос."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:843
+#: shipping-method/rest-api/class-location-controller.php:1099
+msgid "Некорректный уровень поиска."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:861
+msgid "Неизвестный провайдер."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:965
+#: shipping-method/rest-api/class-location-controller.php:1116
+msgid "Некорректный код страны."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1132
+msgid "Список населённых пунктов сейчас недоступен."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1197
+msgid "Сервис определения местоположения сейчас недоступен."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1228
+#: shipping-method/rest-api/class-location-controller.php:1238
+msgid "Некорректные данные о местоположении."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1457
+msgid "This information is out of date, please choose again"
+msgstr "Данные не актуальны, выберите заново"
+
+#: shipping-method/rest-api/class-location-controller.php:1590
+msgid "Определение локации по IP-адресу сейчас недоступно."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1604
+msgid "Не удалось определить IP-адрес."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1846
+msgid "Сервис определения местоположения временно недоступен. Попробуйте обновить страницу позже."
+msgstr ""
+
+#: shipping-method/rest-api/class-location-controller.php:1864
+#: shipping-method/rest-api/class-pickup-controller.php:1105
+msgid "Слишком много запросов. Пожалуйста, подождите немного."
+msgstr ""
+
+#: shipping-method/rest-api/class-pickup-controller.php:563
+msgid "Пункт выдачи не указан."
+msgstr ""
+
+#: shipping-method/rest-api/class-pickup-controller.php:578
+#: shipping-method/rest-api/class-pickup-controller.php:837
+msgid "Пункт выдачи не найден."
+msgstr ""
+
+#: shipping-method/rest-api/class-pickup-controller.php:1086
+msgid "Сервис пунктов выдачи временно недоступен. Попробуйте обновить страницу позже."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:98
+msgid "Enable debug mode/logging"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:100
+#, php-format
+msgid "All requests and responses will be record to %s."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:168
+msgctxt "Shipping plugin production or test environment modes"
+msgid "Environment"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:171
+msgctxt "Shipping plugin production or test environment modes"
+msgid "Select the plugin environment to use."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-integration.php:459
+#, php-format
+msgid "Heads up! Plugin %1$s is not fully configured and cannot calculate delivery. Please %2$sreview the documentation%3$s and configure the %4$sgeneral plugin settings%5$s."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:267
+msgid "Локация"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:273
+msgid "Управляет тем, откуда на чекауте берутся подсказки городов, регионов и адресов, и что подставляется покупателю по умолчанию, пока он ничего не ввёл."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:308
+msgid "Определяет, какие поля адреса показываются на чекауте, в каком порядке и как вводится регион с населённым пунктом — это не конструктор полей, а набор правил присутствия и типа для уже существующих полей."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:314
+msgid "Поля"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:322
+msgid "Карта"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:324
+msgid "Общие для всех способов доставки с пунктами выдачи настройки карты: где показывается кнопка выбора точки и что происходит с адресом и картой после того, как покупатель выбрал пункт."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:335
+msgid "Инструменты"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:337
+msgid "Действия над данными раздела «Доставка» — не настройки, а то, что можно выполнить прямо сейчас."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:404
+msgid "Доставка"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-tools-registry.php:236
+msgid "Инструмент не найден."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-tools-registry.php:244
+msgid "Инструмент недоступен."
+msgstr ""
+
+#: shipping-method/settings/class-shipping-tools-registry.php:262
+msgid "Внутренняя ошибка сервера."
+msgstr ""
+
+#: utilities/class-woodev-background-job-handler.php:645
 #, php-format
 msgid "Job data key \"%s\" not set"
 msgstr "Улюч данных задачи \"%s\" не установлен"
 
-#: utilities/class-woodev-background-job-handler.php:596
+#: utilities/class-woodev-background-job-handler.php:649
 #, php-format
 msgid "Job data key \"%s\" is not an array"
 msgstr "Улюч данных задачи \"%s\" не массив"
 
-#: utilities/class-woodev-background-job-handler.php:816
+#: utilities/class-woodev-background-job-handler.php:897
 #, php-format
 msgid "Every %d Minute"
 msgid_plural "Every %d Minutes"
@@ -2102,34 +3011,704 @@ msgstr[0] "Каждую %d минуту"
 msgstr[1] "Каждые %d минуты"
 msgstr[2] "Каждые %d минут"
 
-#: utilities/class-woodev-background-job-handler.php:961
+#: utilities/class-woodev-background-job-handler.php:1044
 msgid "Background Processing Test"
 msgstr "Тест фоновой обработки"
 
-#: utilities/class-woodev-background-job-handler.php:962
+#: utilities/class-woodev-background-job-handler.php:1045
 msgid "Run Test"
 msgstr "Запустить тест"
 
-#: utilities/class-woodev-background-job-handler.php:963
-msgid ""
-"This tool will test whether your server is capable of processing background "
-"jobs."
-msgstr ""
-"Этот инструмент проверит, способен ли ваш сервер обрабатывать фоновые "
-"задания."
+#: utilities/class-woodev-background-job-handler.php:1046
+msgid "This tool will test whether your server is capable of processing background jobs."
+msgstr "Этот инструмент проверит, способен ли ваш сервер обрабатывать фоновые задания."
 
-#: utilities/class-woodev-background-job-handler.php:979
+#: utilities/class-woodev-background-job-handler.php:1062
 msgid "Success! You should be able to process background jobs."
 msgstr "Успешно! У вас есть возможность обрабатывать фоновые задания."
 
-#: utilities/class-woodev-background-job-handler.php:982
-msgid ""
-"Could not connect. Please ask your hosting company to ensure your server has "
-"loopback connections enabled."
-msgstr ""
-"Не удалось подключиться. Пожалуйста уточните у поддержики вашего хостинг "
-"провайдера что на вашем сервере есть возможность LOOPBACK соединений."
+#: utilities/class-woodev-background-job-handler.php:1065
+msgid "Could not connect. Please ask your hosting company to ensure your server has loopback connections enabled."
+msgstr "Не удалось подключиться. Пожалуйста уточните у поддержики вашего хостинг провайдера что на вашем сервере есть возможность LOOPBACK соединений."
 
-#: utilities/class-woodev-job-batch-handler.php:200
+#: utilities/class-woodev-job-batch-handler.php:131
+#: utilities/class-woodev-job-batch-handler.php:170
+msgid "У вас нет прав для управления фоновыми задачами."
+msgstr ""
+
+#: utilities/class-woodev-job-batch-handler.php:221
 msgid "Invalid job ID"
 msgstr "Некорректный ID задачи"
+
+#: assets/build/license-page/index.js:1
+msgid "Не удалось сохранить настройку бета-версий."
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Лицензия не требуется"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Лицензия для этого плагина не требуется."
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Разрешает устанавливать бета-версии плагина"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Бета"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Изменение ключа"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Не активирована"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Неверный ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Лимит исчерпан"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Активна на другом сайте"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Истекла"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Истекает "
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Активна · до "
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Активна · Бессрочно"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Вы уверены, что хотите деактивировать лицензионный ключ?"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Лицензионный ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Укажите ваш ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Скрыть ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Показать ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Проверка…"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Активировать"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Продлить"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Деактивировать"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Изменить ключ"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Отмена"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "Для использования плагинов Woodev укажите и активируйте действующий лицензионный ключ. Ключ был отправлен на вашу электронную почту после покупки. Также его можно найти на "
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "странице вашего аккаунта"
+msgstr ""
+
+#: assets/build/license-page/index.js:1
+msgid "."
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Установлено"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Активировать в «Плагинах»"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Установка…"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Ошибка, повторить"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Установить"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Поиск плагинов"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Все"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+#, js-format
+msgid "Рейтинг: %s из 5"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Посмотреть"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:1
+msgid "Бесплатно"
+msgstr ""
+
+#. translators: %s is a formatted RUB amount.
+#: assets/build/plugins-page/index.js:4
+#, js-format
+msgid "Купить за %s ₽"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Установлен"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Куплено"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Ничего не найдено"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Подключите аккаунт woodev.ru, чтобы видеть купленные плагины."
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Подключить аккаунт"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Личный кабинет"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Отключение…"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Отключить аккаунт"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Личный кабинет на woodev.ru"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Загрузка покупок…"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Не удалось загрузить покупки, попробуйте позже."
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "У вас пока нет покупок на woodev.ru."
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Расширьте возможности магазина плагинами Woodev."
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Каталог"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Мои покупки"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+#: assets/build/settings-page/index.js:1
+msgid "Загрузка…"
+msgstr ""
+
+#: assets/build/plugins-page/index.js:4
+msgid "Не удалось загрузить каталог, попробуйте позже."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Некорректное сохранённое значение — выберите заново"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Выберите локацию…"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Начните вводить название…"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Введите минимум 2 символа для поиска"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Поиск…"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Не удалось загрузить подсказки. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Выберите…"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Полужирный"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Курсив"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Список"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Ссылка"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Адрес ссылки (URL):"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Ошибка проверки."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Проверить подключение"
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Ошибка выполнения."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Не удалось загрузить настройки."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Нет доступных настроек."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Настройки сохранены."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Не удалось сохранить настройки."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+msgid "Сохранить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Начать настройку"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Продолжить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Не сейчас"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Вернуться в Консоль WordPress"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:1
+msgid "Мастер настройки"
+msgstr ""
+
+#. translators: %s plugin name
+#: assets/build/setup-wizard/index.js:2
+#, js-format
+msgid "Плагин «%s» готов к работе!"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Плагин подключён и настроен. Все параметры можно изменить позже на странице плагина."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Вы также можете:"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Назад"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Пропустить"
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Проверьте правильность заполнения полей на этом шаге."
+msgstr ""
+
+#: assets/build/setup-wizard/index.js:2
+msgid "Что-то пошло не так. Попробуйте ещё раз."
+msgstr ""
+
+#~ (obsolete: no longer referenced anywhere under woodev/)
+
+#~ msgid "Thanks for installing %1$s! To get started, take a minute to %2$sread the documentation%3$s :)"
+#~ msgstr "Спасибо за установку плагина %1$s! Для начала, уделите минутку %2$sна изучение документации%3$s :)"
+
+#~ msgid "Thanks for installing %1$s! To get started, take a minute to complete these %2$squick and easy setup steps%3$s :)"
+#~ msgstr "Спасибо за установку плагина %1$s! Для начала, уделите минутку на выполнение нескольких %2$sбыстрых и простых шагов настройки%3$s :)"
+
+#~ msgid "Setup"
+#~ msgstr "Установка"
+
+#~ msgid "%s &rsaquo; Setup"
+#~ msgstr "%s &rsaquo; Установка"
+
+#~ msgid "Oops! An error occurred, please try again."
+#~ msgstr "Ой! Произошла ошибка. Пожалуйста, попробуйте еще раз."
+
+#~ msgctxt "enhanced select"
+#~ msgid "No matches found"
+#~ msgstr "Совпания не найдены"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Loading failed"
+#~ msgstr "Неудачная загрузка"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Please enter 1 or more characters"
+#~ msgstr "Пожалуйста введите минимум 1 символ"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Please enter %qty% or more characters"
+#~ msgstr "Введите %qty% или более символов"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Please delete 1 character"
+#~ msgstr "Пожалуйста удалите один символ"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Please delete %qty% characters"
+#~ msgstr "Пожалуйста удалите %qty% символов"
+
+#~ msgctxt "enhanced select"
+#~ msgid "You can only select 1 item"
+#~ msgstr "Вы можете выбрать только один элемент"
+
+#~ msgctxt "enhanced select"
+#~ msgid "You can only select %qty% items"
+#~ msgstr "Вы можете выбрать только %qty% символов"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Loading more results&hellip;"
+#~ msgstr "Загружаем ещё результаты&hellip;"
+
+#~ msgctxt "enhanced select"
+#~ msgid "Searching&hellip;"
+#~ msgstr "Идёт поиск&hellip;"
+
+#~ msgid "Ready!"
+#~ msgstr "Готово!"
+
+#~ msgid "Welcome to %s!"
+#~ msgstr "Добро пожаловать в %s!"
+
+#~ msgid "This quick setup wizard will help you configure the basic settings and get you started."
+#~ msgstr "Этот мастер быстрой настройки поможет вам настроить основные параметры и начать работу."
+
+#~ msgid "%s is ready!"
+#~ msgstr "%s готов к использованию!"
+
+#~ msgid "Next step"
+#~ msgstr "Следующий шаг"
+
+#~ msgid "You can also:"
+#~ msgstr "Вы так же можете:"
+
+#~ msgid "View the Docs"
+#~ msgstr "Посмотреть документацию"
+
+#~ msgid "See more setup options"
+#~ msgstr "Посмотреть дополнительные параметры настройки"
+
+#~ msgid "Learn more about customizing the plugin"
+#~ msgstr "Узнайте больше о настройке плагина"
+
+#~ msgid "Review Your Settings"
+#~ msgstr "Просмотреть свои настройки"
+
+#~ msgid "Leave a Review"
+#~ msgstr "Оставить отзыв"
+
+#~ msgid "Continue"
+#~ msgstr "Продолжить"
+
+#~ msgid "required"
+#~ msgstr "обязательно"
+
+#~ msgid "optional"
+#~ msgstr "опционально"
+
+#~ msgid "Choose an option"
+#~ msgstr "Выберите вариант"
+
+#~ msgid "Return to the WordPress Dashboard"
+#~ msgstr "Вернуться в админку Wordpress"
+
+#~ msgid "Not right now"
+#~ msgstr "Не сейчас"
+
+#~ msgid "Skip this step"
+#~ msgstr "Пропустить этот шаг"
+
+#~ msgid "To use Woodev plugins, please provide your valid license key and activate it below. License key was sending to your email after purchase. Also, you can get key on <a href=\"%s\" target=\"_blank\">your account page</a>."
+#~ msgstr "Чтобы использовать плагины Woodev, предоставьте действующий лицензионный ключ и активируйте его ниже. Лицензионный ключ был отправлен на вашу электронную почту после покупки. Так же, вы можете получить ключ на <a href=\"%s\" target=\"_blank\">странице вашего аккаунта</a>."
+
+#~ msgid "Save changes"
+#~ msgstr "Сохранить изменения"
+
+#~ msgid "Woodev all plugins"
+#~ msgstr "Все плагины Woodev"
+
+#~ msgid "Plugins"
+#~ msgstr "Плагины"
+
+#~ msgid "Woodev Plugins"
+#~ msgstr "Плагины Woodev"
+
+#~ msgid "Improve your Wordpress website with our extensions."
+#~ msgstr "Улучшайте свой Wordpress сайт с помощью наших расширений."
+
+#~ msgid "Search for extensions"
+#~ msgstr "Найти плагин"
+
+#~ msgid "All"
+#~ msgstr "Все категории"
+
+#~ msgid "Buy by %d RUB"
+#~ msgstr "Купить за %d руб"
+
+#~ msgid "Free download"
+#~ msgstr "Скачать бесплатно"
+
+#~ msgid "WooCommerce"
+#~ msgstr "WooCommerce"
+
+#~ msgid "plugin"
+#~ msgstr "плагин"
+
+#~ msgid "This appears to be an invalid license key for %s."
+#~ msgstr "Похоже, указан неверный лицензионный ключ для %s."
+
+#~ msgid "The key you entered belongs to a bundle, please use the product specific license key."
+#~ msgstr "Введенный вами ключ принадлежит набору плагинов, используйте лицензионный ключ для конкретного плагина."
+
+#~ msgid "Your license key has been deactivated."
+#~ msgstr "Ваш лицензионный ключ деактивирован."
+
+#~ msgid "Unlicensed: currently not receiving updates."
+#~ msgstr "Нелицензированный: в настоящее время плагин не будет работать."
+
+#~ msgid "License key never expires."
+#~ msgstr "Срок действия лицензионного ключа никогда не истекает (пожизненная лицензия)."
+
+#~ msgid "Your license key expires soon! It expires on %1$s. %2$sRenew your key%3$s before it expires."
+#~ msgstr "Срок действия вашего лицензионного ключа скоро истечет! Срок его действия истекает %1$s. %2$sОбновите ключ%3$s до истечения срока его действия."
+
+#~ msgid "Your license key expires on %s."
+#~ msgstr "Срок действия вашего лицензионного ключа истекает %s."
+
+#~ msgid "Your license key expired on %1$s. Please %2$srenew your license key%3$s."
+#~ msgstr "Срок действия вашего лицензионного ключа истек %1$s. Пожалуйста, %2$sобновите лицензионный ключ%3$s."
+
+#~ msgid "Your license key has expired. Please %1$srenew your license key%2$s."
+#~ msgstr "Срок действия вашего лицензионного ключа истек. Пожалуйста, %1$sобновите лицензионный ключ%2$s."
+
+#~ msgid "Your license key has been disabled. Please %1$scontact support%2$s for more information."
+#~ msgstr "Ваш лицензионный ключ отключен. Пожалуйста, %1$sсвяжитесь со службой поддержки%2$s для получения дополнительной информации."
+
+#~ msgid "Your license key has reached its activation limit. %1$sView possible upgrades%2$s now."
+#~ msgstr "Ваш лицензионный ключ достиг предела активации. %1$sПросмотрите возможные обновления%2$s прямо сейчас."
+
+#~ msgid "Your %1$s license key is not active for this URL. Please %2$svisit your account page%3$s to manage your license keys."
+#~ msgstr "Ваш лицензионный ключ %1$s не активен для этого сайта. Пожалуйста, %2$sперейдите на страницу своей учетной записи%3$s, чтобы управлять своими лицензионными ключами."
+
+#~ msgid "Invalid license. Please %1$svisit your account page%2$s and verify it."
+#~ msgstr "Недействительная лицензия. Пожалуйста, %1$sперейдите на страницу своей учетной записи%2$s и подтвердите ее."
+
+#~ msgid "Enter your valid license key"
+#~ msgstr "Введите действующий лицензионный ключ"
+
+#~ msgid "Before change your license key you have to deactivate current license"
+#~ msgstr "Прежде чем изменить лицензионный ключ, вам необходимо деактивировать текущую лицензию."
+
+#~ msgid "Verify"
+#~ msgstr "Проверить"
+
+#~ msgid "To receive updates and support, please enter your valid license key for <strong>%s</strong>"
+#~ msgstr "Чтобы получать обновления и поддержку, введите действительный лицензионный ключ для <strong>%s</strong>."
+
+#~ msgid "Deactivate"
+#~ msgstr "Деактивировать"
+
+#~ msgid "Allow to upload a beta version"
+#~ msgstr "Разрешить загрузку бета версий плагина."
+
+#~ msgid "License does not exist"
+#~ msgstr "Лицензия не существует"
+
+#~ msgid "Site URL is not provided"
+#~ msgstr "URL сайта не указан"
+
+#~ msgid "Attempting to activate a bundles parent license"
+#~ msgstr "Попытка активировать родительскую лицензию для группы плагинов"
+
+#~ msgid "License key revoked"
+#~ msgstr "Лицензионный ключ отозван"
+
+#~ msgid "No activations left"
+#~ msgstr "Активаций не осталось"
+
+#~ msgid "License has expired"
+#~ msgstr "Срок действия лицензии истек"
+
+#~ msgid "License is not valid for this plugin"
+#~ msgstr "Лицензия недействительна для этого плагина."
+
+#~ msgid "Invalid plugin ID"
+#~ msgstr "Неверный ID плагина"
+
+#~ msgid "Site is not active for this license"
+#~ msgstr "Сайт не активен для этой лицензии"
+
+#~ msgid "License key does not match"
+#~ msgstr "Лицензионный ключ не соответствует"
+
+#~ msgid "License is valid"
+#~ msgstr "Лицензия действительна"
+
+#~ msgid "Unknown license status"
+#~ msgstr "Неизвестный статус лицензии"
+
+#~ msgid "Nonce verification failed"
+#~ msgstr "Проверка nonce не удалась"
+
+#~ msgid "Account Type"
+#~ msgstr "Тип аккаунта"
+
+#~ msgid "Checking"
+#~ msgstr "Проверка"
+
+#~ msgid "Savings"
+#~ msgstr "Сохранение"
+
+#~ msgid "Routing Number is missing"
+#~ msgstr "Отсутствует номер маршрутизации."
+
+#~ msgid "Routing Number is invalid (only digits are allowed)"
+#~ msgstr "Номер маршрутизации недействителен (допускаются только цифры)."
+
+#~ msgid "Routing number is invalid (must be 9 digits)"
+#~ msgstr "Номер маршрутизации недействителен (должен состоять из 9 цифр)."
+
+#~ msgid "Account Number is missing"
+#~ msgstr "Номер счета отсутствует."
+
+#~ msgid "Account Number is invalid (only digits are allowed)"
+#~ msgstr "Номер счета недействителен (допускаются только цифры)."
+
+#~ msgid "Account number is invalid (must be between 5 and 17 digits)"
+#~ msgstr "Номер счета недействителен (должен содержать от 5 до 17 цифр)."
+
+#~ msgid "Drivers license number is invalid"
+#~ msgstr "Номер водительского удостоверения недействителен"
+
+#~ msgid "Check number %s"
+#~ msgstr "Проверочный номер %s"
+
+#~ msgid "Checking Account"
+#~ msgstr "Проверка аккаунта"
+
+#~ msgid "Savings Account"
+#~ msgstr "Сохранение аккаунта"
+
+#~ msgid "Where do I find this?"
+#~ msgstr "Где мне это найти?"
+
+#~ msgid "Unique identifier for the resource."
+#~ msgstr "Уникальный идентификатор ресурса."

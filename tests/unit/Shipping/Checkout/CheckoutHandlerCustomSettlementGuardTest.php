@@ -95,7 +95,7 @@ final class Checkout_Handler_Custom_Settlement_Fake_Location_Service extends Loc
  */
 class CheckoutHandlerCustomSettlementGuardTest extends TestCase {
 
-	private const EXPECTED_MESSAGE = 'Выбранный населённый пункт не найден в списке — выберите его из подсказки.';
+	private const EXPECTED_MESSAGE = 'The selected locality is not in the list — pick it from the suggestions.';
 
 	protected function setUp(): void {
 		parent::setUp();

@@ -515,7 +515,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// A silent empty panel and a slow network are indistinguishable to the
 					// customer, so this one case is worth a sentence (operator, s70).
 					'noResults'          => __(
-						'Поиск не дал результатов. Попробуйте изменить запрос.',
+						'No results found. Try changing your search.',
 						'woodev-plugin-framework'
 					),
 
@@ -526,7 +526,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// true: a location field is a plain text input with the typeahead layered
 					// on top, so a hand-typed address was always accepted.
 					'noResultsAddress'   => __(
-						'Адрес не найден — введите вручную.',
+						'Address not found — enter it manually.',
 						'woodev-plugin-framework'
 					),
 
@@ -538,7 +538,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// otherwise discard. `location-cascade.js`'s `showNotPersistedNotice()` is
 					// the consumer this string exists for.
 					'notPersisted'       => __(
-						'Не удалось сохранить выбор — попробуйте ещё раз.',
+						'Could not save your choice — please try again.',
 						'woodev-plugin-framework'
 					),
 
@@ -551,7 +551,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// the two ends of this same contract — a REST 502 from `/location/suggest`
 					// is what actually triggers this string.
 					'unavailable'        => __(
-						'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
+						'The suggestions service is unavailable. Try again later or enter the address manually.',
 						'woodev-plugin-framework'
 					),
 
@@ -564,7 +564,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// Checkout_Handler::placeholder_label()} (shares its translation across a PO
 					// merge) — that method lives on an unrelated class this one has no reference
 					// to, so the string is repeated here rather than cross-called.
-					'placeholder'        => __( 'Выберите…', 'woodev-plugin-framework' ),
+					'placeholder'        => __( 'Select…', 'woodev-plugin-framework' ),
 
 					// Issue #540: the placeholder for select2's own SEARCH BOX — a different
 					// string, and a different surface, from 'placeholder' above, which names the
@@ -582,7 +582,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// that means "start typing a name" — checked key by key before adding this.
 					// The rule's own escape hatch is this file: a string with no ready-made
 					// source belongs in `Checkout_Config`, never hardcoded in JS.
-					'searchPlaceholder'  => __( 'Начните вводить название', 'woodev-plugin-framework' ),
+					'searchPlaceholder'  => __( 'Start typing a name', 'woodev-plugin-framework' ),
 
 					// Issue #531: the server-side backstop for #528's custom-settlement opt-in
 					// (`Checkout_Handler::guard_custom_settlement()`) — shown when the option is
@@ -591,7 +591,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					// key here or in `wc_country_select_params` means "the value you typed is not
 					// in the list", so this is a genuinely new msgid, not a reused one.
 					'invalidSettlement'  => __(
-						'Выбранный населённый пункт не найден в списке — выберите его из подсказки.',
+						'The selected locality is not in the list — pick it from the suggestions.',
 						'woodev-plugin-framework'
 					),
 				]

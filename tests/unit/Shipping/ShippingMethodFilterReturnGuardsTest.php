@@ -624,8 +624,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			$config = $this->pickup_handler()->get_js_config();
 
-			$this->assertSame( 'Выберите пункт выдачи', $config['i18n']['modalTitle'] );
-			$this->assertSame( 'Закрыть', $config['i18n']['close'] );
+			$this->assertSame( 'Choose a pickup point', $config['i18n']['modalTitle'] );
+			$this->assertSame( 'Close', $config['i18n']['close'] );
 		}
 
 		/**
