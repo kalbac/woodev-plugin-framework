@@ -1290,12 +1290,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			 * beside this one, the assembled string map IS the override surface: a plugin
 			 * overrides any key it disagrees with (spec V-5). One string system, not two.
 			 *
-			 * @since 2.0.2
+			 * Every value is coerced to a string — `array_map( 'strval', ... )` — before it
+			 * reaches the customer-facing map config, and a non-array return is discarded
+			 * entirely in favour of the framework's own strings above. NOT a `(array)`
+			 * cast: that turns a scalar return into a one-element list keyed `0`, so the
+			 * map would render with every label it asks for missing — a broken panel for
+			 * the customer, and nothing in the log. The mirrored `woodev_location_i18n`
+			 * filter ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::location_i18n_strings()})
+			 * still has the `(array)` shape and the same defect.
+			 *
+			 * @since 2.0.2 introduced; also since 2.0.2, a non-array return is discarded
+			 *              and every value is coerced to a string instead of being handed
+			 *              to the customer-facing map as-is.
 			 *
 			 * @param array<string, string> $strings   The framework's default strings.
 			 * @param string                $plugin_id The plugin the map belongs to.
 			 */
-			$strings = apply_filters( 'woodev_pickup_map_i18n', $strings, $this->plugin_id );
+			$filtered_strings = apply_filters( 'woodev_pickup_map_i18n', $strings, $this->plugin_id );
+
+			$strings = is_array( $filtered_strings ) ? array_map( 'strval', $filtered_strings ) : $strings;
 
 			/**
 			 * Filters whether the pickup map offers an address search (Task 18, spec V-6).

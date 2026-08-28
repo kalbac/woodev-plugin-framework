@@ -107,7 +107,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
 
 			$this->form_fields = array_merge( $this->form_fields, $this->get_method_form_fields() );
 
-			$this->form_fields = apply_filters( 'woodev_shipping_plugin_settings_' . $this->get_id() . '_form_fields', $this->form_fields, $this );
+			/**
+			 * Shipping Plugin Settings Form Fields Filter.
+			 *
+			 * Allow actors to modify the settings screen form fields for this
+			 * plugin's shared integration.
+			 *
+			 * A return that is not an array is discarded and the fields built
+			 * above are kept instead — WooCommerce hands `$form_fields` to
+			 * `array_map()` when rendering the settings screen, and a non-array
+			 * value there is a fatal `TypeError`.
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the pre-filter fields
+			 *              are kept instead of trusting the return's type.
+			 *
+			 * @param array $form_fields the settings form fields built above
+			 * @param Shipping_Integration $integration integration instance
+			 */
+			$filtered_form_fields = apply_filters( 'woodev_shipping_plugin_settings_' . $this->get_id() . '_form_fields', $this->form_fields, $this );
+
+			if ( is_array( $filtered_form_fields ) ) {
+				$this->form_fields = $filtered_form_fields;
+			}
 		}
 
 		/**
