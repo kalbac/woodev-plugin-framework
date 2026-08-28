@@ -2522,6 +2522,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			 *
 			 * @since 2.0.2
 			 *
+			 * A return that is neither `null` nor a {@see Location_Provider} is
+			 * discarded and the pre-filter `$provider` is kept: this method's
+			 * `?Location_Provider` return type makes anything else a fatal
+			 * `TypeError`, and it is reached while the checkout is being rendered.
+			 * `null` IS accepted — it is a documented answer here ("nothing is
+			 * registered for this id"), so the guard must not turn a deliberate
+			 * `null` back into a provider.
+			 *
+			 * @since 2.0.2 A return that is neither `null` nor a Location_Provider
+			 *              is discarded; the pre-filter provider is kept.
+			 *
 			 * @param Location_Provider|null $provider  The resolved provider, or null
 			 *                                           when the (possibly-fallen-back-to)
 			 *                                           id has nothing registered.
@@ -2529,7 +2540,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			 *                                           the default-id fallback above
 			 *                                           was applied).
 			 */
-			return apply_filters( self::FILTER_ACTIVE_PROVIDER, $provider, $active_id );
+			$filtered = apply_filters( self::FILTER_ACTIVE_PROVIDER, $provider, $active_id );
+
+			return null === $filtered || $filtered instanceof Location_Provider ? $filtered : $provider;
 		}
 	}
 
