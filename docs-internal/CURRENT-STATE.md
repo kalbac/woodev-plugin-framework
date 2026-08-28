@@ -60,7 +60,7 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s102:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
+**Open cards after s102:** **#567** (msgid
 language — the operator's four rules are on the card, and so is s100's measurement showing the
 `.pot` has been dead since 07.12.2023), **#353**, the locations leftovers
 **#356/#358/#361/#410**, **#589**, **#621** (item 1 measured in s102, the FIX is untouched),
@@ -243,7 +243,8 @@ oversight.
 2. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
    про страно-слепой `provider_for_level()`, потом включать правило регистрации.
 3. **Остатки слоя локаций:** #356, #358, #361, #410.
-4. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+4. ~~**#514**~~ — **закрыт в s102**: m4 (контраст) и m5 (ширина селектора) починены, оператор
+   подтвердил m5 на риге до правки. Прежнее «решён в s97» было ложным — сверено с кодом.
    m6 и T3 закрыты в s98 (#563).
 5. **#627** — тот же `(array)`-каст в `Checkout_Config::location_i18n_strings()`, что отвергли в
    карте ПВЗ. Дефолты инлайном в вызове `apply_filters()` — сперва вынести их в `$defaults`.
