@@ -1236,7 +1236,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 				return null;
 			}
 
-			$current_provider = $this->provider_for_level( $stored->level() );
+			// The record's OWN country, not the country-blind walk (#353). Every record
+			// carries a required, non-empty ISO-3166 alpha-2 `country`
+			// ({@see Location_Record::from_array()}), and the sibling path over the same
+			// kind of object — {@see self::is_customer_record_stale()} — has always passed
+			// it. Walking blind here asked "does anyone serve this LEVEL anywhere", which
+			// can answer with a provider that does not cover the record's country at all;
+			// the fixed default was then measured as current against a provider that could
+			// never resolve it.
+			$current_provider = $this->provider_for_level( $stored->level(), $stored->country() );
 
 			if ( null !== $current_provider && $current_provider->get_id() === $stored->provider_id() ) {
 				return $stored;
