@@ -22,7 +22,7 @@ log, which reads as a red build) live on card **#583** and in gotcha
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s102), sodium enabled:**
-`composer check` **3169** / 7785 / **1 skipped**, and the same three numbers under
+`composer check` **3178** / 7798 / **1 skipped**, and the same three numbers under
 `--order-by=reverse`. Integration **126** / 494. jest **1548** in 21 suites.
 
 ⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless.** Same tree, one
@@ -64,7 +64,7 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 language — the operator's four rules are on the card, and so is s100's measurement showing the
 `.pot` has been dead since 07.12.2023), **#353**, the locations leftovers
 **#356/#358/#361/#410**, **#589**, **#621** (item 1 measured in s102, the FIX is untouched),
-**#613** (only the operator-gated site left, see below), **#627**, **#437** (needs a
+**#627**, **#639**, **#437** (needs a
 scope conversation — do NOT take autonomously), and the standing list #474, #483, #511, #515,
 #331, #332, #374. Deferred to release: #285, #247.
 
@@ -90,7 +90,7 @@ author → kept (an order note, nine admin-facing browser responses, `script-han
 redacts unconditionally (**#594**); this rule is about RESPONSE and NOTE boundaries only. His
 reasoning, verbatim, and the per-site table: cards **#608** / **#610**, `sessions/s101.md`.
 
-**Closed in s102:** **#606**, **#609**, **#632**. Closed in s101: **#594**, **#598**, **#599**, **#605**,
+**Closed in s102:** **#606**, **#609**, **#613**, **#514**, **#632**. Closed in s101: **#594**, **#598**, **#599**, **#605**,
 **#610**, and **#608** (by him, `not planned`). Closed in s100: **#559**, **#560**,
 **#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
 was decided, is the handoff's carry-over section — not this file.
