@@ -301,7 +301,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 | Area | Rule |
 |------|------|
 | Documentation language | English (for AI agents) — see `docs-internal/DOCS-SCHEMA.md` |
-| User-facing strings | Russian (via WordPress i18n, text domain: `woodev-plugin-framework`) |
+| Translatable strings | **Four rules, by WHO READS the string** (operator, 29.08.2026, #567). **Storefront → the msgid is ENGLISH** and the Russian arrives from the catalogue: a shop's frontend may run an English locale even though its admin never does. **Admin → Russian msgid is fine and stays** (do not spend effort anglicising it); an admin string that IS in English must be translated in the catalogue. **Logs, exception texts and anything else that never reaches a screen → either language, and it need not be wrapped in `__()`/`_e()` at all — a plain string is correct.** Text domain, wherever a wrapper IS used: `woodev-plugin-framework` (pinned by `TextDomainConsistencyTest`). Classify by the RENDER PATH, never by the file's directory — gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`. |
 | PHP style | WordPress Coding Standards (tabs, snake_case, PHPDoc) |
 | Classes | `Snake_Case`. **New code is authored directly in namespaces** (`Woodev\Framework\*` PSR-4, e.g. `Woodev\Framework\Shipping\Shipping_Plugin`) — do NOT write new code under the legacy global `Woodev_*` shape. Legacy `Woodev_*` exists only in not-yet-migrated files. |
 | Methods/variables/hooks | `snake_case` |
