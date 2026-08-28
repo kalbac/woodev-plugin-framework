@@ -421,9 +421,12 @@ final class DadataApiClientTest extends TestCase {
 	 * `function_exists( 'get_locale' )` — and whether that function EXISTS depends on
 	 * whether some earlier test class stubbed it, because Brain Monkey defines a
 	 * stubbed function process-wide and PHP cannot un-define it. That made this suite
-	 * green by ALPHABETICAL ACCIDENT: `tests/unit/handlers/` sorts last only because
-	 * it is lowercase, and `--order-by=reverse` turned 55 tests in this layer red
-	 * (issue #606). Pinning the seam removes the dependency on traversal order.
+	 * green by ALPHABETICAL ACCIDENT: the handler tests then lived in a lowercase
+	 * `tests/unit/handlers/`, which sorted last, and `--order-by=reverse` turned 55
+	 * tests in this layer red (issue #606). That directory is `tests/unit/Handlers/`
+	 * now and the accident is gone, but the dependency it hid would come straight
+	 * back the moment any other class stubs `get_locale` — pinning the seam is what
+	 * removes it, not the rename.
 	 *
 	 * @param string $token
 	 * @param string $secret

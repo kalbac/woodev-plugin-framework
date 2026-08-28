@@ -173,9 +173,10 @@ jobs:
         run: composer test:unit
 
       # Traversal-order gate (#606). Until s102 this suite was green by
-      # ALPHABETICAL ACCIDENT: `tests/unit/handlers/` was traversed last only
-      # because the directory name was lowercase, and `--order-by=reverse` gave
-      # 55 failures in the location layer. Mechanism: gotcha
+      # ALPHABETICAL ACCIDENT: the handler tests lived in a lowercase
+      # `tests/unit/handlers/` (now `tests/unit/Handlers/`) and were traversed
+      # last because of it, and `--order-by=reverse` gave 55 failures in the
+      # location layer. Mechanism: gotcha
       # `brain-monkey-function-pollution` — Brain Monkey DEFINES a stubbed
       # function process-wide, so code branching on `function_exists()` behaves
       # differently depending on which test class ran first.

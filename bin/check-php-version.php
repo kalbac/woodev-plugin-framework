@@ -16,10 +16,13 @@ require_once __DIR__ . '/php-version-matrix.php';
 
 $root = dirname( __DIR__ );
 
+$workflow = $root . '/.github/workflows/ci.yml';
+
 $notice = woodev_php_version_notice(
 	PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
-	woodev_ci_php_matrix( $root . '/.github/workflows/ci.yml' ),
-	woodev_composer_platform_php( $root . '/composer.json' )
+	woodev_ci_php_matrix( $workflow ),
+	woodev_composer_platform_php( $root . '/composer.json' ),
+	woodev_ci_php_unparsed_matrices( $workflow )
 );
 
 if ( '' !== $notice ) {
