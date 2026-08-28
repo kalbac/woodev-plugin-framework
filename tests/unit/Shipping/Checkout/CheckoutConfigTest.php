@@ -1494,6 +1494,85 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertSame( 'Ничего нет', $config['location']['i18n']['noResults'] );
 	}
 
+	/* ------------------------------------------------------------------ *
+	 * #627 — `woodev_location_i18n` is NOT an `(array)` cast.
+	 *
+	 * The mirror filter `woodev_pickup_map_i18n` was fixed in s102; this one
+	 * could not be fixed with it, because its defaults were written inline
+	 * into the `apply_filters()` call, leaving nothing to fall back TO.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * A scalar return used to become `[ 0 => 'boom' ]` — a map with none of the keys
+	 * anyone reads, so every label in the locality typeahead rendered blank and nothing
+	 * was logged. The assertion is that the framework's OWN strings survive, not merely
+	 * that nothing fatals.
+	 *
+	 * @return void
+	 */
+	public function test_location_i18n_falls_back_to_the_defaults_when_the_filter_returns_a_non_array(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_i18n' === $hook ? 'not an array' : $value;
+			}
+		);
+
+		$strings = Checkout_Config::location_i18n_strings();
+
+		$this->assertArrayNotHasKey( 0, $strings, 'A scalar must be discarded, never cast to a list.' );
+
+		foreach ( [ 'noResults', 'noResultsAddress', 'notPersisted', 'unavailable', 'placeholder', 'searchPlaceholder', 'invalidSettlement' ] as $key ) {
+			$this->assertArrayHasKey( $key, $strings, $key . ' must survive a hostile filter return.' );
+			$this->assertNotSame( '', $strings[ $key ] );
+		}
+	}
+
+	/**
+	 * The control: a real array IS honoured, and every value is coerced to a string.
+	 *
+	 * @return void
+	 */
+	public function test_location_i18n_is_honoured_and_coerces_values_to_strings(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_i18n' === $hook
+					? [
+						'noResults' => 'Custom empty',
+						'unavailable' => 123,
+					]
+					: $value;
+			}
+		);
+
+		$strings = Checkout_Config::location_i18n_strings();
+
+		$this->assertSame( 'Custom empty', $strings['noResults'] );
+		$this->assertSame( '123', $strings['unavailable'] );
+	}
+
+	/**
+	 * A PARTIAL array is taken whole — the framework does NOT merge the missing keys
+	 * back in, and the mirror filter behaves the same way. That is deliberate and is
+	 * now written in the filter's docblock: a dropped key renders BLANK, which is loud,
+	 * where a silent substitution would hide a PHP/JS key mismatch.
+	 *
+	 * Without this test the fallback above could be implemented as a merge and still
+	 * pass, which would be a different contract than the one documented.
+	 *
+	 * @return void
+	 */
+	public function test_location_i18n_does_not_merge_a_partial_array_with_the_defaults(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value ) {
+				return 'woodev_location_i18n' === $hook ? [ 'noResults' => 'Only this one' ] : $value;
+			}
+		);
+
+		$strings = Checkout_Config::location_i18n_strings();
+
+		$this->assertSame( [ 'noResults' => 'Only this one' ], $strings );
+	}
+
 	public function test_location_block_carries_the_not_persisted_message(): void {
 		// #295 finding 1 (Task 13): the client-side consumer for an honest
 		// `persisted: false` /select response reads this string — see
