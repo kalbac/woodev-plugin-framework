@@ -124,6 +124,50 @@ a SECOND `dispatch --inject` for a follow-up task (here, a re-critic on the fix 
 critic's finding). No new terminal, no re-launch, no ESC needed the second time — just create the
 task, dispatch it, and read the buffer back to confirm it started working.
 
+## s102: on CLI 0.150.1 the dialog did not appear, and `--inject` submitted on its own
+
+A launch smoke-tested on **codex-cli 0.150.1** (28.08.2026, right after the subscription was
+renewed) differed from the recipe above in two ways. **One observation each — the four-step recipe
+STANDS; these are not licence to skip a step.**
+
+1. **No update dialog at all.** `terminal wait --for tui-idle` returned `satisfied: true` and the
+   screen showed `› Ask Codex to do anything` — the composer, with no `Update available` frame. The
+   binary was current, which is the only condition under which that is expected. The screen-grep
+   guard from s86/s93 cost nothing and was still run before every send; keep running it, because
+   `satisfied: true` is still not evidence (s93) and the dialog can still be raised by a later
+   update poll.
+2. **Step 4 was not needed.** `orca orchestration dispatch --task … --to $H --inject` delivered AND
+   submitted the brief by itself: the very next read showed `Working (6s • esc to interrupt)`, with
+   no `[Pasted Content N chars]` sitting in the composer. The follow-up `terminal send --text ""
+   --enter` was never sent.
+
+Read the buffer back either way. If it shows `Working …` you are done; if it shows
+`[Pasted Content …]`, step 4 still applies. What has NOT changed is the rule that makes step 4
+dangerous: **never send a bare Enter to a frame you have not just looked at.**
+
+### What the same smoke test proved about the shell
+
+The historical reason Codex must run in an Orca terminal at all (`codex-shell-sandbox-broken-windows`)
+is that a dead shell makes it FABRICATE file contents rather than report failure. Retested with a
+canary — three facts it could only get by really reading and really executing:
+
+| Asked | Answered | Truth |
+|---|---|---|
+| third function in `bin/php-version-matrix.php` | `woodev_composer_platform_php` | ✅ |
+| that function's `@since` | `2.0.2` | ✅ |
+| `git log --oneline -1` | `39a910 docs(s102): …` | ⚠ really **b39a910** |
+| a real `phpunit --filter` run | `OK (7 tests, 13 assertions)` | ✅ |
+
+The shell is genuinely live — it ran `Get-Content`, `git log` and PHPUnit for real. But **it dropped
+the leading character of the commit hash.** Not fabrication (the subject matched verbatim, the other
+six characters were right), yet exactly the shape a reader accepts as true. **Keep giving a Codex
+round at least one fact you already know**, and prefer facts where a one-character slip is visible.
+
+Two environment notes from the same run, neither blocking: every tool call printed
+`PostToolUse hook (failed) — error: hook exited with code 1` (the `security-guidance@claude-plugins-official`
+hooks registered in `~/.codex/hooks.json`), and `orca terminal close` returned `ok: true` while the
+tab stayed open as a bare shell.
+
 ## Recovering a botched launch
 
 `worker-stop` moves the task to `blocked`, and `dispatch` then refuses it:

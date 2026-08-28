@@ -163,15 +163,18 @@ which is and stays **`2.0.2`** — «иначе врём потребителя�
 `2.0.2` was normalised down in #555; `2.0.0` and `2.0.1` are historical v2 tagging and were left
 alone — a separate question nobody has decided.
 
-**The critic is kilo, not Codex, until the subscription is paid. Model `luna`** — operator decision
-27.08.2026, taken on COST against the BILL rather than a per-round estimate: sol-discounted ran to
-**$10 over one evening and one day**, half a month of his Codex subscription. Full figures and why
-the old $0.01–0.03 estimate misled: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+✅ **Codex is BACK and is the critic again** — subscription renewed 28.08.2026 (s102), smoke-tested
+through Orca the same day rather than assumed: real Codex TUI, live shell, and a four-fact canary
+answered with three exact hits. The fourth (a commit hash) lost its leading character — not
+fabrication, but why every Codex round still gets one fact you already know. Recipe and the two
+ways CLI 0.150.1 departs from it: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
-**Orca cannot supervise kilo** — `--inject` revokes the capability before the worker reports, on
-every launch path including Orca's own UI. Dispatch WITHOUT `--inject`; full recipe in
-[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md), open question
-on **#559**.
+**kilo is the FALLBACK critic now, not the default.** It held the seat 27.08–28.08 while the
+subscription was unpaid; the measurement that put it there stands (sol-discounted: **$10 over one
+evening and one day**, half a month of the Codex subscription). If it is used again: **Orca cannot
+supervise it** — dispatch WITHOUT `--inject`, which otherwise revokes the capability before the
+worker reports (open question **#559**) — and pin the model via `--command`. Figures and full
+recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
 `node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
