@@ -2078,11 +2078,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			 *                                          is off, without ever
 			 *                                          walking the chain).
 			 * @param string                 $level    The level being resolved.
+			 * A return that is neither `null` nor a {@see Location_Provider} is
+			 * discarded and the chain's own answer is kept: this method's
+			 * `?Location_Provider` return type makes anything else a fatal
+			 * `TypeError`, on the `/location/suggest` REST endpoint the checkout
+			 * calls. `null` IS accepted — the chain itself answers `null`, so a
+			 * guard that refused it would break the documented contract.
+			 *
+			 * @since 2.0.2 A return that is neither `null` nor a Location_Provider
+			 *              is discarded; the chain's own answer is kept.
+			 *
 			 * @param string|null             $country  The country the chain was
 			 *                                          walked for, or `null` for
 			 *                                          the country-blind walk.
 			 */
-			return apply_filters( self::FILTER_PROVIDER_FOR_LEVEL, $resolved, $level, $country );
+			$filtered = apply_filters( self::FILTER_PROVIDER_FOR_LEVEL, $resolved, $level, $country );
+
+			return null === $filtered || $filtered instanceof Location_Provider ? $filtered : $resolved;
 		}
 
 
