@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 228 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 233 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](gotchas/a-cast-is-not-a-degradation.md) (s102)
 - [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
 - [php/parse-str] **`parse_str()` LOSES information (arrays, key normalisation), so a subset match built on it silently widens into a false positive.** → [parse-str-loses-information-so-never-compare-queries-with-it](gotchas/parse-str-loses-information-so-never-compare-queries-with-it.md) (s98)
 - [php/dependency-function-check-bug] **get_missing_php_functions() uses extension_loaded instead of function_exists.** → [dependency-function-check-bug](gotchas/dependency-function-check-bug.md) (s2)
@@ -110,6 +111,8 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/measurement] **66 of the local 67 SKIPPED are just ext-sodium being off — the baseline the project compares across checkouts moves with `php.ini`. Measure with `-d extension=sodium`: 1 primary, 6 in CI.** → [the-skipped-count-is-dominated-by-whether-sodium-is-enabled](gotchas/the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md) (s102)
+- [testing/phpunit] **Anything written from `tests/bootstrap.php` turns every PROCESS-ISOLATED test into an error — the parent parses the child's output as the result. Measured: 36 fake failures.** → [writing-to-stderr-from-the-test-bootstrap-breaks-process-isolated-tests](gotchas/writing-to-stderr-from-the-test-bootstrap-breaks-process-isolated-tests.md) (s102)
 - [testing/phpunit] **`phpunit a.php b.php` runs only `a.php` — the rest are dropped silently, so a multi-file FALSIFICATION run can prove a third of what it claims. Also always pass `--testsuite=Unit`.** → [phpunit-takes-one-path-and-silently-ignores-the-rest](gotchas/phpunit-takes-one-path-and-silently-ignores-the-rest.md) (s99)
 - [testing/isolated-run] **A stale Composer classmap breaks ONLY isolated test runs — the full suite is identical before and after, and the primary checkout has the same gap as any worktree.** → [a-stale-composer-classmap-only-breaks-isolated-test-runs](gotchas/a-stale-composer-classmap-only-breaks-isolated-test-runs.md) (s100)
 - [testing/*] **A test that manufactures its own precondition never tests whoever produces it — delete the view's hidden input and all four guard tests stay green.** → [a-test-that-manufactures-its-own-precondition-never-tests-the-producer](gotchas/a-test-that-manufactures-its-own-precondition-never-tests-the-producer.md) (s98)
