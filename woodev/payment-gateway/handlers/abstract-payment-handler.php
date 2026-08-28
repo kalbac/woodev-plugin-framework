@@ -342,6 +342,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 		/**
 		 * Gets the order status used for held orders.
 		 *
+		 * @since 2.0.2 the final value (after both filters below) is validated against
+		 *              `wc_get_order_statuses()`; an unrecognized value degrades to 'on-hold'
+		 *              instead of silently defeating the hold check
+		 *
 		 * @param WC_Order                                 $order order object
 		 * @param Woodev_Payment_Gateway_API_Response|null $response API response object
 		 *
@@ -366,13 +370,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			/**
 			 * Filters the order status that's considered to be "held".
 			 *
+			 * @since 2.0.2 the final value (after this and the deprecated filter above) is
+			 *              validated against `wc_get_order_statuses()`; an unrecognized value
+			 *              degrades to 'on-hold' instead of silently defeating the hold check
+			 *
 			 * @param string $status held order status
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 			 */
 			$status = apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_held_order_status', $status, $order, $response );
 
-			return (string) $status;
+			return $this->get_gateway()->validate_held_order_status( $status );
 		}
 
 

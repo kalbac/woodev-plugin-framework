@@ -477,6 +477,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		 *
 		 * Concrete gateways can override this to provide their own validation.
 		 *
+		 * @since 2.0.2 the filtered value is now actually validated to be an array or false,
+		 *              matching this method's own documented contract; any other type is
+		 *              discarded and degrades to the pre-filter $data, since `save()` passes a
+		 *              truthy return straight into `build_token()`'s untyped `$data` parameter
+		 *
 		 * @param int   $token_id the token ID
 		 * @param array $data the token data
 		 *
@@ -487,13 +492,18 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			/**
 			 * Filter the validated token data.
 			 *
+			 * @since 2.0.2 only an array or `false` is honoured; any other return is discarded
+			 *              and the pre-filter $data is used instead
+			 *
 			 * @param array $data the validated token data
 			 * @param int   $token_id the token ID
 			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the token editor instance
 			 *
-			 * @return array the validated token data
+			 * @return array|bool the validated token data, or false to skip saving
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_validate_token_data', $data, $token_id, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_validate_token_data', $data, $token_id, $this );
+
+			return is_array( $filtered ) || false === $filtered ? $filtered : $data;
 		}
 
 
@@ -601,6 +611,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 		/**
 		 * Get the editor columns.
 		 *
+		 * @since 2.0.2 the filtered value is validated as an array; a non-array return
+		 *              discards the filter and degrades to the pre-filter columns, since the
+		 *              caller does `count( $columns )` for a table `colspan`
+		 *
 		 * @return array
 		 */
 		protected function get_columns() {
@@ -618,15 +632,23 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			/**
 			 * Filters the admin token editor columns.
 			 *
+			 * @since 2.0.2 a non-array return is discarded; the pre-filter columns are used instead
+			 *
 			 * @param array $columns
 			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_columns', $columns, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_columns', $columns, $this );
+
+			return is_array( $filtered ) ? $filtered : $columns;
 		}
 
 
 		/**
 		 * Get the editor fields.
+		 *
+		 * @since 2.0.2 the filtered value is validated as an array; a non-array return
+		 *              discards the filter and degrades to the pre-filter fields, since callers
+		 *              do `array_keys( $fields )` (`ajax_get_blank_token()`) and iterate the result
 		 *
 		 * @return array
 		 */
@@ -692,10 +714,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Payment_Token_Editor' ) ) :
 			/**
 			 * Filters the admin token editor fields.
 			 *
+			 * @since 2.0.2 a non-array return is discarded; the pre-filter fields are used instead
+			 *
 			 * @param array $fields
 			 * @param Woodev_Payment_Gateway_Admin_Payment_Token_Editor $instance the editor object
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_fields', $fields, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_gateway()->get_id() . '_token_editor_fields', $fields, $this );
+
+			return is_array( $filtered ) ? $filtered : $fields;
 		}
 
 
