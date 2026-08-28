@@ -142,18 +142,24 @@
 		color: wd.$muted;
 	}
 
-	// #514 m5, confirmed on the rig: the select used to shrink-to-fit, so the row
+	// #514 m5, reproduced on the rig: the select used to shrink-to-fit, so the row
 	// relaid itself on every pick — "DaData" is 6 characters and
 	// "СДЭК — тестовый контур (только для рига)" is 39, and the control jumped
 	// between the two widths. `.woodev-select` is `display: block` with no width of
 	// its own, so as a bare flex item it took its base size from the content.
 	//
-	// Everywhere else on this page a select sits in the field grid at
-	// $control-col, so that is the width to match rather than invent. `0 1` means
-	// it never grows past that and may still shrink on a narrow card; `min-width: 0`
-	// is what actually lets it shrink, since a flex item's default `min-width: auto`
-	// would otherwise hold it open at the widest option's intrinsic width — which is
-	// the very coupling being removed.
+	// 320px is measured on the rig by the operator, NOT $control-col. The field
+	// grid's 425px is the width of a FORM FIELD in a two-column row; this is an
+	// inline control sitting next to its own label, and at 425px it read as
+	// oversized. The rig's provider names are also the longest that will ever
+	// appear — they are test fixtures, self-describing on purpose — so sizing to
+	// fit them would size for a case production never sees. A name longer than the
+	// box ellipsises via the existing `__value` rule rather than pushing the row.
+	//
+	// `0 1` means it never grows past that and may still shrink on a narrow card.
+	// `min-width: 0` is what actually lets it shrink: a flex item's default
+	// `min-width: auto` would otherwise hold it open at the widest option's
+	// intrinsic width — the very coupling being removed here.
 	&__selector {
 		display: flex;
 		align-items: center;
@@ -161,7 +167,7 @@
 		margin-bottom: wd.$gap;
 
 		.woodev-select {
-			flex: 0 1 wd.$control-col;
+			flex: 0 1 320px;
 			min-width: 0;
 		}
 	}
