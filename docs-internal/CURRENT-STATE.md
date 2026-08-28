@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-28 (s101).** `main` clean, **no open PRs**. Merged in s101: **#607**
-(#598 + #605), **#611** (#594), **#612** (#599) — every job pass, state CLEAN on all three.
-s100 merged **#591** (#587), **#592** (#585 and #593), **#595** (#570), **#596** (#577) and
-closed **#559**, **#560** on the operator's answers.
+**As of 2026-08-28 (s102, autonomous overnight).** `main` clean, **no open PRs**. Merged in s102,
+seven, every job pass and state CLEAN on all seven: **#624** (#606), **#625** / **#626** / **#628**
+/ **#630** / **#631** (all #613), **#629** (#609). s101 merged **#607** (#598 + #605), **#611**
+(#594), **#612** (#599), **#619** (#613 tranche 1).
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,79 +21,85 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s101):**
-`composer check` **3071** / 7388 / **66 skipped**. Every step reconciles: 3025 at the start of
-s101, +1 (#607), +31 (#611), +2 (#616), +12 (#619) = 3071. Compare SKIPPED,
-always: 66 is the primary's number, and a worktree that skips more has silently run fewer
-contract guards.
+**Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s102), sodium enabled:**
+`composer check` **3169** / 7785 / **1 skipped**, and the same three numbers under
+`--order-by=reverse`. Integration **126** / 494. jest **1548** in 21 suites.
 
-⚠ **`--order-by=reverse` is RED on `main` — 55 failures, and they are real.** Not a flake:
-`TranslationHandlerTest` stubs `get_locale`, Brain Monkey defines it process-wide, and
-`Dadata_Api_Client::current_locale()` branches on `function_exists( 'get_locale' )`. The unit
-suite is green by ALPHABETICAL ACCIDENT — `tests/unit/handlers/` sorts last only because it is
-lowercase. Card **#606**. Always run the reverse-order control on `main` before attributing such
-failures to a branch.
+⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless.** Same tree, one
+flag apart: sodium off → **67 skipped**; sodium on → **1**. **66 of the 67 are just "ext-sodium is
+not enabled in this php.ini"**, so the "compare SKIPPED, the primary is 66" rule carried since s84
+was comparing a number driven by the operator's PHP config — and the 5-test signal it existed to
+catch (the gitignored `plugins-reference/` contract guards, absent from CI and every worktree) was a
+rounding error inside it. With sodium on the numbers are legible again: **1 in the primary, 6
+anywhere `plugins-reference/` is absent** (CI reports 6). Gotcha
+`the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **Integration on `main` (s101, primary checkout): 126 tests / 494 assertions, OK** — unchanged
-from s100's number, re-measured rather than copied forward.
+✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624).**
+It was 51 errors + 4 failures: the suite was green by ALPHABETICAL ACCIDENT, because
+`tests/unit/handlers/` sorted last only for being lowercase. `DadataApiClientTest` /
+`DadataProviderTest` now pin the locale through the `current_locale()` seam (and `Dadata_Provider`'s
+new `make_client()` seam) instead of relying on `get_locale` being undefined; the directory is
+`tests/unit/Handlers/`. CI runs `--order-by=reverse` on the target PHP version only — deterministic,
+so a failure reproduces locally with the same command.
 
-✅ **jest on `main` (s101): 1548 tests in 21 suites.** Run from bash with `--roots`,
+**The gate paid for itself twice on its first night, both times on unrelated code:** a latent
+wall-clock race in `LicenseAuthorityClaimsTest`'s expiry-boundary test, and 268 errors from a worker
+stubbing `WC()` in `setUp()` (forward red, reverse green). Details → `sessions/s102.md`.
+
+✅ **Integration on `main` (s102, primary checkout): 126 tests / 494 assertions, OK** — re-measured,
+not copied forward; unchanged since s100.
+
+✅ **jest on `main` (s102): 1548 tests in 21 suites.** Run from bash with `--roots`,
 never `npx jest`.
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing.**
-s92's figures rode into two handoffs wrong (`sessions/s93.md`); s100 caught the same shape again.
-
-⚠ **A green unit suite is NOT sufficient where our code meets someone else's contract** — s96's
-card #551, round 1, was green, falsified and CI-clean, and returned Galicia for Moscow. Measure the real
-collaborator once. Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
+(s93, again s100). And **a green unit suite is not sufficient where our code meets someone else's
+contract**: s96's #551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow.
+Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s101:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
+**Open cards after s102:** **#514** (m4/m5 only — UI, still needs the rig), **#567** (msgid
 language — the operator's four rules are on the card, and so is s100's measurement showing the
 `.pot` has been dead since 07.12.2023), **#353**, the locations leftovers
-**#356/#358/#361/#410**, **#589**, **#437** (needs a scope conversation — do NOT take
-autonomously), and the standing list #474, #483, #511, #515, #331, #332, #374. Deferred to
-release: #285, #247.
+**#356/#358/#361/#410**, **#589**, **#621** (item 1 measured in s102, the FIX is untouched),
+**#613** (only the operator-gated site left, see below), **#627**, **#632**, **#437** (needs a
+scope conversation — do NOT take autonomously), and the standing list #474, #483, #511, #515,
+#331, #332, #374. Deferred to release: #285, #247.
 
-**⚠ The next session is AUTONOMOUS, overnight** — the operator will not be at the desk. Its
-rules, the ranked queue and what NOT to take are in `next-session-prompt.md`; the short version
-is: settle technical forks by MEASUREMENT, and only file to `Инбокс` when genuinely stuck.
+**#613 is effectively done — 47 of the 51 FATAL/DISABLES sites are guarded.** Tranche 1 (s101, PR
+#619) took 6; s102 took 41 more across five PRs. What remains is deliberate, not unfinished:
+`payment-tokens-handler.php:700` waits on the operator (the audit's proposed fix for it was checked
+and is WRONG), and `class-payment-gateway.php:1262` (`is_available`) he triaged to HARMLESS. The
+audit's WRONG-DATA rows were never in this card's scope.
 
-**Filed in s101, all seven:** **#606** (the unit suite is green by alphabetical accident — see the
-reverse-order warning above), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the
-documentation half was already done in s98), **#613** (act on #599's sites — tranche 1 shipped in PR #619, ~44 left), **#621** (the
-framework hangs dynamic properties on WC_Order: Deprecated from PHP 8.2, Error from PHP 9). **#605** was filed and closed the same session,
-and **#608** and **#610** were both answered by the operator while s101 was still running — #608
-closed by him, #610 answered, narrowed and then shipped (PR #616).
+**Filed in s102:** **#627** (`Checkout_Config::location_i18n_strings()` still carries the `(array)`
+cast that was refused in the pickup map — its defaults are inline in the `apply_filters()` call, so
+there is nothing to fall back to without hoisting them first) and **#632** (the unit suite runs at
+126 MB against a local `memory_limit` of 128M; a RED run then dies with a Patchwork fatal instead of
+printing the failures — the symptom masks the cause, and it did exactly that in s102).
 
-**Operator decisions, 27.08.2026 — where a foreign exception's raw text may stand, decided on WHO
-READS IT rather than on how dangerous the text is:**
+**Filed in s101:** **#606** and **#609** — both CLOSED in s102. **#613** — see above. **#621** —
+item 1 (measure on 8.2+ before fixing) closed by measurement in s102; the fix is not started.
 
-| Boundary | Raw text? | Why |
-|---|---|---|
-| `WC_Order` note (**#608**, `not planned`) | **kept** | «Ответ провайдера должен быть доступен магазинщику. Иначе чем менее детализирована запись в админке, тем больше обращений в поддержку.» |
-| nine browser responses whose reader is the admin (**#610**) | **kept** | same reasoning |
-| `script-handler.php:262`, `nopriv` (**#610**) | **kept** | a plugin author's own exception text is not the framework's responsibility at a response boundary, and stripping it is not available either — the response is a public seam someone's front end may act on |
-| `my-payment-methods.php:768` (**#610**) | **REDACTED** | its reader is the CUSTOMER, and the call it wraps goes into the gateway's API. The merchant loses nothing — #594 writes the full text to the log |
+**Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
+decided by WHO READS IT, not by how dangerous the text looks.** Reader is the MERCHANT or a plugin
+author → kept (an order note, nine admin-facing browser responses, `script-handler.php:262`'s
+`nopriv` seam). Reader is the CUSTOMER → redacted (`my-payment-methods.php:768`). Every LOG sink
+redacts unconditionally (**#594**); this rule is about RESPONSE and NOTE boundaries only. His
+reasoning, verbatim, and the per-site table: cards **#608** / **#610**, `sessions/s101.md`.
 
-Every log sink redacts unconditionally (**#594**); the table above is about RESPONSE and NOTE
-boundaries only.
-
-**Closed in s101:** **#594**, **#598**, **#599**, **#605**, **#610**, and **#608** (by him, `not planned`). Closed in s100: **#559**, **#560**,
+**Closed in s102:** **#606**, **#609**. Closed in s101: **#594**, **#598**, **#599**, **#605**,
+**#610**, and **#608** (by him, `not planned`). Closed in s100: **#559**, **#560**,
 **#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
 was decided, is the handoff's carry-over section — not this file.
 
 **Operator decisions still shaping the work:**
 
-- ~~**#531**~~ **SHIPPED in s95 (#545).** `Checkout_Handler::guard_custom_settlement()` on
-  `woocommerce_checkout_process`: option OFF **and** the posted settlement does not match
-  `get_customer_record_at('settlement', $country)` → checkout blocked. `ajax-select2` ONLY. The
-  discriminator is the SERVER RECORD, never a client flag.
-- ~~**#542**~~ **SHIPPED in s95 (#544).** TypeScript is the default for NEW files in `src/`,
-  enforced by `npm run lint:ts-baseline` against `scripts/ts-baseline.txt`; existing files migrate
-  ON TOUCH by deleting their baseline line. `woodev/**/assets/js/frontend/` stays out.
+- **#531** (s95, PR #545) and **#542** (s95, PR #544) both SHIPPED; the surviving rules are the
+  `guard_custom_settlement()` line further down this file and the `src/` TypeScript row in
+  `AGENTS.md` → Conventions. History: `sessions/s95.md`.
 - **#437 — STAYS OPEN, needs a scope conversation. Do NOT take autonomously.** The thing the spec
   is titled for already happened another way; decision 6's capability model and decision 8's
   checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
@@ -137,7 +143,10 @@ is the only thing that picks the column; `woocommerce_ship_to_destination` merel
 checkbox exists (`billing_only`) or what it defaults to — five `file:line` citations are in the rule.
 
 **⚠ Tooling traps — the ONE number to carry, everything else is in `GOTCHAS.md`.**
-**Compare SKIPPED, not assertions — the primary is 66** (`a-worktree-silently-skips-five-contract-tests`; s87 saw it invert). Every other trap in this
+**Compare SKIPPED, not assertions — but only with sodium enabled, where the primary is 1 and any
+checkout without `plugins-reference/` is 6** (`a-worktree-silently-skips-five-contract-tests` for
+the 5, `the-skipped-count-is-dominated-by-whether-sodium-is-enabled` for why the old "66" was not a
+contract). Every other trap in this
 area — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration-job
 flakiness, the three field modes and their Russian labels — is one line each under the
 `[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
@@ -170,7 +179,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **230**.
+Gotchas: **233**.
 
 ## Program status (high level)
 
@@ -224,27 +233,24 @@ oversight.
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
 27.08.2026 — история на **#583**.
 
-1. **#613, транш 2** — триаж оператор дал (граница как есть, `is_available` → HARMLESS), транш 1
-   отгружен в **PR #619** (шесть мест, где цену платит покупатель). Осталось **~36 FATAL и 8
-   DISABLES** на админских и фоновых путях — вопросов к оператору там нет. Отдельно ждёт его
-   слова `payment-tokens-handler.php:700`: предложенная в отчёте правка НЕВЕРНА (ключ по
-   умолчанию — md5-хеш, проверка `str_contains($user_id)` отвергала бы свой же ключ).
-2. **#606** — юнит-суита зелёная по алфавитной случайности; `--order-by=reverse` на `main` даёт
-   55 падений. Порядок работ внутри карточки: снять зависимость от порядка → гейт → и только
-   потом переименовать `tests/unit/handlers/`. Не-UI, мержится само.
-3. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
-   m6 и T3 закрыты в s98 (#563).
-4. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
+1. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 (замерить на
+   8.2+ прежде чем чинить) закрыт замером в s102, ответ на карточке. Тринадцать точек присваивания
+   и заметно больше чтений; варианты (объект-обёртка рядом с заказом / мета) на карточке. ADR-005
+   разрешает ломать эти внутренние поля.
+2. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
    про страно-слепой `provider_for_level()`, потом включать правило регистрации.
-5. **Остатки слоя локаций:** #356, #358, #361, #410.
-6. **#609** — гейт на расхождение локальный PHP / матрица CI. Документная половина сделана ещё
-   в s98, живёт только гейт.
-7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
+3. **Остатки слоя локаций:** #356, #358, #361, #410.
+4. **#514, остаток** — m4 (контраст WCAG AA) и m5 (ширина селектора). Оба UI, ждут рига.
+   m6 и T3 закрыты в s98 (#563).
+5. **#627** — тот же `(array)`-каст в `Checkout_Config::location_i18n_strings()`, что отвергли в
+   карте ПВЗ. Дефолты инлайном в вызове `apply_filters()` — сперва вынести их в `$defaults`.
+6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
 
 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#567** (язык msgid — 305 строк работы в одну сторону, замер на
-карточке), **#437** (нужна беседа об объёме), **#474**, **#483**, **#511**, **#515**, **#331**,
-**#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
+карточке), **#437** (нужна беседа об объёме), **#632** (поднимать ли `memory_limit` в `phpunit.xml`
+— два варианта на карточке), **#613** в части `payment-tokens-handler.php:700`, **#474**, **#483**,
+**#511**, **#515**, **#331**, **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
 и #321, #322.
 
 **Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
