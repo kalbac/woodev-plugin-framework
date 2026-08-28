@@ -47,6 +47,16 @@
 	<php>
 		<ini name="display_errors" value="1"/>
 		<ini name="error_reporting" value="-1"/>
+
+		<!-- #632. The unit suite peaks around 126 MB and a typical local php.ini allows 128M.
+			 While the run is GREEN that gap is invisible. On a RED run it is not: PHPUnit holds
+			 the error objects, hits the ceiling, and dies with a fatal inside Patchwork instead
+			 of printing the failures — so the symptom hides the cause. Measured in s102, where
+			 the real cause was 268 errors from a WC() stub leaking process-wide and the first
+			 thing the run showed was a fatal in someone else's library.
+			 Invisible in CI, which is the point: setup-php sets memory_limit=-1 there.
+			 Operator decision on #632. -->
+		<ini name="memory_limit" value="512M"/>
 	</php>
 
 </phpunit>
