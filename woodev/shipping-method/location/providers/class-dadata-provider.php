@@ -1115,11 +1115,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$credentials = [ $this->token(), $this->clean_secret() ];
 
 			if ( null === $this->client || $this->client_credentials !== $credentials ) {
-				$this->client            = new Dadata_Api_Client( $credentials[0], $credentials[1] );
+				$this->client             = $this->make_client( $credentials[0], $credentials[1] );
 				$this->client_credentials = $credentials;
 			}
 
 			return $this->client;
+		}
+
+		/**
+		 * Builds the HTTP client for a given credential pair — a SEAM, kept apart
+		 * from {@see self::client()} so the caching logic above stays the ONE
+		 * implementation while the construction can be substituted.
+		 *
+		 * Overridable rather than mocked on purpose, for exactly the reason
+		 * {@see Dadata_Api_Client::current_locale()}'s own docblock gives: a Brain
+		 * Monkey stub DEFINES a WordPress function process-wide, so it survives into
+		 * every later test class and flips any `function_exists()` branch there. The
+		 * client resolves its response language through such a branch, and this
+		 * provider builds the client itself — leaving a test no way to pin the locale
+		 * without stubbing. Measured: the whole unit suite is green only by
+		 * ALPHABETICAL ACCIDENT, and 55 tests in this layer turn red under
+		 * `--order-by=reverse` (issue #606).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $token  DaData API token.
+		 * @param string $secret DaData API secret, or an empty string when none is stored.
+		 *
+		 * @return Dadata_Api_Client
+		 */
+		protected function make_client( string $token, string $secret ): Dadata_Api_Client {
+			return new Dadata_Api_Client( $token, $secret );
 		}
 
 		/**

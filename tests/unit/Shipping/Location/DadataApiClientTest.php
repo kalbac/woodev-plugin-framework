@@ -73,21 +73,21 @@ final class DadataApiClientTest extends TestCase {
 
 	public function test_authorization_header_carries_the_token(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Api_Client( 'my-token' ) )->suggest_address( 'q' );
+		( self::client( 'my-token' ) )->suggest_address( 'q' );
 
 		$this->assertSame( 'Token my-token', $this->last_request['args']['headers']['Authorization'] );
 	}
 
 	public function test_x_secret_header_is_absent_without_a_secret(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+		( self::client( 'tok' ) )->suggest_address( 'q' );
 
 		$this->assertArrayNotHasKey( 'X-Secret', $this->last_request['args']['headers'] );
 	}
 
 	public function test_x_secret_header_is_sent_when_a_secret_is_configured(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Api_Client( 'tok', 'my-secret' ) )->suggest_address( 'q' );
+		( self::client( 'tok', 'my-secret' ) )->suggest_address( 'q' );
 
 		$this->assertSame( 'my-secret', $this->last_request['args']['headers']['X-Secret'] );
 	}
@@ -121,7 +121,7 @@ final class DadataApiClientTest extends TestCase {
 				}
 			);
 
-		( new Dadata_Api_Client( 'tok', $secret ) )->suggest_address( 'q' );
+		( self::client( 'tok', $secret ) )->suggest_address( 'q' );
 
 		$this->assertNotNull( $broadcast, 'the broadcast action must have fired' );
 
@@ -149,7 +149,7 @@ final class DadataApiClientTest extends TestCase {
 				}
 			);
 
-		( new Dadata_Api_Client( 'tok', $secret ) )->suggest_address( 'q' );
+		( self::client( 'tok', $secret ) )->suggest_address( 'q' );
 
 		$this->assertSame( \Woodev_API_Base::SECRET_VALUE_MASK, $broadcast['headers']['X-Secret'] );
 	}
@@ -160,7 +160,7 @@ final class DadataApiClientTest extends TestCase {
 
 	public function test_suggest_address_posts_to_the_suggestions_host(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'Моск', [ 'count' => 5 ] );
+		( self::client( 'tok' ) )->suggest_address( 'Моск', [ 'count' => 5 ] );
 
 		$this->assertSame( 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address', $this->last_request['url'] );
 		$this->assertSame( 'POST', $this->last_request['args']['method'] );
@@ -172,7 +172,7 @@ final class DadataApiClientTest extends TestCase {
 
 	public function test_iplocate_address_gets_with_ip_in_the_query_string(): void {
 		$this->stub_http_response( 200, '{"location":{"value":"x","data":{}}}' );
-		( new Dadata_Api_Client( 'tok' ) )->iplocate_address( '1.2.3.4' );
+		( self::client( 'tok' ) )->iplocate_address( '1.2.3.4' );
 
 		$this->assertSame( 'GET', $this->last_request['args']['method'] );
 		$this->assertSame( '', $this->last_request['args']['body'] );
@@ -180,7 +180,7 @@ final class DadataApiClientTest extends TestCase {
 
 	public function test_find_by_id_address_posts_the_fias_id_as_query(): void {
 		$this->stub_http_response( 200, '{"suggestions":[{"value":"x","data":{}}]}' );
-		( new Dadata_Api_Client( 'tok' ) )->find_by_id_address( 'fias-1' );
+		( self::client( 'tok' ) )->find_by_id_address( 'fias-1' );
 
 		$this->assertSame( 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/address', $this->last_request['url'] );
 		$body = json_decode( (string) $this->last_request['args']['body'], true );
@@ -190,12 +190,12 @@ final class DadataApiClientTest extends TestCase {
 	public function test_find_by_id_address_returns_null_for_an_empty_suggestions_array(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
 
-		$this->assertNull( ( new Dadata_Api_Client( 'tok' ) )->find_by_id_address( 'unknown-fias' ) );
+		$this->assertNull( ( self::client( 'tok' ) )->find_by_id_address( 'unknown-fias' ) );
 	}
 
 	public function test_clean_address_posts_to_the_cleaner_host_with_an_array_body(): void {
 		$this->stub_http_response( 200, '[{"result":"x"}]' );
-		( new Dadata_Api_Client( 'tok', 'sec' ) )->clean_address( 'мск сухонска 11/-89' );
+		( self::client( 'tok', 'sec' ) )->clean_address( 'мск сухонска 11/-89' );
 
 		$this->assertSame( 'https://cleaner.dadata.ru/api/v1/clean/address', $this->last_request['url'] );
 
@@ -212,19 +212,19 @@ final class DadataApiClientTest extends TestCase {
 	public function test_clean_address_accepts_an_array_wrapped_response(): void {
 		$this->stub_http_response( 200, '[{"result":"г Москва"}]' );
 
-		$this->assertSame( [ 'result' => 'г Москва' ], ( new Dadata_Api_Client( 'tok', 'sec' ) )->clean_address( 'q' ) );
+		$this->assertSame( [ 'result' => 'г Москва' ], ( self::client( 'tok', 'sec' ) )->clean_address( 'q' ) );
 	}
 
 	public function test_clean_address_accepts_a_bare_object_response(): void {
 		$this->stub_http_response( 200, '{"result":"г Москва"}' );
 
-		$this->assertSame( [ 'result' => 'г Москва' ], ( new Dadata_Api_Client( 'tok', 'sec' ) )->clean_address( 'q' ) );
+		$this->assertSame( [ 'result' => 'г Москва' ], ( self::client( 'tok', 'sec' ) )->clean_address( 'q' ) );
 	}
 
 	public function test_suggest_address_converts_stdclass_tree_to_plain_arrays(): void {
 		$this->stub_http_response( 200, '{"suggestions":[{"value":"x","data":{"region":"Москва","nested":{"a":1}}}]}' );
 
-		$suggestions = ( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+		$suggestions = ( self::client( 'tok' ) )->suggest_address( 'q' );
 
 		$this->assertIsArray( $suggestions[0]['data'] );
 		$this->assertSame( 'Москва', $suggestions[0]['data']['region'] );
@@ -239,21 +239,21 @@ final class DadataApiClientTest extends TestCase {
 	public function test_a_200_response_does_not_throw(): void {
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
 
-		$this->assertSame( [], ( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' ) );
+		$this->assertSame( [], ( self::client( 'tok' ) )->suggest_address( 'q' ) );
 	}
 
 	public function test_a_401_response_throws_a_woodev_api_exception(): void {
 		$this->stub_http_response( 401, '' );
 
 		$this->expectException( \Woodev_API_Exception::class );
-		( new Dadata_Api_Client( 'bad-token' ) )->suggest_address( 'q' );
+		( self::client( 'bad-token' ) )->suggest_address( 'q' );
 	}
 
 	public function test_a_500_response_throws_a_woodev_api_exception(): void {
 		$this->stub_http_response( 500, 'Internal Server Error' );
 
 		$this->expectException( \Woodev_API_Exception::class );
-		( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+		( self::client( 'tok' ) )->suggest_address( 'q' );
 	}
 
 	public function test_a_network_level_wp_error_throws_a_woodev_api_exception(): void {
@@ -261,7 +261,7 @@ final class DadataApiClientTest extends TestCase {
 		Functions\when( 'wp_safe_remote_request' )->justReturn( new \WP_Error( 'timeout', 'Timed out' ) );
 
 		$this->expectException( \Woodev_API_Exception::class );
-		( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+		( self::client( 'tok' ) )->suggest_address( 'q' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -281,7 +281,7 @@ final class DadataApiClientTest extends TestCase {
 		Functions\when( 'wp_safe_remote_request' )->justReturn( [] );
 
 		try {
-			( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+			( self::client( 'tok' ) )->suggest_address( 'q' );
 			$this->fail( 'A 500 response must throw.' );
 		} catch ( \Woodev_API_Exception $e ) {
 			$this->assertStringNotContainsString(
@@ -299,7 +299,7 @@ final class DadataApiClientTest extends TestCase {
 		Functions\when( 'wp_safe_remote_request' )->justReturn( [] );
 
 		try {
-			( new Dadata_Api_Client( 'tok' ) )->suggest_address( 'q' );
+			( self::client( 'tok' ) )->suggest_address( 'q' );
 			$this->fail( 'A 500 response must throw.' );
 		} catch ( \Woodev_API_Exception $e ) {
 			$this->assertStringContainsString(
@@ -409,6 +409,34 @@ final class DadataApiClientTest extends TestCase {
 
 		$body = json_decode( (string) $this->last_request['args']['body'], true );
 		$this->assertSame( 'ru', $body['language'] );
+	}
+
+	/**
+	 * A client whose locale seam is PINNED to `''` — the "express no opinion" value
+	 * {@see Dadata_Api_Client::with_language()} reads as "send no `language` key".
+	 *
+	 * Every test in this class that does not care about the response language goes
+	 * through here rather than `new Dadata_Api_Client(...)`. A bare construction
+	 * reaches {@see Dadata_Api_Client::current_locale()}, which branches on
+	 * `function_exists( 'get_locale' )` — and whether that function EXISTS depends on
+	 * whether some earlier test class stubbed it, because Brain Monkey defines a
+	 * stubbed function process-wide and PHP cannot un-define it. That made this suite
+	 * green by ALPHABETICAL ACCIDENT: `tests/unit/handlers/` sorts last only because
+	 * it is lowercase, and `--order-by=reverse` turned 55 tests in this layer red
+	 * (issue #606). Pinning the seam removes the dependency on traversal order.
+	 *
+	 * @param string $token
+	 * @param string $secret
+	 *
+	 * @return Dadata_Api_Client
+	 */
+	private static function client( string $token, string $secret = '' ): Dadata_Api_Client {
+		return new class( $token, $secret ) extends Dadata_Api_Client {
+
+			protected function current_locale(): string {
+				return '';
+			}
+		};
 	}
 
 	/**
