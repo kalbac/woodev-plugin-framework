@@ -2343,11 +2343,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			/**
 			 * Filters the order status that's considered to be "held".
 			 *
+			 * @since 2.0.2 the final value (after both this and the deprecated filter above) is
+			 *              validated against `wc_get_order_statuses()`; an unrecognized value
+			 *              degrades to 'on-hold' instead of silently defeating the hold check
+			 *
 			 * @param string $status held order status
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 			 */
 			$order_status = apply_filters( 'wc_' . $this->get_id() . '_held_order_status', $order_status, $order, $response );
+			$order_status = $this->validate_held_order_status( $order_status );
 
 			// mark order as held
 			if ( ! $order->has_status( $order_status ) ) {
@@ -2369,6 +2374,39 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			if ( isset( WC()->session ) ) {
 				WC()->session->held_order_received_text = $user_message;
 			}
+		}
+
+
+		/**
+		 * Validates a "held order status" filter return value against real WooCommerce order
+		 * statuses, degrading to 'on-hold' when the value is not one.
+		 *
+		 * Shared by every "held order status" implementation in the payment gateway framework
+		 * (this class, {@see Woodev_Payment_Gateway_Direct::process_payment()}, and
+		 * {@see Woodev_Payment_Gateway_Abstract_Payment_Handler::get_held_order_status()} via
+		 * {@see Woodev_Payment_Gateway_Abstract_Payment_Handler::get_gateway()}) so a plugin
+		 * returning a type-valid-but-wrong value (a typo, an ignored parameter, an empty string)
+		 * cannot silently defeat the "hold order for review" mechanism.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $status the held order status filter's return value
+		 * @return string a real order status slug (unprefixed, e.g. 'on-hold')
+		 */
+		public function validate_held_order_status( $status ) {
+
+			if ( ! is_string( $status ) || '' === $status ) {
+				return 'on-hold';
+			}
+
+			$valid_statuses = array_map(
+				static function ( $status_key ) {
+					return 0 === strpos( $status_key, 'wc-' ) ? substr( $status_key, 3 ) : $status_key;
+				},
+				array_keys( wc_get_order_statuses() )
+			);
+
+			return in_array( $status, $valid_statuses, true ) ? $status : 'on-hold';
 		}
 
 		/**

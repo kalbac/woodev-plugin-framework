@@ -58,6 +58,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 		 * to provide enough information to a user to allow them to resolve an
 		 * issue on their own, but not enough to help nefarious folks fishing for info.
 		 *
+		 * @since 2.0.2 the filtered value is validated as a string; a non-string return
+		 *              discards the filter and degrades to the pre-filter $message, since a
+		 *              concrete `get_user_message()` implementation may hand this straight to
+		 *              `new Woodev_Payment_Gateway_Exception( $message )`, whose native
+		 *              `Exception::__construct( string $message )` is typed
+		 *
 		 * @param string $message_id identifies the message to return
 		 *
 		 * @return string a user message
@@ -148,11 +154,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 			 * Allow actors to modify the error message returned to a user when a transaction
 			 * has encountered an error and the admin has enabled the "show detailed decline messages" setting
 			 *
+			 * @since 2.0.2 a non-string return is discarded; the pre-filter $message is used instead
+			 *
 			 * @param string $message message to show to user
 			 * @param string $message_id machine code for the message, e.g. card_expired
 			 * @param Woodev_Payment_Gateway_API_Response_Message_Helper $instance instance
 			 */
-			return apply_filters( 'wc_payment_gateway_transaction_response_user_message', $message, $message_id, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_transaction_response_user_message', $message, $message_id, $this );
+
+			return is_string( $filtered ) ? $filtered : $message;
 		}
 	}
 

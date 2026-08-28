@@ -229,9 +229,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 
 		/**
-		 * Get the payment form fields
+		 * Gets the payment fields.
 		 *
-		 * @return array payment fields in format suitable for woocommerce_form_field()
+		 * @since 2.0.2 the filtered value is validated as an array; a non-array return
+		 *              discards the filter and degrades to the pre-filter $fields, since
+		 *              `render_payment_fields()` does `foreach ( $this->get_payment_fields() ... )`
+		 *
+		 * @return array
 		 */
 		protected function get_payment_fields() {
 
@@ -253,18 +257,26 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 * the get_credit_card_fields() method. This filter can return payment fields
 			 * for a non-standard payment type (like PayPal Express)
 			 *
+			 * @since 2.0.2 a non-array return is discarded; the pre-filter $fields are used instead
+			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
 			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
-			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_payment_form_fields', $fields, $this );
+			$filtered = apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_payment_form_fields', $fields, $this );
+
+			return is_array( $filtered ) ? $filtered : $fields;
 		}
 
 
 		/**
-		 * Get default credit card form fields, note this pulls default values
-		 * from the associated gateway
+		 * Gets the credit card fields.
 		 *
-		 * @return array credit card form fields
+		 * @since 2.0.2 the filtered value is validated as an array; a non-array return
+		 *              discards the filter and degrades to the pre-filter $fields — this feeds
+		 *              `get_payment_fields()`, whose own filtered result is iterated by
+		 *              `render_payment_fields()`'s `foreach`
+		 *
+		 * @return array
 		 */
 		protected function get_credit_card_fields() {
 
@@ -336,10 +348,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			 *
 			 * Filters the default field data for credit card gateways.
 			 *
+			 * @since 2.0.2 a non-array return is discarded; the pre-filter $fields are used instead
+			 *
 			 * @param array $fields in the format supported by woocommerce_form_fields()
 			 * @param Woodev_Payment_Gateway_Payment_Form $instance payment form instance
 			 */
-			return apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_credit_card_fields', $fields, $this );
+			$filtered = apply_filters( 'wc_' . $this->get_gateway()->get_id() . '_payment_form_default_credit_card_fields', $fields, $this );
+
+			return is_array( $filtered ) ? $filtered : $fields;
 		}
 
 

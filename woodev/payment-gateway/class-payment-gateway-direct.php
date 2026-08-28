@@ -274,11 +274,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					/**
 					 * Filters the order status that's considered to be "held".
 					 *
+					 * @since 2.0.2 the returned value is validated against `wc_get_order_statuses()`;
+					 *              an unrecognized value degrades to 'on-hold' instead of silently
+					 *              defeating the hold check
+					 *
 					 * @param string $status held order status
 					 * @param WC_Order $order order object
 					 * @param Woodev_Payment_Gateway_API_Response|null $response API response object, if any
 					 */
 					$held_order_status = apply_filters( 'wc_' . $this->get_id() . '_held_order_status', 'on-hold', $order, null );
+					$held_order_status = $this->validate_held_order_status( $held_order_status );
 
 					if ( $order->has_status( $held_order_status ) ) {
 						// reduce stock for held orders, but don't complete payment (pass order ID so WooCommerce fetches fresh order object with reduced_stock meta set on order status change)
@@ -801,6 +806,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 * user is redirected back to the My Account page or remains on the add
 			 * new payment method screen
 			 *
+			 * @since 2.0.2 a non-array return is discarded; the pre-filter $result is used
+			 *              instead, since the caller reads `$result['message']`/`$result['success']`
+			 *
 			 * @param array $result {
 			 *
 			 * @type string $message notice message to render
@@ -811,7 +819,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 * @param WC_Order $order order instance
 			 * @param Woodev_Payment_Gateway_Direct $instance direct gateway instance
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_add_payment_method_transaction_result', $result, $response, $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_add_payment_method_transaction_result', $result, $response, $order, $this );
+
+			return is_array( $filtered ) ? $filtered : $result;
 		}
 
 
@@ -888,10 +898,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			 *
 			 * Allow actors to modify the order object used for an add payment method transaction.
 			 *
+			 * @since 2.0.2 a non-WC_Order return is discarded; the pre-filter $order is used
+			 *              instead, since the caller passes this straight into
+			 *              `do_add_payment_method_transaction( WC_Order $order )`'s typed parameter
+			 *
 			 * @param WC_Order $order order object
 			 * @param Woodev_Payment_Gateway_Direct $instance instance
 			 */
-			return apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_add_payment_method', $order, $this );
+			$filtered = apply_filters( 'wc_payment_gateway_' . $this->get_id() . '_get_order_for_add_payment_method', $order, $this );
+
+			return $filtered instanceof WC_Order ? $filtered : $order;
 		}
 
 
