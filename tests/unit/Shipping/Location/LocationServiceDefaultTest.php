@@ -111,9 +111,20 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		/** @var array<int, array{0: string, 1: Location_Scope}> */
 		public array $suggest_calls = [];
 
-		public function __construct( string $id, callable $suggest_callback ) {
+		/** @var array<int, string> */
+		private array $countries;
+
+		/**
+		 * @param array<int, string> $countries the countries this provider covers. Defaults to
+		 *                                     RU, which every pre-existing caller assumes;
+		 *                                     a DIFFERENT country is what lets a test build
+		 *                                     a provider that declares a level but cannot
+		 *                                     serve the record's own country (#353).
+		 */
+		public function __construct( string $id, callable $suggest_callback, array $countries = [ 'RU' ] ) {
 			$this->id               = $id;
 			$this->suggest_callback = $suggest_callback;
+			$this->countries        = $countries;
 		}
 
 		public function get_id(): string {
@@ -125,7 +136,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		public function get_countries(): array {
-			return [ 'RU' ];
+			return $this->countries;
 		}
 
 		protected function declare_suggest_levels(): array {
@@ -826,6 +837,62 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		// policy `fixed` — provider switch strands the stored default
 		// (spec §4.6/D15 amendment)
 		// -------------------------------------------------------------------
+
+		/**
+		 * #353: the stranded-default walk asks for the record's OWN country.
+		 *
+		 * `provider_for_level()` is country-BLIND when called with one argument, and that
+		 * is deliberate — the `$country` parameter was added later and its `null` default
+		 * preserves every pre-existing call site's meaning (see the method's own
+		 * docblock). What was NOT deliberate is this caller using it: a stored default
+		 * always carries a required ISO country, and the sibling path over the same kind
+		 * of object — `is_customer_record_stale()` — has always passed it.
+		 *
+		 * Blind, the question is "does ANY provider serve this LEVEL, anywhere", which a
+		 * provider covering only KZ answers yes to. The stored RU default was then
+		 * measured as stranded against that provider and RE-RESOLVED through it — a
+		 * `suggest()` for a Russian town aimed at a provider that does not serve Russia.
+		 *
+		 * The assertion that carries the defect is the call count: without the fix the
+		 * KZ-only provider IS queried.
+		 *
+		 * @return void
+		 */
+		public function test_fixed_default_does_not_re_resolve_through_a_provider_that_does_not_cover_the_record_country(): void {
+			$foreign = new Default_Test_Fake_Provider(
+				'prov-kz',
+				function ( string $query, Location_Scope $scope ) {
+					return [ $this->record( 'prov-kz:almaty', Location_Record::LEVEL_SETTLEMENT ) ];
+				},
+				[ 'KZ' ]
+			);
+
+			// An RU record, stored by a provider that is no longer registered at all. It
+			// carries a region on purpose: re-resolution REFUSES a settlement record with no
+			// parent to scope by, and would then never reach suggest() in either variant —
+			// which is exactly how the first version of this test passed against the defect.
+			$stale = $this->record(
+				'prov-a:old-city',
+				Location_Record::LEVEL_SETTLEMENT,
+				[ 'region' => [ 'name' => 'Московская область', 'type' => 'обл' ] ]
+			);
+
+			$this->stub_default_locality_options(
+				'prov-kz',
+				Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED,
+				wp_json_encode( $stale->to_array() )
+			);
+			$registry = $this->activate( [ $foreign ] );
+
+			$result = $this->service( $registry )->get_customer_record();
+
+			$this->assertCount(
+				0,
+				$foreign->suggest_calls,
+				"a provider that does not cover the record's country must never be asked to re-resolve it"
+			);
+			$this->assertNull( $result, "with nobody serving the record's own country there is no default to serve" );
+		}
 
 		public function test_fixed_default_re_resolves_through_the_new_provider_when_stranded(): void {
 			$stale_provider  = new Default_Test_Fake_Provider( 'prov-a', static fn() => [] );
