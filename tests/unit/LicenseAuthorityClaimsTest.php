@@ -9,8 +9,11 @@
  *
  * Envelopes are signed at RUNTIME with the published fixture keypair (seed = chr(1)
  * x 32) so each test controls expires_at relative to the real clock — the published
- * vector's fixed expiry is in the past, and time() is not stubbable here (it is a
- * PHP internal not in patchwork.json). Cross-repo canonical-JSON / signature parity
+ * vector's fixed expiry is in the past. `time()` itself is still not stubbable here
+ * (a PHP internal, not in patchwork.json), which is why the two EXPIRY-BOUNDARY
+ * tests go through `claims_at()` instead: it pins the store's own `now()` seam. The
+ * rest keep using the real clock with a far-future expiry, where a second either way
+ * changes nothing. Cross-repo canonical-JSON / signature parity
  * is pinned by LicenseEnvelopeVerifierTest against the published vector; this suite
  * pins the claim SEMANTICS (site/plugin/expiry binding + store IO) on top of it.
  *
