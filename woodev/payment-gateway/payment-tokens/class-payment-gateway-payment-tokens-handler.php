@@ -686,14 +686,37 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			/**
 			 * Filter payment tokens transient key
 			 *
-			 * Warning: this filter should generally only be used to disable token
-			 * transients by returning false or an empty string. Setting an incorrect or invalid
-			 * transient key (e.g. not keyed to the current user or environment) can
-			 * result in unexpected and difficult to debug situations involving tokens.
+			 * THE REAL CONTRACT, stated plainly because the previous wording read as a
+			 * safeguard and there is none (#599 question 4, #613):
 			 *
-			 * filter responsibly!
+			 * - a falsy return DISABLES the token transient entirely. That is this
+			 *   filter's documented purpose and the only use it is designed for;
+			 * - ANY string is accepted verbatim. The framework does NOT check that it
+			 *   is keyed to the user, the gateway or the environment;
+			 * - so a key that is not keyed to the user serves ONE customer's saved
+			 *   payment tokens to ANOTHER. Nothing throws, nothing is logged.
 			 *
-			 * @param string                 $key      transient key (must be 45 chars or less)
+			 * The unguarded return is a DELIBERATE decision, not an oversight
+			 * (operator, #613). Measured at the time: this hook has no consumer in any
+			 * shipped plugin, and the single real gateway — `WC_Gateway_Tinkoff_KVK`,
+			 * a loans/instalments gateway — does not declare `FEATURE_TOKENIZATION`,
+			 * so `supports_tokenization()` is false and this cache is unreachable in
+			 * production. Guarding it would have changed a public hook's behaviour to
+			 * protect a path nobody is on.
+			 *
+			 * REVISIT THE MOMENT THAT STOPS BEING TRUE: the first plugin that filters
+			 * this hook, or the first gateway that declares `FEATURE_TOKENIZATION`,
+			 * puts a customer's saved cards behind an unvalidated string. The options
+			 * weighed on #613 were: reject any string and keep the framework's own key
+			 * (closes it, removes the hook's ability to rename), or require the return
+			 * to contain the framework's own md5 (keeps prefixes and suffixes working,
+			 * forbids substituting the identity).
+			 *
+			 * @param string                 $key      transient key. The framework's own is
+			 *                                         `woodev_tokens_` + a 32-char md5 = 46
+			 *                                         characters; the "45 or less" this
+			 *                                         docblock used to claim was already
+			 *                                         false of the default it describes.
 			 * @param int                     $user_id  WP user ID
 			 * @param Woodev_Payment_Gateway  $instance direct gateway class instance
 			 */
