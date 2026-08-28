@@ -160,6 +160,39 @@ class LicenseAuthorityClaimsTest extends TestCase {
 	}
 
 	/**
+	 * The same claims object with its clock PINNED to `$now` through the class's
+	 * own `now()` seam.
+	 *
+	 * Deliberately a seam rather than a Patchwork stub of `time()`: mocking a PHP
+	 * internal means listing it in `patchwork.json` and instrumenting every call
+	 * site in the project so that one test can be deterministic.
+	 *
+	 * @param int $now The Unix time the expiry gate should see.
+	 *
+	 * @return \Woodev_License_Authority_Claims
+	 */
+	private function claims_at( int $now, int $download_id = 216 ): \Woodev_License_Authority_Claims {
+		$plugin = Mockery::mock( \Woodev_Plugin::class );
+		$plugin->shouldReceive( 'get_plugin_option_name' )->with( 'license_required' )->andReturn( self::CLAIM_OPTION )->byDefault();
+		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id )->byDefault();
+
+		return new class( $plugin, $now ) extends \Woodev_License_Authority_Claims {
+
+			private int $pinned_now;
+
+			public function __construct( \Woodev_Plugin $plugin, int $now ) {
+				parent::__construct( $plugin );
+
+				$this->pinned_now = $now;
+			}
+
+			protected function now(): int {
+				return $this->pinned_now;
+			}
+		};
+	}
+
+	/**
 	 * A fully verified, unexpired claim is stored under the per-plugin option,
 	 * autoload false, value = the raw envelope array (never a bare boolean).
 	 *
@@ -342,16 +375,46 @@ class LicenseAuthorityClaimsTest extends TestCase {
 	public function test_get_verified_valid_at_exact_expiry_boundary(): void {
 		$this->require_sodium();
 
-		// expires_at exactly equals the time() the store will read. Both calls resolve
-		// within the same second under the unit runtime, so now <= expires_at holds.
-		$now      = time();
-		$envelope = $this->sign( $this->payload( $now ) );
+		// `now` is PINNED through the class's own now() seam, not read off the wall
+		// clock. The previous version signed an envelope for time() and then asserted,
+		// assuming "both calls resolve within the same second" — a race it lost the
+		// first time #606's reverse-order gate ran the suite a second time per PR.
+		// Ed25519 signing is real work; if the second ticks over during it, `now` is
+		// already past `expires_at` and the test fails for a reason unrelated to the
+		// inclusive-boundary rule it exists to pin.
+		$expires_at = 1_700_000_000;
+		$envelope   = $this->sign( $this->payload( $expires_at ) );
 
-		$claims = $this->make_claims();
+		$claims = $this->claims_at( $expires_at );
 
 		Functions\when( 'get_option' )->justReturn( $envelope );
 
-		$this->assertSame( $envelope['payload'], $claims->get_verified() );
+		$this->assertSame(
+			$envelope['payload'],
+			$claims->get_verified(),
+			'now === expires_at is INSIDE the claim: the gate rejects on `now > expires_at`'
+		);
+	}
+
+	/**
+	 * The other side of the same boundary, now that it can be pinned: one second
+	 * later the very same envelope must be refused. Without this, a gate written
+	 * `now >= expires_at` — off by exactly one second — would still pass the test
+	 * above.
+	 *
+	 * @return void
+	 */
+	public function test_get_verified_null_one_second_past_the_expiry_boundary(): void {
+		$this->require_sodium();
+
+		$expires_at = 1_700_000_000;
+		$envelope   = $this->sign( $this->payload( $expires_at ) );
+
+		$claims = $this->claims_at( $expires_at + 1 );
+
+		Functions\when( 'get_option' )->justReturn( $envelope );
+
+		$this->assertNull( $claims->get_verified() );
 	}
 
 	/**
