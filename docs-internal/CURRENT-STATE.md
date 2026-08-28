@@ -57,10 +57,14 @@ language — the operator's four rules are on the card, and so is s100's measure
 autonomously), and the standing list #474, #483, #511, #515, #331, #332, #374. Deferred to
 release: #285, #247.
 
-**Filed in s101, all six:** **#606** (the unit suite is green by alphabetical accident — see the
+**⚠ The next session is AUTONOMOUS, overnight** — the operator will not be at the desk. Its
+rules, the ranked queue and what NOT to take are in `next-session-prompt.md`; the short version
+is: settle technical forks by MEASUREMENT, and only file to `Инбокс` when genuinely stuck.
+
+**Filed in s101, all seven:** **#606** (the unit suite is green by alphabetical accident — see the
 reverse-order warning above), **#609** (a GATE for the local-PHP-vs-CI-matrix gap; the
-documentation half was already done in s98), **#613** (act on #599's 49 FATAL/DISABLES sites —
-triage first, and two of its questions are his). **#605** was filed and closed the same session,
+documentation half was already done in s98), **#613** (act on #599's sites — tranche 1 shipped in PR #619, ~44 left), **#621** (the
+framework hangs dynamic properties on WC_Order: Deprecated from PHP 8.2, Error from PHP 9). **#605** was filed and closed the same session,
 and **#608** and **#610** were both answered by the operator while s101 was still running — #608
 closed by him, #610 answered, narrowed and then shipped (PR #616).
 

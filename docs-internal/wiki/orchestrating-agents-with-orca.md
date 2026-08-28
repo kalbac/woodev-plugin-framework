@@ -361,6 +361,22 @@ that was handy.
   dispatch for the follow-up, or hold the release until the worker has reported. Same family as the
   kilo `--inject` revocation, different cause.
 
+### s101 — three traps, all measured
+
+- **`worker-start` can answer `input_accepted` and still not start the worker.** One of three
+  died that way: `dispatch-show` reported `status: failed`, `last_failure:
+  agent_prompt_stalled`, and a `completed_at` ten seconds after `dispatched_at`. The receipt says
+  nothing about it. **Read `dispatch-show` after every `worker-start`**, not the acceptance
+  status — I did not, and waited ten minutes on a corpse. Recover with
+  `worker-start --retry-of <old ctx>`; it allocates a fresh dispatch on the same task.
+- **`check --wait --timeout-ms` above 600000 is pointless from a Bash tool call**, which caps at
+  ten minutes and kills the call. Use ≤ 540000 and chain several waits; a timeout is a
+  checkpoint, not a failure.
+- **Three workers CAN share ONE worktree** — proven twice in s101, six workers total — provided
+  their file sets are disjoint AND the brief forbids them git commands and gate runs. The
+  coordinator runs the gates. That last clause is what keeps this inside the three-agent RAM cap:
+  the OOM in s84 came from concurrent heavy gate runs, not from the agents themselves.
+
 ## Related
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](../gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss this placement rule exists to prevent
