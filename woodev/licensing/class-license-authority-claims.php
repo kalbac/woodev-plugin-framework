@@ -192,7 +192,7 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 
 			$expires_at = $payload['expires_at'] ?? null;
 
-			if ( ! is_int( $expires_at ) || time() > $expires_at ) {
+			if ( ! is_int( $expires_at ) || $this->now() > $expires_at ) {
 				return null;
 			}
 
@@ -203,6 +203,35 @@ if ( ! class_exists( 'Woodev_License_Authority_Claims' ) ) :
 
 			return $payload;
 		}
+
+		/**
+		 * The current Unix time — a SEAM, not a bare `time()` at the comparison
+		 * site.
+		 *
+		 * The expiry gate is INCLUSIVE (`now > expires_at` rejects, so
+		 * `now === expires_at` is still valid), and that boundary is the whole
+		 * point of the rule — a claim must not be refused during the last second
+		 * of its life. A test proving it cannot race the wall clock: it has to
+		 * build and Ed25519-sign an envelope first, and if the second ticks over
+		 * during that work, `now` is already past `expires_at` and the assertion
+		 * fails for a reason that has nothing to do with the rule. That is not
+		 * hypothetical — `--order-by=reverse` (#606's gate) caught exactly that
+		 * failure on its first run, in a test whose own comment assumed "both
+		 * calls resolve within the same second".
+		 *
+		 * Overridable rather than stubbed for the reason the rest of this
+		 * codebase uses seams: `time()` is a PHP internal, so mocking it means
+		 * adding it to `patchwork.json` and instrumenting every call site in the
+		 * project to make one test deterministic.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int
+		 */
+		protected function now(): int {
+			return time();
+		}
+
 
 		/**
 		 * Resolves the base64 public key used to verify claims.

@@ -83,8 +83,12 @@
         "phpcs":       "./vendor/bin/phpcs",
         "phpcbf":      "./vendor/bin/phpcbf",
         "phpstan":     "./vendor/bin/phpstan analyse --memory-limit=4G",
-        "test":        "./vendor/bin/phpunit --testsuite=Unit",
-        "test:unit":   "./vendor/bin/phpunit --testsuite=Unit",
+        "test":        "@test:unit",
+        "test:unit":   [
+            "@php-version",
+            "./vendor/bin/phpunit --testsuite=Unit"
+        ],
+        "php-version": "@php bin/check-php-version.php",
         "test:integration": "./vendor/bin/phpunit --testsuite=Integration",
         "lint":        "@phpcs",
         "fix":         "@phpcbf",
@@ -103,7 +107,8 @@
         "test:integration": "Run integration tests (requires wp-env)",
         "lint":             "Alias for phpcs",
         "fix":              "Alias for phpcbf",
-        "check":            "Run all checks: phpcs + phpstan + unit tests"
+        "check":            "Run all checks: phpcs + phpstan + unit tests",
+        "php-version":      "Warn when the running PHP is outside the CI matrix (#609)"
     },
     "config": {
         "platform": {
