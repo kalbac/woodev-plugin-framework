@@ -76,12 +76,20 @@ abstract class Setup_Wizard {
 		/**
 		 * Filters the registered setup-wizard steps.
 		 *
+		 * The return is validated: it feeds array_filter() below directly,
+		 * which throws a TypeError on a non-array argument. A non-array
+		 * return degrades to the pre-filter steps rather than reaching
+		 * that call.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 the filter return is validated with is_array(); a
+		 *              non-array return no longer reaches array_filter() raw.
 		 *
 		 * @param Step[]       $steps    registered steps keyed by id.
 		 * @param Setup_Wizard $instance wizard instance.
 		 */
-		$steps = apply_filters( "woodev_{$this->get_id()}_setup_wizard_steps", $this->steps, $this );
+		$filtered_steps = apply_filters( "woodev_{$this->get_id()}_setup_wizard_steps", $this->steps, $this );
+		$steps          = is_array( $filtered_steps ) ? $filtered_steps : $this->steps;
 
 		$this->steps = array_filter(
 			$steps,
