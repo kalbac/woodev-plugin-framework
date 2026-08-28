@@ -48,10 +48,16 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		 * Checks if enabled license requests logging
 		 * To enable checking need to create WOODEV_LICENSE_DEBUG constant and set it with value true in wp-config.php file or set true via woodev_enable_license_logging hook
 		 *
+		 * A non-bool return is coerced rather than trusted verbatim, so a plugin
+		 * returning e.g. a truthy string cannot silently change the type this
+		 * method promises its callers.
+		 *
+		 * @since 2.0.2
+		 *
 		 * @return bool
 		 */
 		public function is_debug_enabled(): bool {
-			return apply_filters( 'woodev_enable_license_logging', defined( 'WOODEV_LICENSE_DEBUG' ) && WOODEV_LICENSE_DEBUG );
+			return (bool) apply_filters( 'woodev_enable_license_logging', defined( 'WOODEV_LICENSE_DEBUG' ) && WOODEV_LICENSE_DEBUG );
 		}
 
 		/**
@@ -83,12 +89,18 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 			/**
 			 * Filters the licensing API base URL.
 			 *
+			 * A non-string, empty, or malformed return is discarded (see
+			 * {@see self::is_valid_url()}); the URL then degrades to the
+			 * constructor's default, never to an empty or garbage endpoint.
+			 *
 			 * @since 2.0.2
 			 *
 			 * @param string        $api_url The current API base URL.
 			 * @param Woodev_Plugin $plugin  The plugin instance.
 			 */
-			return apply_filters( 'woodev_license_base_url', $this->api_url, $this->get_plugin() );
+			$filtered = apply_filters( 'woodev_license_base_url', $this->api_url, $this->get_plugin() );
+
+			return self::is_valid_url( $filtered ) ? $filtered : $this->api_url;
 		}
 
 		/**

@@ -1221,6 +1221,51 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 			return $countries[ $code ] ?? $code;
 		}
+
+
+		/** Filter-return guards ***********************************************/
+
+		/**
+		 * Applies a URL-returning filter and validates the result, degrading to
+		 * the pre-filter default when the filter returns something unusable.
+		 *
+		 * Deliberately lighter than {@see wp_http_validate_url()}: several of the
+		 * hooks this guards exist precisely so a self-hosted store, staging
+		 * environment, or the local e2e rig — non-standard ports, loopback and
+		 * private hosts included — can repoint the URL, and
+		 * `wp_http_validate_url()` rejects exactly those hosts by default. This
+		 * validates syntax only (an http(s) URL `filter_var()` accepts, mirroring
+		 * {@see Woodev_Licensing_API::is_valid_url()}), never trust. A caller that
+		 * treats the result as a security-relevant allow-list (e.g. a
+		 * package-download origin check) must still validate it for that purpose
+		 * itself; this only guarantees a well-formed URL, never a trusted one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $hook          The filter hook name.
+		 * @param string $default       The pre-filter value; also the filter's subject and its fallback.
+		 * @param mixed  ...$extra_args Additional arguments passed through to `apply_filters()`, if any.
+		 *
+		 * @return string The validated, trailing-slash-trimmed URL, or the trimmed $default.
+		 */
+		public static function filtered_url( string $hook, string $default, ...$extra_args ): string {
+
+			$filtered = apply_filters( $hook, $default, ...$extra_args );
+
+			if ( ! is_string( $filtered ) || '' === trim( $filtered ) ) {
+				return untrailingslashit( $default );
+			}
+
+			if ( 0 !== strpos( $filtered, 'http://' ) && 0 !== strpos( $filtered, 'https://' ) ) {
+				return untrailingslashit( $default );
+			}
+
+			if ( ! filter_var( $filtered, FILTER_VALIDATE_URL ) ) {
+				return untrailingslashit( $default );
+			}
+
+			return untrailingslashit( $filtered );
+		}
 	}
 
 endif;

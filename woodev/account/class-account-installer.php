@@ -77,6 +77,9 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 		 * (`woodev_account_api_url`); rejects other schemes, embedded credentials,
 		 * and foreign hosts. The allow-list is filterable for the local e2e rig,
 		 * where the issuer's package host differs from the server-to-server base.
+		 * A non-string, empty, or malformed `woodev_account_api_url` override is
+		 * discarded ({@see Woodev_Helper::filtered_url()}): the configured store
+		 * host degrades to the production default, it never disables this check.
 		 *
 		 * @since 2.0.2
 		 *
@@ -104,7 +107,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return false;
 			}
 
-			$store        = wp_parse_url( untrailingslashit( apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) ) );
+			$store        = wp_parse_url( Woodev_Helper::filtered_url( 'woodev_account_api_url', 'https://woodev.ru' ) );
 			$store_host   = is_array( $store ) ? strtolower( (string) ( $store['host'] ?? '' ) ) : '';
 			$store_scheme = is_array( $store ) ? strtolower( (string) ( $store['scheme'] ?? 'https' ) ) : 'https';
 
