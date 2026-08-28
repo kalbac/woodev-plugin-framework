@@ -265,11 +265,15 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			/**
 			 * Filters the woodev.ru storefront base URL the catalog proxy fetches from.
 			 *
+			 * A non-string, empty, or malformed return is discarded; the base then
+			 * degrades to the pre-filter default (`https://woodev.ru`) rather than
+			 * breaking the catalog proxy.
+			 *
 			 * @since 2.0.2
 			 *
 			 * @param string $base The storefront base URL.
 			 */
-			return untrailingslashit( apply_filters( 'woodev_extensions_store_url', 'https://woodev.ru' ) );
+			return Woodev_Helper::filtered_url( 'woodev_extensions_store_url', 'https://woodev.ru' );
 		}
 
 		/**

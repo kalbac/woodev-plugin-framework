@@ -306,7 +306,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 
 			$account                 = $connection->get_account();
 			$account['connectUrl']   = $connection->get_connect_url();
-			$account['myAccountUrl'] = apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) . '/my-account/';
+			$account['myAccountUrl'] = Woodev_Helper::filtered_url( 'woodev_account_api_url', 'https://woodev.ru' ) . '/my-account/';
 
 			$installed = Woodev_Installed_Plugins::download_ids(
 				Woodev_Plugin_Bootstrap::instance()->get_active_plugin_instances()

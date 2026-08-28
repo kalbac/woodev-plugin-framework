@@ -42,12 +42,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			 * Filters the woodev.ru base URL the account client talks to.
 			 *
 			 * Mirrors `woodev_license_base_url`: repoint at the issuer (:8090) for e2e.
+			 * A non-string, empty, or malformed return is discarded; the base then
+			 * degrades to the pre-filter default (`https://woodev.ru`) rather than
+			 * breaking the account client.
 			 *
 			 * @since 2.0.2
 			 *
 			 * @param string $base The account API base URL.
 			 */
-			return untrailingslashit( apply_filters( 'woodev_account_api_url', 'https://woodev.ru' ) );
+			return Woodev_Helper::filtered_url( 'woodev_account_api_url', 'https://woodev.ru' );
 		}
 
 		/**
@@ -94,12 +97,14 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			 *
 			 * Defaults to the API base. Override only when the browser must reach the
 			 * issuer at a different origin than the server does (e.g. the local rig).
+			 * A non-string, empty, or malformed return is discarded; the base then
+			 * degrades to the API base rather than sending the browser somewhere broken.
 			 *
 			 * @since 2.0.2
 			 *
 			 * @param string $base The authorize base URL (defaults to the API base).
 			 */
-			$base = untrailingslashit( apply_filters( 'woodev_account_authorize_url', $this->api_base() ) );
+			$base = Woodev_Helper::filtered_url( 'woodev_account_authorize_url', $this->api_base() );
 
 			return $base . '/';
 		}
