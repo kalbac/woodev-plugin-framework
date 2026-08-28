@@ -293,6 +293,17 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 * Ensures the background job handler never exceeds a sensible time limit.
 		 * A timeout limit of 30s is common on shared hosting.
 		 *
+		 * The `{identifier}_default_time_limit` filter's return feeds arithmetic
+		 * (`+`) directly below, so a non-numeric return would throw a TypeError.
+		 * It degrades to the PRE-FILTER default rather than being cast: `absint()`
+		 * turns garbage into `0`, and a limit of `0` makes `time() >= $finish`
+		 * true on the very first check — every background job would stop before
+		 * processing a single item, silently. Degrading a protection into a
+		 * disabled one is exactly what the rule on #599 forbids.
+		 *
+		 * @since 2.0.2 a non-numeric or non-positive filter return degrades to the
+		 *              pre-filter limit instead of reaching the arithmetic.
+		 *
 		 * @return bool True, if time limit exceeded, false otherwise
 		 */
 		protected function time_exceeded() {
@@ -303,7 +314,10 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 *
 			 * @param int $time Time in seconds
 			 */
-			$finish = $this->start_time + apply_filters( "{$this->identifier}_default_time_limit", 20 );
+			$filtered_limit = apply_filters( "{$this->identifier}_default_time_limit", 20 );
+			$time_limit     = is_numeric( $filtered_limit ) && (int) $filtered_limit > 0 ? (int) $filtered_limit : 20;
+
+			$finish = $this->start_time + $time_limit;
 			$return = false;
 
 			if ( time() >= $finish ) {
@@ -392,6 +406,15 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		/**
 		 * Get a job (by default the first in the queue)
 		 *
+		 * The `{identifier}_returned_job` filter's return is validated: this
+		 * runs on the background/cron path, where a fatal fails invisibly.
+		 * {@see self::process_job()} immediately dereferences `$job->status`,
+		 * so a non-object return degrades to the DB-sourced $job rather than
+		 * reaching that call.
+		 *
+		 * @since 2.0.2 the filter return is validated with is_object(); a
+		 *              non-object return no longer reaches process_job() raw.
+		 *
 		 * @param string $id Optional. Job ID. Will return first job in queue if not
 		 *                   provided. Will not return completed or failed jobs from queue.
 		 *
@@ -453,7 +476,9 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 *
 			 * @param stdClass|object $job
 			 */
-			return apply_filters( "{$this->identifier}_returned_job", $job );
+			$filtered_job = apply_filters( "{$this->identifier}_returned_job", $job );
+
+			return is_object( $filtered_job ) ? $filtered_job : $job;
 		}
 
 
@@ -532,9 +557,9 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 				}
 
 				/** This filter is documented above */
-				$job = apply_filters( "{$this->identifier}_returned_job", $job );
+				$filtered_job = apply_filters( "{$this->identifier}_returned_job", $job );
 
-				$jobs[] = $job;
+				$jobs[] = is_object( $filtered_job ) ? $filtered_job : $job;
 			}
 
 			return $jobs;
@@ -840,6 +865,16 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		/**
 		 * Schedule cron healthcheck
 		 *
+		 * The `{identifier}_cron_interval` filter's return feeds arithmetic
+		 * (`*`) below, so a non-numeric return would throw a TypeError. It
+		 * degrades to the PRE-FILTER interval rather than being cast: `absint()`
+		 * turns garbage into `0`, and an interval of `0` registers a WP-Cron
+		 * schedule that never advances — plus a "Every 0 Minutes" label in the
+		 * admin. Degrading into a hot loop is not a safe default.
+		 *
+		 * @since 2.0.2 a non-numeric or non-positive filter return degrades to the
+		 *              pre-filter interval instead of reaching the arithmetic.
+		 *
 		 * @param array $schedules
 		 *
 		 * @return array
@@ -853,7 +888,8 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 *
 			 * @param int $interval Interval in minutes
 			 */
-			$interval = apply_filters( "{$this->identifier}_cron_interval", $interval );
+			$filtered_interval = apply_filters( "{$this->identifier}_cron_interval", $interval );
+			$interval          = is_numeric( $filtered_interval ) && (int) $filtered_interval > 0 ? (int) $filtered_interval : $interval;
 
 			// adds every 5 minutes to the existing schedules.
 			$schedules[ $this->identifier . '_cron_interval' ] = array(

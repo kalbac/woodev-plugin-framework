@@ -630,6 +630,15 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 		/**
 		 * Gets the list of valid setting types.
 		 *
+		 * The `woodev_{id}_settings_api_setting_types` filter's return is
+		 * validated: it is consumed by {@see self::register_setting()}'s
+		 * `in_array()` call, which throws a `TypeError` on a non-array
+		 * haystack. A non-array return degrades to the pre-filter list
+		 * rather than reaching that call.
+		 *
+		 * @since 2.0.2 the filter return is validated with is_array(); a
+		 *              non-array return no longer reaches in_array() raw.
+		 *
 		 * @return string[]
 		 */
 		public function get_setting_types() {
@@ -650,11 +659,22 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			 * @param string[] $setting_types valid setting types
 			 * @param Woodev_Abstract_Settings $settings the settings handler instance
 			 */
-			return apply_filters( "woodev_{$this->get_id()}_settings_api_setting_types", $setting_types, $this );
+			$filtered_types = apply_filters( "woodev_{$this->get_id()}_settings_api_setting_types", $setting_types, $this );
+
+			return is_array( $filtered_types ) ? $filtered_types : $setting_types;
 		}
 
 		/**
 		 * Gets the list of valid control types.
+		 *
+		 * The `woodev_{id}_settings_api_control_types` filter's return is
+		 * validated: it is consumed by {@see self::register_control()}'s
+		 * `in_array()` calls, which throw a `TypeError` on a non-array
+		 * haystack. A non-array return degrades to the pre-filter list
+		 * rather than reaching those calls.
+		 *
+		 * @since 2.0.2 the filter return is validated with is_array(); a
+		 *              non-array return no longer reaches in_array() raw.
 		 *
 		 * @return string[]
 		 */
@@ -687,11 +707,23 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			 * @param string[] $control_types valid control types
 			 * @param Woodev_Abstract_Settings $settings the settings handler instance
 			 */
-			return apply_filters( "woodev_{$this->get_id()}_settings_api_control_types", $control_types, $this );
+			$filtered_types = apply_filters( "woodev_{$this->get_id()}_settings_api_control_types", $control_types, $this );
+
+			return is_array( $filtered_types ) ? $filtered_types : $control_types;
 		}
 
 		/**
 		 * Returns the valid control types for a setting.
+		 *
+		 * The `woodev_{id}_settings_api_setting_control_types` filter's return
+		 * is validated: it is consumed by {@see self::register_control()}'s
+		 * `in_array()` call, which throws a `TypeError` on a non-array
+		 * haystack. A non-array return degrades to the pre-filter value —
+		 * an empty list, meaning "no restriction" — rather than reaching
+		 * that call.
+		 *
+		 * @since 2.0.2 the filter return is validated with is_array(); a
+		 *              non-array return no longer reaches in_array() raw.
 		 *
 		 * @param Woodev_Setting $setting setting object
 		 * @return string[]
@@ -705,7 +737,9 @@ if ( ! class_exists( 'Woodev_Abstract_Settings' ) ) :
 			 * @param Woodev_Setting $setting setting object
 			 * @param Woodev_Abstract_Settings $settings the settings handler instance
 			 */
-			return apply_filters( "woodev_{$this->get_id()}_settings_api_setting_control_types", [], $setting->get_type(), $setting, $this );
+			$filtered_types = apply_filters( "woodev_{$this->get_id()}_settings_api_setting_control_types", [], $setting->get_type(), $setting, $this );
+
+			return is_array( $filtered_types ) ? $filtered_types : [];
 		}
 
 		/**

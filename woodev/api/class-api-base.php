@@ -310,13 +310,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Get the request URI
 		 *
+		 * The `woodev_{api_id}_api_request_uri` filter's return is validated: this
+		 * is the URI actually sent to the server, so a non-string return degrades
+		 * to the pre-filter $uri rather than reaching the live outbound request
+		 * malformed.
+		 *
+		 * @since 2.0.2 the filter return is validated with is_string(); a
+		 *              non-string return no longer reaches the request unmodified.
+		 *
 		 * @return string
 		 */
 		protected function get_request_uri() {
 
 			$uri = $this->request_uri . $this->get_request_path();
 
-			return apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+			$filtered_uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+
+			return is_string( $filtered_uri ) ? $filtered_uri : $uri;
 		}
 
 		/**
@@ -382,17 +392,24 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * through the unmodified {@see self::get_request_uri()}; only what
 		 * gets logged changes here.
 		 *
+		 * The filter's return is validated the same way {@see self::get_request_uri()}
+		 * validates it: a non-string return degrades to the pre-filter $uri
+		 * rather than being redacted and logged malformed.
+		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 redaction now runs AFTER the request-uri filter, not before.
 		 * @since 2.0.2 redaction now parses the query string structurally via
 		 *              {@see self::redact_secret_query_string()} — #395 Round 4, Blocking.
+		 * @since 2.0.2 the filter return is validated with is_string(); a
+		 *              non-string return no longer reaches redaction unmodified.
 		 *
 		 * @return string
 		 */
 		protected function get_sanitized_request_uri(): string {
 
-			$uri = $this->request_uri . $this->get_sanitized_request_path();
-			$uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+			$uri          = $this->request_uri . $this->get_sanitized_request_path();
+			$filtered_uri = apply_filters( 'woodev_' . $this->get_api_id() . '_api_request_uri', $uri, $this );
+			$uri          = is_string( $filtered_uri ) ? $filtered_uri : $uri;
 
 			return self::redact_secret_query_string( $uri, $this->get_secret_param_names() );
 		}
