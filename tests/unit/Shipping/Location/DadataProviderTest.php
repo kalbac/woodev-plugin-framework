@@ -1607,10 +1607,12 @@ final class DadataProviderTest extends TestCase {
 	 * stub DEFINES the function for the whole PHP process and PHP cannot un-define
 	 * it, so it survives into every later test class and flips
 	 * {@see Dadata_Api_Client::current_locale()}'s `function_exists()` branch. Left
-	 * unpinned, this class passes only while `tests/unit/handlers/` happens to be
-	 * traversed LAST — which it is only because the directory name is lowercase.
-	 * Under `--order-by=reverse` that accident reverses and 55 tests in this layer
-	 * turn red (issue #606).
+	 * unpinned, this class passed only while the handler tests happened to be
+	 * traversed LAST — which they were only because their directory was the
+	 * lowercase `tests/unit/handlers/`. Under `--order-by=reverse` that accident
+	 * reversed and 55 tests in this layer turned red (issue #606). The directory is
+	 * `tests/unit/Handlers/` now; the seam, not the rename, is what keeps this
+	 * class independent of traversal order.
 	 *
 	 * @return Dadata_Provider
 	 */
