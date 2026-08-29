@@ -3491,6 +3491,10 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 	// -------------------------------------------------------------------
 
 	describe( 'options.list() — issue #463', () => {
+		// The same server-supplied string the scope-degradation suite below asserts on; declared
+		// here too because these two suites do not share a scope.
+		const SCOPE_WIDENED_TEXT = 'Показаны результаты по более широкой области — не только по вашему выбору.';
+
 		it( 'builds the /location/list URL scoped by level/country/within, and stamps entry.value via fieldValueFor() exactly like options.fetch does for /location/suggest', async () => {
 			const specialCalls = [];
 
@@ -3527,6 +3531,54 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 			// ancestor-carrying label. Same derivation `fetchFor()` already gives `options.fetch`.
 			expect( localities[ 0 ].value ).toBe( 'Жуковский' );
 			expect( localities[ 0 ].label ).toBe( 'Московская обл., г Жуковский' );
+		} );
+
+		// Issue #361, critic finding s104. `/location/list` returns the SAME `within_status`
+		// `/suggest` does, and this seam sends a `within`, so a third-party renderer using
+		// `options.list` must get the widened-scope text too — otherwise the one renderer path
+		// that is NOT built in is the one left with the silent country-wide fallback #324 forbids.
+		it( 'refreshes options.emptyText from the list response within_status, exactly like options.fetch', async () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( { el, options } );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( { region: true, settlement: true, mode: 'custom-mode' } );
+
+			const listPromise = specialCalls[ 0 ].options.list();
+
+			fetchCalls[ fetchCalls.length - 1 ].resolve( { localities: [], within_status: 'cross_country' } );
+			await listPromise;
+
+			expect( specialCalls[ 0 ].options.emptyText ).toBe( SCOPE_WIDENED_TEXT );
+		} );
+
+		// Control: without it the test above also passes for an implementation that sets the
+		// widened text on every list response.
+		it( 'control: an applied list response leaves the ordinary no-results text in place', async () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( { el, options } );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			boot( { region: true, settlement: true, mode: 'custom-mode' } );
+
+			const listPromise = specialCalls[ 0 ].options.list();
+
+			fetchCalls[ fetchCalls.length - 1 ].resolve( { localities: [], within_status: 'applied' } );
+			await listPromise;
+
+			expect( specialCalls[ 0 ].options.emptyText ).not.toBe( SCOPE_WIDENED_TEXT );
 		} );
 
 		it( 'scopes `within` by the LIVE parent selection at call time, never captured at attach time', () => {

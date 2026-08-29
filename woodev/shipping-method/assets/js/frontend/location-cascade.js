@@ -1382,7 +1382,7 @@
 	 * @param {{level: string, fieldId: string}} node
 	 * @returns {function(): Promise<Array>}
 	 */
-	function listFor( entry, node ) {
+	function listFor( entry, node, options ) {
 		return function() {
 			var url = buildUrl( entry.location.endpoints.list, {
 				level: node.level,
@@ -1392,6 +1392,18 @@
 
 			return fetchJson( url, { method: 'GET', headers: nonceHeader( entry ) } ).then( function( body ) {
 				var localities = body && Array.isArray( body.localities ) ? body.localities : [];
+
+				// Issue #361, critic finding s104: `/location/list` carries the SAME `within_status`
+				// field `/suggest` does, so this seam refreshes `options.emptyText` exactly the way
+				// {@see fetchFor} does. No BUILT-IN renderer reads `options.list` today (see this
+				// function's own issue-#529 note), but the renderer registry is OPEN — a third-party
+				// renderer handed `options.list` for a settlement/address level sends a `within` via
+				// `scopeKeyFor()` above and would otherwise get the ordinary no-results text for a
+				// scope that had silently widened. `options` is optional here for the same reason it
+				// is in `fetchFor`: a caller that hands over none simply gets no refresh.
+				if ( options ) {
+					options.emptyText = emptyTextFor( entry, node, body && body.within_status );
+				}
 
 				localities.forEach( function( locality ) {
 					if ( locality ) {
@@ -3407,7 +3419,9 @@
 			// the FULL scoped list rather than a per-keystroke suggest query. See `listFor()`'s
 			// own docblock (issue #529) for why this stays even though no built-in renderer
 			// currently reads it.
-			list: listFor( entry, node ),
+			// Filled in AFTER this literal, next to `fetch` and for the same reason — it must
+			// receive THIS object to refresh `emptyText` from a completed response.
+			list: null,
 			// Issue #530: only handed over for the level the popular-settlements list can
 			// ever carry — `settlement` (only an order's own settlement is ever enrolled,
 			// spec D2/D3) — a mode-specific renderer for `region`/`address` gets no
@@ -3462,6 +3476,7 @@
 		};
 
 		options.fetch = fetchFor( entry, node, options );
+		options.list = listFor( entry, node, options );
 
 		var renderer = resolveModeRenderer( entry, node );
 
