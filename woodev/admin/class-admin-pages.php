@@ -15,6 +15,19 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 	class Woodev_Admin_Pages {
 
 		/**
+		 * Top-level Woodev admin-menu slug ({@see self::admin_menu()}) — the
+		 * single source every submenu registrar ({@see self::licenses_menu()},
+		 * {@see self::extensions_menu()}), {@see self::menu_remove_top_item()},
+		 * and {@see self::is_woodev_page()} (#410) reference, so the slug
+		 * exists exactly once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const PAGE_SLUG = 'woodev';
+
+		/**
 		 * Main plugin class instance
 		 *
 		 * @var Woodev_Plugin
@@ -67,7 +80,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				__( 'Woodev', 'woodev-plugin-framework' ),
 				__( 'Woodev', 'woodev-plugin-framework' ),
 				'manage_options',
-				'woodev',
+				self::PAGE_SLUG,
 				null,
 				$this->woodev_plugin->get_framework_assets_url() . '/images/woodev-icon-16x16.png',
 				'65.5'
@@ -77,7 +90,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function licenses_menu() {
 
 			$license_page = add_submenu_page(
-				'woodev',
+				self::PAGE_SLUG,
 				__( 'Woodev license keys', 'woodev-plugin-framework' ),
 				__( 'Licenses', 'woodev-plugin-framework' ),
 				'manage_options',
@@ -221,7 +234,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function extensions_menu() {
 
 			$extensions_suffix = add_submenu_page(
-				'woodev',
+				self::PAGE_SLUG,
 				__( 'Плагины Woodev', 'woodev-plugin-framework' ),
 				__( 'Плагины', 'woodev-plugin-framework' ),
 				'manage_options',
@@ -383,9 +396,72 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function menu_remove_top_item() {
 			global $submenu;
 
-			if ( isset( $submenu['woodev'] ) ) {
-				unset( $submenu['woodev'][0] );
+			if ( isset( $submenu[ self::PAGE_SLUG ] ) ) {
+				unset( $submenu[ self::PAGE_SLUG ][0] );
 			}
+		}
+
+		/**
+		 * True when the current wp-admin request is for a Woodev page — the
+		 * top-level `woodev` page itself, or any submenu registered under it
+		 * (#410). Derives the answer from the LIVE menu registry
+		 * (`$GLOBALS['submenu']`) rather than a hardcoded slug list, so a
+		 * plugin that adds its own submenu under {@see self::PAGE_SLUG} is
+		 * covered for free — no separate allowlist to keep in sync.
+		 *
+		 * Reads `$GLOBALS['submenu']` directly rather than `global $submenu`:
+		 * `admin_menu` (where every submenu — this class's own and any host
+		 * plugin's — registers) has always already fired by the time
+		 * `admin_notices` / `admin_footer` call this, so the global is
+		 * populated. `static` (not an instance method): the answer depends
+		 * only on the current request's `$_GET['page']` and the global menu
+		 * registry, neither of which needs `$this->woodev_plugin`.
+		 *
+		 * Compares the raw, `wp_unslash()`-ed value only — no `sanitize_key()`
+		 * — the same way WordPress core itself resolves the current admin page
+		 * (`wp-admin/admin.php` unslashes `$_GET['page']` and compares it
+		 * directly, never running it through `sanitize_key()`). Both sides of
+		 * every comparison here are TRUSTED strings — {@see self::PAGE_SLUG}
+		 * and the slugs `$GLOBALS['submenu']` was itself registered with — used
+		 * strictly in `===`, never echoed, interpolated into SQL, or used as a
+		 * path, so there is nothing to sanitize against. `sanitize_key()`
+		 * lowercases and strips everything but `[a-z0-9_-]`, so it breaks the
+		 * comparison both ways: a mixed-case slug from an unrelated plugin
+		 * (`Woodev-Settings`) would collide into a false-positive match, and a
+		 * legal Woodev submenu slug containing `/` or `.` (registered the way
+		 * WooCommerce's own `edit.php?post_type=shop_order` is) would never
+		 * match at all — a false negative. A false positive is the expensive
+		 * direction here: this notice is non-dismissible, so it would nag on a
+		 * page that is not ours at all (critic finding, PR #661).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_woodev_page(): bool {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page detection, no state change.
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated -- compared with strict === only against trusted slugs (self::PAGE_SLUG and the $GLOBALS['submenu'] registry), never echoed/used in SQL/paths; sanitize_key() would corrupt legal slugs containing '/', '.', or mixed case (matches core admin.php's own wp_unslash()-only handling).
+			$page = isset( $_GET['page'] ) ? (string) wp_unslash( $_GET['page'] ) : '';
+
+			if ( '' === $page ) {
+				return false;
+			}
+
+			if ( self::PAGE_SLUG === $page ) {
+				return true;
+			}
+
+			if ( empty( $GLOBALS['submenu'][ self::PAGE_SLUG ] ) ) {
+				return false;
+			}
+
+			foreach ( $GLOBALS['submenu'][ self::PAGE_SLUG ] as $submenu_item ) {
+				if ( isset( $submenu_item[2] ) && $page === $submenu_item[2] ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 	}
 

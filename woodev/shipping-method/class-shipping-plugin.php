@@ -510,6 +510,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// add a notice when the active Location Provider is not configured
 			// (#375/#377)
 			$this->add_location_provider_not_configured_notice();
+
+			// add a notice when the fixed default locality was picked under a
+			// provider that is no longer the active one (#410)
+			$this->add_default_locality_stale_notice();
 		}
 
 		/**
@@ -756,7 +760,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				return;
 			}
 
-			if ( ! Location\Location_Provider_Registry::instance()->claim_not_configured_notice( $notice['notice_id'] ) ) {
+			if ( ! Location\Location_Provider_Registry::instance()->claim_notice_id( $notice['notice_id'] ) ) {
 				return;
 			}
 
@@ -764,6 +768,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 				$notice['message'],
 				$notice['notice_id'],
 				[
+					'notice_class' => 'notice-warning',
+				]
+			);
+		}
+
+		/**
+		 * Adds an admin notice when the store's FIXED default-locality record was
+		 * picked under a provider that is no longer the active one (#410) — the
+		 * Location Provider layer's admin-notice counterpart to
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::apply_default_locality_status_note()}'s
+		 * settings-page description note, which a merchant who switched
+		 * providers OUTSIDE the settings form (`wp option update`, plugin
+		 * deactivation, a direct-SQL migration) never sees.
+		 *
+		 * Scoped to Woodev admin pages only ({@see \Woodev_Admin_Pages::is_woodev_page()})
+		 * — the operator's deliberate middle-loudness choice (#410): loud enough
+		 * that a merchant working the Woodev settings surfaces meets it, but not
+		 * global across every wp-admin screen the way
+		 * {@see self::add_location_provider_not_configured_notice()} is, since an
+		 * unconfigured provider blocks checkout everywhere while a stale fixed
+		 * pick merely may not suit the currently-active provider.
+		 *
+		 * NON-dismissible, unlike {@see self::add_location_provider_not_configured_notice()}:
+		 * the underlying condition is computed LIVE
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::default_locality_stale_notice()}),
+		 * so the notice disappears by itself the instant the merchant re-picks
+		 * the record or the active provider changes back — a dismiss flag in
+		 * user meta would only let a merchant permanently hide a condition that
+		 * is still true.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function add_default_locality_stale_notice(): void {
+
+			if ( ! $this->needs_location_provider() ) {
+				return;
+			}
+
+			if ( ! \Woodev_Admin_Pages::is_woodev_page() ) {
+				return;
+			}
+
+			$notice = Location\Location_Provider_Registry::instance()->default_locality_stale_notice();
+
+			if ( null === $notice ) {
+				return;
+			}
+
+			if ( ! Location\Location_Provider_Registry::instance()->claim_notice_id( $notice['notice_id'] ) ) {
+				return;
+			}
+
+			$this->get_admin_notice_handler()->add_admin_notice(
+				$notice['message'],
+				$notice['notice_id'],
+				[
+					'dismissible'  => false,
 					'notice_class' => 'notice-warning',
 				]
 			);

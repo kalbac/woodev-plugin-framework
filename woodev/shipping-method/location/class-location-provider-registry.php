@@ -1149,19 +1149,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 
 		/**
-		 * Claims `$notice_id` for the FIRST caller this request — the fleet-wide
-		 * dedup for the shared "active location provider is not configured"
-		 * notice ({@see \Woodev\Framework\Shipping\Shipping_Plugin::add_location_provider_not_configured_notice()}).
+		 * Claims `$notice_id` for the FIRST caller this request — the shared,
+		 * fleet-wide once-per-request dedup for BOTH Location notices the
+		 * registry backs: the "active location provider is not configured"
+		 * notice ({@see \Woodev\Framework\Shipping\Shipping_Plugin::add_location_provider_not_configured_notice()},
+		 * kept here as the worked example) and the "fixed default locality is
+		 * stale" notice (#410;
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::add_default_locality_stale_notice()}).
 		 * Every participating plugin's own handler computes the SAME notice id
-		 * for the SAME unconfigured provider (that method's own docblock), so
-		 * without this gate every plugin in the fleet would render its own copy
-		 * of the identical notice on the same screen. The registry — the one
+		 * for the SAME condition (each caller's own docblock), so without this
+		 * gate every plugin in the fleet would render its own copy of the
+		 * identical notice on the same screen. The registry — the one
 		 * fleet-wide singleton every participating plugin already shares — is
 		 * what can answer "has anyone already claimed this id THIS request",
 		 * which no single plugin's own (per-plugin)
 		 * {@see \Woodev_Admin_Notice_Handler} can.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Renamed from `claim_not_configured_notice()` and its
+		 *              docblock generalised: the gate is not specific to the
+		 *              not-configured notice, it is shared by every fleet-wide
+		 *              Location notice this registry backs (#410).
 		 *
 		 * @param string $notice_id the notice id a caller is about to register.
 		 *
@@ -1170,7 +1178,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              notice); `false` on every subsequent claim of the SAME
 		 *              id (the caller must stand down).
 		 */
-		public function claim_not_configured_notice( string $notice_id ): bool {
+		public function claim_notice_id( string $notice_id ): bool {
 			if ( isset( $this->claimed_notice_ids[ $notice_id ] ) ) {
 				return false;
 			}
@@ -2462,6 +2470,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		}
 
 		/**
+		 * True iff the store's FIXED default-locality record was picked under a
+		 * provider that is no longer the active one — the shared predicate
+		 * behind both {@see self::apply_default_locality_status_note()}'s
+		 * settings-page note and
+		 * {@see self::default_locality_stale_notice()}'s admin notice (#410).
+		 * Extracted into one method specifically so those two surfaces can
+		 * never drift apart — duplicating the comparison in two places is
+		 * exactly how they would.
+		 *
+		 * Deliberately keeps the `null === $active` arm this predicate was
+		 * extracted from ({@see self::apply_default_locality_status_note()}'s
+		 * own prior comparison): a record exists but nothing currently
+		 * resolves as active (e.g. the bundled default provider is not
+		 * configured — see {@see self::get_active_provider()}'s own docblock)
+		 * still counts as a mismatch, since the record's provider is, by
+		 * definition, not the (nonexistent) active one either.
+		 *
+		 * Fires on provider MISMATCH only — not on "policy is `fixed` but no
+		 * record was ever picked", which stays on the «Локация» section's own
+		 * description note ({@see self::apply_default_locality_status_note()}'s
+		 * first branch) and is out of scope for the admin notice (#410).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function is_default_locality_provider_mismatched(): bool {
+			if ( self::DEFAULT_LOCALITY_POLICY_FIXED !== $this->get_default_locality_policy() ) {
+				return false;
+			}
+
+			$record = $this->get_default_locality_record();
+
+			if ( null === $record ) {
+				return false;
+			}
+
+			$active = $this->get_active_provider();
+
+			return null === $active || $active->get_id() !== $record->provider_id();
+		}
+
+		/**
 		 * Surfaces the `fixed` default-locality policy's "nothing usable is
 		 * actually configured" state on the settings page (review finding F4),
 		 * rather than leaving it silent: no picker UI ships in this task (a
@@ -2492,6 +2543,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * runtime gate) "did the store switch away from the provider this was
 		 * picked under" is the common case this exists to catch.
 		 *
+		 * The provider-mismatch branch below delegates to
+		 * {@see self::is_default_locality_provider_mismatched()} (#410) — the
+		 * same predicate {@see self::default_locality_stale_notice()} uses for
+		 * the Woodev-admin-pages notice, so the two surfaces can never drift
+		 * apart. The "no record at all" branch stays here unchanged: that case
+		 * is out of scope for the admin notice (#410), by design.
+		 *
 		 * Called from {@see self::register_settings()} once `$this->settings_handler`
 		 * exists — {@see self::get_default_locality_policy()} /
 		 * {@see self::get_default_locality_record()} / {@see self::get_active_provider()}
@@ -2512,9 +2570,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return; // Defensive: register_settings() above always registers this id.
 			}
 
-			$record = $this->get_default_locality_record();
-
-			if ( null === $record ) {
+			if ( null === $this->get_default_locality_record() ) {
 				$setting->set_description(
 					__( 'The default location is not configured: until a valid record is saved, this policy applies nothing.', 'woodev-plugin-framework' )
 				);
@@ -2522,13 +2578,80 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return;
 			}
 
-			$active = $this->get_active_provider();
-
-			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
+			if ( $this->is_default_locality_provider_mismatched() ) {
 				$setting->set_description(
 					__( 'The fixed location was chosen through a different provider and may not suit the current one — choosing it again is recommended.', 'woodev-plugin-framework' )
 				);
 			}
+		}
+
+
+		/**
+		 * Computes the "fixed default locality is stale" admin notice — message
+		 * text and a stable notice id — or `null` when nothing should be shown
+		 * right now (#410). The Woodev-admin-pages counterpart to
+		 * {@see self::apply_default_locality_status_note()}'s settings-page
+		 * description note: that note is invisible to a merchant who switched
+		 * providers OUTSIDE the settings form (`wp option update`, plugin
+		 * deactivation, a direct-SQL migration), since nothing re-renders the
+		 * «Локация» section for them. This is a LIVE computation with no stored
+		 * flag — see {@see self::is_default_locality_provider_mismatched()}'s
+		 * own docblock for why a stored flag was rejected.
+		 *
+		 * PURE decision (touches no `Woodev_Admin_Notice_Handler`, no admin
+		 * hook, no page-scoping check) — the same split
+		 * {@see \Woodev\Framework\Shipping\Shipping_Plugin::location_provider_not_configured_notice()}
+		 * already uses, so this is directly unit-testable without reflecting
+		 * into a protected registration method.
+		 *
+		 * Deliberately NARROWER than {@see self::is_default_locality_provider_mismatched()}:
+		 * the predicate's `null === $active` arm counts "nothing currently
+		 * resolves as active" as a mismatch too (correct for the settings-page
+		 * note, which merely describes state), but this notice additionally
+		 * requires a REAL active provider before firing. The message tells the
+		 * merchant to "Выберите её заново" — with no active provider there is
+		 * nothing to re-pick with, and since this notice is non-dismissible, a
+		 * `null === $active` state would otherwise become a permanent,
+		 * unactionable banner across the whole Woodev section (critic finding,
+		 * PR #661). The settings note deliberately stays broader; this notice
+		 * fires only on a genuine provider-vs-provider mismatch, which is also
+		 * exactly what card #410 asks for.
+		 *
+		 * Names neither provider in the message: the record's provider may no
+		 * longer be registered under any plugin at all, so there is no name to
+		 * print for it.
+		 *
+		 * The settings link points at the «Доставка» tab's «Локация» section —
+		 * {@see \Woodev\Framework\Settings\Settings_Page_Registry::PAGE_SLUG}
+		 * (`woodev-settings`) and
+		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::SERVICE_ID}
+		 * (`shipping`) — hardcoded rather than referenced directly to avoid
+		 * pulling a new class dependency into the location layer.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{message: string, notice_id: string}|null
+		 */
+		public function default_locality_stale_notice(): ?array {
+			if ( ! $this->is_default_locality_provider_mismatched() ) {
+				return null;
+			}
+
+			if ( null === $this->get_active_provider() ) {
+				return null;
+			}
+
+			$message = sprintf(
+				/* translators: %1$s - opening <a> tag, %2$s - closing </a> tag */
+				__( 'Зафиксированная локация по умолчанию была выбрана через другого провайдера и может не подходить активному сейчас. %1$sВыберите её заново%2$s.', 'woodev-plugin-framework' ),
+				'<a href="' . esc_url( admin_url( 'admin.php?page=woodev-settings&tab=shipping' ) ) . '">',
+				' &raquo;</a>'
+			);
+
+			return [
+				'message'   => $message,
+				'notice_id' => 'location-default-locality-stale',
+			];
 		}
 
 
