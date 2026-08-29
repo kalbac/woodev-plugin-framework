@@ -6,9 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-29 (s103).** `main` clean, **no open PRs**. Merged in s103, four: **#645**
-(#567 rule 1), **#648** (#627), **#649** + **#651** (#353), plus `c5ccae8` (the four i18n rules into
-`AGENTS.md`). s102 merged seven; history → `sessions/s102.md`.
+**As of 2026-08-29 (s104).** `main` clean. **One PR open on purpose: #657 (#361)** — green, critic-
+reviewed, rebased, and held for the operator's UI check because it adds a shopper-visible row.
+Merged in s104, five: **#655** (#650), **#656** (#646), **#658** (#647), **#659** (#653, part),
+**#660** (#644's material). s103 merged four; history → `sessions/s103.md`, `sessions/s104.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -20,35 +21,24 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 29.08.2026 IN THE PRIMARY CHECKOUT (s103), sodium enabled:**
-`composer check` **3186** / 7826 / **1 skipped**, and the same three numbers under
-`--order-by=reverse`. Integration **126** / 494. jest **1548** in 21 suites.
+**Baselines on `main`, measured 29.08.2026 IN THE PRIMARY CHECKOUT (s104), sodium enabled:**
+`composer check` **3215** / 7888 / **1 skipped**, and the same three numbers under
+`--order-by=reverse`. Integration **126** / 494. jest **1551** in 21 suites.
 
-⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless.** Same tree, one
-flag apart: sodium off → **67 skipped**; sodium on → **1**. **66 of the 67 are just "ext-sodium is
-not enabled in this php.ini"**, so the "compare SKIPPED, the primary is 66" rule carried since s84
-was comparing a number driven by the operator's PHP config — and the 5-test signal it existed to
-catch (the gitignored `plugins-reference/` contract guards, absent from CI and every worktree) was a
-rounding error inside it. With sodium on the numbers are legible again: **1 in the primary, 6
-anywhere `plugins-reference/` is absent** (CI reports 6). Gotcha
+⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless** — off it reads 67,
+on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (CI reports 6). Why,
+and why the old "the primary is 66" rule was measuring the operator's php.ini: gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624).**
-It was 51 errors + 4 failures: the suite was green by ALPHABETICAL ACCIDENT, because
-`tests/unit/handlers/` sorted last only for being lowercase. `DadataApiClientTest` /
-`DadataProviderTest` now pin the locale through the `current_locale()` seam (and `Dadata_Provider`'s
-new `make_client()` seam) instead of relying on `get_locale` being undefined; the directory is
-`tests/unit/Handlers/`. CI runs `--order-by=reverse` on the target PHP version only — deterministic,
-so a failure reproduces locally with the same command.
+✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624).** CI
+runs it on the target PHP version only, deterministically, so a failure reproduces locally with the
+same command. What it found on its first night, and why the suite had been green by alphabetical
+accident: `sessions/s102.md`.
 
-**The gate paid for itself twice on its first night, both times on unrelated code:** a latent
-wall-clock race in `LicenseAuthorityClaimsTest`'s expiry-boundary test, and 268 errors from a worker
-stubbing `WC()` in `setUp()` (forward red, reverse green). Details → `sessions/s102.md`.
-
-✅ **Integration on `main` (s102, primary checkout): 126 tests / 494 assertions, OK** — re-measured,
+✅ **Integration on `main` (s104, primary checkout): 126 tests / 494 assertions, OK** — re-measured,
 not copied forward; unchanged since s100.
 
-✅ **jest on `main` (s102): 1548 tests in 21 suites.** Run from bash with `--roots`,
+✅ **jest on `main` (s104): 1551 tests in 21 suites.** Run from bash with `--roots`,
 never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
@@ -59,19 +49,26 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s103:** **#621** (item 1 measured; the FIX is untouched and is held BEHIND
-**#639** — see below), the locations leftovers **#356/#358/#361/#410** (three of the four need a
-CONTRACT or UX decision before any code), **#589**, **#650**, **#647**, **#646**, **#644**, **#652**,
-**#639**, **#437** (needs a scope conversation — do NOT take autonomously), and the standing list
-#474, #483, #511, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
-(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
-and rebuild the `.mo` before release).
+**Open cards after s104:** **#621** (item 1 measured; the FIX is untouched and is held BEHIND
+**#639** — see below), the locations leftovers **#356/#358/#410** (#361 shipped as PR #657, still
+open for his UI check; of the remaining three, #356 and #358 need a CONTRACT decision before any
+code and #410 is decided and buildable), **#589**, **#644** (material delivered, prioritisation is
+his), **#652**, **#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope
+conversation — do NOT take autonomously), and the standing list #474, #483, #515, #331, #332,
+#374. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids with no
+translation — operator, 29.08.2026: leave them, regenerate the `.pot` and rebuild the `.mo` before
+release).
 
-**#621 is held behind #639 deliberately.** The cheap fix — a `WC_Order` subclass with declared
-properties — was written, measured and REVERTED in s103: `get_order()` must preserve the caller's
-concrete order class, and a fixed subclass silently downgrades a `WC_Subscription` to a plain order.
-The code says so itself one line above the first assignment. What remains is a ~138-site context
-object, and investing that in a subsystem whose size #639 is questioning is the wrong order.
+⚠ **#511 was on the waiting-list for four days after it closed** (25.08.2026), and #159 sat in the
+held-tech-debt line for two weeks after closing (13.08.2026). Both removed here; the #644 audit
+found them by checking every card number in this file against `gh issue view`, which is the only
+method that works. Full map → `reviews/2026-08-29-docs-and-board-audit.md`.
+
+**#621 is held behind #639 deliberately.** The cheap fix (a `WC_Order` subclass) was written,
+measured and REVERTED in s103 — `get_order()` must preserve the caller's concrete order class, or a
+`WC_Subscription` silently becomes a plain order. What remains is a ~138-site context object, and
+investing that in a subsystem whose size #639 is questioning is the wrong order. Detail:
+`sessions/s103.md`.
 
 **i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
 English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
@@ -82,18 +79,14 @@ by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-
 in s102 after measuring the hook has zero consumers, `is_available` triaged HARMLESS). History →
 `sessions/s101.md` / `s102.md`.
 
-**Filed in s102:** #627 (closed s103), #632 (closed same session). **Filed in s101:** #606, #609,
-#613, #621 — all but #621 closed. **Filed in s103:** #644, #646, #647, #650, #652.
-
 **Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
-decided by WHO READS IT, not by how dangerous the text looks.** Reader is the MERCHANT or a plugin
-author → kept (an order note, nine admin-facing browser responses, `script-handler.php:262`'s
-`nopriv` seam). Reader is the CUSTOMER → redacted (`my-payment-methods.php:768`). Every LOG sink
-redacts unconditionally (**#594**); this rule is about RESPONSE and NOTE boundaries only. His
-reasoning, verbatim, and the per-site table: cards **#608** / **#610**, `sessions/s101.md`.
+decided by WHO READS IT, not by how dangerous the text looks.** MERCHANT or plugin author → kept;
+CUSTOMER → redacted. Every LOG sink redacts unconditionally (**#594**); this rule is about RESPONSE
+and NOTE boundaries only. His reasoning verbatim and the per-site table: cards **#608** / **#610**,
+`sessions/s101.md`.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this
-file. s103 closed #567 (rule 1), #627, #353.
+file. s104 closed #650, #646, #647; s103 closed #567 (rule 1), #627, #353.
 
 **Operator decisions still shaping the work:**
 
@@ -169,12 +162,10 @@ answered with three exact hits. The fourth (a commit hash) lost its leading char
 fabrication, but why every Codex round still gets one fact you already know. Recipe and the two
 ways CLI 0.150.1 departs from it: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
-**kilo is the FALLBACK critic now, not the default.** It held the seat 27.08–28.08 while the
-subscription was unpaid; the measurement that put it there stands (sol-discounted: **$10 over one
-evening and one day**, half a month of the Codex subscription). If it is used again: **Orca cannot
-supervise it** — dispatch WITHOUT `--inject`, which otherwise revokes the capability before the
-worker reports (open question **#559**) — and pin the model via `--command`. Figures and full
-recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+**kilo is the FALLBACK critic now, not the default** (it held the seat 27.08–28.08 while the
+subscription was unpaid). If it is used again it has its own traps — Orca cannot supervise it, and
+the model must be pinned via `--command`. Figures, cost and full recipe:
+[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
 `node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
@@ -182,7 +173,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **236**.
+Gotchas: **242**.
 
 ## Program status (high level)
 
@@ -236,28 +227,32 @@ oversight.
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
 27.08.2026 — история на **#583**.
 
-1. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 (замерить на
-   8.2+ прежде чем чинить) закрыт замером в s102, ответ на карточке. Тринадцать точек присваивания
-   и заметно больше чтений; варианты (объект-обёртка рядом с заказом / мета) на карточке. ADR-005
-   разрешает ломать эти внутренние поля.
-2. **#353** — начат и осознанно откачен в s98; замер объёма на карточке. Сначала решить вопрос
-   про страно-слепой `provider_for_level()`, потом включать правило регистрации.
-3. **Остатки слоя локаций:** #356, #358, #361, #410.
-4. ~~**#514**~~ — **закрыт в s102**: m4 (контраст) и m5 (ширина селектора) починены, оператор
-   подтвердил m5 на риге до правки. Прежнее «решён в s97» было ложным — сверено с кодом.
-   m6 и T3 закрыты в s98 (#563).
-5. **#627** — тот же `(array)`-каст в `Checkout_Config::location_i18n_strings()`, что отвергли в
-   карте ПВЗ. Дефолты инлайном в вызове `apply_filters()` — сперва вынести их в `$defaults`.
-6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
+1. **#657 (#361) ждёт ЕГО глаз на риге** — PR зелёный, отревьюен критиком, ребейзнут. Добавляет
+   покупателю ВИДИМУЮ строку в списке подсказок, поэтому по стоячему правилу не мержится без него.
+2. **#410 — решено оператором 29.08.2026 и готово к реализации.** Админ-уведомление на страницах
+   Woodev; механизм `Woodev_Admin_Notice_Handler` теперь под тестами и с тайп-хинтами (PR #659),
+   так что причина ждать #653 снята.
+3. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 закрыт замером в
+   s102. Остаётся контекст-объект на ~138 правок. **Держится за #639** — не начинать до ответа.
+4. **Остатки слоя локаций: #356 и #358** — по обоим нужен РАЗБОР комментарием на карточку, а не
+   код: #358 прямо запрещает «чинить» баном cross-provider scope и несёт два ПРОТИВОПОЛОЖНЫХ
+   измеренных исхода; #356 — проектирование forget-пути.
+5. **#653, вторая половина** — инлайновый jQuery. Замер и рекомендация («оставить как есть, если
+   не сводить несколько мелких админских скриптов в один бандл разом») уже на карточке, в `Инбокс`.
+6. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
+   Расстановка приоритетов — ЕГО. В `Инбокс`.
+7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
 
+⚠ **Аудит #644 нашёл 93 открытые карточки, а не 86**, и что из них по коду проверены только ~10 —
+остальные оттриажены по заголовку. Полная поштучная сверка остаётся отдельной работой.
 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#567** (язык msgid — 305 строк работы в одну сторону, замер на
 карточке), **#437** (нужна беседа об объёме), **#613** в части `payment-tokens-handler.php:700`,
 **#474**, **#483**,
-**#511**, **#515**, **#331**, **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
+**#515**, **#331**, **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
 и #321, #322.
 
-**Техдолг и улучшения карты (181, 159, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
+**Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** (#159 из этого списка закрыт 13.08.2026) — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
 
 Deferred (всё остальное — board №6): UK-CFR (settings extensibility) и прочие отложенные карточки живут на доске; `FUTURE-BACKLOG.md` заморожен.
 

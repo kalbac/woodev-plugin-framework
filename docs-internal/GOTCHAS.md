@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 237 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 242 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/namespaces] **Moving a class into a sub-namespace rebinds every UNQUALIFIED sibling reference in that file at once — no parse error, no PHPCS complaint, and seven targeted test files still green; the full suite dies at load.** → [moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings](gotchas/moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings.md) (s104)
 - [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](gotchas/a-cast-is-not-a-degradation.md) (s102)
 - [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
 - [php/parse-str] **`parse_str()` LOSES information (arrays, key normalisation), so a subset match built on it silently widens into a false positive.** → [parse-str-loses-information-so-never-compare-queries-with-it](gotchas/parse-str-loses-information-so-never-compare-queries-with-it.md) (s98)
@@ -293,6 +294,8 @@
 - [shipping/warehouse-identity] **Warehouse identity: storage row id ≠ carrier-unique id.** → [warehouse-storage-id-vs-carrier-id](gotchas/warehouse-storage-id-vs-carrier-id.md)
 
 ### [i18n/*] — Localization
+- [i18n/catalogue] **Rule 1 has TWO halves: an English msgid WITHOUT a `.po` entry is a storefront regression, not a half-done change — `м`/`км` became `m`/`km` for every ru_RU shopper and every gate stayed green.** → [rule-1-has-two-halves-an-english-msgid-alone-is-a-regression](gotchas/rule-1-has-two-halves-an-english-msgid-alone-is-a-regression.md) (s104)
+- [i18n/catalogue] **The committed `.mo` IS `wp i18n make-mo` of the committed `.po` (md5-verified), so adding a catalogue entry is a reviewable diff — compile the unchanged file first as the control.** → [the-mo-is-reproducible-from-the-po](gotchas/the-mo-is-reproducible-from-the-po.md) (s104)
 - [i18n/classification] **A directory says who OWNS a file, not who READS its output — bucketing translatable strings by path put 42 admin settings labels in the frontend bucket and made the estimate 104 where the answer was 65.** → [classify-an-i18n-string-by-its-render-path-not-its-file-path](gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md) (s103)
 - [i18n/scanning] **`__( 'half.' . ' half.', $d )` is ONE msgid to gettext and zero to a scanner that requires a single literal — two measurements missed the same customer-facing string.** → [a-concatenated-msgid-is-invisible-to-a-single-literal-scanner](gotchas/a-concatenated-msgid-is-invisible-to-a-single-literal-scanner.md) (s103)
 - [i18n/catalogue-audit] **A hand-rolled `.po` merge silently ate 92 `#~` obsolete entries and the output was still valid — a parser that treats `#` as a comment never sees them. Count them in and out BEFORE installing.** → [a-po-merge-that-drops-obsolete-entries-still-looks-well-formed](gotchas/a-po-merge-that-drops-obsolete-entries-still-looks-well-formed.md) (s103)
@@ -307,6 +310,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/worktrees] **"A fresh worktree needs no install step" expires the moment another branch renames a class — the COPIED `vendor` carries a snapshot classmap, and `Class "…" not found` reads as a broken diff.** → [a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename](gotchas/a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename.md) (s104)
+- [tooling/orca] **The 2–3 agent cap binds the COORDINATOR only: one worker briefed with a 93-item survey fanned out to eight unsupervised nested agents, and free RAM read 0.1 GB of 15.3.** → [a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap](gotchas/a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap.md) (s104)
 - [tooling/git] **`git push` hangs forever and SILENTLY under Git Credential Manager — it is waiting on a GUI dialog nobody can see. `fetch` works, which hides it.** → [git-push-hangs-silently-under-credential-manager](gotchas/git-push-hangs-silently-under-credential-manager.md) (s97)
 - [tooling/orca] **`terminal create --command "bash"` on Windows lands in WSL (`bash` = `System32\bash.exe`), and the resulting git failure reads as "Orca runs agents in WSL" — which is false.** → [orca-terminal-command-bash-lands-in-wsl-on-windows](gotchas/orca-terminal-command-bash-lands-in-wsl-on-windows.md) (s97)
 - [tooling/orca] **Launching kilo under Orca: the agent id is `kilo`, its update dialog eats the injected brief, and `--inject` revokes the capability before the worker can report — dispatch WITHOUT `--inject`.** → [starting-kilo-under-orca-repeats-every-codex-launch-trap](gotchas/starting-kilo-under-orca-repeats-every-codex-launch-trap.md) (s97)

@@ -4,11 +4,13 @@
 > Newest first. Write the session's own file at session end, then add its row here.
 > This file is an index — never paste a session's body into it.
 
-> **Older than s70 → [archive/session-log-through-s59.md](archive/session-log-through-s59.md)
-> (s6–s59) and [archive/session-log-s60-s69.md](archive/session-log-s60-s69.md) (s60–s69).**
+> **Older than s80 → [archive/session-log-through-s59.md](archive/session-log-through-s59.md)
+> (s6–s59), [archive/session-log-s60-s69.md](archive/session-log-s60-s69.md) (s60–s69) and
+> [archive/session-log-s70-s79.md](archive/session-log-s70-s79.md) (s70–s79).**
 > Split out in s96 because this file has its own 48 KB gate and the entries are paragraphs, not lines;
 > s50-s59 followed them in s99, when the gate fired again.
 
+- **[s104](sessions/s104.md)** — 2026-08-29 — autonomous overnight: five cards closed (#650, #646, #647, #653-part, #644-material), five PRs merged, **#657 (#361) held green for the operator's UI check**. Codex critic found one real defect in each of three rounds, all invisible to a green suite: **rule 1 shipped without its catalogue half** (`м`/`км` → `m`/`km` for every ru_RU shopper), **`unserved_level` reported as a widened search** when nothing was searched at all, and three more — an open renderer seam left without `within_status`, a Rule-2 gate that accepted `abstract-abstract-…`, and a test that returned `true` under both implementations. Every fix mutation-checked. The coordinator's full-suite run caught what a worker's seven targeted files did not: a sub-namespace move silently rebinds unqualified sibling references. Catalogue work is now measured safe — the committed `.mo` is byte-identical to `wp i18n make-mo` of the committed `.po`. One process incident: a survey-briefed worker fanned out to **eight unsupervised nested agents**, free RAM 0.1 GB of 15.3. `main`: `composer check` **3215**/7888/**1**, same reversed; jest **1551**/21; integration **126**/494. Готч → **242**.
 - **[s103](sessions/s103.md)** — 2026-08-29 — #567 rule 1 shipped (65 msgids, not 104), #627 and #353 closed, first worker+critic round that paid for itself
 - **[s102](sessions/s102.md)** — 2026-08-28 — autonomous overnight: #606 closed and gated, #613 taken from 6 sites to 47, #609 closed, #621 measured
 - **[s101](sessions/s101.md)** — 2026-08-28 — five cards shipped, seven filed; the critic and the operator each corrected me twice
@@ -33,15 +35,5 @@
 - **[s82](sessions/s82.md)** — 2026-08-20 — овернайт: шесть карточек доводки вкладки «Доставка» закрыты (#375, #377, #380, #369, #376, #370, #373, #378) + четыре незаявленных дефекта поверхности настроек; **выяснилось, что Codex работает полноценно** через Orca-терминал — готча, два месяца утверждавшая обратное, переписана; сверка ревью локальной 27B: 20 подтверждено (включая критический IDOR), заведено #383–#402
 - **[s81](sessions/s81.md)** — 2026-08-19 — овернайт: #362 закрыт (задача 10 + доки + полная риг-матрица); аудит работы s80 четырьмя ревьюерами; найден и починен дефект, из-за которого заказ падал на невидимых полях, и второй — WooCommerce возвращал скрытые строки инлайновым `display:block`
 - **[s80](sessions/s80.md)** — 2026-08-18/19 — #362 задачи 1–9/12 реализованы (subagent-driven), три PR смержены (#363, #367, #368); два риговых фикса вне плана (полоса приоритетов, общий баг валидации секретов); готча про стековые PR закрывающиеся при мерже
-- **[s79](sessions/s79.md)** — 2026-08-18 — брейншторм #362 с оператором: девять решений, T5 закрыт замером (блочный чекаут читает country-locale), спека + план на 12 задач; кода не менялось
-- **[s78](sessions/s78.md)** — 2026-08-18 — четыре карточки слоя локаций закрыты (#352, #350, #346, #333); три Codex-ревью, три BLOCK, дважды на моей собственной ошибке, а не воркера
-- **[s77](sessions/s77.md)** — 2026-08-17 — #337 смерджен после проверки оператора; он же нашёл дефект возврата ПВЗ (#349) — починен, замер опроверг его собственную гипотезу о причине
-- **[s76](sessions/s76.md)** — 2026-08-16 — все три карточки хэндовера закрыты: блокировка адреса (#337), живой провайдер СДЭК на риге (#343), односоставность §8 как конфигурация (#325)
-- **[s75](sessions/s75.md)** — 2026-08-16 — стартовый контекст урезан втрое и закрыт гейтом; #339 закрыт после того, как замер отверг предложение оператора
-- **[s74](sessions/s74.md)** — 2026-08-15 — три PR смерджено; замер опроверг механизм карточки, а критик — моё собственное решение
-- **[s73](sessions/s73.md)** — 2026-08-15 — два PR смерджено; оператор поправил меня по существу: проверяй риг сам
-- **[s72](sessions/s72.md)** — 2026-08-14 — овернайт: три PR смерджено, два ждут рига; критик нашёл дефект в КАЖДОМ из четырёх PR
-- **[s71](sessions/s71.md)** — 2026-08-13 — овернайт: пять PR смерджено, задача 13 отгружена целиком; независимое ревью спасло фичу, которая была мертва в конфигурации по умолчанию
-- **[s70](sessions/s70.md)** — 2026-08-13 — PR-C смерджен после риг-прохода оператора; четыре дефекта найдены его же руками, пятый — замером чужого API
 
 - **[Platform v2 daily runs](sessions/platform-v2-daily-2026-05-28--06-08.md)** — 2026-05-28 … 2026-06-08 — 45 short single-topic runs from before session numbering
