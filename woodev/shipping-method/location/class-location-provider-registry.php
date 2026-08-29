@@ -1334,9 +1334,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * User-facing labels for every mode in {@see self::FIELD_MODES} — the
 		 * single place both the OFFERED-options builder below (shared by
 		 * BOTH axes, issue #380) and (if a future task needs it) any other
-		 * mode-labeling call site reads from, so the Russian copy exists
-		 * exactly once. Wording matches the three canonical value names the
-		 * operator settled on for the axis split (issue #380).
+		 * mode-labeling call site reads from, so the copy exists exactly once.
+		 * Wording matches the three canonical value names the operator settled
+		 * on for the axis split (issue #380).
+		 *
+		 * The msgid is ENGLISH and the Russian arrives from the catalogue (#567
+		 * rule 2, operator 29.08.2026): these labels are rendered in the admin,
+		 * so a plain untranslatable string would show English to a Russian
+		 * merchant.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1344,9 +1349,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		private static function field_mode_labels(): array {
 			return [
-				self::MODE_TYPEAHEAD    => __( 'Текст с подсказками', 'woodev-plugin-framework' ),
-				self::MODE_RELATED_LIST => __( 'Предустановленный список', 'woodev-plugin-framework' ),
-				self::MODE_AJAX_SELECT2 => __( 'Список с поиском', 'woodev-plugin-framework' ),
+				self::MODE_TYPEAHEAD    => __( 'Text with suggestions', 'woodev-plugin-framework' ),
+				self::MODE_RELATED_LIST => __( 'Preset list', 'woodev-plugin-framework' ),
+				self::MODE_AJAX_SELECT2 => __( 'Searchable list', 'woodev-plugin-framework' ),
 			];
 		}
 
@@ -1728,8 +1733,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 		/**
 		 * User-facing labels for every policy in {@see self::DEFAULT_LOCALITY_POLICIES}
-		 * — mirrors {@see self::field_mode_labels()}'s own single-source-of-Russian-copy
-		 * shape.
+		 * — mirrors {@see self::field_mode_labels()}'s own single-source-of-copy shape,
+		 * including its English-msgid rule.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1737,9 +1742,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		private static function default_locality_policy_labels(): array {
 			return [
-				self::DEFAULT_LOCALITY_POLICY_OFF   => __( 'Отключено', 'woodev-plugin-framework' ),
-				self::DEFAULT_LOCALITY_POLICY_FIXED => __( 'Фиксированная локация', 'woodev-plugin-framework' ),
-				self::DEFAULT_LOCALITY_POLICY_GEOIP => __( 'По IP-адресу покупателя', 'woodev-plugin-framework' ),
+				self::DEFAULT_LOCALITY_POLICY_OFF   => __( 'Disabled', 'woodev-plugin-framework' ),
+				self::DEFAULT_LOCALITY_POLICY_FIXED => __( 'Fixed location', 'woodev-plugin-framework' ),
+				self::DEFAULT_LOCALITY_POLICY_GEOIP => __( 'By the customer\'s IP address', 'woodev-plugin-framework' ),
 			];
 		}
 
@@ -2511,7 +2516,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			if ( null === $record ) {
 				$setting->set_description(
-					__( 'Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит.', 'woodev-plugin-framework' )
+					__( 'The default location is not configured: until a valid record is saved, this policy applies nothing.', 'woodev-plugin-framework' )
 				);
 
 				return;
@@ -2521,7 +2526,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			if ( null === $active || $active->get_id() !== $record->provider_id() ) {
 				$setting->set_description(
-					__( 'Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново.', 'woodev-plugin-framework' )
+					__( 'The fixed location was chosen through a different provider and may not suit the current one — choosing it again is recommended.', 'woodev-plugin-framework' )
 				);
 			}
 		}
@@ -2560,7 +2565,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			$control->set_disabled(
 				true,
-				__( 'Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.', 'woodev-plugin-framework' )
+				__( 'The selected provider does not serve addresses, and the DaData credentials are empty.', 'woodev-plugin-framework' )
 			);
 		}
 
