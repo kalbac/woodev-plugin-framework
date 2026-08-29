@@ -111,6 +111,25 @@ class Stale_Bare_Shipping_Plugin_Fixture extends Shipping_Plugin {
 	public function get_download_id() {
 		return 0;
 	}
+
+	/**
+	 * Exposes the protected registration path.
+	 *
+	 * Declared on the BARE fixture (rather than only on the registration one
+	 * below) so the "never opted in" case can reach it too, and so no test in
+	 * this file has to call `ReflectionMethod::invoke()` on a protected
+	 * method. That only works without `setAccessible( true )` from PHP 8.1
+	 * on, and this repo's CI matrix still covers 7.4 and 8.0, where it raises
+	 * `ReflectionException: Trying to invoke protected method ... from scope
+	 * ReflectionMethod` — green on the developer's 8.1 and red on CI.
+	 * `setAccessible()` is NOT deprecated in 8.1, it merely became a no-op;
+	 * but a public wrapper is the idiom the sibling
+	 * {@see \Woodev\Tests\Unit\Shipping\ShippingPluginLocationProviderNoticeTest}
+	 * already uses, so this file follows it rather than inventing a second one.
+	 */
+	public function publish_default_locality_stale_notice(): void {
+		$this->add_default_locality_stale_notice();
+	}
 }
 
 /**
@@ -154,10 +173,6 @@ class Stale_Registration_Shipping_Plugin_Fixture extends Stale_Opted_In_Shipping
 
 	public function set_notice_handler( Stale_Recording_Admin_Notice_Handler $notice_handler ): void {
 		$this->notice_handler = $notice_handler;
-	}
-
-	public function publish_default_locality_stale_notice(): void {
-		$this->add_default_locality_stale_notice();
 	}
 
 	public function get_admin_notice_handler() {
@@ -465,16 +480,12 @@ final class ShippingPluginDefaultLocalityStaleNoticeTest extends TestCase {
 
 		// Stale_Bare_Shipping_Plugin_Fixture never overrides get_admin_notice_handler()
 		// (it stays the parent's real implementation, which needs a fully
-		// constructed plugin) — invoking the method directly via reflection
-		// proves the gate returns BEFORE ever reaching that call, since reaching
-		// it here would throw rather than silently succeed.
+		// constructed plugin), so reaching that call would throw rather than
+		// silently succeed — completing this line proves the opt-in gate
+		// returned BEFORE ever getting there.
 		$plugin = ( new \ReflectionClass( Stale_Bare_Shipping_Plugin_Fixture::class ) )->newInstanceWithoutConstructor();
 
-		// No setAccessible() call: since PHP 8.1 it is a no-op (and calling it
-		// prints a deprecation notice PHPUnit's own `failOnRisky="true"` turns
-		// into a hard failure) — ReflectionMethod::invoke() already reaches a
-		// protected method directly.
-		( new \ReflectionMethod( $plugin, 'add_default_locality_stale_notice' ) )->invoke( $plugin );
+		$plugin->publish_default_locality_stale_notice();
 
 		$this->addToAssertionCount( 1 ); // reaching this line without a fatal IS the assertion.
 	}
