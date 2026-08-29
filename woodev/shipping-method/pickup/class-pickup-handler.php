@@ -1122,6 +1122,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *     pointIcons: array<string, array{default: string, active: string}>,
 		 *     pointGlyphs: array<string, array{glyph: string|null, markup: string|null}>,
 		 *     mapConfig: array<string, mixed>,
+		 *     distanceUnitSystem: 'metric'|'imperial',
 		 *     replaceAddress: array{enabled: bool, billingOnly: bool},
 		 *     selection: array{close: bool, refreshCheckout: bool},
 		 *     accentColor: string,
@@ -1279,6 +1280,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					'This page is out of date. Refresh it and choose a pickup point again.',
 					'woodev-plugin-framework'
 				),
+				// Issue #646: the distance-to-pickup-point label's unit words, read by
+				// pickup-geo.js's `formatDistance()` instead of that file choosing its own
+				// English/Russian words from a hardcoded `'ru' === lang` branch — the last
+				// place on the storefront where a customer-facing string bypassed this
+				// catalogue entirely (see `$distance_unit_system` below for the SYSTEM half
+				// of the same decision).
+				/* translators: abbreviation for metres, shown after a distance number. */
+				'distanceMeters'     => _x( 'm', 'distance unit abbreviation: metres', 'woodev-plugin-framework' ),
+				/* translators: abbreviation for kilometres, shown after a distance number. */
+				'distanceKilometers' => _x( 'km', 'distance unit abbreviation: kilometres', 'woodev-plugin-framework' ),
+				/* translators: abbreviation for miles, shown after a distance number. */
+				'distanceMiles'      => _x( 'mi', 'distance unit abbreviation: miles', 'woodev-plugin-framework' ),
 			];
 
 			/**
@@ -1361,6 +1374,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// would read as "keep nothing", silently reinstating the same defect.
 			$max_accumulated = max( 0, $max_accumulated );
 
+			$map_config = $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] );
+
+			/**
+			 * Filters the unit SYSTEM (metric/imperial) the distance-to-pickup-point label
+			 * uses, alongside the unit WORDS above (issue #646).
+			 *
+			 * Computed from the REGION half of the SAME resolved map `lang` the provider
+			 * above already rendered with ({@see $map_config}), never re-resolved from
+			 * `get_locale()` a second time here: {@see \Woodev\Framework\Shipping\Map\Yandex_Map_Provider::resolve_lang()}
+			 * restricts `lang` to the set ymaps itself accepts, so re-deriving it
+			 * independently could disagree with what the map already shows and put two
+			 * measurement systems on one screen — exactly what `pickup-geo.js`'s own
+			 * `formatDistance()` docblock warns against. A provider that never resolves a
+			 * `lang` at all (e.g. `Embedded_Map_Provider`) leaves `$map_config['lang']`
+			 * unset, which resolves to `'metric'` below — the same default the browser
+			 * itself computed before this flag existed.
+			 *
+			 * Deliberately NOT driven by `woocommerce_dimension_unit`/`woocommerce_weight_unit`:
+			 * those describe the merchant's PRODUCT CATALOGUE units, not a reading for the
+			 * shopper. A Russian store that happens to enter product dimensions in inches
+			 * must not show miles to a Russian shopper, and a store that enters them in
+			 * centimetres must still be able to show miles to a US shopper.
+			 *
+			 * A return outside `'metric'`/`'imperial'` is discarded in favour of the
+			 * framework's own computed default — the same discipline as the
+			 * `woodev_pickup_map_i18n` guard above, NOT a cast: a `(string)` cast of a
+			 * garbage return (e.g. an array) would not reliably produce one of the two
+			 * valid values either, so the return is validated, not coerced.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param string $unit_system 'metric' or 'imperial' — the framework's own default.
+			 * @param string $plugin_id   The plugin the map belongs to.
+			 */
+			$map_lang             = (string) ( $map_config['lang'] ?? '' );
+			$map_region           = strtoupper( explode( '_', $map_lang )[1] ?? '' );
+			$default_unit_system  = 'US' === $map_region ? 'imperial' : 'metric';
+			$filtered_unit_system = apply_filters(
+				'woodev_pickup_distance_unit_system',
+				$default_unit_system,
+				$this->plugin_id
+			);
+			$distance_unit_system = in_array( $filtered_unit_system, [ 'metric', 'imperial' ], true )
+				? $filtered_unit_system
+				: $default_unit_system;
+
 			$config = [
 				'fieldId'              => $this->field_id,
 				'strategy'             => $this->source->get_strategy(),
@@ -1405,7 +1464,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// no longer the same picture (see {@see self::normalized_point_glyphs()}).
 				'pointGlyphs' => $this->normalized_point_glyphs(),
 
-				'mapConfig'      => $this->map_provider->get_js_config( [ 'plugin_id' => $this->plugin_id ] ),
+				'mapConfig'      => $map_config,
+
+				// Top level, NOT inside `mapConfig`: the sidebar/card distance labels
+				// (issue #646) live outside the map itself, same reasoning as
+				// `accentColor` below. See `$distance_unit_system` above for how this is
+				// derived and the filter that overrides it.
+				'distanceUnitSystem' => $distance_unit_system,
 
 				// `enabled` reads the store's own `pickup_replace_address` setting (Task 8,
 				// issue #362, design S7) — no longer a constructor argument; see

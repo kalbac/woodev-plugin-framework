@@ -763,11 +763,10 @@
 	 * @param {Object}        point
 	 * @param {number[]|null} anchor
 	 * @param {Object}        group
-	 * @param {string}        locale
 	 * @param {Object}        config
 	 * @returns {HTMLElement}
 	 */
-	function buildSinglePointRow( point, anchor, group, locale, config ) {
+	function buildSinglePointRow( point, anchor, group, config ) {
 		var wrap = document.createDocumentFragment();
 
 		var icon = document.createElement( 'span' );
@@ -799,7 +798,7 @@
 			var meters = geo.distanceMeters( anchor, [ group.lat, group.lng ] );
 			var distanceEl = document.createElement( 'span' );
 			distanceEl.className = 'woodev-pickup-list__distance';
-			distanceEl.textContent = geo.formatDistance( meters, locale );
+			distanceEl.textContent = geo.formatDistance( meters, config );
 			wrap.appendChild( distanceEl );
 		}
 
@@ -836,7 +835,6 @@
 		item.className = 'woodev-pickup-list__item';
 		item.dataset.groupKey = group.key;
 
-		var locale = self._config.lang;
 		var anchor = self._anchor;
 		var points = filterGroupPoints( self, group );
 
@@ -856,7 +854,7 @@
 				button.className = 'woodev-pickup-list__point'
 					+ ( null !== selectedId && String( point.id ) === selectedId ? ' is-selected' : '' );
 				button.dataset.pointId = String( point.id );
-				button.appendChild( buildSinglePointRow( point, anchor, group, locale, self._config ) );
+				button.appendChild( buildSinglePointRow( point, anchor, group, self._config ) );
 				button.addEventListener( 'click', function() {
 					self.openCard( group, point.id, 'list' );
 				} );
@@ -867,7 +865,7 @@
 		}
 
 		var onlyPoint = points[ 0 ];
-		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, locale, self._config ) );
+		item.appendChild( buildSinglePointRow( onlyPoint, anchor, group, self._config ) );
 		item.addEventListener( 'click', function() {
 			self.openCard( group, onlyPoint.id, 'list' );
 		} );
@@ -1892,7 +1890,8 @@
 
 	/**
 	 * @param {HTMLElement} container element the panels' root is appended into.
-	 * @param {Object}      config    the pickup config (`i18n`, `lang`, `accentColor`, …).
+	 * @param {Object}      config    the pickup config (`i18n`, `lang`, `distanceUnitSystem`,
+	 *                                `accentColor`, …).
 	 * @constructor
 	 */
 	function Panels( container, config ) {
@@ -3012,7 +3011,7 @@
 		detail.appendChild( nameEl );
 
 		var distanceEl = document.createElement( 'span' );
-		distanceEl.textContent = ' (' + geo.formatDistance( info && info.distanceMeters, this._config.lang ) + ')';
+		distanceEl.textContent = ' (' + geo.formatDistance( info && info.distanceMeters, this._config ) + ')';
 		detail.appendChild( distanceEl );
 
 		wrap.appendChild( detail );

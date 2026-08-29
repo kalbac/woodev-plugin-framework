@@ -253,37 +253,74 @@
 	}
 
 	/**
-	 * Formats a metre distance for display, in the units the point's
-	 * REGION uses — not its language (spec D-12). `en_RU` and `ru_RU` are
-	 * both metric (the `RU` region), they only differ in the unit WORD
-	 * (`km` vs `км`); `en_US` is the one imperial case here. This mirrors
-	 * ymaps' own `lang` parameter, which drives its UI labels the same
-	 * region-first way — disagreeing with it would put two measurement
-	 * systems on one screen.
+	 * Returns `i18n[ key ]` when it is a non-empty string, `fallback` otherwise (issue
+	 * #646) — an absent key, a stale cached config that predates this key, or a filter
+	 * returning garbage all degrade to the framework's own English default here, never to
+	 * `undefined` concatenated into the string.
 	 *
-	 * Below one large unit (1 km / 1 mi) a metric distance is shown as
-	 * whole metres; at/above it, one decimal of kilometres. An imperial
-	 * distance is always shown as one decimal of miles — there is no
-	 * second, smaller imperial unit in this UI (no feet), so there is no
-	 * threshold to switch at; `1609.34` metres (one `METERS_PER_MILE`)
-	 * reads as `'1.0 mi'`, not a rounded whole mile.
-	 *
-	 * @param {number} meters
-	 * @param {string} locale `{language}_{REGION}`, e.g. `ru_RU`, `en_US`.
+	 * @param {Object} i18n
+	 * @param {string} key
+	 * @param {string} fallback
 	 * @returns {string}
 	 */
-	function formatDistance( meters, locale ) {
-		var parts = String( locale || '' ).split( '_' );
-		var lang = ( parts[ 0 ] || '' ).toLowerCase();
-		var region = ( parts[ 1 ] || '' ).toUpperCase();
-		var isImperial = 'US' === region;
+	function unitLabel( i18n, key, fallback ) {
+		return 'string' === typeof i18n[ key ] && i18n[ key ].length > 0 ? i18n[ key ] : fallback;
+	}
 
-		if ( isImperial ) {
-			return ( meters / METERS_PER_MILE ).toFixed( 1 ) + ' mi';
+	/**
+	 * Formats a metre distance for display, in the unit system PHP resolved for this store
+	 * (issue #646) — `Pickup_Handler::get_js_config()` computes `distanceUnitSystem` from
+	 * the SAME resolved map `lang` region ymaps itself renders with (D-12: `RU`/`UA`/`TR`
+	 * region -> metric, `US` -> imperial), so the sidebar and the map can never disagree.
+	 * The unit WORDS (`м`/`km`/…) come from `config.i18n`, the same translation-catalogue
+	 * map every other customer-facing string on this modal goes through — this file no
+	 * longer carries its own `'ru' === lang` branch (that used to pick the WORD from the
+	 * locale's LANGUAGE half while the unit SYSTEM was decided from its REGION half — two
+	 * different axes of the same string, now both resolved server-side instead).
+	 *
+	 * Below one large unit (1 km / 1 mi) a metric distance is shown as whole metres;
+	 * at/above it, one decimal of kilometres. An imperial distance is always shown as one
+	 * decimal of miles — there is no second, smaller imperial unit in this UI (no feet), so
+	 * there is no threshold to switch at; `1609.34` metres (one `METERS_PER_MILE`) reads as
+	 * `'1.0 mi'`, not a rounded whole mile.
+	 *
+	 * Degrades in two independent places — this file is raw JS served to the browser,
+	 * never versioned with the PHP that built the page, so a stale cached config is a real
+	 * state, not a hypothetical:
+	 *  - a missing `config.i18n` label falls back to the English default for that label
+	 *    ({@see unitLabel}).
+	 *  - a missing `config.distanceUnitSystem` (a config cached before this flag existed)
+	 *    falls back to exactly the PREVIOUS `'US' === region` check against the legacy
+	 *    `config.lang` locale string, so a stale config cannot change which unit system a
+	 *    shopper sees.
+	 *
+	 * @param {number} meters
+	 * @param {Object} [config] the mounted pickup config, or any subset of it — every
+	 *                          field read from it is optional.
+	 * @param {Object} [config.i18n] `{ distanceMeters, distanceKilometers, distanceMiles }`.
+	 * @param {string} [config.distanceUnitSystem] `'metric'` or `'imperial'`.
+	 * @param {string} [config.lang] legacy fallback locale, `{language}_{REGION}`.
+	 * @returns {string}
+	 */
+	function formatDistance( meters, config ) {
+		config = config || {};
+
+		var i18n = config.i18n || {};
+		var unitSystem = config.distanceUnitSystem;
+
+		if ( 'metric' !== unitSystem && 'imperial' !== unitSystem ) {
+			var parts = String( config.lang || '' ).split( '_' );
+			var region = ( parts[ 1 ] || '' ).toUpperCase();
+
+			unitSystem = 'US' === region ? 'imperial' : 'metric';
 		}
 
-		var smallWord = 'ru' === lang ? 'м' : 'm';
-		var largeWord = 'ru' === lang ? 'км' : 'km';
+		if ( 'imperial' === unitSystem ) {
+			return ( meters / METERS_PER_MILE ).toFixed( 1 ) + ' ' + unitLabel( i18n, 'distanceMiles', 'mi' );
+		}
+
+		var smallWord = unitLabel( i18n, 'distanceMeters', 'm' );
+		var largeWord = unitLabel( i18n, 'distanceKilometers', 'km' );
 
 		if ( meters < METERS_PER_KM ) {
 			return Math.round( meters ) + ' ' + smallWord;
@@ -478,7 +515,7 @@
 	 * @property {function(string): string}              contrastFor
 	 * @property {function(Array): Array}                groupByPosition
 	 * @property {function(number[], number[]): number}  distanceMeters
-	 * @property {function(number, string): string}      formatDistance
+	 * @property {function(number, Object=): string}     formatDistance
 	 * @property {function(Array, number[], number): Array} nearest
 	 * @property {function(number[], Array): number[][]} boundsFor
 	 * @property {function(Array, string): Array}        matchPoints
