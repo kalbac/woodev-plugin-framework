@@ -3428,6 +3428,21 @@ msgstr ""
 msgid "Что-то пошло не так. Попробуйте ещё раз."
 msgstr ""
 
+#: shipping-method/pickup/class-pickup-handler.php:1290
+msgctxt "distance unit abbreviation: metres"
+msgid "m"
+msgstr "м"
+
+#: shipping-method/pickup/class-pickup-handler.php:1292
+msgctxt "distance unit abbreviation: kilometres"
+msgid "km"
+msgstr "км"
+
+#: shipping-method/pickup/class-pickup-handler.php:1294
+msgctxt "distance unit abbreviation: miles"
+msgid "mi"
+msgstr "миль"
+
 #~ (obsolete: no longer referenced anywhere under woodev/)
 
 #~ msgid "Thanks for installing %1$s! To get started, take a minute to %2$sread the documentation%3$s :)"

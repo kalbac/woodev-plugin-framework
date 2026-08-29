@@ -1287,11 +1287,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// catalogue entirely (see `$distance_unit_system` below for the SYSTEM half
 				// of the same decision).
 				/* translators: abbreviation for metres, shown after a distance number. */
-				'distanceMeters'     => __( 'm', 'woodev-plugin-framework' ),
+				'distanceMeters'     => _x( 'm', 'distance unit abbreviation: metres', 'woodev-plugin-framework' ),
 				/* translators: abbreviation for kilometres, shown after a distance number. */
-				'distanceKilometers' => __( 'km', 'woodev-plugin-framework' ),
+				'distanceKilometers' => _x( 'km', 'distance unit abbreviation: kilometres', 'woodev-plugin-framework' ),
 				/* translators: abbreviation for miles, shown after a distance number. */
-				'distanceMiles'      => __( 'mi', 'woodev-plugin-framework' ),
+				'distanceMiles'      => _x( 'mi', 'distance unit abbreviation: miles', 'woodev-plugin-framework' ),
 			];
 
 			/**
