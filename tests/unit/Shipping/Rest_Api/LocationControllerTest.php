@@ -286,7 +286,12 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	/** @var array<int, array{0: Location_Record, 1: bool}> */
 	public array $set_calls = [];
 
-	/** @var array<int, string> */
+	/**
+	 * Issue #650: records the `$country` argument too (previously
+	 * level-only) — a regression test asserts it is no longer `null`.
+	 *
+	 * @var array<int, array{0: string, 1: string|null}>
+	 */
 	public array $provider_for_level_calls = [];
 
 	/** @var array<int, array{0: string, 1: string|null}> */
@@ -504,7 +509,7 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	}
 
 	public function provider_for_level( string $level, ?string $country = null ): ?Location_Provider {
-		$this->provider_for_level_calls[] = $level;
+		$this->provider_for_level_calls[] = [ $level, $country ];
 
 		if ( null !== $this->providers_by_level ) {
 			return $this->providers_by_level[ $level ] ?? null;
@@ -1123,6 +1128,23 @@ final class LocationControllerTest extends TestCase {
 		$ctrl->handle_suggest_request( $request );
 
 		$this->assertCount( 1, $provider->suggest_calls );
+	}
+
+	/**
+	 * Issue #650: `provider_for_level()` used to be called level-only —
+	 * country-blind — so a provider that declares a level but only covers
+	 * SOME OTHER country could be chosen for a request naming this one. The
+	 * resolved `$country` must now reach that call.
+	 */
+	public function test_suggest_passes_the_resolved_country_into_provider_for_level(): void {
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'q' => 'Мос', 'level' => Location_Record::LEVEL_REGION, 'country' => 'RU' ] );
+		$ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( [ [ Location_Record::LEVEL_REGION, 'RU' ] ], $service->provider_for_level_calls );
 	}
 
 	public function test_suggest_a_malformed_country_still_returns_400_not_the_unsupported_degradation(): void {
@@ -2783,6 +2805,30 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( [], $service->provider_by_id_calls, 'a registration check that already failed must never proceed to resolve eligibility' );
 	}
 
+	/**
+	 * Issue #650: a request that gets BOTH the override provider id AND the
+	 * country wrong must still 400 as "unknown provider", not "invalid
+	 * country" — the registry-membership check runs before country is even
+	 * read (this method's own `@since` note on {@see Location_Controller::perform_suggest()}
+	 * records this precedence as deliberate: the override is an explicit,
+	 * admin-only instruction, and "that provider id does not exist" is the
+	 * more actionable message when both inputs are wrong).
+	 */
+	public function test_admin_suggest_unknown_provider_and_malformed_country_returns_the_unknown_provider_400(): void {
+		$chain_provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service        = new Location_Controller_Fake_Service( true, $chain_provider );
+		$ctrl           = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'not-a-code', 'provider' => 'not-a-real-provider' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_location_unknown_provider', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
 	public function test_admin_suggest_a_registered_but_ineligible_override_degrades_like_no_provider_for_the_level(): void {
 		// Registered (has_provider() -> true) but provider_by_id() itself
 		// answers null — simulates "unconfigured" or "does not serve this
@@ -2844,6 +2890,53 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( [], $result['suggestions'] );
 		$this->assertCount( 0, $override_provider->suggest_calls, 'an unsupported country must never reach the override provider either' );
+	}
+
+	/**
+	 * Issue #650 (settled decision, pinned): `provider_by_id()` stays
+	 * country-blind. An override that serves the level but not the
+	 * requested country is refused by `provider_serves_level()` AFTER
+	 * `$scope` (built from the real country) already exists, so the
+	 * response's `within_status` must report the REAL resolved scope —
+	 * never `unserved_level`, the coarser value the `null === $provider`
+	 * branch would force if resolution were made country-aware instead.
+	 */
+	public function test_admin_suggest_override_not_covering_the_country_reports_the_real_within_status(): void {
+		$override_provider = new Location_Controller_Fake_Provider( static fn() => [ /* would-be suggestions */ ], [ 'RU' ] );
+		$service            = new Location_Controller_Fake_Service(
+			true,
+			null,
+			null,
+			true,
+			true,
+			null,
+			null,
+			null,
+			false,
+			null,
+			null,
+			[ 'dadata' ],
+			[ 'dadata' => $override_provider ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'US', 'provider' => 'dadata' ]
+		);
+		$result = $ctrl->handle_admin_suggest_request( $request );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [], $result['suggestions'] );
+		$this->assertSame(
+			[ [ 'dadata', Location_Record::LEVEL_SETTLEMENT, null ] ],
+			$service->provider_by_id_calls,
+			'provider_by_id() must stay country-blind — the country mismatch is caught later, via provider_serves_level()'
+		);
+		$this->assertSame(
+			'not_requested',
+			$result['within_status'],
+			'the real resolved scope must be reported, never the coarser unserved_level'
+		);
 	}
 
 	public function test_admin_suggest_without_a_provider_param_never_touches_the_override_seam(): void {
