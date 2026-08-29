@@ -230,45 +230,79 @@ describe( 'distanceMeters', () => {
 } );
 
 describe( 'formatDistance', () => {
-	it( 'uses metres below a kilometre for a metric region', () => {
-		expect( formatDistance( 430, 'ru_RU' ) ).toBe( '430 м' );
+	// --- Labels and unit system come from config, not from a hardcoded locale table (#646) --
+
+	it( 'reads the metres label from config.i18n below the km threshold', () => {
+		var config = { i18n: { distanceMeters: 'м' }, distanceUnitSystem: 'metric' };
+
+		expect( formatDistance( 430, config ) ).toBe( '430 м' );
 	} );
 
-	it( 'uses kilometres with one decimal above a kilometre for a metric region', () => {
-		expect( formatDistance( 1240, 'ru_RU' ) ).toBe( '1.2 км' );
+	it( 'reads the kilometres label from config.i18n at/above the km threshold', () => {
+		var config = { i18n: { distanceKilometers: 'км' }, distanceUnitSystem: 'metric' };
+
+		expect( formatDistance( 1240, config ) ).toBe( '1.2 км' );
 	} );
 
-	it( 'uses miles for the US region', () => {
-		expect( formatDistance( 1609.34, 'en_US' ) ).toBe( '1.0 mi' );
+	it( 'reads the miles label from config.i18n for the imperial unit system', () => {
+		var config = { i18n: { distanceMiles: 'mi' }, distanceUnitSystem: 'imperial' };
+
+		expect( formatDistance( 1609.34, config ) ).toBe( '1.0 mi' );
 	} );
 
-	it( 'treats en_RU as metric — the region decides, not the language', () => {
-		expect( formatDistance( 1240, 'en_RU' ) ).toBe( '1.2 km' );
+	it( 'an explicit distanceUnitSystem wins over the legacy lang region check', () => {
+		// en_US would fall back to imperial if the flag were ignored -- pinning metric here
+		// proves the flag, not the legacy fallback, decided the branch.
+		var config = { distanceUnitSystem: 'metric', lang: 'en_US' };
+
+		expect( formatDistance( 1609.34, config ) ).toBe( '1.6 km' );
 	} );
 
-	// --- Extra tests beyond the spec, closing mutation-sweep holes ---------
+	// --- The metric metres/kilometres threshold is unchanged --------------
+
+	it( 'keeps whole metres just below the 1 km threshold', () => {
+		expect( formatDistance( 999, { distanceUnitSystem: 'metric' } ) ).toBe( '999 m' );
+	} );
+
+	it( 'switches to one-decimal kilometres exactly at the 1 km threshold', () => {
+		expect( formatDistance( 1000, { distanceUnitSystem: 'metric' } ) ).toBe( '1.0 km' );
+	} );
 
 	it( 'rounds sub-kilometre metres to a whole number, catching a dropped Math.round', () => {
-		expect( formatDistance( 430.6, 'ru_RU' ) ).toBe( '431 м' );
-	} );
-
-	it( 'uses the English metre/kilometre words for a metric non-Russian locale, not just en_RU', () => {
-		expect( formatDistance( 430, 'de_DE' ) ).toBe( '430 m' );
-	} );
-
-	it( 'pins the exact km conversion, catching a dropped /1000 or a wrong divisor', () => {
-		expect( formatDistance( 2500, 'ru_RU' ) ).toBe( '2.5 км' );
+		expect( formatDistance( 430.6, { distanceUnitSystem: 'metric' } ) ).toBe( '431 m' );
 	} );
 
 	it( 'pins the exact mile conversion for a non-boundary value, catching a wrong mile constant', () => {
-		// 3218.68 m is exactly 2 * 1609.34 m -- if the mile constant used here drifted
-		// from formatDistance's own (e.g. the common 1609.344), this would round to a
-		// visibly different value than "2.0".
-		expect( formatDistance( 3218.68, 'en_US' ) ).toBe( '2.0 mi' );
+		// 3218.68 m is exactly 2 * 1609.34 m -- if the mile constant used here drifted from
+		// formatDistance's own (e.g. the common 1609.344), this would round to a visibly
+		// different value than "2.0".
+		expect( formatDistance( 3218.68, { distanceUnitSystem: 'imperial' } ) ).toBe( '2.0 mi' );
 	} );
 
-	it( 'does not use the Russian words for the US region even when the language part is ru', () => {
-		expect( formatDistance( 1609.34, 'ru_US' ) ).toBe( '1.0 mi' );
+	// --- Fallback: config.i18n missing a label -> the English default (#646) --------------
+
+	it( 'falls back to the English word when config.i18n has no label at all', () => {
+		expect( formatDistance( 430, { distanceUnitSystem: 'metric' } ) ).toBe( '430 m' );
+		expect( formatDistance( 1240, { distanceUnitSystem: 'metric' } ) ).toBe( '1.2 km' );
+		expect( formatDistance( 1609.34, { distanceUnitSystem: 'imperial' } ) ).toBe( '1.0 mi' );
+	} );
+
+	it( 'never renders "undefined" -- an entirely empty config still produces a real label', () => {
+		expect( formatDistance( 500, {} ) ).toBe( '500 m' );
+		expect( formatDistance( 500 ) ).toBe( '500 m' );
+	} );
+
+	// --- Fallback: config.distanceUnitSystem missing -> exactly today's --------------------
+	// --- 'US' === region check against the legacy config.lang locale string (#646) ---------
+
+	it( 'falls back to the US-region check on config.lang when the flag is absent (stale config)', () => {
+		expect( formatDistance( 1609.34, { lang: 'en_US' } ) ).toBe( '1.0 mi' );
+		expect( formatDistance( 1240, { lang: 'ru_RU' } ) ).toBe( '1.2 km' );
+	} );
+
+	it( 'the lang fallback is decided by region, not language, exactly like before #646', () => {
+		expect( formatDistance( 1609.34, { lang: 'ru_US' } ) ).toBe( '1.0 mi' );
+		expect( formatDistance( 1240, { lang: 'en_RU' } ) ).toBe( '1.2 km' );
 	} );
 } );
 

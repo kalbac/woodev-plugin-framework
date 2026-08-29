@@ -17,7 +17,12 @@ const WoodevPickupGeo = require( '../../woodev/shipping-method/assets/js/fronten
 
 const config = {
 	lang: 'ru_RU',
+	// #646: the resolved unit system PHP would ship alongside `lang` above -- a sibling of
+	// `i18n`, not a key inside it, matching Pickup_Handler::get_js_config()'s real shape.
+	distanceUnitSystem: 'metric',
 	i18n: {
+		// #646: the distance-label unit words PHP's i18n map now carries.
+		distanceMeters: 'м', distanceKilometers: 'км', distanceMiles: 'mi',
 		drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
 		// Task 11 (spec V-6): the search layout's own strings — added here (rather than only on a
 		// one-off object) so `buildSearchLayout()`'s tests can merge overrides onto this shared config.
@@ -384,7 +389,7 @@ it( 'renders the exact formatted distance from the anchor, and omits it entirely
 	const g = group( 'near', 55.7501, 37.61 );
 	const expectedDistance = WoodevPickupGeo.formatDistance(
 		WoodevPickupGeo.distanceMeters( anchor, [ g.lat, g.lng ] ),
-		config.lang
+		config
 	);
 
 	const withAnchor = new Panels( document.createElement( 'div' ), config );
@@ -1932,7 +1937,9 @@ it( 'shows continueCheckout on the specific tab matching the selected id, not ju
 // Task 15: the search view (D-6)
 // -----------------------------------------------------------------------
 
-const searchConfig = { lang: 'ru_RU', i18n: {
+const searchConfig = { lang: 'ru_RU', distanceUnitSystem: 'metric', i18n: {
+	// #646: the distance-label unit words -- see the shared `config` object's own note above.
+	distanceMeters: 'м', distanceKilometers: 'км', distanceMiles: 'mi',
 	drawerTitle: 'Пункты выдачи в этой области', emptyInView: 'В этой области пунктов выдачи нет',
 	nearestTo: 'Ближайшие к «%s»', resetSearch: 'Сбросить', nothingNearby: 'Рядом с этим адресом пунктов выдачи нет.',
 	showNearest: 'Показать ближайший', sectionPoints: 'Пункты выдачи', sectionAddresses: 'Адреса',

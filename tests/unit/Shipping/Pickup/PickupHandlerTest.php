@@ -2346,6 +2346,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 					'pointIcons',
 					'pointGlyphs',
 					'mapConfig',
+					'distanceUnitSystem',
 					'replaceAddress',
 					'selection',
 					'accentColor',
@@ -3376,6 +3377,10 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				// carrier's own widget (not the framework) controls. See class-pickup-handler.php.
 				'selectFailedEmbedded' => 'Could not confirm your choice. Please choose a point again.',
 				'stalePage'        => 'This page is out of date. Refresh it and choose a pickup point again.',
+				// The three issue #646 distance-unit-word keys.
+				'distanceMeters'      => 'm',
+				'distanceKilometers'  => 'km',
+				'distanceMiles'       => 'mi',
 			];
 
 			$this->assertSame(
@@ -3440,6 +3445,113 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertArrayHasKey( 'emptyLocality', $config['i18n'] );
 			$this->assertNotSame( '', $config['i18n']['emptyLocality'] );
+		}
+
+		// -------------------------------------------------------------------------
+		// distanceUnitSystem (issue #646) — the map's own resolved `lang` region decides
+		// metric vs. imperial, the SAME value the map itself already renders with, never
+		// re-derived from get_locale() a second way.
+		// -------------------------------------------------------------------------
+
+		public function test_distance_unit_system_defaults_to_metric_when_the_map_lang_region_is_not_us(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'ru_RU' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'metric', $config['distanceUnitSystem'] );
+		}
+
+		public function test_distance_unit_system_is_imperial_for_the_us_region(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'en_US' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'imperial', $config['distanceUnitSystem'] );
+		}
+
+		/**
+		 * The LANGUAGE half of `lang` never decides the unit system, only the REGION half
+		 * does — mirrors ymaps' own behaviour (D-12) and the pre-existing JS check this PHP
+		 * flag replaces.
+		 */
+		public function test_distance_unit_system_is_decided_by_region_not_language(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'en_RU' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'metric', $config['distanceUnitSystem'] );
+		}
+
+		/**
+		 * A map provider that never resolves a `lang` at all (e.g. `Embedded_Map_Provider`)
+		 * must not crash `get_js_config()` and defaults to metric — the same default the
+		 * browser itself computed on an empty locale string before this flag existed.
+		 */
+		public function test_distance_unit_system_defaults_to_metric_when_the_map_provider_has_no_lang(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->embedded_provider() ] )->get_js_config();
+
+			$this->assertSame( 'metric', $config['distanceUnitSystem'] );
+		}
+
+		public function test_distance_unit_system_is_filterable(): void {
+			Filters\expectApplied( 'woodev_pickup_distance_unit_system' )
+				->once()
+				->with( 'metric', 'p' )
+				->andReturn( 'imperial' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'ru_RU' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'imperial', $config['distanceUnitSystem'] );
+		}
+
+		/**
+		 * A return outside `'metric'`/`'imperial'` is discarded in favour of the framework's
+		 * own computed default — the same discipline as the `woodev_pickup_map_i18n` guard,
+		 * NOT a cast (a `(string)` cast of an array would not reliably land on either valid
+		 * value anyway; see gotcha `a-cast-is-not-a-degradation`).
+		 */
+		public function test_distance_unit_system_ignores_a_garbage_filter_return(): void {
+			Filters\expectApplied( 'woodev_pickup_distance_unit_system' )
+				->once()
+				->with( 'metric', 'p' )
+				->andReturn( [ 'unit_system' => 'imperial' ] );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'ru_RU' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'metric', $config['distanceUnitSystem'] );
+		}
+
+		/**
+		 * Same rule for a non-empty but invalid STRING return — not just a wrong type, a
+		 * value that merely fails to be one of the two accepted strings. Uses an `en_US`
+		 * default (`'imperial'`) rather than the metric default every other test above uses,
+		 * so this cannot pass by coincidentally falling back to a hardcoded `'metric'`
+		 * instead of the framework's own COMPUTED default.
+		 */
+		public function test_distance_unit_system_ignores_an_unrecognised_string_filter_return(): void {
+			Filters\expectApplied( 'woodev_pickup_distance_unit_system' )
+				->once()
+				->with( 'imperial', 'p' )
+				->andReturn( 'both' );
+			$this->stub_config_dependencies_except_filters();
+
+			$config = $this->make_handler( [ 'map_provider' => $this->yandex_provider( [ 'lang' => 'en_US' ] ) ] )
+				->get_js_config();
+
+			$this->assertSame( 'imperial', $config['distanceUnitSystem'] );
 		}
 
 		// -------------------------------------------------------------------------
