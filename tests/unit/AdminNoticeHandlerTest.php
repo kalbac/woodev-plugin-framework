@@ -171,7 +171,17 @@ class AdminNoticeHandlerTest extends TestCase {
 		$this->assertTrue( $handler->should_display_notice( 'any-id' ) );
 	}
 
-	public function test_should_display_notice_ignores_settings_page_when_always_show_on_settings_is_false(): void {
+	/**
+	 * The notice must be DISMISSED for this to prove anything (critic finding, s104).
+	 *
+	 * An UNDISMISSED notice on the settings page returns `true` under both implementations —
+	 * the one that honours `always_show_on_settings => false` and the one that displays on the
+	 * settings page unconditionally — so asserting `true` there is a test that cannot fail.
+	 * Only a dismissed notice separates the two: with the override off, the dismissal must win.
+	 *
+	 * @return void
+	 */
+	public function test_should_display_notice_honours_a_dismissal_on_the_settings_page_when_always_show_on_settings_is_false(): void {
 		Functions\when( 'current_user_can' )->justReturn( true );
 
 		$plugin = $this->plugin();
@@ -182,15 +192,39 @@ class AdminNoticeHandlerTest extends TestCase {
 		Functions\when( 'get_current_user_id' )->justReturn( 7 );
 
 		$handler = $this->handler( $plugin );
+		$handler->dismiss_notice( 'settings-id', 7 );
 
-		$this->assertTrue(
+		$this->assertFalse(
 			$handler->should_display_notice(
-				'any-id',
+				'settings-id',
 				[
 					'always_show_on_settings' => false,
 				]
 			)
 		);
+	}
+
+	/**
+	 * The control for the test above: the SAME dismissed notice on the SAME settings page, with
+	 * the override left at its default, is still shown. Without this the assertion above passes
+	 * for an implementation that simply never displays a dismissed notice anywhere.
+	 *
+	 * @return void
+	 */
+	public function test_should_display_notice_still_shows_a_dismissed_notice_on_the_settings_page_by_default(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$plugin = $this->plugin();
+		$plugin->shouldReceive( 'is_plugin_settings' )->andReturn( true );
+
+		$store = $this->fake_user_meta_store();
+		$this->stub_user_meta( $store );
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+
+		$handler = $this->handler( $plugin );
+		$handler->dismiss_notice( 'settings-id', 7 );
+
+		$this->assertTrue( $handler->should_display_notice( 'settings-id' ) );
 	}
 
 	public function test_should_display_notice_returns_true_for_non_dismissible_even_when_dismissed(): void {
