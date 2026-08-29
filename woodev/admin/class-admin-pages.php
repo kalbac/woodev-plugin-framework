@@ -15,6 +15,19 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 	class Woodev_Admin_Pages {
 
 		/**
+		 * Top-level Woodev admin-menu slug ({@see self::admin_menu()}) — the
+		 * single source every submenu registrar ({@see self::licenses_menu()},
+		 * {@see self::extensions_menu()}), {@see self::menu_remove_top_item()},
+		 * and {@see self::is_woodev_page()} (#410) reference, so the slug
+		 * exists exactly once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const PAGE_SLUG = 'woodev';
+
+		/**
 		 * Main plugin class instance
 		 *
 		 * @var Woodev_Plugin
@@ -67,7 +80,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				__( 'Woodev', 'woodev-plugin-framework' ),
 				__( 'Woodev', 'woodev-plugin-framework' ),
 				'manage_options',
-				'woodev',
+				self::PAGE_SLUG,
 				null,
 				$this->woodev_plugin->get_framework_assets_url() . '/images/woodev-icon-16x16.png',
 				'65.5'
@@ -77,7 +90,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function licenses_menu() {
 
 			$license_page = add_submenu_page(
-				'woodev',
+				self::PAGE_SLUG,
 				__( 'Woodev license keys', 'woodev-plugin-framework' ),
 				__( 'Licenses', 'woodev-plugin-framework' ),
 				'manage_options',
@@ -221,7 +234,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function extensions_menu() {
 
 			$extensions_suffix = add_submenu_page(
-				'woodev',
+				self::PAGE_SLUG,
 				__( 'Плагины Woodev', 'woodev-plugin-framework' ),
 				__( 'Плагины', 'woodev-plugin-framework' ),
 				'manage_options',
@@ -383,9 +396,54 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		public function menu_remove_top_item() {
 			global $submenu;
 
-			if ( isset( $submenu['woodev'] ) ) {
-				unset( $submenu['woodev'][0] );
+			if ( isset( $submenu[ self::PAGE_SLUG ] ) ) {
+				unset( $submenu[ self::PAGE_SLUG ][0] );
 			}
+		}
+
+		/**
+		 * True when the current wp-admin request is for a Woodev page — the
+		 * top-level `woodev` page itself, or any submenu registered under it
+		 * (#410). Derives the answer from the LIVE menu registry
+		 * (`$GLOBALS['submenu']`) rather than a hardcoded slug list, so a
+		 * plugin that adds its own submenu under {@see self::PAGE_SLUG} is
+		 * covered for free — no separate allowlist to keep in sync.
+		 *
+		 * Reads `$GLOBALS['submenu']` directly rather than `global $submenu`:
+		 * `admin_menu` (where every submenu — this class's own and any host
+		 * plugin's — registers) has always already fired by the time
+		 * `admin_notices` / `admin_footer` call this, so the global is
+		 * populated. `static` (not an instance method): the answer depends
+		 * only on the current request's `$_GET['page']` and the global menu
+		 * registry, neither of which needs `$this->woodev_plugin`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public static function is_woodev_page(): bool {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page detection, no state change.
+			$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+
+			if ( '' === $page ) {
+				return false;
+			}
+
+			if ( self::PAGE_SLUG === $page ) {
+				return true;
+			}
+
+			if ( empty( $GLOBALS['submenu'][ self::PAGE_SLUG ] ) ) {
+				return false;
+			}
+
+			foreach ( $GLOBALS['submenu'][ self::PAGE_SLUG ] as $submenu_item ) {
+				if ( isset( $submenu_item[2] ) && $page === $submenu_item[2] ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 	}
 
