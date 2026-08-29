@@ -70,7 +70,7 @@ class Fake_Location_Provider extends Abstract_Location_Provider {
 	}
 
 	protected function declare_suggest_levels(): array {
-		return [ Location_Record::LEVEL_REGION ];
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
 	}
 
 	public function suggest( string $query, Location_Scope $scope ): array {
@@ -142,7 +142,7 @@ class Fake_List_Location_Provider extends Abstract_Location_Provider {
 	}
 
 	protected function declare_suggest_levels(): array {
-		return [ Location_Record::LEVEL_REGION ];
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
 	}
 
 	public function suggest( string $query, Location_Scope $scope ): array {
@@ -189,7 +189,7 @@ class Fake_Locate_Location_Provider extends Abstract_Location_Provider {
 	}
 
 	protected function declare_suggest_levels(): array {
-		return [ Location_Record::LEVEL_REGION ];
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
 	}
 
 	public function suggest( string $query, Location_Scope $scope ): array {
@@ -250,7 +250,7 @@ class Fake_Country_Scoped_Location_Provider extends Abstract_Location_Provider {
 	}
 
 	protected function declare_suggest_levels(): array {
-		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_ADDRESS ];
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_ADDRESS, Location_Record::LEVEL_SETTLEMENT ];
 	}
 
 	protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
@@ -610,6 +610,202 @@ final class LocationProviderRegistryTest extends TestCase {
 		// the duplicate-id assertion under test concerns 'acme' specifically.
 		$this->assertCount( 2, $registry->get_providers() );
 		$this->assertTrue( $registry->has_provider( 'dadata' ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Card #353 — a provider that cannot serve settlement for a country it
+	// claims must be refused at registration, per country, not country-blind.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A provider that DECLARES settlement (country-blind) but NARROWS it away
+	 * for one specific country — exactly the DaData `address` shape
+	 * ({@see Dadata_Provider::narrow_suggest_levels_for_country()}), applied
+	 * to settlement instead. Registering it must be refused, and the
+	 * refusal message must name both the provider id and the offending
+	 * country — an author needs to know WHICH country to fix or drop.
+	 */
+	public function test_a_provider_that_narrows_settlement_away_for_one_country_is_refused_at_registration(): void {
+		$provider = new class extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'narrows-settlement-away';
+			}
+
+			public function get_name(): string {
+				return 'Narrows Settlement Away';
+			}
+
+			public function get_countries(): array {
+				return [ 'RU', 'BY' ];
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
+			}
+
+			protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
+				// Serves settlement in BY, but not in RU — country-blind
+				// declare_suggest_levels() alone would never catch this.
+				if ( 'RU' === strtoupper( trim( $country ) ) ) {
+					return array_values( array_diff( $levels, [ Location_Record::LEVEL_SETTLEMENT ] ) );
+				}
+
+				return $levels;
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			// The refusal message must name BOTH the provider id AND the
+			// offending country — an author needs to know which country to
+			// fix or drop, not just that "something" is invalid.
+			->with( \Mockery::type( 'string' ), \Mockery::pattern( '/narrows-settlement-away".*"RU"/' ), '2.0.2' );
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->has_provider( 'narrows-settlement-away' ), 'a provider that cannot serve settlement for a country it lists must not register at all' );
+	}
+
+	/**
+	 * A provider whose {@see Location_Provider::get_suggest_levels()} THROWS
+	 * (the `final` template method's own `UnexpectedValueException` for an
+	 * unknown declared level) must be refused, not allowed to escape the
+	 * `catch` in {@see Location_Provider_Registry::register_provider()} and
+	 * take `init` down with it.
+	 */
+	public function test_a_provider_whose_suggest_levels_throws_is_refused_not_allowed_to_escape_init(): void {
+		$provider = new class extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'throws-on-suggest-levels';
+			}
+
+			public function get_name(): string {
+				return 'Throws On Suggest Levels';
+			}
+
+			public function get_countries(): array {
+				return [ 'RU' ];
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ 'not-a-real-level' ];
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->has_provider( 'throws-on-suggest-levels' ) );
+	}
+
+	/**
+	 * Critic finding on #353: `get_countries()` was read OUTSIDE the try, and it is
+	 * third-party code that is not `final`. A provider whose country list throws took
+	 * the exception straight into `init` — the exact failure the settlement check's own
+	 * docblock promises cannot happen.
+	 *
+	 * @return void
+	 */
+	public function test_a_provider_whose_country_list_throws_is_refused_not_allowed_to_escape_init(): void {
+		$provider = new class extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'throws-on-countries';
+			}
+
+			public function get_name(): string {
+				return 'Throws On Countries';
+			}
+
+			public function get_countries(): array {
+				throw new \RuntimeException( 'third-party country list blew up' );
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ Location_Record::LEVEL_SETTLEMENT ];
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->has_provider( 'throws-on-countries' ) );
+	}
+
+	/**
+	 * The second half of the same finding, and the one whose mechanism is worth
+	 * spelling out because it is NOT what it looks like.
+	 *
+	 * No file under `woodev/` declares `strict_types`, so an int/float/bool element in
+	 * the country list COERCES into `get_suggest_levels( string $country )` and quietly
+	 * registers a provider whose country is `123` — bad, but not a crash. An ARRAY or
+	 * OBJECT element is the crash: it raises a TypeError, the catch turns that into
+	 * `return $country`, and returning an array from a `?string` method raises a SECOND
+	 * TypeError with nothing left to catch it. Measured, not assumed.
+	 *
+	 * @return void
+	 */
+	public function test_a_country_list_holding_a_non_string_is_refused_not_allowed_to_escape_init(): void {
+		$provider = new class extends Abstract_Location_Provider {
+			public function get_id(): string {
+				return 'non-string-country';
+			}
+
+			public function get_name(): string {
+				return 'Non String Country';
+			}
+
+			public function get_countries(): array {
+				return [ [ 'RU' ] ];
+			}
+
+			protected function declare_suggest_levels(): array {
+				return [ Location_Record::LEVEL_SETTLEMENT ];
+			}
+
+			public function suggest( string $query, Location_Scope $scope ): array {
+				return [];
+			}
+		};
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_providers_filter( [ $provider ] );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertFalse( $registry->has_provider( 'non-string-country' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -3293,8 +3489,9 @@ final class LocationProviderRegistryTest extends TestCase {
 	}
 
 	public function test_address_suggestions_control_is_disabled_when_nobody_serves_address(): void {
-		// 'acme' only declares `region` (Fake_Location_Provider's fixed
-		// declare_suggest_levels()); DaData stays unconfigured (no token
+		// 'acme' declares `region` + `settlement` and never `address`
+		// (Fake_Location_Provider's fixed declare_suggest_levels(); settlement is
+		// mandatory since #353); DaData stays unconfigured (no token
 		// stubbed) -> nobody in the chain can ever serve `address`.
 		$active = new Fake_Location_Provider( 'acme', 'ACME' );
 

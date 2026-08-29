@@ -208,6 +208,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		private array $levels;
 		private bool $configured;
 
+		/**
+		 * ISO codes for which {@see self::narrow_suggest_levels_for_country()}
+		 * withholds settlement AFTER construction (card #353 test seam — see
+		 * {@see self::withhold_settlement_for()}).
+		 *
+		 * @var string[]
+		 */
+		private array $settlement_withheld_for = [];
+
 		public int $is_configured_calls = 0;
 		public int $get_suggest_levels_calls = 0;
 
@@ -236,10 +245,47 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			return $this->configured;
 		}
 
+		/**
+		 * Always declares settlement in addition to whatever `$levels` the
+		 * test asked for (card #353): {@see Location_Provider_Registry::register_provider()}
+		 * now refuses any provider that cannot serve settlement for every
+		 * country in {@see self::get_countries()}, so a fixture built with
+		 * `[ LEVEL_REGION ]` alone would never even register. A test whose
+		 * SUBJECT is "this provider does not serve settlement" instead calls
+		 * {@see self::withhold_settlement_for()} AFTER registration — see
+		 * that method's own docblock.
+		 */
 		protected function declare_suggest_levels(): array {
 			++$this->get_suggest_levels_calls;
 
-			return $this->levels;
+			return array_values( array_unique( array_merge( $this->levels, [ Location_Record::LEVEL_SETTLEMENT ] ) ) );
+		}
+
+		protected function narrow_suggest_levels_for_country( array $levels, string $country ): array {
+			if ( in_array( strtoupper( trim( $country ) ), $this->settlement_withheld_for, true ) ) {
+				return array_values( array_diff( $levels, [ Location_Record::LEVEL_SETTLEMENT ] ) );
+			}
+
+			return $levels;
+		}
+
+		/**
+		 * Test seam (card #353): simulates a provider that stops serving
+		 * settlement for `$country` — the only way left to reproduce "a
+		 * chosen provider that does not serve settlement" for the D15-chain
+		 * tests that need exactly that as their subject, now that
+		 * {@see Location_Provider_Registry::register_provider()} refuses a
+		 * provider failing that check UP FRONT. Call this AFTER
+		 * `$registry->collect()` has already registered this instance —
+		 * calling it before would make registration itself see the
+		 * withheld level and refuse the provider.
+		 *
+		 * @param string $country ISO-3166 alpha-2 country code.
+		 *
+		 * @return void
+		 */
+		public function withhold_settlement_for( string $country ): void {
+			$this->settlement_withheld_for[] = strtoupper( trim( $country ) );
 		}
 
 		public function suggest( string $query, Location_Scope $scope ): array {
@@ -285,7 +331,7 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		protected function declare_suggest_levels(): array {
-			return [ Location_Record::LEVEL_REGION ];
+			return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
 		}
 
 		public function suggest( string $query, Location_Scope $scope ): array {
@@ -758,13 +804,27 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry->declare_needed();
 			$registry->collect();
 
+			// Card #353: $chosen must genuinely serve settlement somewhere to
+			// have registered at all (it does — for 'RU', at construction);
+			// this simulates it no longer serving settlement in 'RU' AFTER
+			// registration, which is the only way left to reproduce
+			// "region-only chosen provider" now that the registry refuses
+			// that shape up front. See withhold_settlement_for()'s docblock.
+			$chosen->withhold_settlement_for( 'RU' );
+
 			$store->set( $this->record( 'dadata:settlement-1' ) );
 
 			$service = new Location_Service( $registry, $store );
 
 			// Sanity: the D15 chain really did fall through to the bundled
 			// provider for this level, not the (region-only) chosen one.
-			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT ) );
+			// An explicit country is required here — the country-BLIND path
+			// ($country === null) never applies narrowing at all (deliberate,
+			// see get_suggest_levels()'s own docblock), so it cannot observe
+			// withhold_settlement_for() above; the real production path
+			// (is_customer_record_stale()) always passes the record's own
+			// country, which this mirrors.
+			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_SETTLEMENT, 'RU' ) );
 
 			$fetched = $service->get_customer_record();
 
@@ -787,6 +847,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
 			$registry->collect();
+
+			// Card #353: see the sibling test above for why this call is
+			// necessary — $chosen registered by genuinely serving settlement
+			// for 'RU', and this withdraws it again afterward.
+			$chosen->withhold_settlement_for( 'RU' );
 
 			$store->set( $this->record( 'dadata:settlement-1' ) );
 
@@ -870,7 +935,13 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// survives — the chain must report ONLY the survivor, with `current`
 			// recomputed to it rather than left pointing at the dropped level.
 			$store    = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
-			$registry = $this->activate_owning_provider( new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] ) );
+			$chosen   = new Location_Service_Fake_Provider( 'svc-fixture', [ Location_Record::LEVEL_REGION ], true, [ 'RU' ] );
+			$registry = $this->activate_owning_provider( $chosen );
+
+			// Card #353: 'svc-fixture' registered by genuinely serving
+			// settlement for 'RU' at construction; this withdraws it again
+			// afterward — see Location_Service_Fake_Provider::withhold_settlement_for().
+			$chosen->withhold_settlement_for( 'RU' );
 
 			$region     = Location_Record::from_array(
 				[
@@ -971,6 +1042,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$registry = Location_Provider_Registry::instance();
 			$registry->declare_needed();
 			$registry->collect();
+
+			// Card #353: 'city-dict' registered by genuinely serving
+			// settlement for 'RU' at construction; this withdraws it again
+			// afterward — see Location_Service_Fake_Provider::withhold_settlement_for().
+			$chosen->withhold_settlement_for( 'RU' );
 
 			$settlement = Location_Record::from_array(
 				[
@@ -1403,7 +1479,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
-		 * False-admission direction: the chosen provider serves region only,
+		 * False-admission direction: the chosen provider does not serve ADDRESS
+		 * (it declares region and, since #353's registration rule, settlement),
 		 * in `[ 'RU', 'FR' ]`; the bundled fallback is configured but its own
 		 * country list is left at its (now nine-country, D15 amendment
 		 * follow-up) default, which does NOT include `FR`. An `FR`
@@ -1430,7 +1507,8 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$service = new Location_Service( $registry );
 
 			// Sanity: "address" is indeed resolved to the fallback, not $chosen
-			// (which only declares "region").
+			// (which declares region + settlement, never address — settlement is
+			// mandatory since #353, so "region only" is no longer registrable).
 			$this->assertInstanceOf( Dadata_Provider::class, $service->provider_for_level( Location_Record::LEVEL_ADDRESS ) );
 
 			$this->assertFalse(
