@@ -18,13 +18,13 @@
  * @since 1.5.0
  */
 
-namespace Woodev\Framework\Shipping;
+namespace Woodev\Framework\Shipping\Api;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
 
-if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Shipping_API' ) ) :
+if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Api\\Shipping_API' ) ) :
 
 	/**
 	 * WooCommerce Shipping Method API

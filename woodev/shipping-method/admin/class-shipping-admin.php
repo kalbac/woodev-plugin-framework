@@ -24,7 +24,7 @@
 
 namespace Woodev\Framework\Shipping\Admin;
 
-use Woodev\Framework\Shipping\Shipping_Exception;
+use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {

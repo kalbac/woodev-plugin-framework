@@ -2,14 +2,14 @@
 /**
  * Woodev Abstract Shipping API
  *
- * Base class that wires the carrier-neutral {@see \Woodev\Framework\Shipping\Shipping_API}
+ * Base class that wires the carrier-neutral {@see \Woodev\Framework\Shipping\Api\Shipping_API}
  * contract onto the framework's {@see \Woodev_API_Base} HTTP plumbing. It inherits the
  * request/response transport, the TLS handling, and — crucially — the request logging
  * broadcast (`woodev_{plugin_id}_api_request_performed`) from the base, and adds the two
  * pieces a carrier shouldn't have to repeat:
  *
  * 1. Typed `get_request()` / `get_response()` accessors. {@see \Woodev_API_Base} exposes
- *    these untyped; the {@see \Woodev\Framework\Shipping\Shipping_API} interface declares
+ *    these untyped; the {@see \Woodev\Framework\Shipping\Api\Shipping_API} interface declares
  *    them with `\Woodev_API_Request` / `\Woodev_API_Response` return types, so this class
  *    re-declares them with the interface-compatible signatures over the same backing state.
  * 2. A default pickup-point mapping that turns a carrier pickup-points response into
@@ -32,7 +32,7 @@
  * @since 1.5.0
  */
 
-namespace Woodev\Framework\Shipping;
+namespace Woodev\Framework\Shipping\Api;
 
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 
@@ -40,7 +40,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 } // Exit if accessed directly
 
-if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Abstract_Shipping_API' ) ) :
+if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Api\\Abstract_Shipping_API' ) ) :
 
 	/**
 	 * Carrier-neutral shipping API base.

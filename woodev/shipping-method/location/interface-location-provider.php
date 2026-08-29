@@ -220,7 +220,7 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		 *    location dictionary) — return `[]` here (the {@see Abstract_Location_Provider}
 		 *    default; no override needed) and read the credentials from
 		 *    wherever the plugin's OWN carrier-wide settings actually live
-		 *    (typically a {@see \Woodev\Framework\Shipping\Shipping_Integration}
+		 *    (typically a {@see \Woodev\Framework\Shipping\Settings\Shipping_Integration}
 		 *    subclass — see {@see \Woodev\Framework\Shipping\Shipping_Plugin::get_integration_option()}
 		 *    for the accessor, which already falls back to a raw option read
 		 *    when no integration handler exists yet). Declaring zero fields

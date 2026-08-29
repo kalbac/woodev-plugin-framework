@@ -4,7 +4,7 @@
  *
  * Base class for reading a shipment's tracking history from a carrier and
  * exposing it for display. It drives the carrier seam
- * {@see \Woodev\Framework\Shipping\Shipping_API::get_tracking()} and normalizes
+ * {@see \Woodev\Framework\Shipping\Api\Shipping_API::get_tracking()} and normalizes
  * the carrier's response into a typed `Tracking_Event` list, so callers see one
  * shape regardless of the carrier. Each concrete carrier implements only the
  * carrier-specific mapping ({@see self::map_events()}) and builds events through
@@ -29,7 +29,7 @@
 
 namespace Woodev\Framework\Shipping\Order;
 
-use Woodev\Framework\Shipping\Shipping_API;
+use Woodev\Framework\Shipping\Api\Shipping_API;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

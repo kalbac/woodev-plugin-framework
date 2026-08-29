@@ -37,7 +37,7 @@ use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
-use Woodev\Framework\Shipping\Shipping_Exception;
+use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {

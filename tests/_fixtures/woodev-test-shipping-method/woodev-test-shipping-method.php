@@ -911,7 +911,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 			/**
 			 * @inheritDoc
 			 */
-			public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
+			public function get_api(): ?\Woodev\Framework\Shipping\Api\Shipping_API {
 				return null;
 			}
 
@@ -955,9 +955,9 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 *
 			 * @since 2.0.2
 			 *
-			 * @var \Woodev\Framework\Shipping\Shipping_Integration|null
+			 * @var \Woodev\Framework\Shipping\Settings\Shipping_Integration|null
 			 */
-			private ?\Woodev\Framework\Shipping\Shipping_Integration $integration_handler_instance = null;
+			private ?\Woodev\Framework\Shipping\Settings\Shipping_Integration $integration_handler_instance = null;
 
 			/**
 			 * {@inheritDoc}
@@ -987,7 +987,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 *
 			 * @inheritDoc
 			 */
-			public function get_integration_handler(): ?\Woodev\Framework\Shipping\Shipping_Integration {
+			public function get_integration_handler(): ?\Woodev\Framework\Shipping\Settings\Shipping_Integration {
 				if ( null === $this->integration_handler_instance ) {
 					$this->integration_handler_instance = new \Woodev_Test_Cdek_Integration( $this );
 				}

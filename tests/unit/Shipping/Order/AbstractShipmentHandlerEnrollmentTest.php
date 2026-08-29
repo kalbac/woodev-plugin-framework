@@ -145,7 +145,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		private function handler( ?Popular_Settlement_Store $store, $api = null ): \Test_Shipment_Handler {
 			if ( null === $api ) {
 				$response = Mockery::mock( '\Woodev_API_Response' );
-				$api      = Mockery::mock( '\Woodev\Framework\Shipping\Shipping_API' );
+				$api      = Mockery::mock( '\Woodev\Framework\Shipping\Api\Shipping_API' );
 				$api->shouldReceive( 'create_order' )->andReturn( $response );
 			}
 

@@ -7,13 +7,13 @@
  * @author    Maksim Martirosov
  */
 
-namespace Woodev\Framework\Shipping;
+namespace Woodev\Framework\Shipping\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Integration' ) ) :
+if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integration' ) ) :
 
 	/**
 	 * # WooCommerce Shipping Integration

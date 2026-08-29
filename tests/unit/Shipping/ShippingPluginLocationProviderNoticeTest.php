@@ -103,7 +103,7 @@ class Notice_Bare_Shipping_Plugin_Fixture extends Shipping_Plugin {
 		return [];
 	}
 
-	public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
+	public function get_api(): ?\Woodev\Framework\Shipping\Api\Shipping_API {
 		return null;
 	}
 
