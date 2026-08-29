@@ -351,11 +351,35 @@ final class ShippingPluginDefaultLocalityStaleNoticeTest extends TestCase {
 		$this->assertStringContainsString( 'admin.php?page=woodev-settings&tab=shipping', $notice['message'], 'the settings link points at the Shipping tab\'s Location section' );
 	}
 
-	public function test_notice_when_a_record_exists_but_no_active_provider_resolves(): void {
+	/**
+	 * `apply_filters()` is forced to return `null` for
+	 * {@see Location_Provider_Registry::FILTER_ACTIVE_PROVIDER} specifically —
+	 * NOT achieved via an empty providers list, because
+	 * {@see Location_Provider_Registry::collect()} unconditionally registers
+	 * the bundled DaData provider (its class now exists in this codebase) even
+	 * when the {@see Location_Provider_Registry::FILTER_PROVIDERS} candidates
+	 * list is empty, so `get_active_provider()` would still resolve to it via
+	 * the `self::DEFAULT_PROVIDER_ID` fallback. Forcing the filter's return
+	 * value directly is the one route documented as reachable by both
+	 * `get_active_provider()`'s own docblock and card #410's critic finding.
+	 */
+	private function stub_active_provider_filter_returning_null(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) {
+				if ( Location_Provider_Registry::FILTER_ACTIVE_PROVIDER === $tag ) {
+					return null;
+				}
+
+				return $default;
+			}
+		);
+	}
+
+	public function test_no_notice_when_a_record_exists_but_no_active_provider_resolves(): void {
 		$record = $this->record_array_for( 'stale-other' );
 
 		Functions\when( 'add_action' )->justReturn( true );
-		$this->stub_providers_filter( [] ); // nothing registered -> get_active_provider() is null.
+		$this->stub_active_provider_filter_returning_null();
 		Functions\when( 'get_option' )->alias(
 			static function ( $name, $default = null ) use ( $record ) {
 				if ( 'woodev_location_default_locality_policy' === $name ) {
@@ -373,10 +397,32 @@ final class ShippingPluginDefaultLocalityStaleNoticeTest extends TestCase {
 		$registry->declare_needed();
 		$registry->collect();
 
-		$notice = $registry->default_locality_stale_notice();
+		$this->assertNull( $registry->default_locality_stale_notice(), 'with nothing to re-pick, the non-dismissible notice must not become a permanent unactionable banner (critic finding, PR #661)' );
+	}
 
-		$this->assertNotNull( $notice, 'parity with apply_default_locality_status_note(): a record with nothing currently active is still a mismatch' );
-		$this->assertSame( 'location-default-locality-stale', $notice['notice_id'] );
+	public function test_predicate_still_reports_a_mismatch_when_no_active_provider_resolves(): void {
+		$record = $this->record_array_for( 'stale-other' );
+
+		Functions\when( 'add_action' )->justReturn( true );
+		$this->stub_active_provider_filter_returning_null();
+		Functions\when( 'get_option' )->alias(
+			static function ( $name, $default = null ) use ( $record ) {
+				if ( 'woodev_location_default_locality_policy' === $name ) {
+					return Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED;
+				}
+				if ( 'woodev_location_default_locality_record' === $name ) {
+					return json_encode( $record );
+				}
+
+				return $default;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+		$registry->collect();
+
+		$this->assertTrue( $registry->is_default_locality_provider_mismatched(), 'parity with apply_default_locality_status_note(): the shared predicate still counts a record with nothing currently active as a mismatch, even though the admin notice deliberately stays silent here' );
 	}
 
 	// -------------------------------------------------------------------------

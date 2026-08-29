@@ -72,4 +72,49 @@ final class AdminPagesWoodevPageTest extends TestCase {
 	public function test_false_when_no_page_param_is_present_at_all(): void {
 		$this->assertFalse( \Woodev_Admin_Pages::is_woodev_page(), 'mutant: treating an empty/missing page as a match' );
 	}
+
+	/**
+	 * Overrides the class-wide identity stub with real `sanitize_key()`
+	 * semantics (lowercase; strip everything but `[a-z0-9_-]`) so a mutant
+	 * that re-adds the `sanitize_key()` call in `is_woodev_page()` is
+	 * actually exercised — the default identity stub from `setUp()` would
+	 * silently absorb that mutant otherwise, since it never transforms the
+	 * value either way.
+	 */
+	private function stub_real_sanitize_key(): void {
+		Functions\when( 'sanitize_key' )->alias(
+			static function ( $key ) {
+				$key = strtolower( (string) $key );
+
+				return preg_replace( '/[^a-z0-9_\-]/', '', $key );
+			}
+		);
+	}
+
+	public function test_false_for_a_slug_differing_only_in_case(): void {
+		$this->stub_real_sanitize_key();
+
+		// Collides with a REGISTERED submenu slug only after lowercasing —
+		// exactly the false-positive direction the critic flagged as the
+		// expensive one, since this notice is non-dismissible.
+		$GLOBALS['submenu']['woodev'] = [
+			[ 'Settings', 'manage_options', 'woodev-settings' ],
+		];
+
+		$_GET['page'] = 'Woodev-Settings';
+
+		$this->assertFalse( \Woodev_Admin_Pages::is_woodev_page(), 'sanitize_key() would lowercase this into a false-positive match against a differently-cased page (critic finding, PR #661)' );
+	}
+
+	public function test_true_for_a_registered_submenu_slug_containing_slash_and_dot(): void {
+		$this->stub_real_sanitize_key();
+
+		$GLOBALS['submenu']['woodev'] = [
+			[ 'Orders', 'manage_options', 'edit.php?post_type=shop_order' ],
+		];
+
+		$_GET['page'] = 'edit.php?post_type=shop_order';
+
+		$this->assertTrue( \Woodev_Admin_Pages::is_woodev_page(), 'sanitize_key() strips "/", "?", "=" and "." and would turn this into a false negative (critic finding, PR #661)' );
+	}
 }

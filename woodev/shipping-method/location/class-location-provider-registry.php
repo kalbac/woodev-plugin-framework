@@ -2604,9 +2604,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * already uses, so this is directly unit-testable without reflecting
 		 * into a protected registration method.
 		 *
-		 * Fires on provider MISMATCH only ({@see self::is_default_locality_provider_mismatched()})
-		 * — never on "policy is `fixed` but no record was ever picked", which
-		 * stays on the settings note alone and is out of scope here (#410).
+		 * Deliberately NARROWER than {@see self::is_default_locality_provider_mismatched()}:
+		 * the predicate's `null === $active` arm counts "nothing currently
+		 * resolves as active" as a mismatch too (correct for the settings-page
+		 * note, which merely describes state), but this notice additionally
+		 * requires a REAL active provider before firing. The message tells the
+		 * merchant to "Выберите её заново" — with no active provider there is
+		 * nothing to re-pick with, and since this notice is non-dismissible, a
+		 * `null === $active` state would otherwise become a permanent,
+		 * unactionable banner across the whole Woodev section (critic finding,
+		 * PR #661). The settings note deliberately stays broader; this notice
+		 * fires only on a genuine provider-vs-provider mismatch, which is also
+		 * exactly what card #410 asks for.
+		 *
 		 * Names neither provider in the message: the record's provider may no
 		 * longer be registered under any plugin at all, so there is no name to
 		 * print for it.
@@ -2624,6 +2634,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 */
 		public function default_locality_stale_notice(): ?array {
 			if ( ! $this->is_default_locality_provider_mismatched() ) {
+				return null;
+			}
+
+			if ( null === $this->get_active_provider() ) {
 				return null;
 			}
 

@@ -417,13 +417,31 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 * only on the current request's `$_GET['page']` and the global menu
 		 * registry, neither of which needs `$this->woodev_plugin`.
 		 *
+		 * Compares the raw, `wp_unslash()`-ed value only — no `sanitize_key()`
+		 * — the same way WordPress core itself resolves the current admin page
+		 * (`wp-admin/admin.php` unslashes `$_GET['page']` and compares it
+		 * directly, never running it through `sanitize_key()`). Both sides of
+		 * every comparison here are TRUSTED strings — {@see self::PAGE_SLUG}
+		 * and the slugs `$GLOBALS['submenu']` was itself registered with — used
+		 * strictly in `===`, never echoed, interpolated into SQL, or used as a
+		 * path, so there is nothing to sanitize against. `sanitize_key()`
+		 * lowercases and strips everything but `[a-z0-9_-]`, so it breaks the
+		 * comparison both ways: a mixed-case slug from an unrelated plugin
+		 * (`Woodev-Settings`) would collide into a false-positive match, and a
+		 * legal Woodev submenu slug containing `/` or `.` (registered the way
+		 * WooCommerce's own `edit.php?post_type=shop_order` is) would never
+		 * match at all — a false negative. A false positive is the expensive
+		 * direction here: this notice is non-dismissible, so it would nag on a
+		 * page that is not ours at all (critic finding, PR #661).
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return bool
 		 */
 		public static function is_woodev_page(): bool {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page detection, no state change.
-			$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated -- compared with strict === only against trusted slugs (self::PAGE_SLUG and the $GLOBALS['submenu'] registry), never echoed/used in SQL/paths; sanitize_key() would corrupt legal slugs containing '/', '.', or mixed case (matches core admin.php's own wp_unslash()-only handling).
+			$page = isset( $_GET['page'] ) ? (string) wp_unslash( $_GET['page'] ) : '';
 
 			if ( '' === $page ) {
 				return false;
