@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 235 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 236 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -321,6 +321,7 @@
 - [tooling/parallel-agents] **A green suite in a worktree is not the same suite — five contract tests SKIP there because `plugins-reference/` is gitignored. Compare the skip count, not the assertion count.** → [a-worktree-silently-skips-five-contract-tests](gotchas/a-worktree-silently-skips-five-contract-tests.md) (s84)
 - [tooling/parallel-agents] **Generated bundles must be built in the PRIMARY CHECKOUT — webpack resolves the shared `node_modules` symlink out of the worktree, so its build can never match CI.** → [local-npm-run-build-is-not-assets-parity-evidence](gotchas/local-npm-run-build-is-not-assets-parity-evidence.md) (s84)
 - [tooling/parallel-agents] **Every fresh worktree starts dirty with seven CRLF-only files — a worker running `git add -A` commits 483 lines of line-ending churn.** → [an-orca-worktree-starts-dirty-with-crlf-churn](gotchas/an-orca-worktree-starts-dirty-with-crlf-churn.md) (s84)
+- [tooling/parallel-agents] **`--model terra` is a hard 400 (`not supported when using Codex with a ChatGPT account`) that the buffer shows as a metadata WARNING first — the real id is `gpt-5.6-terra` and is already the config default, so omit `--model`.** → [codex-model-terra-is-a-400-that-looks-like-a-warning](gotchas/codex-model-terra-is-a-400-that-looks-like-a-warning.md) (s103)
 - [tooling/parallel-agents] **Launching Codex takes four steps, ESC for the update dialog included — and that dialog can reappear AFTER a clean read, where Enter means "Update now".** → [starting-codex-under-orca-needs-four-steps-not-one](gotchas/starting-codex-under-orca-needs-four-steps-not-one.md) (s84, extended s86)
 - [tooling/parallel-agents] **Three agents is this machine's real cap — past it phpcs blames innocent files and jest OOMs, both of which read as code defects.** → [three-agents-is-the-concurrency-cap-on-this-machine](gotchas/three-agents-is-the-concurrency-cap-on-this-machine.md) (s84)
 - [tooling/parallel-agents] **A dispatch receipt is never evidence in either direction — and there is a THIRD state, `agent_prompt_stalled`, where the brief sits unsubmitted in the prompt box and needs an Enter, not a retry.** → [dispatch-inject-reports-failure-after-succeeding](gotchas/dispatch-inject-reports-failure-after-succeeding.md) (s85; extended s89)

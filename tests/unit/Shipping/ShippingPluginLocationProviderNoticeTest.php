@@ -82,7 +82,7 @@ class Notice_Fake_Location_Provider extends Abstract_Location_Provider {
 	}
 
 	protected function declare_suggest_levels(): array {
-		return [ Location_Record::LEVEL_REGION ];
+		return [ Location_Record::LEVEL_REGION, Location_Record::LEVEL_SETTLEMENT ];
 	}
 
 	public function suggest( string $query, Location_Scope $scope ): array {

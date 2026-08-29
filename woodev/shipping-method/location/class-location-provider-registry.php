@@ -1000,6 +1000,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * whichever plugin's filter callback ran first) and surfaces the conflict
 		 * loudly instead of letting the second entrant silently win.
 		 *
+		 * Also rejected: a provider that cannot serve {@see Location_Record::LEVEL_SETTLEMENT}
+		 * for every country it lists in {@see Location_Provider::get_countries()}. This is
+		 * the per-country form of the check (spec D15/card #353) — a provider whose
+		 * COUNTRY-BLIND {@see Location_Provider::declare_suggest_levels()} declares
+		 * settlement is not enough, because {@see Location_Provider::narrow_suggest_levels_for_country()}
+		 * may remove it again for one specific country (our own DaData provider narrows
+		 * `address` exactly this way: present in RU/BY/KZ/UZ, absent in AM/AZ/KG/TJ/TM).
+		 * Settlement is what the D15 chain and {@see Provider_Selection_Scope::current_locality()}
+		 * anchor the next search to, so a country a provider cannot serve it in must be
+		 * dropped from `get_countries()` or fixed — never silently admitted with a hole.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param Location_Provider $provider provider to register.
@@ -1022,7 +1033,91 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				return;
 			}
 
+			$unsupported_country = $this->find_country_without_settlement_support( $provider );
+
+			if ( null !== $unsupported_country ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'Location provider "%s" was rejected: it does not serve the settlement level for country "%s"; drop that country from get_countries() or make the provider serve settlement there.',
+						$id,
+						$unsupported_country
+					),
+					'2.0.2'
+				);
+
+				return;
+			}
+
 			$this->providers[ $id ] = $provider;
+		}
+
+		/**
+		 * Stands in for the offending country when the provider's country list itself
+		 * cannot be read — it threw, or it holds an element that is not a string.
+		 *
+		 * A sentinel rather than the raw value, because the raw value is exactly what
+		 * cannot be trusted here: interpolating an array or an object into the
+		 * rejection message is the same class of defect one line further along.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const UNREADABLE_COUNTRY_LIST = '(unreadable country list)';
+
+		/**
+		 * Finds the first country in `$provider->get_countries()` for which the
+		 * provider cannot answer {@see Location_Record::LEVEL_SETTLEMENT}, checked
+		 * PER COUNTRY via {@see Location_Provider::get_suggest_levels()} rather than
+		 * the country-blind declaration (see {@see self::register_provider()}).
+		 *
+		 * `get_suggest_levels()` is `final` and throws `\UnexpectedValueException` on
+		 * an unknown declared level; caught here so a third-party provider's bug
+		 * cannot escape from `init` into the host site — a provider whose levels
+		 * cannot even be read is refused, same as one that openly lacks settlement.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Provider $provider provider under test.
+		 *
+		 * @return string|null The offending ISO-3166 alpha-2 country code, or `null`
+		 *                     when settlement is supported for every listed country.
+		 */
+		private function find_country_without_settlement_support( Location_Provider $provider ): ?string {
+			try {
+				$countries = $provider->get_countries();
+			} catch ( \Throwable $e ) {
+				// `get_countries()` is third-party code and is NOT declared final, so it can
+				// throw. Measured: an exception here escaped straight into `init`, which is
+				// precisely what this method's guarantee says cannot happen.
+				return self::UNREADABLE_COUNTRY_LIST;
+			}
+
+			foreach ( $countries as $country ) {
+				// A non-string element is refused rather than passed on, and the reason is
+				// measured, not defensive habit. No file in `woodev/` declares
+				// `strict_types`, so an int/float/bool/null element COERCES into
+				// `get_suggest_levels( string $country )` and would silently register a
+				// provider whose country is `123`; an array or object element instead raises
+				// a TypeError that the catch below turns into `return $country` — returning
+				// an array from a `?string` method, a SECOND TypeError, and that one escapes
+				// into `init` with nothing left to catch it.
+				if ( ! is_string( $country ) ) {
+					return self::UNREADABLE_COUNTRY_LIST;
+				}
+
+				try {
+					$levels = $provider->get_suggest_levels( $country );
+				} catch ( \Throwable $e ) {
+					return $country;
+				}
+
+				if ( ! in_array( Location_Record::LEVEL_SETTLEMENT, $levels, true ) ) {
+					return $country;
+				}
+			}
+
+			return null;
 		}
 
 		/**
