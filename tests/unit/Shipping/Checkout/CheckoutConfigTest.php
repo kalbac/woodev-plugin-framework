@@ -1480,6 +1480,23 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertNotSame( '', $config['location']['i18n']['noResults'] );
 	}
 
+	/**
+	 * Issue #361: `location-cascade.js`'s `emptyTextFor()` swaps this string in over
+	 * `noResults`/`noResultsAddress` whenever the most recent `/suggest`/`/list` response's
+	 * `within_status` is anything other than `applied`/`not_requested` — the two must never
+	 * read the same sentence, same guard shape as `unavailable` vs `noResults` above.
+	 */
+	public function test_location_block_carries_the_scope_widened_message_distinct_from_no_results(): void {
+		$service = new Checkout_Config_Fake_Location_Service( true, [ 'settlement' => true ], null, [ 'RU' ] );
+		$config  = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], $service ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertIsString( $config['location']['i18n']['scopeWidened'] );
+		$this->assertNotSame( '', $config['location']['i18n']['scopeWidened'] );
+		$this->assertNotSame( $config['location']['i18n']['noResults'], $config['location']['i18n']['scopeWidened'] );
+		$this->assertNotSame( $config['location']['i18n']['noResultsAddress'], $config['location']['i18n']['scopeWidened'] );
+	}
+
 	public function test_the_no_results_message_is_filterable(): void {
 		Functions\when( 'apply_filters' )->alias(
 			static function ( $hook, $value ) {
@@ -1521,7 +1538,7 @@ class CheckoutConfigTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 0, $strings, 'A scalar must be discarded, never cast to a list.' );
 
-		foreach ( [ 'noResults', 'noResultsAddress', 'notPersisted', 'unavailable', 'placeholder', 'searchPlaceholder', 'invalidSettlement' ] as $key ) {
+		foreach ( [ 'noResults', 'noResultsAddress', 'notPersisted', 'unavailable', 'scopeWidened', 'placeholder', 'searchPlaceholder', 'invalidSettlement' ] as $key ) {
 			$this->assertArrayHasKey( $key, $strings, $key . ' must survive a hostile filter return.' );
 			$this->assertNotSame( '', $strings[ $key ] );
 		}

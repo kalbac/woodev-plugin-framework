@@ -308,6 +308,49 @@ describe( 'selectConfigFor() — pure config builder, no select2 required', () =
 			.toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
 	} );
 
+	// -------------------------------------------------------------------------
+	// Issue #361: `emptyText` may be a LIVE getter, not only a plain string —
+	// `location-cascade.js`'s `attachOne()`/`ensureSelect2()` hand over a closure over the
+	// SAME `options` object `fetchFor()` mutates after every completed `/suggest` response, so
+	// `noResults()` (select2's own per-render hook) must re-resolve it on every call rather
+	// than freeze whatever it first saw when `selectConfigFor()` ran.
+	// -------------------------------------------------------------------------
+
+	it( 'emptyText as a function is re-resolved on every noResults() call, not frozen at config-build time', () => {
+		let current = 'Поиск не дал результатов. Попробуйте изменить запрос.';
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{
+				initialValue: '',
+				placeholder: '',
+				applyEntries: jest.fn(),
+				level: 'settlement',
+				emptyText: () => current,
+			}
+		);
+
+		expect( config.language.noResults() ).toBe( 'Поиск не дал результатов. Попробуйте изменить запрос.' );
+
+		// The caller mutates the variable the getter closes over — mirrors `location-cascade.js`'s
+		// own `fetchFor()` setting `options.emptyText` after a LATER completed search's
+		// `within_status` came back degraded.
+		current = 'Показаны результаты по более широкой области — не только по вашему выбору.';
+
+		expect( config.language.noResults() ).toBe( 'Показаны результаты по более широкой области — не только по вашему выбору.' );
+	} );
+
+	it( 'a getter that currently resolves to "" still wires noResults when wc_country_select_params can answer', () => {
+		window.wc_country_select_params = { i18n_no_matches: 'No matches found' };
+
+		const config = mod.selectConfigFor(
+			{ ajax: true, fetchEntries: jest.fn() },
+			{ initialValue: '', placeholder: '', applyEntries: jest.fn(), level: 'settlement', emptyText: () => '' }
+		);
+
+		expect( config.language.noResults() ).toBe( 'No matches found' );
+	} );
+
 	it( 'an ajax strategy with an initial value gets no placeholder — the seeded <option> already carries it', () => {
 		const config = mod.selectConfigFor(
 			{ ajax: true, fetchEntries: jest.fn() },

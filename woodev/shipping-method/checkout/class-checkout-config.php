@@ -540,6 +540,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					'woodev-plugin-framework'
 				),
 
+				// Issue #361: `/location/suggest`'s `within_status` response field (#333) tells
+				// the client whether the search actually stayed inside the parent the customer
+				// already picked — the REST layer has known this since #333, but nothing ever
+				// read it, so a shopper who typed into a settlement/address field expecting a
+				// search scoped to their own region/settlement got a silently country-wide one.
+				// Shown INSIDE the open listbox, same seam as `noResults`/`noResultsAddress`
+				// above, whenever `within_status` is anything other than `applied` or
+				// `not_requested` (`unknown_key`, `cross_country`, `bad_level`,
+				// `unserved_level` — {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s
+				// own `WITHIN_STATUS_*` constants) — `location-cascade.js`'s `emptyTextFor()` is
+				// the one place that reads the status and picks this string over `noResults`/
+				// `noResultsAddress`.
+				//
+				// Deliberately describes the RESULT, never the CAUSE: the shopper has no use for
+				// "unknown key" or "cross country" — those exist for devtools/integrators, who
+				// already have `within_status` itself in the response. What the shopper needs is
+				// only that the list in front of them is broader than what they scoped it to.
+				'scopeWidened'       => __(
+					'Showing results for a broader area — not limited to your selection.',
+					'woodev-plugin-framework'
+				),
+
 				// Issue #460: a WooCommerce-rebuilt state field (`country-select.js`'s
 				// `country_to_state_changed` handler) carries neither a value nor a
 				// `placeholder`/`data-placeholder` attribute, leaving an ajax-select2 widget
