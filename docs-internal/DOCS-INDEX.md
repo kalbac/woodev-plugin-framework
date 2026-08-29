@@ -7,6 +7,8 @@
 
 ## Session Start (for AI agents)
 
+> Canonical list: `AGENTS.md` → "Session Start". This checklist mirrors it — do not let them diverge.
+
 1. **Read `next-session-prompt.md`** — the prepared entry point for the next session.
 2. **Read `CURRENT-STATE.md`** — live status: phase/track state, open bugs, next actions.
 3. **Read `GOTCHAS.md`** — scan `[topic/*]` tags relevant to the current task.
