@@ -61,12 +61,18 @@ class Testable_Admin_Notice_Handler extends \Woodev_Admin_Notice_Handler {
 	 * @return void
 	 */
 	public static function reset_static_render_state(): void {
-		foreach ( [ 'admin_notice_placeholder_rendered', 'admin_notice_js_rendered' ] as $prop_name ) {
+		$reset_values = [
+			'admin_notice_placeholder_rendered' => false,
+			'admin_notice_js_rendered'          => false,
+			'admin_notice_placeholder_slug'     => null,
+		];
+
+		foreach ( $reset_values as $prop_name => $reset_value ) {
 			$property = new \ReflectionProperty( \Woodev_Admin_Notice_Handler::class, $prop_name );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}
-			$property->setValue( null, false );
+			$property->setValue( null, $reset_value );
 		}
 	}
 }
@@ -468,6 +474,98 @@ class AdminNoticeHandlerTest extends TestCase {
 
 		$this->assertStringContainsString( 'style="display:none;"', $html );
 		$this->assertStringNotContainsString( 'admin-notice-placeholder', $html );
+	}
+
+	// ---- render_admin_notice_js() placeholder-slug targeting (#662) ---------------
+
+	/**
+	 * The actual bug: in a fleet, the placeholder is echoed by the first handler to
+	 * run on `admin_notices` regardless of whether it has notices, while the JS is
+	 * emitted by the first handler whose own notices are non-empty. Those are
+	 * routinely different plugins, so the JS must target the slug that was actually
+	 * echoed, not the slug of the plugin whose handler happens to emit the JS.
+	 */
+	public function test_render_admin_notice_js_targets_the_slug_of_the_plugin_that_echoed_the_placeholder(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'wp_kses_post' )->returnArg();
+		Functions\when( 'wp_create_nonce' )->justReturn( 'test-nonce' );
+
+		// First handler on admin_notices: no notices of its own, but still echoes the placeholder.
+		$placeholder_plugin = $this->plugin( 'first-plugin' );
+		$placeholder_plugin->shouldReceive( 'is_plugin_settings' )->andReturn( true );
+		$placeholder_handler = $this->handler( $placeholder_plugin );
+
+		ob_start();
+		$placeholder_handler->render_admin_notices();
+		ob_end_clean();
+
+		// Second handler: has a notice, so it is the one whose render_admin_notice_js() actually fires.
+		$notice_plugin = $this->plugin( 'second-plugin' );
+		$notice_plugin->shouldReceive( 'is_plugin_settings' )->andReturn( true );
+		$notice_handler = $this->handler( $notice_plugin );
+		$notice_handler->add_admin_notice( 'Hello there', 'greeting' );
+
+		ob_start();
+		$notice_handler->render_admin_notices();
+		ob_end_clean();
+
+		unset( $GLOBALS['woodev_queued_js'] );
+		$notice_handler->render_admin_notice_js();
+		$js = $GLOBALS['woodev_queued_js'] ?? '';
+
+		$this->assertStringContainsString( '.js-wc-first-plugin-admin-notice-placeholder', $js );
+		$this->assertStringNotContainsString( '.js-wc-second-plugin-admin-notice-placeholder', $js );
+	}
+
+	/**
+	 * Single-plugin case: no regression when the same handler both echoes the
+	 * placeholder and emits the JS.
+	 */
+	public function test_render_admin_notice_js_targets_its_own_slug_when_it_also_rendered_the_placeholder(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'wp_kses_post' )->returnArg();
+		Functions\when( 'wp_create_nonce' )->justReturn( 'test-nonce' );
+
+		$plugin = $this->plugin( 'solo-plugin' );
+		$plugin->shouldReceive( 'is_plugin_settings' )->andReturn( true );
+		$handler = $this->handler( $plugin );
+		$handler->add_admin_notice( 'Hello there', 'greeting' );
+
+		ob_start();
+		$handler->render_admin_notices();
+		ob_end_clean();
+
+		unset( $GLOBALS['woodev_queued_js'] );
+		$handler->render_admin_notice_js();
+		$js = $GLOBALS['woodev_queued_js'] ?? '';
+
+		$this->assertStringContainsString( '.js-wc-solo-plugin-admin-notice-placeholder', $js );
+	}
+
+	/**
+	 * Fallback: render_delayed_admin_notices() calls render_admin_notices( false ),
+	 * which never echoes a placeholder, so the recorded slug stays null and
+	 * render_admin_notice_js() must fall back to the emitting plugin's own slug.
+	 */
+	public function test_render_admin_notice_js_falls_back_to_its_own_slug_when_no_placeholder_was_ever_echoed(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'wp_kses_post' )->returnArg();
+		Functions\when( 'wp_create_nonce' )->justReturn( 'test-nonce' );
+
+		$plugin = $this->plugin( 'delayed-only-plugin' );
+		$plugin->shouldReceive( 'is_plugin_settings' )->andReturn( true );
+		$handler = $this->handler( $plugin );
+		$handler->add_admin_notice( 'Hello there', 'greeting' );
+
+		ob_start();
+		$handler->render_delayed_admin_notices();
+		ob_end_clean();
+
+		unset( $GLOBALS['woodev_queued_js'] );
+		$handler->render_admin_notice_js();
+		$js = $GLOBALS['woodev_queued_js'] ?? '';
+
+		$this->assertStringContainsString( '.js-wc-delayed-only-plugin-admin-notice-placeholder', $js );
 	}
 
 	// ---- handle_dismiss_notice() AJAX entry point ----------------------------------

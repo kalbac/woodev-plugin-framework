@@ -26,6 +26,9 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/** @var boolean static member to enforce a single rendering of the admin notice javascript */
 		private static $admin_notice_js_rendered = false;
 
+		/** @var string|null dasherized ID of the plugin whose handler actually echoed the admin notice placeholder */
+		private static $admin_notice_placeholder_slug = null;
+
 
 		/**
 		 * Initialize and setup the Admin Notice Handler
@@ -156,6 +159,9 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				// placeholder for moving delayed notices up into place
 				echo '<div class="js-wc-' . esc_attr( $this->get_plugin()->get_id_dasherized() ) . '-admin-notice-placeholder"></div>';
 				self::$admin_notice_placeholder_rendered = true;
+				// record which plugin actually echoed the placeholder, since in a fleet it need not
+				// be the same plugin whose handler later emits render_admin_notice_js()'s selector
+				self::$admin_notice_placeholder_slug = $this->get_plugin()->get_id_dasherized();
 			}
 		}
 
@@ -230,6 +236,15 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 *
 		 * @since 3.0.0
 		 *
+		 * Targets the placeholder slug recorded by whichever plugin's handler actually echoed it in
+		 * render_admin_notices(), not this handler's own plugin — in a fleet those can differ, and the
+		 * placeholder element only exists under the slug that was actually printed. This is safe to
+		 * read here because the placeholder renders on `admin_notices` (priority 15) and this method
+		 * on `admin_footer` (priority 20), so the static is already set by the time this runs whenever
+		 * any placeholder was echoed at all. Falls back to this plugin's own slug when no placeholder
+		 * was ever echoed (e.g. render_delayed_admin_notices() calls render_admin_notices( false ),
+		 * which does not echo one), preserving prior behaviour for that path.
+		 *
 		 * @return void
 		 */
 		public function render_admin_notice_js(): void {
@@ -239,7 +254,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 				return;
 			}
 
-			$plugin_slug = $this->get_plugin()->get_id_dasherized();
+			$plugin_slug = self::$admin_notice_placeholder_slug ?? $this->get_plugin()->get_id_dasherized();
 
 			self::$admin_notice_js_rendered = true;
 
