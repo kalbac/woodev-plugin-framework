@@ -18,7 +18,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		private $plugin;
 
 		/** @var array associative array of id to notice text */
-		private $admin_notices = array();
+		private $admin_notices = [];
 
 		/** @var boolean static member to enforce a single rendering of the admin notice placeholder element */
 		private static $admin_notice_placeholder_rendered = false;
@@ -48,6 +48,8 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * Adds the given $message as a dismissible notice identified by $message_id,
 		 * unless the notice has been dismissed, or we're on the plugin settings page
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param string $message the notice message to display
 		 * @param string $message_id the message id
 		 * @param array  $params {
@@ -58,24 +60,25 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 *                                         plugin settings page, regardless of `$dismissible`.
 		 *     @type string $notice_class          Additional classes for the notice.
 		 * }
+		 * @return void
 		 */
-		public function add_admin_notice( $message, $message_id, $params = array() ) {
+		public function add_admin_notice( string $message, string $message_id, array $params = [] ): void {
 
 			$params = wp_parse_args(
 				$params,
-				array(
+				[
 					'dismissible'             => true,
 					'always_show_on_settings' => true,
 					'notice_class'            => 'updated',
-				)
+				]
 			);
 
 			if ( $this->should_display_notice( $message_id, $params ) ) {
-				$this->admin_notices[ $message_id ] = array(
+				$this->admin_notices[ $message_id ] = [
 					'message'  => $message,
 					'rendered' => false,
 					'params'   => $params,
-				);
+				];
 			}
 		}
 
@@ -83,6 +86,8 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Returns true if the identified notice hasn't been cleared, or we're on
 		 * the plugin settings page (where notices are always displayed)
+		 *
+		 * @since 2.0.2
 		 *
 		 * @param string $message_id the message id
 		 * @param array  $params {
@@ -94,7 +99,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * }
 		 * @return bool
 		 */
-		public function should_display_notice( $message_id, $params = array() ) {
+		public function should_display_notice( string $message_id, array $params = [] ): bool {
 
 			// bail out if user is not a shop manager
 			if ( ! current_user_can( 'manage_woocommerce' ) ) {
@@ -103,10 +108,10 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 
 			$params = wp_parse_args(
 				$params,
-				array(
+				[
 					'dismissible'             => true,
 					'always_show_on_settings' => true,
-				)
+				]
 			);
 
 			// if the notice is always shown on the settings page, and we're on the settings page
@@ -127,9 +132,12 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Render any admin notices, as well as the admin notice placeholder
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param boolean $is_visible true if the notices should be immediately visible, false otherwise
+		 * @return void
 		 */
-		public function render_admin_notices( $is_visible = true ) {
+		public function render_admin_notices( $is_visible = true ): void {
 
 			// default for actions
 			if ( ! is_bool( $is_visible ) ) {
@@ -154,14 +162,20 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 
 		/**
 		 * Render any delayed admin notices, which have not yet already been rendered
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
 		 */
-		public function render_delayed_admin_notices() {
+		public function render_delayed_admin_notices(): void {
 			$this->render_admin_notices( false );
 		}
 
 
 		/**
 		 * Render a single admin notice
+		 *
+		 * @since 2.0.2
 		 *
 		 * @param string $message the notice message to display
 		 * @param string $message_id the message id
@@ -174,24 +188,25 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 *                                         plugin settings page, regardless of `$dismissible`.
 		 *     @type string $notice_class          Additional classes for the notice.
 		 * }
+		 * @return void
 		 */
-		public function render_admin_notice( $message, $message_id, $params = array() ) {
+		public function render_admin_notice( string $message, string $message_id, array $params = [] ): void {
 
 			$params = wp_parse_args(
 				$params,
-				array(
+				[
 					'dismissible'             => true,
 					'is_visible'              => true,
 					'always_show_on_settings' => true,
 					'notice_class'            => 'updated',
-				)
+				]
 			);
 
-			$classes = array(
+			$classes = [
 				'notice',
 				'js-woodev-plugin-framework-admin-notice',
 				$params['notice_class'],
-			);
+			];
 
 			// maybe make this notice dismissible
 			// uses a WP core class which handles the markup and styling
@@ -214,8 +229,10 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * Render the javascript to handle the notice "dismiss" functionality
 		 *
 		 * @since 3.0.0
+		 *
+		 * @return void
 		 */
-		public function render_admin_notice_js() {
+		public function render_admin_notice_js(): void {
 
 			// if there were no notices, or we've already rendered the js, there's nothing to do
 			if ( empty( $this->admin_notices ) || self::$admin_notice_js_rendered ) {
@@ -284,10 +301,13 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Marks the identified admin notice as dismissed for the given user
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param string $message_id the message identifier
 		 * @param int    $user_id optional user identifier, defaults to current user
+		 * @return void
 		 */
-		public function dismiss_notice( $message_id, $user_id = null ) {
+		public function dismiss_notice( string $message_id, $user_id = null ): void {
 
 			if ( is_null( $user_id ) ) {
 				$user_id = get_current_user_id();
@@ -297,6 +317,11 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 
 			$dismissed_notices[ $message_id ] = true;
 
+			// Frozen installed-site data contract (ADR-005): this user-meta key must
+			// never change, not even a character — existing installs have dismissed
+			// notices stored under it. Guarded by
+			// AdminNoticeHandlerTest::test_dismiss_notice_writes_the_frozen_user_meta_key()
+			// and test_get_dismissed_notices_reads_the_frozen_user_meta_key().
 			update_user_meta( $user_id, '_woodev_plugin_framework_' . $this->get_plugin()->get_id() . '_dismissed_messages', $dismissed_notices );
 
 			/**
@@ -314,10 +339,13 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Marks the identified admin notice as not dismissed for the identified user
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param string $message_id the message identifier
 		 * @param int    $user_id optional user identifier, defaults to current user
+		 * @return void
 		 */
-		public function undismiss_notice( $message_id, $user_id = null ) {
+		public function undismiss_notice( string $message_id, $user_id = null ): void {
 
 			if ( is_null( $user_id ) ) {
 				$user_id = get_current_user_id();
@@ -327,6 +355,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 
 			$dismissed_notices[ $message_id ] = false;
 
+			// Frozen installed-site data contract (ADR-005) — same key as dismiss_notice().
 			update_user_meta( $user_id, '_woodev_plugin_framework_' . $this->get_plugin()->get_id() . '_dismissed_messages', $dismissed_notices );
 		}
 
@@ -335,11 +364,13 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * Returns true if the identified admin notice has been dismissed for the
 		 * given user
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param string $message_id the message identifier
 		 * @param int    $user_id optional user identifier, defaults to current user
-		 * @return boolean true if the message has been dismissed by the admin user
+		 * @return bool true if the message has been dismissed by the admin user
 		 */
-		public function is_notice_dismissed( $message_id, $user_id = null ) {
+		public function is_notice_dismissed( string $message_id, $user_id = null ): bool {
 
 			$dismissed_notices = $this->get_dismissed_notices( $user_id );
 
@@ -351,19 +382,22 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		 * Returns the full set of dismissed notices for the user identified by
 		 * $user_id, for this plugin
 		 *
+		 * @since 2.0.2
+		 *
 		 * @param int $user_id optional user identifier, defaults to current user
 		 * @return array of message id to dismissed status (true or false)
 		 */
-		public function get_dismissed_notices( $user_id = null ) {
+		public function get_dismissed_notices( $user_id = null ): array {
 
 			if ( is_null( $user_id ) ) {
 				$user_id = get_current_user_id();
 			}
 
+			// Frozen installed-site data contract (ADR-005) — same key as dismiss_notice().
 			$dismissed_notices = get_user_meta( $user_id, '_woodev_plugin_framework_' . $this->get_plugin()->get_id() . '_dismissed_messages', true );
 
 			if ( empty( $dismissed_notices ) ) {
-				return array();
+				return [];
 			} else {
 				return $dismissed_notices;
 			}
@@ -375,8 +409,12 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 
 		/**
 		 * Dismiss the identified notice
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
 		 */
-		public function handle_dismiss_notice() {
+		public function handle_dismiss_notice(): void {
 
 			check_ajax_referer( 'woodev_dismiss_notice', 'nonce' );
 
@@ -390,9 +428,11 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Get the plugin
 		 *
+		 * @since 2.0.2
+		 *
 		 * @return Woodev_Plugin returns the plugin instance
 		 */
-		protected function get_plugin() {
+		protected function get_plugin(): Woodev_Plugin {
 			return $this->plugin;
 		}
 	}
