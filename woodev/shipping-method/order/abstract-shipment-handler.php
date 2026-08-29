@@ -4,8 +4,8 @@
  *
  * Base class for the order→carrier shipment lifecycle: export an order to the
  * carrier, persist the carrier-assigned order id, and cancel a shipment. It
- * drives the carrier seam {@see \Woodev\Framework\Shipping\Shipping_API::create_order()}
- * / {@see \Woodev\Framework\Shipping\Shipping_API::cancel_order()} and routes the
+ * drives the carrier seam {@see \Woodev\Framework\Shipping\Api\Shipping_API::create_order()}
+ * / {@see \Woodev\Framework\Shipping\Api\Shipping_API::cancel_order()} and routes the
  * carrier-assigned id through {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler}
  * so it is stored under the plugin's own installed-site order-meta key. The
  * carrier's raw response shape never leaks past this class: each concrete carrier
@@ -37,7 +37,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
-use Woodev\Framework\Shipping\Shipping_API;
+use Woodev\Framework\Shipping\Api\Shipping_API;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

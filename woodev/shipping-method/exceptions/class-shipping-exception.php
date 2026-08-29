@@ -9,13 +9,13 @@
  * @since 1.5.0
  */
 
-namespace Woodev\Framework\Shipping;
+namespace Woodev\Framework\Shipping\Exceptions;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Exception' ) ) :
+if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Exceptions\\Shipping_Exception' ) ) :
 
 	class Shipping_Exception extends \Woodev_Plugin_Exception {}
 

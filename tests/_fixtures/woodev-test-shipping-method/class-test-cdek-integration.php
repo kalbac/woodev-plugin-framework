@@ -46,7 +46,7 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Integration' ) ) {
 	/**
 	 * Class Woodev_Test_Cdek_Integration
 	 */
-	class Woodev_Test_Cdek_Integration extends \Woodev\Framework\Shipping\Shipping_Integration {
+	class Woodev_Test_Cdek_Integration extends \Woodev\Framework\Shipping\Settings\Shipping_Integration {
 
 		/**
 		 * Settings field id: OAuth client id.

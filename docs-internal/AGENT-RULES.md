@@ -157,6 +157,17 @@ All framework subsystems are initialized in `Woodev_Plugin::__construct()` via `
 
 There is **no `capabilities` array** — it was removed in s27. The runtime `Woodev_Framework_Autoloader` resolves base classes on demand from a generated `woodev/class-map.php`. **After adding/renaming any framework class, run `php bin/generate-class-map.php` and commit the map** (gotcha `framework-classmap-autoload-vendored-boot`; no Composer in shipped plugins).
 
+**Naming conventions the generator enforces (#647):** a class's directory must match its namespace,
+and its file name must not repeat what the file's own kind-prefix already says. The generator exits
+non-zero on a violation — the exact rule table (including the two directory aliases and the small
+grandfather lists of pre-#647 exceptions) lives in `bin/generate-class-map.php`; don't restate it here.
+1. **A namespace segment maps to a directory of the same name, unless aliased.** E.g.
+   `Woodev\Framework\Shipping\*` lives under `woodev/shipping-method/`, not `woodev/shipping/`.
+2. **`Abstract_` is dropped from the file name** — the `abstract-` file prefix already says it:
+   `Abstract_Shipment_Handler` → `abstract-shipment-handler.php`, not `class-abstract-shipment-handler.php`.
+3. **`Woodev_` is dropped from a legacy (un-namespaced) class's file name:**
+   `Woodev_API_Base` → `woodev/api/class-api-base.php`, not `class-woodev-api-base.php`.
+
 **Multi-version conventions (REQUIRED in every loader definition):**
 1. **Always set `version`** (the framework version this plugin bundles) **and `backwards_compatible`** (the oldest framework version this plugin is compatible with). The guard at `resolver:148-153` is skipped if `backwards_compatible` is empty — then a too-old plugin is NOT quarantined.
 2. On `plugins_loaded` the resolver loads the **highest** registered framework version for the WHOLE fleet — so framework **classes always come from the highest copy**, regardless of which copy won the bootstrap class rendezvous (the rendezvous winner, first-loaded alphabetically, runs only orchestration; it registers the autoloader against the winning/highest path). A plugin whose bundled framework `version` is **older than the loaded copy's `backwards_compatible`** is deactivated with an "update the outdated plugin" admin notice.

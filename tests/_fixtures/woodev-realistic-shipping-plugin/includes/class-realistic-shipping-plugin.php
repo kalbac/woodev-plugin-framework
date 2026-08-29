@@ -152,9 +152,9 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	/**
 	 * Gets the carrier API instance.
 	 *
-	 * @return null|\Woodev\Framework\Shipping\Shipping_API
+	 * @return null|\Woodev\Framework\Shipping\Api\Shipping_API
 	 */
-	public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
+	public function get_api(): ?\Woodev\Framework\Shipping\Api\Shipping_API {
 		return null;
 	}
 }

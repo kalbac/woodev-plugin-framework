@@ -103,7 +103,7 @@ class ShippingIntegrationConstructionTest extends TestCase {
 		$environments = $integration->get_environments();
 
 		$this->assertNotSame( [], $environments, 'the seeding branch must actually run' );
-		$this->assertArrayHasKey( \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION, $environments );
+		$this->assertArrayHasKey( \Woodev\Framework\Shipping\Settings\Shipping_Integration::ENVIRONMENT_PRODUCTION, $environments );
 	}
 
 	/**
@@ -120,7 +120,7 @@ class ShippingIntegrationConstructionTest extends TestCase {
 	public function test_get_environment_name_resolves_the_current_environment_to_its_label(): void {
 
 		$integration = new \Woodev_Test_Cdek_Integration();
-		$production  = \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION;
+		$production  = \Woodev\Framework\Shipping\Settings\Shipping_Integration::ENVIRONMENT_PRODUCTION;
 
 		$this->assertSame( $production, $integration->get_environment(), 'the default with nothing saved' );
 
@@ -149,7 +149,7 @@ class ShippingIntegrationConstructionTest extends TestCase {
 
 		$this->assertSame( 'no-such-environment', $integration->get_environment_name() );
 
-		$integration->update_option( 'environment', \Woodev\Framework\Shipping\Shipping_Integration::ENVIRONMENT_PRODUCTION );
+		$integration->update_option( 'environment', \Woodev\Framework\Shipping\Settings\Shipping_Integration::ENVIRONMENT_PRODUCTION );
 	}
 
 

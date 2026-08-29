@@ -110,10 +110,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * Gets the carrier API instance.
 		 * This is a stub method which must be overridden
 		 *
-		 * @return null|Shipping_API
+		 * @return null|Api\Shipping_API
 		 * @since 1.5.0
 		 */
-		abstract public function get_api(): ?Shipping_API;
+		abstract public function get_api(): ?Api\Shipping_API;
 
 		/**
 		 * Includes required framework files.
@@ -226,7 +226,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
 			// register WC_Integration if configured
-			if ( $this->get_integration_handler() instanceof Shipping_Integration ) {
+			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
 				add_filter( 'woocommerce_integrations', [ $this, 'register_integration' ] );
 			}
 
@@ -397,9 +397,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @since 1.5.0
 		 *
-		 * @return Shipping_Integration|null
+		 * @return Settings\Shipping_Integration|null
 		 */
-		public function get_integration_handler(): ?Shipping_Integration {
+		public function get_integration_handler(): ?Settings\Shipping_Integration {
 			return null;
 		}
 

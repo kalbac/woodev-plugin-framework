@@ -26,7 +26,7 @@
 namespace Woodev\Framework\Shipping\Order;
 
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
-use Woodev\Framework\Shipping\Shipping_Exception;
+use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

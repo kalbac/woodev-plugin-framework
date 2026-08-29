@@ -104,7 +104,7 @@ namespace Woodev\Tests\Unit\Shipping {
 	use Woodev\Framework\Shipping\Pickup\Pickup_Handler;
 	use Woodev\Framework\Shipping\Pickup\Point_Source;
 	use Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab;
-	use Woodev\Framework\Shipping\Shipping_Integration;
+	use Woodev\Framework\Shipping\Settings\Shipping_Integration;
 	use Woodev\Framework\Shipping\Shipping_Method;
 	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Framework\Shipping\Shipping_Rate;
@@ -150,7 +150,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/** @return null */
-		public function get_api(): ?\Woodev\Framework\Shipping\Shipping_API {
+		public function get_api(): ?\Woodev\Framework\Shipping\Api\Shipping_API {
 			return null;
 		}
 	}

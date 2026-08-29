@@ -44,7 +44,7 @@ final class Woodev_Yandex_Pilot_Point_Source implements Point_Source {
 	 * Fetches yandex pickup points matching the given query.
 	 *
 	 * Filters out a null {@see Pickup_Point::from_array()} result — the same rule
-	 * {@see \Woodev\Framework\Shipping\Abstract_Shipping_API::to_pickup_points()} applies:
+	 * {@see \Woodev\Framework\Shipping\Api\Abstract_Shipping_API::to_pickup_points()} applies:
 	 * one malformed point from the carrier must not break the whole list.
 	 * `array_values()` re-indexes after the filter: `array_filter()` preserves keys, and a
 	 * gap-keyed result would serialize as a JSON object instead of the list the map expects.
