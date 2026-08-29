@@ -242,6 +242,9 @@ function buildConfig( opts ) {
 				// Issue #405: DISTINCT from noResults/noResultsAddress above — see
 				// attachOne()'s own errorText wiring.
 				unavailable: 'Источник подсказок недоступен. Попробуйте ещё раз позже или введите вручную.',
+				// Issue #361: DISTINCT from noResults/noResultsAddress above — see
+				// emptyTextFor()'s own docblock in the module under test.
+				scopeWidened: 'Показаны результаты по более широкой области — не только по вашему выбору.',
 			},
 		},
 	};
@@ -264,6 +267,11 @@ function fakeTypeahead() {
 			// know yet — see onResolvingFor() in the module under test.
 			onResolving: opts.onResolving,
 			emptyText: opts.emptyText, errorText: opts.errorText, detach,
+			// Issue #361: the LIVE `options` object itself — `location-cascade.js`'s `fetchFor()`
+			// mutates `opts.emptyText` in place after every completed search, so a test proving
+			// that mutation has to read it off THIS reference, never the `emptyText` snapshot
+			// above (which is frozen at the moment this attach call ran, before any search).
+			opts,
 		};
 
 		attachCalls.push( call );
@@ -4840,6 +4848,112 @@ describe( 'empty-result message', () => {
 		boot( { region: true, settlement: true, address: true, i18n: null } );
 
 		expect( callFor( 'billing_city' ).emptyText ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Scope-degradation message (issue #361) — `within_status` on a completed `/suggest`
+// response tells the client whether the search actually stayed inside the parent the
+// customer already picked. `emptyTextFor()` swaps `noResults`/`noResultsAddress` above for
+// `i18n.scopeWidened` whenever the status is anything other than `applied`/`not_requested`,
+// mutating the SAME `options` object {@see attachOne} already handed to the widget — the
+// established `emptyText` seam, never a second way of talking to the customer.
+//
+// `callFor(id).opts` (not `callFor(id).emptyText`) is what these tests read: `.emptyText` is
+// a SNAPSHOT taken the moment the fake widget's constructor ran, before any search — exactly
+// what the "hands the widget the translated noResults string" suite above already tests.
+// `.opts` is the LIVE object `fetchFor()` mutates on every completed response, which is the
+// only way to observe an update that happens strictly AFTER attach.
+// -----------------------------------------------------------------------
+
+describe( 'scope-degradation message (issue #361)', () => {
+	const SCOPE_WIDENED = 'Показаны результаты по более широкой области — не только по вашему выбору.';
+	const NO_RESULTS = 'Поиск не дал результатов. Попробуйте изменить запрос.';
+	const NO_RESULTS_ADDRESS = 'Адрес не найден — введите вручную.';
+
+	it.each( [ 'unknown_key', 'cross_country', 'bad_level', 'unserved_level' ] )(
+		'shows the scope-widened message when within_status is %s',
+		async ( status ) => {
+			boot( { settlement: true } );
+
+			callFor( 'billing_city' ).fetch( 'Мос' );
+			fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: status } );
+			await flushMicrotasks();
+
+			expect( callFor( 'billing_city' ).opts.emptyText ).toBe( SCOPE_WIDENED );
+		}
+	);
+
+	it( 'control: within_status "applied" leaves the ordinary noResults message in place', async () => {
+		boot( { settlement: true } );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'applied' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( NO_RESULTS );
+	} );
+
+	it( 'control: within_status "not_requested" leaves the ordinary noResults message in place', async () => {
+		boot( { settlement: true } );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'not_requested' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( NO_RESULTS );
+	} );
+
+	it( 'wins over the ADDRESS level\'s own noResultsAddress wording — the message is about the SCOPE, not the level', async () => {
+		boot( { settlement: true, address: true } );
+
+		callFor( 'billing_address_1' ).fetch( 'Тверская' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'cross_country' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_address_1' ).opts.emptyText ).toBe( SCOPE_WIDENED );
+		expect( callFor( 'billing_address_1' ).opts.emptyText ).not.toBe( NO_RESULTS_ADDRESS );
+	} );
+
+	it( 'wins over "nothing found" even though both are true at once — the degradation message is the more informative of the two (operator steer)', async () => {
+		boot( { settlement: true } );
+
+		// A completed search that ALSO genuinely found nothing, while the scope had
+		// independently degraded — the exact interaction the card calls out.
+		callFor( 'billing_city' ).fetch( 'Жуковский' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'unknown_key' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( SCOPE_WIDENED );
+		expect( callFor( 'billing_city' ).opts.emptyText ).not.toBe( NO_RESULTS );
+	} );
+
+	it( 'updates live across two searches on the same field — never frozen at attach time', async () => {
+		boot( { settlement: true } );
+
+		const call = callFor( 'billing_city' );
+
+		call.fetch( 'Мос' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'applied' } );
+		await flushMicrotasks();
+
+		expect( call.opts.emptyText ).toBe( NO_RESULTS );
+
+		call.fetch( 'Жуко' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'cross_country' } );
+		await flushMicrotasks();
+
+		expect( call.opts.emptyText ).toBe( SCOPE_WIDENED );
+	} );
+
+	it( 'without a scopeWidened string of its own, degrades to the ordinary noResults text — never blank', async () => {
+		boot( { settlement: true, i18n: { noResults: 'Общий текст' } } );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'cross_country' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( 'Общий текст' );
 	} );
 } );
 

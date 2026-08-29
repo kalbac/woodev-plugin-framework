@@ -418,8 +418,15 @@
 	 * re-verified here before the change was made.
 	 *
 	 * @since 2.0.2
+	 * @since 2.0.2 `seed.emptyText` may now be a `function(): string` instead of a plain string
+	 *              (issue #361) — resolved via {@see resolveEmptyText} EVERY time `noResults` is
+	 *              called, not once here, so a caller (`ensureSelect2()`) that hands over a live
+	 *              getter can change what the customer sees between two searches on the same
+	 *              field, mirroring `location-typeahead.js`'s own live re-read of `options.emptyText`.
+	 *              A plain string still works exactly as before — `resolveEmptyText` returns it
+	 *              unchanged.
 	 *
-	 * @param {{emptyText?: string}} seed
+	 * @param {{emptyText?: (string|function(): string)}} seed
 	 * @returns {Object} A select2 `language` object carrying only the keys this environment can
 	 *   actually answer. Never null — the abandon-recording branch below WRAPS the `noResults`
 	 *   this returns rather than replacing it, and must tolerate its absence.
@@ -429,6 +436,21 @@
 			? window.wc_country_select_params
 			: {};
 		var language = {};
+
+		/**
+		 * Resolves `seed.emptyText` at CALL TIME — a plain string is returned as-is, a function
+		 * is invoked (issue #361: `ensureSelect2()` hands over a live getter over
+		 * `options.emptyText`, so this must re-read it on every `noResults()` call rather than
+		 * once when `select2LanguageFor()` itself ran). Anything else (absent, `null`) is `''`,
+		 * matching the plain-string branch's own tolerance below.
+		 *
+		 * @returns {string}
+		 */
+		function resolveEmptyText() {
+			var value = 'function' === typeof seed.emptyText ? seed.emptyText() : seed.emptyText;
+
+			return 'string' === typeof value ? value : '';
+		}
 
 		/**
 		 * @param {string} key
@@ -514,10 +536,13 @@
 		//
 		// Wired only when at least one of the two can answer — with neither, omitting the key
 		// leaves select2's own English «No results found», which is worse than a translation
-		// and better than a blank dropdown.
-		if ( seed.emptyText || has( 'i18n_no_matches' ) ) {
+		// and better than a blank dropdown. `resolveEmptyText()` here (issue #361) is what the
+		// initial gate itself checks too — a getter that currently resolves to `''` must not
+		// wire the key on `has('i18n_no_matches') === false` alone, same as a plain empty string
+		// never did before this round.
+		if ( resolveEmptyText() || has( 'i18n_no_matches' ) ) {
 			language.noResults = function() {
-				return seed.emptyText || params.i18n_no_matches;
+				return resolveEmptyText() || params.i18n_no_matches;
 			};
 		}
 
@@ -1762,7 +1787,16 @@
 				onAbandon: 'function' === typeof options.onAbandon ? recordAbandonCandidate : null,
 				// Issue #528: see the local `allowCustomSettlement` var's own docblock above.
 				allowCustomSettlement: allowCustomSettlement,
-				emptyText: 'string' === typeof options.emptyText ? options.emptyText : '',
+				// Issue #361: a LIVE getter, not a string captured once here — `ensureSelect2()`
+				// runs exactly once, at attach time, but `location-cascade.js`'s `fetchFor()`
+				// mutates `options.emptyText` after every completed search as that search's own
+				// `within_status` comes back. `select2LanguageFor()`'s `resolveEmptyText()` calls
+				// this on every `language.noResults()` invocation (select2's own per-render hook),
+				// so a status that changes between two searches on the SAME field is reflected on
+				// the very next one, mirroring `location-typeahead.js`'s own live re-read.
+				emptyText: function() {
+					return 'string' === typeof options.emptyText ? options.emptyText : '';
+				},
 				// Issue #530: OPTIONAL, same discipline as `onAbandon` above — `location-cascade.js`'s
 				// `attachOne()` only hands this over when a level actually carries a popular list
 				// (currently `settlement`). Read LIVE by `selectConfigFor()`'s transport on every

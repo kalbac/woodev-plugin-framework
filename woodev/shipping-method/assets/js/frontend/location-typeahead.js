@@ -302,7 +302,11 @@
 	 *                                               Defaults to {@see DEFAULT_MIN_CHARS}.
 	 * @param {string}           [options.emptyText] Message shown in the listbox when a completed
 	 *                                                search returned nothing. Omitted/blank keeps
-	 *                                                the listbox hidden instead.
+	 *                                                the listbox hidden instead. Read LIVE off
+	 *                                                `options` on every render (issue #361), not
+	 *                                                captured once at attach — a caller may mutate
+	 *                                                `options.emptyText` after this call returns
+	 *                                                and the NEXT empty result reflects it.
 	 * @param {string}           [options.errorText] Message shown in the listbox when `fetch()`
 	 *                                                REJECTS or throws — the request itself could
 	 *                                                not be completed, as opposed to `emptyText`'s
@@ -314,7 +318,6 @@
 	 */
 	function attachTypeahead( input, options ) {
 		var opts = options || {};
-		var emptyText = 'string' === typeof opts.emptyText ? opts.emptyText : '';
 		var errorText = 'string' === typeof opts.errorText ? opts.errorText : '';
 		var fetchFn = 'function' === typeof opts.fetch ? opts.fetch : function() {
 			return Promise.resolve( [] );
@@ -488,6 +491,15 @@
 		 * hides the listbox with NO placeholder content — see the file
 		 * docblock's EMPTY RESULTS section.
 		 *
+		 * Reads `opts.emptyText` LIVE, on every call, rather than a value captured once at
+		 * attach (issue #361): `location-cascade.js` mutates the SAME `options` object it
+		 * handed to {@see attachTypeahead} as each completed search's own `within_status`
+		 * comes back, so the message a given empty result shows can differ from the one an
+		 * earlier empty result on this same field showed — this module stays ignorant of WHY
+		 * (it never reads `within_status` itself), it just always paints whatever the caller
+		 * currently says. A caller that never mutates it after attach sees no behaviour change
+		 * at all.
+		 *
 		 * @param {Array} newItems
 		 * @returns {void}
 		 */
@@ -501,6 +513,8 @@
 
 			if ( 0 === items.length ) {
 				input.removeAttribute( 'aria-activedescendant' );
+
+				var emptyText = 'string' === typeof opts.emptyText ? opts.emptyText : '';
 
 				if ( '' === emptyText ) {
 					listbox.hidden = true;

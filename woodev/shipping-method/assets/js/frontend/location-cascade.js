@@ -1305,11 +1305,22 @@
 	 * STALE-RESPONSE DISCARD section) rather than aborting the request, so `opts` is genuinely
 	 * OPTIONAL here, never assumed present.
 	 *
+	 * issue #361: also refreshes `options.emptyText` on the SAME `options` object {@see attachOne}
+	 * built and handed to whichever renderer attached — from this response's own `within_status`,
+	 * via {@see emptyTextFor} — on EVERY completed response, not only one that resolved empty:
+	 * the value is only ever actually rendered when a LATER empty result reads it, so keeping it
+	 * always current costs nothing and needs no separate "was this the response that mattered"
+	 * tracking. `options` is OPTIONAL here purely for callers that build a suggest transport with
+	 * no widget/options of their own (e.g. a future direct caller, or a test that only wants the
+	 * suggestions array) — every in-tree caller ({@see attachOne}) always supplies it.
+	 *
 	 * @param {Object} entry
 	 * @param {{level: string, fieldId: string}} node
+	 * @param {Object} [options] The SAME options object {@see attachOne} handed to the renderer —
+	 *   mutated in place, never replaced.
 	 * @returns {function(string, {signal?: AbortSignal}=): Promise<Array>}
 	 */
-	function fetchFor( entry, node ) {
+	function fetchFor( entry, node, options ) {
 		return function( query, opts ) {
 			var url = buildUrl( entry.location.endpoints.suggest, {
 				q: query,
@@ -1332,6 +1343,10 @@
 						suggestion.value = fieldValueFor( suggestion.record, node.level );
 					}
 				} );
+
+				if ( options ) {
+					options.emptyText = emptyTextFor( entry, node, body && body.within_status );
+				}
 
 				return suggestions;
 			} );
@@ -3297,6 +3312,52 @@
 	}
 
 	/**
+	 * The listbox/select "nothing here" message for `node`, given the most recently completed
+	 * search's own `within_status` (issue #361) — the ONE function both the initial value
+	 * (attach time, `withinStatus` `undefined`, no search has run yet) and every later update
+	 * {@see fetchFor} makes go through, so the two can never pick the message by different
+	 * rules.
+	 *
+	 * A DEGRADED status — anything other than `applied`/`not_requested`, i.e.
+	 * `unknown_key`/`cross_country`/`bad_level`/`unserved_level`
+	 * ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s own `WITHIN_STATUS_*`
+	 * constants) — wins over the ordinary "nothing found" text, even when the search ALSO
+	 * genuinely found nothing (operator's own steer on issue #361): the degradation message is
+	 * strictly the more informative of the two. "Nothing found" only tells the shopper their
+	 * own search failed; the degradation message additionally explains that the scope they
+	 * expected — their own picked settlement/region — silently widened, which "nothing found"
+	 * alone would leave them to misread as a typo. A shopper who has not picked a parent at all
+	 * yet (`not_requested`) is unaffected — that is the ordinary, unscoped first search, never a
+	 * degradation of anything.
+	 *
+	 * The ADDRESS level says something different from every other level when it finds nothing
+	 * at all (operator, s70): "nothing found" under a street field reads as a delivery refusal,
+	 * and a street the provider simply does not carry is the ordinary case there, not a failure.
+	 * Only reached when `withinStatus` is NOT degraded — the degradation message is level-
+	 * agnostic (it is about the SCOPE, not the search outcome), so it never needs `node.level`'s
+	 * own address/non-address split.
+	 *
+	 * @param {Object} entry
+	 * @param {{level: string}} node
+	 * @param {string} [withinStatus] Absent before the first completed search for this node.
+	 * @returns {string}
+	 */
+	function emptyTextFor( entry, node, withinStatus ) {
+		var i18n = entry.location.i18n || {};
+
+		if ( withinStatus && 'applied' !== withinStatus && 'not_requested' !== withinStatus
+			&& 'string' === typeof i18n.scopeWidened ) {
+			return i18n.scopeWidened;
+		}
+
+		var fallback = 'address' === node.level && 'string' === typeof i18n.noResultsAddress
+			? i18n.noResultsAddress
+			: i18n.noResults;
+
+		return 'string' === typeof fallback ? fallback : '';
+	}
+
+	/**
 	 * Attaches a typeahead widget to one chain node, UNLESS its level is unsupported for that
 	 * node's own country per `config.location.levels` (D15) — an unsupported level stays a
 	 * plain native input; it still fully participates in the clearing gate below, just with no
@@ -3317,14 +3378,6 @@
 
 		var i18n = entry.location.i18n || {};
 
-		// The ADDRESS level says something different when it finds nothing (operator, s70):
-		// "nothing found" under a street field reads as a delivery refusal, and a street the
-		// provider simply does not carry is the ordinary case at that level rather than a
-		// failure. Falls back to the generic string when the server did not supply one.
-		var emptyKey = 'address' === node.level && 'string' === typeof i18n.noResultsAddress
-			? i18n.noResultsAddress
-			: i18n.noResults;
-
 		// Handed to WHICHEVER renderer attaches — a Task 13 mode-specific one or the baseline
 		// typeahead below get the EXACT SAME `fetch`/`onSelect` (spec: "assert the shared code
 		// path, not a copy" — a related-list/ajax-select2 pick persists through the identical
@@ -3333,9 +3386,13 @@
 		// reimplements suggest/list URL building, JSON fetching, or live country/parent scoping
 		// — it only decides HOW to present them. Still fully mode-ignorant on THIS side: none of
 		// these primitives know or care which renderer, if any, ends up using them.
+		//
+		// `fetch` is filled in AFTER this literal (below) rather than inline, deliberately:
+		// issue #361 needs `fetchFor()` to MUTATE `options.emptyText` as each completed search's
+		// own `within_status` comes back, so it has to receive this SAME object, which cannot
+		// name itself from inside its own literal.
 		var options = {
-			fetch: fetchFor( entry, node ),
-			// Issue #463: the `/location/list` analog of `fetch` above — same live scope, same
+			// Issue #463: the `/location/list` analog of `fetch` below — same live scope, same
 			// `fieldValueFor()` value stamping — for a Task 13 `related-list` renderer that needs
 			// the FULL scoped list rather than a per-keystroke suggest query. See `listFor()`'s
 			// own docblock (issue #529) for why this stays even though no built-in renderer
@@ -3359,14 +3416,20 @@
 			onResolving: onResolvingFor( entry, node ),
 			// Server-supplied (translated, filterable via `woodev_location_i18n`) — never a
 			// literal here: this string reaches the customer, so it follows the same route
-			// every other user-facing string in this layer takes.
-			emptyText: 'string' === typeof emptyKey ? emptyKey : '',
+			// every other user-facing string in this layer takes. The INITIAL value, before any
+			// search has completed for this node — {@see fetchFor} overwrites this SAME property
+			// on this SAME object after every completed search (issue #361), and both renderers
+			// read it LIVE (`location-typeahead.js`'s own `renderItems()`; `location-select-modes.js`'s
+			// `ensureSelect2()` hands over a getter closing over this object) rather than a value
+			// snapshotted once here.
+			emptyText: emptyTextFor( entry, node ),
 			// Issue #405: a DIFFERENT server-supplied string from `emptyText` above — "the
 			// source could not answer" is not "searched, found nothing", and conflating the
 			// two at checkout is exactly the bug #405 closes. Same server-supplied/filterable
 			// route as `emptyText`; see `location-typeahead.js`'s own `errorText` docblock for
 			// when this actually renders (a rejected/thrown `fetch()`, never a resolved-empty
-			// one).
+			// one). Never touched by `within_status` — a transport failure and a widened scope
+			// are unrelated conditions.
 			errorText: 'string' === typeof i18n.unavailable ? i18n.unavailable : '',
 			// Issue #540: the placeholder for select2's own SEARCH BOX — not `placeholder`,
 			// which names the closed control. Same server-supplied/filterable route as every
@@ -3387,6 +3450,8 @@
 				return nonceHeader( entry );
 			},
 		};
+
+		options.fetch = fetchFor( entry, node, options );
 
 		var renderer = resolveModeRenderer( entry, node );
 

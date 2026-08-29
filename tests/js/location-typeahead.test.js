@@ -852,6 +852,35 @@ test( 'without emptyText the listbox still hides silently — the old contract i
 	expect( input.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
 } );
 
+test( 'issue #361: emptyText is read LIVE off the options object on every render, not captured once at attach', async () => {
+	jest.useFakeTimers();
+	const fetchMock = jest.fn( () => Promise.resolve( [] ) );
+
+	// `location-cascade.js`'s own `fetchFor()` mutates THIS SAME object in place after every
+	// completed search, as that search's own `within_status` comes back — this module must
+	// never snapshot `options.emptyText` once at attach and go stale.
+	const options = { fetch: fetchMock, onSelect: jest.fn(), emptyText: 'ничего не найдено' };
+
+	attachTypeahead( input, options );
+
+	input.value = 'ba';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( emptyRowOf().textContent ).toBe( 'ничего не найдено' );
+
+	// The caller mutates the SAME object between two searches — nothing re-attaches.
+	options.emptyText = 'показаны результаты по более широкой области';
+
+	input.value = 'bar';
+	input.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+	jest.advanceTimersByTime( 250 );
+	await flushMicrotasks();
+
+	expect( emptyRowOf().textContent ).toBe( 'показаны результаты по более широкой области' );
+} );
+
 // -----------------------------------------------------------------------
 // errorText (issue #405) — a REJECTED/thrown fetch(), the "request could not
 // be completed" state, must read as a DIFFERENT sentence from emptyText's
