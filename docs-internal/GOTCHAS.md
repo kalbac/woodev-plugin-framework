@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 236 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 237 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -295,6 +295,7 @@
 ### [i18n/*] — Localization
 - [i18n/classification] **A directory says who OWNS a file, not who READS its output — bucketing translatable strings by path put 42 admin settings labels in the frontend bucket and made the estimate 104 where the answer was 65.** → [classify-an-i18n-string-by-its-render-path-not-its-file-path](gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md) (s103)
 - [i18n/scanning] **`__( 'half.' . ' half.', $d )` is ONE msgid to gettext and zero to a scanner that requires a single literal — two measurements missed the same customer-facing string.** → [a-concatenated-msgid-is-invisible-to-a-single-literal-scanner](gotchas/a-concatenated-msgid-is-invisible-to-a-single-literal-scanner.md) (s103)
+- [i18n/catalogue-audit] **A hand-rolled `.po` merge silently ate 92 `#~` obsolete entries and the output was still valid — a parser that treats `#` as a comment never sees them. Count them in and out BEFORE installing.** → [a-po-merge-that-drops-obsolete-entries-still-looks-well-formed](gotchas/a-po-merge-that-drops-obsolete-entries-still-looks-well-formed.md) (s103)
 - [i18n/catalogue-audit] **Comparing a `.po` against a compiled `.mo` by bare msgid undercounts — a `msgctxt` entry is keyed `context + EOT + msgid`, and an older `.mo` mtime is not evidence of desync.** → [comparing-a-po-against-a-compiled-mo-by-bare-msgid-undercounts](gotchas/comparing-a-po-against-a-compiled-mo-by-bare-msgid-undercounts.md) (s100)
 - [i18n/russian-source-plural-n] **`_n()` with Russian source strings renders wrong plural forms without a translation catalog.** → [russian-source-i18n-plural-n](gotchas/russian-source-i18n-plural-n.md) (s7)
 
