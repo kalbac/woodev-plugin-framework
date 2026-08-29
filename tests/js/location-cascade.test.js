@@ -4855,7 +4855,8 @@ describe( 'empty-result message', () => {
 // Scope-degradation message (issue #361) — `within_status` on a completed `/suggest`
 // response tells the client whether the search actually stayed inside the parent the
 // customer already picked. `emptyTextFor()` swaps `noResults`/`noResultsAddress` above for
-// `i18n.scopeWidened` whenever the status is anything other than `applied`/`not_requested`,
+// `i18n.scopeWidened` whenever the status is one of the three WIDENED ones (`unknown_key`,
+// `cross_country`, `bad_level` — never `unserved_level`, where nothing was searched at all),
 // mutating the SAME `options` object {@see attachOne} already handed to the widget — the
 // established `emptyText` seam, never a second way of talking to the customer.
 //
@@ -4871,7 +4872,7 @@ describe( 'scope-degradation message (issue #361)', () => {
 	const NO_RESULTS = 'Поиск не дал результатов. Попробуйте изменить запрос.';
 	const NO_RESULTS_ADDRESS = 'Адрес не найден — введите вручную.';
 
-	it.each( [ 'unknown_key', 'cross_country', 'bad_level', 'unserved_level' ] )(
+	it.each( [ 'unknown_key', 'cross_country', 'bad_level' ] )(
 		'shows the scope-widened message when within_status is %s',
 		async ( status ) => {
 			boot( { settlement: true } );
@@ -4889,6 +4890,22 @@ describe( 'scope-degradation message (issue #361)', () => {
 
 		callFor( 'billing_city' ).fetch( 'Мос' );
 		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'applied' } );
+		await flushMicrotasks();
+
+		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( NO_RESULTS );
+	} );
+
+	// `unserved_level` is a CONTROL, not a degraded case, and it is the one status that looks
+	// like it belongs in the list above. It does not mean "your scope was dropped and we searched
+	// wider" — it means no provider serves this level at all, and `perform_suggest()` returns
+	// `suggestions: []` from its `null === $provider` branch BEFORE any scope is built and before
+	// any provider is called. Nothing was widened because nothing was searched, so the widened
+	// message beside that empty listbox would be a plain untruth.
+	it( 'control: within_status "unserved_level" keeps noResults — nothing was searched, so nothing widened', async () => {
+		boot( { settlement: true } );
+
+		callFor( 'billing_city' ).fetch( 'Мос' );
+		fetchCalls[ fetchCalls.length - 1 ].resolve( { suggestions: [], within_status: 'unserved_level' } );
 		await flushMicrotasks();
 
 		expect( callFor( 'billing_city' ).opts.emptyText ).toBe( NO_RESULTS );

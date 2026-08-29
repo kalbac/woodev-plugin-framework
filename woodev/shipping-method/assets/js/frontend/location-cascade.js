@@ -3318,8 +3318,7 @@
 	 * {@see fetchFor} makes go through, so the two can never pick the message by different
 	 * rules.
 	 *
-	 * A DEGRADED status — anything other than `applied`/`not_requested`, i.e.
-	 * `unknown_key`/`cross_country`/`bad_level`/`unserved_level`
+	 * A WIDENED status — `unknown_key`, `cross_country` or `bad_level`
 	 * ({@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}'s own `WITHIN_STATUS_*`
 	 * constants) — wins over the ordinary "nothing found" text, even when the search ALSO
 	 * genuinely found nothing (operator's own steer on issue #361): the degradation message is
@@ -3329,6 +3328,15 @@
 	 * alone would leave them to misread as a typo. A shopper who has not picked a parent at all
 	 * yet (`not_requested`) is unaffected — that is the ordinary, unscoped first search, never a
 	 * degradation of anything.
+	 *
+	 * `unserved_level` is DELIBERATELY excluded, and this is the one status that looks like it
+	 * belongs here and does not (critic finding, s104; the card said as much and the first
+	 * implementation covered it anyway). It does not mean "your scope was dropped and we
+	 * searched wider" — it means NO PROVIDER SERVES THIS LEVEL AT ALL, and the controller
+	 * returns `suggestions: []` from `perform_suggest()`'s own `null === $provider` branch
+	 * BEFORE any scope is built and before any provider is called. Nothing was widened because
+	 * nothing was searched. Saying "showing results for a broader area" beside that empty
+	 * listbox would be a plain untruth, so it keeps the ordinary no-results text.
 	 *
 	 * The ADDRESS level says something different from every other level when it finds nothing
 	 * at all (operator, s70): "nothing found" under a street field reads as a delivery refusal,
@@ -3345,8 +3353,10 @@
 	function emptyTextFor( entry, node, withinStatus ) {
 		var i18n = entry.location.i18n || {};
 
-		if ( withinStatus && 'applied' !== withinStatus && 'not_requested' !== withinStatus
-			&& 'string' === typeof i18n.scopeWidened ) {
+		var widened = 'unknown_key' === withinStatus || 'cross_country' === withinStatus
+			|| 'bad_level' === withinStatus;
+
+		if ( widened && 'string' === typeof i18n.scopeWidened ) {
 			return i18n.scopeWidened;
 		}
 
