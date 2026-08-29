@@ -157,11 +157,19 @@ function woodev_verify_naming_rules( array $map ): array {
 
 		// Rule 2 — `Abstract_` is dropped from the file name; the file uses the `abstract-`
 		// kind prefix instead of repeating the word after `class-`.
+		//
+		// The expected basename is COMPUTED and compared exactly, not merely prefix-checked
+		// (critic finding, s104): a prefix test alone accepts
+		// `abstract-abstract-shipment-handler.php`, which is precisely the repetition this rule
+		// exists to forbid — a gate that passes the thing it names is not a gate.
 		if ( 1 === preg_match( '/^Abstract_/', $short_name )
 			&& ! in_array( $fqcn, WOODEV_RULE2_GRANDFATHERED, true )
-			&& 0 !== strpos( $basename, 'abstract-' )
 		) {
-			$violations[] = sprintf( '%s: class name starts with Abstract_ but file is "%s", expected an "abstract-" prefix', $fqcn, $basename );
+			$expected_basename = 'abstract-' . strtolower( str_replace( '_', '-', substr( $short_name, strlen( 'Abstract_' ) ) ) ) . '.php';
+
+			if ( $expected_basename !== $basename ) {
+				$violations[] = sprintf( '%s: class name starts with Abstract_, so the file must be "%s", not "%s"', $fqcn, $expected_basename, $basename );
+			}
 		}
 
 		// Rule 3 — `Woodev_` is dropped from a legacy class's file name.
