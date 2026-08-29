@@ -7,7 +7,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-28T22:02:59+00:00\n"
+"POT-Creation-Date: 2026-08-29T01:15:03+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woodev-plugin-framework\n"
@@ -2058,32 +2058,32 @@ msgstr ""
 msgid "Whether the carrier API integration is wired up for this plugin."
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:517
+#: shipping-method/checkout/class-checkout-config.php:502
 msgid "No results found. Try changing your search."
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:528
+#: shipping-method/checkout/class-checkout-config.php:513
 msgid "Address not found — enter it manually."
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:540
+#: shipping-method/checkout/class-checkout-config.php:525
 msgid "Could not save your choice — please try again."
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:553
+#: shipping-method/checkout/class-checkout-config.php:538
 msgid "The suggestions service is unavailable. Try again later or enter the address manually."
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:567
+#: shipping-method/checkout/class-checkout-config.php:552
 #: shipping-method/checkout/class-checkout-handler.php:1390
 msgid "Select…"
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:585
+#: shipping-method/checkout/class-checkout-config.php:570
 msgid "Start typing a name"
 msgstr ""
 
-#: shipping-method/checkout/class-checkout-config.php:593
+#: shipping-method/checkout/class-checkout-config.php:578
 msgid "The selected locality is not in the list — pick it from the suggestions."
 msgstr ""
 
@@ -2309,43 +2309,40 @@ msgstr ""
 msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1252
-msgid "Текст с подсказками"
+#: shipping-method/location/class-location-provider-registry.php:1352
+msgid "Text with suggestions"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1253
-msgid "Предустановленный список"
+#: shipping-method/location/class-location-provider-registry.php:1353
+msgid "Preset list"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1254
-msgid "Список с поиском"
+#: shipping-method/location/class-location-provider-registry.php:1354
+msgid "Searchable list"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1645
-msgid "Отключено"
+#: shipping-method/location/class-location-provider-registry.php:1745
+msgid "Disabled"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1646
-msgid "Фиксированная локация"
+#: shipping-method/location/class-location-provider-registry.php:1746
+msgid "Fixed location"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:1647
-msgid "По IP-адресу покупателя"
+#: shipping-method/location/class-location-provider-registry.php:1747
+msgid "By the customer's IP address"
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:2419
-msgid "Локация по умолчанию не настроена: пока не будет сохранена корректная запись, эта политика ничего не применит."
+#: shipping-method/location/class-location-provider-registry.php:2519
+msgid "The default location is not configured: until a valid record is saved, this policy applies nothing."
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:2429
-#: assets/build/settings-page/index.js:1
-#: assets/build/setup-wizard/index.js:1
-#: assets/build/ui-kit-gallery/index.js:1
-msgid "Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново."
+#: shipping-method/location/class-location-provider-registry.php:2529
+msgid "The fixed location was chosen through a different provider and may not suit the current one — choosing it again is recommended."
 msgstr ""
 
-#: shipping-method/location/class-location-provider-registry.php:2468
-msgid "Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены."
+#: shipping-method/location/class-location-provider-registry.php:2568
+msgid "The selected provider does not serve addresses, and the DaData credentials are empty."
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:272
@@ -3287,6 +3284,12 @@ msgstr ""
 #: assets/build/setup-wizard/index.js:1
 #: assets/build/ui-kit-gallery/index.js:1
 msgid "Не удалось загрузить подсказки. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/settings-page/index.js:1
+#: assets/build/setup-wizard/index.js:1
+#: assets/build/ui-kit-gallery/index.js:1
+msgid "Зафиксированная локация была выбрана через другого провайдера и может не подойти текущему — рекомендуется выбрать её заново."
 msgstr ""
 
 #: assets/build/settings-page/index.js:1

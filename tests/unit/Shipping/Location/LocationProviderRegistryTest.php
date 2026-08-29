@@ -3507,7 +3507,7 @@ final class LocationProviderRegistryTest extends TestCase {
 
 		$this->assertTrue( $control->is_disabled() );
 		$this->assertSame(
-			'Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.',
+			'The selected provider does not serve addresses, and the DaData credentials are empty.',
 			$control->get_disabled_reason()
 		);
 		$this->assertFalse( $registry->is_address_suggestions_available() );
