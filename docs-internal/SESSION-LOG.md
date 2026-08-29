@@ -9,6 +9,7 @@
 > Split out in s96 because this file has its own 48 KB gate and the entries are paragraphs, not lines;
 > s50-s59 followed them in s99, when the gate fired again.
 
+- **[s103](sessions/s103.md)** — 2026-08-29 — #567 rule 1 shipped (65 msgids, not 104), #627 and #353 closed, first worker+critic round that paid for itself
 - **[s102](sessions/s102.md)** — 2026-08-28 — autonomous overnight: #606 closed and gated, #613 taken from 6 sites to 47, #609 closed, #621 measured
 - **[s101](sessions/s101.md)** — 2026-08-28 — five cards shipped, seven filed; the critic and the operator each corrected me twice
 - **[s100](sessions/s100.md)** — 2026-08-27 — автономно: смержены **#591** (#587), **#592** (#585 и #593), **#595** (#570); закрыты #559, #560. Критик нашёл **четыре блокера, все мимо зелёной суиты**, три одного класса — невалидированный возврат фильтра. Два моих утверждения опровергнуты замером; зато диагностирована ловушка изолированного прогона. `composer check` **3018**/7233/**66**, jest **1548**/21, интеграция **126**/494. Готч → **228**.

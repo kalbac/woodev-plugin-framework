@@ -6,10 +6,9 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-28 (s102, autonomous overnight).** `main` clean, **no open PRs**. Merged in s102,
-seven, every job pass and state CLEAN on all seven: **#624** (#606), **#625** / **#626** / **#628**
-/ **#630** / **#631** (all #613), **#629** (#609). s101 merged **#607** (#598 + #605), **#611**
-(#594), **#612** (#599), **#619** (#613 tranche 1).
+**As of 2026-08-29 (s103).** `main` clean, **no open PRs**. Merged in s103, four: **#645**
+(#567 rule 1), **#648** (#627), **#649** + **#651** (#353), plus `c5ccae8` (the four i18n rules into
+`AGENTS.md`). s102 merged seven; history → `sessions/s102.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,8 +20,8 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 28.08.2026 IN THE PRIMARY CHECKOUT (s102), sodium enabled:**
-`composer check` **3178** / 7798 / **1 skipped**, and the same three numbers under
+**Baselines on `main`, measured 29.08.2026 IN THE PRIMARY CHECKOUT (s103), sodium enabled:**
+`composer check` **3186** / 7826 / **1 skipped**, and the same three numbers under
 `--order-by=reverse`. Integration **126** / 494. jest **1548** in 21 suites.
 
 ⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless.** Same tree, one
@@ -60,28 +59,31 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s102:** **#567** (msgid
-language — the operator's four rules are on the card, and so is s100's measurement showing the
-`.pot` has been dead since 07.12.2023), **#353**, the locations leftovers
-**#356/#358/#361/#410**, **#589**, **#621** (item 1 measured in s102, the FIX is untouched),
-**#627**, **#639**, **#437** (needs a
-scope conversation — do NOT take autonomously), and the standing list #474, #483, #511, #515,
-#331, #332, #374. Deferred to release: #285, #247.
+**Open cards after s103:** **#621** (item 1 measured; the FIX is untouched and is held BEHIND
+**#639** — see below), the locations leftovers **#356/#358/#361/#410** (three of the four need a
+CONTRACT or UX decision before any code), **#589**, **#650**, **#647**, **#646**, **#644**, **#652**,
+**#639**, **#437** (needs a scope conversation — do NOT take autonomously), and the standing list
+#474, #483, #511, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
+and rebuild the `.mo` before release).
 
-**#613 is effectively done — 47 of the 51 FATAL/DISABLES sites are guarded.** Tranche 1 (s101, PR
-#619) took 6; s102 took 41 more across five PRs. What remains is deliberate, not unfinished:
-`payment-tokens-handler.php:700` waits on the operator (the audit's proposed fix for it was checked
-and is WRONG), and `class-payment-gateway.php:1262` (`is_available`) he triaged to HARMLESS. The
-audit's WRONG-DATA rows were never in this card's scope.
+**#621 is held behind #639 deliberately.** The cheap fix — a `WC_Order` subclass with declared
+properties — was written, measured and REVERTED in s103: `get_order()` must preserve the caller's
+concrete order class, and a fixed subclass silently downgrades a `WC_Subscription` to a plain order.
+The code says so itself one line above the first assignment. What remains is a ~138-site context
+object, and investing that in a subsystem whose size #639 is questioning is the wrong order.
 
-**Filed in s102:** **#627** (`Checkout_Config::location_i18n_strings()` still carries the `(array)`
-cast that was refused in the pickup map — its defaults are inline in the `apply_filters()` call, so
-there is nothing to fall back to without hoisting them first) and **#632**, filed and CLOSED the
-same session on the operator's answer: `phpunit.xml` now sets `memory_limit` to 512M, so a RED run
-prints its failures instead of dying with a Patchwork fatal that hides the cause.
+**i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
+English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
+anything not on a screen need not be wrapped in `__()` at all**; classify by the RENDER PATH, never
+by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
 
-**Filed in s101:** **#606** and **#609** — both CLOSED in s102. **#613** — see above. **#621** —
-item 1 (measure on 8.2+ before fixing) closed by measurement in s102; the fix is not started.
+**#613 is closed** (47 of 51 sites guarded; `payment-tokens-handler.php:700` closed by docblock
+in s102 after measuring the hook has zero consumers, `is_available` triaged HARMLESS). History →
+`sessions/s101.md` / `s102.md`.
+
+**Filed in s102:** #627 (closed s103), #632 (closed same session). **Filed in s101:** #606, #609,
+#613, #621 — all but #621 closed. **Filed in s103:** #644, #646, #647, #650, #652.
 
 **Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
 decided by WHO READS IT, not by how dangerous the text looks.** Reader is the MERCHANT or a plugin
@@ -90,10 +92,8 @@ author → kept (an order note, nine admin-facing browser responses, `script-han
 redacts unconditionally (**#594**); this rule is about RESPONSE and NOTE boundaries only. His
 reasoning, verbatim, and the per-site table: cards **#608** / **#610**, `sessions/s101.md`.
 
-**Closed in s102:** **#606**, **#609**, **#613**, **#514**, **#632**. Closed in s101: **#594**, **#598**, **#599**, **#605**,
-**#610**, and **#608** (by him, `not planned`). Closed in s100: **#559**, **#560**,
-**#570**, **#577**, **#585**, **#587**, **#593**, **#600**. Which are COMMITMENTS, and where each
-was decided, is the handoff's carry-over section — not this file.
+**What closed when** is the handoff's carry-over section and the per-session files — not this
+file. s103 closed #567 (rule 1), #627, #353.
 
 **Operator decisions still shaping the work:**
 
@@ -182,7 +182,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **233**.
+Gotchas: **236**.
 
 ## Program status (high level)
 
