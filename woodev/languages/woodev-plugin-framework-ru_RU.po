@@ -3443,6 +3443,10 @@ msgctxt "distance unit abbreviation: miles"
 msgid "mi"
 msgstr "миль"
 
+#: shipping-method/checkout/class-checkout-config.php:561
+msgid "Showing results for a broader area — not limited to your selection."
+msgstr "Показаны результаты по более широкой области, а не только по вашему выбору."
+
 #~ (obsolete: no longer referenced anywhere under woodev/)
 
 #~ msgid "Thanks for installing %1$s! To get started, take a minute to %2$sread the documentation%3$s :)"
