@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 242 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 245 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -205,6 +205,7 @@
 - [build/css-enqueue-version] **enqueue the wp-scripts `style-index.css` with its OWN filemtime, not the JS bundle's asset-hash version.** → [wp-scripts-css-enqueue-version-by-mtime](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI
+- [admin-ui/notices] **A DELAYED admin notice renders into the HTML with `display:none` and is unhidden by inline jQuery — grepping the markup for its text proves nothing about whether anyone sees it, and the PHP suite cannot tell.** → [a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed](gotchas/a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed.md) (s105)
 - [admin-ui/license-page] **the v2 license page only enqueues the React bundle CSS — server-rendered sections need their styles in style.scss.** → [license-page-css-bundle-only](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] **Use `esc_url_raw` (not `esc_url`) for URLs handed to JS / REST.** → [esc-url-raw-for-js-consumed-urls](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
 - [admin-ui/wp-nonce-url-esc-html] **`wp_nonce_url()` HTML-encodes `&` → breaks a URL consumed by JS/JSON.** → [wp-nonce-url-esc-html-breaks-js-urls](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
@@ -310,6 +311,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/serena] **Serena IGNORES `tests/` — symbolic ops there fail with "while the path is ignored", so `Read`/`Edit` is the only tool and is NOT a rule violation (and test files escape the CRLF flip).** → [serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there](gotchas/serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there.md) (s105)
+- [tooling/orca] **A BACKGROUNDED `check --wait` holds the FIFO waiter, so every later wait returns empty in seconds and reads as "the worker produced nothing"; `--json` is also a keepalive STREAM, not one object.** → [a-backgrounded-orca-check-wait-starves-every-later-waiter](gotchas/a-backgrounded-orca-check-wait-starves-every-later-waiter.md) (s105)
 - [tooling/worktrees] **"A fresh worktree needs no install step" expires the moment another branch renames a class — the COPIED `vendor` carries a snapshot classmap, and `Class "…" not found` reads as a broken diff.** → [a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename](gotchas/a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename.md) (s104)
 - [tooling/orca] **The 2–3 agent cap binds the COORDINATOR only: one worker briefed with a 93-item survey fanned out to eight unsupervised nested agents, and free RAM read 0.1 GB of 15.3.** → [a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap](gotchas/a-worker-can-fan-out-to-background-forks-past-the-concurrency-cap.md) (s104)
 - [tooling/git] **`git push` hangs forever and SILENTLY under Git Credential Manager — it is waiting on a GUI dialog nobody can see. `fetch` works, which hides it.** → [git-push-hangs-silently-under-credential-manager](gotchas/git-push-hangs-silently-under-credential-manager.md) (s97)

@@ -1,7 +1,9 @@
 # The local PHP is four minor versions above the CI floor, so a green local suite says nothing about 7.4
 
 **Namespace:** `[testing/*]`
-**Found:** s98 (27.08.2026), on PR #563.
+**Found:** s98 (27.08.2026), on PR #563. **Recurred s105 (30.08.2026), on PR #661** — a different
+Reflection API, the same two red jobs, and a *better* remedy than the version guard below (see
+"The remedy that beats a version guard").
 
 ## The trap
 
@@ -45,6 +47,44 @@ if ( PHP_VERSION_ID < 80100 ) {
 
 $handle->setValue( $section, 'tools' );
 ```
+
+## The second instance (s105): `ReflectionMethod::invoke()` on a **protected method**
+
+Same family, different API — and worth recording because the agent that hit it had *reasoned* about
+the version span and still got it wrong, in the opposite direction from s98:
+
+| PHP | `( new ReflectionMethod( $o, 'protected_method' ) )->invoke( $o )` without `setAccessible( true )` |
+|---|---|
+| 7.4, 8.0 | `ReflectionException: Trying to invoke protected method … from scope ReflectionMethod` |
+| 8.1+ | works |
+
+The test was written deliberately WITHOUT `setAccessible()`, on the stated belief that the call "is
+deprecated in 8.1 and `failOnRisky="true"` turns its notice into a hard failure". **That premise is
+false.** `setAccessible()` was not deprecated in 8.1 — it became a **no-op**, silently and without
+any notice. (It is deprecated in 8.5, which is what the s98 row above records; conflating the two is
+what produced the bad fix.) So the reasoning was version-aware and still landed on the one option
+that breaks the two lowest jobs.
+
+## The remedy that beats a version guard
+
+For invoking a protected METHOD, do not reach for Reflection at all. Every notice test in this repo
+already has a fixture subclass; give it a public wrapper:
+
+```php
+class Stale_Bare_Shipping_Plugin_Fixture extends Shipping_Plugin {
+	public function publish_default_locality_stale_notice(): void {
+		$this->add_default_locality_stale_notice();
+	}
+}
+```
+
+Then the test calls `$plugin->publish_default_locality_stale_notice()` — version-proof, no guard to
+get wrong, and it matches the idiom `ShippingPluginLocationProviderNoticeTest` already established.
+Put the wrapper on the BASE fixture so the "never opted in" case can reach it too; the specialised
+fixtures inherit it rather than redeclaring it.
+
+Keep the `PHP_VERSION_ID < 80100` guard for the cases a wrapper cannot cover — reading or writing a
+private PROPERTY, which is what s98 was.
 
 ## How to notice before CI does
 

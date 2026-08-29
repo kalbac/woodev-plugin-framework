@@ -6,10 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-29 (s104).** `main` clean, **no open PRs**. Merged in s104, six: **#655** (#650),
-**#656** (#646), **#658** (#647), **#659** (#653, part), **#660** (#644's material), and **#657**
-(#361) after the operator's own rig pass. s103 merged four; history → `sessions/s103.md`,
-`sessions/s104.md`.
+**As of 2026-08-30 (s105).** `main` clean. **TWO PRs open and both waiting on the operator's own rig
+pass, not on work:** **#661** (#410, the stale-fixed-locality admin notice) and **#663** (#662, the
+framework bug that made delayed notices invisible in a fleet). Both are green on every CI job with
+`mergeStateStatus: CLEAN`, both were walked on the rig by me, and both change what a merchant SEES —
+which is why they are held, same as #657 in s104. s104 merged six; history → `sessions/s104.md`,
+`sessions/s105.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -24,6 +26,10 @@ in the global `CLAUDE.md` → «GitHub Actions budget».
 **Baselines on `main`, measured 29.08.2026 IN THE PRIMARY CHECKOUT (s104), sodium enabled:**
 `composer check` **3216** / 7894 / **1 skipped**, and the same three numbers under
 `--order-by=reverse`. Integration **126** / 494. jest **1566** in 21 suites.
+
+**With #661 + #663 applied (s105, primary checkout, sodium):** **3233** / 7919 / **1**, identical
+under `--order-by=reverse`; phpcs clean; phpstan no errors; integration **126** / 494; jest
+**1566** / 21. The arithmetic is exact: 3216 + 14 (#410) + 3 (#662) = 3233.
 
 ⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless** — off it reads 67,
 on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (CI reports 6). Why,
@@ -49,20 +55,15 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s104:** **#621** (item 1 measured; the FIX is untouched and is held BEHIND
-**#639** — see below), the locations leftovers **#356/#358/#410** (#361 shipped and merged as PR #657
-after his own rig pass; of the remaining three, #356 and #358 need a CONTRACT decision before any
-code and #410 is decided and buildable), **#589**, **#644** (material delivered, prioritisation is
-his), **#652**, **#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope
-conversation — do NOT take autonomously), and the standing list #474, #483, #515, #331, #332,
-#374. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids with no
-translation — operator, 29.08.2026: leave them, regenerate the `.pot` and rebuild the `.mo` before
-release).
-
-⚠ **#511 was on the waiting-list for four days after it closed** (25.08.2026), and #159 sat in the
-held-tech-debt line for two weeks after closing (13.08.2026). Both removed here; the #644 audit
-found them by checking every card number in this file against `gh issue view`, which is the only
-method that works. Full map → `reviews/2026-08-29-docs-and-board-audit.md`.
+**Open cards after s105:** **#410** and **#662** are BUILT and green (PRs #661/#663) but **not
+merged — they need his rig pass**, so they are open in the sense of the button, not of the work.
+Still genuinely open: **#621** (item 1 measured; the FIX is untouched and is held BEHIND **#639**),
+the locations leftovers **#356/#358** (both need a CONTRACT decision before any code), **#589**,
+**#644** (material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half
+only), **#639**, **#437** (needs a scope conversation — do NOT take autonomously), and the standing
+list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
+and rebuild the `.mo` before release).
 
 **#621 is held behind #639 deliberately.** The cheap fix (a `WC_Order` subclass) was written,
 measured and REVERTED in s103 — `get_order()` must preserve the caller's concrete order class, or a
@@ -86,7 +87,8 @@ and NOTE boundaries only. His reasoning verbatim and the per-site table: cards *
 `sessions/s101.md`.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this
-file. s104 closed #650, #646, #647, #361; s103 closed #567 (rule 1), #627, #353.
+file. s105 built #410 and #662 (unmerged, awaiting his pass); s104 closed #650, #646, #647,
+#361; s103 closed #567 (rule 1), #627, #353.
 
 **Operator decisions still shaping the work:**
 
@@ -173,7 +175,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **242**.
+Gotchas: **245**.
 
 ## Program status (high level)
 
@@ -224,23 +226,25 @@ oversight.
 
 ## Next Actions
 
-✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
-27.08.2026 — история на **#583**.
+✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория 27.08.2026 — история на **#583**.
 
-1. **#410 — решено оператором 29.08.2026 и готово к реализации.** Админ-уведомление на страницах
-   Woodev; механизм `Woodev_Admin_Notice_Handler` теперь под тестами и с тайп-хинтами (PR #659),
-   так что причина ждать #653 снята.
-2. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 закрыт замером в
-   s102. Остаётся контекст-объект на ~138 правок. **Держится за #639** — не начинать до ответа.
-3. **Остатки слоя локаций: #356 и #358** — по обоим нужен РАЗБОР комментарием на карточку, а не
-   код: #358 прямо запрещает «чинить» баном cross-provider scope и несёт два ПРОТИВОПОЛОЖНЫХ
-   измеренных исхода; #356 — проектирование forget-пути.
-4. **#653, вторая половина** — инлайновый jQuery. Замер и рекомендация («оставить как есть, если
-   не сводить несколько мелких админских скриптов в один бандл разом») уже на карточке, в `Инбокс`.
+1. **Пройти риг по #661 и #663 и смержить — это его кнопка.** Оба PR зелёные и CLEAN, оба
+   пройдены мной на риге. Чтобы увидеть самому: припарковать ветку на дереве плюс
+   `wp option update woodev_location_active_provider dadata`, потом вернуть `test-cdek`.
+   ⚠ **#663 меняет видимое на ВСЕХ сайтах флота**: отложенные уведомления, которых
+   магазинщики не видели вообще, начнут показываться (включая давно отгруженное
+   `debug-in-production`). Это правильное поведение, но знать об этом стоит до мержа.
+2. **Остатки слоя локаций: #356 и #358** — по обоим нужен РАЗБОР комментарием на
+   карточку, а не код: #358 прямо запрещает «чинить» баном cross-provider scope и несёт
+   два ПРОТИВОПОЛОЖНЫХ измеренных исхода; #356 — проектирование forget-пути.
+3. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. **Держится за #639** —
+   не начинать до ответа.
+4. **#653, вторая половина** — инлайновый jQuery. ⚠ **s105 добавил ей веса:** именно этот
+   инлайновый jQuery и был причиной #662.
 5. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
    Расстановка приоритетов — ЕГО. В `Инбокс`.
 6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
+7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
 
 ⚠ **Аудит #644 нашёл 93 открытые карточки, а не 86**, и что из них по коду проверены только ~10 —
 остальные оттриажены по заголовку. Полная поштучная сверка остаётся отдельной работой.
