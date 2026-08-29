@@ -803,6 +803,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              eligible, resolves to that EXACT provider instead of
 		 *              {@see Location_Service::provider_for_level()}'s D15
 		 *              chosen -> fallback chain.
+		 * @since 2.0.2 `country` is now read, defaulted, and format-validated
+		 *              BEFORE the provider is resolved (issue #650), and the
+		 *              resolved value is threaded into
+		 *              {@see Location_Service::provider_for_level()} — a
+		 *              provider that declares a level but does not cover THIS
+		 *              country can no longer be chosen for it (the same class
+		 *              of defect PR #649 closed in `resolve_fixed_default()`).
+		 *              Only the `$provider_override` registry-MEMBERSHIP check
+		 *              stays ahead of it: the existing precedence is
+		 *              UNCHANGED — an unknown override id (400) still wins
+		 *              over a malformed country (400) when a request gets
+		 *              both wrong. The format check itself now lives in
+		 *              {@see self::is_valid_country_format()}, shared with
+		 *              {@see self::build_scope()} rather than duplicated.
+		 *              `provider_by_id()` deliberately stays country-blind —
+		 *              see the override branch's own comment below for why.
 		 *
 		 * @param \WP_REST_Request $request           request object.
 		 * @param string           $rate_limit_key     Per-route rate-limit bucket prefix.
@@ -851,19 +867,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			 * `@since` note above. `self::handle_suggest_request()` (the public
 			 * route) always passes `null` here and never even reads the
 			 * request's own `provider` param, so a shopper can never reach the
-			 * branch below (D4) — see the class docblock and register_routes()'s
-			 * own comment on the public `/suggest` route.
+			 * override branch below (D4) — see the class docblock and
+			 * register_routes()'s own comment on the public `/suggest` route.
+			 *
+			 * Only the registry MEMBERSHIP is checked here — resolving the
+			 * actual provider (via `provider_by_id()`) waits until AFTER
+			 * `country` is validated below (issue #650), so that an unknown
+			 * override id still wins the 400 race against a malformed country
+			 * (this method's own `@since` note above records that precedence
+			 * as deliberate and unchanged).
 			 */
-			if ( null !== $provider_override ) {
-				if ( ! $this->service->has_provider( $provider_override ) ) {
-					return new \WP_Error(
-						'woodev_location_unknown_provider',
-						__( 'Неизвестный провайдер.', 'woodev-plugin-framework' ),
-						[ 'status' => 400 ]
-					);
-				}
+			if ( null !== $provider_override && ! $this->service->has_provider( $provider_override ) ) {
+				return new \WP_Error(
+					'woodev_location_unknown_provider',
+					__( 'Неизвестный провайдер.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
 
-				// Level-blind eligibility check (country-blind too, `null`) — mirrors
+			$country = $this->normalize_param( $request->get_param( 'country' ) );
+
+			// Issue #296: a checkout with no country field at all (common for a single-country
+			// store) sends `''` here — location-cascade.js's own `countryFor()` degrades to `''`
+			// once its own client-side fallback (the live field, then
+			// `config.location.defaultCountry`) has nothing left to try. Mirroring the SAME
+			// fallback server-side (through the ONE shared
+			// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
+			// {@see Checkout_Config::build_location_block()} already feeds `defaultCountry` from)
+			// keeps this a genuine `/suggest` read for the store's own base country instead of the
+			// 400 an un-split `''` would otherwise hit below. A request that DOES carry a country
+			// — even an unsupported one — is never second-guessed here.
+			if ( '' === $country ) {
+				$country = $this->service->resolve_default_country();
+			}
+
+			/*
+			 * Hoisted here (issue #650), ahead of provider resolution: passing
+			 * an unvalidated `$country` into `provider_for_level()` below would
+			 * resolve to `null` on the "no provider serves this level" branch,
+			 * silently replacing this 400 with a 200 + empty response. Shares
+			 * {@see self::is_valid_country_format()} with `build_scope()`'s own
+			 * check further down rather than duplicating the rule.
+			 */
+			if ( ! $this->is_valid_country_format( $country ) ) {
+				return new \WP_Error(
+					'woodev_location_invalid_country',
+					__( 'Некорректный код страны.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			if ( null !== $provider_override ) {
+				// Level-blind eligibility check — mirrors
 				// Location_Service::provider_for_level()'s own first pass, just
 				// anchored to the ONE named id instead of walking chosen -> fallback.
 				// provider_by_id() itself applies is_configured() and the
@@ -874,9 +929,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				// note: the registry membership check above is what turns an
 				// UNKNOWN id into a 400; a KNOWN-but-ineligible one is never an
 				// error, only the ordinary empty-suggestions degradation.
+				//
+				// Settled, not an open question (issue #650): `provider_by_id()`
+				// stays country-blind here — `$country` is deliberately never
+				// passed as its third argument. An override that does not serve
+				// THIS country is already refused a few lines below, via
+				// `provider_serves_level( $provider, $level, $country )` — which
+				// runs AFTER `$scope` (built from the real, already-validated
+				// `$country`) exists, so the response still reports the REAL
+				// resolved `within_status`. Resolving country-aware here instead
+				// would route that same request through the `null === $provider`
+				// branch below, which forces `within_status` to
+				// `self::WITHIN_STATUS_UNSERVED_LEVEL` unconditionally — a
+				// coarser, less true answer than the one the request already
+				// gets. That would be a loss of information, not a fix.
 				$provider = $this->service->provider_by_id( $provider_override, $level );
 			} else {
-				$provider = $this->service->provider_for_level( $level );
+				$provider = $this->service->provider_for_level( $level, $country );
 			}
 
 			if ( null === $provider ) {
@@ -909,22 +978,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 							: self::WITHIN_STATUS_NOT_REQUESTED,
 					]
 				);
-			}
-
-			$country = $this->normalize_param( $request->get_param( 'country' ) );
-
-			// Issue #296: a checkout with no country field at all (common for a single-country
-			// store) sends `''` here — location-cascade.js's own `countryFor()` degrades to `''`
-			// once its own client-side fallback (the live field, then
-			// `config.location.defaultCountry`) has nothing left to try. Mirroring the SAME
-			// fallback server-side (through the ONE shared
-			// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
-			// {@see Checkout_Config::build_location_block()} already feeds `defaultCountry` from)
-			// keeps this a genuine `/suggest` read for the store's own base country instead of the
-			// 400 an un-split `''` would otherwise hit in build_scope() below. A request that DOES
-			// carry a country — even an unsupported one — is never second-guessed here.
-			if ( '' === $country ) {
-				$country = $this->service->resolve_default_country();
 			}
 
 			$within = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
@@ -1616,6 +1669,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		}
 
 		/**
+		 * Country-code FORMAT predicate — never a support/eligibility check.
+		 *
+		 * Extracted (issue #650) so {@see self::perform_suggest()}'s own
+		 * hoisted early validation and {@see self::build_scope()} share ONE
+		 * implementation of the ISO-3166 alpha-2 rule instead of each
+		 * carrying its own copy that could silently drift apart. Mirrors
+		 * {@see Location_Scope}'s own `normalize_country()` rule exactly —
+		 * both must keep agreeing on what "well-formed" means, since a
+		 * country this method accepts is handed straight into
+		 * {@see Location_Scope::for_country()} a few lines later.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country Normalized (trimmed) country code, as
+		 *                        returned by {@see self::normalize_param()}.
+		 *
+		 * @return bool
+		 */
+		private function is_valid_country_format( string $country ): bool {
+			return 1 === preg_match( '/^[A-Z]{2}$/', strtoupper( trim( $country ) ) );
+		}
+
+		/**
 		 * Builds the lookup scope for a suggest call, resolving the optional
 		 * `within` parent constraint — and reports what actually happened to
 		 * that constraint via `within_status` (one of the
@@ -1693,6 +1769,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              authority for THIS request; the ambient customer can
 		 *              disagree with it (gotcha
 		 *              `wc-customer-default-location-geolocation-fallback`).
+		 * @since 2.0.2 The format check now runs FIRST, via
+		 *              {@see self::is_valid_country_format()} (issue #650) —
+		 *              shared with {@see self::perform_suggest()}'s own
+		 *              hoisted early check — instead of being discovered
+		 *              incidentally once execution reaches
+		 *              {@see Location_Scope::for_country()} deeper in the
+		 *              branches below; this also keeps
+		 *              {@see Location_Service::get_customer_chain()} from
+		 *              ever being called with a malformed country when
+		 *              `$within_key` is non-empty.
 		 *
 		 * @param string $country    Normalized ISO-3166 alpha-2 country code.
 		 * @param string $level      One of {@see Location_Record::LEVELS} — already validated by the caller.
@@ -1705,6 +1791,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *                                    converts this to a 400.
 		 */
 		private function build_scope( string $country, string $level, string $within_key ): array {
+
+			if ( ! $this->is_valid_country_format( $country ) ) {
+				throw new \InvalidArgumentException(
+					sprintf(
+						'Location_Controller::build_scope(): "country" must be a 2-letter ISO-3166 alpha-2 code, got "%s".',
+						$country
+					)
+				);
+			}
 
 			if ( '' === $within_key ) {
 				return [
