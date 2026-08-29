@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-29 (s104).** `main` clean. **One PR open on purpose: #657 (#361)** — green, critic-
-reviewed, rebased, and held for the operator's UI check because it adds a shopper-visible row.
-Merged in s104, five: **#655** (#650), **#656** (#646), **#658** (#647), **#659** (#653, part),
-**#660** (#644's material). s103 merged four; history → `sessions/s103.md`, `sessions/s104.md`.
+**As of 2026-08-29 (s104).** `main` clean, **no open PRs**. Merged in s104, six: **#655** (#650),
+**#656** (#646), **#658** (#647), **#659** (#653, part), **#660** (#644's material), and **#657**
+(#361) after the operator's own rig pass. s103 merged four; history → `sessions/s103.md`,
+`sessions/s104.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -22,8 +22,8 @@ log, which reads as a red build) live on card **#583** and in gotcha
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 29.08.2026 IN THE PRIMARY CHECKOUT (s104), sodium enabled:**
-`composer check` **3215** / 7888 / **1 skipped**, and the same three numbers under
-`--order-by=reverse`. Integration **126** / 494. jest **1551** in 21 suites.
+`composer check` **3216** / 7894 / **1 skipped**, and the same three numbers under
+`--order-by=reverse`. Integration **126** / 494. jest **1566** in 21 suites.
 
 ⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless** — off it reads 67,
 on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (CI reports 6). Why,
@@ -38,7 +38,7 @@ accident: `sessions/s102.md`.
 ✅ **Integration on `main` (s104, primary checkout): 126 tests / 494 assertions, OK** — re-measured,
 not copied forward; unchanged since s100.
 
-✅ **jest on `main` (s104): 1551 tests in 21 suites.** Run from bash with `--roots`,
+✅ **jest on `main` (s104): 1566 tests in 21 suites.** Run from bash with `--roots`,
 never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
@@ -50,8 +50,8 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
 **Open cards after s104:** **#621** (item 1 measured; the FIX is untouched and is held BEHIND
-**#639** — see below), the locations leftovers **#356/#358/#410** (#361 shipped as PR #657, still
-open for his UI check; of the remaining three, #356 and #358 need a CONTRACT decision before any
+**#639** — see below), the locations leftovers **#356/#358/#410** (#361 shipped and merged as PR #657
+after his own rig pass; of the remaining three, #356 and #358 need a CONTRACT decision before any
 code and #410 is decided and buildable), **#589**, **#644** (material delivered, prioritisation is
 his), **#652**, **#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope
 conversation — do NOT take autonomously), and the standing list #474, #483, #515, #331, #332,
@@ -86,7 +86,7 @@ and NOTE boundaries only. His reasoning verbatim and the per-site table: cards *
 `sessions/s101.md`.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this
-file. s104 closed #650, #646, #647; s103 closed #567 (rule 1), #627, #353.
+file. s104 closed #650, #646, #647, #361; s103 closed #567 (rule 1), #627, #353.
 
 **Operator decisions still shaping the work:**
 
@@ -227,22 +227,20 @@ oversight.
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория
 27.08.2026 — история на **#583**.
 
-1. **#657 (#361) ждёт ЕГО глаз на риге** — PR зелёный, отревьюен критиком, ребейзнут. Добавляет
-   покупателю ВИДИМУЮ строку в списке подсказок, поэтому по стоячему правилу не мержится без него.
-2. **#410 — решено оператором 29.08.2026 и готово к реализации.** Админ-уведомление на страницах
+1. **#410 — решено оператором 29.08.2026 и готово к реализации.** Админ-уведомление на страницах
    Woodev; механизм `Woodev_Admin_Notice_Handler` теперь под тестами и с тайп-хинтами (PR #659),
    так что причина ждать #653 снята.
-3. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 закрыт замером в
+2. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. Пункт 1 закрыт замером в
    s102. Остаётся контекст-объект на ~138 правок. **Держится за #639** — не начинать до ответа.
-4. **Остатки слоя локаций: #356 и #358** — по обоим нужен РАЗБОР комментарием на карточку, а не
+3. **Остатки слоя локаций: #356 и #358** — по обоим нужен РАЗБОР комментарием на карточку, а не
    код: #358 прямо запрещает «чинить» баном cross-provider scope и несёт два ПРОТИВОПОЛОЖНЫХ
    измеренных исхода; #356 — проектирование forget-пути.
-5. **#653, вторая половина** — инлайновый jQuery. Замер и рекомендация («оставить как есть, если
+4. **#653, вторая половина** — инлайновый jQuery. Замер и рекомендация («оставить как есть, если
    не сводить несколько мелких админских скриптов в один бандл разом») уже на карточке, в `Инбокс`.
-6. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
+5. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
    Расстановка приоритетов — ЕГО. В `Инбокс`.
-7. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-8. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
+6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель, иначе не начинать.
 
 ⚠ **Аудит #644 нашёл 93 открытые карточки, а не 86**, и что из них по коду проверены только ~10 —
 остальные оттриажены по заголовку. Полная поштучная сверка остаётся отдельной работой.

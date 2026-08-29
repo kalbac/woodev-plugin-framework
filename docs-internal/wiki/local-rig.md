@@ -74,6 +74,34 @@ by design:
   deleted — restoring the provider brings it straight back (verified). If a rig session suddenly
   "loses" its locality, check the active provider before suspecting a bug.
 
+## Which field the live cascade is actually on — measured, s104
+
+`woocommerce_ship_to_destination` on this rig is **`shipping`**, so by Rule 7c the ONE live cascade
+sits on the shipping column. In the DOM that means:
+
+| Axis | Live element on this rig |
+|---|---|
+| region (`related-list`) | `#shipping_state` — a native `<select>` WooCommerce renders |
+| settlement (`ajax-select2`) | **`#shipping_city`** — the select2-enhanced one |
+| address | `#shipping_address_1` |
+
+`#billing_city` stays a **plain `<input>` with no select2 attached**, which reads exactly like a
+broken build if you go looking there first. It is not — it is the non-live column. Confirm with
+`jQuery('#shipping_city').data('select2')` before concluding anything about the widget.
+
+**A `<select>` that WooCommerce itself renders is also select2-enhanced** (`#billing_country`,
+`#billing_state`, …), so "there is a select2 on the page" proves nothing about OUR widget.
+
+### The empty-list seam
+
+Every message this layer shows the shopper — «nothing found», «source unavailable», and the
+widened-scope row from #361 — travels through `options.emptyText` and is therefore **only visible
+when the list came back EMPTY**. A search that returns rows shows the rows. When reproducing any of
+them, use a query that genuinely matches nothing (`Ззз` works) — otherwise the message is there and
+simply not rendered, which looks like the feature is broken.
+
+⚠ `/suggest` answers in **6–10 seconds** here. Wait for the row to appear, not for a timer.
+
 ## Related
 
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — the rig's current values
