@@ -201,7 +201,7 @@ composer test:integration   # integration tests (requires wp-env)
 ./vendor/bin/phpunit tests/unit/BootstrapTest.php
 
 # JS tests + build
-npm run test:js -- --roots "<rootDir>/tests/js"   # jest (800 tests) — CI gate (test-js job)
+npm run test:js                                   # jest (800 tests) — CI gate (test-js job); jest-unit.config.js scopes roots, agent worktrees excluded
 npm run build                                     # build the 5 React bundles (CI has an assets-parity job)
 npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI gate (test-js job)
 npm run typecheck                                 # tsc --noEmit over src/ — CI gate (test-js job)
@@ -223,7 +223,7 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   `git config credential.helper '!gh auth git-credential'` — that leaves `manager` first in the
   chain and it still hangs; `gh auth setup-git` writes the empty entry that clears it. Gotcha:
   `git-credential-manager-hangs-silently-in-an-agent-session`.
-- Never run `npx jest` directly — it loses the wp-scripts jsdom environment and scans agent worktrees inside the repo (gotchas `npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`)
+- Never run `npx jest` directly — it loses the wp-scripts jsdom environment (gotcha `npx-jest-bypasses-wp-scripts-jsdom`). `jest-unit.config.js` scopes `roots` to `tests/js`, so a bare `npm run test:js` no longer counts agent worktrees (gotcha `jest-scans-agent-worktrees-inside-the-repo`, fixed s107/#188)
 - Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
 - **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.
 
@@ -247,7 +247,7 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 A task is DONE only when:
 1. Code is written (type declarations, docblocks, backward compat preserved)
 2. `composer check` passes without errors (phpcs + phpstan + unit tests)
-3. Jest is green: `npm run test:js -- --roots "<rootDir>/tests/js"` (never `npx jest`)
+3. Jest is green: `npm run test:js` (never `npx jest`)
 4. New/modified behavior is covered by tests
 5. `docs-internal/CURRENT-STATE.md` is updated
 6. `docs-internal/sessions/sNN.md` is written and indexed in `SESSION-LOG.md`

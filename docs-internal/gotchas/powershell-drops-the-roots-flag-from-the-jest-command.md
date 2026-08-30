@@ -3,9 +3,14 @@
 **Namespace:** `[testing/js]`
 **Found:** s73 (14.08.2026).
 
+**Update (s107, #188):** a bare `npm run test:js` no longer needs `--roots` at all —
+`jest-unit.config.js` now scopes it by default (see
+[[jest-scans-agent-worktrees-inside-the-repo]]). The trap below still applies whenever a
+flag IS passed to an npm script through PowerShell, `--roots` or otherwise.
+
 ## The trap
 
-`AGENTS.md` and `CLAUDE.md` both document the JS test command as
+`AGENTS.md` and `CLAUDE.md` used to document the JS test command as
 
 ```bash
 npm run test:js -- --roots "<rootDir>/tests/js"

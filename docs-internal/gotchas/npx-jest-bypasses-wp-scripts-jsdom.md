@@ -17,8 +17,10 @@ The same tree, run correctly, is **631 passed, 631 total, 8 suites**.
 
 ## Root cause
 
-This project has **no jest config of its own** — no `jest.config.js`, no `jest` key in
-`package.json`. JS tests run through `@wordpress/scripts`:
+This project's own `jest-unit.config.js` (added s107, #188, to scope `roots` — see
+[[jest-scans-agent-worktrees-inside-the-repo]]) is a `wp-scripts`-specific filename, not
+one plain `jest` auto-discovers (`jest.config.js`/`.json` or a `jest` key in
+`package.json` — neither exists here). JS tests run through `@wordpress/scripts`:
 
 ```json
 "test:js": "wp-scripts test-unit-js"
