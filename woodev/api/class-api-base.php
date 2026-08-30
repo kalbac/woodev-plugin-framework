@@ -248,14 +248,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Returns a safe challenge redirect URI, or a WP_Error for a cross-origin one.
 		 *
-		 * An empty Location is refused here rather than resolved: RFC 3986 §5.2.2
-		 * would resolve it to the base URI itself (path and query intact, minus
-		 * any fragment), which is a same-origin URI and would pass the guard
-		 * below — but a 302/307 with an empty Location is a malformed response,
-		 * not an instruction to repeat the same request. This is the guard that
-		 * actually matters for that case; {@see self::resolve_challenge_redirect_uri()}
-		 * also resolves an empty Location correctly, as a second, independent line
-		 * of defence.
+		 * An empty (or whitespace-only, after trimming OWS) Location is refused
+		 * here rather than resolved: RFC 3986 §5.2.2 would resolve a genuinely
+		 * empty one to the base URI itself (path and query intact, minus any
+		 * fragment), which is a same-origin URI and would pass the guard below —
+		 * but a 302/307 with an empty Location is a malformed response, not an
+		 * instruction to repeat the same request, and whitespace-only is not a
+		 * usable relative path either. This is the guard that actually matters
+		 * for the empty case; {@see self::resolve_challenge_redirect_uri()} also
+		 * resolves a genuinely empty Location correctly, as a second, independent
+		 * line of defence (it does not special-case whitespace-only, since a
+		 * malformed Location never reaches it once this guard rejects one).
 		 *
 		 * @since 2.0.2
 		 *
@@ -273,7 +276,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$location = $this->get_response_header_value( $response, 'location' );
 
-			if ( null === $location || '' === $location ) {
+			if ( null === $location || '' === trim( $location ) ) {
 				return null;
 			}
 

@@ -812,6 +812,17 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertSame( 'root=r', $fresh->calls[1]['args']['headers']['Cookie'] );
 	}
 
+	/** @return void */
+	public function test_a_whitespace_only_location_header_follows_nothing(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 302, [ 'Location' => '   ' ] ) ];
+
+		$response = $api->request_for_test( 'https://h/x', $this->request_args() );
+
+		$this->assertSame( 302, $response['code'] );
+		$this->assertCount( 1, $api->calls );
+	}
+
 	/**
 	 * Pin, not a defect: a digit-only Max-Age far larger than any realistic
 	 * value is still syntactically valid and is accepted as a far-future
