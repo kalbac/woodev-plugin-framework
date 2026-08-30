@@ -95,7 +95,7 @@ starting a wave; any two that overlap get separate worktrees or a `--deps` chain
 know what another worker is editing — dispatching two into one tree and hoping is how s82 lost
 finished work (gotcha `two-agents-one-file-is-the-orchestrator-s-bug`).
 
-Jest caveat: **always** run `npm run test:js -- --roots "<rootDir>/tests/js"`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Worktrees under `.claude/worktrees/` live inside the repo and a bare jest run scans them; Orca worktrees land outside the repo and do not have that problem, but `npx jest` still loses the wp-scripts jsdom environment either way. And a fresh Orca worktree has **no `node_modules/`** until the worker runs `npm ci` — the repo has no Orca setup hook.
+Jest caveat: run `npm run test:js`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Orca worktrees under `.orca/worktrees/` live inside the repo and are a full checkout, `tests/js/` included; `jest-unit.config.js` scopes `roots` to `<rootDir>/tests/js` so a bare run no longer counts them, but `npx jest` still loses the wp-scripts jsdom environment either way. And a fresh Orca worktree has **no `node_modules/`** until the worker runs `npm ci` — the repo has no Orca setup hook.
 
 ### Conventional Commits (REQUIRED)
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
@@ -320,7 +320,7 @@ the records and the customer gets filled fields plus a re-locked address field: 
 | Layer | Tool | When |
 |-------|------|------|
 | Unit tests | Brain Monkey + Mockery | PHP logic without WP |
-| JS tests | jest — `npm run test:js -- --roots "<rootDir>/tests/js"` (800 tests). **Never `npx jest`** — two recorded gotchas (`npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`) | React admin UI / JS logic |
+| JS tests | jest — `npm run test:js` (800 tests; `jest-unit.config.js` scopes `roots`). **Never `npx jest`** — two recorded gotchas (`npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`) | React admin UI / JS logic |
 | Integration tests | `wp-env` + `WP_TESTS_DIR` | Full WP stack testing |
 | Static analysis | PHPStan (level 3, PHP 7.4+) | Every commit |
 | Code style | PHPCS (WordPress + PHPCompatibility) | Every commit |

@@ -130,8 +130,9 @@ Codex is launched through an Orca terminal (see fact 3 for the four steps), neve
 
 ## Claude Code specifics worth knowing here
 
-- **JS tests must run from bash, not PowerShell** — PowerShell drops the `--roots` flag and the
-  run reads as successful while the restriction never applied (gotcha
+- **JS tests must run from bash, not PowerShell** — a bare `npm run test:js` is correct by default
+  now (`jest-unit.config.js` scopes `roots`), but PowerShell still drops any flag forwarded to an
+  npm script, so a targeted run (`--testPathPattern`, etc.) silently loses it there (gotcha
   `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **Rig probes go to the scratchpad, never into the repo** — a stray probe file once rode along in
   a commit.

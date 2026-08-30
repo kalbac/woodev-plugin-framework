@@ -50,8 +50,8 @@ not copied forward. The +3 are #356's `/location/forget` route tests, which the 
 could not run (a worktree has no wp-env); running them is the coordinator's job, and it is not
 optional.
 
-✅ **jest on `main` (s106): 1568 tests in 21 suites.** Run from bash with `--roots`,
-never `npx jest`.
+✅ **jest on `main` (s106): 1568 tests in 21 suites.** Run from bash (`jest-unit.config.js` now
+scopes `roots`, a bare `npm run test:js` is correct on its own — #188), never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
 (s93, again s100). And **a green unit suite is not sufficient where our code meets someone else's

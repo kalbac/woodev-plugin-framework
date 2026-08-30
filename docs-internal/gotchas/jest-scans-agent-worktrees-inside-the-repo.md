@@ -2,6 +2,8 @@
 
 **Namespace:** `[testing/js]`
 **Found:** s55 (2026-08-07), while taking baseline suite numbers on a freshly merged `main`.
+**Fixed:** s107 (#188, 2026-08-30) — `jest-unit.config.js` now scopes `roots`; see "Fixed" below.
+The trap description that follows is kept as the record of what it cost.
 
 ## Symptom
 
@@ -19,12 +21,14 @@ Everything was green, so nothing looked wrong — the run simply reported a numb
 ## Root cause
 
 Subagents dispatched with `isolation: "worktree"` get a git worktree created **inside the
-repository**, at `.claude/worktrees/agent-<id>/`. Each worktree is a full checkout,
-including `tests/js/`.
+repository** — at `.claude/worktrees/agent-<id>/` when this was found (s55); Orca agent
+worktrees have since moved to `.orca/worktrees/<repo>/<name>/` (s83), and the trap moves
+with the location, wherever it lands next. Each worktree is a full checkout, including
+`tests/js/`.
 
-`.claude/worktrees/` **is** listed in `.gitignore` (line 29), and that is exactly what
-makes this trap quiet: it keeps the copies out of `git status`, so the tree looks clean
-and nothing hints that seven extra checkouts are sitting inside the project.
+The worktree root **is** listed in `.gitignore`, and that is exactly what makes this trap
+quiet: it keeps the copies out of `git status`, so the tree looks clean and nothing hints
+that several extra checkouts are sitting inside the project.
 
 **Jest does not read `.gitignore`.** It walks the filesystem from its root and collects
 every `*.test.js` it finds. So each live worktree contributes its own complete copy of
@@ -52,38 +56,34 @@ was partly made of tests that no longer exist on `main`.
   names a path that looks almost exactly like the real one; it is easy to start
   debugging `main` over a failure that belongs to another branch entirely.
 
-## Correct practice
+## Fixed (s107, #188)
 
-- **Never quote a local jest total while agent worktrees exist.** Run `git worktree list`
-  first, or check `ls .claude/worktrees/`.
-- **You do not have to wait for the worktrees to clear.** Scoping the run to this repo's own
-  suite gives a trustworthy total immediately:
+A project-level `jest-unit.config.js` at the repo root, discovered automatically by
+`wp-scripts test-unit-js` (see its README's "Advanced information" for the discovery
+rule — a `jest-unit.config.js` next to `package.json` overrides the package's default
+`@wordpress/scripts/config/jest-unit.config.js`), spreads that same default config and
+adds `roots: [ '<rootDir>/tests/js' ]`. A bare `npm run test:js` now resolves `<rootDir>`
+to wherever it is invoked from and only walks that repo's own `tests/js/`, so nested
+agent worktrees (`.orca/worktrees/…/tests/js/…`, or wherever a future tool moves them)
+are never reached in the first place — jest is now told where to look, instead of being
+trusted to look everywhere and filtered after the fact.
 
-  ```bash
-  npm run test:js -- --roots "<rootDir>/tests/js"
-  ```
+Measured s107, with live sibling worktrees under `.orca/worktrees/woodev_framework/`:
+before the fix, a bare `npm run test:js` from the repo root reported `63 suites / 4704
+tests`; after, the same bare command reports `21 suites / 1568 tests` — this repo's real
+set, matching what `npm run test:js -- --roots "<rootDir>/tests/js"` has always reported
+(the `--roots` form still works unchanged; both now agree). **CI is a no-op**: a CI
+checkout has no worktrees, so `<rootDir>/tests/js` was already the whole suite there —
+the config only changes what a bare run scans, never runs an extra test.
 
-  Observed s55 with three sibling worktrees alive: the bare command reported
-  `24 suites / 2109 tests, 2 failed`; the scoped command reported this repo's own suite, all
-  passing (for the current true baseline see the `CURRENT-STATE.md` header — 800 jest as of
-  s59 — not any number frozen in this file). **Both failures belonged to another agent's
-  worktree, mid-edit.** Without scoping,
-  the honest reading of that run is "something is broken and I do not know whose" — and the
-  tempting reading is "I broke it", which sends you debugging code you never touched.
-- Remove worktrees when their agent finishes: `git worktree remove --force .claude/worktrees/<dir>`.
-  On Windows this can fail with `Permission denied` while a process still holds the files;
-  the worktree gets deregistered from `git worktree list` but the **directory survives on
-  disk and jest keeps scanning it**. Verify with `ls`, not with `git worktree list`.
-- **CI is unaffected** — a CI checkout has no worktrees — so this only ever misleads
-  locally, which is precisely where the baseline numbers quoted in handoffs come from.
-
-## Not yet done
-
-Hardening this by adding `testPathIgnorePatterns` for `.claude/` would need a
-`jest.config.js` extending `@wordpress/scripts`' own preset. This repo deliberately has
-**no jest config of its own** — `wp-scripts test-unit-js` owns it and supplies jsdom — and
-that arrangement has already burned the project once. Changing it is an operator
-decision, tracked separately, not something to do casually.
+Historical correct practice, kept for context: quote a local jest total only after
+checking `git worktree list` / `ls .orca/worktrees/` for live worktrees, and remove a
+finished agent's worktree with `git worktree remove --force <path>` — on Windows this can
+fail with `Permission denied` while a process still holds the files, deregistering it from
+`git worktree list` while the **directory survives on disk**; verify with `ls`, not
+`git worktree list`. None of this is required anymore for jest specifically, but the
+worktree-cleanup half still matters for disk space and for any OTHER tool that, like jest
+used to, walks the filesystem instead of reading `.gitignore`.
 
 ## Related
 
