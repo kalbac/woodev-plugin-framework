@@ -126,10 +126,35 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 		/**
 		 * Saves the response to cache.
 		 *
+		 * Cache only the transport data that this API base consumes when it reparses
+		 * a cached response: the body, response code/message and headers. Header
+		 * values are redacted through the same seam as the request log, while parsed
+		 * cookies and the HTTP response object are deliberately omitted: neither is
+		 * used to resume a remote session when a request is served from this cache,
+		 * and both can retain Set-Cookie credentials in the site database.
+		 *
+		 * The remaining non-secret headers are intentional. The shipped Edostavka
+		 * plugin forwards its cached `X-Current-Page`, `X-Total-Elements` and
+		 * `X-Total-Pages` headers to its delivery-points AJAX client. Transients are
+		 * disposable, and no framework or shipped-plugin consumer reads their raw
+		 * value directly; this reduced shape is therefore safe for existing entries
+		 * and avoids treating a raw wp_remote_* result as an installed-site contract.
+		 *
+		 * @since 2.0.2
 		 * @param array $response
+		 * @return void
 		 */
 		protected function save_response_to_cache( array $response ) {
-			set_transient( $this->get_request_transient_key(), $response, $this->get_request_cache_lifetime() );
+			$cached_response = [
+				'headers'  => (array) $this->get_sanitized_response_headers(),
+				'body'     => $this->get_raw_response_body(),
+				'response' => [
+					'code'    => $this->get_response_code(),
+					'message' => $this->get_response_message(),
+				],
+			];
+
+			set_transient( $this->get_request_transient_key(), $cached_response, $this->get_request_cache_lifetime() );
 		}
 
 
