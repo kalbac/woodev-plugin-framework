@@ -337,6 +337,10 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// record resolve_default() itself just wrote) — 'RU' matches every
 			// fixture in this file.
 			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+			// Customer_Location_Store::get_chain() now calls retention_ttl_seconds()
+			// (issue #356 part 3) on every read too — same reasoning as
+			// wc_get_base_location() above.
+			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();

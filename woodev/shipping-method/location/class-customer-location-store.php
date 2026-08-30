@@ -140,6 +140,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		public const FILTER_EXPORT_RAW = 'woodev_customer_location_export_raw';
 
 		/**
+		 * Filters how long, in seconds, a stored CHAIN may live — counted from its
+		 * `saved_at` stamp — before {@see self::get_chain()} reads it as though it
+		 * were never stored and physically erases it via {@see self::forget()}
+		 * (issue #356 part 3).
+		 *
+		 * A stored location is customer data with no lifespan of its own; this
+		 * framework has NO authority to invent one the merchant never chose — a
+		 * fixed number baked into the framework would itself be a data-retention
+		 * POLICY decision, and only the store owner may make that decision. The
+		 * default is therefore DERIVED, never invented: WooCommerce's own
+		 * Settings -> Accounts & Privacy -> "Personal data retention" ->
+		 * "Retain inactive accounts" field (option
+		 * `woocommerce_delete_inactive_accounts`, a `{ number, unit }` pair read
+		 * through WooCommerce's own {@see wc_parse_relative_date_option()} —
+		 * verified against `WC_Privacy::delete_inactive_accounts()` in
+		 * `woocommerce/includes/class-wc-privacy.php`, which guards the identical
+		 * "blank means never" case via `empty( $option['number'] )` before ever
+		 * computing a cutoff) already says how long the STORE keeps an inactive
+		 * customer around at all. A saved location must not outlive the account it
+		 * describes, so when the merchant has set that field, its duration is the
+		 * default here too. When the merchant has left it blank — WooCommerce's own
+		 * "retain indefinitely" — the default is `null`: nothing expires, no matter
+		 * how old.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|null $ttl_seconds The retention duration in seconds, or `null`
+		 *                              for no expiry (the default when the store has
+		 *                              not configured its own account retention).
+		 */
+		public const FILTER_TTL_SECONDS = 'woodev_customer_location_ttl_seconds';
+
+		/**
 		 * Reads the customer's CURRENT location record — the record at the
 		 * chain's `current` level, exactly the same shape and contract this
 		 * method has always had.
@@ -174,15 +207,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * throws" discipline — both are implemented once, here, in
 		 * {@see self::parse_stored_chain()} and its two callers below.
 		 *
+		 * Retention (issue #356 part 3): a chain older than
+		 * {@see self::retention_ttl_seconds()} — measured from its own `saved_at`
+		 * stamp — is read as `null` and PHYSICALLY erased via {@see self::forget()}
+		 * before this method returns, so the next read finds nothing rather than
+		 * rediscovering the same stale chain. This is a lazy, read-time check —
+		 * no cron, no migration.
+		 *
+		 * DELIBERATELY a different mechanism from
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Service::gate_chain()}'s
+		 * own staleness gate: that gate drops individual levels whose ancestry can
+		 * no longer be proven, entirely in memory, and is REVERSIBLE — the dropped
+		 * level is still on disk and a later read may recover it once its ancestor
+		 * is refreshed. Retention expiry is necessarily irreversible (the chain is
+		 * deleted, not merely filtered) because it expresses a data-retention
+		 * POLICY rather than a momentary ancestry mismatch; treating an ordinary,
+		 * recoverable staleness moment as grounds for erasure would turn a routine
+		 * gate result into a permanent loss of the customer's choice.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reads back `null` and erases the chain once it outlives
+		 *              {@see self::retention_ttl_seconds()} (issue #356 part 3).
 		 *
 		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
 		 */
 		public function get_chain(): ?array {
-			if ( is_user_logged_in() ) {
-				return $this->get_chain_for_logged_in_user();
+			$chain = is_user_logged_in() ? $this->get_chain_for_logged_in_user() : $this->get_chain_from_session();
+
+			if ( null === $chain || ! $this->is_retention_expired( $chain['saved_at'] ) ) {
+				return $chain;
 			}
 
+			$this->forget();
+
+			return null;
+		}
+
+		/**
+		 * The guest half of {@see self::get_chain()}'s two read paths — split out
+		 * so the retention check in {@see self::get_chain()} sits in ONE place
+		 * regardless of which path produced the chain.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{records: array<string, Location_Record>, current: string, implicit: bool, saved_at: int}|null
+		 */
+		private function get_chain_from_session(): ?array {
 			$session = $this->session();
 
 			if ( null === $session ) {
@@ -932,6 +1002,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			}
 
 			return $from_meta;
+		}
+
+		/**
+		 * Derives the retention TTL (issue #356 part 3) — see
+		 * {@see self::FILTER_TTL_SECONDS} for the policy this implements and why
+		 * the default must be DERIVED from the store's own WooCommerce setting
+		 * rather than invented by this framework.
+		 *
+		 * `wc_parse_relative_date_option()` is called directly, unguarded, the
+		 * same convention already used for `wc_get_base_location()` elsewhere in
+		 * this subsystem ({@see Location_Service::base_location_country()}'s own
+		 * docblock): it is a plain function, exactly as stubbable per-test as
+		 * `get_option()` itself, not the `WC()` singleton whose mocking would
+		 * poison Brain Monkey's function table.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int|null Seconds, or `null` for no expiry.
+		 */
+		private function retention_ttl_seconds(): ?int {
+			$option = wc_parse_relative_date_option( get_option( 'woocommerce_delete_inactive_accounts' ) );
+			$ttl    = empty( $option['number'] ) ? null : ( time() - strtotime( '-' . $option['number'] . ' ' . $option['unit'] ) );
+
+			/** This filter is documented above, on {@see self::FILTER_TTL_SECONDS}. */
+			$filtered = apply_filters( self::FILTER_TTL_SECONDS, $ttl );
+
+			return null === $filtered ? null : (int) $filtered;
+		}
+
+		/**
+		 * Whether a chain stamped `$saved_at` has outlived
+		 * {@see self::retention_ttl_seconds()}. A chain exactly AT the threshold
+		 * is NOT expired — only a chain strictly older than it is (issue #356
+		 * part 3, boundary fixed by test).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $saved_at The chain's own `saved_at` stamp.
+		 *
+		 * @return bool
+		 */
+		private function is_retention_expired( int $saved_at ): bool {
+			$ttl = $this->retention_ttl_seconds();
+
+			return null !== $ttl && ( time() - $saved_at ) > $ttl;
 		}
 
 		/**

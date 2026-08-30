@@ -172,6 +172,14 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			Location_Provider_Registry::instance()->reset_for_tests();
 
 			Functions\when( 'is_user_logged_in' )->justReturn( false );
+
+			// Customer_Location_Store::get_chain() now calls retention_ttl_seconds()
+			// (issue #356 part 3) on every read too — 'not configured' keeps every
+			// test in this file, none of which is about retention, from expiring a
+			// fixture (same discipline as LocationServiceTest's own setUp() for
+			// wc_get_base_location()).
+			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
 		}
 
 		private function record( string $key = 'dadata:fias-1' ): Location_Record {
