@@ -168,4 +168,87 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertCount( 2, $api->calls );
 		$this->assertSame( 'https://api.example.test/first', $api->calls[1]['uri'] );
 	}
+
+	/** @return void */
+	public function test_a_cookie_set_by_one_host_is_not_sent_to_a_different_host(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=host-a; Path=/' ] ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://host-a.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://host-b.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://host-a.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
+		$this->assertSame( 'testcookie=host-a', $api->calls[2]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_the_challenge_redirect_cookie_filter_never_fires_when_challenge_redirects_are_disabled(): void {
+		$api            = new Testable_Api_Base_For_Challenge_Redirect_Test();
+		$api->responses = [ $this->response( 200 ) ];
+
+		$applied_filters = [];
+		Functions\when( 'apply_filters' )->alias( static function ( $tag, $value = null ) use ( &$applied_filters ) {
+			$applied_filters[] = $tag;
+
+			return $value;
+		} );
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertNotContains( 'woodev_challenge-test_api_challenge_redirect_cookies', $applied_filters );
+	}
+
+	/** @return void */
+	public function test_the_updated_action_does_not_fire_when_the_response_repeats_a_cookie_already_in_the_jar(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=same; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=same; Path=/' ] ),
+		];
+
+		$updated_action_fired_count = 0;
+		Functions\when( 'do_action' )->alias( static function ( $tag ) use ( &$updated_action_fired_count ) {
+			if ( 'woodev_challenge-test_api_challenge_redirect_cookies_updated' === $tag ) {
+				$updated_action_fired_count++;
+			}
+		} );
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 1, $updated_action_fired_count );
+	}
+
+	/** @return void */
+	public function test_origin_normalisation_treats_default_port_and_host_case_as_the_same_origin(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h/x', $this->request_args() );
+		$api->request_for_test( 'https://H:443/y', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_origin_normalisation_treats_a_different_scheme_as_a_different_origin(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h', $this->request_args() );
+		$api->request_for_test( 'http://h', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
+	}
 }
