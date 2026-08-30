@@ -77,6 +77,7 @@ class LicenseOutageGraceTest extends TestCase {
 		$license = $this->make_real_engine_with_throwing_transport();
 
 		Functions\expect( 'home_url' )->andReturn( 'https://example.test' );
+		Functions\when( 'get_option' )->justReturn( false );
 		// Belt-and-braces: the per-plugin claim option is never written either.
 		Functions\expect( 'update_option' )->never();
 		Functions\expect( 'delete_option' )->never();
