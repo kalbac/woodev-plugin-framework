@@ -298,7 +298,7 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [
 			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
-			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Max-Age=0' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Path=/; Max-Age=0' ] ),
 			$this->response( 200 ),
 		];
 
@@ -314,7 +314,7 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [
 			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
-			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Max-Age=0' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Path=/; Max-Age=0' ] ),
 		];
 
 		$updated_action_calls = [];
@@ -358,7 +358,7 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [
 			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
-			$this->response( 200, [ 'Set-Cookie' => 'testcookie=stale; Expires=Thu, 01 Jan 1970 00:00:00 GMT' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=stale; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT' ] ),
 			$this->response( 200 ),
 		];
 
@@ -369,26 +369,42 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertArrayNotHasKey( 'Cookie', $api->calls[2]['args']['headers'] );
 	}
 
-	/** @return void */
+	/**
+	 * Carries a short-lived `neighbor` cookie in the SAME response so this test
+	 * discriminates: the old jar (pre-#686) kept everything forever, so both
+	 * cookies would still be in the outgoing header and this assertion would
+	 * fail on old code, not just pass trivially. Round-2 critic finding: this
+	 * test previously passed unchanged under the old code too.
+	 *
+	 * @return void
+	 */
 	public function test_an_expires_attribute_in_the_future_does_not_delete_the_cookie(): void {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
-		$far_future     = gmdate( 'D, d M Y H:i:s', time() + 3600 ) . ' GMT';
+		$api->now       = 1_700_000_000;
+		$far_future     = gmdate( 'D, d M Y H:i:s', $api->now + 3600 ) . ' GMT';
 		$api->responses = [
-			$this->response( 200, [ 'Set-Cookie' => "testcookie=first; Expires={$far_future}" ] ),
+			$this->response( 200, [ 'Set-Cookie' => [ "testcookie=first; Expires={$far_future}", 'neighbor=temp; Max-Age=1' ] ] ),
 			$this->response( 200 ),
 		];
 
 		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 5;
 		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
 
 		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
 	}
 
-	/** @return void */
+	/**
+	 * Same discrimination as above: a short-lived `neighbor` cookie in the same
+	 * response proves this test fails on the old always-keep-forever jar.
+	 *
+	 * @return void
+	 */
 	public function test_a_cookie_with_neither_max_age_nor_expires_is_a_session_cookie_that_never_expires_on_its_own(): void {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [
-			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => [ 'testcookie=first; Path=/', 'neighbor=temp; Max-Age=1' ] ] ),
 			$this->response( 200 ),
 		];
 
@@ -485,5 +501,140 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $response );
 		$this->assertSame( 'woodev_api_challenge_redirect_cross_origin', $response->get_error_code() );
 		$this->assertCount( 1, $api->calls );
+	}
+
+	/** @return void */
+	public function test_max_age_with_a_fractional_value_is_ignored_and_a_valid_expires_still_governs(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->now       = 1_700_000_000;
+		$future         = gmdate( 'D, d M Y H:i:s', $api->now + 3600 ) . ' GMT';
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => "testcookie=first; Max-Age=0.5; Expires={$future}" ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/**
+	 * Advances the clock past what `+1` would mean if it were wrongly accepted
+	 * as a literal 1-second Max-Age, so this discriminates: an incorrect
+	 * accept-and-cast would evict the cookie by the second request.
+	 *
+	 * @return void
+	 */
+	public function test_max_age_with_a_leading_plus_sign_is_ignored(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/; Max-Age=+1' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->now = 1_700_000_000;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 5;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/**
+	 * Advances the clock past what `1e3` would mean if it were wrongly accepted
+	 * as a literal 1000-second Max-Age, so this discriminates the same way.
+	 *
+	 * @return void
+	 */
+	public function test_max_age_in_exponential_notation_is_ignored(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/; Max-Age=1e3' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->now = 1_700_000_000;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 1001;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_a_valid_max_age_still_wins_over_a_valid_expires(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->now       = 1_700_000_000;
+		$future         = gmdate( 'D, d M Y H:i:s', $api->now + 3600 ) . ' GMT';
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => "testcookie=first; Max-Age=1; Expires={$future}" ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 5;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_a_path_scoped_cookie_is_sent_only_under_its_path(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'clearance=token; Path=/challenge' ] ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h/api/orders', $this->request_args() );
+		$api->request_for_test( 'https://h/challenge', $this->request_args() );
+		$api->request_for_test( 'https://h/challenge/x', $this->request_args() );
+		$api->request_for_test( 'https://h/api/orders', $this->request_args() );
+
+		$this->assertSame( 'clearance=token', $api->calls[1]['args']['headers']['Cookie'] );
+		$this->assertSame( 'clearance=token', $api->calls[2]['args']['headers']['Cookie'] );
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[3]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_a_cookie_with_no_path_attribute_gets_the_rfc_6265_default_path(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first' ] ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h/api/orders', $this->request_args() );
+		$api->request_for_test( 'https://h/api/other', $this->request_args() );
+		$api->request_for_test( 'https://h/other', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[2]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_the_same_cookie_name_under_two_different_paths_coexists(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'shared=one; Path=/a' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'shared=two; Path=/b' ] ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h/a', $this->request_args() );
+		$api->request_for_test( 'https://h/b', $this->request_args() );
+		$api->request_for_test( 'https://h/a', $this->request_args() );
+		$api->request_for_test( 'https://h/b', $this->request_args() );
+
+		$this->assertSame( 'shared=one', $api->calls[2]['args']['headers']['Cookie'] );
+		$this->assertSame( 'shared=two', $api->calls[3]['args']['headers']['Cookie'] );
 	}
 }
