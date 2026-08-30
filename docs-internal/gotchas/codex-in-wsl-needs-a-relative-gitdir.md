@@ -1,5 +1,31 @@
-# Gotcha: [tooling/parallel-agents] — Codex's own shell tool is a Linux shell, so an Orca worktree's `gitdir` is unreadable to it; and the git config that "fixes" it breaks the whole repo
-> Tags: tooling, orca, codex, git, wsl | Session: s107
+# Gotcha: [tooling/parallel-agents] — Codex's tool shell is NOT fixed: measure which one it got before diagnosing anything else, because every symptom below is downstream of that one variable
+> Tags: tooling, orca, codex, git, wsl | Session: s107, corrected by measurement s108
+
+## ⚠ Read this first — s108 falsified the premise this gotcha was built on
+
+s107 measured Codex executing its tool calls in a Linux `bash`. **s108 measured the same launch
+path putting them in PowerShell 7.6.5**, on the same machine, same Orca, same repo:
+
+| probe | s107 | s108 (30.08.2026) |
+|---|---|---|
+| the tool shell | Linux `bash`, `/mnt/d/…` paths | **PowerShell 7.6.5** — `Get-Content`, `ForEach-Object`; `uname` is "not recognized as a name of a cmdlet" |
+| `orca` on its PATH | absent, `ORCA_CLI_COMMAND` empty | **reachable** — the worker ran `orca status --json` itself and got `runtime ready` |
+| git in the worktree | `fatal: not a git repository` | **`git rev-parse --show-toplevel` succeeded with `.git` untouched** |
+
+So the chain "Linux shell → absolute `gitdir` unreadable → `orca` off PATH → worker cannot report"
+is real **only when the tool shell is a POSIX one**, and that is not a property of Orca, of this
+repo, or of the worktree. It varies. The rewrite below is a conditional remedy, not a step 0.
+
+**Therefore: the FIRST thing a Codex worker's brief should ask for is which shell it got.**
+`echo $SHELL ; uname -a` and `$PSVersionTable.PSVersion` — one errors, and which one errors is the
+answer. Diagnose nothing until that is on the table. s107 skipped this and every conclusion it drew
+downstream inherited the error.
+
+**And one conclusion s107 drew was wrong outright.** The worker that "traded the task for a receipt"
+was blamed on an unreachable CLI — taken from the worker's own account of itself, never verified.
+s108 reproduced the real defect: **the dispatch body does not always reach Codex's prompt.** The
+worker gets the Orca preamble and no task, reports honestly that nothing arrived, and then explains
+its own idleness with whatever it can see. Card #683 carries the measurement.
 
 ## What happens
 
@@ -41,7 +67,7 @@ a real directory with no path inside it. Same path-format wall as s97, reached f
 
 Two consequences measured in s107, both of which cost time:
 
-- **The `orca` CLI is not on the PATH of that Linux shell.** `orca`, `orca-ide` and `orca-dev` are
+- **When the tool shell IS a Linux one, the `orca` CLI is not on its PATH** (in PowerShell it is — measured s108). `orca`, `orca-ide` and `orca-dev` are
   all absent, and the Windows `orca.exe` invoked by its `/mnt/c/...` path dies with
   `sh: 1: C:/Program: not found`. One worker read its brief literally, could not send `worker_done`,
   and therefore did **no work at all** — it traded the task for the receipt. A brief must say that
@@ -49,7 +75,7 @@ Two consequences measured in s107, both of which cost time:
 - Three other Codex workers the same session DID send `worker_done`. So this is not deterministic;
   do not build a recipe on either outcome.
 
-## Fix — one line, per worktree, and write it shell-agnostically
+## Fix — ONLY when the tool shell is a POSIX one; one line, per worktree, written shell-agnostically
 
 Run it **from the worktree root**, with no absolute prefix at all:
 

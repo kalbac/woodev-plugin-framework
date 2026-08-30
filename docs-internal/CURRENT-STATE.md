@@ -6,10 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-30 (s107).** `main` clean, **no open PRs, no worktrees**. s107 merged twelve
-(#668-#672, #674, #675, #677-#681) and closed eleven cards: **#321, #568, #510, #429, #318, #482,
-#322, #147, #499, #673, #188**. The one that changes how work is done is **#510** — Codex is now a
-full WORKER in a worktree, not only a critic. History → `sessions/s107.md`, `sessions/s106.md`.
+**As of 2026-08-30 (s108).** `main` clean, **no open PRs, no worktrees**. s108 merged PR #685 and
+closed **#676** (the challenge-cookie jar is scoped by origin), filed **#686** and **#687** from its
+review, and **overturned s107's #683 diagnosis by measurement** — see the Codex section below, which
+was rewritten because of it. s107 before it merged twelve PRs and closed eleven cards. History →
+`sessions/s108.md`, `sessions/s107.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,19 +22,15 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s107), sodium enabled, after
-all twelve merges:** `composer check` **3314** / 8166 / **1 skipped**. phpcs clean, phpstan left to
-CI. Integration **129** / 506. jest **1568** in 21 suites. Over s107: +17 unit tests, integration
-and jest unchanged.
+**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s108), sodium enabled, after
+PR #685:** `composer check` **3321** / 8174 / **1 skipped**. phpcs clean (225 files), phpstan left
+to CI. Integration **129** / 506 and jest **1568** in 21 suites are s107 figures — s108 touched
+neither layer, so they were not re-measured and must be re-run before being compared against.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
 "result is incomplete", which reads exactly like a real analysis failure over the diff you just
 wrote. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`, s106 section.
-
-⚠ **The s105 handoff first carried 3233/7919 — that was measured BEFORE the critic round added 3
-tests to #661, and it was stale by the time it was written down.** Caught by re-measuring `main`
-after the merge rather than copying the number forward. The standing rule below is not decoration.
 
 ⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless** — off it reads 67,
 on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (CI reports 6). Why,
@@ -45,13 +42,9 @@ runs it on the target PHP version only, deterministically, so a failure reproduc
 same command. What it found on its first night, and why the suite had been green by alphabetical
 accident: `sessions/s102.md`.
 
-✅ **Integration on `main` (s106, primary checkout): 129 tests / 506 assertions, OK** — re-measured,
-not copied forward. The +3 are #356's `/location/forget` route tests, which the WORKER wrote but
-could not run (a worktree has no wp-env); running them is the coordinator's job, and it is not
-optional.
-
-✅ **jest on `main` (s106): 1568 tests in 21 suites.** Run from bash (`jest-unit.config.js` now
-scopes `roots`, a bare `npm run test:js` is correct on its own — #188), never `npx jest`.
+✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
+and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
+so a bare `npm run test:js` is correct on its own (#188).
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
 (s93, again s100). And **a green unit suite is not sufficient where our code meets someone else's
@@ -61,28 +54,25 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s107 — 76 open, `Инбокс` empty, nothing in `В работе`.** Still open: **#621** (item 1 measured; the FIX is untouched
-and held BEHIND **#639**), **#589**, **#644** (material delivered, prioritisation is his), **#652**,
-**#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope conversation — do NOT take
-autonomously), **#676** (the challenge-cookie jar is not host-scoped — filed in s107 from the #674
-review), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285,
-#247, and **#567's remainder** (150 English msgids with no translation — operator, 29.08.2026: leave
-them, regenerate the `.pot` and rebuild the `.mo` before release).
+**Open cards after s108 — 78 in `Бэклог`, `Инбокс` empty, nothing in `В работе`.** Still open:
+**#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**, **#644**
+(material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half only),
+**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#683** (why the
+dispatch body does not reach Codex's prompt), **#686** and **#687** (both filed in s108 from the
+#685 review — cookie attributes discarded, and `Location` resolved by heuristic), and the standing
+list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
+and rebuild the `.mo` before release).
 
-**#621 is held behind #639 deliberately.** The cheap fix (a `WC_Order` subclass) was written,
-measured and REVERTED in s103 — `get_order()` must preserve the caller's concrete order class, or a
-`WC_Subscription` silently becomes a plain order. What remains is a ~138-site context object, and
-investing that in a subsystem whose size #639 is questioning is the wrong order. Detail:
-`sessions/s103.md`.
+**#621 is held behind #639 deliberately.** The cheap `WC_Order` subclass was measured and REVERTED
+in s103 — `get_order()` must preserve the caller's concrete order class, or a `WC_Subscription`
+silently becomes a plain order. What remains is a ~138-site context object, and #639 is questioning
+that subsystem's size. Detail: `sessions/s103.md`.
 
 **i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
 English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
 anything not on a screen need not be wrapped in `__()` at all**; classify by the RENDER PATH, never
 by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
-
-**#613 is closed** (47 of 51 sites guarded; `payment-tokens-handler.php:700` closed by docblock
-in s102 after measuring the hook has zero consumers, `is_available` triaged HARMLESS). History →
-`sessions/s101.md` / `s102.md`.
 
 **Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
 decided by WHO READS IT, not by how dangerous the text looks.** MERCHANT or plugin author → kept;
@@ -90,8 +80,7 @@ CUSTOMER → redacted. Every LOG sink redacts unconditionally (**#594**); this r
 and NOTE boundaries only. His reasoning verbatim and the per-site table: cards **#608** / **#610**,
 `sessions/s101.md`.
 
-**What closed when** is the handoff's carry-over section and the per-session files — not this
-file. s105 closed #410 and #662; s104 closed #650, #646, #647, #361; s103 closed #567 (rule 1), #627, #353.
+**What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
 
@@ -112,9 +101,9 @@ lock stands. Detail → `sessions/s92.md`.
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
-**#541's cause was an ASYMMETRY between the two select renderers, not the `/select` queue** — new
-seam `options.onResolving()`, a pick announced by LEVEL. Detail → `sessions/s94.md`; the two
-near-miss frames it taught → gotcha `an-empty-list-while-the-search-runs-is-not-a-zero-result`.
+**#541's cause was an ASYMMETRY between the two select renderers, not the `/select` queue** — seam
+`options.onResolving()`, a pick announced by LEVEL. `sessions/s94.md`; gotcha
+`an-empty-list-while-the-search-runs-is-not-a-zero-result`.
 
 ## ⚠ The checkout location layer
 
@@ -167,10 +156,23 @@ answered with three exact hits. The fourth (a commit hash) lost its leading char
 fabrication, but why every Codex round still gets one fact you already know. Recipe and the two
 ways CLI 0.150.1 departs from it: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
-✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.** Its WSL
-shell needs the worktree's `.git` rewritten to a relative `gitdir` as its step 0; WSL carries the
-whole toolchain. ⚠ `worktree.useRelativePaths` is NOT the fix — it takes the main checkout down
-too. Recipe and trap: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.**
+
+⚠ **Everything s107 wrote about HOW to start it was corrected by measurement in s108 (#683).** A
+native `orca orchestration worker-start --agent codex` started it **in one command**, in a real
+Codex TUI, defaulting to `gpt-5.6-terra`. From that worker: the **Orca CLI is reachable**, its tool
+shell is **PowerShell 7.6.5** (not bash), and `git rev-parse --show-toplevel` works in the worktree
+**with `.git` untouched**. So the relative-`gitdir` rewrite is a remedy for the case where Codex's
+tool shell happens to be a POSIX one — **not a step 0**, and which shell it gets is the variable to
+measure FIRST. `worktree.useRelativePaths` is still never the fix; it takes the main checkout down.
+
+⚠ **What actually breaks: the dispatch body does not always reach Codex's prompt** — the worker
+receives the Orca preamble and no task, and honestly reports having nothing to do. Re-deliver with
+`orca terminal send --text "<brief>" --enter`, and **read the buffer back to confirm the TASK text
+is there**, not just the preamble. This is very likely why s107's worker "traded the task for a
+receipt": it never had a task. Card **#683**; gotchas
+`codex-in-wsl-needs-a-relative-gitdir` and `starting-codex-under-orca-needs-four-steps-not-one`
+both rewritten. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **kilo is the FALLBACK critic now, not the default** (it held the seat 27.08–28.08 while the
 subscription was unpaid). If it is used again it has its own traps — Orca cannot supervise it, and
@@ -234,29 +236,27 @@ oversight.
 
 ## Next Actions
 
-✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория 27.08.2026 — история на **#583**.
+✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
+27.08.2026, история на **#583**.
 
-1. **#653, вторая половина** — инлайновый jQuery. ⚠ **s105 добавил ей веса:** именно этот
-   инлайновый jQuery и был причиной #662. **Без оператора не брать.**
-2. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. **Держится за #639** —
-   не начинать до ответа.
-3. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
-   Расстановка приоритетов — ЕГО.
-4. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-5. **Слой локаций закрыт целиком.** #356 и #358 закрыты в s106; открытых остатков в этом слое нет.
-6. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
+Полный список открытых карточек — в блоке «Open cards after s108» выше; он и есть источник правды,
+здесь только порядок и запреты.
 
-⚠ **Аудит #644 нашёл 93 открытые карточки, а не 86**, и что из них по коду проверены только ~10 —
-остальные оттриажены по заголовку. Полная поштучная сверка остаётся отдельной работой.
-🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#567** (язык msgid — 305 строк работы в одну сторону, замер на
-карточке), **#437** (нужна беседа об объёме), **#613** в части `payment-tokens-handler.php:700`,
-**#474**, **#483**,
-**#515**, **#331**, **#332**, **#374**. **Отложено до релиза:** #285, #247. **Старое:** #289, #270, #310, #318,
-и #321, #322.
+1. **#686** и **#687** — оба из ревью #685, полностью описаны на карточках, никого не ждут.
+2. **#683** — почему тело dispatch не доезжает до промпта Codex. Симптом лечится досылкой брифа.
+3. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
+   лишь ~10, остальные оттриажены по заголовку. Расстановка приоритетов — ЕГО, сверка — агента.
+4. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
+5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
 
-**Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной миграции** (#159 из этого списка закрыт 13.08.2026) — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали сами.
+🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#437** (нужна беседа об объёме), **#653**
+(вторая половина, инлайновый jQuery — именно он был причиной #662), **#567** (остаток по языку
+msgid), **#474**, **#483**, **#515**, **#331**, **#332**, **#374**. **#621** держится за **#639**.
+**Отложено до релиза:** #285, #247.
 
-Deferred (всё остальное — board №6): UK-CFR (settings extensibility) и прочие отложенные карточки живут на доске; `FUTURE-BACKLOG.md` заморожен.
+**Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
+миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали
+сами. `FUTURE-BACKLOG.md` заморожен; всё остальное живёт на доске №6.
 
 ## 🔔 Cross-Project Reminder — Ecosystem Orchestration (dormant)
 

@@ -241,6 +241,50 @@ orca orchestration task-update --id <task_id> --status ready --json
 terminal the coordinator ever wrote to with `terminal send` — which, given step 4, is every Codex
 worker. Those must be closed with `orca terminal close --terminal <handle>`.
 
+## s108 (30.08.2026) — the "four steps" were the UPDATE DIALOG, and the operator removed its cause
+
+The operator refused the s107 framing on the record — «Codex мы использовали с самого начала, и он
+отлично работал из-под CLI Orca… Поэтому я не верю, что Codex вот так вот просто на ровном месте
+перестал работать» — and a clean experiment says he was right about the part that matters.
+
+`orca orchestration worker-start --task <id> --worktree id:<…> --agent codex` was run once, with no
+ritual around it. Measured:
+
+- It created a **real Codex terminal**, not a PowerShell one — the TUI header read
+  `OpenAI Codex (v0.150.1)`, `directory: …\codex-native-probe-683`, `permissions: YOLO mode`. The
+  s84 "three times out of four it is a bare shell" did NOT reproduce.
+- The model defaulted to `gpt-5.6-terra` on its own. No `--model` was passed, and none should be.
+- It exited `state: failed`, `lastError: agent_prompt_blocked` — and the buffer named the cause
+  exactly: the **Codex update dialog** (`0.150.1 -> 0.151.0`, "Press enter to continue").
+- Sending `3` (Skip until next version) cleared it, `terminal wait --for tui-idle` then satisfied,
+  and one `terminal send --text "" --enter` submitted the queued prompt. Codex went to `Working`.
+
+**The operator then updated Codex, which removes the cause rather than working around it.** Step 2
+of the recipe above exists only to survive that dialog; on an up-to-date Codex there is nothing for
+it to dismiss. Keep the step — the dialog returns with every new release, and s86 showed it can
+appear after a clean read — but stop describing a four-step ritual as what Orca requires. Orca
+requires one command. Codex's own updater is what adds the other three.
+
+## ⚠ s108, NEW and unexplained: the dispatch body does not always reach the prompt
+
+After the dialog was cleared and the prompt submitted, the Codex worker reported:
+
+> No substantive assignment reached my prompt — only the dispatch wrapper with task id
+> task_59874caef6be
+
+The Orca lifecycle preamble arrived; **the task spec did not.** The worker had nothing to do and
+said so. Re-delivering the same brief with `orca terminal send --text "<brief>" --enter` worked
+immediately, and the same Codex then produced a full review with `file:line` citations.
+
+This is very likely what actually happened in s107 to the worker that "traded the task for a
+receipt": it never had a task. Its own explanation — that it could not reach the `orca` CLI — was
+recorded as a measured fact and was not verified; s108 measured the CLI as reachable. Card #683
+carries this.
+
+**Operationally:** after submitting a Codex worker's prompt, read the buffer back and confirm the
+TASK text is in it, not just the preamble. A `Working` spinner proves it is doing something, not
+that it received what you sent.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery
