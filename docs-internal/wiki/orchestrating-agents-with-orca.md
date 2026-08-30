@@ -206,26 +206,38 @@ because the brief arrives as `[Pasted Content N chars]` and sits unsubmitted. Af
 the task goes to `blocked`; `task-update --status ready` before redispatching. Gotcha:
 `starting-codex-under-orca-needs-four-steps-not-one`.
 
-**And once it is up, its first command must make the worktree readable — Codex runs in WSL.** A
-worktree Orca created carries `.git` as a file holding `gitdir: D:/Projects/…`, which WSL git does
-not treat as absolute: it glues the line onto the cwd and every git command dies with
-`fatal: not a git repository: …/D:/Projects/…`. That is card **#510**, open since s91, and it is
-what kept Codex to critic duty on the main checkout. The fix is one line, run by the worker itself
-as its step 0 so it doubles as the anti-fabrication canary:
+**And once it is up, its first command must make the worktree readable.** Codex's own tool calls
+execute in a LINUX shell here — note the layering, because s107 got it wrong and the operator
+corrected it the same day: the TERMINAL Orca creates is PowerShell on Windows (s97,
+`orca-terminal-command-bash-lands-in-wsl-on-windows`), while Codex's INTERNAL shell is bash, which
+is where `/mnt/d/...` paths come from. A worktree created by Windows git carries `.git` as a file
+holding `gitdir: D:/Projects/...`, which Linux git does not treat as absolute: it glues the line
+onto the cwd and every git command dies with `fatal: not a git repository: .../D:/Projects/...`.
+That is card **#510**, open since s91. The fix is one line, run by the worker itself as its step 0
+so it doubles as the anti-fabrication canary — **from the worktree root, with no absolute prefix**,
+so the recipe survives a change of runtime setting:
 
 ```sh
-cd /mnt/d/Projects/woodev_framework/.orca/worktrees/woodev_framework/<name>
 printf 'gitdir: ../../../../.git/worktrees/<name>
 ' > .git
 git rev-parse --show-toplevel   # must print that same worktree path
 ```
 
-Measured s107: both gits then read the same worktree, and WSL carries the whole toolchain Codex
-needs — PHP 8.3.6, Composer 2.7.1, node 22, and `gh` already authenticated. **Codex is therefore a
-full worker in a worktree now, not only a critic.** Do NOT reach for `worktree.useRelativePaths`
-instead: it writes an `extensions.relativeWorktrees` line into the SHARED repo config, and git 2.43
-(what WSL ships here) then refuses the entire repository, main checkout included. Gotcha:
-`codex-in-wsl-needs-a-relative-gitdir`.
+Measured s107: both gits then read the same worktree, and **Codex is a full worker in a worktree,
+not only a critic**. Two further facts from the same session: the `orca` CLI is NOT on the PATH of
+Codex's internal shell (one worker consequently sent no `worker_done` and, reading its brief
+literally, did no work at all — say in every brief that the WORK is the deliverable and the
+lifecycle message is not a precondition for it), yet three other Codex workers reported fine, so do
+not build a recipe on either outcome.
+
+**Standing rule, operator 30.08.2026: everything goes through the DEFAULT Orca CLI, and Orca decides
+whether that lands in WSL or PowerShell from his settings.** Never route yourself through `wsl ...`,
+never `--command bash`, and never probe one shell to conclude something about another — read the
+agent's own transcript instead.
+
+Do NOT reach for `worktree.useRelativePaths` instead: it writes an `extensions.relativeWorktrees`
+line into the SHARED repo config, and git 2.43 then refuses the entire repository, main checkout
+included. Gotcha: `codex-in-wsl-needs-a-relative-gitdir`.
 
 **Two gates read green in a worktree and are not.** Five `Contract/Yandex*` tests SKIP there
 because `plugins-reference/` is gitignored (fixed in s84 by adding it to `.worktreeinclude`), and
