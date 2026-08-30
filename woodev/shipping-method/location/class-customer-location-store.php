@@ -86,6 +86,60 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		public const ACTION_SAVED = 'woodev_customer_location_saved';
 
 		/**
+		 * Fires after {@see self::forget()} actually erases a stored chain — the
+		 * counterpart to {@see self::ACTION_SAVED}. A `forget()` call that finds
+		 * nothing to erase (nothing stored in either store it was allowed to touch)
+		 * does NOT fire this, mirroring `ACTION_SAVED`'s own "a refused/no-op write
+		 * does not fire" discipline. Left in place even though nothing in this
+		 * codebase consumes it yet (project preference: extension hooks are not
+		 * gated on having a consumer).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id The logged-in customer's user id whose chain was
+		 *                      erased, or `0` for a guest's session-only erasure.
+		 */
+		public const ACTION_FORGOTTEN = 'woodev_customer_location_forgotten';
+
+		/**
+		 * Filters the opaque `raw` provider payload (see
+		 * {@see Location_Record::raw()}) immediately before
+		 * {@see self::export_personal_data()} writes it into a WP Privacy export
+		 * file.
+		 *
+		 * `raw` is exported by default because it is normally just the
+		 * customer's own address, verbatim from the provider (see
+		 * {@see self::export_personal_data()}'s own docblock) — but
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider} is a
+		 * PUBLIC extension point, and this framework cannot vouch for what a
+		 * THIRD-PARTY provider's response actually contains. A provider author
+		 * whose `raw` payload MAY carry a secret (an echoed API key/token) or
+		 * another person's data (e.g. a shared-account/organization lookup) has
+		 * an OBLIGATION — not merely the option — to redact it here before it
+		 * ever reaches a customer's export file. The same "we don't own this
+		 * content, so it needs a cleanup seam" principle already applied to
+		 * logged API responses (#594) and to header masking in
+		 * `Woodev\Framework\Api\Api_Base`.
+		 *
+		 * Default: unfiltered, `$raw` passed through unchanged — the bundled
+		 * DaData provider's `raw` is a plain address-component object with
+		 * nothing beyond what {@see self::export_personal_data()} already
+		 * exports as named fields (see gotcha
+		 * `a-cross-provider-within-is-handed-over-as-components`), so there is
+		 * nothing to redact for it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed           $raw     The provider's raw payload, exactly as
+		 *                                 {@see Location_Record::raw()} returns
+		 *                                 it. Return `null` to omit the raw
+		 *                                 field from the export entirely.
+		 * @param Location_Record $record  The record `$raw` came from.
+		 * @param int             $user_id The user whose data is being exported.
+		 */
+		public const FILTER_EXPORT_RAW = 'woodev_customer_location_export_raw';
+
+		/**
 		 * Reads the customer's CURRENT location record — the record at the
 		 * chain's `current` level, exactly the same shape and contract this
 		 * method has always had.
@@ -270,6 +324,366 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			$this->persist( null, $chain['records'], $chain['current'], false, $chain['saved_at'] );
 
 			return self::session_will_survive( $session );
+		}
+
+		/**
+		 * Erases the customer's stored location CHAIN — the counterpart
+		 * {@see self::set()} has never had (issue #356 part 1). Today
+		 * {@see self::persist()} is the only write primitive and cannot express
+		 * "nothing" (it unconditionally dereferences `$records[ $current_level ]`
+		 * when firing {@see self::ACTION_SAVED}), so before this method there was
+		 * no way to satisfy a WP "erase my personal data" request, nor any way
+		 * for a "forget me" control to clear the store at all.
+		 *
+		 * Store contract — deliberately ASYMMETRIC with {@see self::get_chain()}'s
+		 * own dual-store read, because the two callers of this method run in
+		 * different security contexts:
+		 *
+		 * - `$user_id === null` (a VISITOR forgetting their OWN location): acts on
+		 *   the CURRENT request's session, and — if that visitor happens to be
+		 *   logged in — their own user meta too. Both stores belong to the same
+		 *   person making the request.
+		 * - `$user_id` given explicitly (the WP Privacy "erase personal data"
+		 *   tool, run from wp-admin against SOMEONE ELSE's account via
+		 *   {@see self::erase_personal_data()}): touches ONLY that user's meta.
+		 *   `$this->session()` in that request is the ADMINISTRATOR's session, not
+		 *   the erased customer's — clearing it would erase a location belonging
+		 *   to a different person than the one the request is about. The erased
+		 *   customer's OWN session copy, if any, is unreachable from an admin
+		 *   request by construction: it lives in that customer's own browser
+		 *   cookie/session store, not in anything the server can address by user
+		 *   id. That is a WordPress privacy-mechanism limitation, not an omission
+		 *   here — see {@see self::erase_personal_data()}'s own docblock.
+		 *
+		 * A logged-in visitor forgetting their OWN location (the `null` branch)
+		 * MUST clear both stores even though {@see self::get_chain()} prefers the
+		 * session: {@see self::get_chain_for_logged_in_user()} falls back to meta
+		 * on an empty session and REPOPULATES the session from it — so a
+		 * session-only clear would have the meta blob resurrect the "forgotten"
+		 * chain on the very next read within the same request.
+		 *
+		 * Meta is erased with `delete_user_meta()` — never by writing an empty
+		 * value, which {@see self::parse_stored_chain()}'s lenient guards could
+		 * still read back as SOMETHING, and which would leave
+		 * {@see self::ACTION_FORGOTTEN} and {@see self::erase_personal_data()}'s
+		 * own `items_removed` report with no honest way to tell "erased" from
+		 * "already empty".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int|null $user_id `null` to forget the CURRENT visitor's own
+		 *                          location (their session, and their own meta if
+		 *                          logged in); an explicit user id to erase ONLY
+		 *                          that user's meta, leaving any session
+		 *                          untouched.
+		 *
+		 * @return void
+		 */
+		public function forget( ?int $user_id = null ): void {
+			if ( null !== $user_id ) {
+				$this->forget_user_meta( $user_id );
+
+				return;
+			}
+
+			$session      = $this->session();
+			$session_had  = null !== $session && null !== $session->get( self::STORAGE_KEY );
+			$current_id   = is_user_logged_in() ? get_current_user_id() : 0;
+			$meta_removed = 0 !== $current_id && $this->delete_meta_chain( $current_id );
+
+			if ( ! $session_had && ! $meta_removed ) {
+				return;
+			}
+
+			if ( $session_had ) {
+				$session->set( self::STORAGE_KEY, null );
+			}
+
+			$this->fire_forgotten( $current_id );
+		}
+
+		/**
+		 * Deletes `$user_id`'s stored chain from user meta, reporting whether it
+		 * was ACTUALLY deleted — the shared primitive behind both branches of
+		 * {@see self::forget()} and behind {@see self::erase_personal_data()}'s
+		 * honest `items_removed`/`items_retained` report.
+		 *
+		 * Returns `delete_user_meta()`'s OWN result, not a blanket `true` once a
+		 * row was found — Codex review, round 2: a fixed `true` here would make
+		 * {@see self::forget()} fire {@see self::ACTION_FORGOTTEN} and clear the
+		 * session, and {@see self::erase_personal_data()} report
+		 * `items_removed: true`, even on a failed database write that left the
+		 * row in place. On the very next request
+		 * {@see self::get_chain_for_logged_in_user()}'s meta fallback would then
+		 * repopulate the session from that still-present row — the exact
+		 * resurrection bug this whole forget-path exists to prevent — while
+		 * having ALREADY told a WP Privacy erasure requester their data was
+		 * gone.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id The user whose meta chain should be deleted.
+		 *
+		 * @return bool `true` only when a chain was stored AND
+		 *              `delete_user_meta()` reports it actually removed it;
+		 *              `false` when there was nothing to delete, OR when the
+		 *              delete itself failed.
+		 */
+		private function delete_meta_chain( int $user_id ): bool {
+			if ( '' === get_user_meta( $user_id, self::STORAGE_KEY, true ) ) {
+				return false;
+			}
+
+			return (bool) delete_user_meta( $user_id, self::STORAGE_KEY );
+		}
+
+		/**
+		 * The explicit-`$user_id` half of {@see self::forget()}, split out as
+		 * its own bool-returning primitive so {@see self::erase_personal_data()}
+		 * can report `items_removed`/`items_retained` honestly instead of
+		 * guessing from a pre-check that cannot see whether the delete itself
+		 * actually succeeded.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id The user whose meta chain should be forgotten.
+		 *
+		 * @return bool `true` when a chain was stored and is now actually gone;
+		 *              `false` when there was nothing to forget, or the delete
+		 *              itself failed.
+		 */
+		private function forget_user_meta( int $user_id ): bool {
+			$removed = $this->delete_meta_chain( $user_id );
+
+			if ( $removed ) {
+				$this->fire_forgotten( $user_id );
+			}
+
+			return $removed;
+		}
+
+		/**
+		 * Fires {@see self::ACTION_FORGOTTEN} — split out so {@see self::forget()}
+		 * can decide ONCE, after both stores it is allowed to touch have been
+		 * considered, whether anything was actually erased, rather than each
+		 * branch firing (and potentially double-firing) independently.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $user_id Forwarded to {@see self::ACTION_FORGOTTEN} as-is.
+		 *
+		 * @return void
+		 */
+		private function fire_forgotten( int $user_id ): void {
+			/** This action is documented above, on {@see self::ACTION_FORGOTTEN}. */
+			do_action( self::ACTION_FORGOTTEN, $user_id );
+		}
+
+		/**
+		 * WP Privacy "export personal data" callback for this store — see
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::register_data_exporters()}
+		 * for how this is wired onto the `wp_privacy_personal_data_exporters`
+		 * filter, and why the removal discipline that filter registration follows
+		 * matters.
+		 *
+		 * Reads user META directly (not {@see self::get_chain()}, which is
+		 * session-preferred for the CURRENT visitor) — an export request names an
+		 * arbitrary EMAIL address, not "the current visitor", so there is no
+		 * session to prefer; meta is this store's only address-independent,
+		 * authoritative source (spec: meta is authoritative for a logged-in
+		 * customer).
+		 *
+		 * Exports every level of the chain, not only `current` — a settlement the
+		 * customer picked before refining to an address is still THEIR data even
+		 * once superseded. `raw` — the opaque, provider-supplied payload behind
+		 * each {@see Location_Record} (see that class's own docblock: "never
+		 * inspected by the framework") — is exported too: it is the provider's
+		 * verbatim response for an address/settlement/region THE CUSTOMER
+		 * selected, so it can (and for most providers' address-level responses,
+		 * does) carry MORE identifying detail than the handful of fields this
+		 * store normalizes out of it (e.g. a provider's own internal
+		 * identifiers, unrestricted address strings, or geocoding metadata) —
+		 * confirmed by reading {@see Location_Record::from_array()}'s own
+		 * handling of `raw` ("stored and returned untouched, never inspected")
+		 * rather than assumed. A personal-data export must be complete, so
+		 * "probably nothing sensitive in there" is not a basis to omit it. `raw`
+		 * passes through {@see self::FILTER_EXPORT_RAW} first — see that
+		 * constant's own docblock for the redaction OBLIGATION it places on a
+		 * third-party provider author, since this framework has no way to know
+		 * what a provider it does not own actually put in there.
+		 *
+		 * Never paginates beyond page 1: one customer holds at most one chain
+		 * (a handful of levels), which always fits on a single page — every
+		 * later page honestly reports `done => true` with no data, the same
+		 * shape WordPress core's own exporters use once they run out of rows.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $email_address The requester's email address.
+		 * @param int    $page          1-based page number.
+		 *
+		 * @return array{data: array<int, array{group_id: string, group_label: string, group_description: string, item_id: string, data: array<int, array{name: string, value: mixed}>}>, done: bool}
+		 */
+		public function export_personal_data( string $email_address, int $page = 1 ): array {
+			if ( $page > 1 ) {
+				return [
+					'data' => [],
+					'done' => true,
+				];
+			}
+
+			$user = get_user_by( 'email', $email_address );
+
+			if ( false === $user ) {
+				return [
+					'data' => [],
+					'done' => true,
+				];
+			}
+
+			$user_id = (int) $user->ID;
+			$chain   = $this->parse_stored_chain( get_user_meta( $user_id, self::STORAGE_KEY, true ) );
+
+			if ( null === $chain ) {
+				return [
+					'data' => [],
+					'done' => true,
+				];
+			}
+
+			$items = [];
+
+			foreach ( $chain['records'] as $level => $record ) {
+				$fields = [
+					[
+						'name' => __( 'Ключ локации', 'woodev-plugin-framework' ),
+						'value' => $record->key(),
+					],
+					[
+						'name' => __( 'Уровень', 'woodev-plugin-framework' ),
+						'value' => $level,
+					],
+					[
+						'name' => __( 'Страна', 'woodev-plugin-framework' ),
+						'value' => $record->country(),
+					],
+					[
+						'name' => __( 'Название', 'woodev-plugin-framework' ),
+						'value' => $record->label(),
+					],
+					[
+						'name' => __( 'Сохранено', 'woodev-plugin-framework' ),
+						'value' => gmdate( 'Y-m-d H:i:s', $chain['saved_at'] ),
+					],
+					[
+						'name'  => __( 'Определено автоматически (не выбор покупателя)', 'woodev-plugin-framework' ),
+						'value' => $chain['implicit'] ? __( 'Да', 'woodev-plugin-framework' ) : __( 'Нет', 'woodev-plugin-framework' ),
+					],
+				];
+
+				/** This filter is documented above, on {@see self::FILTER_EXPORT_RAW}. */
+				$raw = apply_filters( self::FILTER_EXPORT_RAW, $record->raw(), $record, $user_id );
+
+				if ( null !== $raw ) {
+					$fields[] = [
+						'name'  => __( 'Необработанный ответ провайдера', 'woodev-plugin-framework' ),
+						'value' => wp_json_encode( $raw ),
+					];
+				}
+
+				$items[] = [
+					'group_id'          => 'woodev-customer-location',
+					'group_label'       => __( 'Локация покупателя', 'woodev-plugin-framework' ),
+					'group_description' => __( 'Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа.', 'woodev-plugin-framework' ),
+					'item_id'           => "woodev-customer-location-{$level}",
+					'data'              => $fields,
+				];
+			}
+
+			return [
+				'data' => $items,
+				'done' => true,
+			];
+		}
+
+		/**
+		 * WP Privacy "erase personal data" callback for this store — see
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::register_data_erasers()}
+		 * for how this is wired onto the `wp_privacy_personal_data_erasers`
+		 * filter.
+		 *
+		 * Erases via {@see self::forget_user_meta()} — {@see self::forget()}'s
+		 * own explicit-`$user_id` primitive — for the SAME meta-only,
+		 * session-untouched reason {@see self::forget()}'s own docblock
+		 * explains: this callback runs in wp-admin, against an arbitrary
+		 * customer's email, so `$this->session()` here would be the
+		 * ADMINISTRATOR's session, never the erased customer's. The customer's
+		 * own session copy (if any) is left alone; it lives in that customer's
+		 * own browser and is unreachable from this request. That is a
+		 * WordPress-privacy-mechanism limitation (an eraser has no way to reach
+		 * a different person's session), not an omission — the erasure is still
+		 * COMPLETE for every store this method can actually reach.
+		 *
+		 * `items_removed`/`items_retained` reflect what actually happened in
+		 * the database, not merely whether a row was found beforehand (Codex
+		 * review, round 2): a row that existed but whose `delete_user_meta()`
+		 * call itself failed is reported as RETAINED, with a message, rather
+		 * than as removed — see {@see self::delete_meta_chain()}'s own docblock
+		 * for why silently reporting success there would be worse than a
+		 * cosmetic bug.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 `items_removed`/`items_retained` now come from
+		 *              {@see self::forget_user_meta()}'s actual result, not a
+		 *              pre-check that could not see whether the delete itself
+		 *              succeeded (Codex review, round 2, must-fix 1).
+		 *
+		 * @param string $email_address The requester's email address.
+		 * @param int    $page          1-based page number.
+		 *
+		 * @return array{items_removed: bool, items_retained: bool, messages: string[], done: bool}
+		 */
+		public function erase_personal_data( string $email_address, int $page = 1 ): array {
+			if ( $page > 1 ) {
+				return self::eraser_result( false, false );
+			}
+
+			$user = get_user_by( 'email', $email_address );
+
+			if ( false === $user ) {
+				return self::eraser_result( false, false );
+			}
+
+			$user_id = (int) $user->ID;
+			$had     = '' !== get_user_meta( $user_id, self::STORAGE_KEY, true );
+			$removed = $this->forget_user_meta( $user_id );
+
+			return self::eraser_result( $removed, $had && ! $removed );
+		}
+
+		/**
+		 * Builds {@see self::erase_personal_data()}'s WP Privacy return shape —
+		 * `messages` carries a human-readable explanation whenever
+		 * `$items_retained` is `true`, since a bare `true` gives the customer no
+		 * indication of WHY their data is still there.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool $items_removed  Whether a chain was actually erased.
+		 * @param bool $items_retained Whether a chain existed but could not be
+		 *                             erased.
+		 *
+		 * @return array{items_removed: bool, items_retained: bool, messages: string[], done: bool}
+		 */
+		private static function eraser_result( bool $items_removed, bool $items_retained ): array {
+			return [
+				'items_removed'  => $items_removed,
+				'items_retained' => $items_retained,
+				'messages'       => $items_retained
+					? [ __( 'Не удалось удалить сохранённую локацию покупателя — запись осталась в базе данных.', 'woodev-plugin-framework' ) ]
+					: [],
+				'done'           => true,
+			];
 		}
 
 		/**

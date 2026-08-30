@@ -499,6 +499,65 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( 1, $login_hook_calls, 'two declaring plugins must still register the login migration only once' );
 	}
 
+	// -------------------------------------------------------------------------
+	// WP Privacy forget-path (issue #356 part 1): declare_needed() must wire
+	// Customer_Location_Store's exporter/eraser onto WordPress's own
+	// wp_privacy_personal_data_exporters/_erasers filters, bound to THIS
+	// registry singleton — not a throwaway Customer_Location_Store instance —
+	// so reset_for_tests()'s class+method removal can find and remove them
+	// exactly like it already does for collect()/register_rest() above.
+	// -------------------------------------------------------------------------
+
+	public function test_declare_needed_hooks_the_privacy_exporter_and_eraser_filters(): void {
+		Functions\when( 'add_action' )->justReturn( true );
+
+		$captured = [];
+		Functions\when( 'add_filter' )->alias(
+			static function ( $hook, $callback, $priority = 10, $args = 1 ) use ( &$captured ) {
+				$captured[] = [ $hook, $callback ];
+
+				return true;
+			}
+		);
+
+		$registry = Location_Provider_Registry::instance();
+		$registry->declare_needed();
+
+		$exporter_hooks = array_values( array_filter( $captured, static fn( $entry ) => 'wp_privacy_personal_data_exporters' === $entry[0] ) );
+		$eraser_hooks   = array_values( array_filter( $captured, static fn( $entry ) => 'wp_privacy_personal_data_erasers' === $entry[0] ) );
+
+		$this->assertCount( 1, $exporter_hooks );
+		$this->assertIsArray( $exporter_hooks[0][1], 'the callback must be an [ object, method ] pair' );
+		$this->assertSame( $registry, $exporter_hooks[0][1][0], 'bound to THIS registry singleton, not a throwaway instance — reset_for_tests() removes it by class+method' );
+		$this->assertSame( 'register_data_exporters', $exporter_hooks[0][1][1] );
+
+		$this->assertCount( 1, $eraser_hooks );
+		$this->assertSame( $registry, $eraser_hooks[0][1][0] );
+		$this->assertSame( 'register_data_erasers', $eraser_hooks[0][1][1] );
+	}
+
+	public function test_register_data_exporters_and_erasers_add_the_customer_location_entry(): void {
+		$registry = Location_Provider_Registry::instance();
+
+		$exporters = $registry->register_data_exporters( [] );
+		$erasers   = $registry->register_data_erasers( [] );
+
+		$this->assertArrayHasKey( 'woodev-customer-location', $exporters );
+		$this->assertSame( [ 'exporter_friendly_name', 'callback' ], array_keys( $exporters['woodev-customer-location'] ) );
+		$this->assertIsArray( $exporters['woodev-customer-location']['callback'] );
+		$this->assertInstanceOf( Customer_Location_Store::class, $exporters['woodev-customer-location']['callback'][0] );
+		$this->assertSame( 'export_personal_data', $exporters['woodev-customer-location']['callback'][1] );
+
+		$this->assertArrayHasKey( 'woodev-customer-location', $erasers );
+		$this->assertSame( [ 'eraser_friendly_name', 'callback' ], array_keys( $erasers['woodev-customer-location'] ) );
+		$this->assertIsArray( $erasers['woodev-customer-location']['callback'] );
+		$this->assertInstanceOf( Customer_Location_Store::class, $erasers['woodev-customer-location']['callback'][0] );
+		$this->assertSame( 'erase_personal_data', $erasers['woodev-customer-location']['callback'][1] );
+
+		// Existing entries from WordPress core / other plugins must be preserved.
+		$this->assertArrayHasKey( 'other-plugin', $registry->register_data_exporters( [ 'other-plugin' => [] ] ) );
+	}
+
 	public function test_gate_open_collects_the_bundled_and_filter_registered_providers(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [ new Fake_Location_Provider( 'acme', 'ACME' ) ] );

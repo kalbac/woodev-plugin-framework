@@ -211,6 +211,15 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 					return true;
 				}
 			);
+
+			Functions\when( 'delete_user_meta' )->alias(
+				static function ( $user_id, $key ) use ( &$store ) {
+					$had = isset( $store[ $user_id ][ $key ] );
+					unset( $store[ $user_id ][ $key ] );
+
+					return $had;
+				}
+			);
 		}
 
 		private function stub_guest(): void {
@@ -994,6 +1003,486 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			Actions\expectDone( 'woodev_customer_location_saved' )->never();
 
 			$store->set( $this->record( 'dadata:guess' ), true );
+		}
+
+		// -------------------------------------------------------------------
+		// forget() — WP privacy forget-path (issue #356 part 1)
+		// -------------------------------------------------------------------
+
+		public function test_forget_for_a_guest_clears_the_session_and_never_touches_meta(): void {
+			Functions\expect( 'delete_user_meta' )->never();
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$store->set( $this->record() );
+			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'sanity: something was stored' );
+
+			$store->forget();
+
+			$this->assertNull( $session->raw( self::SESSION_KEY ) );
+		}
+
+		public function test_forget_for_a_logged_in_visitor_clears_both_stores(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+			$this->stub_logged_in( 42 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$store->set( $this->record() );
+			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'sanity: session was written' );
+			$this->assertNotNull( $meta_store[42][ self::META_KEY ] ?? null, 'sanity: meta was written' );
+
+			$store->forget();
+
+			$this->assertNull( $session->raw( self::SESSION_KEY ) );
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[42], 'delete_user_meta() must actually remove the key, not write an empty value' );
+		}
+
+		/**
+		 * The `$user_id` branch is the WP Privacy "erase personal data" tool
+		 * running from wp-admin against someone else's account — the store this
+		 * request carries a session for belongs to the ADMINISTRATOR, not the
+		 * customer being erased, and clearing it would erase the wrong person's
+		 * location. This is the defense against that mistake, not a formality.
+		 */
+		public function test_forget_with_an_explicit_user_id_erases_only_that_users_meta_leaving_the_session_untouched(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record( 'dadata:admin-own-location' )->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'record'   => $this->record( 'dadata:erased-customer' )->to_array(),
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$session_before = $session->raw( self::SESSION_KEY );
+
+			$store->forget( 7 );
+
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[7] );
+			// A weaker "session is not null" check would stay green even if a
+			// guard were removed and the session got REWRITTEN to something else
+			// non-null — assert the stored value is the exact same one, untouched.
+			$this->assertSame( $session_before, $session->raw( self::SESSION_KEY ), 'the session belongs to a different person (the admin) and must be left byte-for-byte untouched' );
+		}
+
+		/**
+		 * {@see Customer_Location_Store::get_chain_for_logged_in_user()} falls
+		 * back to meta on an empty session AND repopulates the session from it —
+		 * so a naive session-only clear does NOT forget anything for a logged-in
+		 * customer; the very next read resurrects it. This is the exact bug
+		 * forget() exists to avoid.
+		 */
+		public function test_a_session_only_clear_is_resurrected_by_the_meta_fallback_but_forget_clears_both(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+			$this->stub_logged_in( 42 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$store->set( $this->record( 'dadata:mine' ) );
+
+			// Naive session-only clear — NOT what forget() does.
+			$session->clear( self::SESSION_KEY );
+
+			$this->assertNotNull(
+				$store->get(),
+				'precondition: the meta fallback resurrects the chain after a session-only clear'
+			);
+			$this->assertSame( 'dadata:mine', $store->get()['record']->key() );
+
+			// Re-seed, then use the real forget() path.
+			$store->set( $this->record( 'dadata:mine' ) );
+			$store->forget();
+
+			$this->assertNull( $store->get(), 'forget() must clear BOTH stores so meta cannot resurrect the chain' );
+		}
+
+		public function test_forget_fires_the_forgotten_action_once_when_something_is_removed(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$store->set( $this->record() );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->once();
+
+			$store->forget();
+		}
+
+		public function test_forget_does_not_fire_the_forgotten_action_when_nothing_was_stored(): void {
+			$this->stub_guest();
+
+			$store = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->never();
+
+			$store->forget();
+		}
+
+		public function test_forget_with_user_id_fires_the_forgotten_action_only_when_meta_existed(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'record'   => $this->record()->to_array(),
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$store = new Customer_Location_Store_Probe( null );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->once();
+
+			$store->forget( 7 );
+		}
+
+		public function test_forget_with_user_id_is_a_noop_when_there_is_no_meta(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\expect( 'delete_user_meta' )->never();
+
+			$store = new Customer_Location_Store_Probe( null );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->never();
+
+			$store->forget( 999 );
+		}
+
+		/**
+		 * Codex review, round 2, must-fix 1: a chain existing is not the same
+		 * fact as it having actually been deleted. If `delete_user_meta()`
+		 * itself fails (a database write error, not "nothing to delete"),
+		 * {@see Customer_Location_Store::ACTION_FORGOTTEN} must NOT fire —
+		 * firing it here would be exactly the false "your data is gone" signal
+		 * the review caught.
+		 */
+		public function test_forget_with_user_id_does_not_fire_the_forgotten_action_when_the_meta_delete_itself_fails(): void {
+			Functions\when( 'get_user_meta' )->justReturn(
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
+			Functions\when( 'delete_user_meta' )->justReturn( false );
+
+			$store = new Customer_Location_Store_Probe( null );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->never();
+
+			$store->forget( 7 );
+		}
+
+		// -------------------------------------------------------------------
+		// export_personal_data() — WP Privacy exporter contract
+		// -------------------------------------------------------------------
+
+		public function test_export_personal_data_returns_the_wp_contract_shape_with_every_chain_level(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->alias(
+				static function ( $field, $value ) {
+					return 'email' === $field && 'customer@example.com' === $value ? (object) [ 'ID' => 7 ] : false;
+				}
+			);
+
+			$settlement = $this->record( 'dadata:settlement-1', Location_Record::LEVEL_SETTLEMENT );
+			$address    = $this->record_with_ancestors( 'dadata:address-1', Location_Record::LEVEL_ADDRESS, [ 'dadata:settlement-1' ] );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [
+					Location_Record::LEVEL_SETTLEMENT => $settlement->to_array(),
+					Location_Record::LEVEL_ADDRESS    => $address->to_array(),
+				],
+				'current'  => Location_Record::LEVEL_ADDRESS,
+				'implicit' => false,
+				'saved_at' => 12345,
+			];
+
+			$store  = new Customer_Location_Store();
+			$result = $store->export_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['done'] );
+			$this->assertCount( 2, $result['data'], 'both chain levels must be exported, not only current' );
+
+			foreach ( $result['data'] as $item ) {
+				$this->assertArrayHasKey( 'group_id', $item );
+				$this->assertArrayHasKey( 'group_label', $item );
+				$this->assertArrayHasKey( 'group_description', $item );
+				$this->assertArrayHasKey( 'item_id', $item );
+				$this->assertIsArray( $item['data'] );
+
+				foreach ( $item['data'] as $field ) {
+					$this->assertArrayHasKey( 'name', $field );
+					$this->assertArrayHasKey( 'value', $field );
+				}
+			}
+		}
+
+		public function test_export_personal_data_includes_the_raw_provider_payload_when_present(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value ) );
+
+			$record_with_raw = Location_Record::from_array(
+				[
+					'key'         => 'dadata:1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'raw'         => [ 'unrestricted_value' => 'г Москва' ],
+				]
+			);
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $record_with_raw->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$store  = new Customer_Location_Store();
+			$result = $store->export_personal_data( 'customer@example.com' );
+
+			$raw_field = null;
+
+			foreach ( $result['data'][0]['data'] as $field ) {
+				if ( is_string( $field['value'] ) && false !== strpos( $field['value'], 'unrestricted_value' ) ) {
+					$raw_field = $field;
+				}
+			}
+
+			$this->assertNotNull( $raw_field, 'the raw provider payload must be exported when present' );
+		}
+
+		/**
+		 * {@see Customer_Location_Store::FILTER_EXPORT_RAW} — a third-party
+		 * provider is a PUBLIC extension point (`Location_Provider`), so this
+		 * framework cannot vouch for what a provider's own `raw` response
+		 * carries; the seam exists so a provider author with a genuinely
+		 * sensitive payload can redact it before export.
+		 */
+		public function test_export_personal_data_passes_raw_record_and_user_id_to_the_export_raw_filter(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+			Functions\when( 'wp_json_encode' )->alias( static fn( $value ) => json_encode( $value ) );
+
+			$captured = [];
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) use ( &$captured ) {
+					if ( Customer_Location_Store::FILTER_EXPORT_RAW === $hook ) {
+						$captured[] = array_merge( [ $value ], $args );
+					}
+
+					return $value;
+				}
+			);
+
+			$record_with_raw = Location_Record::from_array(
+				[
+					'key'         => 'dadata:1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'raw'         => [ 'unrestricted_value' => 'г Москва' ],
+				]
+			);
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $record_with_raw->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$store = new Customer_Location_Store();
+			$store->export_personal_data( 'customer@example.com' );
+
+			$this->assertCount( 1, $captured, 'the filter must run exactly once for the one raw-bearing record' );
+			$this->assertSame( [ 'unrestricted_value' => 'г Москва' ], $captured[0][0], 'the raw payload itself must be the filtered value' );
+			$this->assertInstanceOf( Location_Record::class, $captured[0][1] );
+			$this->assertSame( 'dadata:1', $captured[0][1]->key(), 'the record raw came from must be passed for context' );
+			$this->assertSame( 7, $captured[0][2], 'the resolved user id must be passed for context' );
+		}
+
+		/**
+		 * A provider author who redacts a secret out of `raw` by returning `null`
+		 * from {@see Customer_Location_Store::FILTER_EXPORT_RAW} must not have
+		 * that secret leak through as an empty-but-present field — the WHOLE
+		 * raw field must be omitted from the export.
+		 */
+		public function test_export_personal_data_omits_the_raw_field_when_the_export_raw_filter_redacts_it_to_null(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+			Functions\when(
+				'apply_filters'
+			)->alias(
+				static function ( $hook, $value, ...$args ) {
+					return Customer_Location_Store::FILTER_EXPORT_RAW === $hook ? null : $value;
+				}
+			);
+
+			$record_with_raw = Location_Record::from_array(
+				[
+					'key'         => 'dadata:1',
+					'provider_id' => 'dadata',
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'raw'         => [ 'secret_token' => 'abc123' ],
+				]
+			);
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $record_with_raw->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$store  = new Customer_Location_Store();
+			$result = $store->export_personal_data( 'customer@example.com' );
+
+			// 6 base fields (key, level, country, label, saved_at, implicit) and
+			// NO 7th raw field — a redacted-to-null raw must vanish entirely, not
+			// merely become an empty value.
+			$this->assertCount( 6, $result['data'][0]['data'] );
+		}
+
+		public function test_export_personal_data_page_two_returns_an_empty_done_response_without_touching_meta(): void {
+			Functions\expect( 'get_user_by' )->never();
+			Functions\expect( 'get_user_meta' )->never();
+
+			$store  = new Customer_Location_Store();
+			$result = $store->export_personal_data( 'customer@example.com', 2 );
+
+			$this->assertSame( [], $result['data'] );
+			$this->assertTrue( $result['done'] );
+		}
+
+		public function test_export_personal_data_for_an_unknown_email_returns_an_empty_done_response(): void {
+			Functions\when( 'get_user_by' )->justReturn( false );
+
+			$store  = new Customer_Location_Store();
+			$result = $store->export_personal_data( 'nobody@example.com' );
+
+			$this->assertSame( [], $result['data'] );
+			$this->assertTrue( $result['done'] );
+		}
+
+		// -------------------------------------------------------------------
+		// erase_personal_data() — WP Privacy eraser contract
+		// -------------------------------------------------------------------
+
+		public function test_erase_personal_data_reports_items_removed_true_when_a_chain_existed(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'record'   => $this->record()->to_array(),
+				'implicit' => false,
+				'saved_at' => 1,
+			];
+
+			$store  = new Customer_Location_Store();
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertTrue( $result['items_removed'] );
+			$this->assertTrue( $result['done'] );
+			$this->assertArrayNotHasKey( self::META_KEY, $meta_store[7] );
+		}
+
+		public function test_erase_personal_data_reports_items_removed_false_when_there_was_nothing_to_erase(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+
+			$store  = new Customer_Location_Store();
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertFalse( $result['items_removed'] );
+			$this->assertFalse( $result['items_retained'] );
+			$this->assertSame( [], $result['messages'] );
+			$this->assertTrue( $result['done'] );
+		}
+
+		/**
+		 * Codex review, round 2, must-fix 1: a chain that EXISTED but whose
+		 * `delete_user_meta()` call itself failed must be reported as RETAINED,
+		 * with an explanatory message — never as removed. Reporting success on a
+		 * failed database write is a false claim to a privacy-erasure requester
+		 * AND leaves the row to be resurrected into the session on the next
+		 * logged-in read.
+		 */
+		public function test_erase_personal_data_reports_items_retained_when_the_meta_delete_itself_fails(): void {
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+			Functions\when( 'get_user_meta' )->justReturn(
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => 1,
+				]
+			);
+			Functions\when( 'delete_user_meta' )->justReturn( false );
+
+			$store  = new Customer_Location_Store();
+			$result = $store->erase_personal_data( 'customer@example.com' );
+
+			$this->assertFalse( $result['items_removed'] );
+			$this->assertTrue( $result['items_retained'] );
+			$this->assertNotEmpty( $result['messages'], 'a retained row must carry a human-readable explanation' );
+			$this->assertTrue( $result['done'] );
+		}
+
+		public function test_erase_personal_data_page_two_returns_an_empty_done_response_without_touching_meta(): void {
+			Functions\expect( 'get_user_by' )->never();
+			Functions\expect( 'get_user_meta' )->never();
+			Functions\expect( 'delete_user_meta' )->never();
+
+			$store  = new Customer_Location_Store();
+			$result = $store->erase_personal_data( 'customer@example.com', 2 );
+
+			$this->assertFalse( $result['items_removed'] );
+			$this->assertFalse( $result['items_retained'] );
+			$this->assertTrue( $result['done'] );
+		}
+
+		public function test_erase_personal_data_for_an_unknown_email_reports_items_removed_false(): void {
+			Functions\when( 'get_user_by' )->justReturn( false );
+
+			$store  = new Customer_Location_Store();
+			$result = $store->erase_personal_data( 'nobody@example.com' );
+
+			$this->assertFalse( $result['items_removed'] );
+			$this->assertTrue( $result['done'] );
 		}
 
 		/**
