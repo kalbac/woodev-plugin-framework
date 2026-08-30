@@ -53,15 +53,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * sharing a name under different paths coexist instead of colliding.
 		 *
 		 * Each leaf entry is `[ 'value' => string, 'expires_at' => ?int ]`; a null
-		 * `expires_at` marks a session cookie that never expires on its own. This
-		 * nested shape is internal bookkeeping only — every public hook payload
-		 * for this jar is flattened ({@see self::select_best_challenge_redirect_cookie_per_name()},
-		 * {@see self::challenge_redirect_cookie_values()}) to a plain `name => value`
-		 * map, one entry per name, preferring the longer (more specific) path on
-		 * a collision per RFC 6265 §5.4's ordering — lossy by design.
+		 * `expires_at` marks a session cookie that never expires on its own.
+		 *
+		 * This exact nested shape — `name => [ path => [ 'value' => ..., 'expires_at' => ... ] ]`
+		 * — is ALSO the public payload both challenge-cookie hooks carry (see
+		 * {@see self::remember_challenge_redirect_cookies()} and
+		 * {@see self::get_challenge_redirect_cookies()} for the full contract and
+		 * an example). A flat `name => value` map cannot represent Path, so a
+		 * listener that persisted the flat shape and restored it later would
+		 * replay a `/a`-scoped cookie on `/b` — this jar's expiry/deletion
+		 * bookkeeping is not incidental detail, it is exactly what a persistence
+		 * hook exists to round-trip.
 		 *
 		 * @since 2.0.2 keyed by origin; entries carry expiry bookkeeping.
 		 * @since 2.0.2 keyed by name then Path, so same-name/different-path cookies coexist.
+		 * @since 2.0.2 the hook payload changed a second time, from a flattened
+		 *              `name => value` map back to this structured shape, once
+		 *              Path keying made the flat map lossy for persistence.
 		 *
 		 * @var array<string, array<string, array<string, array{value: string, expires_at: ?int}>>>
 		 */
@@ -553,45 +561,133 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Picks one entry per cookie name out of the nested name → path → entry
-		 * jar shape, optionally restricted to paths that path-match a request
-		 * path (RFC 6265 §5.1.4); `null` selects across every stored path
-		 * instead. On any remaining collision the LONGER (more specific) path
-		 * wins, per the ordering RFC 6265 §5.4 gives more-specific paths.
+		 * Selects every jar entry whose Path path-matches the given request path,
+		 * in RFC 6265 §5.4 order: longest (most specific) Path first, ties broken
+		 * by the order entries were added to the jar (this mechanism's
+		 * approximation of "earlier creation time", since it does not track real
+		 * timestamps for that). A cookie name MAY repeat — that is legal and, per
+		 * §5.4, meaningful: `shared=root; Path=/` and `shared=specific; Path=/a`
+		 * both path-match a request to `/a/x` and both belong in the header, the
+		 * `/a` one first.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string, array<string, array{value: string, expires_at: ?int}>> $entries_by_name Jar entries for one origin.
-		 * @param string|null                                                          $request_path    Restrict to path-matching entries, or null for every path.
-		 * @return array<string, array{value: string, expires_at: ?int}>
+		 * @param string                                                               $request_path    Path of the request the cookies will be sent on.
+		 * @return array<int, array{name: string, value: string}>
 		 */
-		private static function select_best_challenge_redirect_cookie_per_name( array $entries_by_name, ?string $request_path ): array {
+		private static function select_matching_challenge_redirect_cookies( array $entries_by_name, string $request_path ): array {
 
-			$selected = [];
+			$matches = [];
 
 			foreach ( $entries_by_name as $name => $entries_by_path ) {
-				$best_path  = null;
-				$best_entry = null;
-
 				foreach ( $entries_by_path as $cookie_path => $entry ) {
 					$cookie_path = (string) $cookie_path;
 
-					if ( null !== $request_path && ! self::cookie_path_matches_request_path( $cookie_path, $request_path ) ) {
-						continue;
+					if ( self::cookie_path_matches_request_path( $cookie_path, $request_path ) ) {
+						$matches[] = [
+							'name'  => $name,
+							'value' => $entry['value'],
+							'path'  => $cookie_path,
+							'order' => count( $matches ),
+						];
 					}
-
-					if ( null === $best_path || strlen( $cookie_path ) > strlen( $best_path ) ) {
-						$best_path  = $cookie_path;
-						$best_entry = $entry;
-					}
-				}
-
-				if ( null !== $best_entry ) {
-					$selected[ $name ] = $best_entry;
 				}
 			}
 
-			return $selected;
+			usort(
+				$matches,
+				static function ( array $a, array $b ): int {
+					$by_path_length = strlen( $b['path'] ) <=> strlen( $a['path'] );
+
+					return 0 !== $by_path_length ? $by_path_length : $a['order'] <=> $b['order'];
+				}
+			);
+
+			return array_map(
+				static function ( array $match ): array {
+					return [
+						'name'  => $match['name'],
+						'value' => $match['value'],
+					];
+				},
+				$matches
+			);
+		}
+
+		/**
+		 * Validates and sanitises an already-array `..._api_challenge_redirect_cookies`
+		 * filter return value against the documented jar shape (see {@see
+		 * self::remember_challenge_redirect_cookies()}), discarding any name,
+		 * Path, or entry that does not match it rather than trusting arbitrary
+		 * filter output — the caller falls back to the internal jar outright
+		 * when the filter did not even return an array. `expires_at` accepts
+		 * `int`, `float` (PHP promotes `$now + $max_age` to float once it
+		 * exceeds `PHP_INT_MAX`, for an absurdly long but syntactically valid
+		 * Max-Age — a safe far-future cap, not a value this jar itself would
+		 * ever reject), or `null`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<mixed, mixed> $cookies Filter return value, already known to be an array.
+		 * @return array<string, array<string, array{value: string, expires_at: int|float|null}>>
+		 */
+		private static function sanitize_challenge_redirect_cookie_jar( array $cookies ): array {
+
+			$sanitized = [];
+
+			foreach ( $cookies as $name => $entries_by_path ) {
+				if ( ! is_string( $name ) || '' === $name || ! is_array( $entries_by_path ) ) {
+					continue;
+				}
+
+				foreach ( $entries_by_path as $path => $entry ) {
+					$expires_at_is_valid = is_array( $entry ) && array_key_exists( 'expires_at', $entry )
+						&& ( null === $entry['expires_at'] || is_int( $entry['expires_at'] ) || is_float( $entry['expires_at'] ) );
+
+					if (
+						! is_string( $path ) || '' === $path || '/' !== $path[0]
+						|| ! $expires_at_is_valid
+						|| ! isset( $entry['value'] ) || ! is_string( $entry['value'] )
+					) {
+						continue;
+					}
+
+					$sanitized[ $name ][ $path ] = [
+						'value'      => $entry['value'],
+						'expires_at' => $entry['expires_at'],
+					];
+				}
+			}
+
+			return $sanitized;
+		}
+
+		/**
+		 * Converts a flat `name => value` map (as parsed from a literal Cookie
+		 * header, {@see self::parse_challenge_redirect_cookies()}) into the same
+		 * `[ 'name' => ..., 'value' => ... ]` pair shape
+		 * {@see self::select_matching_challenge_redirect_cookies()} returns, so
+		 * both can be merged and built into one header by
+		 * {@see self::build_challenge_redirect_cookie_header()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string> $cookies Cookie name/value map.
+		 * @return array<int, array{name: string, value: string}>
+		 */
+		private static function challenge_redirect_cookie_pairs_from_map( array $cookies ): array {
+
+			$pairs = [];
+
+			foreach ( $cookies as $name => $value ) {
+				$pairs[] = [
+					'name'  => $name,
+					'value' => $value,
+				];
+			}
+
+			return $pairs;
 		}
 
 		/**
@@ -625,8 +721,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Adds the challenge-cookie jar for the request's origin to its headers.
 		 *
 		 * A cookie the caller explicitly set on the request already carries the
-		 * caller's own intent for that name, so it takes precedence over a
-		 * same-named cookie remembered from a previous challenge response.
+		 * caller's own intent for that NAME, so it suppresses every jar entry of
+		 * that name (at any Path) rather than being merged alongside them.
 		 *
 		 * @since 2.0.2
 		 *
@@ -653,7 +749,18 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				}
 			}
 
-			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $cookies, $existing_cookies ) );
+			$jar_cookies = array_values(
+				array_filter(
+					$cookies,
+					static function ( array $cookie ) use ( $existing_cookies ): bool {
+						return ! array_key_exists( $cookie['name'], $existing_cookies );
+					}
+				)
+			);
+
+			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header(
+				array_merge( $jar_cookies, self::challenge_redirect_cookie_pairs_from_map( $existing_cookies ) )
+			);
 
 			return $request_args;
 		}
@@ -663,6 +770,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * origin the request went to. Fires the `..._updated` action only when the
 		 * origin's jar actually changed (including a name removed via {@see
 		 * self::parse_challenge_redirect_set_cookie()}).
+		 *
+		 * The action's second argument is the FULL updated jar for the origin —
+		 * `name => [ path => [ 'value' => string, 'expires_at' => ?int ] ]` —
+		 * the same nested shape {@see self::$challenge_redirect_cookies} stores
+		 * internally. For example, after `Set-Cookie: session=abc` (no Path, from
+		 * a request to `/api/orders`) and `Set-Cookie: clearance=xyz; Path=/challenge`:
+		 *
+		 *     [
+		 *         'session'   => [ '/api' => [ 'value' => 'abc', 'expires_at' => null ] ],
+		 *         'clearance' => [ '/challenge' => [ 'value' => 'xyz', 'expires_at' => 1700003600 ] ],
+		 *     ]
+		 *
+		 * This is the ONLY way a challenge cookie survives past the current PHP
+		 * request, so a listener that wants persistence must store this payload
+		 * verbatim (or something it can restore to the same shape) and hand it
+		 * back through the `..._api_challenge_redirect_cookies` filter — see
+		 * {@see self::get_challenge_redirect_cookies()}.
 		 *
 		 * @since 2.0.2
 		 *
@@ -717,22 +841,33 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$this->challenge_redirect_cookies[ $origin ] = $updated_cookies;
 
-			do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', self::challenge_redirect_cookie_values( self::select_best_challenge_redirect_cookie_per_name( $updated_cookies, null ) ), $origin, $this );
+			do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', $updated_cookies, $origin, $this );
 		}
 
 		/**
-		 * Gets the challenge-cookie jar for one origin restricted to the cookies
-		 * whose Path path-matches the given request path (RFC 6265 §5.1.4),
-		 * allowing a client to restore persisted cookies for the request it is
-		 * about to make. Evicts any entry whose expiry has passed before
-		 * returning, even if no response has arrived since to fold the eviction
-		 * in via {@see self::remember_challenge_redirect_cookies()}.
+		 * Gets every challenge-cookie jar entry for one origin whose Path
+		 * path-matches the given request path (RFC 6265 §5.1.4), in the ORDER a
+		 * real Cookie header requires — longest (most specific) Path first,
+		 * duplicate names allowed — allowing a client to restore persisted
+		 * cookies for the request it is about to make.
+		 *
+		 * The `..._api_challenge_redirect_cookies` filter receives, and must
+		 * return, the SAME structured per-origin shape the `..._updated` action
+		 * fires with (see {@see self::remember_challenge_redirect_cookies()} for
+		 * the shape and an example) — not the flat `name => value` map this hook
+		 * carried earlier in this same PR: a flat map cannot represent Path, so
+		 * restoring one could replay a `/a`-scoped cookie on `/b`. A non-array
+		 * return, or an individual name/path/entry that does not match the
+		 * documented shape, is ignored rather than trusted — the internal jar is
+		 * used in its place. A restored entry is subject to the same path
+		 * matching and expiry eviction as one learned from a live response, so a
+		 * restored cookie whose deadline has already passed is never sent.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $origin       Origin (scheme + host + effective port) the request is going to.
 		 * @param string $request_path Path of the request the returned cookies will be sent on.
-		 * @return array<string, string>
+		 * @return array<int, array{name: string, value: string}>
 		 */
 		private function get_challenge_redirect_cookies( string $origin, string $request_path ): array {
 
@@ -744,11 +879,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$this->challenge_redirect_cookies[ $origin ] = $cookies_for_origin;
 			}
 
-			$path_matching_cookies = self::challenge_redirect_cookie_values( self::select_best_challenge_redirect_cookie_per_name( $cookies_for_origin, $request_path ) );
+			$filtered = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $cookies_for_origin, $origin, $this );
 
-			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $path_matching_cookies, $origin, $this );
+			$jar = is_array( $filtered )
+				? self::evict_expired_challenge_redirect_cookies( self::sanitize_challenge_redirect_cookie_jar( $filtered ), $now )
+				: $cookies_for_origin;
 
-			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : $path_matching_cookies;
+			return self::select_matching_challenge_redirect_cookies( $jar, $request_path );
 		}
 
 		/**
@@ -896,26 +1033,6 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Reduces internal jar entries to the plain `name => value` map every
-		 * challenge-cookie hook payload uses; expiry bookkeeping never leaks past
-		 * this boundary.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param array<string, array{value: string, expires_at: ?int}> $entries Jar entries.
-		 * @return array<string, string>
-		 */
-		private static function challenge_redirect_cookie_values( array $entries ): array {
-
-			return array_map(
-				static function ( array $entry ): string {
-					return $entry['value'];
-				},
-				$entries
-			);
-		}
-
-		/**
 		 * Current Unix timestamp used to evaluate challenge-cookie expiry.
 		 *
 		 * Overridable so tests can simulate the passage of time without sleeping.
@@ -929,19 +1046,22 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Builds a Cookie request header from a name/value jar.
+		 * Builds a Cookie request header from an ORDERED list of name/value
+		 * pairs. A list, not a map: RFC 6265 §5.4 allows the same name to repeat
+		 * with a different value for a different matching Path, and a map could
+		 * not represent that.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string, string> $cookies Cookie jar.
+		 * @param array<int, array{name: string, value: string}> $cookies Cookie name/value pairs, in send order.
 		 * @return string
 		 */
 		private static function build_challenge_redirect_cookie_header( array $cookies ): string {
 
 			$parts = [];
 
-			foreach ( $cookies as $name => $value ) {
-				$parts[] = $name . '=' . $value;
+			foreach ( $cookies as $cookie ) {
+				$parts[] = $cookie['name'] . '=' . $cookie['value'];
 			}
 
 			return implode( '; ', $parts );

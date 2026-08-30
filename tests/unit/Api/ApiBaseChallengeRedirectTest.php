@@ -745,4 +745,125 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 
 		$this->assertSame( 'https://h/x/a//b', $api->calls[1]['uri'] );
 	}
+
+	/** @return void */
+	public function test_overlapping_same_name_cookies_are_all_sent_longest_path_first(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'shared=root; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'shared=specific; Path=/a' ] ),
+			$this->response( 200 ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://h/x', $this->request_args() );
+		$api->request_for_test( 'https://h/a', $this->request_args() );
+		$api->request_for_test( 'https://h/a/x', $this->request_args() );
+		$api->request_for_test( 'https://h/b', $this->request_args() );
+
+		$this->assertSame( 'shared=specific; shared=root', $api->calls[2]['args']['headers']['Cookie'] );
+		$this->assertSame( 'shared=root', $api->calls[3]['args']['headers']['Cookie'] );
+	}
+
+	/**
+	 * Exercises the full persistence contract: exports the structured jar
+	 * through the `..._updated` action, restores it into a FRESH instance
+	 * through the `..._cookies` filter, and proves the restore is not a naive
+	 * pass-through — it is path-scoped per request (`/a/x` gets both the `/a`
+	 * and `/` cookie, longest path first; `/b` gets only `/`) and a restored
+	 * entry whose deadline has passed by the time of the LATER restore (a
+	 * different moment in wall-clock time than the original export — the
+	 * entire point of persistence) is evicted rather than sent.
+	 *
+	 * @return void
+	 */
+	public function test_the_persistence_hooks_round_trip_path_and_evict_a_restored_expired_entry(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->now       = 1_700_000_000;
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => [ 'root=r; Path=/', 'narrow=n; Path=/a', 'stale=s; Max-Age=1' ] ] ),
+		];
+
+		$persisted = null;
+		Functions\when( 'do_action' )->alias( static function ( $tag, $cookies = null ) use ( &$persisted ) {
+			if ( 'woodev_challenge-test_api_challenge_redirect_cookies_updated' === $tag ) {
+				$persisted = $cookies;
+			}
+		} );
+
+		$api->request_for_test( 'https://h/api', $this->request_args() );
+
+		$this->assertNotNull( $persisted );
+		$this->assertArrayHasKey( 'stale', $persisted );
+
+		$fresh      = new Testable_Api_Base_With_Challenge_Redirects();
+		$fresh->now = $api->now + 10;
+
+		Functions\when( 'apply_filters' )->alias( static function ( $tag, $value = null ) use ( $persisted ) {
+			return 'woodev_challenge-test_api_challenge_redirect_cookies' === $tag ? $persisted : $value;
+		} );
+
+		$fresh->responses = [ $this->response( 200 ), $this->response( 200 ) ];
+
+		$fresh->request_for_test( 'https://h/a/x', $this->request_args() );
+		$fresh->request_for_test( 'https://h/b', $this->request_args() );
+
+		$this->assertSame( 'narrow=n; root=r', $fresh->calls[0]['args']['headers']['Cookie'] );
+		$this->assertSame( 'root=r', $fresh->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/**
+	 * Pin, not a defect: a digit-only Max-Age far larger than any realistic
+	 * value is still syntactically valid and is accepted as a far-future
+	 * deadline, not misread as a deletion. This deliberately stays within
+	 * PHP_INT_MAX — an actual overflow makes PHP's `(int)` cast emit "not
+	 * representable as an int", which this suite's `failOnWarning="true"`
+	 * turns into a test failure, so exercising the literal overflow path
+	 * cannot be done here without changing production code, which this pin
+	 * does not do.
+	 *
+	 * @return void
+	 */
+	public function test_max_age_as_a_large_but_in_range_integer_is_a_far_future_deadline_not_a_deletion(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/; Max-Age=99999999999' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_max_age_of_negative_one_deletes_the_cookie_immediately(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=stale; Path=/; Max-Age=-1' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[2]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_max_age_with_an_empty_value_is_ignored_and_the_cookie_becomes_a_session_cookie(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/; Max-Age=' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
 }
