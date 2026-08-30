@@ -179,6 +179,35 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		private const META_KEY    = 'woodev_customer_location';
 
 		/**
+		 * `Customer_Location_Store::get_chain()` now calls its own
+		 * `retention_ttl_seconds()` on EVERY read (issue #356 part 3), which reads
+		 * `get_option()` through WooCommerce's `wc_parse_relative_date_option()` —
+		 * same "stub it once, globally" discipline `LocationServiceTest`'s own
+		 * `setUp()` already established for `wc_get_base_location()` (#346):
+		 * defaulting to "not configured" here keeps every OTHER test in this file,
+		 * which is not about retention, from having to know about a WooCommerce
+		 * option it never set. The retention-specific tests below re-stub both
+		 * per scenario, overriding this default.
+		 */
+		protected function setUp(): void {
+			parent::setUp();
+
+			Functions\when( 'get_option' )->justReturn( null );
+
+			// test_get_chain_never_fatals_when_woocommerce_is_unavailable() below is
+			// the ONE test in this suite that must observe
+			// function_exists( 'wc_parse_relative_date_option' ) === false for
+			// real (Codex review, round 1, must-fix 3) — stubbing it here, even to
+			// a safe default, would DECLARE the function via Brain Monkey/Patchwork
+			// and defeat that test's entire point (a function, once declared in a
+			// PHPUnit process, cannot be un-declared — that test runs
+			// @runInSeparateProcess for exactly this reason; see its own docblock).
+			if ( 'test_get_chain_never_fatals_when_woocommerce_is_unavailable' !== $this->getName() ) {
+				Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
+			}
+		}
+
+		/**
 		 * Simple in-memory user-meta fake, keyed [user_id][meta_key] => value —
 		 * enough to stand in for `get_user_meta()`/`update_user_meta()` without a
 		 * real WordPress install.
@@ -932,6 +961,411 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$this->assertIsInt( $store->get()['saved_at'] );
 			$this->assertGreaterThan( 0, $store->get()['saved_at'] );
+		}
+
+		// -------------------------------------------------------------------
+		// Retention TTL (issue #356 part 3) — lazy expiry by saved_at
+		// -------------------------------------------------------------------
+
+		/**
+		 * Stubs `apply_filters()` so ONLY {@see Customer_Location_Store::FILTER_TTL_SECONDS}
+		 * is overridden to `$ttl_seconds`; every other hook passes its value through
+		 * unchanged, matching real WordPress with nothing else hooked.
+		 *
+		 * @param int|null $ttl_seconds Value the filter should answer.
+		 *
+		 * @return void
+		 */
+		private function stub_ttl_filter( ?int $ttl_seconds ): void {
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) use ( $ttl_seconds ) {
+					return Customer_Location_Store::FILTER_TTL_SECONDS === $hook ? $ttl_seconds : $value;
+				}
+			);
+		}
+
+		public function test_a_chain_within_the_ttl_is_read_normally_and_nothing_is_deleted(): void {
+			$this->stub_guest();
+			$this->stub_ttl_filter( 3600 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - 10,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNotNull( $store->get_chain(), 'a chain well within the TTL must still read back' );
+			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'reading a fresh chain must not touch storage' );
+		}
+
+		public function test_a_chain_older_than_the_ttl_reads_as_null_and_is_erased_from_the_guest_session(): void {
+			$this->stub_guest();
+			$this->stub_ttl_filter( 10 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - 3600,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			Actions\expectDone( 'woodev_customer_location_forgotten' )->once();
+
+			$this->assertNull( $store->get_chain(), 'an expired chain must read back as though it were never stored' );
+			$this->assertNull( $session->raw( self::SESSION_KEY ), 'and must be PHYSICALLY erased from the session, not merely hidden from this read' );
+		}
+
+		public function test_a_chain_older_than_the_ttl_reads_as_null_and_is_erased_from_both_stores_for_a_logged_in_customer(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+			$this->stub_logged_in( 42 );
+			$this->stub_ttl_filter( 10 );
+
+			$meta_store[42][ self::META_KEY ] = [
+				'record'   => $this->record()->to_array(),
+				'implicit' => false,
+				'saved_at' => time() - 3600,
+			];
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$store   = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNull( $store->get_chain(), 'an expired chain must read back as though it were never stored' );
+			$this->assertArrayNotHasKey(
+				self::META_KEY,
+				$meta_store[42],
+				'the expired chain must be PHYSICALLY deleted from user meta, not merely hidden from this read'
+			);
+			$this->assertNull(
+				$session->raw( self::SESSION_KEY ),
+				'the meta fallback repopulates the session before expiry is noticed — the session copy must be erased too'
+			);
+		}
+
+		/**
+		 * The defense against this task's main failure mode: with no threshold
+		 * configured anywhere (store default, unrigged by the setUp() stub above),
+		 * NOTHING may expire — no matter how old the chain is. A framework that
+		 * silently invented a retention policy the merchant never chose would be
+		 * exactly the mistake this test exists to catch.
+		 */
+		public function test_with_no_ttl_configured_nothing_ever_expires_no_matter_how_old(): void {
+			$this->stub_guest();
+			// No stub_ttl_filter() call — apply_filters() passes the derived `null`
+			// straight through, exactly as with nothing hooked in real WordPress.
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					// As old as a stored chain can possibly be.
+					'saved_at' => 1,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNotNull( $store->get_chain(), 'with no configured retention, age must never cause expiry' );
+			$this->assertNotNull( $session->raw( self::SESSION_KEY ), 'and nothing may be deleted' );
+		}
+
+		public function test_the_ttl_filter_can_shrink_the_default_retention_to_expire_a_chain_that_would_otherwise_survive(): void {
+			$this->stub_guest();
+			// The derived default is `null` (no setUp() override) — the filter alone
+			// introduces a threshold the store itself would not have applied.
+			$this->stub_ttl_filter( 5 );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - 3600,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNull( $store->get_chain(), 'a smaller filtered TTL must be able to expire a chain the unfiltered default would have kept' );
+		}
+
+		public function test_the_ttl_filter_can_extend_the_default_retention_to_keep_a_chain_that_would_otherwise_expire(): void {
+			$this->stub_guest();
+			// The store's own derived default (via wc_parse_relative_date_option())
+			// would expire this chain; the filter widens it enough to survive.
+			Functions\when( 'get_option' )->justReturn( [ 'number' => 1, 'unit' => 'days' ] );
+			Functions\when( 'wc_parse_relative_date_option' )->alias( static fn( $raw ) => is_array( $raw ) ? $raw : [ 'number' => '', 'unit' => 'days' ] );
+
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) {
+					if ( Customer_Location_Store::FILTER_TTL_SECONDS !== $hook ) {
+						return $value;
+					}
+
+					// Widen whatever the store derived (~1 day) far beyond the age below.
+					return $value + DAY_IN_SECONDS * 365;
+				}
+			);
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					// Older than the ~1 day the store would have derived on its own.
+					'saved_at' => time() - ( 2 * DAY_IN_SECONDS ),
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNotNull( $store->get_chain(), 'a widened filtered TTL must be able to keep a chain the unfiltered default would have expired' );
+		}
+
+		/**
+		 * Codex review, round 1, should-fix 1: a boundary test built on real
+		 * `time()` calls (`saved_at = time() - 1000`, then racing a SECOND,
+		 * separate `time()` call inside production code) is not pinned — a
+		 * second ticking over between the two calls flips the age from 1000 to
+		 * 1001 and fails a CORRECT implementation. `Customer_Location_Store::chain_is_expired()`
+		 * is a pure, side-effect-free comparison for exactly this reason — reflect
+		 * into it and test with fixed integers, no clock involved at all.
+		 */
+		public function test_chain_is_expired_treats_the_exact_ttl_boundary_as_not_expired(): void {
+			$method = new \ReflectionMethod( Customer_Location_Store::class, 'chain_is_expired' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
+			$this->assertFalse(
+				$method->invoke( null, 1000, 2000, 1000 ),
+				'age === ttl exactly (saved_at 1000, now 2000, ttl 1000) must NOT be expired'
+			);
+			$this->assertTrue(
+				$method->invoke( null, 1000, 2001, 1000 ),
+				'age one second past the boundary (now 2001) must be expired'
+			);
+			$this->assertFalse(
+				$method->invoke( null, 1000, 2000, null ),
+				'a null ttl (not configured) must never be expired regardless of age'
+			);
+		}
+
+		public function test_the_default_ttl_derived_from_the_stores_own_account_retention_setting_expires_an_old_chain(): void {
+			$this->stub_guest();
+
+			// The exact option/helper WooCommerce's own WC_Privacy::delete_inactive_accounts()
+			// uses for "Retain inactive accounts" (Settings -> Accounts & Privacy ->
+			// Personal data retention) — verified against
+			// woocommerce/includes/class-wc-privacy.php and wc-formatting-functions.php.
+			Functions\when( 'get_option' )->alias(
+				static fn( $option ) => 'woocommerce_delete_inactive_accounts' === $option ? [ 'number' => 1, 'unit' => 'days' ] : null
+			);
+			Functions\when( 'wc_parse_relative_date_option' )->alias( static fn( $raw ) => is_array( $raw ) ? $raw : [ 'number' => '', 'unit' => 'days' ] );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - ( 2 * DAY_IN_SECONDS ),
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNull( $store->get_chain(), 'a chain older than the store\'s own 1-day inactive-account retention must expire' );
+		}
+
+		public function test_the_default_ttl_derived_from_the_stores_own_account_retention_setting_keeps_a_fresh_chain(): void {
+			$this->stub_guest();
+
+			Functions\when( 'get_option' )->alias(
+				static fn( $option ) => 'woocommerce_delete_inactive_accounts' === $option ? [ 'number' => 1, 'unit' => 'days' ] : null
+			);
+			Functions\when( 'wc_parse_relative_date_option' )->alias( static fn( $raw ) => is_array( $raw ) ? $raw : [ 'number' => '', 'unit' => 'days' ] );
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - 10,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$this->assertNotNull( $store->get_chain(), 'a chain well within the store\'s own 1-day inactive-account retention must not expire' );
+		}
+
+		/**
+		 * Codex review, round 1, must-fix 2: `wc_parse_relative_date_option()`
+		 * itself constrains `unit` to `days`/`weeks`/`months`/`years`
+		 * (`wc-formatting-functions.php`), but a raw option value written by
+		 * something else — or a future WooCommerce version that stops
+		 * normalizing it — must not silently become a WRONG numeric TTL.
+		 * `strtotime( '-1 nonsense' )` returns `false` (verified directly with
+		 * a standalone PHP script); `false` coerces to `0` in `time() - false`,
+		 * which computes to `time()` itself — a large but technically POSITIVE
+		 * duration (~56.7 years) that would otherwise silently pass the
+		 * must-fix-1 "positive integer" check and stand in as the derived
+		 * default, instead of correctly degrading to "not configured" (`null`).
+		 * Asserted directly against {@see Customer_Location_Store::retention_ttl_seconds()}
+		 * (via reflection, same idiom as `chain_is_expired()` above) rather than
+		 * through `get_chain()`'s visible behaviour: given THIS class's
+		 * duration-based comparison (`age > ttl`), a ~56.7-year miscomputed TTL
+		 * happens not to expire any realistic `saved_at` on its own — the
+		 * CONTRACT violation (silently accepting an unparsable unit at all,
+		 * rather than treating it as "not configured") is what this test pins.
+		 */
+		public function test_a_bogus_retention_unit_that_strtotime_cannot_parse_degrades_to_no_expiry(): void {
+			Functions\when( 'get_option' )->justReturn( [ 'number' => 1, 'unit' => 'nonsense' ] );
+			Functions\when( 'wc_parse_relative_date_option' )->alias( static fn( $raw ) => is_array( $raw ) ? $raw : [ 'number' => '', 'unit' => 'days' ] );
+
+			$store  = new Customer_Location_Store_Probe( new Customer_Location_Store_Fake_Session() );
+			$method = new \ReflectionMethod( Customer_Location_Store::class, 'retention_ttl_seconds' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
+			$this->assertNull(
+				$method->invoke( $store ),
+				'strtotime() returning false for an unparsable unit must degrade to "no expiry" (null), never a coerced numeric TTL'
+			);
+		}
+
+		/**
+		 * Codex review, round 1, must-fix 1: a naive `(int) $filtered` cast
+		 * would turn a misbehaving filter callback's `false`/`''`/`[]` into
+		 * `(int) 0`, and a TTL of `0` (or `true` casting to `1`) deletes a
+		 * customer's location the next time it is read. Only `null` or a
+		 * positive integer may pass; everything else must be refused toward
+		 * "keep the data", not toward "delete faster than intended" — and
+		 * reported via `_doing_it_wrong()` so the misbehaving callback is
+		 * discoverable.
+		 */
+		public function test_the_ttl_filter_returning_anything_but_null_or_a_positive_int_is_refused_and_reported(): void {
+			$this->stub_guest();
+
+			$garbage_values = [ false, '', '30', [], 0, -5, true ];
+
+			Functions\expect( '_doing_it_wrong' )->times( count( $garbage_values ) );
+
+			foreach ( $garbage_values as $garbage ) {
+				Functions\when( 'apply_filters' )->alias(
+					static function ( $hook, $value, ...$args ) use ( $garbage ) {
+						return Customer_Location_Store::FILTER_TTL_SECONDS === $hook ? $garbage : $value;
+					}
+				);
+
+				$session = new Customer_Location_Store_Fake_Session();
+				$session->set(
+					self::SESSION_KEY,
+					[
+						'record'   => $this->record()->to_array(),
+						'implicit' => false,
+						'saved_at' => time() - 3600,
+					]
+				);
+				$store = new Customer_Location_Store_Probe( $session );
+
+				$this->assertNotNull(
+					$store->get_chain(),
+					sprintf( 'a filter returning %s must never expire the record', var_export( $garbage, true ) )
+				);
+			}
+		}
+
+		/**
+		 * Codex review, round 1, should-fix 2: {@see Customer_Location_Store::retention_ttl_seconds()}
+		 * is memoized per instance — a request can call `get_chain()` more than
+		 * once against the same instance, and redoing the option read + filter
+		 * on every call is wasted work for a value that cannot change mid-request.
+		 */
+		public function test_the_ttl_is_computed_at_most_once_per_instance(): void {
+			$this->stub_guest();
+
+			$filter_calls = 0;
+			Functions\when( 'apply_filters' )->alias(
+				static function ( $hook, $value, ...$args ) use ( &$filter_calls ) {
+					if ( Customer_Location_Store::FILTER_TTL_SECONDS === $hook ) {
+						++$filter_calls;
+					}
+
+					return $value;
+				}
+			);
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - 10,
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$store->get_chain();
+			$store->get_chain();
+			$store->get_chain();
+
+			$this->assertSame( 1, $filter_calls, 'the TTL filter must run at most once per instance, not once per get_chain() call' );
+		}
+
+		/**
+		 * Codex review, round 1, must-fix 3: {@see Customer_Location_Store::set()}'s
+		 * own docblock documents that a logged-in customer's meta read/write
+		 * survives WooCommerce being entirely unavailable
+		 * ("get_user_meta()/update_user_meta() need WordPress, not WooCommerce")
+		 * — so a read through `get_chain()` must survive it too, not fatal the
+		 * moment retention is asked about.
+		 *
+		 * Deliberately does NOT stub `wc_parse_relative_date_option()` — that is
+		 * the entire point, and this file's own `setUp()` carves out exactly
+		 * this one test by name so its usual default stub does not run either.
+		 * Isolated in its own process (`@runInSeparateProcess`, the same idiom
+		 * `CheckoutConfigTest`'s own `WC()`-stubbing tests use, see that test's
+		 * docblock): once ANY test anywhere in this shared PHPUnit process calls
+		 * `Functions\when()` for a function name, PHP cannot un-declare it —
+		 * five OTHER test files in this suite must stub
+		 * `wc_parse_relative_date_option()` to a safe default to avoid fataling
+		 * on an unrelated read, so a genuinely undeclared function is only
+		 * observable inside a fresh process.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 */
+		public function test_get_chain_never_fatals_when_woocommerce_is_unavailable(): void {
+			$this->stub_guest();
+
+			$session = new Customer_Location_Store_Fake_Session();
+			$session->set(
+				self::SESSION_KEY,
+				[
+					'record'   => $this->record()->to_array(),
+					'implicit' => false,
+					'saved_at' => time() - ( 100 * DAY_IN_SECONDS ),
+				]
+			);
+			$store = new Customer_Location_Store_Probe( $session );
+
+			$read = $store->get_chain();
+
+			$this->assertNotNull( $read, 'a missing wc_parse_relative_date_option() must degrade to "no expiry", not a fatal' );
+			$this->assertSame( 'dadata:fias-1', $read['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
 		}
 
 		// -------------------------------------------------------------------

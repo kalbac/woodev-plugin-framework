@@ -1121,6 +1121,12 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				}
 			);
 
+			// Customer_Location_Store::get_chain() now calls retention_ttl_seconds()
+			// (issue #356 part 3) on EVERY read too, same as is_user_logged_in()
+			// above — 'not configured' keeps every test in this file, none of which
+			// is about retention, from expiring a fixture.
+			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
+
 			// Shipping_Settings_Tab is a process-wide singleton (same discipline as
 			// Location_Provider_Registry above) — reset it so a get_option alias a test
 			// sets AFTER this point always builds a FRESH Pickup_Map_Settings, never one

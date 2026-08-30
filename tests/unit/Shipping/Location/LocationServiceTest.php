@@ -375,6 +375,11 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			// one value that keeps every OTHER test in this file from having to
 			// know about a WooCommerce function it is not about.
 			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'RU', 'state' => '' ] );
+			// Customer_Location_Store::get_chain() now calls retention_ttl_seconds()
+			// (issue #356 part 3) on EVERY read too — same reasoning as
+			// wc_get_base_location() above: 'not configured' keeps every test in
+			// this file, none of which is about retention, from expiring a fixture.
+			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
 
 			Location_Provider_Registry::instance()->reset_for_tests();
 			Settings_Page_Registry::instance()->reset_for_tests();

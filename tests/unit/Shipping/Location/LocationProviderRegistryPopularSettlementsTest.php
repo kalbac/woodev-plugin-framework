@@ -115,6 +115,25 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 	final class LocationProviderRegistryPopularSettlementsTest extends TestCase {
 
 		/**
+		 * `Customer_Location_Store::get_chain()` — reached via
+		 * `stub_logged_in_chain()`'s `get_user_meta()` fixtures below — now calls
+		 * `retention_ttl_seconds()` on every read too (issue #356 part 3), which
+		 * reads `get_option()` through WooCommerce's `wc_parse_relative_date_option()`.
+		 * 'Not configured' keeps every test in this file, none of which is about
+		 * retention, from expiring a fixture (same discipline as
+		 * `LocationServiceTest`'s own `setUp()` for `wc_get_base_location()`).
+		 * Tests further down override `get_option` per scenario for their OWN
+		 * reasons (schema-version checks); that per-test `Functions\when()` simply
+		 * wins over this default, as everywhere else in this codebase.
+		 */
+		protected function setUp(): void {
+			parent::setUp();
+
+			Functions\when( 'get_option' )->justReturn( null );
+			Functions\when( 'wc_parse_relative_date_option' )->justReturn( [ 'number' => '', 'unit' => 'days' ] );
+		}
+
+		/**
 		 * Builds a registry instance WITHOUT going through the singleton
 		 * (private constructor) — isolates each test from any state another test
 		 * file's `declare_needed()`/`collect()` may have left on the real singleton.
