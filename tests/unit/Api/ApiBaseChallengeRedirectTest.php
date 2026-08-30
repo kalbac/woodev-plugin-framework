@@ -50,9 +50,17 @@ class Testable_Api_Base_For_Challenge_Redirect_Test extends \Woodev_API_Base {
 
 class Testable_Api_Base_With_Challenge_Redirects extends Testable_Api_Base_For_Challenge_Redirect_Test {
 
+	/** @var int|null Overrides the real clock so tests can simulate elapsed time without sleeping. */
+	public $now = null;
+
 	/** @return bool */
 	protected function follow_challenge_redirects(): bool {
 		return true;
+	}
+
+	/** @return int */
+	protected function get_challenge_redirect_current_time(): int {
+		return $this->now ?? parent::get_challenge_redirect_current_time();
 	}
 }
 
@@ -283,5 +291,130 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
 
 		$this->assertFalse( $updated_action_fired );
+	}
+
+	/** @return void */
+	public function test_max_age_zero_removes_the_cookie_from_the_jar(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Max-Age=0' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[2]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_max_age_zero_removal_fires_the_updated_action_without_the_removed_name(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=; Max-Age=0' ] ),
+		];
+
+		$updated_action_calls = [];
+		Functions\when( 'do_action' )->alias( static function ( $tag, $cookies = null ) use ( &$updated_action_calls ) {
+			if ( 'woodev_challenge-test_api_challenge_redirect_cookies_updated' === $tag ) {
+				$updated_action_calls[] = $cookies;
+			}
+		} );
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertCount( 2, $updated_action_calls );
+		$this->assertArrayNotHasKey( 'testcookie', $updated_action_calls[1] );
+	}
+
+	/** @return void */
+	public function test_max_age_zero_for_an_unknown_cookie_name_changes_nothing_and_fires_nothing(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'ghost=; Max-Age=0' ] ),
+			$this->response( 200 ),
+		];
+
+		$updated_action_fired = false;
+		Functions\when( 'do_action' )->alias( static function ( $tag ) use ( &$updated_action_fired ) {
+			if ( 'woodev_challenge-test_api_challenge_redirect_cookies_updated' === $tag ) {
+				$updated_action_fired = true;
+			}
+		} );
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertFalse( $updated_action_fired );
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_an_expires_attribute_in_the_past_deletes_the_cookie(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=stale; Expires=Thu, 01 Jan 1970 00:00:00 GMT' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[2]['args']['headers'] );
+	}
+
+	/** @return void */
+	public function test_an_expires_attribute_in_the_future_does_not_delete_the_cookie(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$far_future     = gmdate( 'D, d M Y H:i:s', time() + 3600 ) . ' GMT';
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => "testcookie=first; Expires={$far_future}" ] ),
+			$this->response( 200 ),
+		];
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_a_cookie_with_neither_max_age_nor_expires_is_a_session_cookie_that_never_expires_on_its_own(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Path=/' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->now = 1_700_000_000;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 60 * 60 * 24 * 365;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'testcookie=first', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_an_expired_cookie_is_not_sent_even_when_no_new_response_evicts_it(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 200, [ 'Set-Cookie' => 'testcookie=first; Max-Age=1' ] ),
+			$this->response( 200 ),
+		];
+
+		$api->now = 1_700_000_000;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$api->now += 5;
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
 	}
 }

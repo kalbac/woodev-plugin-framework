@@ -49,9 +49,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Cookies received while passing an opt-in bot-protection challenge, keyed by
 		 * the origin (scheme + host + effective port) of the request that set them.
 		 *
-		 * @since 2.0.2 keyed by origin; was a flat name => value map before.
+		 * Each entry is `[ 'value' => string, 'expires_at' => ?int ]`; a null
+		 * `expires_at` marks a session cookie that never expires on its own. This
+		 * shape is internal bookkeeping only — every public hook payload for this
+		 * jar stays a plain `name => value` map, never this shape.
 		 *
-		 * @var array<string, array<string, string>>
+		 * @since 2.0.2 keyed by origin; entries now carry expiry bookkeeping.
+		 *
+		 * @var array<string, array<string, array{value: string, expires_at: ?int}>>
 		 */
 		private array $challenge_redirect_cookies = [];
 
@@ -421,7 +426,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Reads and remembers every Set-Cookie value on a response, scoped to the
 		 * origin the request went to. Fires the `..._updated` action only when the
-		 * origin's jar actually changed.
+		 * origin's jar actually changed (including a name removed via {@see
+		 * self::parse_challenge_redirect_set_cookie()}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -442,8 +448,9 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return;
 			}
 
+			$now                = $this->get_challenge_redirect_current_time();
 			$origin             = self::get_uri_origin( $request_uri );
-			$cookies_for_origin = $this->challenge_redirect_cookies[ $origin ] ?? [];
+			$cookies_for_origin = self::evict_expired_challenge_redirect_cookies( $this->challenge_redirect_cookies[ $origin ] ?? [], $now );
 			$updated_cookies    = $cookies_for_origin;
 
 			foreach ( $headers as $name => $value ) {
@@ -454,10 +461,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$set_cookie_values = is_array( $value ) ? $value : [ $value ];
 
 				foreach ( $set_cookie_values as $set_cookie_value ) {
-					$updated_cookies = array_merge(
-						$updated_cookies,
-						self::parse_challenge_redirect_set_cookie( (string) $set_cookie_value )
-					);
+					foreach ( self::parse_challenge_redirect_set_cookie( (string) $set_cookie_value, $now ) as $cookie_name => $cookie_entry ) {
+						if ( null === $cookie_entry ) {
+							unset( $updated_cookies[ $cookie_name ] );
+						} else {
+							$updated_cookies[ $cookie_name ] = $cookie_entry;
+						}
+					}
 				}
 			}
 
@@ -467,12 +477,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$this->challenge_redirect_cookies[ $origin ] = $updated_cookies;
 
-			do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', $updated_cookies, $origin, $this );
+			do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', self::challenge_redirect_cookie_values( $updated_cookies ), $origin, $this );
 		}
 
 		/**
 		 * Gets the challenge-cookie jar for one origin, allowing a client to restore
-		 * persisted cookies for the request it is about to make.
+		 * persisted cookies for the request it is about to make. Evicts any entry
+		 * whose expiry has passed before returning, even if no response has arrived
+		 * since to fold the eviction in via {@see self::remember_challenge_redirect_cookies()}.
 		 *
 		 * @since 2.0.2
 		 *
@@ -481,11 +493,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		private function get_challenge_redirect_cookies( string $origin ): array {
 
-			$cookies_for_origin = $this->challenge_redirect_cookies[ $origin ] ?? [];
+			$now                = $this->get_challenge_redirect_current_time();
+			$stored_cookies     = $this->challenge_redirect_cookies[ $origin ] ?? [];
+			$cookies_for_origin = self::evict_expired_challenge_redirect_cookies( $stored_cookies, $now );
 
-			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $cookies_for_origin, $origin, $this );
+			if ( $cookies_for_origin !== $stored_cookies ) {
+				$this->challenge_redirect_cookies[ $origin ] = $cookies_for_origin;
+			}
 
-			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : $cookies_for_origin;
+			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', self::challenge_redirect_cookie_values( $cookies_for_origin ), $origin, $this );
+
+			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : self::challenge_redirect_cookie_values( $cookies_for_origin );
 		}
 
 		/**
@@ -512,21 +530,126 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Extracts only the name/value pair from one Set-Cookie header value.
+		 * Extracts the name, value, and deletion/expiry intent from one Set-Cookie
+		 * header value.
 		 *
-		 * Set-Cookie attributes such as Path and HttpOnly describe storage policy;
-		 * forwarding them in a Cookie request header would be invalid.
+		 * Deliberately narrow: this jar exists only to carry a bot-protection
+		 * challenge cookie, not to be a general RFC 6265 cookie store.
+		 *
+		 * - `Max-Age` <= 0, or an `Expires` that has already passed, marks the name
+		 *   for REMOVAL — represented as `name => null` — rather than storing an
+		 *   empty value.
+		 * - A future `Max-Age`/`Expires` is stored as an expiry deadline; Max-Age
+		 *   takes precedence when both are present (RFC 6265 §5.3). A cookie with
+		 *   neither is a session cookie that never expires on its own.
+		 * - `Path` is deliberately IGNORED: we may over-send a `Path`-scoped cookie
+		 *   to other paths of the same origin. Accepted, documented narrowing.
+		 * - `Domain` is deliberately IGNORED, and safely so — ignoring it never
+		 *   widens a cookie to a sibling host, it only keeps the cookie on the
+		 *   exact origin it came from.
+		 * - `Secure` needs no handling: the jar is keyed by {@see self::get_uri_origin()},
+		 *   whose key includes the scheme, so a cookie accepted from `https://h`
+		 *   can never be replayed against `http://h`.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $header Set-Cookie header value.
+		 * @param int    $now    Current Unix timestamp, for expiry comparisons.
+		 * @return array<string, array{value: string, expires_at: ?int}|null>
+		 */
+		private static function parse_challenge_redirect_set_cookie( string $header, int $now ): array {
+
+			$attributes = explode( ';', $header );
+			$pair       = explode( '=', trim( (string) array_shift( $attributes ) ), 2 );
+
+			if ( 2 !== count( $pair ) || '' === $pair[0] ) {
+				return [];
+			}
+
+			[ $name, $value ] = $pair;
+
+			$max_age = null;
+			$expires = null;
+
+			foreach ( $attributes as $attribute ) {
+				$attribute_pair = explode( '=', trim( $attribute ), 2 );
+				$attribute_name = strtolower( $attribute_pair[0] );
+
+				if ( 'max-age' === $attribute_name && isset( $attribute_pair[1] ) && is_numeric( trim( $attribute_pair[1] ) ) ) {
+					$max_age = (int) trim( $attribute_pair[1] );
+				} elseif ( 'expires' === $attribute_name && isset( $attribute_pair[1] ) ) {
+					$parsed_expires = strtotime( trim( $attribute_pair[1] ) );
+
+					if ( false !== $parsed_expires ) {
+						$expires = $parsed_expires;
+					}
+				}
+			}
+
+			$expires_at = null !== $max_age ? $now + $max_age : $expires;
+
+			if ( null !== $expires_at && $expires_at <= $now ) {
+				return [ $name => null ];
+			}
+
+			return [
+				$name => [
+					'value' => $value,
+					'expires_at' => $expires_at,
+				],
+			];
+		}
+
+		/**
+		 * Drops expired entries from a challenge-cookie jar.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array{value: string, expires_at: ?int}> $entries Jar entries.
+		 * @param int                                                   $now     Current Unix timestamp.
+		 * @return array<string, array{value: string, expires_at: ?int}>
+		 */
+		private static function evict_expired_challenge_redirect_cookies( array $entries, int $now ): array {
+
+			return array_filter(
+				$entries,
+				static function ( array $entry ) use ( $now ): bool {
+					return null === $entry['expires_at'] || $entry['expires_at'] > $now;
+				}
+			);
+		}
+
+		/**
+		 * Reduces internal jar entries to the plain `name => value` map every
+		 * challenge-cookie hook payload uses; expiry bookkeeping never leaks past
+		 * this boundary.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array{value: string, expires_at: ?int}> $entries Jar entries.
 		 * @return array<string, string>
 		 */
-		private static function parse_challenge_redirect_set_cookie( string $header ): array {
+		private static function challenge_redirect_cookie_values( array $entries ): array {
 
-			$pair = explode( '=', trim( strtok( $header, ';' ) ), 2 );
+			return array_map(
+				static function ( array $entry ): string {
+					return $entry['value'];
+				},
+				$entries
+			);
+		}
 
-			return 2 === count( $pair ) && '' !== $pair[0] ? [ $pair[0] => $pair[1] ] : [];
+		/**
+		 * Current Unix timestamp used to evaluate challenge-cookie expiry.
+		 *
+		 * Overridable so tests can simulate the passage of time without sleeping.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int
+		 */
+		protected function get_challenge_redirect_current_time(): int {
+			return time();
 		}
 
 		/**
