@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 248 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 249 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -114,6 +114,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/phpunit] **A `--random-order-seed` is NOT a portable repro — it shuffles the test SET this tree has, so the same seed on a tree with one more test is a different order. Carry the defect, not the seed.** → [a-random-order-seed-is-not-a-portable-repro](gotchas/a-random-order-seed-is-not-a-portable-repro.md) (s107)
 - [testing/measurement] **66 of the local 67 SKIPPED are just ext-sodium being off — the baseline the project compares across checkouts moves with `php.ini`. Measure with `-d extension=sodium`: 1 primary, 6 in CI.** → [the-skipped-count-is-dominated-by-whether-sodium-is-enabled](gotchas/the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md) (s102)
 - [testing/phpunit] **Anything written from `tests/bootstrap.php` turns every PROCESS-ISOLATED test into an error — the parent parses the child's output as the result. Measured: 36 fake failures.** → [writing-to-stderr-from-the-test-bootstrap-breaks-process-isolated-tests](gotchas/writing-to-stderr-from-the-test-bootstrap-breaks-process-isolated-tests.md) (s102)
 - [testing/phpunit] **`phpunit a.php b.php` runs only `a.php` — the rest are dropped silently, so a multi-file FALSIFICATION run can prove a third of what it claims. Also always pass `--testsuite=Unit`.** → [phpunit-takes-one-path-and-silently-ignores-the-rest](gotchas/phpunit-takes-one-path-and-silently-ignores-the-rest.md) (s99)
