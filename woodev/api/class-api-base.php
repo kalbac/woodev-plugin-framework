@@ -46,9 +46,12 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected $response;
 
 		/**
-		 * Cookies received while passing an opt-in bot-protection challenge.
+		 * Cookies received while passing an opt-in bot-protection challenge, keyed by
+		 * the origin (scheme + host + effective port) of the request that set them.
 		 *
-		 * @var array<string, string>
+		 * @since 2.0.2 keyed by origin; was a flat name => value map before.
+		 *
+		 * @var array<string, array<string, string>>
 		 */
 		private array $challenge_redirect_cookies = [];
 
@@ -160,11 +163,17 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * Performs a request and, when explicitly enabled by a subclass, repeats a
 		 * same-origin 302 or 307 challenge redirect without changing its method or body.
 		 *
+		 * When the subclass has not opted in via {@see self::follow_challenge_redirects()},
+		 * this is a plain pass-through to {@see self::do_remote_request()}: no cookie jar
+		 * is read or written, and neither challenge-cookie hook fires.
+		 *
 		 * Cookies are collected from every non-error response, not just redirects, so
-		 * a provider may rotate a challenge cookie between ordinary API calls. The
-		 * `woodev_{api_id}_api_challenge_redirect_cookies` filter can supply a
-		 * persisted jar, and `woodev_{api_id}_api_challenge_redirect_cookies_updated`
-		 * lets a plugin persist a refreshed jar if it chooses to do so.
+		 * a provider may rotate a challenge cookie between ordinary API calls. Cookies are
+		 * scoped per origin (scheme + host + effective port): the
+		 * `woodev_{api_id}_api_challenge_redirect_cookies` filter can supply a persisted
+		 * jar for the origin a request is going to, and
+		 * `woodev_{api_id}_api_challenge_redirect_cookies_updated` lets a plugin persist a
+		 * refreshed jar for that origin if it chooses to do so.
 		 *
 		 * @since 2.0.2
 		 *
@@ -174,13 +183,13 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected function do_remote_request_with_challenge_redirects( string $request_uri, array $request_args ) {
 
-			$response = $this->do_remote_request( $request_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args ) );
-
 			if ( ! $this->follow_challenge_redirects() ) {
-				return $response;
+				return $this->do_remote_request( $request_uri, $request_args );
 			}
 
-			$this->remember_challenge_redirect_cookies( $response );
+			$response = $this->do_remote_request( $request_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args, $request_uri ) );
+
+			$this->remember_challenge_redirect_cookies( $response, $request_uri );
 
 			if ( is_wp_error( $response ) ) {
 				return $response;
@@ -194,8 +203,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 					return $redirect_uri ?: $response;
 				}
 
-				$response = $this->do_remote_request( $redirect_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args ) );
-				$this->remember_challenge_redirect_cookies( $response );
+				$response = $this->do_remote_request( $redirect_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args, $redirect_uri ) );
+				$this->remember_challenge_redirect_cookies( $response, $redirect_uri );
 			}
 
 			return $response;
@@ -325,6 +334,27 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
+		 * Derives the normalised origin key (scheme + host + effective port, all
+		 * lowercased) used to scope the challenge-cookie jar, reusing the same
+		 * normalisation {@see self::is_same_origin_uri()} compares with.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $uri URI.
+		 * @return string
+		 */
+		private static function get_uri_origin( string $uri ): string {
+
+			$parsed = parse_url( $uri );
+
+			if ( ! is_array( $parsed ) || empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
+				return strtolower( $uri );
+			}
+
+			return strtolower( $parsed['scheme'] ) . '://' . strtolower( $parsed['host'] ) . ':' . self::get_uri_port( $parsed );
+		}
+
+		/**
 		 * Gets a response header value case-insensitively.
 		 *
 		 * @since 2.0.2
@@ -352,16 +382,21 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Adds the current challenge-cookie jar to request headers.
+		 * Adds the challenge-cookie jar for the request's origin to its headers.
+		 *
+		 * A cookie the caller explicitly set on the request already carries the
+		 * caller's own intent for that name, so it takes precedence over a
+		 * same-named cookie remembered from a previous challenge response.
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string, mixed> $request_args Request arguments.
+		 * @param string               $request_uri  URI the request is going to.
 		 * @return array<string, mixed>
 		 */
-		private function add_challenge_redirect_cookies_to_request_args( array $request_args ): array {
+		private function add_challenge_redirect_cookies_to_request_args( array $request_args, string $request_uri ): array {
 
-			$cookies = $this->get_challenge_redirect_cookies();
+			$cookies = $this->get_challenge_redirect_cookies( self::get_uri_origin( $request_uri ) );
 
 			if ( [] === $cookies || ! isset( $request_args['headers'] ) || ! is_array( $request_args['headers'] ) ) {
 				return $request_args;
@@ -378,20 +413,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				}
 			}
 
-			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $existing_cookies, $cookies ) );
+			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $cookies, $existing_cookies ) );
 
 			return $request_args;
 		}
 
 		/**
-		 * Reads and remembers every Set-Cookie value on a response.
+		 * Reads and remembers every Set-Cookie value on a response, scoped to the
+		 * origin the request went to. Fires the `..._updated` action only when the
+		 * origin's jar actually changed.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array|WP_Error $response Response data.
+		 * @param array|WP_Error $response    Response data.
+		 * @param string         $request_uri URI the request went to.
 		 * @return void
 		 */
-		private function remember_challenge_redirect_cookies( $response ): void {
+		private function remember_challenge_redirect_cookies( $response, string $request_uri ): void {
 
 			if ( is_wp_error( $response ) ) {
 				return;
@@ -404,6 +442,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return;
 			}
 
+			$origin             = self::get_uri_origin( $request_uri );
+			$cookies_for_origin = $this->challenge_redirect_cookies[ $origin ] ?? [];
+			$updated_cookies    = $cookies_for_origin;
+
 			foreach ( $headers as $name => $value ) {
 				if ( 'set-cookie' !== strtolower( (string) $name ) ) {
 					continue;
@@ -412,30 +454,38 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				$set_cookie_values = is_array( $value ) ? $value : [ $value ];
 
 				foreach ( $set_cookie_values as $set_cookie_value ) {
-					$this->challenge_redirect_cookies = array_merge(
-						$this->challenge_redirect_cookies,
+					$updated_cookies = array_merge(
+						$updated_cookies,
 						self::parse_challenge_redirect_set_cookie( (string) $set_cookie_value )
 					);
 				}
 			}
 
-			if ( [] !== $this->challenge_redirect_cookies ) {
-				do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', $this->challenge_redirect_cookies, $this );
+			if ( $updated_cookies === $cookies_for_origin ) {
+				return;
 			}
+
+			$this->challenge_redirect_cookies[ $origin ] = $updated_cookies;
+
+			do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', $updated_cookies, $origin, $this );
 		}
 
 		/**
-		 * Gets the challenge-cookie jar, allowing a client to restore persisted cookies.
+		 * Gets the challenge-cookie jar for one origin, allowing a client to restore
+		 * persisted cookies for the request it is about to make.
 		 *
 		 * @since 2.0.2
 		 *
+		 * @param string $origin Origin (scheme + host + effective port) the request is going to.
 		 * @return array<string, string>
 		 */
-		private function get_challenge_redirect_cookies(): array {
+		private function get_challenge_redirect_cookies( string $origin ): array {
 
-			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $this->challenge_redirect_cookies, $this );
+			$cookies_for_origin = $this->challenge_redirect_cookies[ $origin ] ?? [];
 
-			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : $this->challenge_redirect_cookies;
+			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $cookies_for_origin, $origin, $this );
+
+			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : $cookies_for_origin;
 		}
 
 		/**
