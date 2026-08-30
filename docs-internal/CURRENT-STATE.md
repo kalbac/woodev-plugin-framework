@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-30 (s106).** `main` clean, **no open PRs**. Merged in s106, four: **#664**
-(#358 — a provider now self-reports what it did with a `within` parent) and **#665 / #666 / #667**,
-which are #356 parts 1-3 and close that card entirely. s105 merged two; history →
-`sessions/s105.md`, `sessions/s106.md`.
+**As of 2026-08-30 (s107).** `main` clean, **no open PRs, no worktrees**. s107 merged twelve
+(#668-#672, #674, #675, #677-#681) and closed eleven cards: **#321, #568, #510, #429, #318, #482,
+#322, #147, #499, #673, #188**. The one that changes how work is done is **#510** — Codex is now a
+full WORKER in a worktree, not only a critic. History → `sessions/s107.md`, `sessions/s106.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,10 +21,10 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s106), sodium enabled, after
-all four merges:** `composer check` **3297** / 8100 / **1 skipped**. phpcs clean, phpstan no errors.
-Integration **129** / 506. jest **1568** in 21 suites. Over s106: +61 unit tests, +3 integration,
-+2 jest.
+**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s107), sodium enabled, after
+all twelve merges:** `composer check` **3314** / 8166 / **1 skipped**. phpcs clean, phpstan left to
+CI. Integration **129** / 506. jest **1568** in 21 suites. Over s107: +17 unit tests, integration
+and jest unchanged.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
@@ -61,11 +61,11 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s106:** **#358** and **#356** are CLOSED (PRs #664, #665, #666, #667). The
-locations layer has no leftovers now. Still open: **#621** (item 1 measured; the FIX is untouched
+**Open cards after s107 — 76 open, `Инбокс` empty, nothing in `В работе`.** Still open: **#621** (item 1 measured; the FIX is untouched
 and held BEHIND **#639**), **#589**, **#644** (material delivered, prioritisation is his), **#652**,
 **#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope conversation — do NOT take
-autonomously), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285,
+autonomously), **#676** (the challenge-cookie jar is not host-scoped — filed in s107 from the #674
+review), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285,
 #247, and **#567's remainder** (150 English msgids with no translation — operator, 29.08.2026: leave
 them, regenerate the `.pot` and rebuild the `.mo` before release).
 
