@@ -17,6 +17,7 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
+use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Service;
 use Woodev\Tests\Integration\TestCase;
@@ -284,7 +285,15 @@ class LocationRouteTest extends TestCase {
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $response->get_data() );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$response->get_data()
+		);
 	}
 
 	/**

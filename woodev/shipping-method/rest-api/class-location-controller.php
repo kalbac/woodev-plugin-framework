@@ -819,6 +819,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              {@see self::build_scope()} rather than duplicated.
 		 *              `provider_by_id()` deliberately stays country-blind —
 		 *              see the override branch's own comment below for why.
+		 * @since 2.0.2 Response gained `scope_narrowing` (#358) — the missing
+		 *              second half of `within_status`: what the PROVIDER did
+		 *              with the parent constraint `within_status` says it
+		 *              resolved, independent of it on purpose (see
+		 *              {@see Location_Scope::report_narrowing()}'s own
+		 *              docblock). `within_status`/`within_applied` are
+		 *              UNCHANGED — no new value, no new meaning.
 		 *
 		 * @param \WP_REST_Request $request           request object.
 		 * @param string           $rate_limit_key     Per-route rate-limit bucket prefix.
@@ -826,7 +833,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *                                              override, or `null` for the
 		 *                                              ordinary D15 chain resolution.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool, within_status: string}
+		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>, within_applied: bool, within_status: string, scope_narrowing: string}
 		 */
 		private function perform_suggest( $request, string $rate_limit_key, ?string $provider_override = null ) {
 
@@ -971,11 +978,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 				return rest_ensure_response(
 					[
-						'suggestions'    => [],
-						'within_applied' => false,
-						'within_status'  => $within_requested
+						'suggestions'      => [],
+						'within_applied'   => false,
+						'within_status'    => $within_requested
 							? self::WITHIN_STATUS_UNSERVED_LEVEL
 							: self::WITHIN_STATUS_NOT_REQUESTED,
+						'scope_narrowing'  => Location_Provider::NARROWING_NOT_APPLICABLE,
 					]
 				);
 			}
@@ -1056,12 +1064,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			if ( ! $country_supported ) {
 				return rest_ensure_response(
 					[
-						'suggestions'    => [],
-						'within_applied' => $scope->has_parent(),
-						'within_status'  => $within_status,
+						'suggestions'     => [],
+						'within_applied'  => $scope->has_parent(),
+						'within_status'   => $within_status,
+						'scope_narrowing' => $scope->has_parent() ? $scope->narrowing() : Location_Provider::NARROWING_NOT_APPLICABLE,
 					]
 				);
 			}
+
+			// #358: stamp a fresh, unfilled narrowing slot for THIS provider call —
+			// see Location_Scope::for_provider()'s own docblock for why a clone per
+			// call (not per request) matters in a D15 fallback chain.
+			$scope = $scope->for_provider( $provider->get_id() );
 
 			try {
 				$records = $provider->suggest( $query, $scope );
@@ -1073,9 +1087,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			return rest_ensure_response(
 				[
-					'suggestions'    => $this->to_response_records( $records ),
-					'within_applied' => $scope->has_parent(),
-					'within_status'  => $within_status,
+					'suggestions'     => $this->to_response_records( $records ),
+					'within_applied'  => $scope->has_parent(),
+					'within_status'   => $within_status,
+					'scope_narrowing' => $scope->has_parent() ? $scope->narrowing() : Location_Provider::NARROWING_NOT_APPLICABLE,
 				]
 			);
 		}
@@ -1128,10 +1143,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              `/suggest` this route never shipped a `within_applied`
 		 *              boolean, so `within_status` is its ONLY `within`
 		 *              signal, not a supplement to one.
+		 * @since 2.0.2 Response gained `scope_narrowing` (#358) — this route
+		 *              never had a `within_applied` boolean to add a second
+		 *              half to; `scope_narrowing` is this stage's only
+		 *              signal, not a supplement to an existing one. See
+		 *              {@see Location_Controller::perform_suggest()}'s own
+		 *              `@since` note for the full contract.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
-		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool, within_status: string}
+		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, truncated: bool, within_status: string, scope_narrowing: string}
 		 */
 		public function handle_list_request( $request ) {
 
@@ -1187,6 +1208,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 				);
 			}
 
+			// #358: stamp a fresh, unfilled narrowing slot for THIS provider call —
+			// see Location_Scope::for_provider()'s own docblock for why a clone per
+			// call (not per request) matters in a D15 fallback chain.
+			$scope = $scope->for_provider( $provider->get_id() );
+
 			try {
 				$records = $provider->list_localities( $scope );
 			} catch ( \Throwable $exception ) {
@@ -1200,9 +1226,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 			return rest_ensure_response(
 				[
-					'localities'    => $this->to_response_records( $records ),
-					'truncated'     => $truncated,
-					'within_status' => $within_status,
+					'localities'       => $this->to_response_records( $records ),
+					'truncated'        => $truncated,
+					'within_status'    => $within_status,
+					'scope_narrowing'  => $scope->has_parent() ? $scope->narrowing() : Location_Provider::NARROWING_NOT_APPLICABLE,
 				]
 			);
 		}

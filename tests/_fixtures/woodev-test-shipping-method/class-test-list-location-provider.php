@@ -247,29 +247,56 @@ if ( ! class_exists( 'Woodev_Test_List_Location_Provider' ) ) {
 		 * components) — `null` when the scope has no parent, or the parent does
 		 * not match a fixture region this provider knows about.
 		 *
+		 * REPORTS NARROWING (#358) on `$scope` the same way the CDEK fixture's
+		 * {@see \Woodev_Test_Cdek_Location_Provider::region_code_from_scope()} does:
+		 * `exact` for the own-provider key, `degraded` for a components name found in
+		 * {@see self::REGIONS}, `none` for a foreign key or an unmatched name. Nothing
+		 * is reported when the scope carries no parent at all.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reports the narrowing verdict on `$scope` (#358).
 		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Scope $scope Settlement-level scope.
 		 *
 		 * @return string|null
 		 */
 		private function region_native_id_from_scope( \Woodev\Framework\Shipping\Location\Location_Scope $scope ): ?string {
+			if ( ! $scope->has_parent() ) {
+				return null;
+			}
+
 			$parent_record = $scope->parent_record();
 
 			if ( null !== $parent_record ) {
 				[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $parent_record->key() );
 
-				return self::PROVIDER_ID === $provider_id && isset( self::REGIONS[ $native_id ] ) ? $native_id : null;
+				$resolved = self::PROVIDER_ID === $provider_id && isset( self::REGIONS[ $native_id ] ) ? $native_id : null;
+
+				$scope->report_narrowing(
+					null !== $resolved
+						? \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_EXACT
+						: \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE
+				);
+
+				return $resolved;
 			}
 
 			$components = $scope->parent_components();
 			$region     = $components['region']['name'] ?? null;
 
 			if ( null === $region ) {
+				$scope->report_narrowing( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE );
+
 				return null;
 			}
 
 			$match = array_search( $region, self::REGIONS, true );
+
+			$scope->report_narrowing(
+				false !== $match
+					? \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_DEGRADED
+					: \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE
+			);
 
 			return false !== $match ? (string) $match : null;
 		}

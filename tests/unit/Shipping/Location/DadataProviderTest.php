@@ -25,6 +25,7 @@ namespace Woodev\Tests\Unit\Shipping\Location;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Locality_Key;
+use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider_Exception;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
@@ -818,7 +819,11 @@ final class DadataProviderTest extends TestCase {
 		$region_record = ( self::provider() )->suggest( 'Моск', Location_Scope::for_country( 'RU', Location_Record::LEVEL_REGION ) )[0];
 
 		$this->stub_http_response( 200, (string) json_encode( [ 'suggestions' => [ self::settlement_suggestion( '4' ) ] ] ) );
-		( self::provider() )->suggest( 'Красн', Location_Scope::within( $region_record, Location_Record::LEVEL_SETTLEMENT ) );
+		$scope = Location_Scope::within( $region_record, Location_Record::LEVEL_SETTLEMENT )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Красн', $scope );
+
+		// #358: the native-id branch is the strongest narrowing verdict.
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
 
 		$body = $this->last_request_body();
 		$this->assertTrue( $body['restrict_value'] );
@@ -1332,7 +1337,11 @@ final class DadataProviderTest extends TestCase {
 		);
 
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( self::provider() )->suggest( 'Юнус', Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS ) );
+		$scope = Location_Scope::within( $tashkent, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Юнус', $scope );
+
+		// #358: still OWN-provider native ids (just OSM-derived, not FIAS) — exact.
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
 
 		$locations = $this->last_request_body()['locations'];
 
@@ -1361,12 +1370,48 @@ final class DadataProviderTest extends TestCase {
 		);
 
 		$this->stub_http_response( 200, '{"suggestions":[]}' );
-		( self::provider() )->suggest( 'Абая', Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS ) );
+		$scope = Location_Scope::within( $foreign, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Абая', $scope );
+
+		// #358: a foreign provider's record with no usable native id — narrowed by
+		// NAME components only, the weaker verdict.
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
 
 		$locations = $this->last_request_body()['locations'];
 
 		$this->assertSame( 'KZ', $locations[0]['country_iso_code'] );
 		$this->assertSame( 'Алматы', $locations[0]['city'] );
+	}
+
+	/**
+	 * #358: a parent that resolves to NEITHER a usable native id NOR any name
+	 * component (foreign provider, empty region/settlement) leaves DaData with
+	 * nothing to narrow by at all — `none`, not `degraded`.
+	 */
+	public function test_a_parent_with_no_usable_id_or_name_reports_no_narrowing(): void {
+		$this->set_token( 'tok' );
+
+		$bare_foreign = Location_Record::from_array(
+			[
+				'key'         => 'cdek:99',
+				'provider_id' => 'cdek',
+				'level'       => Location_Record::LEVEL_SETTLEMENT,
+				'country'     => 'KZ',
+				'label'       => 'Неизвестно',
+			]
+		);
+
+		$this->stub_http_response( 200, '{"suggestions":[]}' );
+		$scope = Location_Scope::within( $bare_foreign, Location_Record::LEVEL_ADDRESS )->for_provider( Dadata_Provider::PROVIDER_ID );
+		( self::provider() )->suggest( 'Абая', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_NONE, $scope->narrowing() );
+
+		// Existing (unchanged) behaviour: a parent with nothing usable sends NO
+		// `locations` constraint at all — not even a bare country floor, and the
+		// key is absent from the body entirely (build_suggest_body() only adds it
+		// for a non-empty constraint). Only the narrowing report above is new.
+		$this->assertArrayNotHasKey( 'locations', $this->last_request_body() );
 	}
 
 	// -------------------------------------------------------------------------
