@@ -335,6 +335,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * contribution, matching S5's own "if that list is empty, the preset contributes
 		 * nothing" clause.
 		 *
+		 * Card #147 audit: not reachable as a live REST/GET degradation — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()}'s
+		 * own docblock for the proof that `WC()->countries` is set unconditionally in
+		 * `WooCommerce::init()`, independent of request type. This guard only fires
+		 * when WooCommerce itself is inactive.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string[]
@@ -371,6 +377,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * and {@see Checkout_Config::pickup_method_ids()}: returns `false` whenever WooCommerce,
 		 * its session, or a pickup method list isn't available — the safe direction, since this
 		 * value only ever RELAXES `required` (see {@see self::checkout_fields_contribution()}).
+		 *
+		 * Card #147 audit: unlike `WC()->countries`, `WC()->session` genuinely IS
+		 * request-gated — `WooCommerce::init()` only starts it (via `wc_load_cart()`)
+		 * `if ( $this->is_request( 'frontend' ) )`, excluding every REST request (gotcha
+		 * `the-integration-suite-has-a-wc-session-a-rest-request-does-not`). But this
+		 * method's only caller, {@see self::filter_checkout_fields()}, is hooked on
+		 * `woocommerce_checkout_fields`, which this project's own rig measurement
+		 * (gotcha `block-checkout-reads-country-locale-not-checkout-fields`) proved the
+		 * block/Store-API checkout never applies — classic checkout only, always inside
+		 * `is_request( 'frontend' )`, where the session is already up. And even were it
+		 * ever reached without a session, the degradation direction is the SAFE one
+		 * documented above (`false` = fields stay required), not the "unknown read as
+		 * allowed" shape this card exists to catch.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Merges the posted `shipping_method` over the session instead of
@@ -784,6 +803,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 		 * {@see self::shipping_countries()}: returns `[]`, which degrades
 		 * `restore_invariants()`'s re-insertion to an empty stub rather than failing —
 		 * harmless outside a real WooCommerce runtime.
+		 *
+		 * Card #147 audit: not reachable as a live REST/GET degradation — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()}'s
+		 * own docblock for the proof that `WC()->countries` is set unconditionally in
+		 * `WooCommerce::init()`, independent of request type. This guard only fires
+		 * when WooCommerce itself is inactive.
 		 *
 		 * @since 2.0.2
 		 *

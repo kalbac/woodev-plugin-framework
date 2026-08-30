@@ -353,6 +353,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * shipping subsystem is unavailable, exactly like {@see self::wc_states()}
 		 * degrades for the same reason.
 		 *
+		 * Card #147 audit: `WC()->shipping()` is `WC_Shipping::instance()` — a lazy
+		 * singleton (`includes/class-woocommerce.php::shipping()`) instantiated on
+		 * first call, independent of request type. It is never gated by
+		 * `is_request( 'frontend' )` the way `WC()->cart`/`WC()->session`/`WC()->customer`
+		 * are, so — like `WC()->countries` (see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()}'s
+		 * own docblock for that proof) — this guard only ever fires when WooCommerce
+		 * itself is inactive, never as a REST-vs-POST degradation.
+		 *
 		 * `public static` (2.0.2, issue #362 pickup-required-relaxation fix): touches no
 		 * `$this` — pure indirection over `WC()` — so
 		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::pickup_method_chosen()}
@@ -1153,6 +1162,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 * degrades to `[]` (via `array_filter()`) when `get_states()` itself
 		 * answers `false` for an absent country key — see this method's own body
 		 * comment (PR #304 review finding 1).
+		 *
+		 * Card #147 audit: confirmed not reachable as a live REST/GET
+		 * degradation — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()}'s
+		 * own docblock for the proof that `WC()->countries` is set unconditionally
+		 * in `WooCommerce::init()`, before the `is_request( 'frontend' )` branch
+		 * that gates cart/session/customer. This guard exists solely for the unit
+		 * suite.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Wrapped the cast in `array_filter()` — a bare `(array) false`

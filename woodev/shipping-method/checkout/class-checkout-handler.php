@@ -308,6 +308,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * (gotcha `brain-monkey-function-pollution`). Overriding a method costs a subclass and
 		 * pollutes nothing — the same reason {@see self::wc_country_codes()} exists.
 		 *
+		 * Card #147 audit: this method's only caller,
+		 * {@see self::handle_checkout_get_value()}, is hooked on `woocommerce_checkout_get_value`
+		 * — a `WC_Checkout::get_value()` filter applied from classic checkout field
+		 * rendering (`woocommerce_form_field()`), never from the block/Store-API
+		 * checkout (see {@see Checkout_Handler::current_country()}'s own docblock for
+		 * the rig-measured proof that this codebase's block checkout does not consult
+		 * classic-checkout instruments). Reachable only inside `is_request( 'frontend' )`,
+		 * where `WC()->customer` is guaranteed already initialized — `null` here is a
+		 * unit-test-only path, not a REST/GET degradation.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return object|null
@@ -1353,6 +1363,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * Override in subclasses or test doubles to supply a specific country code
 		 * without bootstrapping WooCommerce.
 		 *
+		 * Card #147 audit: unlike `WC()->countries`, `WC()->customer` genuinely IS
+		 * request-gated — `WooCommerce::init()` only initializes it (via
+		 * `wc_load_cart()`) `if ( $this->is_request( 'frontend' ) )`, and that gate
+		 * excludes every REST request (gotcha
+		 * `the-integration-suite-has-a-wc-session-a-rest-request-does-not`). But this
+		 * method's only caller, {@see self::inject()} ← {@see self::handle_checkout_fields()},
+		 * is hooked on `woocommerce_checkout_fields`, and this project's own
+		 * rig measurement (gotcha `block-checkout-reads-country-locale-not-checkout-fields`,
+		 * WC 11.0.1) established that the block/Store-API checkout never applies that
+		 * filter at all — it fires only from the classic checkout page render and its
+		 * `update_order_review` AJAX call, both squarely inside `is_request( 'frontend' )`.
+		 * So the `''` branch never actually fires against a live customer; it is a
+		 * unit-test-only path, not a REST/GET degradation.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string ISO 3166-1 alpha-2 country code, or empty string.
@@ -1395,6 +1419,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *
 		 * Extracted so tests can supply a country list without bootstrapping WooCommerce.
 		 *
+		 * Card #147 audit: this guard protects only against WooCommerce being fully
+		 * inactive, never a REST-vs-POST context difference. Unlike `WC()->cart` /
+		 * `WC()->session` / `WC()->customer` — which `WooCommerce::init()` populates
+		 * only `if ( $this->is_request( 'frontend' ) )` (`includes/class-woocommerce.php`,
+		 * WC 10.4.3+; the gate excludes every REST request, see gotcha
+		 * `the-integration-suite-has-a-wc-session-a-rest-request-does-not`) —
+		 * `WC()->countries` is instantiated UNCONDITIONALLY in that same `init()`
+		 * (`$this->countries = new WC_Countries();`), before the frontend branch, for
+		 * every request type once WordPress's `init` action has fired. Both callers of
+		 * this method ({@see self::inject_states()} on `woocommerce_states`,
+		 * {@see self::enqueue_assets()} on `wp_enqueue_scripts`) fire strictly after
+		 * `init`, so the `[]` branch is unreachable in production; it only fires in a
+		 * unit test where `WC()` is undefined.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string[]
@@ -1423,6 +1461,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * selling-country list without bootstrapping WooCommerce; returns an empty
 		 * array when WC is unavailable — a caller must treat that as "unknown",
 		 * never as "sells nowhere" (see {@see self::maybe_suppress_wc_address_providers()}).
+		 *
+		 * Card #147 audit: not reachable as a live degradation — see
+		 * {@see self::wc_country_codes()}'s own docblock for the proof that
+		 * `WC()->countries` is set unconditionally in `WooCommerce::init()`,
+		 * independent of REST vs. frontend. This method's only caller,
+		 * {@see self::maybe_suppress_wc_address_providers()}, is hooked on `init:21`
+		 * — strictly after WC's own `init()` callback (priority 0) — so `[]` only
+		 * ever fires when WooCommerce itself is inactive.
 		 *
 		 * @since 2.0.2
 		 *
