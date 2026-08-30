@@ -417,4 +417,73 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
 	}
+
+	/** @return void */
+	public function test_a_relative_location_carrying_a_scheme_in_its_query_is_followed_as_same_origin(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [
+			$this->response( 307, [ 'Location' => '/challenge?return=https://provider.example/' ] ),
+			$this->response( 200 ),
+		];
+
+		$response = $api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertSame( 200, $response['code'] );
+		$this->assertCount( 2, $api->calls );
+		$this->assertSame( 'https://api.example.test/challenge?return=https://provider.example/', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_query_only_location_resolves_against_the_current_path_not_the_parent_directory(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '?challenge=1' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'https://h/v1/orders?challenge=1', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_network_path_reference_resolves_to_the_other_host_and_is_then_refused_as_cross_origin(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '//other.example/x' ] ) ];
+
+		$response = $api->request_for_test( 'https://h/a', $this->request_args() );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'woodev_api_challenge_redirect_cross_origin', $response->get_error_code() );
+		$this->assertCount( 1, $api->calls );
+	}
+
+	/** @return void */
+	public function test_a_relative_path_with_dot_segments_is_merged_and_normalised_against_the_base_path(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '../up' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/a/b/c', $this->request_args() );
+
+		$this->assertSame( 'https://h/a/up', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_location_with_a_scheme_at_the_start_is_still_treated_as_absolute(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => 'https://h/abs' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/v1/orders', $this->request_args() );
+
+		$this->assertSame( 'https://h/abs', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_genuinely_cross_origin_absolute_location_is_still_refused(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => 'https://attacker.example/challenge?return=https://h/' ] ) ];
+
+		$response = $api->request_for_test( 'https://h/v1/orders', $this->request_args() );
+
+		$this->assertInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 'woodev_api_challenge_redirect_cross_origin', $response->get_error_code() );
+		$this->assertCount( 1, $api->calls );
+	}
 }

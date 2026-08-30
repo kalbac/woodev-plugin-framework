@@ -263,43 +263,137 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		}
 
 		/**
-		 * Resolves a redirect location against the original request URI.
+		 * Resolves a redirect Location against the original request URI, per RFC
+		 * 3986 §5.2's reference-resolution algorithm for the reference forms a
+		 * Location header can actually take.
+		 *
+		 * Absoluteness is decided by a SCHEME at the very start of the string
+		 * (`^[A-Za-z][A-Za-z0-9+.-]*:`), never by searching for `://` anywhere in
+		 * it — a same-origin `Location: /challenge?return=https://provider.example/`
+		 * (a `return`/`redirect_uri` query param is ordinary for a challenge
+		 * redirect) contains `://` without being absolute, and treating it as one
+		 * sent it to {@see self::is_same_origin_uri()} with no scheme or host,
+		 * where it was wrongly refused as cross-origin.
+		 *
+		 * A query-only Location (`?q`) keeps the base URI's PATH per RFC 3986
+		 * §5.3 — not the base's parent directory, which a naive "everything up to
+		 * the last `/`" merge produces for every relative Location, query-only
+		 * included.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $request_uri Original request URI.
-		 * @param string $location Redirect Location header.
+		 * @param string $request_uri Original request URI (absolute).
+		 * @param string $location    Redirect Location header value.
 		 * @return string
 		 */
 		private static function resolve_challenge_redirect_uri( string $request_uri, string $location ): string {
 
-			if ( false !== strpos( $location, '://' ) ) {
+			$base = parse_url( $request_uri );
+
+			if ( ! is_array( $base ) || empty( $base['scheme'] ) || empty( $base['host'] ) ) {
 				return $location;
 			}
 
-			$original = parse_url( $request_uri );
-
-			if ( ! is_array( $original ) || empty( $original['scheme'] ) || empty( $original['host'] ) ) {
+			// Absolute URI (RFC 3986 §3.1, §5.2.2 first case).
+			if ( 1 === preg_match( '/^[A-Za-z][A-Za-z0-9+.\-]*:/', $location ) ) {
 				return $location;
 			}
 
-			$origin = $original['scheme'] . '://' . $original['host'];
+			$origin = $base['scheme'] . '://' . $base['host'] . ( isset( $base['port'] ) ? ':' . $base['port'] : '' );
 
-			if ( isset( $original['port'] ) ) {
-				$origin .= ':' . $original['port'];
-			}
-
+			// Network-path reference: inherit only the base scheme.
 			if ( 0 === strpos( $location, '//' ) ) {
-				return $original['scheme'] . ':' . $location;
+				return $base['scheme'] . ':' . $location;
 			}
 
+			$base_path = isset( $base['path'] ) && '' !== $base['path'] ? $base['path'] : '/';
+
+			// Fragment-only reference: keep the base path and query, replace the fragment.
+			if ( 0 === strpos( $location, '#' ) ) {
+				return $origin . $base_path . ( isset( $base['query'] ) ? '?' . $base['query'] : '' ) . $location;
+			}
+
+			// Query-only reference (RFC 3986 §5.3): keep the base path, replace the query.
+			if ( 0 === strpos( $location, '?' ) ) {
+				return $origin . $base_path . $location;
+			}
+
+			[ $location_path, $location_suffix ] = self::split_uri_reference_path( $location );
+
+			// Absolute-path reference: the path replaces the base path outright.
 			if ( 0 === strpos( $location, '/' ) ) {
-				return $origin . $location;
+				return $origin . self::remove_dot_segments( $location_path ) . $location_suffix;
 			}
 
-			$path = isset( $original['path'] ) ? $original['path'] : '/';
+			// Relative-path reference: merge against the base path (RFC 3986 §5.2.3), then normalise.
+			$merged_path = substr( $base_path, 0, strrpos( $base_path, '/' ) + 1 ) . $location_path;
 
-			return $origin . substr( $path, 0, strrpos( $path, '/' ) + 1 ) . $location;
+			return $origin . self::remove_dot_segments( $merged_path ) . $location_suffix;
+		}
+
+		/**
+		 * Splits a scheme-less, authority-less URI reference into its leading
+		 * path and its verbatim query/fragment suffix, so dot-segment removal
+		 * touches only the path (RFC 3986 §5.2.4) and never a `?`/`#` that
+		 * happens to appear inside the reference's own query value.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $uri_reference Path-only URI reference (no scheme, no authority).
+		 * @return array{0: string, 1: string} [ path, suffix ], suffix is '' or starts with `?`/`#`.
+		 */
+		private static function split_uri_reference_path( string $uri_reference ): array {
+
+			$end = strlen( $uri_reference );
+
+			foreach ( [ strpos( $uri_reference, '?' ), strpos( $uri_reference, '#' ) ] as $marker ) {
+				if ( false !== $marker ) {
+					$end = min( $end, $marker );
+				}
+			}
+
+			return [ substr( $uri_reference, 0, $end ), substr( $uri_reference, $end ) ];
+		}
+
+		/**
+		 * Removes `.` and `..` dot-segments from a URI path per the RFC 3986
+		 * §5.2.4 algorithm.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $path Path to normalise.
+		 * @return string
+		 */
+		private static function remove_dot_segments( string $path ): string {
+
+			$output = '';
+
+			while ( '' !== $path ) {
+
+				if ( 0 === strpos( $path, '../' ) ) {
+					$path = substr( $path, 3 );
+				} elseif ( 0 === strpos( $path, './' ) ) {
+					$path = substr( $path, 2 );
+				} elseif ( 0 === strpos( $path, '/./' ) ) {
+					$path = '/' . substr( $path, 3 );
+				} elseif ( '/.' === $path ) {
+					$path = '/';
+				} elseif ( 0 === strpos( $path, '/../' ) ) {
+					$path   = '/' . substr( $path, 4 );
+					$output = (string) preg_replace( '#/?[^/]*$#', '', $output );
+				} elseif ( '/..' === $path ) {
+					$path   = '/';
+					$output = (string) preg_replace( '#/?[^/]*$#', '', $output );
+				} elseif ( '.' === $path || '..' === $path ) {
+					$path = '';
+				} else {
+					$segment = 1 === preg_match( '#^/?[^/]*#', $path, $segment_match ) ? $segment_match[0] : $path;
+					$output .= $segment;
+					$path    = substr( $path, strlen( $segment ) );
+				}
+			}
+
+			return $output;
 		}
 
 		/**
