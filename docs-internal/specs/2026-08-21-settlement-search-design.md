@@ -291,7 +291,34 @@ the control is presentation only, and `show_if` merely hides. Same pattern as #4
   actually wanted from it — a higher chance of finding the settlement — gets *better*. The mode
   disappears; the capability improves.
 
-## ⚠ Status, 26.08.2026 — this spec needs a scope conversation before any of it is built
+## ✅ Status, 31.08.2026 — the scope conversation happened; this spec is now PARTLY SUPERSEDED
+
+The operator settled it in one principle:
+
+> Лимита в 500 точно не должно быть. Если поля регион нет, поиск идёт по всей стране, и тут уже
+> ответственность провайдера. Мы даём возможность сузить поиск через регион, но если магазинщик сам
+> отключил это поле — это его осознанный выбор.
+
+**We offer narrowing; we never force it. The merchant's only switch is the region field itself.**
+
+That retires two decisions outright:
+
+- **Decision 8 (the «включить гранулярность» checkbox) — DROPPED.** A second switch is redundant when
+  the region field's presence already is one. A region field that exists but is not yet filled does
+  not block either: country-wide search, narrowed the moment a region appears. That is today's
+  behaviour.
+- **Decision 9 (server-side enforcement of the region requirement) — DROPPED with it.** There is no
+  requirement left to enforce.
+- **Decision 7** survives only as a definition of the term, not as a mode that gets built.
+
+**What is still live is decision 1, half-finished** — and it is not cleanup. Measured 31.08.2026:
+«Предустановленный список» is STILL offered on the settlement axis whenever the region axis is also
+`related-list` (`class-location-settings.php:349-362`), and in that state the field's own tooltip
+promises the list «становится полным» while `LIST_HARD_CAP = 500` silently truncates a ~3000-strong
+region. The `truncated` flag has NO consumer anywhere in the JS. Full remaining scope is on card
+**#437**.
+
+## ⚠ The superseded status note, 26.08.2026 — kept for the reasoning it carries
 
 The operator kept #437 open but flagged it for **detailed discussion**, and a read of the spec
 against the code says why: the thing it is TITLED for — replacing the preset settlement list —

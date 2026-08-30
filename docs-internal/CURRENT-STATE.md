@@ -37,10 +37,9 @@ on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (
 and why the old "the primary is 66" rule was measuring the operator's php.ini: gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624).** CI
-runs it on the target PHP version only, deterministically, so a failure reproduces locally with the
-same command. What it found on its first night, and why the suite had been green by alphabetical
-accident: `sessions/s102.md`.
+✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624),** on
+the target PHP version only, so a failure reproduces locally with the same command. Why the suite
+had been green by alphabetical accident: `sessions/s102.md`.
 
 ✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
 and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
@@ -74,35 +73,30 @@ anything not on a screen need not be wrapped in `__()` at all**; classify by the
 by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
 
 **Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
-decided by WHO READS IT, not by how dangerous the text looks.** MERCHANT or plugin author → kept;
-CUSTOMER → redacted. Every LOG sink redacts unconditionally (**#594**); this rule is about RESPONSE
-and NOTE boundaries only. His reasoning verbatim and the per-site table: cards **#608** / **#610**,
-`sessions/s101.md`.
+decided by WHO READS IT, not by how dangerous it looks.** MERCHANT or plugin author → kept; CUSTOMER
+→ redacted. Every LOG sink redacts unconditionally (**#594**); this rule governs RESPONSE and NOTE
+boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `sessions/s101.md`.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
 
-- **#531** (s95, PR #545) and **#542** (s95, PR #544) both SHIPPED; the surviving rules are the
-  `guard_custom_settlement()` line further down this file and the `src/` TypeScript row in
-  `AGENTS.md` → Conventions. History: `sessions/s95.md`.
-- **#437 — STAYS OPEN, needs a scope conversation. Do NOT take autonomously.** The thing the spec
-  is titled for already happened another way; decision 6's capability model and decision 8's
-  checkbox do not exist in code. Live remainder: 7/8 and 9. Two of its three open questions closed.
+- **#531** and **#542** (both s95) SHIPPED; the surviving rules are the `guard_custom_settlement()`
+  line below and the `src/` TypeScript row in `AGENTS.md`. History: `sessions/s95.md`.
+- **#437 — the scope conversation HAPPENED (31.08.2026); the card is takeable now.** His principle:
+  *we offer narrowing, we never force it; the merchant's only switch is the region field itself* —
+  which retires decisions 8 and 9 outright. Live remainder is decision 1, half-finished. Scope on
+  the card, reasoning in the spec's status banner.
   Detail on the card and in the spec's own status banner.
 
 **TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
-**#528 — the merchant opt-in «Разрешить использовать города не из списка»**, default OFF, only for
-«Список с поиском». ON → select2 `tags`; OFF → #517's abandon mechanism is gated off and the address
-lock stands. Detail → `sessions/s92.md`.
+**#528 — the merchant opt-in «Разрешить использовать города не из списка»** (label being shortened
+to «Города вне списка», #374), default OFF, only for «Список с поиском». ON → select2 `tags`; OFF →
+#517's abandon mechanism is gated off. Detail → `sessions/s92.md`.
 
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
-
-**#541's cause was an ASYMMETRY between the two select renderers, not the `/select` queue** — seam
-`options.onResolving()`, a pick announced by LEVEL. `sessions/s94.md`; gotcha
-`an-empty-list-while-the-search-runs-is-not-a-zero-result`.
 
 ## ⚠ The checkout location layer
 
@@ -225,13 +219,11 @@ Gotchas: **249**.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
 
-`docs/` (GH Pages) still teaches the v1 positional `register_plugin( '1.4.0', ... )`, which in v2 is
-a **tombstone** (quarantines the caller, never registers); the live API is
-`register_loader_definition([...])`. Versions are hardcoded instead of using
-`%%FRAMEWORK_VERSION%%`. Affected: `getting-started.md`, `core-framework.md`, `payment-gateway.md`,
-`shipping-method.md`, `README.md`. **Do NOT touch public docs yet** — the operator is the only
-consumer today; they get rewritten once everything is ready. Recorded so it is not mistaken for an
-oversight.
+`docs/` (GH Pages) still teaches the v1 positional `register_plugin( '1.4.0', … )`, a **tombstone**
+in v2 (quarantines the caller, never registers); the live API is `register_loader_definition([…])`,
+and versions are hardcoded instead of `%%FRAMEWORK_VERSION%%`. Affected: `getting-started.md`,
+`core-framework.md`, `payment-gateway.md`, `shipping-method.md`, `README.md`. **Do NOT touch public
+docs yet** — he is the only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 
@@ -241,16 +233,21 @@ oversight.
 Полный список открытых карточек — в блоке «Open cards after s108» выше; он и есть источник правды,
 здесь только порядок и запреты.
 
-1. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
+1. **#515**, **#374**, **#483**, **#437**, **#503** — все разблокированы 31.08.2026 и берутся без
+   вопросов. Порядок и объём каждой — в `next-session-prompt.md` → «С чего начать».
+2. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
    лишь ~10, остальные оттриажены по заголовку. Расстановка приоритетов — ЕГО, сверка — агента.
-2. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
-3. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+3. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
 4. **#689** — косметика по RFC 6265 §5.4, отклонена осознанно; брать только если появится потребитель.
 
-🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#437** (нужна беседа об объёме), **#653**
-(вторая половина, инлайновый jQuery — именно он был причиной #662), **#567** (остаток по языку
-msgid), **#474**, **#483**, **#515**, **#331**, **#332**, **#374**. **#621** держится за **#639**.
-**Отложено до релиза:** #285, #247.
+🙋 **Ждут решения ОПЕРАТОРА — список СИЛЬНО сократился 31.08.2026.** Брейншторм s108 обнаружил,
+что **девять из одиннадцати** «ждущих» карточек ответ уже имели, прямо на себе, и этот файл держал
+работу зря. Реально его ждут только: **#644** (расстановка приоритетов), **#652** (его глаза на
+риге) и **#331**/**#332** (он сам поставил «не сейчас» 15.08.2026). Решены в s108: **#483**,
+**#374**, **#437**; закрыта **#653**. Ответы давно лежали на карточках: **#503**, **#515**,
+**#247**. **#474** отнесена к архитектурным — решать замером, не спрашивать. **#621** держится за
+**#639** (условие входа: 2-3 плагина оплаты разных типов). **Отложено до релиза:** #285, #247,
+остаток #567.
 
 **Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
 миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали
