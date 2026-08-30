@@ -251,4 +251,37 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'Cookie', $api->calls[1]['args']['headers'] );
 	}
+
+	/** @return void */
+	public function test_the_callers_own_cookie_header_takes_precedence_over_the_remembered_jar(): void {
+		$api                        = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses             = [
+			$this->response( 200, [ 'Set-Cookie' => 'session=jar-value; Path=/' ] ),
+			$this->response( 200 ),
+		];
+		$args                       = $this->request_args();
+		$args['headers']['Cookie'] = 'session=caller-value';
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $args );
+		$api->request_for_test( 'https://api.example.test/v1/orders', $args );
+
+		$this->assertSame( 'session=caller-value', $api->calls[1]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_the_updated_action_does_not_fire_when_the_response_has_no_set_cookie_header(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 200 ) ];
+
+		$updated_action_fired = false;
+		Functions\when( 'do_action' )->alias( static function ( $tag ) use ( &$updated_action_fired ) {
+			if ( 'woodev_challenge-test_api_challenge_redirect_cookies_updated' === $tag ) {
+				$updated_action_fired = true;
+			}
+		} );
+
+		$api->request_for_test( 'https://api.example.test/v1/orders', $this->request_args() );
+
+		$this->assertFalse( $updated_action_fired );
+	}
 }

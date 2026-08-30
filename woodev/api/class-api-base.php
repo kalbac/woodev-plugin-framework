@@ -384,6 +384,10 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Adds the challenge-cookie jar for the request's origin to its headers.
 		 *
+		 * A cookie the caller explicitly set on the request already carries the
+		 * caller's own intent for that name, so it takes precedence over a
+		 * same-named cookie remembered from a previous challenge response.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string, mixed> $request_args Request arguments.
@@ -409,7 +413,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				}
 			}
 
-			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $existing_cookies, $cookies ) );
+			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $cookies, $existing_cookies ) );
 
 			return $request_args;
 		}
