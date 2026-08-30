@@ -162,16 +162,25 @@ namespace {
 		 * the `ON DUPLICATE KEY UPDATE` clause TEXT names (round 3, MEDIUM 4 — see
 		 * {@see self::apply_upsert()}'s own docblock), a new key inserts a fresh row.
 		 *
-		 * @param string $query the prepared query (as returned by prepare(), i.e. unchanged)
+		 * Round 5 (#499): records the ACTUAL `$query` argument, not
+		 * {@see self::$last_query} — a plain, unprepared call like
+		 * `query( 'START TRANSACTION' )` (the merge fold's transaction
+		 * brackets) never goes through `prepare()` at all, so `$last_query`
+		 * would still be whatever an EARLIER `prepare()` call left behind. The
+		 * atomic-upsert path is unaffected: production always calls
+		 * `query( $wpdb->prepare( ... ) )`, so `$query` and `$last_query` are
+		 * identical there.
+		 *
+		 * @param string $query the raw or prepared query text
 		 * @return int
 		 */
 		public function query( $query ) {
 			$this->queries[] = [
-				'sql'  => $this->last_query,
+				'sql'  => $query,
 				'args' => $this->last_args,
 			];
 
-			if ( false !== strpos( (string) $this->last_query, 'ON DUPLICATE KEY UPDATE' ) ) {
+			if ( false !== strpos( (string) $query, 'ON DUPLICATE KEY UPDATE' ) ) {
 				$this->apply_upsert();
 			}
 
@@ -300,9 +309,17 @@ namespace {
 		}
 
 		/**
-		 * Extracts `` `col` = %s `` column names from {@see self::$last_query} and
-		 * filters `$rows` by zipping them against {@see self::$last_args}. Returns
-		 * `$rows` unfiltered when the query text has no such comparisons at all.
+		 * Extracts `` `col` = %s `` / `` `col` = %d `` column names from
+		 * {@see self::$last_query} and filters `$rows` by zipping them against
+		 * {@see self::$last_args}. Returns `$rows` unfiltered when the query
+		 * text has no such comparisons at all.
+		 *
+		 * Round 5 (#499): compares as strings, mirroring {@see self::row_matches_where()}'s
+		 * own cast — `lock_row_by_id()` binds its `id` arg via `%d` (a PHP int),
+		 * while every row this fake stores keeps `id` as a string; a strict
+		 * `!==` would (wrongly) never match, exactly the way real MySQL WOULD
+		 * match an int-bound placeholder against a BIGINT column regardless of
+		 * the PHP-side type of the bound value.
 		 *
 		 * @param array<int,array<string,mixed>> $rows
 		 * @return array<int,array<string,mixed>>
@@ -320,7 +337,7 @@ namespace {
 					$rows,
 					function ( array $row ) use ( $columns ): bool {
 						foreach ( $columns as $i => $column ) {
-							if ( ( $row[ $column ] ?? null ) !== ( $this->last_args[ $i ] ?? null ) ) {
+							if ( (string) ( $row[ $column ] ?? null ) !== (string) ( $this->last_args[ $i ] ?? null ) ) {
 								return false;
 							}
 						}
@@ -948,15 +965,16 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 		}
 
 		/**
-		 * replace_record() (round 2 critic HIGH finding, #488 slice 3): when the
-		 * fresh key converges onto a DIFFERENT row that already holds it — the
-		 * table's `UNIQUE (provider_id, locality_key)` (two historical popular
-		 * rows the provider has since merged into one settlement) — the write is
-		 * REJECTED by the database. replace_record() must report that (`false`),
-		 * not silently swallow it, and the LOSING row must be left exactly as it
-		 * was: no key change, no clock bump.
+		 * replace_record() (#499): when the fresh key converges onto a DIFFERENT
+		 * row that already holds it — the table's `UNIQUE (provider_id,
+		 * locality_key)` — two historical popular rows the provider has since
+		 * merged into one settlement, replace_record() now folds the losing
+		 * row's `order_count`/`last_ordered_at` into the surviving row, refreshes
+		 * the survivor's `record`/`country`/`last_verified_at` from the fresh
+		 * record, deletes the loser, and reports `true` — never leaving the
+		 * settlement stuck forever reporting `false`.
 		 */
-		public function test_replace_record_reports_false_and_leaves_the_row_untouched_on_a_unique_key_collision(): void {
+		public function test_replace_record_folds_the_loser_into_the_survivor_on_a_unique_key_collision(): void {
 			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
 
 			$staying = $this->record( $provider->get_id(), 'already-there' );
@@ -971,25 +989,93 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			// The provider now resolves the losing row's OLD key to the SAME
 			// record the staying row already holds — a merge.
-			$merged = $staying->to_array();
-
-			$fresh = Location_Record::from_array( $merged );
+			$fresh = Location_Record::from_array( $staying->to_array() );
 
 			$result = $store->replace_record( 7, $fresh, 1787572800 );
 
-			$this->assertFalse( $result, 'A write that violates the unique key must report false, not silently succeed.' );
+			$this->assertTrue( $result, 'A merge collision must fold and report true, not fail forever.' );
+			$this->assertCount( 1, $wpdb->rows, 'The losing row must really be gone — folded away, not left as a duplicate.' );
+			$this->assertSame( '1', $wpdb->rows[0]['id'], "The surviving row keeps ITS OWN surrogate id, not the loser's." );
+			$this->assertSame( $staying->key(), $wpdb->rows[0]['locality_key'], 'The survivor keeps the key it already held.' );
 			$this->assertSame(
-				$losing->key(),
-				$wpdb->rows[1]['locality_key'],
-				'The losing row must keep its OLD key — the rejected write must never land.'
+				$fresh->to_array(),
+				json_decode( (string) $wpdb->rows[0]['record'], true ),
+				'The survivor\'s record is refreshed from the provider\'s fresh answer.'
 			);
+			$this->assertSame( 12, $wpdb->rows[0]['order_count'], 'order_count on the survivor must be the SUM of both rows (3 + 9).' );
 			$this->assertSame(
-				json_encode( $losing->to_array() ),
-				$wpdb->rows[1]['record'],
-				'The losing row must keep its OLD record — no partial write.'
+				'2026-08-02 00:00:00',
+				$wpdb->rows[0]['last_ordered_at'],
+				'last_ordered_at must be the LATER of the two rows\' values — a merge does not erase that someone ordered there.'
 			);
-			$this->assertNull( $wpdb->rows[1]['last_verified_at'], 'A rejected write must never bump last_verified_at either.' );
-			$this->assertSame( '9', $wpdb->rows[1]['order_count'], 'The usage clock must be untouched by a rejected write.' );
+			$this->assertSame( '2026-08-24 12:00:00', $wpdb->rows[0]['last_verified_at'], 'The survivor\'s freshness clock must bump too.' );
+		}
+
+		/**
+		 * replace_record() (#499): the fold is wrapped in a single transaction —
+		 * a START TRANSACTION and a COMMIT bracket the read/update/delete, so a
+		 * concurrent `/select` cannot observe the counters mid-fold.
+		 */
+		public function test_replace_record_wraps_the_fold_in_one_transaction(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+
+			$staying = $this->record( $provider->get_id(), 'already-there' );
+			$losing  = $this->record( $provider->get_id(), 'old-native-id' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [
+				$this->row( $staying, 3, '2026-08-01 00:00:00', 1 ),
+				$this->row( $losing, 9, '2026-08-02 00:00:00', 7 ),
+			];
+			$store = new Popular_Settlement_Store( $wpdb );
+
+			$fresh = Location_Record::from_array( $staying->to_array() );
+
+			$store->replace_record( 7, $fresh, 1787572800 );
+
+			$transaction_statements = array_map(
+				static fn( array $query ): string => (string) $query['sql'],
+				$wpdb->queries
+			);
+
+			$this->assertSame( 'START TRANSACTION', $transaction_statements[0] ?? null, 'The fold must open a transaction first.' );
+			$this->assertSame( 'COMMIT', end( $transaction_statements ), 'A successful fold must COMMIT, not leave the transaction open.' );
+			$this->assertNotContains( 'ROLLBACK', $transaction_statements, 'A successful fold must never roll back.' );
+		}
+
+		/**
+		 * replace_record() (#499): a PLAIN rename — the new key is free, no other
+		 * row holds it — must keep going through the ordinary single UPDATE, not
+		 * the fold path: no transaction statements, no delete, and the usage
+		 * clock left untouched exactly as before #499.
+		 */
+		public function test_replace_record_still_takes_the_plain_update_path_when_the_new_key_is_free(): void {
+			$provider = new \Popular_Settlement_Resolving_Fixture_Provider();
+			$original = $this->record( $provider->get_id(), 'old-native-id' );
+
+			$wpdb       = new \Popular_Settlement_Store_Fake_Wpdb();
+			$wpdb->rows = [ $this->row( $original, 9, '2026-08-01 00:00:00', 7 ) ];
+			$store      = new Popular_Settlement_Store( $wpdb );
+
+			$fresh = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':new-native-id',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+					'settlement'  => [ 'name' => 'Renamed', 'type' => 'city' ],
+				]
+			);
+
+			$result = $store->replace_record( 7, $fresh, 1787572800 );
+
+			$this->assertTrue( $result );
+			$this->assertCount( 1, $wpdb->rows, 'A plain rename must never delete or duplicate a row.' );
+			$this->assertCount( 0, $wpdb->deletes, 'A plain rename must never delete — there is no loser to fold away.' );
+			$this->assertCount( 0, $wpdb->queries, 'A plain rename must never open a transaction — that is only for the fold branch.' );
+			$this->assertSame( $fresh->key(), $wpdb->rows[0]['locality_key'] );
+			$this->assertSame( '9', $wpdb->rows[0]['order_count'], 'order_count must still be untouched by a plain rename.' );
+			$this->assertSame( '2026-08-01 00:00:00', $wpdb->rows[0]['last_ordered_at'], 'last_ordered_at must still be untouched by a plain rename.' );
 		}
 
 		/**

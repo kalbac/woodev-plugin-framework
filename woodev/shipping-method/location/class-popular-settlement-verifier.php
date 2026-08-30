@@ -92,25 +92,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 
 			// A rename, a new postcode, or even a changed key must land — search
 			// would have returned the new record (spec D1/D6 equivalence).
-			// order_count/last_ordered_at are separate clocks (spec D2), untouched
-			// here — replace_record() only ever overwrites record/locality_key/
-			// country/last_verified_at.
+			// order_count/last_ordered_at are separate clocks (spec D2), left
+			// untouched by a plain rename — replace_record() only overwrites
+			// record/locality_key/country/last_verified_at in that case. When the
+			// new key converges onto a DIFFERENT row (two historical popular rows
+			// the provider has since merged into one settlement, #499),
+			// replace_record() itself folds that row's order_count/
+			// last_ordered_at into the survivor and deletes this one, and still
+			// reports success — this call site does not need to know which of
+			// the two happened.
 			if ( ! $this->store->replace_record( $entry->id(), $fresh ) ) {
-				// The write itself can be rejected even though resolve_key()
-				// succeeded: the table's `UNIQUE (provider_id, locality_key)`
-				// rejects a changed key that converges onto a DIFFERENT row
-				// already holding it — two historical popular rows the provider
-				// has since merged into one settlement. Reconciling that merge is
-				// deliberately out of scope for this slice (spec D6: "it should
-				// cost one UPDATE, not a subsystem") — open question tracked at
-				// https://github.com/kalbac/woodev-plugin-framework/issues/499.
-				// Report `failed`, never `updated`: the row was NOT actually
-				// overwritten, so returning `updated` would be a lie a caller
-				// (the `/select` route's D5 step) would persist as fact.
+				// A `false` here is neither a plain rename nor a mergeable
+				// collision — both are handled inside replace_record() now — but
+				// some OTHER failure, e.g. a genuinely concurrent delete racing
+				// the write. Report `failed`, never `updated`: the row was NOT
+				// actually reconciled, so returning `updated` would be a lie a
+				// caller (the `/select` route's D5 step) would persist as fact.
 				return Popular_Settlement_Verification::failed(
 					new \RuntimeException(
 						sprintf(
-							'Popular_Settlement_Store::replace_record() failed for entry id %d — likely a (provider_id, locality_key) unique-key collision (a merged settlement).',
+							'Popular_Settlement_Store::replace_record() failed for entry id %d.',
 							$entry->id()
 						)
 					)

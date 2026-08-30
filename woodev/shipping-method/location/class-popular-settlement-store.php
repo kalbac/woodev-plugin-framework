@@ -549,29 +549,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		/**
 		 * Overwrites the stored `record`/`locality_key`/`country` in place and
 		 * bumps `last_verified_at` (spec D6: "alive, changed" — incl. a changed
-		 * key). Deliberately leaves `order_count`/`last_ordered_at` untouched —
-		 * those are the usage clock (spec D2), a different axis; a settlement does
-		 * not become less popular because it was renamed. The row keeps its
-		 * surrogate `id` (spec D3/D6) — its identity survives the key change.
+		 * key). Deliberately leaves `order_count`/`last_ordered_at` untouched on
+		 * a PLAIN rename — those are the usage clock (spec D2), a different
+		 * axis; a settlement does not become less popular because it was
+		 * renamed. The row keeps its surrogate `id` (spec D3/D6) — its identity
+		 * survives the key change.
 		 *
-		 * The write can fail even though the caller already resolved a fresh
-		 * record: the table's `UNIQUE (provider_id, locality_key)` (see
-		 * {@see self::get_schema()}) rejects it when the new key converges onto a
-		 * DIFFERENT row that already holds it — two historical popular rows the
-		 * provider has since merged into one settlement. This method does not
-		 * attempt to reconcile that; it only reports whether the write landed so
-		 * the caller (@see Popular_Settlement_Verifier::verify_entry()) never
-		 * mistakes a rejected write for a successful one.
+		 * The new key can converge onto a DIFFERENT row that already holds it —
+		 * two historical popular rows the provider has since merged into one
+		 * settlement, which the table's `UNIQUE (provider_id, locality_key)`
+		 * (see {@see self::get_schema()}) would reject as a plain UPDATE. Rather
+		 * than let that reject bubble up as a `false` this row can never recover
+		 * from (a settlement whose verification would fail forever), this method
+		 * detects the collision itself — a plain, unlocked {@see self::find_row_by_key()}
+		 * read against the NEW key — and hands off to {@see self::fold_into_survivor()}:
+		 * the OTHER row's `order_count`/`last_ordered_at` absorb THIS row's, its
+		 * `record`/`country`/`last_verified_at` are refreshed from `$record`, and
+		 * this row (the one that lost its key) is deleted. Three statements in
+		 * one transaction — still "one UPDATE, not a subsystem" in spirit (spec
+		 * D6), because it only ever runs on the rare collision branch; the
+		 * ordinary rename below is still the single UPDATE it always was.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 A key that collides with a DIFFERENT row now folds that
+		 *              row's counters into the survivor and deletes the loser
+		 *              (#499) instead of leaving both rows to report `false`
+		 *              forever.
 		 *
 		 * @param int             $id        The row's surrogate id.
 		 * @param Location_Record $record    The provider's fresh record.
 		 * @param int|null        $timestamp Verification time override, in seconds; defaults to now.
 		 *
-		 * @return bool Whether the write actually landed.
+		 * @return bool Whether the write — a plain overwrite, or a merge fold — actually landed.
 		 */
 		public function replace_record( int $id, Location_Record $record, ?int $timestamp = null ): bool {
+			$colliding_row = $this->find_row_by_key( $record->provider_id(), $record->key() );
+
+			if ( null !== $colliding_row && (int) $colliding_row['id'] !== $id ) {
+				return $this->fold_into_survivor( (int) $colliding_row['id'], $id, $record, $timestamp );
+			}
+
 			$result = $this->wpdb()->update(
 				$this->get_table_name(),
 				[
@@ -586,6 +603,122 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 			);
 
 			return false !== $result;
+		}
+
+		/**
+		 * Folds a merged-away settlement into the row that survives it (spec
+		 * D6/#499): {@see self::replace_record()} found that the fresh key it
+		 * needs to write already belongs to a DIFFERENT row — two historical
+		 * popular rows the provider has since merged into one settlement.
+		 *
+		 * Runs as a single transaction: a LOCKED re-read of both rows (guarding
+		 * against a concurrent {@see self::delete_entry()} or
+		 * {@see self::evict_if_over_cap()} racing the fold between
+		 * `replace_record()`'s own unlocked collision check and here), an UPDATE
+		 * on the survivor that sums `order_count` and keeps the LATER of the two
+		 * `last_ordered_at` values (a merge does not erase the fact that someone
+		 * ordered there), and a DELETE of the now-redundant loser. `country`/
+		 * `record`/`last_verified_at` on the survivor are refreshed from
+		 * `$record` — the provider's own answer for this key, resolved moments
+		 * ago — exactly as the ordinary rename branch of `replace_record()` would.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int             $survivor_id The id of the row that already holds `$record`'s key.
+		 * @param int             $loser_id    The id of the row being merged away.
+		 * @param Location_Record $record      The provider's fresh record for the shared key.
+		 * @param int|null        $timestamp   Verification time override, in seconds; defaults to now.
+		 *
+		 * @return bool Whether the fold actually landed.
+		 */
+		private function fold_into_survivor( int $survivor_id, int $loser_id, Location_Record $record, ?int $timestamp ): bool {
+			$wpdb  = $this->wpdb();
+			$table = $this->get_table_name();
+
+			$wpdb->query( 'START TRANSACTION' );
+
+			$survivor = $this->lock_row_by_id( $survivor_id );
+			$loser    = $this->lock_row_by_id( $loser_id );
+
+			if ( null === $survivor || null === $loser ) {
+				// One of the two rows vanished under us (e.g. a concurrent sweep
+				// already deleted it) — nothing sane left to fold.
+				$wpdb->query( 'ROLLBACK' );
+
+				return false;
+			}
+
+			$updated = $wpdb->update(
+				$table,
+				[
+					'country'          => $record->country(),
+					'record'           => wp_json_encode( $record->to_array() ),
+					'order_count'      => (int) $survivor['order_count'] + (int) $loser['order_count'],
+					'last_ordered_at'  => self::later_datetime( $survivor['last_ordered_at'] ?? null, $loser['last_ordered_at'] ?? null ),
+					'last_verified_at' => $this->to_mysql_datetime( $timestamp ),
+				],
+				[ 'id' => $survivor_id ],
+				[ '%s', '%s', '%d', '%s', '%s' ],
+				[ '%d' ]
+			);
+
+			if ( false === $updated ) {
+				$wpdb->query( 'ROLLBACK' );
+
+				return false;
+			}
+
+			$wpdb->delete( $table, [ 'id' => $loser_id ] );
+
+			$wpdb->query( 'COMMIT' );
+
+			return true;
+		}
+
+		/**
+		 * Reads one row by its surrogate id with a row lock (`FOR UPDATE`), for
+		 * use only inside a transaction — {@see self::fold_into_survivor()}'s
+		 * guard against a concurrent write racing the fold.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $id The row's surrogate id.
+		 *
+		 * @return array<string, mixed>|null
+		 */
+		private function lock_row_by_id( int $id ): ?array {
+			$row = $this->wpdb()->get_row(
+				$this->wpdb()->prepare( 'SELECT * FROM `' . $this->get_table_name() . '` WHERE `id` = %d FOR UPDATE', $id ),
+				ARRAY_A
+			);
+
+			return is_array( $row ) ? $row : null;
+		}
+
+		/**
+		 * Returns the chronologically later of two nullable MySQL `DATETIME`
+		 * strings, treating a null/empty value as "no signal" rather than
+		 * "earliest possible" — used by {@see self::fold_into_survivor()} to
+		 * keep the later `last_ordered_at` when merging two rows (a merge does
+		 * not erase the fact that someone ordered there).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string|null $a First candidate.
+		 * @param string|null $b Second candidate.
+		 *
+		 * @return string|null
+		 */
+		private static function later_datetime( ?string $a, ?string $b ): ?string {
+			if ( null === $a || '' === $a ) {
+				return $b;
+			}
+
+			if ( null === $b || '' === $b ) {
+				return $a;
+			}
+
+			return $a > $b ? $a : $b;
 		}
 
 		/**
