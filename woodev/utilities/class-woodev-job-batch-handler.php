@@ -134,7 +134,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			$job_id = isset( $_POST['job_id'] ) ? sanitize_text_field( $_POST['job_id'] ) : '';
 
-			if ( empty( $job_id ) ) {
+			if ( ! $this->is_valid_job_id( $job_id ) || ! $this->get_job_handler()->get_job( $job_id ) ) {
 				return;
 			}
 
@@ -173,7 +173,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			$job_id = isset( $_POST['job_id'] ) ? sanitize_text_field( $_POST['job_id'] ) : '';
 
-			if ( empty( $job_id ) ) {
+			if ( ! $this->is_valid_job_id( $job_id ) || ! $this->get_job_handler()->get_job( $job_id ) ) {
 				return;
 			}
 
@@ -240,6 +240,19 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 			$items_per_batch = absint( apply_filters( $this->get_job_handler()->get_identifier() . '_batch_handler_items_per_batch', $this->items_per_batch ) );
 
 			return $items_per_batch > 0 ? $items_per_batch : 1;
+		}
+
+
+		/**
+		 * Determines whether a job identifier uses the generated job ID format.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $job_id Job identifier.
+		 * @return bool
+		 */
+		private static function is_valid_job_id( string $job_id ): bool {
+			return 1 === preg_match( '/^[a-f0-9]{32}$/', $job_id );
 		}
 
 
