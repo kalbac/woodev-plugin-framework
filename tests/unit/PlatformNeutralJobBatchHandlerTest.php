@@ -171,6 +171,7 @@ class PlatformNeutralJobBatchHandlerTest extends TestCase {
 	public function test_ajax_process_batch_returns_completed_zero_total_job(): void {
 		$job_handler = Mockery::mock();
 		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldReceive( 'get_job' )->once()->with( 'd41d8cd98f00b204e9800998ecf8427e' )->andReturn( (object) [ 'id' => 'd41d8cd98f00b204e9800998ecf8427e' ] );
 
 		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
 		$handler->set_job_handler( $job_handler );
@@ -191,9 +192,58 @@ class PlatformNeutralJobBatchHandlerTest extends TestCase {
 			)
 		);
 
-		$_POST['job_id'] = 'job-1';
+		$_POST['job_id'] = 'd41d8cd98f00b204e9800998ecf8427e';
 		$handler->ajax_process_batch();
 		unset( $_POST['job_id'] );
+	}
+
+	/**
+	 * Malformed IDs must stop at the AJAX boundary and never enter the batch
+	 * processor or persistence lookup.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_process_batch_rejects_malformed_job_id(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldNotReceive( 'get_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( true );
+
+		$_POST['job_id'] = 'not-a-job-id';
+		$handler->ajax_process_batch();
+		unset( $_POST['job_id'] );
+
+		$this->assertFalse( $handler->processed_batch );
+	}
+
+	/**
+	 * A correctly shaped but absent ID must stop before the batch processor.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_process_batch_rejects_missing_job_id(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldReceive( 'get_job' )->once()->with( 'd41d8cd98f00b204e9800998ecf8427e' )->andReturn( null );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( true );
+
+		$_POST['job_id'] = 'd41d8cd98f00b204e9800998ecf8427e';
+		$handler->ajax_process_batch();
+		unset( $_POST['job_id'] );
+
+		$this->assertFalse( $handler->processed_batch );
 	}
 
 	/**
@@ -243,6 +293,52 @@ class PlatformNeutralJobBatchHandlerTest extends TestCase {
 		Functions\expect( 'wp_send_json_error' )->once()->with( Mockery::type( 'array' ), 403 );
 
 		$_POST['job_id'] = 'job-1';
+		$handler->ajax_cancel_job();
+		unset( $_POST['job_id'] );
+	}
+
+	/**
+	 * Cancel requests must reject malformed IDs without reaching persistence.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_cancel_job_rejects_malformed_job_id(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldNotReceive( 'get_job' );
+		$job_handler->shouldNotReceive( 'delete_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( true );
+
+		$_POST['job_id'] = 'not-a-job-id';
+		$handler->ajax_cancel_job();
+		unset( $_POST['job_id'] );
+	}
+
+	/**
+	 * Cancel requests must reject a well-formed ID that has no stored job.
+	 *
+	 * @return void
+	 */
+	public function test_ajax_cancel_job_rejects_missing_job_id(): void {
+		$job_handler = Mockery::mock();
+		$job_handler->shouldReceive( 'get_identifier' )->andReturn( 'test_job' );
+		$job_handler->shouldReceive( 'get_job' )->once()->with( 'd41d8cd98f00b204e9800998ecf8427e' )->andReturn( null );
+		$job_handler->shouldNotReceive( 'delete_job' );
+
+		$handler = new Testable_Platform_Neutral_Job_Batch_Handler();
+		$handler->set_job_handler( $job_handler );
+
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+		Functions\when( 'sanitize_text_field' )->returnArg();
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_woocommerce' )->andReturn( true );
+
+		$_POST['job_id'] = 'd41d8cd98f00b204e9800998ecf8427e';
 		$handler->ajax_cancel_job();
 		unset( $_POST['job_id'] );
 	}

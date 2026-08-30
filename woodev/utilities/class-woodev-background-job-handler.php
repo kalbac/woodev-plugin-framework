@@ -622,7 +622,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 * @param int             $items_per_batch number of items to process in a single request. Defaults to unlimited.
 		 *
 		 * @return stdClass $job
-		 * @throws Exception when job data is incorrect
+		 * @throws Woodev_Plugin_Exception when job data is incorrect
 		 */
 		public function process_job( $job, $items_per_batch = null ) {
 
@@ -642,11 +642,11 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$data_key = $this->data_key;
 
 			if ( ! isset( $job->{$data_key} ) ) {
-				throw new Exception( sprintf( __( 'Job data key "%s" not set', 'woodev-plugin-framework' ), $data_key ) );
+				throw new Woodev_Plugin_Exception( sprintf( __( 'Job data key "%s" not set', 'woodev-plugin-framework' ), $data_key ) );
 			}
 
 			if ( ! is_array( $job->{$data_key} ) ) {
-				throw new Exception( sprintf( __( 'Job data key "%s" is not an array', 'woodev-plugin-framework' ), $data_key ) );
+				throw new Woodev_Plugin_Exception( sprintf( __( 'Job data key "%s" is not an array', 'woodev-plugin-framework' ), $data_key ) );
 			}
 
 			$data = $job->{$data_key};
@@ -966,6 +966,20 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 
 		/**
+		 * Gets the final PHP error, if the process is shutting down after one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array|null
+		 */
+		protected function get_last_error(): ?array {
+			$error = error_get_last();
+
+			return is_array( $error ) ? $error : null;
+		}
+
+
+		/**
 		 * Handles PHP shutdown, say after a fatal error.
 		 *
 		 * @since 2.0.2
@@ -974,7 +988,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 */
 		public function handle_shutdown(): void {
 
-			$error = error_get_last();
+			$error = $this->get_last_error();
 
 			// if shutting down because of a fatal error, fail the job
 			if ( $error && E_ERROR === $error['type'] && $this->job_being_processed ) {

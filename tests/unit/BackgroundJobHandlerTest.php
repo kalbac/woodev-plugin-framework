@@ -11,6 +11,7 @@ use Brain\Monkey\Functions;
 use Mockery;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/utilities/class-woodev-async-request.php';
+require_once dirname( __DIR__, 2 ) . '/woodev/class-plugin-exception.php';
 require_once dirname( __DIR__, 2 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
 
 /**
@@ -119,6 +120,57 @@ class Testable_Background_Job_Handler extends \Woodev_Background_Job_Handler {
 }
 
 /**
+ * Drives the shutdown callback from the active job-processing step.
+ */
+class Shutdown_Wiring_Background_Job_Handler extends Testable_Background_Job_Handler {
+
+	/** @var object|null */
+	public $failed_job;
+
+	/** @var string */
+	public $failure_reason = '';
+
+	/**
+	 * Supplies a fatal error to the production shutdown handler.
+	 *
+	 * @return array|null
+	 */
+	protected function get_last_error(): ?array {
+		return [
+			'type'    => E_ERROR,
+			'message' => 'Simulated fatal error',
+		];
+	}
+
+	/**
+	 * Simulates a fatal error while the queue loop's current job is active.
+	 *
+	 * @param object   $job             Active job.
+	 * @param int|null $items_per_batch Unused item cap.
+	 * @return object
+	 */
+	public function process_job( $job, $items_per_batch = null ) {
+		$this->handle_shutdown();
+
+		return $job;
+	}
+
+	/**
+	 * Records the job selected by the shutdown callback.
+	 *
+	 * @param object|string $job    Job to fail.
+	 * @param string        $reason Failure reason.
+	 * @return object
+	 */
+	public function fail_job( $job, $reason = '' ) {
+		$this->failed_job    = $job;
+		$this->failure_reason = $reason;
+
+		return $job;
+	}
+}
+
+/**
  * Class BackgroundJobHandlerTest.
  */
 class BackgroundJobHandlerTest extends TestCase {
@@ -144,6 +196,80 @@ class BackgroundJobHandlerTest extends TestCase {
 		$handler->handle_public();
 
 		$this->assertSame( 1, $handler->shutdown_handler_registrations );
+	}
+
+	/**
+	 * A fatal simulated while handle() processes a queued job is reported against
+	 * that organically selected job, rather than a hand-built shutdown target.
+	 *
+	 * @return void
+	 */
+	public function test_handle_routes_active_job_to_shutdown_handler_after_fatal_error(): void {
+		$job = (object) [
+			'id'     => 'active-job',
+			'status' => 'processing',
+		];
+
+		Functions\when( 'wp_die' )->justReturn( null );
+
+		$handler = new Shutdown_Wiring_Background_Job_Handler();
+		$handler->set_jobs( [ $job ] );
+
+		$handler->handle_public();
+
+		$this->assertSame( $job, $handler->failed_job );
+		$this->assertSame( 'Simulated fatal error', $handler->failure_reason );
+	}
+
+	/**
+	 * Invalid default job data must use the exception type caught by the batch
+	 * AJAX boundary instead of leaking a generic exception as a 500 response.
+	 *
+	 * @return void
+	 */
+	public function test_process_job_throws_plugin_exception_for_missing_data_key(): void {
+		$handler = new class extends \Woodev_Background_Job_Handler {
+			/** @return void */
+			public function __construct() {}
+
+			/** @return void */
+			protected function process_item( $item, $job ) {}
+		};
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$handler->process_job(
+			(object) [
+				'id'     => 'missing-data',
+				'status' => 'processing',
+			]
+		);
+	}
+
+	/**
+	 * A scalar data value must use the same AJAX-caught exception type as a
+	 * missing data key.
+	 *
+	 * @return void
+	 */
+	public function test_process_job_throws_plugin_exception_for_non_array_data(): void {
+		$handler = new class extends \Woodev_Background_Job_Handler {
+			/** @return void */
+			public function __construct() {}
+
+			/** @return void */
+			protected function process_item( $item, $job ) {}
+		};
+
+		$this->expectException( \Woodev_Plugin_Exception::class );
+
+		$handler->process_job(
+			(object) [
+				'id'     => 'scalar-data',
+				'status' => 'processing',
+				'data'   => 'not-an-array',
+			]
+		);
 	}
 
 	/**
