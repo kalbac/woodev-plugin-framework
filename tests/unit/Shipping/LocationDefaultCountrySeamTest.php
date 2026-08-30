@@ -1,15 +1,18 @@
 <?php
 /**
- * Issue #296 seam-pin test: Checkout_Config::build_location_block()'s own
- * `defaultCountry` key and Location_Controller::perform_suggest()'s own
- * empty-`country`-param fallback must resolve to the SAME answer — both are
- * backed by the ONE Location_Service::resolve_default_country() method
- * (`checkout field -> WooCommerce store setting -> RU`). This project has
- * already shipped a layer where each side of a client/server boundary was
- * independently green in its own tests and quietly disagreed between them;
- * this file exercises BOTH call sites against the SAME `get_option()` stub
- * so a future change that moves one side without the other fails here
- * first, not on a live checkout.
+ * Issue #296/#321 seam-pin test: Checkout_Config::build_location_block()'s
+ * own `defaultCountry` key, Location_Controller::perform_suggest()'s own
+ * empty-`country`-param fallback (`/suggest`, #296), and
+ * Location_Controller::handle_list_request()'s own matching fallback
+ * (`/list`, #321 — deliberately left out of PR #320's scope) must all
+ * resolve to the SAME answer — every one of them is backed by the ONE
+ * Location_Service::resolve_default_country() method (`checkout field ->
+ * WooCommerce store setting -> RU`). This project has already shipped a
+ * layer where each side of a client/server boundary was independently
+ * green in its own tests and quietly disagreed between them; this file
+ * exercises ALL THREE call sites against the SAME `get_option()` stub so a
+ * future change that moves one side without the others fails here first,
+ * not on a live checkout.
  *
  * @package Woodev\Tests\Unit\Shipping
  */
@@ -142,6 +145,17 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/**
+		 * Issue #321: the REAL provider_for_list() reaches into
+		 * `$this->registry`, which this fake's constructor never sets (it
+		 * never calls the parent's) — without this override, handle_list_request()
+		 * would fatal on a null registry rather than exercise the fallback this
+		 * test pins.
+		 */
+		public function provider_for_list( ?string $country = null ): ?Location_Provider {
+			return $this->provider;
+		}
+
+		/**
 		 * Issue #530: WITHOUT this override, build_location_block() calling
 		 * get_popular_settlements_for_country() would run the REAL method body,
 		 * which reaches `$this->registry->get_active_provider()`; `$this->registry`
@@ -165,6 +179,9 @@ namespace Woodev\Tests\Unit\Shipping {
 
 		/** @var array<int, array{0: string, 1: Location_Scope}> */
 		public array $suggest_calls = [];
+
+		/** @var Location_Scope[] */
+		public array $list_calls = [];
 
 		/**
 		 * @param string[] $countries ISO-3166 alpha-2 codes this fake covers.
@@ -194,6 +211,12 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			return [];
 		}
+
+		public function list_localities( Location_Scope $scope ): array {
+			$this->list_calls[] = $scope;
+
+			return [];
+		}
 	}
 
 	/**
@@ -211,6 +234,7 @@ namespace Woodev\Tests\Unit\Shipping {
 	 * @covers \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country
 	 * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Config::build
 	 * @covers \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_suggest_request
+	 * @covers \Woodev\Framework\Shipping\Rest_Api\Location_Controller::handle_list_request
 	 */
 	final class LocationDefaultCountrySeamTest extends TestCase {
 
@@ -257,6 +281,63 @@ namespace Woodev\Tests\Unit\Shipping {
 				$config['location']['defaultCountry'],
 				$provider->suggest_calls[0][1]->country(),
 				'the config block and the /suggest fallback must resolve to the SAME country — the whole point of this test'
+			);
+		}
+
+		/**
+		 * Issue #321: `handle_list_request()` (the `/location/list` route) had
+		 * exactly the same empty-`country` exposure #296 closed for `/suggest`
+		 * alone — deliberately left out of PR #320's scope. Pins that its own
+		 * fallback resolves to the SAME country as `/suggest` and the checkout
+		 * config block, for the same empty-`country` shape a real request
+		 * carries (see the previous test's own comment: `'country' => ''`,
+		 * never an omitted key — this route's own `register_routes()` also
+		 * marks `country` `'required' => true`).
+		 */
+		public function test_list_route_agrees_with_suggest_and_checkout_config_on_the_default_country(): void {
+			Functions\when( '__' )->returnArg( 1 );
+			Functions\when( 'wp_unslash' )->returnArg();
+			Functions\when( 'wc_clean' )->alias(
+				static function ( $value ) {
+					return is_string( $value ) ? trim( $value ) : $value;
+				}
+			);
+			Functions\when( 'rest_ensure_response' )->returnArg();
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'wc_get_base_location' )->justReturn( [ 'country' => 'KZ', 'state' => 'north' ] );
+
+			$provider = new Seam_Fake_Provider( [ 'KZ' ] );
+			$service  = new Seam_Fake_Location_Service( $provider );
+
+			// Side 1: the checkout config block a page load emits.
+			$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'KZ' ], $service ) )
+				->build( Checkout_Fields::from_array( [] ) );
+
+			$ctrl = new Seam_Location_Controller_Probe( $service );
+
+			// Side 2: the /suggest route (issue #296), for cross-comparison.
+			$suggest_request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+			$ctrl->handle_suggest_request( $suggest_request );
+
+			// Side 3: the /list route (issue #321) — the fallback this card added
+			// to handle_list_request().
+			$list_request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+			$response     = $ctrl->handle_list_request( $list_request );
+
+			$this->assertNotInstanceOf( \WP_Error::class, $response, '/list must not 400 on an empty country — that is the whole bug this card closes' );
+			$this->assertCount( 1, $provider->suggest_calls, 'the /suggest route must have reached the provider at all' );
+			$this->assertCount( 1, $provider->list_calls, '/list must have reached the provider — a 400 here means the fallback did not run' );
+
+			$this->assertSame( 'KZ', $config['location']['defaultCountry'] );
+			$this->assertSame(
+				$config['location']['defaultCountry'],
+				$provider->suggest_calls[0][1]->country(),
+				'the config block and the /suggest fallback must resolve to the SAME country'
+			);
+			$this->assertSame(
+				$config['location']['defaultCountry'],
+				$provider->list_calls[0]->country(),
+				'the config block and the /list fallback must resolve to the SAME country — the whole point of this test'
 			);
 		}
 	}
