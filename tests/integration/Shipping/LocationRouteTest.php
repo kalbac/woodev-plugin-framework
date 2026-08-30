@@ -243,6 +243,8 @@ class LocationRouteTest extends TestCase {
 
 		$this->assertArrayHasKey( '/woodev/v1/location/suggest', $routes );
 		$this->assertArrayHasKey( '/woodev/v1/location/select', $routes );
+		// Issue #356 part 2.
+		$this->assertArrayHasKey( '/woodev/v1/location/forget', $routes );
 	}
 
 	public function test_routes_are_absent_when_no_plugin_declared_need(): void {
@@ -264,6 +266,7 @@ class LocationRouteTest extends TestCase {
 
 		$this->assertArrayNotHasKey( '/woodev/v1/location/suggest', $routes );
 		$this->assertArrayNotHasKey( '/woodev/v1/location/select', $routes );
+		$this->assertArrayNotHasKey( '/woodev/v1/location/forget', $routes );
 	}
 
 	// -------------------------------------------------------------------------
@@ -626,7 +629,98 @@ class LocationRouteTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// 5. Regression guard — a persisted guest record must not leak into the
+	// 5. /forget (issue #356 part 2) — registered by the SAME register_routes()
+	//    call as /select, on the SAME controller instance, so it shares
+	//    check_select_permission() by construction; these tests prove that
+	//    behaviourally (same nonce rejection, same active-layer gate) rather
+	//    than by reflecting into route internals — the end-to-end shape a real
+	//    client actually depends on. Guest vs logged-in erasure itself is
+	//    CustomerLocationStoreTest's own exhaustive territory (part 1); what is
+	//    new HERE is the route: method, permission, and the response actually
+	//    reflecting the erasure through the real Location_Service ->
+	//    Customer_Location_Store -> WC session chain.
+	// -------------------------------------------------------------------------
+
+	public function test_forget_without_a_nonce_is_refused(): void {
+		$this->activate_and_boot_rest();
+
+		wp_set_current_user( 0 );
+
+		$request  = new WP_REST_Request( 'POST', '/woodev/v1/location/forget' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertContains( $response->get_status(), [ 401, 403 ] );
+	}
+
+	public function test_forget_with_a_valid_nonce_but_inactive_layer_returns_404_not_500(): void {
+		$this->activate_and_boot_rest();
+
+		wp_set_current_user( 0 );
+
+		$request = new WP_REST_Request( 'POST', '/woodev/v1/location/forget' );
+		$request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		// setUp() neutralised OPTION_DADATA_TOKEN, so Location_Service::is_active()
+		// is false regardless of what the environment seeded — mirrors
+		// test_select_with_a_valid_nonce_but_inactive_layer_returns_404_not_500()
+		// exactly.
+		$this->assertSame( 404, $response->get_status() );
+	}
+
+	/**
+	 * The end-to-end reproduction of the measured bug this route fixes: a
+	 * customer's EXPLICIT pick survives (implicit: false, a real key) until
+	 * `/forget` is called, after which the chain the client reads next is
+	 * genuinely empty — never a stale echo of the record that was just erased.
+	 *
+	 * @return void
+	 */
+	public function test_forget_with_a_valid_nonce_and_active_layer_erases_the_persisted_record_and_returns_200(): void {
+		$this->activate_and_boot_rest();
+		$this->make_location_layer_active();
+
+		wp_set_current_user( 0 );
+		$this->seed_customer_shipping_country();
+
+		$select_request = new WP_REST_Request( 'POST', '/woodev/v1/location/select' );
+		$select_request->set_param(
+			'record',
+			[
+				'key'         => 'dadata:fias-1',
+				'provider_id' => 'dadata',
+				'level'       => 'settlement',
+				'country'     => 'RU',
+			]
+		);
+		$select_request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$select_response = rest_get_server()->dispatch( $select_request );
+		$this->assertSame( 200, $select_response->get_status(), 'setup precondition: the pick must actually persist first.' );
+		$this->assertFalse( $select_response->get_data()['implicit'], 'setup precondition: an explicit pick, not a default guess.' );
+
+		$forget_request = new WP_REST_Request( 'POST', '/woodev/v1/location/forget' );
+		$forget_request->add_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+		$forget_response = rest_get_server()->dispatch( $forget_request );
+
+		$this->assertSame( 200, $forget_response->get_status() );
+		$this->assertSame( [], $forget_response->get_data()['chain'] );
+
+		// And a FRESH service — the same next-page-load shape
+		// test_a_fresh_service_instance_still_sees_a_settlement_persisted_by_an_earlier_select_call()
+		// uses for the write side — confirms the erasure actually reached
+		// storage, not merely this one response's own read.
+		$fresh_service = new Location_Service();
+		$this->assertNull(
+			$fresh_service->get_customer_record(),
+			'a fresh Location_Service must no longer see the record /forget just erased'
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// 6. Regression guard — a persisted guest record must not leak into the
 	//    next test (root cause of a CI-only PickupRouteTest failure).
 	// -------------------------------------------------------------------------
 

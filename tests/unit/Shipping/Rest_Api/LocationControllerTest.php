@@ -561,6 +561,34 @@ final class Location_Controller_Fake_Service extends Location_Service {
 	}
 
 	/**
+	 * Issue #356 part 2: how many times {@see self::forget_customer_record()}
+	 * was called — a test asserts exactly one call, never zero or two.
+	 *
+	 * @var int
+	 */
+	public int $forget_calls = 0;
+
+	/**
+	 * Minimal simulation of {@see Customer_Location_Store::forget()}'s effect on
+	 * what this fake answers afterward: both `$customer_record` and
+	 * `$chain_records` go back to their "nothing stored" state, so
+	 * {@see self::get_customer_chain()} — read by
+	 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller::customer_chain_response()}
+	 * AFTER this call runs, exactly like {@see self::set_customer_record()}'s own
+	 * docblock describes for the write side — honestly reports an empty chain,
+	 * proving `handle_forget_request()`'s response reflects the erasure rather
+	 * than an echo of whatever was there before.
+	 *
+	 * @return void
+	 */
+	public function forget_customer_record(): void {
+		++$this->forget_calls;
+
+		$this->customer_record = null;
+		$this->chain_records   = null;
+	}
+
+	/**
 	 * Without a {@see self::$providers_by_level} map, mirrors the original
 	 * fixed-answer fake exactly (level-blind — the pre-existing behaviour
 	 * every unchanged test in this file relies on). WITH the map, resolves
@@ -754,6 +782,37 @@ final class Location_Controller_Select_Order_Probe extends Location_Controller {
 
 	protected function bridge_wc_session(): void {
 		$this->order[] = 'bridge@' . count( $this->spy->set_calls ) . '-writes';
+	}
+}
+
+/**
+ * Issue #356 part 2: the {@see Location_Controller_Select_Order_Probe} counterpart for
+ * `handle_forget_request()` — proves the session bridge runs BEFORE
+ * {@see Location_Controller_Fake_Service::forget_customer_record()}, not merely that
+ * both ran. Same reasoning as the select-side probe's own docblock: a guest's
+ * session must already exist by the time the erase runs, or there is nothing
+ * for {@see Customer_Location_Store::forget()}'s own session branch to act on.
+ */
+final class Location_Controller_Forget_Order_Probe extends Location_Controller {
+
+	/** @var string[] */
+	public array $order = [];
+
+	/** @var Location_Controller_Fake_Service */
+	private Location_Controller_Fake_Service $spy;
+
+	public function __construct( Location_Controller_Fake_Service $service ) {
+		parent::__construct( $service );
+
+		$this->spy = $service;
+	}
+
+	protected function is_rate_limited( string $key_prefix, int $max, int $window = 60 ): bool {
+		return false;
+	}
+
+	protected function bridge_wc_session(): void {
+		$this->order[] = 'bridge@' . $this->spy->forget_calls . '-forgets';
 	}
 }
 
@@ -2401,6 +2460,89 @@ final class LocationControllerTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result, 'A suggest() failure during D7 must degrade to cancel, never a 500.' );
 		$this->assertTrue( $result['cancelled'] );
 		$this->assertCount( 0, $service->set_calls );
+	}
+
+	// -------------------------------------------------------------------
+	// /forget — issue #356 part 2. Reuses check_select_permission() verbatim
+	// (same nonce gate, already exhaustively covered by the
+	// "/select — nonce permission gate" section right below), and route
+	// registration/method/permission_callback wiring is covered by
+	// LocationRouteTest — this section is `handle_forget_request()`'s OWN
+	// logic: the rate-limit/inactive-layer guards it shares with
+	// handle_select_request(), the session bridge and its ordering, and that
+	// the erasure actually reaches Location_Service::forget_customer_record()
+	// with a response that honestly reflects the now-empty chain.
+	// -------------------------------------------------------------------
+
+	public function test_forget_inactive_layer_returns_404(): void {
+		$service = new Location_Controller_Fake_Service( false );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$result = $ctrl->handle_forget_request( new WP_REST_Request() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 404, $result->get_error_data()['status'] );
+		$this->assertSame( 0, $service->forget_calls );
+	}
+
+	public function test_forget_happy_path_calls_the_service_exactly_once(): void {
+		$record  = $this->record();
+		$service = new Location_Controller_Fake_Service(
+			true, null,
+			[ 'record' => $record, 'implicit' => false, 'saved_at' => 0 ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$result = $ctrl->handle_forget_request( new WP_REST_Request() );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 1, $service->forget_calls, 'mutant: dropping the forget_customer_record() call' );
+	}
+
+	/**
+	 * The response is read AFTER the erase — never an echo of the chain the
+	 * customer walked in with. Mirrors handle_select_request()'s own
+	 * "response read after the write" discipline, just for the opposite
+	 * direction (erase instead of persist).
+	 */
+	public function test_forget_response_reports_the_now_empty_chain(): void {
+		$record  = $this->record();
+		$service = new Location_Controller_Fake_Service(
+			true, null,
+			[ 'record' => $record, 'implicit' => false, 'saved_at' => 0 ]
+		);
+		$ctrl = new Location_Controller_Probe( $service );
+
+		$result = $ctrl->handle_forget_request( new WP_REST_Request() );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [], $result['chain'] );
+		$this->assertFalse( $result['implicit'] );
+	}
+
+	public function test_forget_bridges_the_wc_session(): void {
+		$service = new Location_Controller_Fake_Service( true );
+		$ctrl    = new Location_Controller_Session_Bridge_Probe( $service );
+
+		$ctrl->handle_forget_request( new WP_REST_Request() );
+
+		$this->assertSame( 1, $ctrl->bridge_calls, 'mutant: dropping the bridge_wc_session() call from handle_forget_request()' );
+	}
+
+	/**
+	 * Same reasoning as test_select_bridges_the_session_BEFORE_it_writes(): a
+	 * guest's session must already exist by the time
+	 * Customer_Location_Store::forget()'s own session branch runs, or there is
+	 * nothing there for it to clear.
+	 */
+	public function test_forget_bridges_the_session_BEFORE_it_forgets(): void {
+		$service = new Location_Controller_Fake_Service( true );
+		$ctrl    = new Location_Controller_Forget_Order_Probe( $service );
+
+		$ctrl->handle_forget_request( new WP_REST_Request() );
+
+		$this->assertSame( [ 'bridge@0-forgets' ], $ctrl->order );
+		$this->assertSame( 1, $service->forget_calls, 'the erase must still happen' );
 	}
 
 	// -------------------------------------------------------------------

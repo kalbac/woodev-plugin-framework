@@ -4,9 +4,11 @@
  *
  * Serves the store-level Location Provider layer's client seam (Task 8; spec D1,
  * D4, D8, D15): `GET woodev/v1/location/suggest` (query-driven suggestions),
- * `POST woodev/v1/location/select` (persist a chosen record), and
- * `GET woodev/v1/location/list` (full enumeration within a scope — Task 13,
- * feeding the `related-list`/`ajax-select2` field modes, spec D7). Unlike the sibling
+ * `POST woodev/v1/location/select` (persist a chosen record),
+ * `POST woodev/v1/location/forget` (erase the current visitor's own chain —
+ * issue #356 part 2), and `GET woodev/v1/location/list` (full enumeration
+ * within a scope — Task 13, feeding the `related-list`/`ajax-select2` field
+ * modes, spec D7). Unlike the sibling
  * shipping controllers ({@see Field_Source_Controller}, {@see Pickup_Controller}),
  * this one is FLEET-WIDE, not per-plugin: there is exactly one active location
  * provider per store (spec §4.1), so the route carries no `plugin_id` path
@@ -37,8 +39,10 @@
  *   abuse. `/list` degrades to 404 rather than `/suggest`'s 200+empty when
  *   nothing can answer it — see {@see self::handle_list_request()}'s own
  *   docblock for why that asymmetry is intentional.
- * - `/select` is NOT public-read: it is the customer's write into the
- *   server-side customer-location store, so it is nonce-gated exactly like
+ * - `/select` and `/forget` are NOT public-read: both are the customer's own
+ *   write into the server-side customer-location store — `/select` persists a
+ *   chosen record, `/forget` erases the visitor's whole chain (issue #356
+ *   part 2) — so both are nonce-gated exactly like
  *   {@see Pickup_Controller::check_select_permission()} — a capability check is
  *   impossible here (guests check out), so the `wp_rest` REST cookie nonce is
  *   the whole barrier. See {@see self::check_select_permission()}'s own
@@ -57,6 +61,7 @@
 namespace Woodev\Framework\Shipping\Rest_Api;
 
 use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
+use Woodev\Framework\Shipping\Location\Customer_Location_Store;
 use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
@@ -299,19 +304,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			$this->service = $service ?? new Location_Service();
 		}
 
-		/**
-		 * Registers the `/location/suggest` and `/location/select` routes.
-		 *
-		 * Unlike every sibling shipping controller, the route carries no
-		 * `plugin_id` path segment — see the class docblock for why this
-		 * controller is fleet-wide rather than per-plugin.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		public function register_routes(): void {
 
 			register_rest_route(
@@ -407,6 +399,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 								'required' => true,
 							],
 						],
+					],
+				]
+			);
+
+			register_rest_route(
+				'woodev/v1',
+				'/location/forget',
+				[
+					[
+						'methods'  => 'POST',
+						'callback' => [ $this, 'handle_forget_request' ],
+
+						/*
+						 * Identical barrier to `/select` immediately above, and for the
+						 * same reason: this route is ALSO a write into the server-side
+						 * customer-location store — it erases the visitor's own chain
+						 * (issue #356 part 2) — so a capability check is impossible here
+						 * (guests check out too); the nonce is the whole barrier. See
+						 * check_select_permission()'s own docblock for the exact
+						 * semantics this mirrors.
+						 *
+						 * Deliberately no `args`: forgetting is not parameterized — it
+						 * always erases the CURRENT visitor's own chain
+						 * ({@see Customer_Location_Store::forget()} called with `null`),
+						 * never a specific level or record.
+						 */
+						'permission_callback' => [ $this, 'check_select_permission' ],
 					],
 				]
 			);
@@ -1437,6 +1456,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 					'implicit'  => $chain_block['implicit'],
 				]
 			);
+		}
+
+
+		/**
+		 * Handles a forget (erase) request — issue #356 part 2.
+		 *
+		 * Client-side `clearCountryScope()` erases WooCommerce's own customer
+		 * address fields (city/state) when the shopper changes the checkout
+		 * country, and WooCommerce persists that erasure server-side. Left
+		 * unanswered, the woodev customer-location chain — a SEPARATE
+		 * server-side store — kept whatever the shopper had explicitly chosen
+		 * earlier, so the two stores disagreed: WooCommerce's own address blank,
+		 * woodev's chain still pointing at the old locality, and every reader of
+		 * the chain (rate calculation, pickup points, …) answering for a place
+		 * the shopper's screen no longer shows. This route is what the client
+		 * calls to keep the two in sync: it does not "lose" the shopper's
+		 * choice — WooCommerce already erased it — it stops the chain from
+		 * being the one part of the page still lying about it.
+		 *
+		 * Goes through {@see Location_Service::forget_customer_record()} — the
+		 * same façade seam {@see self::handle_select_request()} already writes
+		 * through ({@see Location_Service::set_customer_record()}) — rather than
+		 * instantiating {@see Customer_Location_Store} here directly, so `$this->service`
+		 * (already injectable/mockable in this controller's own tests, exactly like
+		 * every other write/read here) stays the single seam between this
+		 * controller and the customer-location store. That façade method passes
+		 * `null`, never an explicit id: this is the CURRENT visitor forgetting their
+		 * OWN chain, which — per {@see Customer_Location_Store::forget()}'s own
+		 * docblock — clears both stores that belong to the person making the
+		 * request (session, and their own user meta if logged in).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error|array{chain: array<string, array{key: string, level: string}>, implicit: bool}
+		 */
+		public function handle_forget_request( $request ) {
+
+			if ( $this->is_rate_limited( 'woodev_location_sel_rl_', self::SELECT_RATE_LIMIT_MAX ) ) {
+				return $this->rate_limited_error();
+			}
+
+			if ( ! $this->service->is_active() ) {
+				return new \WP_Error(
+					'woodev_location_inactive',
+					__( 'Сервис определения местоположения сейчас недоступен.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			// Same reasoning as handle_select_request(): this is a write into
+			// the customer-location store, which for a guest lives in
+			// WC()->session, and a plain REST request does not start one on
+			// its own (issue #324).
+			$this->bridge_wc_session();
+
+			$this->service->forget_customer_record();
+
+			return rest_ensure_response( $this->customer_chain_response() );
 		}
 
 

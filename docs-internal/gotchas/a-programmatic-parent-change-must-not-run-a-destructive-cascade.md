@@ -93,6 +93,18 @@ actor's schedule, not yours: here a 3-second async gap was crossed by WooCommerc
 serialization, which converted a transient UI blip into permanent session damage. Ask what else
 reads this state before the answer lands.
 
+**s106 (2026-08-30) — the same boundary now also licenses a server-side write.** Issue #356 part 2
+added `clearCountryScope()` → `POST /location/forget`: a real `entry.resolved` transition (this
+gotcha's own rule above) now erases the woodev customer-location chain on the server, not just DOM
+state. Considered and rejected: gating that write on `event.isTrusted` — this codebase's own "WC
+Address Autocomplete suppression" section proves a programmatic, untrusted `change` on the same
+field is routinely genuine customer intent (a Google Places pick), so trustedness is not a safe
+proxy for actor. Kept on the actor-blind rule instead, because on this exact path WooCommerce has
+*already* destroyed its own address fields by the mechanics above — refusing to follow would not
+protect the customer's choice (WooCommerce already discarded it), it would just leave the woodev
+chain as the one store still disagreeing with what WooCommerce's own record and the customer's own
+screen now show. Full reasoning: `location-cascade.js`'s `sendForget()` docblock.
+
 ## Related
 
 - [[checkout-field-takeover-woocommerce-states]] — the takeover's own value-preservation guards

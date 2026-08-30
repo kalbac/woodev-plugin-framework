@@ -1074,6 +1074,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			return $this->customer_store->set( $record, $implicit );
 		}
 
+
+		/**
+		 * Erases the CURRENT visitor's own location chain — issue #356 part 2. Thin
+		 * pass-through to {@see Customer_Location_Store::forget()} with `null`, the
+		 * same seam {@see self::set_customer_record()} above already gives
+		 * {@see Customer_Location_Store::set()} — never a specific user id: this is
+		 * the visitor forgetting their OWN record (their session, and their own user
+		 * meta if logged in), not the WP Privacy "erase personal data" tool's
+		 * per-account path (that one calls
+		 * {@see Customer_Location_Store::erase_personal_data()} directly, outside
+		 * this façade).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function forget_customer_record(): void {
+			$this->customer_store->forget( null );
+		}
+
 		/**
 		 * Records that the customer's stored location is no longer a default
 		 * GUESS — without changing which location it is (issue #518).

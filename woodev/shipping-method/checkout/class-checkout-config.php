@@ -55,7 +55,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *   'pickup_method_ids' => string[], // WC_Shipping_Method::$id of every pickup-shipping method.
 	 *   // Present only when a Location_Service was injected AND is_active() (Task 9):
 	 *   'location' => [
-	 *     'endpoints' => [ 'suggest' => string, 'select' => string, 'list' => string ], // 'list' added Task 13
+	 *     'endpoints' => [ 'suggest' => string, 'select' => string, 'list' => string, 'forget' => string ], // 'list' added Task 13; 'forget' added issue #356 part 2
 	 *     'nonce'     => string, // same wp_rest nonce as the top-level 'nonce' above
 	 *     'countries' => string[],
 	 *     // Two independent axes since issue #380 (each carries the same three
@@ -1081,6 +1081,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					'suggest' => $this->rest_base . '/location/suggest',
 					'select'  => $this->rest_base . '/location/select',
 					'list'    => $this->rest_base . '/location/list',
+					'forget'  => $this->rest_base . '/location/forget',
 				],
 				'nonce'                 => $this->nonce,
 				'countries'             => array_values( $countries ),
