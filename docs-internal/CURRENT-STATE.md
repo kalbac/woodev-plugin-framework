@@ -167,6 +167,11 @@ answered with three exact hits. The fourth (a commit hash) lost its leading char
 fabrication, but why every Codex round still gets one fact you already know. Recipe and the two
 ways CLI 0.150.1 departs from it: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
+✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.** Its WSL
+shell needs the worktree's `.git` rewritten to a relative `gitdir` as its step 0; WSL carries the
+whole toolchain. ⚠ `worktree.useRelativePaths` is NOT the fix — it takes the main checkout down
+too. Recipe and trap: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+
 **kilo is the FALLBACK critic now, not the default** (it held the seat 27.08–28.08 while the
 subscription was unpaid). If it is used again it has its own traps — Orca cannot supervise it, and
 the model must be pinned via `--command`. Figures, cost and full recipe:
@@ -178,7 +183,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **247**.
+Gotchas: **248**.
 
 ## Program status (high level)
 

@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 247 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 248 atomic gotchas across 31 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -313,6 +313,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/parallel-agents] **Codex runs in WSL, which reads a worktree's `gitdir: D:/…` as RELATIVE and fails every git command — rewrite that one line per worktree. `worktree.useRelativePaths` looks like the fix and makes git 2.43 refuse the WHOLE repo.** → [codex-in-wsl-needs-a-relative-gitdir](gotchas/codex-in-wsl-needs-a-relative-gitdir.md) (s107)
 - [tooling/serena] **Serena IGNORES `tests/` — symbolic ops there fail with "while the path is ignored", so `Read`/`Edit` is the only tool and is NOT a rule violation (and test files escape the CRLF flip).** → [serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there](gotchas/serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there.md) (s105)
 - [tooling/orca] **A BACKGROUNDED `check --wait` holds the FIFO waiter, so every later wait returns empty in seconds and reads as "the worker produced nothing"; `--json` is also a keepalive STREAM, not one object.** → [a-backgrounded-orca-check-wait-starves-every-later-waiter](gotchas/a-backgrounded-orca-check-wait-starves-every-later-waiter.md) (s105)
 - [tooling/worktrees] **"A fresh worktree needs no install step" expires the moment another branch renames a class — the COPIED `vendor` carries a snapshot classmap, and `Class "…" not found` reads as a broken diff.** → [a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename](gotchas/a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename.md) (s104)
