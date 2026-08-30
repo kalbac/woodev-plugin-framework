@@ -57,7 +57,9 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 (material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half only),
 **#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#689** (RFC 6265 §5.4 equal-length
 `Path` tie ordering — filed in s108 and DELIBERATELY not fixed, the card carries the reasoning),
-**#692** (the `desc_tip`/`description` audit, filed in s108 from his correction), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+**#692** (the `desc_tip`/`description` audit, filed in s108 from his correction), **#694** (SP-10's
+page shape — in `Инбокс`, his call) and **#695** (reconcile `SHIPPING-PLANS.md` against code and
+board — the root-level plans files sit outside every gate and outside `DOCS-INDEX.md`), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
 (150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
 and rebuild the `.mo` before release).
 
@@ -131,10 +133,9 @@ flakiness, the three field modes and their Russian labels — is one line each u
 `[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
 anyway. Scan the tag for your task; do not keep a second copy here.
 
-**✅ #405 IS rig-verified as of s95** — the s83 note that said otherwise was writing a decoy
-option. Before probing `test-cdek` credentials on the rig, read the gotcha
-`the-cdek-fixture-credentials-are-not-the-option-they-look-like`: it carries the real option name,
-two further masks, the measurement table and the control.
+**✅ #405 IS rig-verified as of s95** — the s83 note saying otherwise was writing a decoy option.
+Before probing `test-cdek` credentials, read the gotcha
+`the-cdek-fixture-credentials-are-not-the-option-they-look-like`.
 
 **Operator decision, #409 and again #546 (27.08.2026):** `@since` records the **planned release**,
 which is and stays **`2.0.2`** — «иначе врём потребителям, у нас по факту ещё даже 2.0.0 не было».
@@ -166,10 +167,9 @@ receipt": it never had a task. Card **#683**; gotchas
 `codex-in-wsl-needs-a-relative-gitdir` and `starting-codex-under-orca-needs-four-steps-not-one`
 both rewritten. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
-**kilo is the FALLBACK critic now, not the default** (it held the seat 27.08–28.08 while the
-subscription was unpaid). If it is used again it has its own traps — Orca cannot supervise it, and
-the model must be pinned via `--command`. Figures, cost and full recipe:
-[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+**kilo is the FALLBACK critic, not the default** (it held the seat 27.08–28.08 while the
+subscription was unpaid) and has its own traps — Orca cannot supervise it, and the model must be
+pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
 `node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
@@ -212,8 +212,8 @@ Gotchas: **250**.
 ## Known Bugs / Open debt
 
 - [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (→ board №6).
-- **B-2 loader-protocol forward-tolerance — standing behavior:** the resolver loads framework classes from the **highest registered copy for the whole fleet**, and `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Standing rules → `AGENT-RULES.md` Rule 3.
-- [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru-side API extension.
+- **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
+- [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru API extension.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
