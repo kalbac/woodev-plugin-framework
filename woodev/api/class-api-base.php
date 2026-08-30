@@ -46,6 +46,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected $response;
 
 		/**
+		 * Cookies received while passing an opt-in bot-protection challenge.
+		 *
+		 * @var array<string, string>
+		 */
+		private array $challenge_redirect_cookies = [];
+
+		/**
+		 * Maximum number of same-origin challenge redirects followed per request.
+		 *
+		 * A testcookie challenge needs one repeat. Keeping this explicit prevents a
+		 * malformed or hostile endpoint from turning a request into an unbounded loop.
+		 *
+		 * @since 2.0.2
+		 */
+		private const CHALLENGE_REDIRECT_HOP_LIMIT = 1;
+
+		/**
 		 * The fixed placeholder used everywhere a credential value is masked out
 		 * of a log — headers and request params (both via
 		 * {@see self::mask_secret_values()}, including through
@@ -109,7 +126,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				add_action( 'http_api_curl', array( $this, 'set_tls_1_2_request' ), 10, 3 );
 			}
 
-			$response = $this->do_remote_request( $this->get_request_uri(), $this->get_request_args() );
+			$response = $this->do_remote_request_with_challenge_redirects( $this->get_request_uri(), $this->get_request_args() );
 
 			$this->request_duration = round( microtime( true ) - $start_time, 5 );
 
@@ -137,6 +154,348 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected function do_remote_request( $request_uri, $request_args ) {
 			return wp_safe_remote_request( $request_uri, $request_args );
+		}
+
+		/**
+		 * Performs a request and, when explicitly enabled by a subclass, repeats a
+		 * same-origin 302 or 307 challenge redirect without changing its method or body.
+		 *
+		 * Cookies are collected from every non-error response, not just redirects, so
+		 * a provider may rotate a challenge cookie between ordinary API calls. The
+		 * `woodev_{api_id}_api_challenge_redirect_cookies` filter can supply a
+		 * persisted jar, and `woodev_{api_id}_api_challenge_redirect_cookies_updated`
+		 * lets a plugin persist a refreshed jar if it chooses to do so.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string               $request_uri Request URI.
+		 * @param array<string, mixed> $request_args WordPress HTTP request arguments.
+		 * @return array|WP_Error Response from the final request.
+		 */
+		protected function do_remote_request_with_challenge_redirects( string $request_uri, array $request_args ) {
+
+			$response = $this->do_remote_request( $request_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args ) );
+
+			if ( ! $this->follow_challenge_redirects() ) {
+				return $response;
+			}
+
+			$this->remember_challenge_redirect_cookies( $response );
+
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+
+			for ( $hop = 0; $hop < self::CHALLENGE_REDIRECT_HOP_LIMIT; $hop++ ) {
+
+				$redirect_uri = $this->get_same_origin_challenge_redirect_uri( $request_uri, $response );
+
+				if ( is_wp_error( $redirect_uri ) || null === $redirect_uri ) {
+					return $redirect_uri ?: $response;
+				}
+
+				$response = $this->do_remote_request( $redirect_uri, $this->add_challenge_redirect_cookies_to_request_args( $request_args ) );
+				$this->remember_challenge_redirect_cookies( $response );
+			}
+
+			return $response;
+		}
+
+		/**
+		 * Whether this API client may pass a bot-protection challenge redirect.
+		 *
+		 * Disabled by default so existing API clients retain their historical
+		 * `redirection => 0` behavior exactly. A client that needs this mechanism
+		 * overrides the method and returns true.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function follow_challenge_redirects(): bool {
+			return false;
+		}
+
+		/**
+		 * Returns a safe challenge redirect URI, or a WP_Error for a cross-origin one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string         $request_uri Original request URI.
+		 * @param array|WP_Error $response Response which may carry Location.
+		 * @return string|WP_Error|null
+		 */
+		private function get_same_origin_challenge_redirect_uri( string $request_uri, $response ) {
+
+			$status_code = (int) wp_remote_retrieve_response_code( $response );
+
+			if ( ! in_array( $status_code, [ 302, 307 ], true ) ) {
+				return null;
+			}
+
+			$location = $this->get_response_header_value( $response, 'location' );
+
+			if ( null === $location ) {
+				return null;
+			}
+
+			$redirect_uri = self::resolve_challenge_redirect_uri( $request_uri, $location );
+
+			if ( ! self::is_same_origin_uri( $request_uri, $redirect_uri ) ) {
+				return new WP_Error( 'woodev_api_challenge_redirect_cross_origin', 'Refusing to follow a cross-origin bot-protection challenge redirect.' );
+			}
+
+			return $redirect_uri;
+		}
+
+		/**
+		 * Resolves a redirect location against the original request URI.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $request_uri Original request URI.
+		 * @param string $location Redirect Location header.
+		 * @return string
+		 */
+		private static function resolve_challenge_redirect_uri( string $request_uri, string $location ): string {
+
+			if ( false !== strpos( $location, '://' ) ) {
+				return $location;
+			}
+
+			$original = parse_url( $request_uri );
+
+			if ( ! is_array( $original ) || empty( $original['scheme'] ) || empty( $original['host'] ) ) {
+				return $location;
+			}
+
+			$origin = $original['scheme'] . '://' . $original['host'];
+
+			if ( isset( $original['port'] ) ) {
+				$origin .= ':' . $original['port'];
+			}
+
+			if ( 0 === strpos( $location, '//' ) ) {
+				return $original['scheme'] . ':' . $location;
+			}
+
+			if ( 0 === strpos( $location, '/' ) ) {
+				return $origin . $location;
+			}
+
+			$path = isset( $original['path'] ) ? $original['path'] : '/';
+
+			return $origin . substr( $path, 0, strrpos( $path, '/' ) + 1 ) . $location;
+		}
+
+		/**
+		 * Checks whether two URIs use the same scheme, host, and effective port.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $first_uri First URI.
+		 * @param string $second_uri Second URI.
+		 * @return bool
+		 */
+		private static function is_same_origin_uri( string $first_uri, string $second_uri ): bool {
+
+			$first  = parse_url( $first_uri );
+			$second = parse_url( $second_uri );
+
+			if ( ! is_array( $first ) || ! is_array( $second ) ) {
+				return false;
+			}
+
+			return isset( $first['scheme'], $first['host'], $second['scheme'], $second['host'] )
+				&& strtolower( $first['scheme'] ) === strtolower( $second['scheme'] )
+				&& strtolower( $first['host'] ) === strtolower( $second['host'] )
+				&& self::get_uri_port( $first ) === self::get_uri_port( $second );
+		}
+
+		/**
+		 * Gets a URI's explicit or scheme-default port.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $uri Parsed URI.
+		 * @return int
+		 */
+		private static function get_uri_port( array $uri ): int {
+			return isset( $uri['port'] ) ? (int) $uri['port'] : ( 'https' === strtolower( $uri['scheme'] ) ? 443 : 80 );
+		}
+
+		/**
+		 * Gets a response header value case-insensitively.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array|WP_Error $response Response data.
+		 * @param string         $header_name Header name.
+		 * @return string|null
+		 */
+		private function get_response_header_value( $response, string $header_name ): ?string {
+
+			$headers = wp_remote_retrieve_headers( $response );
+			$headers = is_object( $headers ) && is_callable( [ $headers, 'getAll' ] ) ? $headers->getAll() : $headers;
+
+			if ( ! is_array( $headers ) ) {
+				return null;
+			}
+
+			foreach ( $headers as $name => $value ) {
+				if ( strtolower( (string) $name ) === strtolower( $header_name ) ) {
+					return is_array( $value ) ? (string) reset( $value ) : (string) $value;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Adds the current challenge-cookie jar to request headers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $request_args Request arguments.
+		 * @return array<string, mixed>
+		 */
+		private function add_challenge_redirect_cookies_to_request_args( array $request_args ): array {
+
+			$cookies = $this->get_challenge_redirect_cookies();
+
+			if ( [] === $cookies || ! isset( $request_args['headers'] ) || ! is_array( $request_args['headers'] ) ) {
+				return $request_args;
+			}
+
+			$cookie_header_name = 'Cookie';
+			$existing_cookies   = [];
+
+			foreach ( $request_args['headers'] as $name => $value ) {
+				if ( 'cookie' === strtolower( (string) $name ) ) {
+					$cookie_header_name = $name;
+					$existing_cookies   = self::parse_challenge_redirect_cookies( (string) $value );
+					break;
+				}
+			}
+
+			$request_args['headers'][ $cookie_header_name ] = self::build_challenge_redirect_cookie_header( array_merge( $existing_cookies, $cookies ) );
+
+			return $request_args;
+		}
+
+		/**
+		 * Reads and remembers every Set-Cookie value on a response.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array|WP_Error $response Response data.
+		 * @return void
+		 */
+		private function remember_challenge_redirect_cookies( $response ): void {
+
+			if ( is_wp_error( $response ) ) {
+				return;
+			}
+
+			$headers = wp_remote_retrieve_headers( $response );
+			$headers = is_object( $headers ) && is_callable( [ $headers, 'getAll' ] ) ? $headers->getAll() : $headers;
+
+			if ( ! is_array( $headers ) ) {
+				return;
+			}
+
+			foreach ( $headers as $name => $value ) {
+				if ( 'set-cookie' !== strtolower( (string) $name ) ) {
+					continue;
+				}
+
+				$set_cookie_values = is_array( $value ) ? $value : [ $value ];
+
+				foreach ( $set_cookie_values as $set_cookie_value ) {
+					$this->challenge_redirect_cookies = array_merge(
+						$this->challenge_redirect_cookies,
+						self::parse_challenge_redirect_set_cookie( (string) $set_cookie_value )
+					);
+				}
+			}
+
+			if ( [] !== $this->challenge_redirect_cookies ) {
+				do_action( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies_updated', $this->challenge_redirect_cookies, $this );
+			}
+		}
+
+		/**
+		 * Gets the challenge-cookie jar, allowing a client to restore persisted cookies.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, string>
+		 */
+		private function get_challenge_redirect_cookies(): array {
+
+			$cookies = apply_filters( 'woodev_' . $this->get_api_id() . '_api_challenge_redirect_cookies', $this->challenge_redirect_cookies, $this );
+
+			return is_array( $cookies ) ? self::parse_challenge_redirect_cookies( self::build_challenge_redirect_cookie_header( $cookies ) ) : $this->challenge_redirect_cookies;
+		}
+
+		/**
+		 * Parses a Set-Cookie or Cookie header into name/value pairs.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $header Cookie header text.
+		 * @return array<string, string>
+		 */
+		private static function parse_challenge_redirect_cookies( string $header ): array {
+
+			$cookies = [];
+
+			foreach ( preg_split( '/[;\n]/', $header ) as $cookie ) {
+				$pair = explode( '=', trim( $cookie ), 2 );
+
+				if ( 2 === count( $pair ) && '' !== $pair[0] ) {
+					$cookies[ $pair[0] ] = $pair[1];
+				}
+			}
+
+			return $cookies;
+		}
+
+		/**
+		 * Extracts only the name/value pair from one Set-Cookie header value.
+		 *
+		 * Set-Cookie attributes such as Path and HttpOnly describe storage policy;
+		 * forwarding them in a Cookie request header would be invalid.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $header Set-Cookie header value.
+		 * @return array<string, string>
+		 */
+		private static function parse_challenge_redirect_set_cookie( string $header ): array {
+
+			$pair = explode( '=', trim( strtok( $header, ';' ) ), 2 );
+
+			return 2 === count( $pair ) && '' !== $pair[0] ? [ $pair[0] => $pair[1] ] : [];
+		}
+
+		/**
+		 * Builds a Cookie request header from a name/value jar.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string> $cookies Cookie jar.
+		 * @return string
+		 */
+		private static function build_challenge_redirect_cookie_header( array $cookies ): string {
+
+			$parts = [];
+
+			foreach ( $cookies as $name => $value ) {
+				$parts[] = $name . '=' . $value;
+			}
+
+			return implode( '; ', $parts );
 		}
 
 		/**
