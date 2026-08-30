@@ -67,7 +67,7 @@ value bolted onto an existing one).
 `scope_narrowing` is one of `Location_Provider::NARROWING_EXACT` (the parent's own native
 id/key was used), `NARROWING_DEGRADED` (narrowed by locale-dependent NAME components only —
 weaker, can be silently defeated by a name mismatch), `NARROWING_NONE` (a parent was given but
-could not be used at all — this is the "molча ломается" case above, now visible),
+could not be used at all — the silently-broken case above, now visible),
 `NARROWING_UNREPORTED` (the provider never called {@see Location_Scope::report_narrowing()} —
 the honest default for a third-party provider unaware of the contract, NEVER read as "did not
 narrow"), or `NARROWING_NOT_APPLICABLE` (no parent to narrow by at all — computed by the
