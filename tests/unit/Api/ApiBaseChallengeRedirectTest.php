@@ -459,7 +459,14 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertSame( 'https://h/v1/orders?challenge=1', $api->calls[1]['uri'] );
 	}
 
-	/** @return void */
+	/**
+	 * Control, not a regression check: the old resolver already handled a
+	 * network-path reference correctly. Kept to pin the behaviour and prove
+	 * the same-origin guard still refuses the other host after the rewrite —
+	 * do not "fix" this test for failing to RED against the old code.
+	 *
+	 * @return void
+	 */
 	public function test_a_network_path_reference_resolves_to_the_other_host_and_is_then_refused_as_cross_origin(): void {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [ $this->response( 307, [ 'Location' => '//other.example/x' ] ) ];
@@ -481,7 +488,14 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertSame( 'https://h/a/up', $api->calls[1]['uri'] );
 	}
 
-	/** @return void */
+	/**
+	 * Control, not a regression check: the old `://`-substring heuristic
+	 * already treated a leading-scheme Location as absolute. Kept to pin that
+	 * this stays true under the RFC 3986 scheme-prefix detection — do not
+	 * "fix" this test for failing to RED against the old code.
+	 *
+	 * @return void
+	 */
 	public function test_a_location_with_a_scheme_at_the_start_is_still_treated_as_absolute(): void {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [ $this->response( 307, [ 'Location' => 'https://h/abs' ] ), $this->response( 200 ) ];
@@ -491,7 +505,14 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 		$this->assertSame( 'https://h/abs', $api->calls[1]['uri'] );
 	}
 
-	/** @return void */
+	/**
+	 * Control, not a regression check: the old resolver already refused a
+	 * genuinely cross-origin absolute Location. Kept to pin that the guard
+	 * still bites after the rewrite — do not "fix" this test for failing to
+	 * RED against the old code.
+	 *
+	 * @return void
+	 */
 	public function test_a_genuinely_cross_origin_absolute_location_is_still_refused(): void {
 		$api            = new Testable_Api_Base_With_Challenge_Redirects();
 		$api->responses = [ $this->response( 307, [ 'Location' => 'https://attacker.example/challenge?return=https://h/' ] ) ];
@@ -636,5 +657,92 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 
 		$this->assertSame( 'shared=one', $api->calls[2]['args']['headers']['Cookie'] );
 		$this->assertSame( 'shared=two', $api->calls[3]['args']['headers']['Cookie'] );
+	}
+
+	/** @return void */
+	public function test_a_query_only_location_keeps_the_base_query_string_semantics_per_rfc_3986_section_5_3(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '?new=1' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h?old=1', $this->request_args() );
+
+		$this->assertSame( 'https://h?new=1', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_fragment_only_location_keeps_the_base_query_when_the_base_path_is_empty(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '#f' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h?old=1', $this->request_args() );
+
+		$this->assertSame( 'https://h?old=1#f', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_a_302_with_an_empty_location_header_follows_nothing(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 302, [ 'Location' => '' ] ) ];
+
+		$response = $api->request_for_test( 'https://h?old=1', $this->request_args() );
+
+		$this->assertSame( 302, $response['code'] );
+		$this->assertCount( 1, $api->calls );
+	}
+
+	/**
+	 * Dot-segment pins (RFC 3986 §5.2.4). Traced by hand against the spec for
+	 * the round-2 critic's five listed cases: the implementation is already
+	 * correct on every one. These are regression pins, not suspected defects.
+	 *
+	 * @return void
+	 */
+	public function test_dot_segments_a_trailing_single_dot_resolves_with_a_trailing_slash(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => 'b/.' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/x/y', $this->request_args() );
+
+		$this->assertSame( 'https://h/x/b/', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_dot_segments_a_trailing_double_dot_removes_the_prior_segment(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => 'b/..' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/x/y', $this->request_args() );
+
+		$this->assertSame( 'https://h/x/', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_dot_segments_attempting_to_escape_root_clamp_at_root(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '../../up' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/a', $this->request_args() );
+
+		$this->assertSame( 'https://h/up', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_dot_segments_a_reference_that_is_exactly_double_dot_removes_the_prior_segment(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => '..' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/a/b/c', $this->request_args() );
+
+		$this->assertSame( 'https://h/a/', $api->calls[1]['uri'] );
+	}
+
+	/** @return void */
+	public function test_dot_segments_a_double_slash_inside_the_path_is_preserved(): void {
+		$api            = new Testable_Api_Base_With_Challenge_Redirects();
+		$api->responses = [ $this->response( 307, [ 'Location' => 'a//b' ] ), $this->response( 200 ) ];
+
+		$api->request_for_test( 'https://h/x/y', $this->request_args() );
+
+		$this->assertSame( 'https://h/x/a//b', $api->calls[1]['uri'] );
 	}
 }

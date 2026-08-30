@@ -240,6 +240,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		/**
 		 * Returns a safe challenge redirect URI, or a WP_Error for a cross-origin one.
 		 *
+		 * An empty Location is refused here rather than resolved: RFC 3986 §5.2.2
+		 * would resolve it to the base URI itself (path and query intact, minus
+		 * any fragment), which is a same-origin URI and would pass the guard
+		 * below — but a 302/307 with an empty Location is a malformed response,
+		 * not an instruction to repeat the same request. This is the guard that
+		 * actually matters for that case; {@see self::resolve_challenge_redirect_uri()}
+		 * also resolves an empty Location correctly, as a second, independent line
+		 * of defence.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string         $request_uri Original request URI.
@@ -256,7 +265,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 			$location = $this->get_response_header_value( $response, 'location' );
 
-			if ( null === $location ) {
+			if ( null === $location || '' === $location ) {
 				return null;
 			}
 
@@ -287,6 +296,15 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * the last `/`" merge produces for every relative Location, query-only
 		 * included.
 		 *
+		 * An empty base path is coerced to `/` ONLY where RFC 3986 §5.2.3
+		 * actually requires it — merging a non-empty relative-path reference
+		 * against an authority base with no path. A query-only, fragment-only, or
+		 * genuinely empty Location keeps the base path exactly as parsed (RFC
+		 * 3986 §5.2.2's `R.path == ""` case): coercing it there produced a
+		 * synthetic `/` and, for an empty Location specifically, silently dropped
+		 * the base query and fell through to a parent-directory merge instead of
+		 * returning the base URI unchanged.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $request_uri Original request URI (absolute).
@@ -313,17 +331,23 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				return $base['scheme'] . ':' . $location;
 			}
 
+			// R.path == "" (RFC 3986 §5.2.2): keep Base.path exactly as parsed — no
+			// coercion to '/' — whether the Location is query-only, fragment-only,
+			// or genuinely empty.
+			if ( '' === $location || 0 === strpos( $location, '?' ) || 0 === strpos( $location, '#' ) ) {
+
+				$raw_base_path = $base['path'] ?? '';
+
+				// Query-only reference (RFC 3986 §5.3): keep the base path, replace the query.
+				if ( 0 === strpos( $location, '?' ) ) {
+					return $origin . $raw_base_path . $location;
+				}
+
+				// Fragment-only, or genuinely empty: keep the base path and query, replace/drop the fragment.
+				return $origin . $raw_base_path . ( isset( $base['query'] ) ? '?' . $base['query'] : '' ) . $location;
+			}
+
 			$base_path = isset( $base['path'] ) && '' !== $base['path'] ? $base['path'] : '/';
-
-			// Fragment-only reference: keep the base path and query, replace the fragment.
-			if ( 0 === strpos( $location, '#' ) ) {
-				return $origin . $base_path . ( isset( $base['query'] ) ? '?' . $base['query'] : '' ) . $location;
-			}
-
-			// Query-only reference (RFC 3986 §5.3): keep the base path, replace the query.
-			if ( 0 === strpos( $location, '?' ) ) {
-				return $origin . $base_path . $location;
-			}
 
 			[ $location_path, $location_suffix ] = self::split_uri_reference_path( $location );
 
