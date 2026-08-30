@@ -2313,6 +2313,37 @@
 	 * server-side chain stays one write behind until the next real pick corrects it, exactly the
 	 * {@see fetchJson} rejection path {@see logError} exists for.
 	 *
+	 * ACCEPTED DECISION (s106 critic round, Codex/gpt-5.6-terra, operator-settled): this call is
+	 * licensed by the SAME boundary every other destructive move in this file already uses —
+	 * gotcha `a-programmatic-parent-change-must-not-run-a-destructive-cascade`'s "a real
+	 * transition, not an event" rule, keyed on `entry.resolved` actually changing — never on WHO
+	 * changed it. That is deliberate, not an oversight:
+	 *
+	 * - There is nothing to key on instead. The country field is a native/WC-select2 `<select>`,
+	 *   not one of this module's own typeahead widgets, so {@see writeSilently}'s
+	 *   `change.select2` namespace trick (which only shields THIS module's own internal writes
+	 *   from ITS OWN change-gate — see that function's own docblock) has no reach here: it says
+	 *   nothing about who fired a `change` on a field this module never writes to itself.
+	 * - `event.isTrusted` was considered and rejected: this very file's "WC Address Autocomplete
+	 *   suppression" section (Task 12, spec D2) proves a PROGRAMMATIC, `isTrusted: false` write to
+	 *   this exact field is routinely genuine customer intent (a Google Places pick), so gating on
+	 *   trustedness would silently break that real path rather than filtering out a hypothetical
+	 *   bad one.
+	 * - Following WooCommerce is not optional once a real transition has happened, because on
+	 *   THIS SAME PATH — programmatic or not — WooCommerce has ALREADY destroyed its own address
+	 *   fields before this line ever runs: {@see clearCountryScope} blanks them locally, and by
+	 *   the exact mechanics the gotcha above documents, WC's own `update_checkout` serializes the
+	 *   form shortly after and writes the emptiness into `WC()->customer` — with no purchaser
+	 *   gesture required, today, independently of this card. If the woodev chain refused to
+	 *   follow here, it would not protect the customer's choice — WooCommerce already discarded
+	 *   it — it would just leave woodev as the ONE store that still disagrees with what the
+	 *   customer's own screen and WooCommerce's own record now show, which is precisely the
+	 *   split-brain this card exists to close (see {@see clearCountryScope}'s own docblock, issue
+	 *   #356 part 2 note). A softer
+	 *   "mark stale instead of erasing" compromise was considered and rejected too — that is
+	 *   exactly the design part 1 of this issue already ruled out for this store; re-litigating it
+	 *   here would reopen a closed question, not answer a new one.
+	 *
 	 * @param {Object} entry
 	 * @returns {void}
 	 */

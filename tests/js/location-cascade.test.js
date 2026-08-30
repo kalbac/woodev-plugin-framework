@@ -3192,6 +3192,12 @@ describe( 'issue #356 part 2: /forget on a country change', () => {
 		// here must never resurrect it or otherwise disturb the rest of the clear.
 		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
 
+		// The point of sendForget() logging at all (issue #356 part 2 itself is about a
+		// SILENT disagreement between two server-side stores) is that a transport failure
+		// must be VISIBLE, not merely non-fatal — assert the actual call, under this
+		// module's own prefix, not just that @wordpress/jest-console was silenced.
+		expect( consoleSpy ).toHaveBeenCalledWith( '[woodev-location-cascade]', expect.any( Error ) );
+
 		consoleSpy.mockRestore();
 	} );
 } );
