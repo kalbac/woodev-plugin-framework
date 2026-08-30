@@ -532,6 +532,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			self::remove_hooked_instances( 'rest_api_init', self::class, 'register_rest' );
 			self::remove_hooked_instances( 'wp_login', Customer_Location_Store::class, 'handle_wp_login' );
 			self::remove_hooked_instances( 'woocommerce_states', self::class, 'inject_related_list_states' );
+			self::remove_hooked_instances( 'wp_privacy_personal_data_exporters', self::class, 'register_data_exporters' );
+			self::remove_hooked_instances( 'wp_privacy_personal_data_erasers', self::class, 'register_data_erasers' );
 
 			// The popular-settlements pair, added in #488 slice 2. Every INSTANCE-BOUND callback
 			// `add_hooks()` registers must be removable here, or an integration test keeps a stale
@@ -698,6 +700,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 *              `$wpdb` mid-`add_hooks()`) and
 		 *              {@see self::handle_checkout_order_processed_for_popular_settlements()}
 		 *              onto `woocommerce_checkout_order_processed`.
+		 * @since 2.0.2 Also hooks {@see self::register_data_exporters()} and
+		 *              {@see self::register_data_erasers()} onto WordPress's
+		 *              `wp_privacy_personal_data_exporters`/`_erasers` filters
+		 *              (issue #356 part 1) — bound to THIS singleton, exactly like
+		 *              {@see self::collect()}/{@see self::register_rest()} above,
+		 *              so {@see self::reset_for_tests()} can remove them the same
+		 *              way (class+method match, not object identity).
 		 *
 		 * @return void
 		 */
@@ -711,6 +720,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			add_action( 'init', [ $this, 'maybe_install_popular_settlements_table' ], 20 );
 			add_action( 'wp_login', [ new Customer_Location_Store(), 'handle_wp_login' ], 10, 2 );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
+			add_filter( 'wp_privacy_personal_data_exporters', [ $this, 'register_data_exporters' ] );
+			add_filter( 'wp_privacy_personal_data_erasers', [ $this, 'register_data_erasers' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_related_list_states' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed_for_popular_settlements' ], 20, 3 );
 
@@ -724,6 +735,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 				\Woodev\Framework\Shipping\Settings\Shipping_Tools_Registry::FILTER_TOOLS,
 				[ Popular_Settlements_Tools::class, 'register_tools' ]
 			);
+		}
+
+		/**
+		 * `wp_privacy_personal_data_exporters` callback: registers this fleet's
+		 * {@see Customer_Location_Store} exporter (issue #356 part 1).
+		 *
+		 * Bound to THIS singleton in {@see self::add_hooks()} — not to a fresh
+		 * `Customer_Location_Store` instance the way `wp_login` is — because it is
+		 * the OUTER `add_filter()` registration that needs to survive
+		 * {@see self::reset_for_tests()}'s class+method removal; the actual
+		 * exporter callback array entry this method returns is rebuilt fresh on
+		 * every `apply_filters()` call (nothing about it is itself a persistent
+		 * hook registration), so binding it to a throwaway
+		 * `new Customer_Location_Store()` here — exactly like the `wp_login`
+		 * registration above — costs nothing and needs no instance of its own to
+		 * be tracked.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array{exporter_friendly_name: string, callback: callable}> $exporters Exporters already registered by WordPress core or other plugins.
+		 *
+		 * @return array<string, array{exporter_friendly_name: string, callback: callable}>
+		 */
+		public function register_data_exporters( array $exporters ): array {
+			$exporters['woodev-customer-location'] = [
+				'exporter_friendly_name' => __( 'Локация покупателя (Woodev)', 'woodev-plugin-framework' ),
+				'callback'                => [ new Customer_Location_Store(), 'export_personal_data' ],
+			];
+
+			return $exporters;
+		}
+
+		/**
+		 * `wp_privacy_personal_data_erasers` callback: registers this fleet's
+		 * {@see Customer_Location_Store} eraser (issue #356 part 1) — see
+		 * {@see self::register_data_exporters()} for why the OUTER `add_filter()`
+		 * is bound to this singleton while the actual callback is a throwaway
+		 * `Customer_Location_Store` instance.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, array{eraser_friendly_name: string, callback: callable}> $erasers Erasers already registered by WordPress core or other plugins.
+		 *
+		 * @return array<string, array{eraser_friendly_name: string, callback: callable}>
+		 */
+		public function register_data_erasers( array $erasers ): array {
+			$erasers['woodev-customer-location'] = [
+				'eraser_friendly_name' => __( 'Локация покупателя (Woodev)', 'woodev-plugin-framework' ),
+				'callback'              => [ new Customer_Location_Store(), 'erase_personal_data' ],
+			];
+
+			return $erasers;
 		}
 
 		/**
