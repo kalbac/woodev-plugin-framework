@@ -33,6 +33,7 @@ const CONFIG_GLOBAL = 'woodev_checkout_field_config_location_cascade_test';
 const SUGGEST_URL = 'https://example.test/wp-json/woodev/v1/location/suggest';
 const SELECT_URL = 'https://example.test/wp-json/woodev/v1/location/select';
 const LIST_URL = 'https://example.test/wp-json/woodev/v1/location/list';
+const FORGET_URL = 'https://example.test/wp-json/woodev/v1/location/forget';
 
 let attachCalls;
 let fetchCalls;
@@ -196,7 +197,7 @@ function buildConfig( opts ) {
 		nonce: 'test-nonce',
 		takeover: {},
 		location: {
-			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 			nonce: 'test-nonce',
 			countries: o.countries || [ 'RU' ],
 			// Issue #380: two independent axes — each 'typeahead' | 'related-list' |
@@ -3003,6 +3004,9 @@ describe( 'country switch', () => {
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( document.getElementById( 'shipping_city' ).value ).toBe( 'Москва' );
+		// Issue #356 part 2: this entry has nothing bound to #billing_country at all — there was
+		// nothing to clear, so nothing is told to /forget either.
+		expect( fetchCalls.filter( ( c ) => c.url === FORGET_URL ) ).toHaveLength( 0 );
 	} );
 
 	it( 'detaches a level the NEW country does not serve, even though the country itself is served', () => {
@@ -3067,6 +3071,128 @@ describe( 'country switch', () => {
 
 		expect( window.WoodevLocationTypeahead.mock.calls.length ).toBeGreaterThan( attachCountAfterDetach );
 		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+	} );
+} );
+
+// -----------------------------------------------------------------------
+// Issue #356 part 2: clearCountryScope() erases WooCommerce's OWN address fields, and
+// WooCommerce persists that erasure server-side. Left unanswered, the woodev
+// customer-location chain — a separate server-side store — would still hold whatever the
+// shopper had explicitly chosen, so the two disagree. sendForget() is the fix; these tests
+// cover its own dedup rule (one POST per country-change gesture, never one per entry) and its
+// fire-and-forget failure mode.
+// -----------------------------------------------------------------------
+
+describe( 'issue #356 part 2: /forget on a country change', () => {
+	/**
+	 * Two entries, DIFFERENT fields, but the SAME billing section — so a single
+	 * `#billing_country` change runs `clearCountryScope()` for BOTH of them (mirrors
+	 * `bootSharedLocationEntries()` above, but same-SECTION rather than billing+shipping, which
+	 * is what actually reproduces `handleFieldChanged()`'s `entries.forEach` duplication this
+	 * task is about).
+	 *
+	 * @returns {void}
+	 */
+	function bootTwoEntriesSameSection() {
+		document.body.innerHTML = `
+			<form class="checkout woocommerce-checkout">
+				<select id="billing_country" name="billing_country">
+					<option value="RU">Россия</option>
+					<option value="US">United States</option>
+				</select>
+				<input type="text" id="billing_state" name="billing_state" value="" />
+				<input type="text" id="billing_city" name="billing_city" value="" />
+			</form>
+		`;
+		document.getElementById( 'billing_country' ).value = 'RU';
+
+		global.jQuery = require( 'jquery' );
+		global.$ = global.jQuery;
+		window.jQuery = global.jQuery;
+
+		window.WoodevCheckoutFieldStore = require(
+			'../../woodev/shipping-method/assets/js/frontend/checkout-field-store.js'
+		);
+
+		fakeTypeahead();
+		mockFetch();
+
+		const sharedLocation = {
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
+			nonce: 'test-nonce',
+			countries: [ 'RU', 'US' ],
+			mode: 'typeahead',
+			levels: { RU: { region: true, settlement: true, address: true }, US: { region: true, settlement: true, address: true } },
+			current: null,
+			implicit: false,
+			i18n: {},
+		};
+
+		window[ CONFIG_GLOBAL + '_region_entry' ] = {
+			fields: { billing_state: locationField( 'region', 'billing' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+		window[ CONFIG_GLOBAL + '_settlement_entry' ] = {
+			fields: { billing_city: locationField( 'settlement', 'billing' ) },
+			endpoint: 'https://example.test/wp-json/woodev/v1/carrier/field-source',
+			nonce: 'test-nonce',
+			takeover: {},
+			location: sharedLocation,
+		};
+
+		require( '../../woodev/shipping-method/assets/js/frontend/location-cascade.js' );
+	}
+
+	afterEach( () => {
+		delete window[ CONFIG_GLOBAL + '_region_entry' ];
+		delete window[ CONFIG_GLOBAL + '_settlement_entry' ];
+	} );
+
+	it( 'a real country transition posts /forget exactly once even though TWO entries both clear something', () => {
+		bootTwoEntriesSameSection();
+
+		document.getElementById( 'billing_state' ).value = 'Москва';
+		document.getElementById( 'billing_city' ).value = 'Москва';
+
+		document.getElementById( 'billing_country' ).value = 'US';
+		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( '' );
+		expect( fetchCalls.filter( ( c ) => c.url === FORGET_URL ) ).toHaveLength( 1 );
+		expect( fetchCalls.find( ( c ) => c.url === FORGET_URL ).init.method ).toBe( 'POST' );
+	} );
+
+	it( 'a rejected /forget request never throws and never blocks the rest of the clear', async () => {
+		// A network failure is logged (`logError()`), so expect it explicitly rather than let
+		// @wordpress/jest-console flag an "unexpected" console.error (mirrors "does NOT trigger
+		// update_checkout when /select fails" above).
+		const consoleSpy = jest.spyOn( console, 'error' ).mockImplementation( () => {} );
+
+		bootTwoEntriesSameSection();
+
+		document.getElementById( 'billing_state' ).value = 'Москва';
+
+		expect( () => {
+			document.getElementById( 'billing_country' ).value = 'US';
+			document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
+		} ).not.toThrow();
+
+		const forgetReq = fetchCalls.find( ( c ) => c.url === FORGET_URL );
+
+		expect( forgetReq ).toBeDefined();
+
+		forgetReq.reject( new Error( 'network down' ) );
+		await flushMicrotasks();
+
+		// The field was cleared LOCALLY before the POST was even sent — a transport failure
+		// here must never resurrect it or otherwise disturb the rest of the clear.
+		expect( document.getElementById( 'billing_state' ).value ).toBe( '' );
+
+		consoleSpy.mockRestore();
 	} );
 } );
 
@@ -4444,7 +4570,7 @@ describe( 'woodev_location_applied\'s implicit detail (issue #309)', () => {
 		mockFetch();
 
 		const sharedLocation = {
-			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 			nonce: 'test-nonce',
 			countries: [ 'RU' ],
 			mode: 'typeahead',
@@ -5067,7 +5193,7 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		return seen;
 	}
 
-	it( 'a real country transition fires an empty-key event (clearCountryScope posts nothing to /select)', () => {
+	it( 'a real country transition fires an empty-key event (clearCountryScope posts nothing to /select, exactly one /forget)', () => {
 		boot( { region: true, settlement: true, address: true, countries: [ 'RU', 'US' ] } );
 
 		document.getElementById( 'billing_city' ).value = 'Москва';
@@ -5078,8 +5204,12 @@ describe( 'Location Provider key invalidation on a local-only clear (review find
 		document.getElementById( 'billing_country' ).dispatchEvent( new Event( 'change', { bubbles: true } ) );
 
 		expect( seen ).toEqual( [ { key: '', level: '', settlementKey: '', implicit: false } ] );
-		// Sanity: this really is a pure client-side clear, never a network call.
-		expect( fetchCalls.length ).toBe( 0 );
+		// Issue #356 part 2: clearCountryScope() still never posts to /select — but the
+		// server's own customer-location chain must now be told to forget what it held, so
+		// EXACTLY ONE /forget POST goes out (never /select).
+		expect( fetchCalls.length ).toBe( 1 );
+		expect( fetchCalls[ 0 ].url ).toBe( FORGET_URL );
+		expect( fetchCalls[ 0 ].init.method ).toBe( 'POST' );
 	} );
 
 	it( 'a programmatic country change carrying the SAME value (no real transition) fires nothing', () => {
@@ -5193,7 +5323,7 @@ describe( 'section-aware addressing (review finding F3)', () => {
 		mockFetch();
 
 		const sharedLocation = {
-			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+			endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 			nonce: 'test-nonce',
 			countries: [ 'RU' ],
 			mode: 'typeahead',
@@ -7087,7 +7217,7 @@ describe( 'buildChain() tie-break when Rule 7b fans a field into both sections (
 			nonce: 'test-nonce',
 			takeover: {},
 			location: {
-				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 				nonce: 'test-nonce',
 				countries: [ 'RU' ],
 				mode: { region: 'typeahead', settlement: 'typeahead' },
@@ -7284,7 +7414,7 @@ describe( 'a column swap carries the chain RECORDS, not just the widget (issue #
 			nonce: 'test-nonce',
 			takeover: {},
 			location: {
-				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 				nonce: 'test-nonce',
 				countries: [ 'RU' ],
 				mode: { region: 'typeahead', settlement: 'typeahead' },
@@ -7565,7 +7695,7 @@ describe( 'a column swap carries the record even after its /select round trip ha
 			nonce: 'test-nonce',
 			takeover: {},
 			location: {
-				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 				nonce: 'test-nonce',
 				countries: [ 'RU' ],
 				mode: { region: 'typeahead', settlement: 'typeahead' },
@@ -7792,7 +7922,7 @@ describe( 'a column swap carries the settlement even when its widget SWAPS the D
 			nonce: 'test-nonce',
 			takeover: {},
 			location: {
-				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 				nonce: 'test-nonce',
 				countries: [ 'RU' ],
 				mode: { region: 'typeahead', settlement: 'ajax-select2' },
@@ -8023,7 +8153,7 @@ describe( 'the real rig sequence: starts CHECKED, uncheck, fill billing, check a
 			nonce: 'test-nonce',
 			takeover: {},
 			location: {
-				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL },
+				endpoints: { suggest: SUGGEST_URL, select: SELECT_URL, list: LIST_URL, forget: FORGET_URL },
 				nonce: 'test-nonce',
 				countries: [ 'RU' ],
 				mode: { region: 'ajax-select2', settlement: 'ajax-select2' },

@@ -2305,6 +2305,22 @@
 	}
 
 	/**
+	 * Tells the server the current visitor's whole location chain is now stale — issue #356
+	 * part 2. Fire-and-forget, unlike {@see sendNextSelect}'s queued `/select` POST: forgetting
+	 * is not parameterized (no body, no `record` to adopt), the fields it concerns were already
+	 * cleared LOCALLY by {@see clearCountryScope} before this is ever called, and a checkout
+	 * must never stall or misbehave over a network failure here — it would only mean the
+	 * server-side chain stays one write behind until the next real pick corrects it, exactly the
+	 * {@see fetchJson} rejection path {@see logError} exists for.
+	 *
+	 * @param {Object} entry
+	 * @returns {void}
+	 */
+	function sendForget( entry ) {
+		fetchJson( entry.location.endpoints.forget, { method: 'POST', headers: nonceHeader( entry ) } ).then( null, logError );
+	}
+
+	/**
 	 * Fires WooCommerce's own `update_checkout` — the ONE place this module fires it itself,
 	 * because WooCommerce's OWN client-side gate does not reliably fire it off an address change
 	 * on its own (gotcha `wc-does-not-save-the-address-until-every-required-text-field-is-filled`
@@ -4202,9 +4218,19 @@
 	 * that section was never feeding the shared record to begin with (see
 	 * {@see isActiveAddressSection}'s own docblock).
 	 *
+	 * Issue #356 part 2: this function also clears WooCommerce's OWN address fields
+	 * (`entry.store.setValue`/`applyValueToElement` above act on the same city/state inputs
+	 * WooCommerce's own customer object owns), and WooCommerce persists that erasure
+	 * server-side. Left unanswered, the woodev customer-location chain — a SEPARATE
+	 * server-side store — would keep whatever the shopper had explicitly chosen earlier, so the
+	 * two stores would disagree. The RETURN VALUE (whether this entry actually had anything to
+	 * clear) is what {@see handleFieldChanged} uses to decide whether to tell the server the
+	 * chain is stale too — see that function's own docblock for why the POST itself does not
+	 * belong in here.
+	 *
 	 * @param {Object} entry
 	 * @param {string} countryFieldId
-	 * @returns {void}
+	 * @returns {boolean} Whether any node governed by `countryFieldId` was actually cleared.
 	 */
 	function clearCountryScope( entry, countryFieldId ) {
 		var section = sectionForCountryFieldId( countryFieldId );
@@ -4248,6 +4274,8 @@
 			// as {@see settleSelect}'s own `notPersisted` branch.
 			fireLocationApplied( entry, null, false );
 		}
+
+		return cleared;
 	}
 
 	/**
@@ -4306,6 +4334,17 @@
 			// the DOM here answers the SAME thing `target.value` would for a present, non-empty
 			// selection — it only additionally covers the field-absent/unselected case the raw
 			// read got wrong.
+			// Issue #356 part 2: `clearCountryScope()` runs once PER entry below, but a real
+			// country transition is one gesture, not N of them — the server-side chain it tells
+			// `/forget` about is the CURRENT VISITOR's, not any one entry's, so sending N POSTs
+			// for N entries would be pure duplication of the exact same write. `clearedEntry`
+			// captures the first entry that actually had something to clear (its `.location`
+			// config — nonce, endpoint — is shared store-wide, so any cleared entry will do) and
+			// {@see sendForget} fires at most once, after the loop, exactly like
+			// {@see isActiveAddressSection}'s own gate below (same `section`, computed once,
+			// mirrors {@see clearCountryScope}'s own internal gate for the identical reason).
+			var clearedEntry = null;
+
 			entries.forEach( function( entry ) {
 				var country = cascadeKey( countryFor( entry, { section: section } ) );
 
@@ -4314,8 +4353,15 @@
 				}
 
 				entry.resolved[ id ] = country;
-				clearCountryScope( entry, id );
+
+				if ( clearCountryScope( entry, id ) && ! clearedEntry ) {
+					clearedEntry = entry;
+				}
 			} );
+
+			if ( clearedEntry && isActiveAddressSection( section ) ) {
+				sendForget( clearedEntry );
+			}
 
 			handleLayoutRelevantChange();
 			return;
