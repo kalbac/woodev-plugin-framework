@@ -23,6 +23,12 @@ count: None deliveryId: None        # returned in ~2 seconds, not 9 minutes
 **Fix:** keep exactly one waiter. If a wait got backgrounded, stop it before starting another
 (`TaskStop` on the task id), then wait in the foreground.
 
+**Prevention, added s107 — backgrounding is not a choice you make.** The Bash tool moves ANY call
+past its own timeout (600 s) into the background automatically, so a `--timeout-ms 900000` wait
+starves the queue without anyone deciding to background it. Set `--timeout-ms` **below the tool's
+limit** — 480000 works — and take several short waits instead of one long one. A wait that returns
+`timedOut: true` with `count: 0` is a checkpoint, not a failed worker; just wait again.
+
 ## Trap 2 — `--json` emits a stream, not a document
 
 With `--wait`, the CLI prints a keepalive object roughly every 15 s and then the real result:

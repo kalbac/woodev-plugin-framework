@@ -124,6 +124,57 @@ a SECOND `dispatch --inject` for a follow-up task (here, a re-critic on the fix 
 critic's finding). No new terminal, no re-launch, no ESC needed the second time — just create the
 task, dispatch it, and read the buffer back to confirm it started working.
 
+## s107: three of four launches failed, in three different ways — and the RETRY has its own trap
+
+Four `worker-start --agent codex` launches on CLI 0.150.1, 30.08.2026. **One worked. Three failed,
+and no two failed alike:**
+
+| failure | `stage` / `lastError` | what the terminal actually held |
+|---|---|---|
+| A | `dispatch_input` / `agent_prompt_blocked` | a bare **PowerShell** shell — Codex never launched, and the injected brief was being eaten by the shell as a here-string (`>>` continuation) |
+| B | `agent_readiness` / `Agent startup blocked: codex-update-prompt` | Codex up, update dialog on top |
+| C | `dispatch_input` / `agent_prompt_blocked` | Codex up, update dialog on top |
+
+So the `lastError` does **not** tell you which one you have. Read the buffer before choosing a
+recovery: a `>>` continuation prompt means case A and needs a fresh
+`terminal create --command codex`; a dialog means ESC and a re-dispatch.
+
+### The retry trap — it silently targets the coordinator's worktree
+
+`worker-start --retry-of <ctx> --terminal <handle>` looks complete and is not:
+
+```text
+terminal_worktree_mismatch: Terminal term_… does not belong to worktree
+  cb27dca8-…::D:/Projects/woodev_framework
+```
+
+That is the COORDINATOR's worktree — the flag defaults there. The retry needs the worktree named
+explicitly, with the full id from the original `worker-start` receipt's `effects`:
+
+```bash
+orca orchestration worker-start --task <task_id> --retry-of <ctx_id>   --worktree "id:<repo-uuid>::D:/…/.orca/worktrees/<repo>/<name>"   --terminal <handle> --json
+```
+
+### After three failures the task is beyond `task-update`
+
+s93 above records `task-update --status ready` as the recovery. In s107 a task that had burned its
+three attempts answered `task_not_startable` **even after** being set back to `ready` — the dispatch
+context itself had circuit-broken. The way through is a **new task carrying the same spec**; the old
+one gets `--status failed` with a reason, for hygiene.
+
+### `tui-idle` is not "ready for a dispatch"
+
+`terminal wait --for tui-idle` returns while Codex is still starting its ~11 MCP servers, and a
+brief injected in that window is lost (the composer comes up empty). Poll the buffer for the line
+that ends MCP startup — here `⚠ MCP startup incomplete (failed: …)` next to the
+`gpt-5.6-terra` status line — and dispatch only after it appears.
+
+### One more, cheap to miss
+
+Codex wrote its PR body with **literal `
+` escapes**, so the `Closes #673` in it never fired and
+the card stayed open after the merge. Check the card actually closed; do not assume the keyword ran.
+
 ## s102: on CLI 0.150.1 the dialog did not appear, and `--inject` submitted on its own
 
 A launch smoke-tested on **codex-cli 0.150.1** (28.08.2026, right after the subscription was

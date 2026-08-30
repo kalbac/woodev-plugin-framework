@@ -248,7 +248,7 @@ independently measured zero diff. Generated bundles must be rebuilt in the prima
 (`git checkout --detach origin/<branch>`, build, push, then `git checkout main`). Gotchas:
 `a-worktree-silently-skips-five-contract-tests`, `local-npm-run-build-is-not-assets-parity-evidence`.
 
-**Every brief needs four standing lines.** They earned their place: every agent told about the
+**Every brief needs five standing lines.** They earned their place: every agent told about the
 memory pressure reported its OOM honestly instead of claiming a green gate, and every agent told
 about the CRLF churn left the seven dirty files unstaged.
 
@@ -258,8 +258,12 @@ about the CRLF churn left the seven dirty files unstaged.
 3. Never `git add -A` — this worktree starts dirty with seven CRLF-only files.
 4. The machine is shared and low on memory; if a gate OOMs, say so and retry once — never report a
    gate green whose aggregate result you never saw, and never substitute `npx jest`.
+5. **The WORK is the deliverable; the lifecycle message is not a precondition for it.** If you
+   cannot send `worker_done`, do the task anyway and print the report in your terminal — the
+   coordinator reads transcripts. Added s107, where a Codex worker could not reach the `orca` CLI
+   from its shell and therefore did nothing at all rather than work it could not announce.
 
-A fifth line is worth its weight on anything non-trivial: **you are licensed to contradict this
+A sixth line is worth its weight on anything non-trivial: **you are licensed to contradict this
 brief; if the code disagrees, the code wins.** In s84 it produced a correction in almost every
 report — a third AJAX handler with the same hole, a preflight check that existed but was never
 consumed, and a "the brief's baseline is stale" that turned out to be the skipped-test gap above.
