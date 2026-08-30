@@ -265,7 +265,39 @@ it to dismiss. Keep the step — the dialog returns with every new release, and 
 appear after a clean read — but stop describing a four-step ritual as what Orca requires. Orca
 requires one command. Codex's own updater is what adds the other three.
 
-## ⚠ s108, NEW and unexplained: the dispatch body does not always reach the prompt
+## ✅ s108, SETTLED by a controlled run: the update dialog was eating the brief, and that is all
+
+An earlier s108 pass recorded "the dispatch body does not always reach the prompt" as a separate,
+unexplained defect. **That was a second unverified inference in the same session and it did not
+survive its own control.** What was actually observed, on a stale Codex 0.150.1 with the update
+dialog raised: the injection is TRUNCATED. The buffer showed the Orca preamble cut mid-sentence, and
+after the dialog was dismissed only that truncated prefix remained in the composer — so the worker
+received no task and honestly reported having none.
+
+**The control.** Once the operator updated Codex, a native `worker-start --agent codex` was run,
+one command, no ritual, with a canary as the LAST line of the brief:
+
+    Begin your very first message with the exact token WOODEV-688-TAIL-REACHED.
+
+Result: `state: ready`, no `agent_prompt_blocked`, no manual Enter, and Codex **echoed the canary**
+before delivering a full adversarial review with `file:line` citations. The whole brief arrives.
+Repeated three more times across the session, every time with a fresh canary, every time echoed.
+
+⚠ **What the control does NOT separate:** updating Codex removed the dialog AND changed the version
+at the same time. The honest claim is only this — on an up-to-date Codex with no dialog the injection
+arrives complete, and truncation was observed only on a stale one showing the dialog. Operationally
+it makes no difference; the remedy is the same.
+
+**The two rules that survive:**
+
+1. Keep Codex updated. The dialog is the cause of this entire branch of diagnoses.
+2. **Put a canary on the LAST line of every Codex brief.** It is the only thing that distinguishes
+   "nothing arrived" from "a prefix arrived" — a worker cannot tell you that about itself, and both
+   times this project guessed instead of measuring, it guessed wrong.
+
+## The observation itself, kept — it is what a truncated injection looks like from the inside
+
+After the dialog was cleared and the prompt submitted, the Codex worker reported:
 
 After the dialog was cleared and the prompt submitted, the Codex worker reported:
 
@@ -276,10 +308,10 @@ The Orca lifecycle preamble arrived; **the task spec did not.** The worker had n
 said so. Re-delivering the same brief with `orca terminal send --text "<brief>" --enter` worked
 immediately, and the same Codex then produced a full review with `file:line` citations.
 
-This is very likely what actually happened in s107 to the worker that "traded the task for a
-receipt": it never had a task. Its own explanation — that it could not reach the `orca` CLI — was
-recorded as a measured fact and was not verified; s108 measured the CLI as reachable. Card #683
-carries this.
+This is what happened in s107 to the worker that "traded the task for a receipt": **it never had a
+task.** Its own explanation — that it could not reach the `orca` CLI — was recorded as a measured
+fact and was not verified; s108 measured the CLI as reachable from a Codex worker, PowerShell shell
+and all. Card **#683 is closed** on the controlled run above.
 
 **Operationally:** after submitting a Codex worker's prompt, read the buffer back and confirm the
 TASK text is in it, not just the preamble. A `Working` spinner proves it is doing something, not

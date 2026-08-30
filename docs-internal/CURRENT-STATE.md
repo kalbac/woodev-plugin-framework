@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-30 (s108).** `main` clean, **no open PRs, no worktrees**. s108 merged PR #685 and
-closed **#676** (the challenge-cookie jar is scoped by origin), filed **#686** and **#687** from its
-review, and **overturned s107's #683 diagnosis by measurement** — see the Codex section below, which
-was rewritten because of it. s107 before it merged twelve PRs and closed eleven cards. History →
+**As of 2026-08-31 (s108).** `main` clean, **no open PRs, no worktrees**. s108 merged **PR #685 and
+#688** and closed **#676, #686, #687** (the challenge-redirect cookie mechanism: jar scoped by
+origin, then RFC 6265 deletion/expiry/Path and RFC 3986 `Location` resolution) plus **#683 by
+measurement**. Filed **#689**. The Codex section below was rewritten because of #683. History →
 `sessions/s108.md`, `sessions/s107.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
@@ -22,10 +22,10 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s108), sodium enabled, after
-PR #685:** `composer check` **3321** / 8174 / **1 skipped**. phpcs clean (225 files), phpstan left
-to CI. Integration **129** / 506 and jest **1568** in 21 suites are s107 figures — s108 touched
-neither layer, so they were not re-measured and must be re-run before being compared against.
+**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s108), sodium enabled, after
+PR #688:** `composer check` **3355** / 8226 / **1 skipped**. phpcs clean, phpstan left to CI.
+Integration **129** / 506 and jest **1568** in 21 suites are s107 figures — s108 touched neither
+layer, so they were NOT re-measured and must be re-run before being compared against.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
@@ -54,13 +54,12 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s108 — 78 in `Бэклог`, `Инбокс` empty, nothing in `В работе`.** Still open:
+**Open cards after s108 — 76 in `Бэклог`, `Инбокс` empty, nothing in `В работе`.** Still open:
 **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**, **#644**
 (material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half only),
-**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#683** (why the
-dispatch body does not reach Codex's prompt), **#686** and **#687** (both filed in s108 from the
-#685 review — cookie attributes discarded, and `Location` resolved by heuristic), and the standing
-list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#689** (RFC 6265 §5.4
+equal-length `Path` tie ordering — filed in s108 and DELIBERATELY not fixed, the card carries the
+reasoning), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
 (150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
 and rebuild the `.mo` before release).
 
@@ -242,12 +241,11 @@ oversight.
 Полный список открытых карточек — в блоке «Open cards after s108» выше; он и есть источник правды,
 здесь только порядок и запреты.
 
-1. **#686** и **#687** — оба из ревью #685, полностью описаны на карточках, никого не ждут.
-2. **#683** — почему тело dispatch не доезжает до промпта Codex. Симптом лечится досылкой брифа.
-3. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
+1. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
    лишь ~10, остальные оттриажены по заголовку. Расстановка приоритетов — ЕГО, сверка — агента.
-4. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
-5. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+2. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
+3. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+4. **#689** — косметика по RFC 6265 §5.4, отклонена осознанно; брать только если появится потребитель.
 
 🙋 **Ждут решения ОПЕРАТОРА, автономно не брать:** **#437** (нужна беседа об объёме), **#653**
 (вторая половина, инлайновый jQuery — именно он был причиной #662), **#567** (остаток по языку
