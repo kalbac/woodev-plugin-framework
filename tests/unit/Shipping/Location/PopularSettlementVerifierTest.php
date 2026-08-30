@@ -117,9 +117,10 @@ final class Popular_Settlement_Verifier_Store_Spy extends Popular_Settlement_Sto
 	public array $delete_entry_calls = [];
 
 	/**
-	 * @var bool What replace_record() returns — set false to model a
-	 *           `(provider_id, locality_key)` unique-key collision (two
-	 *           historical popular rows the provider merged into one).
+	 * @var bool What replace_record() returns — set false to model some
+	 *           write-side failure OTHER than a mergeable
+	 *           `(provider_id, locality_key)` collision, which the real store
+	 *           now reconciles internally and reports as success (#499).
 	 */
 	public bool $replace_record_result = true;
 
@@ -234,15 +235,14 @@ final class PopularSettlementVerifierTest extends TestCase {
 	}
 
 	/**
-	 * The write half of a "changed" outcome can be REJECTED even though
-	 * resolve_key() succeeded: the store's `(provider_id, locality_key)`
-	 * unique key rejects the new key when it converges onto a DIFFERENT row
-	 * that already holds it — two historical popular rows the provider has
-	 * since merged into one settlement (round 2 critic HIGH finding, #488
-	 * slice 3). This must be reported as `failed`, never `updated` — a caller
-	 * (the `/select` route's D5 step) that trusted `updated` here would
-	 * persist the NEW key back to the customer while the row it thinks it
-	 * updated is still carrying the OLD, stale one.
+	 * The write half of a "changed" outcome can be REJECTED for reasons other
+	 * than a mergeable `(provider_id, locality_key)` collision — the store now
+	 * folds THAT case internally and still reports success (#499); a `false`
+	 * here means something else went wrong (e.g. a genuinely concurrent delete
+	 * racing the write). This must be reported as `failed`, never `updated` —
+	 * a caller (the `/select` route's D5 step) that trusted `updated` here
+	 * would persist the NEW key back to the customer while the row it thinks
+	 * it updated was never actually reconciled.
 	 */
 	public function test_a_rejected_write_reports_failed_not_updated(): void {
 		$stored   = $this->record( 'dadata', 'old-native-id' );
