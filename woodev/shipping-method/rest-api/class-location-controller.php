@@ -1168,6 +1168,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *              signal, not a supplement to an existing one. See
 		 *              {@see Location_Controller::perform_suggest()}'s own
 		 *              `@since` note for the full contract.
+		 * @since 2.0.2 An empty `country` param now falls back through
+		 *              {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}
+		 *              instead of reaching `build_scope()`'s own 400 (issue #321)
+		 *              — the same exposure PR #320 closed for `/suggest` alone
+		 *              (issue #296), deliberately left out of that PR's scope.
+		 *              Mirrors {@see self::perform_suggest()}'s own fallback
+		 *              exactly; both routes resolve through the ONE shared
+		 *              method.
 		 *
 		 * @param \WP_REST_Request $request request object.
 		 *
@@ -1195,7 +1203,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 			}
 
 			$country = $this->normalize_param( $request->get_param( 'country' ) );
-			$within  = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
+
+			// Issue #321: same exposure #296 closed for /suggest (see
+			// perform_suggest()'s own comment on its matching fallback) — a
+			// checkout with no country field at all sends '' here, and this
+			// route's own build_scope() call below would otherwise reject it
+			// with a 400 before ever reaching the provider. Mirrors
+			// perform_suggest()'s fallback through the ONE shared
+			// {@see \Woodev\Framework\Shipping\Location\Location_Service::resolve_default_country()}.
+			if ( '' === $country ) {
+				$country = $this->service->resolve_default_country();
+			}
+
+			$within = $this->cap_length( $this->normalize_param( $request->get_param( 'within' ) ), self::MAX_PARAM_LENGTH );
 
 			$raw_limit = $request->get_param( 'limit' );
 			$limit     = null === $raw_limit ? self::LIST_HARD_CAP : (int) $raw_limit;
