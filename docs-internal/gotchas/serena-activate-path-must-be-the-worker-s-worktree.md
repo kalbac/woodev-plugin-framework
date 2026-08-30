@@ -65,7 +65,37 @@ The verification line is not decoration. The failure is silent: a wrongly-activa
 returns correct-looking symbols and applies edits successfully. The only visible signal is a path
 in a result, or stray files in someone else's `git status`.
 
+## The same failure with no Serena in it — the COORDINATOR's shell cwd (s108)
+
+This gotcha was written about workers and Serena. s108 hit the identical outcome as the coordinator,
+with neither.
+
+The Bash tool's working directory **persists between calls**. A single
+`cd "$WORKTREE" && <gate command>` — run once to measure a worker's branch — leaves the session's cwd
+inside that worktree for every later call. Doc edits written afterwards with a RELATIVE path
+(`docs-internal/gotchas/...`) then land in the worktree, not the primary checkout. Nothing errors:
+the file exists in both trees, the edit succeeds, a `lint:docs` run in that tree passes.
+
+The loss happens at cleanup. `orca worktree rm` takes the worktree away and the edit with it. In s108
+a corrected gotcha section was written, verified by `grep`, and was simply **gone** an hour later —
+noticed only because `git status` in the primary did not list a file that had definitely been edited.
+
+The harness says so, and it is easy to read past:
+
+    Session cwd remains D:\Projects\woodev_framework\.orca\worktrees\...;
+    directory changes made by the backgrounded command do not apply to subsequent commands.
+
+**Rules:**
+
+- Coordinator edits to repo files use an **absolute path**, always. The primary checkout's path is
+  known; there is no reason to depend on cwd for it.
+- Prefer `cd "$W" && cmd` inside a single background call over letting the cwd drift, and treat the
+  harness's "Session cwd remains …" line as a warning, not a footnote.
+- `git status` in the PRIMARY checkout is the check that catches it: a file you edited that is not
+  listed as modified was edited somewhere else.
+
 ## Related
+
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](two-agents-one-file-is-the-orchestrator-s-bug.md) — the same lesson: a worker cannot know what it was not told
 - [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) — the other Serena trap, and the one this is NOT
