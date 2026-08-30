@@ -514,4 +514,217 @@ class CdekFixtureProviderTest extends TestCase {
 			'a malformed dictionary row degrades to "not found", the same as any other row regions() cannot map'
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// #358 — region_code_from_scope() reports a narrowing verdict on the scope
+	// it is handed. Shared by suggest_settlements() AND list_localities(), so
+	// exercising it through one covers both call sites.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Stubs BOTH `/location/suggest/cities` (or `/location/cities`) and
+	 * `/location/regions` behind one cached-token transport — the own-provider-key
+	 * branch of `region_code_from_scope()` never touches the network, but the
+	 * components-name branch calls `region_code_for_name()` -> `regions()`, a
+	 * SEPARATE endpoint from whichever settlement call the provider method itself
+	 * makes. Routes on the request URL, same shape as
+	 * {@see self::stub_region_dictionary_transport()}.
+	 *
+	 * @param array<int, mixed>                     $settlement_rows Rows for the
+	 *                                                                non-`/location/regions` endpoint.
+	 * @param array<string, array<int, mixed>>      $region_rows     `/location/regions` rows, keyed by country.
+	 *
+	 * @return void
+	 */
+	private function stub_narrowing_transport( array $settlement_rows, array $region_rows = [] ): void {
+		Functions\when( 'get_transient' )->justReturn( 'fake-cached-token' );
+		Functions\when( 'set_transient' )->justReturn( true );
+		Functions\when( 'add_query_arg' )->alias(
+			static function ( $params, $path ) {
+				return [ $path, $params ];
+			}
+		);
+		Functions\when( 'wp_safe_remote_get' )->alias(
+			static function ( $request ) {
+				return [ 'request' => $request ];
+			}
+		);
+		Functions\when( 'is_wp_error' )->justReturn( false );
+		Functions\when( 'wp_remote_retrieve_response_code' )->justReturn( 200 );
+		Functions\when( 'wp_remote_retrieve_body' )->alias(
+			static function ( $response ) use ( $settlement_rows, $region_rows ) {
+				[ $path, $params ] = $response['request'];
+
+				if ( false !== strpos( $path, '/location/regions' ) ) {
+					$country = strtoupper( (string) ( $params['country_codes'] ?? '' ) );
+
+					return (string) json_encode( $region_rows[ $country ] ?? [] );
+				}
+
+				return (string) json_encode( $settlement_rows );
+			}
+		);
+	}
+
+	/**
+	 * @return \Woodev\Framework\Shipping\Location\Location_Record Own-provider region
+	 *         parent, `region_code` 81 ("Москва") — the shape a real prior
+	 *         `list_localities()`/`suggest()` region call would have returned.
+	 */
+	private function own_region_parent(): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':r81',
+				'provider_id' => \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID,
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Москва' ],
+			]
+		);
+	}
+
+	/**
+	 * @return \Woodev\Framework\Shipping\Location\Location_Record A region record from
+	 *         ANOTHER provider — the D15 cross-provider handover shape (gotcha
+	 *         `a-cross-provider-within-is-handed-over-as-components`).
+	 */
+	private function foreign_region_parent(): Location_Record {
+		return Location_Record::from_array(
+			[
+				'key'         => 'dadata:0c5b2444-70a0-4932-980c-b4dc0d3f02b5',
+				'provider_id' => 'dadata',
+				'level'       => Location_Record::LEVEL_REGION,
+				'country'     => 'RU',
+				'region'      => [ 'name' => 'Москва' ],
+			]
+		);
+	}
+
+	public function test_suggest_settlements_reports_exact_narrowing_for_an_own_provider_region_parent(): void {
+		$this->stub_narrowing_transport( [] );
+
+		$scope = Location_Scope::within( $this->own_region_parent(), Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
+	}
+
+	/**
+	 * PIN (#358, critic follow-up): `exact` must not just be the REPORTED verdict — the
+	 * filter it describes must actually have run. Upstream answers TWO rows, one inside
+	 * the requested region, one outside it; only the inside one may survive. Without
+	 * this, a broken ancestor-key guard at {@see \Woodev_Test_Cdek_Location_Provider::suggest_settlements()}'s
+	 * own `in_array(... $record->ancestors() ...)` check (region_code_from_scope()
+	 * itself untouched) would still report `exact` while quietly answering country-wide —
+	 * the exact bug this whole issue exists to make visible, just moved one level down.
+	 */
+	public function test_suggest_settlements_with_exact_narrowing_actually_filters_to_the_region(): void {
+		$this->stub_narrowing_transport(
+			[
+				[ 'code' => 111, 'full_name' => 'Царицыно, Москва, Россия', 'country_code' => 'RU' ],
+				[ 'code' => 222, 'full_name' => 'Пушкино, Московская область, Россия', 'country_code' => 'RU' ],
+			],
+			[ 'RU' => [ [ 'region_code' => 81, 'region' => 'Москва', 'country_code' => 'RU' ] ] ]
+		);
+
+		$scope = Location_Scope::within( $this->own_region_parent(), Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		$records = ( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $scope->narrowing() );
+		$this->assertCount( 1, $records, 'the out-of-region row must be filtered out — an exact verdict with no actual filtering is the bug #358 exists to surface' );
+		$this->assertSame( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID . ':111', $records[0]->key(), 'must be the IN-region row, not the out-of-region one' );
+	}
+
+	public function test_suggest_settlements_reports_none_narrowing_for_a_foreign_provider_parent(): void {
+		$this->stub_narrowing_transport( [] );
+
+		$scope = Location_Scope::within( $this->foreign_region_parent(), Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_NONE, $scope->narrowing() );
+	}
+
+	public function test_suggest_settlements_reports_degraded_narrowing_for_a_components_parent_resolved_by_name(): void {
+		$this->stub_narrowing_transport(
+			[],
+			[ 'RU' => [ [ 'region_code' => 81, 'region' => 'Москва', 'country_code' => 'RU' ] ] ]
+		);
+
+		$scope = Location_Scope::within_components( 'RU', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Москва' ] ] )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+	}
+
+	public function test_suggest_settlements_reports_none_narrowing_when_the_components_name_is_unknown(): void {
+		$this->stub_narrowing_transport( [] );
+
+		$scope = Location_Scope::within_components( 'RU', Location_Record::LEVEL_SETTLEMENT, [ 'region' => [ 'name' => 'Неизвестная область' ] ] )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_NONE, $scope->narrowing() );
+	}
+
+	public function test_suggest_settlements_reports_nothing_when_the_scope_has_no_parent(): void {
+		// No `_doing_it_wrong` expectation set: if region_code_from_scope() called
+		// report_narrowing() here, Brain Monkey would fail this test on the
+		// unexpected call — the absence of that expectation IS the assertion.
+		$this->stub_narrowing_transport( [] );
+
+		$scope = Location_Scope::for_country( 'RU', Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $scope->narrowing() );
+	}
+
+	/**
+	 * PIN (#358): a foreign/unresolvable parent must not gain a filter it never had —
+	 * `suggest_settlements()` keeps answering COUNTRY-WIDE when `region_code_from_scope()`
+	 * returns `null`, exactly as it did before this issue's change. Only the
+	 * OBSERVABILITY of that fact changed (via `narrowing()`), never the behaviour —
+	 * see this fixture's own `region_code_from_scope()` docblock, and the gotcha
+	 * `within-applied-reports-the-scope-builder-not-the-provider`. "Fixing" this by
+	 * making an unresolvable parent start filtering is exactly the regression this
+	 * test exists to catch.
+	 */
+	public function test_suggest_settlements_still_answers_unnarrowed_when_narrowing_is_none(): void {
+		$this->stub_narrowing_transport( [ [ 'code' => 999, 'country_code' => 'RU' ] ] );
+
+		$scope = Location_Scope::within( $this->foreign_region_parent(), Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		$records = ( new \Woodev_Test_Cdek_Location_Provider() )->suggest( 'Мос', $scope );
+
+		$this->assertCount( 1, $records, 'a foreign/unresolvable parent must not silently start filtering results' );
+		$this->assertSame( Location_Provider::NARROWING_NONE, $scope->narrowing() );
+	}
+
+	public function test_list_localities_reports_exact_narrowing_for_an_own_provider_region_parent(): void {
+		$this->stub_narrowing_transport(
+			[ [ 'code' => 44, 'city' => 'Москва', 'country_code' => 'RU', 'region' => 'Москва', 'region_code' => 81 ] ]
+		);
+
+		$scope = Location_Scope::within( $this->own_region_parent(), Location_Record::LEVEL_SETTLEMENT )
+			->for_provider( \Woodev_Test_Cdek_Location_Provider::PROVIDER_ID );
+
+		( new \Woodev_Test_Cdek_Location_Provider() )->list_localities( $scope );
+
+		$this->assertSame(
+			Location_Provider::NARROWING_EXACT,
+			$scope->narrowing(),
+			'list_localities() shares region_code_from_scope() with suggest_settlements() — one change covers both'
+		);
+	}
 }

@@ -88,6 +88,77 @@ if ( ! interface_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Prov
 		public const CAPABILITIES = [ self::CAPABILITY_LIST, self::CAPABILITY_LOCATE, self::CAPABILITY_NORMALIZE, self::CAPABILITY_RESOLVE_KEY ];
 
 		/**
+		 * Narrowing verdict (#358): the provider used the parent's own NATIVE id/key
+		 * — the exact identifier this provider itself would have produced for that
+		 * locality — to narrow the search. The strongest verdict; no name-matching
+		 * ambiguity is involved.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const NARROWING_EXACT = 'exact';
+
+		/**
+		 * Narrowing verdict (#358): the provider narrowed the search, but only by
+		 * matching the parent's locale-dependent NAME components (region/settlement
+		 * text), because no native id for THIS provider was available on the parent
+		 * (e.g. a foreign-provider parent handed over via
+		 * {@see Location_Scope::parent_components()}). Weaker than
+		 * {@see self::NARROWING_EXACT} — a name mismatch (transliteration,
+		 * translation, punctuation) can silently defeat it.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const NARROWING_DEGRADED = 'degraded';
+
+		/**
+		 * Narrowing verdict (#358): the provider was given a parent constraint but
+		 * could not use it at all — neither a usable native id nor a resolvable
+		 * name — and answered UNNARROWED (e.g. country-wide) instead of refusing to
+		 * answer.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const NARROWING_NONE = 'none';
+
+		/**
+		 * Narrowing verdict (#358): the default. A provider that never calls
+		 * {@see Location_Scope::report_narrowing()} — because it predates this
+		 * contract, or is a third-party extension unaware of it — reads as
+		 * "unreported", never as "did not narrow": the framework makes no claim on
+		 * behalf of a provider that never spoke for itself.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const NARROWING_UNREPORTED = 'unreported';
+
+		/**
+		 * Narrowing verdict (#358): there was no parent constraint to narrow by in
+		 * the first place — set by {@see Location_Controller}, never reported by a
+		 * provider (a provider cannot report this via
+		 * {@see Location_Scope::report_narrowing()}, which refuses to accept it on
+		 * a parentless scope).
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		public const NARROWING_NOT_APPLICABLE = 'not_applicable';
+
+		/**
+		 * The subset of narrowing verdicts a provider may actually REPORT via
+		 * {@see Location_Scope::report_narrowing()} — excludes
+		 * {@see self::NARROWING_UNREPORTED} and {@see self::NARROWING_NOT_APPLICABLE},
+		 * both of which the framework itself computes, never a provider.
+		 *
+		 * @since 2.0.2
+		 * @var string[]
+		 */
+		public const NARROWING_REPORTABLE = [ self::NARROWING_EXACT, self::NARROWING_DEGRADED, self::NARROWING_NONE ];
+
+		/**
 		 * Gets the provider's unique identifier.
 		 *
 		 * Used as the registry key, as the namespace prefix of every

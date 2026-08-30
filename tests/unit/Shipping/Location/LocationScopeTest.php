@@ -10,10 +10,13 @@
 
 namespace Woodev\Tests\Unit\Shipping\Location;
 
+use Brain\Monkey\Functions;
+use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Location\Location_Scope;
 use Woodev\Tests\Unit\TestCase;
 
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/interface-location-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
@@ -233,5 +236,87 @@ final class LocationScopeTest extends TestCase {
 		$array = $scope->to_array();
 
 		$this->assertSame( [ 'region' => [ 'name' => 'X', 'type' => 'обл' ] ], $array['parent'] );
+	}
+
+	// ---- for_provider() / report_narrowing() / narrowing() (#358) ----
+
+	public function test_narrowing_defaults_to_unreported(): void {
+		$scope = Location_Scope::within( $this->region_record(), 'settlement' )->for_provider( 'dadata' );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $scope->narrowing() );
+	}
+
+	public function test_for_provider_returns_a_different_instance(): void {
+		$scope   = Location_Scope::within( $this->region_record(), 'settlement' );
+		$stamped = $scope->for_provider( 'dadata' );
+
+		$this->assertNotSame( $scope, $stamped );
+	}
+
+	public function test_for_provider_clone_is_isolated_from_the_original(): void {
+		$scope   = Location_Scope::within( $this->region_record(), 'settlement' );
+		$stamped = $scope->for_provider( 'dadata' );
+
+		$stamped->report_narrowing( Location_Provider::NARROWING_EXACT );
+
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $stamped->narrowing() );
+		$this->assertSame(
+			Location_Provider::NARROWING_UNREPORTED,
+			$scope->narrowing(),
+			'the original scope must never see the clone\'s reported verdict'
+		);
+	}
+
+	public function test_report_narrowing_records_the_verdict(): void {
+		$scope = Location_Scope::within( $this->region_record(), 'settlement' )->for_provider( 'dadata' );
+
+		$scope->report_narrowing( Location_Provider::NARROWING_DEGRADED );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $scope->narrowing() );
+	}
+
+	public function test_report_narrowing_first_write_wins(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$scope = Location_Scope::within( $this->region_record(), 'settlement' )->for_provider( 'dadata' );
+
+		$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+		$scope->report_narrowing( Location_Provider::NARROWING_NONE );
+
+		$this->assertSame(
+			Location_Provider::NARROWING_EXACT,
+			$scope->narrowing(),
+			'the second call must never overwrite the first'
+		);
+	}
+
+	public function test_report_narrowing_ignores_an_unknown_verdict(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$scope = Location_Scope::within( $this->region_record(), 'settlement' )->for_provider( 'dadata' );
+
+		$scope->report_narrowing( 'bogus' );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $scope->narrowing() );
+	}
+
+	public function test_report_narrowing_refuses_a_scope_with_no_parent(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$scope = Location_Scope::for_country( 'RU', 'region' )->for_provider( 'dadata' );
+
+		$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $scope->narrowing() );
+	}
+
+	public function test_report_narrowing_refuses_a_scope_never_stamped_via_for_provider(): void {
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		$scope = Location_Scope::within( $this->region_record(), 'settlement' );
+
+		$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $scope->narrowing() );
 	}
 }

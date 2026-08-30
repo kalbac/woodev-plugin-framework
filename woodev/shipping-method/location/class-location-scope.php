@@ -73,6 +73,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Scope' )
 		private ?array $parent_components;
 
 		/**
+		 * The provider (#358, {@see Location_Provider::get_id()}) this scope was
+		 * minted for via {@see self::for_provider()}, or null when it never was.
+		 * {@see self::report_narrowing()} refuses to accept a verdict on a scope
+		 * that is null here — a caller must stamp a fresh clone per provider call
+		 * first.
+		 *
+		 * @var string|null
+		 */
+		private ?string $narrowing_provider_id = null;
+
+		/**
+		 * The narrowing verdict reported by the provider this scope was stamped
+		 * for via {@see self::for_provider()}, or null when none has been reported
+		 * yet — write-once, see {@see self::report_narrowing()}.
+		 *
+		 * @var string|null
+		 */
+		private ?string $narrowing = null;
+
+		/**
 		 * Constructor. Use one of the named constructors below — they validate.
 		 *
 		 * @since 2.0.2
@@ -317,6 +337,113 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Scope' )
 		 */
 		public function has_parent(): bool {
 			return null !== $this->parent_record || null !== $this->parent_components;
+		}
+
+
+		/**
+		 * Returns a CLONE of this scope, stamped for one {@see Location_Provider}
+		 * call (#358).
+		 *
+		 * A fresh, unfilled narrowing slot per call is deliberate: in a D15
+		 * fallback chain the SAME scope can be handed to more than one provider,
+		 * and a shared verdict slot would leave "whose verdict is this?" exactly
+		 * as ambiguous as the problem {@see self::report_narrowing()} exists to
+		 * fix. Call this immediately before invoking the provider, once per call.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id The provider ({@see Location_Provider::get_id()})
+		 *                             this scope is being handed to.
+		 *
+		 * @return self A clone stamped for `$provider_id`, with no narrowing
+		 *              verdict reported yet.
+		 */
+		public function for_provider( string $provider_id ): self {
+			$clone                         = clone $this;
+			$clone->narrowing_provider_id  = $provider_id;
+			$clone->narrowing              = null;
+
+			return $clone;
+		}
+
+		/**
+		 * Records how the provider currently answering this scope narrowed the
+		 * search using its parent constraint (#358) — the missing second half of
+		 * `within_status` (see `Location_Controller::perform_suggest()`'s own
+		 * docblock on why the two fields are independent).
+		 *
+		 * WRITE-ONCE, and NEVER THROWS: the first accepted call is the one that
+		 * counts. Every rejected call — a second report, an unrecognised verdict,
+		 * a call on a scope with no parent to narrow by, or a call on a scope
+		 * never stamped via {@see self::for_provider()} — is silently a no-op
+		 * apart from a `_doing_it_wrong()` notice. This deliberately mirrors
+		 * {@see Location_Provider::suggest()}'s own contract: `Location_Controller`
+		 * catches any `\Throwable` escaping a provider call and reports it to the
+		 * customer as "источник подсказок недоступен" (502) — a provider's own
+		 * bookkeeping mistake here must read as a programming-error notice, never
+		 * as a false upstream-outage report.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $verdict One of {@see Location_Provider::NARROWING_REPORTABLE}.
+		 *
+		 * @return void
+		 */
+		public function report_narrowing( string $verdict ): void {
+			if ( ! in_array( $verdict, Location_Provider::NARROWING_REPORTABLE, true ) ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf( 'Unknown narrowing verdict "%s" — ignored.', $verdict ),
+					'2.0.2'
+				);
+
+				return;
+			}
+
+			if ( null === $this->narrowing_provider_id ) {
+				_doing_it_wrong(
+					__METHOD__,
+					'Called on a scope never stamped via Location_Scope::for_provider() — ignored.',
+					'2.0.2'
+				);
+
+				return;
+			}
+
+			if ( ! $this->has_parent() ) {
+				_doing_it_wrong(
+					__METHOD__,
+					'Called on a scope with no parent constraint to narrow by — ignored.',
+					'2.0.2'
+				);
+
+				return;
+			}
+
+			if ( null !== $this->narrowing ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf( 'Narrowing already reported as "%s" for this scope — ignored.', $this->narrowing ),
+					'2.0.2'
+				);
+
+				return;
+			}
+
+			$this->narrowing = $verdict;
+		}
+
+		/**
+		 * Gets the narrowing verdict reported by the provider this scope was
+		 * stamped for (#358), or {@see Location_Provider::NARROWING_UNREPORTED}
+		 * when none has been reported yet.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function narrowing(): string {
+			return $this->narrowing ?? Location_Provider::NARROWING_UNREPORTED;
 		}
 
 		/**

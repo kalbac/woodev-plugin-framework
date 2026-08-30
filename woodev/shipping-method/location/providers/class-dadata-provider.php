@@ -703,6 +703,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 		 * doc-confirmed).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reports the narrowing verdict on `$scope` (#358): `exact`
+		 *              for the native-id branch, `degraded` for the name-components
+		 *              branch, `none` when neither could narrow.
 		 *
 		 * @param Location_Scope $scope Lookup scope.
 		 *
@@ -759,6 +762,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				}
 
 				if ( [] !== $location ) {
+					$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+
 					return [ array_merge( $country, $location ) ];
 				}
 			}
@@ -766,6 +771,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			$components = $scope->parent_components();
 
 			if ( null === $components ) {
+				$scope->report_narrowing( Location_Provider::NARROWING_NONE );
+
 				return [];
 			}
 
@@ -778,6 +785,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 			if ( ! empty( $components['settlement']['name'] ) ) {
 				$location['city'] = $components['settlement']['name'];
 			}
+
+			$scope->report_narrowing( [] !== $location ? Location_Provider::NARROWING_DEGRADED : Location_Provider::NARROWING_NONE );
 
 			return [] !== $location ? [ array_merge( $country, $location ) ] : [];
 		}

@@ -826,7 +826,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 	}
 
 	public function test_suggest_accepts_a_query_exactly_at_the_maximum(): void {
@@ -1081,7 +1089,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 	}
 
 	public function test_suggest_inactive_layer_returns_empty_200_not_404(): void {
@@ -1095,7 +1111,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 	}
 
 	/**
@@ -1115,7 +1139,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 		$this->assertCount( 0, $provider->suggest_calls, 'an unsupported country must never reach the provider' );
 	}
 
@@ -1311,7 +1343,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 		$this->assertCount( 0, $fallback->suggest_calls, 'a country the resolved provider does not cover must never reach it' );
 		$this->assertCount( 0, $chosen->suggest_calls, 'the active provider is never the one dispatched to for this level' );
 	}
@@ -1629,6 +1669,54 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( 'applied', $result['within_status'] );
 	}
 
+	/**
+	 * #358: `scope_narrowing` is the missing second half of `within_status` —
+	 * what the PROVIDER did with the parent constraint, independent of whether
+	 * the controller resolved one. Proves the controller stamps the scope via
+	 * `for_provider()` BEFORE calling `suggest()`: without that stamp,
+	 * `report_narrowing()` would refuse the call and this would read
+	 * `unreported` instead.
+	 */
+	public function test_suggest_response_carries_the_providers_reported_scope_narrowing(): void {
+		$parent   = $this->region_record( 'dadata:region-1' );
+		$provider = new Location_Controller_Fake_Provider(
+			static function ( string $q, Location_Scope $scope ) {
+				$scope->report_narrowing( Location_Provider::NARROWING_DEGRADED );
+
+				return [];
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, $provider, [ 'record' => $parent, 'implicit' => false, 'saved_at' => 0 ] );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$result = $ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( Location_Provider::NARROWING_DEGRADED, $result['scope_narrowing'] );
+	}
+
+	/**
+	 * A provider that never calls `report_narrowing()` at all (predates the
+	 * contract, or is a third-party extension unaware of it) must read as
+	 * `unreported` — the framework never claims a verdict on the provider's
+	 * behalf.
+	 */
+	public function test_suggest_response_scope_narrowing_defaults_to_unreported(): void {
+		$parent   = $this->region_record( 'dadata:region-1' );
+		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, $provider, [ 'record' => $parent, 'implicit' => false, 'saved_at' => 0 ] );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'q' => 'Мос', 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$result = $ctrl->handle_suggest_request( $request );
+
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $result['scope_narrowing'] );
+	}
+
 	public function test_suggest_within_applied_is_false_when_an_unknown_within_falls_through(): void {
 		$provider = new Location_Controller_Fake_Provider( static fn() => [] );
 		$service  = new Location_Controller_Fake_Service( true, $provider, null );
@@ -1723,6 +1811,10 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( [], $result['suggestions'] );
 		$this->assertTrue( $result['within_applied'], 'the scope was still built (and had a parent) before the unsupported-country check ran' );
 		$this->assertSame( 'applied', $result['within_status'] );
+		// #358: the provider is NEVER called on this branch (see the comment above)
+		// — has_parent() is true, but no report was ever made, so this must read
+		// unreported, not none/exact/degraded.
+		$this->assertSame( Location_Provider::NARROWING_UNREPORTED, $result['scope_narrowing'] );
 	}
 
 	// -------------------------------------------------------------------
@@ -2627,6 +2719,44 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( 'applied', $result['within_status'] );
 	}
 
+	/**
+	 * #358: `/list` never had a `within_applied` boolean, so `scope_narrowing` is
+	 * its ONLY signal for what the provider did with the parent — proving the
+	 * controller stamps the scope via `for_provider()` BEFORE calling
+	 * `list_localities()` (otherwise `report_narrowing()` would refuse and this
+	 * would read `unreported`).
+	 */
+	public function test_list_response_carries_the_providers_reported_scope_narrowing(): void {
+		$parent   = $this->region_record( 'dadata:region-1' );
+		$provider = new Location_Controller_Fake_List_Provider(
+			static function ( Location_Scope $scope ) {
+				$scope->report_narrowing( Location_Provider::NARROWING_EXACT );
+
+				return [];
+			}
+		);
+		$service = new Location_Controller_Fake_Service( true, null, [ 'record' => $parent, 'implicit' => false, 'saved_at' => 0 ], true, true, null, null, $provider );
+		$ctrl    = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request(
+			[ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'within' => 'dadata:region-1' ]
+		);
+		$result = $ctrl->handle_list_request( $request );
+
+		$this->assertSame( Location_Provider::NARROWING_EXACT, $result['scope_narrowing'] );
+	}
+
+	public function test_list_response_scope_narrowing_is_not_applicable_without_a_within_param(): void {
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Probe( $service );
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+		$result  = $ctrl->handle_list_request( $request );
+
+		$this->assertSame( Location_Provider::NARROWING_NOT_APPLICABLE, $result['scope_narrowing'] );
+	}
+
 	public function test_list_within_status_is_unknown_key_when_within_matches_nothing(): void {
 		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
 		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
@@ -2731,7 +2861,15 @@ final class LocationControllerTest extends TestCase {
 		$result  = $ctrl->handle_admin_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 	}
 
 	// -------------------------------------------------------------------
@@ -2857,7 +2995,15 @@ final class LocationControllerTest extends TestCase {
 		$result = $ctrl->handle_admin_suggest_request( $request );
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( [ 'suggestions' => [], 'within_applied' => false, 'within_status' => 'not_requested' ], $result );
+		$this->assertSame(
+			[
+				'suggestions'     => [],
+				'within_applied'  => false,
+				'within_status'   => 'not_requested',
+				'scope_narrowing' => Location_Provider::NARROWING_NOT_APPLICABLE,
+			],
+			$result
+		);
 	}
 
 	public function test_admin_suggest_override_provider_not_covering_the_requested_country_returns_empty_200_without_calling_it(): void {

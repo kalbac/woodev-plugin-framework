@@ -770,19 +770,44 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 		 * `Locality_Key` carries its `provider_id` precisely so a foreign key can be
 		 * recognised as foreign instead of being read as an opaque string.
 		 *
+		 * REPORTS NARROWING (#358) on `$scope` — `exact` for the own-provider `r`-prefixed
+		 * key, `degraded` when a name from the components fallback resolved through
+		 * {@see self::region_code_for_name()}, `none` for a foreign key or an unresolved
+		 * name. Called from both {@see self::list_localities()} and
+		 * {@see self::suggest_settlements()}, once per request, so one change here covers
+		 * both. Nothing is reported when the scope carries no parent at all — that is
+		 * {@see Location_Controller}'s `not_applicable` case, not this provider's to speak
+		 * to, and {@see \Woodev\Framework\Shipping\Location\Location_Scope::report_narrowing()}
+		 * refuses it anyway.
+		 *
+		 * ⚠ DOES NOT CHANGE what either caller does with a `null` result: `list_localities()`
+		 * still returns `[]`, `suggest_settlements()` still searches unnarrowed — see each
+		 * method's own docblock. Only the OBSERVABILITY changed.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Reports the narrowing verdict on `$scope` (#358).
+		 *
 		 * @param \Woodev\Framework\Shipping\Location\Location_Scope $scope Settlement-level scope.
 		 *
 		 * @return int|null
 		 */
 		private function region_code_from_scope( \Woodev\Framework\Shipping\Location\Location_Scope $scope ): ?int {
+			if ( ! $scope->has_parent() ) {
+				return null;
+			}
+
 			$parent_record = $scope->parent_record();
 
 			if ( null !== $parent_record ) {
 				[ $provider_id, $native_id ] = \Woodev\Framework\Shipping\Location\Locality_Key::parse( $parent_record->key() );
 
 				if ( self::PROVIDER_ID !== $provider_id || 'r' !== substr( $native_id, 0, 1 ) ) {
+					$scope->report_narrowing( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE );
+
 					return null;
 				}
+
+				$scope->report_narrowing( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_EXACT );
 
 				return (int) substr( $native_id, 1 );
 			}
@@ -790,9 +815,21 @@ if ( ! class_exists( 'Woodev_Test_Cdek_Location_Provider' ) ) {
 			$components  = $scope->parent_components();
 			$region_name = $components['region']['name'] ?? null;
 
-			return is_string( $region_name ) && '' !== $region_name
-				? $this->region_code_for_name( $region_name, $scope->country() )
-				: null;
+			if ( ! is_string( $region_name ) || '' === $region_name ) {
+				$scope->report_narrowing( \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE );
+
+				return null;
+			}
+
+			$region_code = $this->region_code_for_name( $region_name, $scope->country() );
+
+			$scope->report_narrowing(
+				null !== $region_code
+					? \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_DEGRADED
+					: \Woodev\Framework\Shipping\Location\Location_Provider::NARROWING_NONE
+			);
+
+			return $region_code;
 		}
 
 		// -----------------------------------------------------------------
