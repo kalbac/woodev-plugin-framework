@@ -15,12 +15,11 @@ measurement**. Filed **#689**. The Codex section below was rewritten because of 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
 
-✅ **CI works and the repo is PUBLIC** (since 27.08.2026, operator decision) — public repositories
-on standard runners consume no quota, so the s98 billing block lifted the moment it was switched.
-The whole account, the cost measurement and the symptom (every job failing in two seconds with no
-log, which reads as a red build) live on card **#583** and in gotcha
-`every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
-in the global `CLAUDE.md` → «GitHub Actions budget».
+✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
+no quota, so the s98 billing block lifted the moment it was switched. Account, cost measurement and
+the symptom (every job failing in two seconds with no log, which reads as a red build): card **#583**
+and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
+`CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s108), sodium enabled, after
 PR #688:** `composer check` **3355** / 8226 / **1 skipped**. phpcs clean, phpstan left to CI.
@@ -46,19 +45,19 @@ and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.
 so a bare `npm run test:js` is correct on its own (#188).
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
-(s93, again s100). And **a green unit suite is not sufficient where our code meets someone else's
+(s93, s100). And **a green unit suite is not sufficient where our code meets someone else's
 contract**: s96's #551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow.
 Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
-**The settlement search is scoped by the region even when the region came from the DEFAULT**
-(#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
+**The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
+a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
 **Open cards after s108 — 76 in `Бэклог`, `Инбокс` empty, nothing in `В работе`.** Still open:
 **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**, **#644**
 (material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half only),
-**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#689** (RFC 6265 §5.4
-equal-length `Path` tie ordering — filed in s108 and DELIBERATELY not fixed, the card carries the
-reasoning), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
+**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#689** (RFC 6265 §5.4 equal-length
+`Path` tie ordering — filed in s108 and DELIBERATELY not fixed, the card carries the reasoning),
+**#692** (the `desc_tip`/`description` audit, filed in s108 from his correction), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
 (150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
 and rebuild the `.mo` before release).
 
@@ -178,7 +177,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **249**.
+Gotchas: **250**.
 
 ## Program status (high level)
 
