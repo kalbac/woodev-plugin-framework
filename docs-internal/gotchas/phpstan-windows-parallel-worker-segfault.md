@@ -47,6 +47,30 @@ If that crashes too, your change is not the cause.
 - Still run `composer phpcs` + `composer test:unit` locally — those are stable on Windows;
   only PHPStan has this native-crash flakiness here.
 
+## s106 (2026-08-30): the same command now fails a SECOND way — the memory limit, not the stack
+
+`--memory-limit=2G`, the value this file recommends above and the one CI still uses, is **no longer
+enough for a local run on this tree**. The failure is a different one wearing the same coat:
+
+```
+Child process error: PHPStan process crashed because it reached configured PHP memory limit: 2G
+ while running parallel worker
+[ERROR] Found 1 error
+⚠️  Result is incomplete because of severe errors. ⚠️
+```
+
+It is **not** the `-1073741819` access violation above, and it is **not** flaky — it reproduces every
+run. The trap is the last two lines: `Found 1 error` plus "result is incomplete" is exactly what a
+real analysis failure prints, so a session reads it as "PHPStan found something" and starts hunting
+a defect in the diff it just wrote. There is nothing to find.
+
+**Locally, use `--memory-limit=4G`.** With it the same tree reports `[OK] No errors`. CI stays on
+2G and stays green, because a Linux worker's footprint on the same file set is smaller — so a local
+2G crash proves nothing about CI, in either direction.
+
+Note the asymmetry with the segfault above: that one is environmental and CI is the authority; this
+one is a local resource setting and the fix is a flag, not a shrug.
+
 ## Related
 
 - [[framework-classmap-autoload-vendored-boot]] — the s27/s28 autoloader work that PHPStan analyses

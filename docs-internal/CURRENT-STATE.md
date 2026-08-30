@@ -6,11 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-30 (s105).** `main` clean, **no open PRs**. Merged in s105, two: **#663** (#662,
-the framework bug that made delayed admin notices invisible in a multi-plugin fleet) and **#661**
-(#410, the stale-fixed-locality admin notice) — both after the operator said «мержу оба сейчас» on
-the strength of the rig pass and screenshot. s104 merged six; history → `sessions/s104.md`,
-`sessions/s105.md`.
+**As of 2026-08-30 (s106).** `main` clean, **no open PRs**. Merged in s106, four: **#664**
+(#358 — a provider now self-reports what it did with a `within` parent) and **#665 / #666 / #667**,
+which are #356 parts 1-3 and close that card entirely. s105 merged two; history →
+`sessions/s105.md`, `sessions/s106.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -22,10 +21,15 @@ log, which reads as a red build) live on card **#583** and in gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`. The standing rule that came out of it is
 in the global `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s105), sodium enabled, after
-both merges:** `composer check` **3236** / 7921 / **1 skipped**, and the same three numbers under
-`--order-by=reverse`. phpcs clean, phpstan no errors. Integration **126** / 494. jest **1566** in
-21 suites.
+**Baselines on `main`, measured 30.08.2026 IN THE PRIMARY CHECKOUT (s106), sodium enabled, after
+all four merges:** `composer check` **3297** / 8100 / **1 skipped**. phpcs clean, phpstan no errors.
+Integration **129** / 506. jest **1568** in 21 suites. Over s106: +61 unit tests, +3 integration,
++2 jest.
+
+⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
+gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
+"result is incomplete", which reads exactly like a real analysis failure over the diff you just
+wrote. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`, s106 section.
 
 ⚠ **The s105 handoff first carried 3233/7919 — that was measured BEFORE the critic round added 3
 tests to #661, and it was stale by the time it was written down.** Caught by re-measuring `main`
@@ -41,10 +45,12 @@ runs it on the target PHP version only, deterministically, so a failure reproduc
 same command. What it found on its first night, and why the suite had been green by alphabetical
 accident: `sessions/s102.md`.
 
-✅ **Integration on `main` (s104, primary checkout): 126 tests / 494 assertions, OK** — re-measured,
-not copied forward; unchanged since s100.
+✅ **Integration on `main` (s106, primary checkout): 129 tests / 506 assertions, OK** — re-measured,
+not copied forward. The +3 are #356's `/location/forget` route tests, which the WORKER wrote but
+could not run (a worktree has no wp-env); running them is the coordinator's job, and it is not
+optional.
 
-✅ **jest on `main` (s104): 1566 tests in 21 suites.** Run from bash with `--roots`,
+✅ **jest on `main` (s106): 1568 tests in 21 suites.** Run from bash with `--roots`,
 never `npx jest`.
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
@@ -55,14 +61,13 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when the region came from the DEFAULT**
 (#551/#552) — and any region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s105:** **#410** and **#662** are CLOSED (PRs #661/#663, merged 30.08.2026).
-Still open: **#621** (item 1 measured; the FIX is untouched and is held BEHIND **#639**),
-the locations leftovers **#356/#358** (both need a CONTRACT decision before any code), **#589**,
-**#644** (material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half
-only), **#639**, **#437** (needs a scope conversation — do NOT take autonomously), and the standing
-list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
-(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
-and rebuild the `.mo` before release).
+**Open cards after s106:** **#358** and **#356** are CLOSED (PRs #664, #665, #666, #667). The
+locations layer has no leftovers now. Still open: **#621** (item 1 measured; the FIX is untouched
+and held BEHIND **#639**), **#589**, **#644** (material delivered, prioritisation is his), **#652**,
+**#653** (the inline-jQuery half only), **#639**, **#437** (needs a scope conversation — do NOT take
+autonomously), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285,
+#247, and **#567's remainder** (150 English msgids with no translation — operator, 29.08.2026: leave
+them, regenerate the `.pot` and rebuild the `.mo` before release).
 
 **#621 is held behind #639 deliberately.** The cheap fix (a `WC_Order` subclass) was written,
 measured and REVERTED in s103 — `get_order()` must preserve the caller's concrete order class, or a
@@ -173,7 +178,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **245**.
+Gotchas: **247**.
 
 ## Program status (high level)
 
@@ -226,18 +231,15 @@ oversight.
 
 ✅ **CI работает, мержить можно как обычно.** Блок по биллингу снят публичностью репозитория 27.08.2026 — история на **#583**.
 
-1. **#356 и #358 — РАЗБОР комментарием на карточку, а не код.** Это следующее по списку и в s105
-   сознательно не начато (память машины, см. `sessions/s105.md`).
-2. **Подробнее по этим двум:** #358 прямо запрещает «чинить» баном cross-provider scope и несёт
-   два ПРОТИВОПОЛОЖНЫХ измеренных исхода; #356 — проектирование forget-пути.
-3. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. **Держится за #639** —
+1. **#653, вторая половина** — инлайновый jQuery. ⚠ **s105 добавил ей веса:** именно этот
+   инлайновый jQuery и был причиной #662. **Без оператора не брать.**
+2. **#621, пункты 2-3** — как чинить динамические свойства на `WC_Order`. **Держится за #639** —
    не начинать до ответа.
-4. **#653, вторая половина** — инлайновый jQuery. ⚠ **s105 добавил ей веса:** именно этот
-   инлайновый jQuery и был причиной #662.
-5. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
-   Расстановка приоритетов — ЕГО. В `Инбокс`.
-6. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
-7. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
+3. **#644** — материал по приоритетам сдан (`reviews/2026-08-29-docs-and-board-audit.md`).
+   Расстановка приоритетов — ЕГО.
+4. **#503** — маска телефона. В `Бэклог`, ответ оператора в карточке. Не начата.
+5. **Слой локаций закрыт целиком.** #356 и #358 закрыты в s106; открытых остатков в этом слое нет.
+6. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
 
 ⚠ **Аудит #644 нашёл 93 открытые карточки, а не 86**, и что из них по коду проверены только ~10 —
 остальные оттриажены по заголовку. Полная поштучная сверка остаётся отдельной работой.
@@ -270,7 +272,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
   | `woodev_location_field_mode_region` | `related-list` |
   | `woodev_location_field_mode_settlement` | `ajax-select2` |
   | `woodev_location_default_locality_policy` | `fixed` |
-  | `woodev_location_default_locality_record` | `test-cdek:44` (Москва) |
+  | `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, whose `key` is `test-cdek:44` (Москва) — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
   | `woodev_location_allow_custom_settlement` | `no` |
 
   `wp-content/mu-plugins/` holds only `zz-rig-test-pickup-shipping.php` and `zz-rig-yandex-key.php`
@@ -293,7 +295,7 @@ Deferred (всё остальное — board №6): UK-CFR (settings extensibil
 - **tests `:8974` carries NO `WOODEV_TEST_*` constants** — deleted with `wp config delete` so the integration suite is deterministic locally. The authority is `wp config set` **inside the container**, not `.wp-env.override.json`, which is only a mirror (measured).
 - **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
 - Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
-- Rig probes: `docker cp` into the container's `/tmp` and `wp eval-file` — write them to the scratchpad, **NOT** into the repo (a stray probe file once rode along in a commit).
+- Rig probes: write them to the scratchpad, **NOT** into the repo (a stray probe file once rode along in a commit). **`docker cp` INTO the container fails here** (a bind mount defeats it, and `wp eval-file` then reports a plain "does not exist") — pipe instead: `docker exec -i "$C" sh -c 'cat > /tmp/probe.php' < probe.php`, and add `--user=N` whenever the probe touches user-scoped data. Gotcha `docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead`.
 - Integration tests run through the container (`npx wp-env run` breaks on command parsing here):
 
   ```bash
