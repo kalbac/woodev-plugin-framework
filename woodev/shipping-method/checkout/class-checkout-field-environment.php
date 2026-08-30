@@ -66,6 +66,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_En
 		 * `CartCheckoutUtils` probe — that method is `public static` (not instance-bound
 		 * to a plugin object as the plan assumed), so it is directly reusable here.
 		 *
+		 * Card #147 audit: the `WC()->countries` guard below is not reachable as a
+		 * live REST/GET degradation — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::wc_country_codes()}'s
+		 * own docblock for the proof that `WC()->countries` is set unconditionally in
+		 * `WooCommerce::init()`, independent of request type. It only fires when
+		 * WooCommerce itself is inactive.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return self
