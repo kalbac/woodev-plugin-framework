@@ -62,7 +62,7 @@ Follow-up requirements:
 
 ## Related
 
-- [PLANS.md](../../PLANS.md) — target class hierarchy and plugin type open question.
+- [PLANS.md](../archive/PLANS.md) — target class hierarchy and plugin type open question (archived 01.09.2026, #695).
 - [Platform v2 Strategy Alignment](../archive/platform-v2-strategy-alignment.md) — rewrite-first migration and installed-site contract policy.
 - [Platform v2 Next Analysis](../archive/platform-v2-next-analysis.md) — proposed loader shape, metadata limits, and migration checklist.
 - [ADR-002](002-plugin-type-inheritance-with-metadata-bridge.md) — previous inheritance plus metadata bridge decision to narrow.

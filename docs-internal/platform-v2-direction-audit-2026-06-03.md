@@ -269,7 +269,7 @@ The **`payment-gateway` module is the architectural reference** (mature: handler
 
 ## Related
 
-- [PLANS.md](../PLANS.md) — original intent draft (priorities + §5 open questions)
+- [PLANS.md](archive/PLANS.md) — original intent draft (priorities + §5 open questions; archived 01.09.2026, #695)
 - [platform-v2-implementation-spec.md](platform-v2-implementation-spec.md) — architecture valid; sequencing overridden here (§8)
 - [archive/platform-v2-roadmap-reconciliation.md](archive/platform-v2-roadmap-reconciliation.md) — §7 already recommended real-plugin validation
 - [archive/platform-v2-migration-contract-template.md](archive/platform-v2-migration-contract-template.md) — keep as the §6.2 data-preservation checklist

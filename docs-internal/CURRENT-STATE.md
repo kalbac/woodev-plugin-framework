@@ -103,12 +103,10 @@ enforces `required` on every declared descriptor, so a field nobody can see bloc
 **#707** — DaData's federal cities return `ancestors = []` with region and settlement sharing one
 `fias_guid`, so #551/#552's "region must be an ancestor" rule cannot pass for Moscow or St Petersburg.
 
-**SP-10's page form is DECIDED (#694, operator 01.09.2026): ONE landing page, a tab per carrier,
-tabs drawn only when carriers > 1, and the default view is the AGGREGATE table** (his reversal of
-the agent's proposal — "first carrier in the list" is arbitrary), gated on the aggregate being cheap.
-⚠ `SHIPPING-PLANS.md` §16 and the spec's SP-10 line still carry the retired "page per carrier" AND
-its false "mirrors §15" citation. **#695 disposition is DECIDED too: archive the spent sections, move
-the live remainder into `specs/` and cards.**
+✅ **#694/#695 are written into the docs (s111).** SP-10: one landing page, tab per carrier (drawn
+only if >1), default view the aggregate table, gated on it being cheap. `SHIPPING-PLANS.md`/
+`PLANS.md` archived to `docs-internal/archive/`; live remainder is in `specs/` + cards **#712 #713
+#714**.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 

@@ -102,7 +102,7 @@ After the P3 clean break (legacy adapter removed) and P4 base decomposition, `Fr
 
 ## Related
 
-- [PLANS.md](../../PLANS.md) — target platform-first architecture and open bootstrap question.
+- [PLANS.md](../archive/PLANS.md) — target platform-first architecture and open bootstrap question (archived 01.09.2026, #695).
 - [Platform v2 Strategy Alignment](../archive/platform-v2-strategy-alignment.md) — hybrid roadmap and minimal resolver direction.
 - [Platform v2 Next Analysis](../archive/platform-v2-next-analysis.md) — detailed resolver responsibility mapping.
 - [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — current bootstrap risks and module dependency evidence.

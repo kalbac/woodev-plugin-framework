@@ -41,5 +41,5 @@ Negative:
 
 - [ADR-003](003-platform-v2-minimal-framework-resolver.md) — minimal framework resolver; supersedes this ADR for implementation planning.
 - [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — P0 spike item, loader options, and top production risks.
-- [PLANS.md](../../PLANS.md) — sections 2 and 5 define the target platform hierarchy and open loader question.
+- [PLANS.md](../archive/PLANS.md) — sections 2 and 5 define the target platform hierarchy and open loader question (archived 01.09.2026, #695).
 - [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work.
