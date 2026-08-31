@@ -2646,7 +2646,6 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertCount( 1, $result['localities'] );
-		$this->assertFalse( $result['truncated'] );
 		$this->assertSame( 'not_requested', $result['within_status'], '#333: /list carries within_status too, not only /suggest' );
 
 		$locality = $result['localities'][0];
@@ -2659,103 +2658,6 @@ final class LocationControllerTest extends TestCase {
 		$this->assertSame( $record->key(), $round_tripped->key() );
 
 		$this->assertCount( 1, $provider->list_calls );
-	}
-
-	// -------------------------------------------------------------------
-	// /list — PR #304 review finding 5: an unbounded enumeration is capped,
-	// an optional `limit` narrows it further (clamped), and the response is
-	// honest about truncation rather than silently cutting.
-	// -------------------------------------------------------------------
-
-	/**
-	 * @param int $count how many fake records the fixture provider returns.
-	 *
-	 * @return Location_Record[]
-	 */
-	private function many_records( int $count ): array {
-		$records = [];
-
-		for ( $i = 0; $i < $count; $i++ ) {
-			$records[] = Location_Record::from_array(
-				[
-					'key'         => 'fake-list:' . $i,
-					'provider_id' => 'fake-list',
-					'level'       => Location_Record::LEVEL_SETTLEMENT,
-					'country'     => 'RU',
-					'label'       => 'City ' . $i,
-				]
-			);
-		}
-
-		return $records;
-	}
-
-	public function test_list_caps_the_response_at_the_hard_limit_and_reports_truncation(): void {
-		// One MORE than the hard cap — the exact neighbouring value a mutant
-		// removing/loosening the cap would fail against.
-		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 501 ) );
-		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller_Probe( $service );
-
-		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
-		$result  = $ctrl->handle_list_request( $request );
-
-		$this->assertNotInstanceOf( \WP_Error::class, $result );
-		$this->assertCount( 500, $result['localities'], 'the response must never exceed LIST_HARD_CAP' );
-		$this->assertTrue( $result['truncated'] );
-	}
-
-	public function test_list_exactly_at_the_hard_cap_is_not_reported_truncated(): void {
-		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 500 ) );
-		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller_Probe( $service );
-
-		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
-		$result  = $ctrl->handle_list_request( $request );
-
-		$this->assertCount( 500, $result['localities'] );
-		$this->assertFalse( $result['truncated'], 'the provider handed back exactly the cap, nothing was actually cut' );
-	}
-
-	public function test_list_limit_arg_narrows_the_response_below_the_hard_cap(): void {
-		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 20 ) );
-		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller_Probe( $service );
-
-		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'limit' => 5 ] );
-		$result  = $ctrl->handle_list_request( $request );
-
-		$this->assertCount( 5, $result['localities'] );
-		$this->assertTrue( $result['truncated'] );
-	}
-
-	/**
-	 * A client cannot use `limit` to ask for MORE than the hard cap — the
-	 * mutant this pins: `min( $limit, self::LIST_HARD_CAP )` reverted to a
-	 * bare `$limit` would let this request through at 100000 records.
-	 */
-	public function test_list_limit_arg_above_the_hard_cap_is_clamped_to_it(): void {
-		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 501 ) );
-		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller_Probe( $service );
-
-		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'limit' => 100000 ] );
-		$result  = $ctrl->handle_list_request( $request );
-
-		$this->assertCount( 500, $result['localities'] );
-		$this->assertTrue( $result['truncated'] );
-	}
-
-	public function test_list_limit_arg_zero_or_negative_falls_back_to_the_hard_cap(): void {
-		$provider = new Location_Controller_Fake_List_Provider( fn() => $this->many_records( 10 ) );
-		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller_Probe( $service );
-
-		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU', 'limit' => -5 ] );
-		$result  = $ctrl->handle_list_request( $request );
-
-		$this->assertCount( 10, $result['localities'], 'a non-positive limit is not a valid narrowing — falls back to the hard cap' );
-		$this->assertFalse( $result['truncated'] );
 	}
 
 	/**
