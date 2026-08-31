@@ -11,7 +11,48 @@ why each of these fixtures exists and what breaks if it is removed.
 
 - **There IS a pickup-type shipping method on the rig now (s81), and it lives OUTSIDE the repo.** Until s81 the only active method was `Woodev Test Shipping`, whose `delivery_type` is `courier` — so `Checkout_Config::pickup_method_ids()` resolved to `[]` and the entire `hide_for_pickup` branch of the checkout-field policy was physically unreachable on the rig. Fixed with a container-only mu-plugin, `wp-content/mu-plugins/zz-rig-test-pickup-shipping.php` (that directory is NOT bind-mounted from the repo — `zz-rig-yandex-key.php` was already there as precedent), registering `woodev_test_pickup_shipping` (`Woodev Test Pickup`) whose `get_delivery_type()` is `pickup`. It is enabled in zone 1 «Russia» as instance 4, alongside `free_shipping` and `woodev_test_shipping`, so a checkout session can switch between a pickup rate and a courier rate. **Keep it** — it is what made the s80 gap verifiable, and it is the only way to exercise that branch live. To remove: delete the mu-plugin file and `wp wc shipping_zone_method delete 1 4 --user=1`.
 
+### s110 (01.09.2026): the method is now declared in ALL the places the framework asks
+
+Until s110 that mu-plugin declared `get_delivery_type() = 'pickup'` and nothing else, so the rig
+had **two half-declared methods and could not express a correct one**:
+
+| method | `is_pickup_shipping()` | pickup button (`Pickup_Field`) | required backstop |
+|---|---|---|---|
+| `woodev_test_shipping` (fixture) | **false** | yes | yes |
+| `woodev_test_pickup_shipping` (mu-plugin) | **true** | no | no |
+
+Choosing either produced a contradiction on screen — a pickup button beside a required address, or
+hidden address fields with no way to pick a point — which made #652's scenarios 3 and 4 untestable.
+
+The mu-plugin now also patches the two declarations that ARE reachable through public API after the
+fixture builds its handler, on `wp_loaded` priority 20:
+
+- `Checkout_Handler::get_fields()->add( Pickup_Field::create( 'carrier_pickup_point', [ … ] ) )` —
+  `add()` is documented as "adds (or replaces)" and is keyed by field id, so re-declaring the slot
+  overwrites the fixture's narrower list. Verified: the stored condition spec is now
+  `{"state":"chosen_shipping_method","operator":"in","value":["woodev_test_shipping","woodev_test_pickup_shipping"]}`.
+- `Checkout_Handler::set_requires_pickup_methods( [ … ] )` — plain public setter.
+
+⚠ **What is deliberately NOT patched, and the limit it leaves.** `Selection_Scope::type_for_method()`
+— the fourth declaration — is a PRIVATE constructor argument of `Pickup_Handler` with no setter, and
+the fixture hardcodes `woodev_test_shipping`. Consequence: a point chosen under
+`woodev_test_pickup_shipping` is **not restored after a page reload**. Choosing a point, seeing the
+fields hide and placing the order all work; only remember-across-reload is missing. That gap is
+evidence for card **#709** — two of the four declarations are write-once at construction.
+
+`pickup_method_ids()` stays `["woodev_test_pickup_shipping"]`, correctly: it is driven by
+`is_pickup_shipping()`, and only the mu-plugin's method genuinely is pickup. `woodev_test_shipping`
+keeps its button and stays courier on purpose — it is the contrast case, and the live reproduction
+of #709.
+
+⚠ **The mu-plugin is container-only and dies with the volume.** Reinstall by writing the file into
+`wp-content/mu-plugins/` — note the cli container needs `docker exec -u root` to write there.
+
 ## `woocommerce_checkout_company_field` is `optional`, deliberately
+
+⚠ **Measured `hidden` again on 01.09.2026 (s110)** — someone took the documented revert below,
+so by this section's own reasoning the §8 root demo should be dark. It is NOT: the operator sees
+«Демо §8: …» on the checkout and the fields BLOCK the order. That contradiction is card **#708**.
 
 - **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
   (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and
