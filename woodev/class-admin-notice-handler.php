@@ -234,7 +234,7 @@ if ( ! class_exists( 'Woodev_Admin_Notice_Handler' ) ) :
 		/**
 		 * Render the javascript to handle the notice "dismiss" functionality
 		 *
-		 * @since 3.0.0
+		 * @since 1.0.0
 		 *
 		 * Targets the placeholder slug recorded by whichever plugin's handler actually echoed it in
 		 * render_admin_notices(), not this handler's own plugin — in a fleet those can differ, and the

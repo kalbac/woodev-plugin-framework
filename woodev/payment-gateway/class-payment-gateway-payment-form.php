@@ -11,7 +11,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 	 *
 	 * Handles rendering the payment form for credit card gateways.
 	 *
-	 * @since 4.0.0
+	 * @since 1.0.0
 	 */
 	class Woodev_Payment_Gateway_Payment_Form extends Woodev_Script_Handler {
 

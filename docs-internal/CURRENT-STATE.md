@@ -51,9 +51,8 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s110 — 71. `Инбокс` holds #694 (his call); `В работе` holds #116** (only its part
-(а) is left). **Eight cards genuinely need HIS answer, and the list is now verified rather than
-assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
+**Open cards after s110 — 71.** #116 CLOSED in s111; #694 DECIDED by him and its docs rewritten in
+s111. **Eight cards genuinely need HIS answer, and the list is now verified rather than assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
 `reviews/2026-08-31-644-prioritisation-material.md` §4, which also records why #639, #621, #285,
 #567, #701, #247, #689, #589 and #371 were considered and excluded. Still open and NOT waiting on
 him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
@@ -171,8 +170,8 @@ anyway. Scan the tag for your task; do not keep a second copy here.
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
 **`@since` = the PLANNED release, `2.0.2`; `VERSION` = the released one and lags on purpose**
-(#409, #546; full rule in `AGENT-RULES.md` Rule 5). ⚠ The claim that everything above `2.0.2` was
-normalised in #555 is WRONG — seven inherited docblocks still read 3.0.0/4.0.0/5.2.0 (#116a).
+(#409, #546; full rule in `AGENT-RULES.md` Rule 5, which now also covers INHERITED code → `1.0.0`).
+**Nothing above `2.0.2` remains — #116(a) closed it in s111**; #555 had not normalised them.
 
 ✅ **Every Codex round gets a CANARY — a few facts you already know, answered before anything else.**
 It earns its keep: in s110 the canary made the critic say «не смог прочитать» for the one fact it
