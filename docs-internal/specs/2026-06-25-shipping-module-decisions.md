@@ -2,8 +2,10 @@
 
 > **Status:** program-level decisions LOCKED with operator (interactive brainstorm, 2026-06-25, s32).
 > Resolves all 14 open operator questions from `SHIPPING-PLANS.md` §20. This document **supersedes
-> the `{нужно дополнить оператором}` gaps** in the operator draft. The draft (`SHIPPING-PLANS.md`,
-> repo root) remains the narrative/code-review source; this file is the authoritative resolution.
+> the `{нужно дополнить оператором}` gaps** in the operator draft. The draft (`SHIPPING-PLANS.md`)
+> remains the narrative/code-review source; this file is the authoritative resolution. **Archived
+> 01.09.2026 (#695) to `docs-internal/archive/SHIPPING-PLANS.md`** — it was in the repo root and
+> ungated until then; this file's authority over it is unchanged by the move.
 >
 > **This is NOT an implementation spec.** It is the decomposition layer. Each sub-project below gets
 > its own `brainstorm → spec → plan → implementation` cycle. No code until a sub-project is picked.
@@ -222,7 +224,11 @@ Each SP = its own brainstorm → spec → plan → implementation. Dependency-aw
 - **SP-7 Shipment export + documents (§12)**.
 - **SP-8 Tracking + canonical statuses (§13)**.
 - **SP-9 Emails (§14)** — needs §13.
-- **SP-10 Orders admin page (§16)** — per-carrier React page; needs SP-7 + SP-8.
+- **SP-10 Orders admin page (§16)** — one landing page, a tab per carrier (tabs drawn only when
+  carriers > 1), default view the AGGREGATE table across carriers (conditional on the aggregate
+  being cheap to build). **Decided by #694 (operator, 01.09.2026), which replaces this line's
+  original "per-carrier React page"** — that line inherited §16's false "mirrors §15" citation
+  rather than establishing the page shape independently. Needs SP-7 + SP-8.
 
 **Phase D — modernization**
 - **SP-11 Blocks adapter (§11)** — second field-layer adapter, after classic proven.

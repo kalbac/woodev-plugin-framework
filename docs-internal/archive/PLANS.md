@@ -1,5 +1,17 @@
 # План рефакторинга фреймворка (черновик)
 
+> **Заархивировано 01.09.2026 (#695, решение оператора (в)+(б)).** Из репо-рута, вне гейта
+> `npm run lint:docs` и вне навигации `DOCS-INDEX.md`, сюда — с сохранённой git-историей (`git mv`).
+> Стратегическое намерение реализовано и разошлось по авторитетным источникам: класс-иерархия и
+> bootstrap (§2, §5.1) — `adr/001`–`004`; clean-break политика (§2.4) — `adr/005`; capability-шов
+> (упомянут как референс, §3.2) — `adr/006`; полная программа v2 — `platform-v2-implementation-spec.md`
+> и архивные `platform-v2-*` (dependency matrix, strategy alignment, roadmap reconciliation). §3.2
+> (модуль доставки) полностью заменён `SHIPPING-PLANS.md` (тоже заархивирован, тут же) и
+> `docs-internal/specs/2026-06-25-shipping-module-decisions.md` (живая декомпозиция). §5's два открытых
+> вопроса (судьба `bootstrap.php`, способ объявления типа плагина) закрыты — `adr/001` и `adr/002`/`004`
+> соответственно. §4 (референсы) и §6 (конвенции UI/работы с агентами) остаются верны де-факто, но не
+> нуждаются в отдельном гейтимом доме. Файл сохранён целиком ради истории.
+>
 > Рабочий черновик-брейншторм, **не строгая спека**. После согласования из него
 > родится отдельная спека для реализации (через `superpowers:writing-plans`).
 > Цель документа — зафиксировать намерения и открытые вопросы так, чтобы будущий
@@ -175,3 +187,16 @@ class Woodev_EDD_Plugin extends Woodev_Plugin {}            // плагины Ea
 ### Работа с агентами
 
 На этапе планирования и написания спеков ожидается формат **дискуссии**, а не только строгое выполнение задачи: агент инициативен, предлагает идеи, оспаривает предложения оператора.
+
+---
+
+## Related
+
+- [SHIPPING-PLANS.md](SHIPPING-PLANS.md) — the §3.2 shipping-module successor, archived the same session
+- [../specs/2026-06-25-shipping-module-decisions.md](../specs/2026-06-25-shipping-module-decisions.md) — live shipping decomposition
+- [../adr/001-bootstrap-platform-aware-loader.md](../adr/001-bootstrap-platform-aware-loader.md) — resolves §5's bootstrap.php question
+- [../adr/002-plugin-type-inheritance-with-metadata-bridge.md](../adr/002-plugin-type-inheritance-with-metadata-bridge.md), [../adr/004-platform-v2-plugin-loader-api.md](../adr/004-platform-v2-plugin-loader-api.md) — resolve §5's plugin-type-declaration question
+- [../adr/005-platform-v2-clean-break-policy.md](../adr/005-platform-v2-clean-break-policy.md) — resolves §2.4's clean-break intent
+- [../platform-v2-implementation-spec.md](../platform-v2-implementation-spec.md) — accepted execution plan for this document's strategic intent
+- [../reviews/2026-08-31-695-shipping-plans-reconciliation.md](../reviews/2026-08-31-695-shipping-plans-reconciliation.md) — the reconciliation pass that archived this file
+- Card [#695](https://github.com/kalbac/woodev-plugin-framework/issues/695) — the disposition decision

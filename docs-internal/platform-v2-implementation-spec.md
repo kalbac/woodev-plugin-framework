@@ -525,7 +525,7 @@ Platform v2 framework implementation is not done until:
 
 ## Related
 
-- [PLANS.md](../PLANS.md) — strategic source for platform-first refactoring.
+- [PLANS.md](archive/PLANS.md) — strategic source for platform-first refactoring (archived 01.09.2026, #695).
 - [Platform v2 Strategy Alignment](archive/platform-v2-strategy-alignment.md) — hybrid roadmap and rewrite-first migration policy.
 - [Platform v2 Next Analysis](archive/platform-v2-next-analysis.md) — resolver, loader API, and migration analysis.
 - [ADR-003](adr/003-platform-v2-minimal-framework-resolver.md) — minimal resolver decision.

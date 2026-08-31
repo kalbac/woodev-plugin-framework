@@ -44,5 +44,5 @@ Negative:
 - [ADR-004](004-platform-v2-plugin-loader-api.md) — explicit loader definitions; narrowed this ADR (inheritance stays the runtime source of truth, the metadata bridge must not grow into a plugin type API).
 - [ADR-005](005-platform-v2-clean-break-policy.md) — clean-break policy; superseded the metadata-bridge portion of this ADR.
 - [Platform v2 Dependency Matrix](../archive/platform-v2-dependency-matrix.md) — P0 plugin type spike, metadata vs inheritance tradeoff, and top production risks.
-- [PLANS.md](../../PLANS.md) — sections 2 and 5 define the target class hierarchy and plugin type open question.
+- [PLANS.md](../archive/PLANS.md) — sections 2 and 5 define the target class hierarchy and plugin type open question (archived 01.09.2026, #695).
 - [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — framework decoupling backlog and deferred post-v2 work.
