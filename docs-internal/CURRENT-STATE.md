@@ -6,11 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-31 (s109).** `main` clean. **One PR OPEN ON PURPOSE — #702 (#503, the phone input
-mask): it changes what a customer sees at the checkout, so it waits for the operator's rig pass, not
-for CI.** One worktree survives with it (`s109-503`). s109 merged **#697, #698, #699, #700** and
-closed **#483, #374, #515, #437**, plus **#153** (duplicate) and **#155** (fixed by the panels
-rewrite) from the #644 sweep. Filed **#701**. History → `sessions/s109.md`, `sessions/s108.md`.
+**As of 2026-08-31 (s109).** `main` clean, **no open PRs, no worktrees**. s109 merged **#697, #698,
+#699, #700, #702, #703** and closed **#483, #374, #515, #437, #503**, plus **#153** (duplicate) and
+**#155** (fixed by the panels rewrite) from the #644 sweep. Filed **#701**; wrote **ADR-011**.
+History → `sessions/s109.md`, `sessions/s108.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -22,9 +21,10 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s109), sodium enabled, after
-PR #700:** unit **3355** / 8229 / **1 skipped**; **integration 129 / 506 — re-measured this session,
-the s107 figure held**; jest **1570** in **22** suites. phpcs clean, phpstan left to CI. On the
-unmerged #702 branch: unit **3365** / 8275 / **1**, jest **1593**.
+PR #702/#703:** unit **3364** / 8302 / **1 skipped**; **integration 129 / 506 — re-measured this
+session, the s107 figure held**; jest **1598** in **23** suites. phpcs clean, phpstan left to CI.
+⚠ A gate number is only true against a NAMED COMMIT: the same session read 3355 before #700 and
+3351 after it.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
@@ -52,23 +52,22 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s109 — `Инбокс` holds #694 (his call), #503 is in `В работе` until #702 merges.**
-Still open: **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**,
+**Open cards after s109 — `Инбокс` holds #694 (his call); nothing in `В работе`.** Still open: **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**,
 **#644** (ten cards verified by code in s109 — findings are comments on each card; prioritisation
 stays his), **#652**, **#639**, **#689** (RFC 6265 §5.4 tie ordering — deliberately not fixed),
 **#692** (audited in s109: two of its three points came back empty, the copy half is unstarted),
-**#694**, **#695**, **#701** (per-option `disabled_reason`, filed from #503), and the standing list
-#474, #331, #332. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids —
+**#694**, **#695**, **#701** (per-option `disabled_reason` — filed from #503 and its DRIVER IS GONE:
+pattern-less countries are no longer listed, so nothing needs disabling; a research record, not
+work), and the standing list #474, #331, #332. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids —
 operator, 29.08.2026: leave them, regenerate `.pot` and rebuild `.mo` before release).
 
 ⚠ **#289 must be re-read before it is triaged again.** It is filed as "недостижимо сегодня" pending a
 multi-country provider — and `Dadata_Provider::DEFAULT_COUNTRIES` has been nine countries by default
 for some time. Its own entry condition has fired (measured s109).
 
-**#621 is held behind #639 deliberately.** The cheap `WC_Order` subclass was measured and REVERTED
-in s103 — `get_order()` must preserve the caller's concrete order class, or a `WC_Subscription`
-silently becomes a plain order. What remains is a ~138-site context object, and #639 is questioning
-that subsystem's size. Detail: `sessions/s103.md`.
+**#621 is held behind #639 deliberately.** The cheap `WC_Order` subclass was measured and REVERTED in
+s103 — `get_order()` must preserve the caller's concrete order class or a `WC_Subscription` silently
+becomes a plain order. Detail: `sessions/s103.md`.
 
 **i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
 English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
@@ -84,10 +83,18 @@ boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `session
 
 **Operator decisions still shaping the work:**
 
-- **#531** and **#542** (both s95) SHIPPED; the surviving rules are the `guard_custom_settlement()`
-  line below and the `src/` TypeScript row in `AGENTS.md`. History: `sessions/s95.md`.
+- **#531**/**#542** (s95) SHIPPED; surviving rules: `guard_custom_settlement()` below and the `src/`
+  TypeScript row in `AGENTS.md`.
 - **#437 CLOSED in s109.** His principle stands as the durable part: *we offer narrowing, we never
   force it; the merchant's only switch is the region field itself* — decisions 8 and 9 are retired.
+
+**FIRST vendored runtime JS in the framework: IMask, pinned, for the checkout phone mask.** Its
+country table is GENERATED (`npm run generate:phone-masks`, `lint:phone-masks` fails when stale);
+libphonenumber is a devDependency and must never be enqueued; adding a country is one ISO code, never
+a typed template. **[ADR-011](adr/011-vendored-imask-and-generated-phone-masks.md)** + gotcha
+`a-hand-typed-format-table-drifts-from-the-real-spec`.
+
+**No jargon in merchant-facing copy** — «чекаут»/«фреймворк» swept in s109; rule in `AGENTS.md`.
 
 **TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
@@ -111,10 +118,10 @@ ownership rather than a name heuristic. Gotcha:
 | ~~**#437**~~ | **CLOSED in s109.** `/location/list` lost `LIST_HARD_CAP`, `limit` and `truncated`; a stored `related-list` now reads as `ajax-select2`, option untouched, no migration. Decisions 8/9 retired by the operator 31.08.2026. Detail: `sessions/s109.md`. |
 | ~~**#488**~~ | **CLOSED (D1-D8).** The one fact still load-bearing: `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure THROWS. History: `sessions/s89.md`-`s92.md`. |
 | ~~**#512**~~ | **DONE — #548 (s95).** Surviving contract fact: `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key — documented on both methods and PINNED by a test. The `VARCHAR(191)` length question was measured and closed with no guard (100+ chars of headroom). |
-| ~~**#518**~~ | **CLOSED 27.08.2026 — PR #586, accepted live by the operator.** A pickup selection now makes the settlement record EXPLICIT, and the address stays unlocked after a reload. His acceptance note became its own card: the lock is not scoped to pickup-type shipping methods, so under a courier method no pickup selection can clear it. **This row claimed «DECIDED, still NOT started» for two sessions after the card closed** — the miss that prompted the #644 audit. |
-| ~~**#473**~~ | **CLOSED in s98 (#571).** The ownership guard now sits at the top of the `updated_checkout` loop, as it already did in `applyTakeover()`. Two facts worth keeping: the bare `$field.val()` restore is reachable in principle but was NOT reproduced live in four rig scenarios (the cascade's own restore gets there first), and the card's SECOND half — a second select2 from `maybeInitSelect2()` — **cannot happen at all**: it acts on `source_kind === 'suggest'`, ownership tests `'location'`, and `source_kind` is a single scalar (`class-field.php:265,315`). |
+| ~~**#518**~~ | **CLOSED 27.08.2026 — PR #586.** A pickup selection makes the settlement record EXPLICIT and the address stays unlocked after a reload. This row claimed «DECIDED, still NOT started» for two sessions after the card closed — the miss that prompted #644. |
+| ~~**#473**~~ | **CLOSED in s98 (#571).** Ownership guard sits at the top of the `updated_checkout` loop. Its second half cannot happen at all: `maybeInitSelect2()` acts on `source_kind === 'suggest'` while ownership tests `'location'`, and `source_kind` is a single scalar (`class-field.php:265,315`). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
-| ~~**#483**~~ | **CLOSED in s109 (PR #697).** And the card's diagnosis was wrong: the label DOES reach `get_checkout_fields()`; WooCommerce's `address-i18n.js` then overwrites the rendered `<label>` from `get_country_locale()['default']`, which carries one for `state`/`city`/`address_1`/`postcode`. A final-DOM reading cannot tell "never rendered" from "rendered and replaced". Contract: `set_label()` applies only to fields WC does not define itself. |
+| ~~**#483**~~ | **CLOSED in s109 (PR #697).** Contract: `set_label()` applies only to fields WC does not define itself — for a native one `address-i18n.js` overwrites the rendered `<label>` from the country locale AFTER render. Gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`. |
 
 **Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
 both columns, but exactly **one live cascade**, on the column that currently determines delivery,
@@ -176,7 +183,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **250**.
+Gotchas: **251**.
 
 ## Program status (high level)
 
