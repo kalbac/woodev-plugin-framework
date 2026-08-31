@@ -6,11 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-31 (s110).** `main` clean at **`c321d6a`**, **no open PRs, no worktrees**. s110 merged
-**#705** and closed **#139** and **#289**; rewrote **#310** to its live remnant; decided **#701**
-(a record, not work) and settled the **#474** doc contradiction. The **#644 tail is finished** — 48
-cards verified against the CODE across two workers, 13 comments — and **#695**'s reconciliation pass
-is done. **77 open cards.** History → `sessions/s110.md`, `sessions/s109.md`.
+**As of 2026-09-01 (s111).** `main` clean at **`afb3a92`**. s111 merged **#716 #717 #718 #719** and
+closed **#116**, **#708**, **#694** and **#695**; half-fixed **#707** (the card stays OPEN for one
+fork — see below); filed **#712 #713 #714**. **76 open cards.** History → `sessions/s111.md`,
+`sessions/s110.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -49,10 +48,12 @@ contract**: s96's #551 round 1 was green, falsified and CI-clean, and returned G
 Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
-a region whose `key()` is not in the settlement's own `ancestors()` is refused.
+a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
+`Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that
+IS its own region publishes NO ancestors (#707, gotcha
+`dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s110 — 71.** #116 CLOSED in s111; #694 DECIDED by him and its docs rewritten in
-s111. **Eight cards genuinely need HIS answer, and the list is now verified rather than assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
+**Open cards after s111 — 76.** #116, #708, #694 and #695 CLOSED in s111. **Eight cards genuinely need HIS answer, and the list is now verified rather than assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
 `reviews/2026-08-31-644-prioritisation-material.md` §4, which also records why #639, #621, #285,
 #567, #701, #247, #689, #589 and #371 were considered and excluded. Still open and NOT waiting on
 him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
@@ -95,12 +96,16 @@ is enforced too now (`Generic.Arrays.DisallowLongArraySyntax`, ERROR, 633 sites 
 ⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
 something. This is the reading-budget gate working, not a defect.
 
-**Three checkout defects are OPEN with measured diagnoses and are the next session's first work**
-(operator, 01.09.2026): **#708** — `inject()` skips takeover fields from rendering while `validate()`
-enforces `required` on every declared descriptor, so a field nobody can see blocks the order forever;
-**#709** — "is this a pickup method?" has FOUR independent declarations and no cross-check;
-**#707** — DaData's federal cities return `ancestors = []` with region and settlement sharing one
-`fias_guid`, so #551/#552's "region must be an ancestor" rule cannot pass for Moscow or St Petersburg.
+**The three checkout defects, after s111.** **#708 CLOSED** (PR #717): `validate()` enforces a
+takeover field's `required` only when its condition owns the field AND WooCommerce actually rendered
+it. The card's own recommended option was measured INCOMPLETE — the fixture's two takeover fields
+have different conditions, so it would have left `billing_address_2` blocking on RU.
+**#707 half-closed** (PR #719) and OPEN for one fork — the PHP derivation and the scoped client
+branch are reflexive now; the #538 sibling branch is NOT, because "no ancestry published" and "this
+record is its own region" are the same empty array and #538 deliberately fails OPEN there.
+⚠ **A rig pass may close #707 outright**: now that a region IS derived for Moscow, the client may
+take the (fixed) scoped branch instead of the escape hatch. That is an inference, not a measurement.
+**#709** — still open, in flight at the end of s111.
 
 ✅ **#694/#695 are written into the docs (s111).** SP-10: one landing page, tab per carrier (drawn
 only if >1), default view the aggregate table, gated on it being cheap. `SHIPPING-PLANS.md`/
@@ -198,7 +203,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **254**.
+Gotchas: **257**.
 
 ## Program status (high level)
 

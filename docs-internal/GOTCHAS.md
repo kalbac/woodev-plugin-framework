@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 255 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 257 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -95,6 +95,7 @@
 - [shipping/location] **A served level can come from the FALLBACK provider, not the active one — "the active provider lacks X" and "X is unserved" are different statements.** → [a-level-served-can-come-from-the-fallback-not-the-active-provider](gotchas/a-level-served-can-come-from-the-fallback-not-the-active-provider.md) (s76)
 - [shipping/location] **One identity, two roles: one must refuse, the other must fall back.** → [one-identity-two-roles-one-must-refuse-the-other-must-fall-back](gotchas/one-identity-two-roles-one-must-refuse-the-other-must-fall-back.md) (s74)
 - [shipping/location] **A derived ancestor is not the one the customer picked.** → [a-derived-ancestor-is-not-the-one-the-customer-picked](gotchas/a-derived-ancestor-is-not-the-one-the-customer-picked.md) (s74)
+- [shipping/location] **DaData gives a city of federal significance ONE key on both levels and `ancestors: []` — measured for Moscow/SPb/Sevastopol/Baikonur plus most big BY/KZ/UZ cities. Never test `ancestors()` raw; ask `is_within()`.** → [dadata-collapses-region-and-settlement-into-one-key](gotchas/dadata-collapses-region-and-settlement-into-one-key.md) (s111)
 - [shipping/location] **A DOM attribute is the wrong seam on a WooCommerce checkout — the node is not yours.** → [a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout](gotchas/a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout.md) (s72)
 - [shipping/location] **A locality's display NAME is not an identifier — the same settlement answers «Москва» or «Moscow» depending on the account's locale.** → [a-locality-display-name-is-not-an-identifier](gotchas/a-locality-display-name-is-not-an-identifier.md) (s71)
 
@@ -338,6 +339,7 @@
 - [tooling/parallel-agents] **Edits landing in the wrong checkout, twice over: a worker's Serena `activate_project` aimed at the repo root, and the COORDINATOR's Bash cwd drifting into a worktree — relative-path edits then die with it.** → [serena-activate-path-must-be-the-worker-s-worktree](gotchas/serena-activate-path-must-be-the-worker-s-worktree.md) (s83, extended s108)
 - [tooling/parallel-agents] **Two agents editing one file is the ORCHESTRATOR's bug — one `git checkout` erased another agent's finished, uncommitted work.** → [two-agents-one-file-is-the-orchestrator-s-bug](gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) (s82)
 - [tooling/parallel-agents] **A green suite in a worktree is not the same suite — five contract tests SKIP there because `plugins-reference/` is gitignored. Compare the skip count, not the assertion count.** → [a-worktree-silently-skips-five-contract-tests](gotchas/a-worktree-silently-skips-five-contract-tests.md) (s84)
+- [tooling/references] **`plugins-reference/` bundles framework 1.3.3/1.4.0, so it cannot contain ANY v2 symbol — a zero hit count there never measures how many consumers a v2 API has.** → [plugins-reference-predates-every-v2-api](gotchas/plugins-reference-predates-every-v2-api.md) (s111)
 - [tooling/parallel-agents] **Generated bundles must be built in the PRIMARY CHECKOUT — webpack resolves the shared `node_modules` symlink out of the worktree, so its build can never match CI.** → [local-npm-run-build-is-not-assets-parity-evidence](gotchas/local-npm-run-build-is-not-assets-parity-evidence.md) (s84)
 - [tooling/parallel-agents] **Every fresh worktree starts dirty with seven CRLF-only files — a worker running `git add -A` commits 483 lines of line-ending churn.** → [an-orca-worktree-starts-dirty-with-crlf-churn](gotchas/an-orca-worktree-starts-dirty-with-crlf-churn.md) (s84)
 - [tooling/parallel-agents] **`--model terra` is a hard 400 (`not supported when using Codex with a ChatGPT account`) that the buffer shows as a metadata WARNING first — the real id is `gpt-5.6-terra` and is already the config default, so omit `--model`.** → [codex-model-terra-is-a-400-that-looks-like-a-warning](gotchas/codex-model-terra-is-a-400-that-looks-like-a-warning.md) (s103)
