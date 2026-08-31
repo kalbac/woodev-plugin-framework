@@ -36,6 +36,36 @@ file would also trip the **Assets-build-parity** / `.gitattributes eol=lf` guard
   re-tested for this; assume the same risk and verify EOL (`file <path>`) after any
   Serena write on Windows.
 
+## What a MIXED-EOL file actually looks like when it breaks (s109)
+
+The flip does not have to be Serena's — any writer that emits `
+` into a CRLF file, or `
+`
+into an LF one, produces the same mixed state. In s109 a nine-line docblock was inserted into
+`class-checkout-field-settings.php` by a Python script, and phpcs then reported:
+
+```
+ 76 | ERROR | [x] Spaces must be used for mid-line alignment; tabs are not allowed
+    |       |     (Universal.WhiteSpace.DisallowInlineTabs.NonIndentTabsUsed)
+```
+
+**On a line that contains no mid-line tab at all** — line 76 was `		/**`. The message points at
+whitespace, so the natural next move is to go stare at indentation, which is a dead end. The real
+cause is the EOL mix confusing the tokenizer's column arithmetic.
+
+**Diagnose by counting, not by looking:**
+
+```bash
+python -c "b=open('<file>','rb').read(); print('CRLF', b.count(b'
+'), 'LF', b.count(b'
+'))"
+```
+
+Equal numbers mean a pure-CRLF file; `CRLF == 0` means pure LF. Anything between is mixed, and that
+is your bug. Normalise to what the file already was — here `.gitattributes` pins `*.php text eol=lf`,
+so LF — then re-run phpcs before changing a single character of whitespace.
+
+
 ## ❌ Wrong
 
 - Trusting `git diff` to reveal the problem — autocrlf/`.gitattributes` normalization
