@@ -270,7 +270,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 					// just "Локация" could reasonably assume this is where a store
 					// ADDRESS lives; it is actually the SOURCE of the city/address
 					// suggestions the checkout shows.
-					__( 'Управляет тем, откуда на чекауте берутся подсказки городов, регионов и адресов, и что подставляется покупателю по умолчанию, пока он ничего не ввёл.', 'woodev-plugin-framework' )
+					__( 'Управляет тем, откуда в форме оформления заказа берутся подсказки городов, регионов и адресов, и что подставляется покупателю по умолчанию, пока он ничего не ввёл.', 'woodev-plugin-framework' )
 				);
 			}
 
@@ -305,7 +305,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			// disabled_reason/description split already follows elsewhere in this
 			// codebase.
 			$fields_description = trim(
-				__( 'Определяет, какие поля адреса показываются на чекауте, в каком порядке и как вводится регион с населённым пунктом — это не конструктор полей, а набор правил присутствия и типа для уже существующих полей.', 'woodev-plugin-framework' )
+				__( 'Определяет, какие поля адреса показываются в форме оформления заказа, в каком порядке и как вводится регион с населённым пунктом — это не конструктор полей, а набор правил присутствия и типа для уже существующих полей.', 'woodev-plugin-framework' )
 				. ' ' . $this->get_field_settings()->get_section_note()
 			);
 

@@ -122,7 +122,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_replace_address',
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
-					'tooltip' => __( 'Когда включено, после выбора пункта выдачи его адрес подставляется в поля доставки на чекауте вместо адреса, который до этого ввёл покупатель.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Когда включено, после выбора пункта выдачи его адрес подставляется в поля доставки формы оформления заказа вместо адреса, который до этого ввёл покупатель.', 'woodev-plugin-framework' ),
 				]
 			);
 

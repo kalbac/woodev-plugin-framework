@@ -278,7 +278,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ACTIVE_PROVIDER,
 				\Woodev_Control::TYPE_SELECT,
 				[
-					'tooltip' => __( 'От выбранного провайдера зависит, откуда на чекауте берутся подсказки городов и адресов, и какие типы полей ниже вообще доступны — не каждый провайдер умеет отдавать готовый список для локального выбора.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'От выбранного провайдера зависит, откуда в форме оформления заказа берутся подсказки городов и адресов, и какие типы полей ниже вообще доступны — не каждый провайдер умеет отдавать готовый список для локального выбора.', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -399,7 +399,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
-					'tooltip' => __( 'Показывать подсказки при вводе улицы и дома на чекауте. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Показывать подсказки при вводе улицы и дома в форме оформления заказа. Работает только пока подключённый провайдер умеет отдавать адреса — если нет, поле становится недоступным, и причина написана под ним.', 'woodev-plugin-framework' ),
 				]
 			);
 

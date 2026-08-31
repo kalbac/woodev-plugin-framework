@@ -88,10 +88,14 @@
 	// one, rather than discovering it cramped.
 	.woodev-field__toggle-row {
 		display: grid;
-		grid-template-columns: wd.$label-col minmax( 0, wd.$control-col );
+		// 200px, not `$label-col`'s 182px — the operator set this by eye on the rig,
+		// 31.08.2026. Deliberately a literal: the boolean row's label column is NOT
+		// the same width as the select rows', so tying it to the token would be a lie
+		// about why the number is what it is.
+		grid-template-columns: 200px minmax( 0, wd.$control-col );
 		align-items: start;
 		gap: wd.$gap-lg;
-		max-width: calc( #{ wd.$label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
+		max-width: calc( 200px + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
 
 		.woodev-field__toggle-meta {
