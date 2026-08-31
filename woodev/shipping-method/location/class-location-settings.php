@@ -394,7 +394,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
-					'tooltip' => __( 'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.', 'woodev-plugin-framework' ),
 				]
 			);
 
