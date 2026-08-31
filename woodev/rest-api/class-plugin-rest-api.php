@@ -18,7 +18,7 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		/**
 		 * Constructs the class.
 		 *
-		 * @since 5.2.0
+		 * @since 1.0.0
 		 *
 		 * @param Woodev_Plugin $plugin plugin instance
 		 */
@@ -48,7 +48,7 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		 *
 		 * @internal
 		 *
-		 * @since 5.2.0
+		 * @since 1.0.0
 		 *
 		 * @param WP_REST_Response $response REST API response object
 		 * @param array            $system_status system status data
@@ -66,7 +66,7 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 			/**
 			 * Filters the data added to the WooCommerce REST API System Status response.
 			 *
-			 * @since 5.2.0
+			 * @since 1.0.0
 			 *
 			 * @param array $data system status response data
 			 * @param WP_REST_Response $response REST API response object
@@ -106,7 +106,7 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		/**
 		 * Gets the plugin instance.
 		 *
-		 * @since 5.2.0
+		 * @since 1.0.0
 		 *
 		 * @return Woodev_Plugin|Woodev_Payment_Gateway_Plugin
 		 */

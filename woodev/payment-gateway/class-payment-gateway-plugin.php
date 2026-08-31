@@ -743,7 +743,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * @param string $gateway_id the gateway ID
 		 *
 		 * @return string admin configuration url for the gateway
-		 * @since 3.0.0
+		 * @since 1.0.0
 		 */
 		public function get_payment_gateway_configuration_url( $gateway_id ) {
 			return add_query_arg(
