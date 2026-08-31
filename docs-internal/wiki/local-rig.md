@@ -145,6 +145,24 @@ simply not rendered, which looks like the feature is broken.
 
 ⚠ `/suggest` answers in **6–10 seconds** here. Wait for the row to appear, not for a timer.
 
+## Docker inventory — what must never be pruned
+
+- **`wordpress-test` stack** (`wordpress-test` + `wp-mysql` + `wp-phpmyadmin`, volume
+  `wordpress-test_db_data`, ~`:8080`) is the operator's **production-plugins test instance — ALL real
+  plugins in one env**, an intentional single instance for testing plugin-to-plugin compatibility.
+  **NEVER delete it or its volume, even when the containers show `Exited`.**
+- That volume is unattached while the stack is down, so **never run `docker volume prune` or
+  `docker system prune --volumes` on this machine** — it would wipe `wordpress-test_db_data`. Clean
+  docker only surgically: `docker builder prune`, `docker image prune` (dangling only), and orphans
+  you have identified by name.
+- Project wp-env = `de59f74e…` (dev `:8973`, tests `:8974`); issuer = `c8ec47a5…` (`:8090`). Both KEEP.
+- ⚠ The two wp-env CLI containers are easy to confuse: `…-cli-1` is the DEV rig (`:8973`, carries the
+  options), `…-tests-cli-1` is the test stack (`:8974`, deliberately option-free). Reading options
+  from the wrong one returns "Does it exist?" for everything.
+- ⚠ Writing into `wp-content/mu-plugins/` from the CLI container needs `docker exec -u root`; the
+  default user has no write permission there. And `/tmp/...` paths need `MSYS_NO_PATHCONV=1` on this
+  Windows shell, or they are rewritten into Windows paths before docker sees them.
+
 ## Related
 
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — the rig's current values

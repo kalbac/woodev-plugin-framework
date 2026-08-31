@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 254 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 255 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -229,6 +229,7 @@
 - [box-packer/virtual-box-null-best-inf-overflow] **`$best=null;.** → [virtual-box-null-best-inf-overflow](gotchas/virtual-box-null-best-inf-overflow.md)
 
 ### [shipping/checkout] — Checkout field layer (§8)
+- [shipping/checkout] **The WORDING says who rejected the order — «Please fill in the “…” field» is OURS, «… is a required field» is WooCommerce's — and `validate()` enforces takeover fields that `inject()` never renders.** → [whose-checkout-error-is-it-the-wording-tells-you](gotchas/whose-checkout-error-is-it-the-wording-tells-you.md) (s110)
 - [shipping/checkout] **A hand-typed per-country format table is wrong on arrival and review cannot catch it — eleven of twelve phone masks were right, the twelfth made a whole country unenterable.** → [a-hand-typed-format-table-drifts-from-the-real-spec](gotchas/a-hand-typed-format-table-drifts-from-the-real-spec.md) (s109)
 - [shipping/checkout] **WooCommerce strips empty-string `custom_attributes`, so an empty attribute cannot be declared through them.** → [woocommerce-strips-empty-string-custom-attributes](gotchas/woocommerce-strips-empty-string-custom-attributes.md) (s89)
 - [shipping/checkout] **The §8 takeover reverts a `<select>` the location cascade owns — and it was guarded by a NAME suffix, not by ownership.** → [the-classic-adapter-reverts-a-select-the-location-cascade-owns](gotchas/the-classic-adapter-reverts-a-select-the-location-cascade-owns.md) (s87)

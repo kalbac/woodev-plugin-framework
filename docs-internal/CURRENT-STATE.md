@@ -10,7 +10,7 @@
 **#705** and closed **#139** and **#289**; rewrote **#310** to its live remnant; decided **#701**
 (a record, not work) and settled the **#474** doc contradiction. The **#644 tail is finished** — 48
 cards verified against the CODE across two workers, 13 comments — and **#695**'s reconciliation pass
-is done. **71 open cards.** History → `sessions/s110.md`, `sessions/s109.md`.
+is done. **77 open cards.** History → `sessions/s110.md`, `sessions/s109.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -28,19 +28,16 @@ NOT re-measured in s110** (no PHP behaviour changed; CI's three wp-env stacks pa
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
-⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
-gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
-"result is incomplete", which reads exactly like a real analysis failure over the diff you just
-wrote. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`, s106 section.
+⚠ **`phpstan` locally needs `--memory-limit=4G`.** At 2G (CI's value) the parallel worker dies and
+prints `Found 1 error` + "result is incomplete", which reads like a real failure over your diff. CI
+stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
-⚠ **Measure with `php -d extension=sodium`, or the SKIPPED number is meaningless** — off it reads 67,
-on it reads **1 in the primary and 6 wherever `plugins-reference/` is absent** (CI reports 6). Why,
-and why the old "the primary is 66" rule was measuring the operator's php.ini: gotcha
+⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — off it reads 67, on it
+reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN on `main` and GATED IN CI — #606, closed in s102 (PR #624),** on
-the target PHP version only, so a failure reproduces locally with the same command. Why the suite
-had been green by alphabetical accident: `sessions/s102.md`.
+✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606, s102) on the target PHP version only, so
+a failure reproduces locally with the same command. Why it had been green by accident: `sessions/s102.md`.
 
 ✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
 and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
@@ -99,6 +96,20 @@ is enforced too now (`Generic.Arrays.DisallowLongArraySyntax`, ERROR, 633 sites 
 ⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
 something. This is the reading-budget gate working, not a defect.
 
+**Three checkout defects are OPEN with measured diagnoses and are the next session's first work**
+(operator, 01.09.2026): **#708** — `inject()` skips takeover fields from rendering while `validate()`
+enforces `required` on every declared descriptor, so a field nobody can see blocks the order forever;
+**#709** — "is this a pickup method?" has FOUR independent declarations and no cross-check;
+**#707** — DaData's federal cities return `ancestors = []` with region and settlement sharing one
+`fias_guid`, so #551/#552's "region must be an ancestor" rule cannot pass for Moscow or St Petersburg.
+
+**SP-10's page form is DECIDED (#694, operator 01.09.2026): ONE landing page, a tab per carrier,
+tabs drawn only when carriers > 1, and the default view is the AGGREGATE table** (his reversal of
+the agent's proposal — "first carrier in the list" is arbitrary), gated on the aggregate being cheap.
+⚠ `SHIPPING-PLANS.md` §16 and the spec's SP-10 line still carry the retired "page per carrier" AND
+its false "mirrors §15" citation. **#695 disposition is DECIDED too: archive the spent sections, move
+the live remainder into `specs/` and cards.**
+
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
@@ -117,18 +128,16 @@ a typed template. **[ADR-011](adr/011-vendored-imask-and-generated-phone-masks.m
 
 **TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
-**#528 — the merchant opt-in «Города вне списка»** (shortened by #374), default OFF, only for
-«Список с поиском». ON → select2 `tags`; OFF →
-#517's abandon mechanism is gated off. Detail → `sessions/s92.md`.
+**#528 «Города вне списка»** — default OFF, only for «Список с поиском»; ON → select2 `tags`, OFF →
+#517's abandon mechanism gated off. Detail → `sessions/s92.md`.
 
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
 pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
 ## ⚠ The checkout location layer
 
-**#466 was our own §8 adapter, not the network and not WooCommerce** — fixed in #471 by guarding on
-ownership rather than a name heuristic. Gotcha:
-`the-classic-adapter-reverts-a-select-the-location-cascade-owns`.
+**A §8 adapter of ours can look exactly like a third party misbehaving** (#466/#471 — guard on
+ownership, never a name heuristic). Gotcha `the-classic-adapter-reverts-a-select-the-location-cascade-owns`.
 
 ### Open in this layer
 
@@ -161,11 +170,9 @@ anyway. Scan the tag for your task; do not keep a second copy here.
 ⚠ Before probing `test-cdek` credentials, read the gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**Operator decision, #409 and again #546 (27.08.2026):** `@since` records the **planned release**,
-which is and stays **`2.0.2`** — «иначе врём потребителям, у нас по факту ещё даже 2.0.0 не было».
-`VERSION` records the **released** one (`2.0.1`) and lags on purpose (#285). Every `@since` above
-`2.0.2` was normalised down in #555; `2.0.0` and `2.0.1` are historical v2 tagging and were left
-alone — a separate question nobody has decided.
+**`@since` = the PLANNED release, `2.0.2`; `VERSION` = the released one and lags on purpose**
+(#409, #546; full rule in `AGENT-RULES.md` Rule 5). ⚠ The claim that everything above `2.0.2` was
+normalised in #555 is WRONG — seven inherited docblocks still read 3.0.0/4.0.0/5.2.0 (#116a).
 
 ✅ **Every Codex round gets a CANARY — a few facts you already know, answered before anything else.**
 It earns its keep: in s110 the canary made the critic say «не смог прочитать» for the one fact it
@@ -185,8 +192,7 @@ the buffer's SIZE before concluding: the tail is truncated, so a missing phrase 
 scrolled off (that misled the coordinator once in s110). Recipe:
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
-**kilo is the FALLBACK critic, not the default** (it held the seat 27.08–28.08 while the
-subscription was unpaid) and has its own traps — Orca cannot supervise it, and the model must be
+**kilo is the FALLBACK critic, not the default** — Orca cannot supervise it and the model must be
 pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
@@ -277,9 +283,15 @@ only consumer; they get rewritten once everything is ready.
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ✅ **The rig is BACK in its standard state — measured 27.08.2026 (s100), not inferred.** The #518
-  pass is over and everything the s99 detour changed has been put back. Read straight off the
-  container:
+- ⚠ **The rig is NOT in its standard state right now (01.09.2026):** the operator switched
+  `woodev_location_active_provider` to **`dadata`** for #652 scenario 2, which clamped
+  `field_mode_region` to `ajax-select2` (DaData structurally cannot offer `related-list`). Popular
+  settlements now hold 5 seeded `dadata` rows alongside the 6 `test-cdek` ones. **Restore to the
+  table below before any pickup/location work** — and re-pick a settlement, because a stored
+  customer location survives a provider switch.
+
+  **STANDARD values, read off the container (s100), never off a doc** — the s93 handoff had two of
+  them wrong and a correctly-absent row was read as a regression:
 
   | Option | Value |
   |---|---|
@@ -287,23 +299,14 @@ only consumer; they get rewritten once everything is ready.
   | `woodev_location_field_mode_region` | `related-list` |
   | `woodev_location_field_mode_settlement` | `ajax-select2` |
   | `woodev_location_default_locality_policy` | `fixed` |
-  | `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, whose `key` is `test-cdek:44` (Москва) — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
+  | `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, key `test-cdek:44` — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
   | `woodev_location_allow_custom_settlement` | `no` |
+  | checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
 
-  `wp-content/mu-plugins/` holds only `zz-rig-test-pickup-shipping.php` and `zz-rig-yandex-key.php`
-  — the temporary `zz-rig-geoip-ip.php` is gone.
-
-  **Switching it again** (`geoip` needs `dadata` + a pinned non-local IP; restoring options is not
-  enough because a stored customer location survives): gotcha
+  `mu-plugins/` holds `zz-rig-test-pickup-shipping.php` (extended in s110 — the pickup method is now
+  declared in every registry reachable by public API) and `zz-rig-yandex-key.php`. Switching to
+  `geoip` needs `dadata` + a pinned non-local IP: gotcha
   `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
-
-- **The option VALUES the rig must be restored to are the table above** — read them off the
-  container, never off a doc (the s93 handoff had two of them wrong, and a correctly-absent
-  #528 tag row was read as a regression once because of it). Why each value is set the way it
-  is, and what changes when the provider is switched back to `dadata`: [wiki/local-rig.md](wiki/local-rig.md).
-  One consequence worth knowing before you switch anything: **DaData structurally cannot offer
-  `related-list`**, so moving the provider back silently removes «Предустановленный список» from
-  the region select.
 - **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
@@ -324,11 +327,12 @@ only consumer; they get rewritten once everything is ready.
 Пошаговая процедура вынесена в [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md)
 (проверена в s75). Открывать, когда идёшь на риг проверять ПВЗ.
 
-### Docker inventory — DO NOT blindly prune
+### Docker — DO NOT blindly prune
 
-- **`wordpress-test` stack** (`wordpress-test` + `wp-mysql` + `wp-phpmyadmin`, volume `wordpress-test_db_data`, ~`:8080`) is the operator's **production-plugins test instance — ALL real plugins in one env** (intentional single instance, to test plugin↔plugin compatibility). **NEVER delete it or its volume, even when its containers are `Exited`.**
-- Because that volume is unattached while the stack is down, **never run `docker volume prune` / `docker system prune --volumes` here** — it would wipe `wordpress-test_db_data`. Clean docker only surgically: `docker builder prune`, `docker image prune` (dangling), and explicitly-identified orphans.
-- Project wp-env = `de59f74e…` (dev `:8973` + tests `:8974`); issuer = `c8ec47a5…` (`:8090`). Both KEEP.
+⛔ **Never run `docker volume prune` / `docker system prune --volumes` on this machine.** The
+operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
+while the stack is `Exited` — a prune wipes it. Full inventory, which container is which, and the
+two exec traps: [wiki/local-rig.md](wiki/local-rig.md).
 
 ## Infrastructure Reference
 
