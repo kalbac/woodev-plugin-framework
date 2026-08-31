@@ -138,7 +138,7 @@ required), leave every other field alone, and record a note the tab shows.
 
 ### The `address_suggestions` gate
 
-The «Подсказки для адреса» switch is enforced in ONE place — `Location_Service::provider_for_level()`
+The «Подсказки адреса» switch is enforced in ONE place — `Location_Service::provider_for_level()`
 forces `null` for the `address` level while the switch is off, before the chain is walked. Every
 derived question (`get_levels_for_country()`, `get_level_owners_for_country()`,
 `is_country_supported()`, the REST `/suggest` route) therefore agrees without re-checking it.

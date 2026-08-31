@@ -222,8 +222,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 		 * field list.
 		 *
 		 * The two field-mode axes and `address_suggentions` are DELIBERATELY
-		 * excluded (issue #380): the operator moved «Тип поля Регион», «Тип
-		 * поля НП» and «Подсказки для адреса» to the «Поля» section — this
+		 * excluded (issue #380): the operator moved «Выбор региона», «Выбор
+		 * города» and «Подсказки адреса» to the «Поля» section — this
 		 * handler still REGISTERS and OWNS those settings (option name
 		 * namespace stays `woodev_location_*`, ADR-005), it just no longer
 		 * reports them here. `Shipping_Settings_Tab::build_sections()` lists
@@ -316,7 +316,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
 				\Woodev_Setting::TYPE_STRING,
 				[
-					'name'    => __( 'Тип поля Регион', 'woodev-plugin-framework' ),
+					'name'    => __( 'Выбор региона', 'woodev-plugin-framework' ),
 					'options' => $this->field_mode_region_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 					'show_if' => [
@@ -341,7 +341,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
 				\Woodev_Setting::TYPE_STRING,
 				[
-					'name'    => __( 'Тип поля НП', 'woodev-plugin-framework' ),
+					'name'    => __( 'Выбор города', 'woodev-plugin-framework' ),
 					'options' => $this->field_mode_settlement_options,
 					'default' => Location_Provider_Registry::MODE_TYPEAHEAD,
 				]
@@ -382,7 +382,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Разрешить использовать города не из списка', 'woodev-plugin-framework' ),
+					'name'    => __( 'Города вне списка', 'woodev-plugin-framework' ),
 					'default' => false,
 					'show_if' => [
 						'setting' => Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
@@ -394,7 +394,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
-					'tooltip' => __( 'Покупатель сможет оставить в поле населённого пункта значение, которого нет у службы доставки. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться. По умолчанию выключено.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.', 'woodev-plugin-framework' ),
 				]
 			);
 
@@ -413,7 +413,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ADDRESS_SUGGESTIONS,
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Подсказки для адреса', 'woodev-plugin-framework' ),
+					'name'    => __( 'Подсказки адреса', 'woodev-plugin-framework' ),
 					'default' => true,
 				]
 			);

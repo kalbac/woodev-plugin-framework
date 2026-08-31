@@ -1727,7 +1727,7 @@
 		 * macrotask per close is pure ceremony.
 		 *
 		 * Issue #532 point 2 asked the narrower question — a close under a merchant who left
-		 * «Разрешить использовать города не из списка» OFF still queued a timer, because the
+		 * «Города вне списка» OFF still queued a timer, because the
 		 * option is checked at `selectConfigFor()`'s recording call sites and nowhere else.
 		 * `null === pendingAbandon` answers that case and every other one it belongs to (the
 		 * option ON but no search completed, a search that DID return results and cleared the

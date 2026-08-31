@@ -1006,7 +1006,7 @@ there). The point of the tests, not the literal selectors, is the contract.
 ### Task 10: `address_suggestions` in «Локация»
 
 **Files:**
-- Modify: `woodev/shipping-method/location/class-location-settings.php:159–260` (register the setting after `field_mode`; relabel `field_mode` to «Тип поля НП/Регион»; `get_owned_setting_ids()` order: `active_provider`, `field_mode`, `address_suggestions`, `default_locality_*`, provider fields)
+- Modify: `woodev/shipping-method/location/class-location-settings.php:159–260` (register the setting after `field_mode`; relabel `field_mode` to «Выбор города/региона»; `get_owned_setting_ids()` order: `active_provider`, `field_mode`, `address_suggestions`, `default_locality_*`, provider fields)
 - Modify: `woodev/shipping-method/location/class-location-provider-registry.php` — constant `SETTING_ADDRESS_SUGGESTIONS = 'address_suggestions'`; `is_address_suggestions_enabled(): bool`; in `register_settings()` compute availability: any served country where `Location_Service` (or the registry's own chain logic — see `provider_for_level()`'s implementation, `class-location-service.php:1510`) resolves a provider for `address` → enabled; else `set_disabled( true, «Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены.» )`
 - Modify: `woodev/shipping-method/location/class-location-service.php:1510` (`provider_for_level()`: `if ( 'address' === $level && ! $registry->is_address_suggestions_enabled() ) return null;` — put it BEFORE the chain walk so levels/owners/suggest all agree)
 - Test: `tests/unit/Shipping/Location/LocationServiceTest.php`, `LocationProviderRegistryTest.php`
@@ -1035,7 +1035,7 @@ public function test_address_suggestions_control_is_disabled_when_nobody_serves_
 
 - [ ] **Step 2: Run** — FAIL.
 - [ ] **Step 3: Implement** as described; `is_address_suggestions_enabled()` = `stored && available` (clamp on read).
-- [ ] **Step 4:** unit + integration green; rig: DaData active → checkbox enabled, uncheck → address field on `/classic-checkout/` is a plain input (no typeahead, no lock); `test-cdek` active with DaData token blanked → checkbox disabled with the reason. Commit — `feat(location): «Подсказки для адреса» store switch; field type relabelled`.
+- [ ] **Step 4:** unit + integration green; rig: DaData active → checkbox enabled, uncheck → address field on `/classic-checkout/` is a plain input (no typeahead, no lock); `test-cdek` active with DaData token blanked → checkbox disabled with the reason. Commit — `feat(location): «Подсказки адреса» store switch; field type relabelled`.
 
 ---
 

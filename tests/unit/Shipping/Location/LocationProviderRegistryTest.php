@@ -3460,6 +3460,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( \Woodev_Setting::TYPE_BOOLEAN, $setting->get_type() );
 		$this->assertTrue( $setting->get_default() );
 		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
+		$this->assertSame( 'Подсказки адреса', $setting->get_name() );
 	}
 
 	/**
@@ -3506,7 +3507,7 @@ final class LocationProviderRegistryTest extends TestCase {
 		);
 	}
 
-	public function test_field_mode_axes_are_labelled_region_and_settlement(): void {
+	public function test_field_mode_axes_are_labelled_as_region_and_city_selection(): void {
 		Functions\when( 'add_action' )->justReturn( true );
 		$this->stub_providers_filter( [] );
 
@@ -3517,8 +3518,8 @@ final class LocationProviderRegistryTest extends TestCase {
 		$region_setting     = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_REGION );
 		$settlement_setting = $registry->get_settings_handler()->get_setting( Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT );
 
-		$this->assertSame( 'Тип поля Регион', $region_setting->get_name() );
-		$this->assertSame( 'Тип поля НП', $settlement_setting->get_name() );
+		$this->assertSame( 'Выбор региона', $region_setting->get_name() );
+		$this->assertSame( 'Выбор города', $settlement_setting->get_name() );
 	}
 
 	/**
@@ -3661,6 +3662,11 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertSame( \Woodev_Setting::TYPE_BOOLEAN, $setting->get_type() );
 		$this->assertFalse( $setting->get_default() );
 		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
+		$this->assertSame( 'Города вне списка', $setting->get_name() );
+		$this->assertSame(
+			'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.',
+			$setting->get_control()->get_tooltip()
+		);
 	}
 
 	/**

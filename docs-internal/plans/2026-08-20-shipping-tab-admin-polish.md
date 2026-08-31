@@ -19,7 +19,7 @@
 ## Two defects that block the rest (Block 0 — in flight)
 
 1. `ControlField`'s toggle/checkbox branch bypasses `withAnatomy` and drops `tooltip` — a tooltip on
-   any boolean setting renders nothing. Blocks #373 for «Подсказки для адреса», «Записывать адрес
+   any boolean setting renders nothing. Blocks #373 for «Подсказки адреса», «Записывать адрес
    пункта», «Закрывать карту после выбора».
 2. `Field_Schema::from_handler()` assigns `disabled_reason` INTO `description`, destroying the
    authored text. #375/#377 both rely on "disabled + reason", so a disabled field must keep both.
@@ -140,13 +140,13 @@ Cheap insurance beats a bet.
 - The client currently receives ONE `location.mode`. It must receive the two axes plus the derived
   overlay flag, and renderer resolution becomes per-level rather than per-mode-then-level.
 
-**#369 closure:** with `region_field = remove`, «Тип поля Регион» is hidden via `show_if` and clamped
+**#369 closure:** with `region_field = remove`, «Выбор региона» is hidden via `show_if` and clamped
 to typeahead on read, so `region_field=remove` + list-region (today's silent breakage) is
 unconstructible. Verify and close #369 with this work. NOTE: the condition crosses handlers
 (`region_field` belongs to `Checkout_Field_Settings`, the mode to `Location_Settings`) — React builds
 condition values across the whole tab, but assert the cross-handler case on both sides.
 
-**Section move:** «Тип поля Регион», «Тип поля НП» and «Подсказки для адреса» move to «Поля»,
+**Section move:** «Выбор региона», «Выбор города» and «Подсказки адреса» move to «Поля»,
 interleaved with the fields they describe:
 `field_order_preset, country_field, region_field, field_mode_region, field_mode_settlement, address_field, address_suggestions, postcode_field`.
 «Локация» keeps provider, provider keys, «Локация по умолчанию». Registration stays with

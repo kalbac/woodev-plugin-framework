@@ -2130,7 +2130,7 @@ msgid "Удалять"
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:246
-msgid "«Удалять» полностью убирает поле «Регион» из формы чекаута — его значение никогда не попадёт в заказ, а настройки «Тип поля Регион» ниже перестают действовать (поле нечем управлять). «Показывать» оставляет обычное поле региона."
+msgid "«Удалять» полностью убирает поле «Регион» из формы чекаута — его значение никогда не попадёт в заказ, а настройки «Выбор региона» ниже перестают действовать (поле нечем управлять). «Показывать» оставляет обычное поле региона."
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:254
@@ -2354,7 +2354,7 @@ msgid "От выбранного провайдера зависит, откуд
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:319
-msgid "Тип поля Регион"
+msgid "Выбор региона"
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:336
@@ -2362,7 +2362,7 @@ msgid "Как покупатель выбирает регион. «Текст �
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:344
-msgid "Тип поля НП"
+msgid "Выбор города"
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:360
@@ -2370,15 +2370,15 @@ msgid "Как покупатель выбирает населённый пун�
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:385
-msgid "Разрешить использовать города не из списка"
+msgid "Города вне списка"
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:397
-msgid "Покупатель сможет оставить в поле населённого пункта значение, которого нет у службы доставки. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться. По умолчанию выключено."
+msgid "Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться."
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:416
-msgid "Подсказки для адреса"
+msgid "Подсказки адреса"
 msgstr ""
 
 #: shipping-method/location/class-location-settings.php:424
