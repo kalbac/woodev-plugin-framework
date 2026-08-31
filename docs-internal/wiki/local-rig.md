@@ -50,9 +50,11 @@ of #709.
 
 ## `woocommerce_checkout_company_field` is `optional`, deliberately
 
-⚠ **Measured `hidden` again on 01.09.2026 (s110)** — someone took the documented revert below,
-so by this section's own reasoning the §8 root demo should be dark. It is NOT: the operator sees
-«Демо §8: …» on the checkout and the fields BLOCK the order. That contradiction is card **#708**.
+⚠ **Measured `hidden` again on 01.09.2026 (s110)** — someone took the documented revert below, so
+the §8 root demo IS dark, exactly as this section predicts: the fields are not on the checkout, and
+the operator confirmed it. What is NOT dark is their VALIDATION — `validate()` still enforces their
+`required` flag, so the checkout is blocked by two fields nobody can see or fill. That is a
+framework defect, not a rig one: card **#708**.
 
 - **`woocommerce_checkout_company_field` was flipped `hidden` → `optional` on the rig
   (24.08.2026).** The §8 demo moved onto `billing_company`/`billing_address_2` (#481), and
