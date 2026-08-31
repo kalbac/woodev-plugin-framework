@@ -228,7 +228,7 @@ class CompositeSettingsHandlerTest extends TestCase {
 		$location = $this->make_handler(
 			'location',
 			function ( $h ) {
-				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Тип поля Регион' ] );
+				$h->register_setting( 'field_mode_region', \Woodev_Setting::TYPE_STRING, [ 'name' => 'Выбор региона' ] );
 			}
 		);
 

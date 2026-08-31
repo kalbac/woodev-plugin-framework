@@ -41,7 +41,7 @@ test( 'the settlement chooser offers only the options the server sent, whatever 
 			settingId: 'field_mode_settlement',
 			schema: {
 				type: 'string',
-				name: 'Тип поля НП',
+				name: 'Выбор города',
 				controlType: 'select',
 				options: {
 					typeahead: 'Текст с подсказками',
@@ -148,7 +148,7 @@ test( 'a boolean field with a tooltip shows the tooltip affordance next to its l
 			schema: {
 				type: 'boolean',
 				controlType: 'checkbox',
-				name: 'Подсказки для адреса',
+				name: 'Подсказки адреса',
 				tooltip: 'Показывать варианты адреса по мере ввода.',
 			},
 			value: false,
@@ -168,7 +168,7 @@ test( 'a boolean field without a tooltip renders no tooltip affordance', () => {
 			schema: {
 				type: 'boolean',
 				controlType: 'checkbox',
-				name: 'Подсказки для адреса',
+				name: 'Подсказки адреса',
 			},
 			value: false,
 			onChange: () => {},

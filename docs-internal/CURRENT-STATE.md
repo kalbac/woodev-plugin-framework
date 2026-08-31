@@ -92,8 +92,8 @@ boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `session
 
 **TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
-**#528 — the merchant opt-in «Разрешить использовать города не из списка»** (label being shortened
-to «Города вне списка», #374), default OFF, only for «Список с поиском». ON → select2 `tags`; OFF →
+**#528 — the merchant opt-in «Города вне списка»** (shortened by #374), default OFF, only for
+«Список с поиском». ON → select2 `tags`; OFF →
 #517's abandon mechanism is gated off. Detail → `sessions/s92.md`.
 
 **`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the

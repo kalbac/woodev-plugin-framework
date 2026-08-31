@@ -17,8 +17,8 @@
 > because "two settings steering one axis would be a defect". Seeing the tab live, the operator
 > found a case one setting cannot express — settlement as `ajax-select2` while the region is a plain
 > text field, or the region as a preset list while the settlement is plain. There are two axes, not
-> one. `field_mode` therefore splits into «Тип поля НП» and «Тип поля Регион», both of which move
-> from «Локация» to «Поля» along with «Подсказки для адреса». The "region gates settlement"
+> one. `field_mode` therefore splits into «Выбор города» and «Выбор региона», both of which move
+> from «Локация» to «Поля» along with «Подсказки адреса». The "region gates settlement"
 > behaviour survives as a DERIVED state (the preset-list region turns it on), which is what S2 said
 > it was — the settlement keeps its own chosen type and merely gains the "wait for a region, then
 > scope to it" behaviour, which today's `related-list` welds to a list-shaped settlement it also
@@ -70,8 +70,8 @@ new location providers, anything about rates.
 | # | Decision | Rationale (operator's, 18.08.2026) |
 |---|---|---|
 | **S1** | **One tab «Доставка»** on `Woodev → Настройки` (the existing «Локация» tab renamed), with three sections: **«Локация» / «Поля» / «Карта»**. Not three tabs. | One screen shows the whole checkout behaviour; `field_mode` stays next to the provider it depends on. |
-| **S2** | **Field type = the existing `field_mode`**, no new setting. Vocabulary: `typeahead` / `ajax-select2` / `related-list`. Admin label: «Тип поля НП/Регион». The CDEK plugin's three values map onto it (§4.1). **«Region gates settlement» is a consequence of `related-list`, not a separate mode.** | Two settings steering one axis would be a defect. Both operator notes — a select2 data adapter is needed; the related-list region is selectWoo over a preset list, only for providers that can enumerate — are already how the code behaves (§4.1). |
-| **S3** | **«Подсказки для адреса» lives in «Локация»**, right under the provider block. Its availability is computed from what sits in the same section (active provider serves `address`, OR DaData credentials present). Blocked → `disabled` + reason (D11). | The cause of a block is visible on the same screen. Consequence: «Поля» holds NO suggestion-related option — only presence / visibility / order / required. |
+| **S2** | **Field type = the existing `field_mode`**, no new setting. Vocabulary: `typeahead` / `ajax-select2` / `related-list`. Admin labels: «Выбор города» / «Выбор региона». The CDEK plugin's three values map onto it (§4.1). **«Region gates settlement» is a consequence of `related-list`, not a separate mode.** | Two settings steering one axis would be a defect. Both operator notes — a select2 data adapter is needed; the related-list region is selectWoo over a preset list, only for providers that can enumerate — are already how the code behaves (§4.1). |
+| **S3** | **«Подсказки адреса» lives in «Локация»**, right under the provider block. Its availability is computed from what sits in the same section (active provider serves `address`, OR DaData credentials present). Blocked → `disabled` + reason (D11). | The cause of a block is visible on the same screen. Consequence: «Поля» holds NO suggestion-related option — only presence / visibility / order / required. |
 | **S4** | **Postcode = one `select` with three values**: `show` / `hide for pickup methods` / `remove`. **Address = one `select` with two values**: `show` / `hide for pickup methods` (no `remove` — an address field is never removed by the framework). | Values name genuinely different mechanisms (T1); one control, honest labels. Address mirrors postcode so the two read the same. |
 | **S5** | **Field-order preset applies to ALL shipping countries of the store** (`WC()->countries->get_shipping_countries()`), not to a fixed CIS list, not to "countries the location layer serves". On by default. Mechanism: `woocommerce_get_country_locale` (`priority`). | One switch — one predictable behaviour; per-country is WC's mechanism, not the setting's meaning. |
 | **S6** | **The block checkout DOES honour country-locale `priority`** (measured, §5.4). Therefore the field-order preset is available on both checkouts and is NOT rendered disabled on the block checkout. | Closes T5 / OPEN 6 in the good direction. |
@@ -88,8 +88,8 @@ Woodev → Настройки → [Доставка]
   ┌ Локация ────────────────────────────────────────────────┐
   │ Провайдер локаций          [DaData ▼]                    │  BUILT (active_provider)
   │ <provider's own fields: token, secret …>                 │  BUILT (provider_fields)
-  │ Тип поля НП/Регион         [Текст с подсказками ▼]       │  BUILT (field_mode), relabelled
-  │ Подсказки для адреса       [x]                           │  NEW  (address_suggestions)
+  │ Выбор города/региона       [Текст с подсказками ▼]       │  BUILT (field_mode), relabelled
+  │ Подсказки адреса           [x]                           │  NEW  (address_suggestions)
   │   ↳ disabled + reason when nobody serves `address`       │
   │ Локация по умолчанию       [Выкл ▼]                      │  BUILT (default_locality_policy)
   └──────────────────────────────────────────────────────────┘
@@ -118,7 +118,7 @@ domain; setting ids are English (`snake_case`).
 | Section | Setting id | Type / control | Default | Availability rule |
 |---|---|---|---|---|
 | Локация | `active_provider` | BUILT | — | — |
-| Локация | `field_mode` | BUILT; label → «Тип поля НП/Регион» | `typeahead` | BUILT gate: `related-list` / `ajax-select2` only for `CAPABILITY_LIST` providers |
+| Локация | `field_mode` | BUILT; labels → «Выбор города» / «Выбор региона» | `typeahead` | BUILT gate: `related-list` / `ajax-select2` only for `CAPABILITY_LIST` providers |
 | Локация | `address_suggestions` | bool / checkbox | `true` | enabled iff the chain resolves SOME provider for `address` in at least one served country (active provider declares `address`, or the bundled DaData is configured); otherwise `disabled` + reason «Выбранный провайдер не отдаёт адреса, а учётные данные DaData не заполнены» |
 | Локация | `default_locality_*` | BUILT | — | — |
 | Поля | `field_order_preset` | bool / checkbox | `true` | always |
