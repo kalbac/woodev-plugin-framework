@@ -684,6 +684,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			$config['phone_mask'] = $field_settings->get_phone_mask_config();
 
 			if ( 'off' !== $config['phone_mask']['mode'] && ! \Woodev_Blocks_Handler::is_checkout_block_in_use() ) {
+				// Card #503 round 2 (the IMask rewrite): IMask (MIT, https://imask.js.org),
+				// VENDORED rather than CDN-loaded — a shop's checkout must not depend on a
+				// third-party host — with no build step at this layer. Its own handle so
+				// `phone-mask.js` can depend on it for load order; bump the version string
+				// here AND `imask.min.js`'s own header comment together when updating it —
+				// that header records the exact upstream version this file was fetched at.
+				wp_enqueue_script(
+					'woodev-imask',
+					self::asset_url( 'js/vendor/imask.min.js' ),
+					[],
+					'7.6.1',
+					true
+				);
+
 				$mask_path = self::asset_path( 'js/frontend/phone-mask.js' );
 
 				wp_enqueue_script(
@@ -694,7 +708,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					// `<script>` tag, so by the time this file runs, `window.woodev_checkout_field_config_*`
 					// is already on `window` — the same guarantee `location-select-modes.js` relies
 					// on for `wc_country_select_params` (see the comment on that enqueue above).
-					[ 'jquery', 'woodev-checkout-field-classic' ],
+					// `woodev-imask` is the masking engine itself (see above).
+					[ 'jquery', 'woodev-checkout-field-classic', 'woodev-imask' ],
 					file_exists( $mask_path ) ? (string) filemtime( $mask_path ) : (string) \Woodev_Plugin::VERSION,
 					true
 				);

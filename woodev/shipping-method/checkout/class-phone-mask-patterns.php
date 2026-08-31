@@ -44,6 +44,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Phone_Mask_Patter
 		public const FILTER_PATTERNS = 'woodev_phone_mask_patterns';
 
 		/**
+		 * Filter tag a plugin uses to add or override a country's national trunk-prefix
+		 * digit (card #503 round 2, the IMask rewrite) — {@see self::get_trunk_prefixes()}.
+		 *
+		 * @since 2.0.2
+		 */
+		public const FILTER_TRUNK_PREFIXES = 'woodev_phone_mask_trunk_prefixes';
+
+		/**
 		 * Gets the country → mask template map, RU/CIS first, filtered.
 		 *
 		 * @since 2.0.2
@@ -74,6 +82,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Phone_Mask_Patter
 			 * @param array<string,string> $patterns ISO-3166 alpha-2 country code => `#`-placeholder template.
 			 */
 			return (array) apply_filters( self::FILTER_PATTERNS, $patterns );
+		}
+
+		/**
+		 * Gets the country → national trunk-prefix-digit map, filtered.
+		 *
+		 * card #503 round 2 (IMask rewrite): RU/KZ dial a domestic number with a leading
+		 * `8` in place of the `+7` calling code (`8 929 600-80-90` ⇔ `+7 929 600-80-90`) —
+		 * a numbering-plan convention, not something every country shares, so it lives in
+		 * its OWN small declarative table next to {@see self::get()} rather than being
+		 * assumed for every pattern entry. `phone-mask.js`'s `resolveTrunkDigit()` reads
+		 * this to swap a leading trunk digit for the active template's own calling code the
+		 * moment it is typed or pasted as (or at the start of) the very first character —
+		 * see that file's own docblock, TRUNK PREFIX section.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,string> ISO-3166 alpha-2 country code => single trunk digit.
+		 */
+		public static function get_trunk_prefixes(): array {
+			$trunk_prefixes = [
+				'RU' => '8',
+				'KZ' => '8',
+			];
+
+			/**
+			 * Filters the country → national trunk-prefix-digit map.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string,string> $trunk_prefixes ISO-3166 alpha-2 country code => single trunk digit.
+			 */
+			return (array) apply_filters( self::FILTER_TRUNK_PREFIXES, $trunk_prefixes );
 		}
 	}
 

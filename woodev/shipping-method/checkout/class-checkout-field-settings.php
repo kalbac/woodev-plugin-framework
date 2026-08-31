@@ -420,24 +420,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		}
 
 		/**
-		 * The `phone-mask.js` config block: which mode the merchant picked, and
-		 * the country → template table it needs to act on that mode. Read
-		 * directly from the STORED value (never {@see self::effective()}) —
-		 * unlike this class's other four settings, `phone_field_format`'s
-		 * availability does not depend on the checkout-experience/country-count
-		 * facts {@see Checkout_Field_Environment} carries; a country losing its
-		 * pattern (a plugin unhooking {@see Phone_Mask_Patterns::FILTER_PATTERNS})
-		 * degrades to a no-op on the JS side (same as picking «Не использовать»),
-		 * never to a clamp-and-rewrite.
+		 * The `phone-mask.js` config block: which mode the merchant picked, the
+		 * country → template table it needs to act on that mode, and (card #503 round 2,
+		 * the IMask rewrite) the country → trunk-prefix-digit table
+		 * {@see Phone_Mask_Patterns::get_trunk_prefixes()} for the RU/KZ-style "8 stands
+		 * for the calling code" convention. Read directly from the STORED value (never
+		 * {@see self::effective()}) — unlike this class's other four settings,
+		 * `phone_field_format`'s availability does not depend on the checkout-experience/
+		 * country-count facts {@see Checkout_Field_Environment} carries; a country losing
+		 * its pattern (a plugin unhooking {@see Phone_Mask_Patterns::FILTER_PATTERNS})
+		 * degrades to a no-op on the JS side (same as picking «Не использовать»), never to
+		 * a clamp-and-rewrite.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array{mode: string, patterns: array<string,string>}
+		 * @return array{mode: string, patterns: array<string,string>, trunk_prefixes: array<string,string>}
 		 */
 		public function get_phone_mask_config(): array {
 			return [
-				'mode'     => (string) $this->get_value( 'phone_field_format' ),
-				'patterns' => Phone_Mask_Patterns::get(),
+				'mode'           => (string) $this->get_value( 'phone_field_format' ),
+				'patterns'       => Phone_Mask_Patterns::get(),
+				'trunk_prefixes' => Phone_Mask_Patterns::get_trunk_prefixes(),
 			];
 		}
 	}
