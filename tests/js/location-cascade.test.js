@@ -3883,6 +3883,62 @@ describe( 'Task 13 renderer seam (spec D7)', () => {
 
 			expect( specialCalls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:in' ] );
 		} );
+
+		// Issue #707 — a city of federal significance IS its own region, so DaData
+		// gives it ONE key across both levels and the provider drops the self-key
+		// from `ancestors`, leaving the set EMPTY. Measured live: Moscow, Saint
+		// Petersburg, Sevastopol and Baikonur, plus 5 of 8 Belarusian, 5 of 8
+		// Kazakh and 3 of 7 Uzbek cities sampled.
+		it( 'keeps a settlement that IS its own region in its own scoped list, and still excludes a foreign one (issue #707)', async () => {
+			const specialCalls = [];
+
+			window.WoodevLocationRenderers = {
+				'custom-mode:settlement': ( el, options ) => {
+					specialCalls.push( options );
+
+					return { detach: jest.fn() };
+				},
+			};
+
+			// The collapsed shape: the region record carries the SAME key the
+			// settlement does.
+			const within = {
+				key: 'dadata:moscow', level: 'region', provider_id: 'dadata', country: 'RU',
+				region: { name: 'Москва', type: 'г' }, label: 'Москва', ancestors: [],
+			};
+
+			boot( {
+				region: true, settlement: true, mode: 'custom-mode',
+				popular: {
+					RU: [
+						{
+							key: 'dadata:moscow', label: 'Москва', level: 'settlement',
+							record: {
+								key: 'dadata:moscow', provider_id: 'dadata', level: 'settlement', country: 'RU',
+								settlement: { name: 'Москва', type: 'г' }, label: 'Москва', ancestors: [],
+							},
+						},
+						{
+							key: 'dadata:out', label: 'Казань', level: 'settlement',
+							record: {
+								key: 'dadata:out', provider_id: 'dadata', level: 'settlement', country: 'RU',
+								settlement: { name: 'Казань', type: 'г' }, label: 'Казань', ancestors: [ 'dadata:other-region' ],
+							},
+						},
+					],
+				},
+			} );
+
+			expect( specialCalls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:moscow', 'dadata:out' ] );
+
+			specialCalls[ 0 ].onSelect( { record: within } );
+			await settleLastSelect( within );
+
+			// Before #707 this asserted [] — the city was dropped from its OWN list
+			// because the raw ancestor test can never match an empty set.
+			expect( specialCalls[ 0 ].popular().map( ( p ) => p.key ) ).toEqual( [ 'dadata:moscow' ] );
+		} );
+
 	} );
 
 	// -------------------------------------------------------------------

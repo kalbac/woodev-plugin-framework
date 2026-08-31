@@ -837,6 +837,88 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$this->assertSame( 'prov-a:city-1', $chain['records'][ Location_Record::LEVEL_SETTLEMENT ]->key() );
 		}
 
+		/**
+		 * Issue #707 — a city of federal significance IS its own region.
+		 *
+		 * DaData gives Moscow, Saint Petersburg, Sevastopol and Baikonur one
+		 * `fias_id` across both levels, and the provider drops an ancestor equal
+		 * to the row's own id on purpose, so such a record publishes NO ancestors
+		 * at all. The pre-#707 `[] === $ancestors` early return therefore refused
+		 * to derive a region for exactly the busiest cities in the shop.
+		 *
+		 * @return void
+		 */
+		public function test_region_ancestor_is_derived_when_the_settlement_is_its_own_region(): void {
+			$this->stub_region_ancestor_transients();
+
+			$region_record = $this->record( 'prov-a:moscow', Location_Record::LEVEL_REGION );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $region_record ): ?Location_Record {
+					return 'prov-a:moscow' === $key ? $region_record : null;
+				}
+			);
+
+			// The collapsed shape, exactly as measured: one key on both levels,
+			// and an EMPTY ancestor set.
+			$stored = $this->record( 'prov-a:moscow', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayHasKey(
+				Location_Record::LEVEL_REGION,
+				$chain['records'],
+				'a settlement that is its own region must still derive one — issue #707'
+			);
+			$this->assertSame( 'prov-a:moscow', $chain['records'][ Location_Record::LEVEL_REGION ]->key() );
+			$this->assertSame( Location_Record::LEVEL_SETTLEMENT, $chain['current'], 'the derived region must still never become current' );
+		}
+
+		/**
+		 * Issue #707 — offering the record's OWN key as a region candidate must
+		 * not invent a region for an ordinary settlement.
+		 *
+		 * This is what makes the own-key candidate safe to offer unconditionally:
+		 * both derivation paths accept a candidate only when it comes back
+		 * REGION-level, and an ordinary city's own key comes back as a settlement.
+		 *
+		 * @return void
+		 */
+		public function test_region_ancestor_derivation_does_not_invent_a_region_for_an_ordinary_settlement(): void {
+			$this->stub_region_ancestor_transients();
+
+			$settlement_record = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT );
+
+			$provider = new Default_Test_Fake_Resolve_Key_Provider(
+				'prov-a',
+				static function ( string $key ) use ( $settlement_record ): ?Location_Record {
+					// Answers its own key honestly — as a SETTLEMENT, not a region.
+					return 'prov-a:city-1' === $key ? $settlement_record : null;
+				}
+			);
+
+			$stored = $this->record( 'prov-a:city-1', Location_Record::LEVEL_SETTLEMENT, [ 'ancestors' => [] ] );
+			$this->stub_default_locality_options( 'prov-a', Location_Provider_Registry::DEFAULT_LOCALITY_POLICY_FIXED, wp_json_encode( $stored->to_array() ) );
+			$registry = $this->activate( [ $provider ] );
+
+			$service = $this->service( $registry );
+
+			$chain = $service->get_customer_chain();
+
+			$this->assertNotNull( $chain );
+			$this->assertArrayNotHasKey(
+				Location_Record::LEVEL_REGION,
+				$chain['records'],
+				'resolving the record own key to a SETTLEMENT must not be accepted as its region'
+			);
+		}
+
 		// -------------------------------------------------------------------
 		// policy `fixed` — provider switch strands the stored default
 		// (spec §4.6/D15 amendment)

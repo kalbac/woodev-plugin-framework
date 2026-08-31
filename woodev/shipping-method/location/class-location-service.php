@@ -573,13 +573,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return Location_Record|null
 		 */
 		private function region_ancestor_of( Location_Record $settlement ): ?Location_Record {
-			$ancestors = $settlement->ancestors();
-
-			if ( [] === $ancestors ) {
-				return null;
-			}
-
-			$provider = $this->get_registered_provider( $settlement->provider_id() );
+			$candidate_keys = $this->region_candidate_keys( $settlement );
+			$provider       = $this->get_registered_provider( $settlement->provider_id() );
 
 			if ( null === $provider ) {
 				return null;
@@ -589,12 +584,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$region       = null;
 
 			if ( in_array( Location_Provider::CAPABILITY_LIST, $capabilities, true ) ) {
-				$region = $this->region_ancestor_via_dictionary( $provider, $settlement->country(), $ancestors );
+				$region = $this->region_ancestor_via_dictionary( $provider, $settlement->country(), $candidate_keys );
 			}
 
 			if ( null === $region && in_array( Location_Provider::CAPABILITY_RESOLVE_KEY, $capabilities, true ) ) {
-				foreach ( $ancestors as $ancestor_key ) {
-					$region = $this->cached_region_lookup( $provider, $ancestor_key );
+				foreach ( $candidate_keys as $candidate_key ) {
+					$region = $this->cached_region_lookup( $provider, $candidate_key );
 
 					if ( null !== $region ) {
 						break;
@@ -603,8 +598,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			}
 
 			// The guard (#553): never surface a region the settlement does not
-			// actually descend from, regardless of which path produced it.
-			return null !== $region && in_array( $region->key(), $ancestors, true ) ? $region : null;
+			// actually descend from, regardless of which path produced it. Asked
+			// through {@see Location_Record::is_within()} rather than against the
+			// raw ancestor set, so a settlement that IS its own region (issue
+			// #707) passes it while a genuinely unrelated region still cannot.
+			return null !== $region && $settlement->is_within( $region->key() ) ? $region : null;
+		}
+
+		/**
+		 * The keys that could name `$settlement`'s REGION: its published
+		 * ancestors, then its OWN key (issue #707).
+		 *
+		 * The own key is a real candidate because for a city of federal
+		 * significance the settlement and the region ARE one entity with one
+		 * key. Measured live against DaData across its nine countries: Moscow,
+		 * Saint Petersburg, Sevastopol and Baikonur all return
+		 * `region_fias_id === fias_id`, and
+		 * {@see \Woodev\Framework\Shipping\Location\Providers\Dadata_Provider}
+		 * drops an ancestor equal to the row's own id ON PURPOSE — its own
+		 * docblock says that identity "is answered by is_within() separately,
+		 * never carried twice over". So such a record publishes NO ancestors at
+		 * all, and the pre-#707 `[] === $ancestors` early return meant its
+		 * region could never be derived. It is not a Russian edge case either:
+		 * the same collapse hits 5 of 8 measured Belarusian cities, 5 of 8
+		 * Kazakh and 3 of 7 Uzbek ones.
+		 *
+		 * The own key is offered ONLY when the ancestor set is empty, and that
+		 * narrowness is deliberate in both directions:
+		 *
+		 * - It is exactly the measured mechanism. The self-key is dropped by the
+		 *   provider, so a collapsed record has nothing else left; a record that
+		 *   DOES publish ancestors already names its region among them.
+		 * - Offering it alongside real ancestors would cost a second live
+		 *   provider call whenever the first candidate throws — {@see
+		 *   self::cached_region_lookup()} deliberately never caches a failure, so
+		 *   the loop would move on and ask again in the same request. That
+		 *   regression was caught by
+		 *   `test_region_ancestor_derivation_is_never_cached_when_resolve_key_throws`.
+		 *
+		 * A record that is BOTH collapsed and publishes some other ancestor (a
+		 * district, say) would still not derive its region here. That shape was
+		 * not observed in the live measurement, so it is left unhandled rather
+		 * than speculated at; it would show up as a missing region, never as a
+		 * wrong one, because the {@see self::region_ancestor_of()} guard refuses
+		 * anything the settlement is not within.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $settlement Settlement-level record to derive from.
+		 *
+		 * @return string[] Candidate keys — published ancestors, or the record's own key.
+		 */
+		private function region_candidate_keys( Location_Record $settlement ): array {
+			$ancestors = $settlement->ancestors();
+
+			return [] === $ancestors ? [ $settlement->key() ] : $ancestors;
 		}
 
 		/**

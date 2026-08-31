@@ -2003,6 +2003,14 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			$store = new Location_Service_Customer_Store_Probe( new Location_Service_Fake_Session() );
 
 			Functions\when( 'add_action' )->justReturn( true );
+
+			// Issue #707: a settlement publishing NO ancestors now offers its own
+			// key as the region candidate instead of returning early, so the
+			// derivation reaches the transient-backed region cache. This settlement
+			// has no ancestors, so the path is live here — stub the cache. It stays
+			// a MISS throughout, which keeps this test's own subject unchanged.
+			Functions\when( 'get_transient' )->justReturn( false );
+			Functions\when( 'set_transient' )->justReturn( true );
 			Functions\when( 'get_option' )->alias(
 				static function ( $name, $default = null ) {
 					if ( 'woodev_location_token' === $name ) {
