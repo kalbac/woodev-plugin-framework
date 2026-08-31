@@ -200,43 +200,69 @@ export default function App() {
 		} );
 	};
 
-	const onSave = ( providerId, tab ) => {
+	// #515: `edits[providerId]` stays a flat, tab-wide map (see the
+	// react-missing-key-state-bleed-across-tabs gotcha), but a save must only
+	// touch the CURRENTLY OPEN section's own settings — a sibling section's
+	// staged-but-unsaved edits must neither block/pass this section's
+	// validation nor reach the REST payload, and must survive this save.
+	const onSave = ( providerId, tab, section ) => {
 		const providerEdits = edits[ providerId ] || {};
+		const sectionFields = section.fields || {};
+		const sectionFieldIds = Object.keys( sectionFields );
 
-		// Gather this tab's fields across sections (skip connection sections — SP-2).
-		const allFields = {};
-		( tab.sections || [] ).forEach( ( s ) => {
-			if ( ! s.is_connection ) {
-				Object.assign( allFields, s.fields || {} );
+		const sectionEdits = {};
+		sectionFieldIds.forEach( ( id ) => {
+			if ( Object.prototype.hasOwnProperty.call( providerEdits, id ) ) {
+				sectionEdits[ id ] = providerEdits[ id ];
 			}
 		} );
-		const merged = {};
-		Object.keys( allFields ).forEach( ( id ) => {
-			merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
-		} );
 
-		const visibleFields = validatableFields( allFields, merged );
+		let payload = sectionEdits;
 
-		const clientErrors = validateFields( visibleFields, merged, providerEdits );
+		// SP-2: a connection section's credential fields skip client-side field
+		// validation and the provider-mismatch check entirely (unchanged from
+		// before this fix) — the difference now is only that the SAVE ITSELF is
+		// scoped to this one section rather than the whole tab.
+		if ( ! section.is_connection ) {
+			// Tab-wide effective values (excluding connection sections, same as
+			// before) so a cross-section `show_if` still resolves correctly even
+			// though only this section's fields are being validated/saved.
+			const allFields = {};
+			( tab.sections || [] ).forEach( ( s ) => {
+				if ( ! s.is_connection ) {
+					Object.assign( allFields, s.fields || {} );
+				}
+			} );
+			const merged = {};
+			Object.keys( allFields ).forEach( ( id ) => {
+				merged[ id ] = providerEdits[ id ] ?? allFields[ id ].value;
+			} );
 
-		// Issue #406: a FIXED default-locality record from a different provider
-		// than the one THIS save visibly switched away from must block Save. The
-		// exact server resolver can apply a fallback or public filter, so unknown
-		// raw-id states deliberately fall through to its authoritative check.
-		// `visibleFields` already excludes a `default_locality_record` hidden by
-		// `show_if` (policy switched to `off` in this same save), so the rule
-		// lifts itself the same way it does server-side.
-		Object.assign( clientErrors, getBlockingProviderMismatchErrors( allFields, merged ) );
+			const visibleFields = validatableFields( sectionFields, merged );
 
-		if ( Object.keys( clientErrors ).length > 0 ) {
-			setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
-			setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors
-			setErrorRevealGen( ( g ) => g + 1 );
-			dispatch( noticesStore ).createErrorNotice(
-				__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
-				{ type: 'snackbar', id: 'woodev-settings-validate' }
-			);
-			return; // block REST — reveal fresh client errors only
+			const clientErrors = validateFields( visibleFields, merged, sectionEdits );
+
+			// Issue #406: a FIXED default-locality record from a different provider
+			// than the one THIS save visibly switched away from must block Save. The
+			// exact server resolver can apply a fallback or public filter, so unknown
+			// raw-id states deliberately fall through to its authoritative check.
+			// `visibleFields` already excludes a `default_locality_record` hidden by
+			// `show_if` (policy switched to `off` in this same save), so the rule
+			// lifts itself the same way it does server-side.
+			Object.assign( clientErrors, getBlockingProviderMismatchErrors( sectionFields, merged ) );
+
+			if ( Object.keys( clientErrors ).length > 0 ) {
+				setShowErrors( ( p ) => ( { ...p, [ providerId ]: true } ) );
+				setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) ); // clear stale server errors before revealing fresh client errors
+				setErrorRevealGen( ( g ) => g + 1 );
+				dispatch( noticesStore ).createErrorNotice(
+					__( 'Проверьте правильность заполнения полей.', 'woodev-plugin-framework' ),
+					{ type: 'snackbar', id: 'woodev-settings-validate' }
+				);
+				return; // block REST — reveal fresh client errors only
+			}
+
+			payload = buildSavePayload( sectionFields, sectionEdits );
 		}
 
 		setSaving( providerId );
@@ -244,7 +270,7 @@ export default function App() {
 		setSaved( '' );
 		setFieldErrors( ( p ) => ( { ...p, [ providerId ]: {} } ) );
 
-		saveTab( providerId, buildSavePayload( allFields, providerEdits ) )
+		saveTab( providerId, payload )
 			.then( () => {
 				setSaving( '' );
 				setSaved( providerId );
@@ -257,17 +283,18 @@ export default function App() {
 				);
 
 				// Best-effort re-fetch so the UI reflects persisted (coerced) values.
-				// A refresh failure must NOT be reported as a save failure. Clear the
-				// tab's local edits only once the refresh lands.
+				// A refresh failure must NOT be reported as a save failure. Clear only
+				// THIS SECTION's local edits once the refresh lands — a sibling
+				// section's still-pending edits must survive this save (#515).
 				fetchSchema()
 					.then( ( res ) => {
 						if ( res && res.tabs ) {
 							setTabs( res.tabs );
 						}
 						setEdits( ( prev ) => {
-							const next = { ...prev };
-							delete next[ providerId ];
-							return next;
+							const tabEdits = { ...( prev[ providerId ] || {} ) };
+							sectionFieldIds.forEach( ( id ) => delete tabEdits[ id ] );
+							return { ...prev, [ providerId ]: tabEdits };
 						} );
 					} )
 					.catch( () => {} );
@@ -290,7 +317,11 @@ export default function App() {
 	const renderSection = ( tab, sectionId ) => {
 		const section = tab.sections.find( ( s ) => s.id === sectionId ) || tab.sections[ 0 ];
 		const values = edits[ tab.id ] || {};
-		const hasChanges = Object.keys( values ).length > 0;
+		// #515: Save must reflect edits of the OPEN SECTION only — a sibling
+		// section's staged edits must not enable (or count towards) this button.
+		const hasChanges = Object.keys( section.fields || {} ).some( ( id ) =>
+			Object.prototype.hasOwnProperty.call( values, id )
+		);
 
 		// Provider-wide effective values so a field can react to a controller in
 		// any section of this tab (live reactivity still only within the open section).
@@ -346,7 +377,7 @@ export default function App() {
 								variant="primary"
 								isBusy={ saving === tab.id }
 								disabled={ saving === tab.id || ! hasChanges || hasProviderMismatch }
-								onClick={ () => onSave( tab.id, tab ) }
+								onClick={ () => onSave( tab.id, tab, section ) }
 							>
 								{ __( 'Сохранить', 'woodev-plugin-framework' ) }
 							</Button>
