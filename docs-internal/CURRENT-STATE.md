@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-31 (s108).** `main` clean, **no open PRs, no worktrees**. s108 merged **PR #685 and
-#688** and closed **#676, #686, #687** (the challenge-redirect cookie mechanism: jar scoped by
-origin, then RFC 6265 deletion/expiry/Path and RFC 3986 `Location` resolution) plus **#683 by
-measurement**. Filed **#689**. The Codex section below was rewritten because of #683. History →
-`sessions/s108.md`, `sessions/s107.md`.
+**As of 2026-08-31 (s109).** `main` clean. **One PR OPEN ON PURPOSE — #702 (#503, the phone input
+mask): it changes what a customer sees at the checkout, so it waits for the operator's rig pass, not
+for CI.** One worktree survives with it (`s109-503`). s109 merged **#697, #698, #699, #700** and
+closed **#483, #374, #515, #437**, plus **#153** (duplicate) and **#155** (fixed by the panels
+rewrite) from the #644 sweep. Filed **#701**. History → `sessions/s109.md`, `sessions/s108.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,10 +21,10 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s108), sodium enabled, after
-PR #688:** `composer check` **3355** / 8226 / **1 skipped**. phpcs clean, phpstan left to CI.
-Integration **129** / 506 and jest **1568** in 21 suites are s107 figures — s108 touched neither
-layer, so they were NOT re-measured and must be re-run before being compared against.
+**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s109), sodium enabled, after
+PR #700:** unit **3355** / 8229 / **1 skipped**; **integration 129 / 506 — re-measured this session,
+the s107 figure held**; jest **1570** in **22** suites. phpcs clean, phpstan left to CI. On the
+unmerged #702 branch: unit **3365** / 8275 / **1**, jest **1593**.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
@@ -52,16 +52,18 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s108 — 76 in `Бэклог`, `Инбокс` empty, nothing in `В работе`.** Still open:
-**#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**, **#644**
-(material delivered, prioritisation is his), **#652**, **#653** (the inline-jQuery half only),
-**#639**, **#437** (needs a scope conversation — do NOT take autonomously), **#689** (RFC 6265 §5.4 equal-length
-`Path` tie ordering — filed in s108 and DELIBERATELY not fixed, the card carries the reasoning),
-**#692** (the `desc_tip`/`description` audit, filed in s108 from his correction), **#694** (SP-10's
-page shape — in `Инбокс`, his call) and **#695** (reconcile `SHIPPING-PLANS.md` against code and
-board — the root-level plans files sit outside every gate and outside `DOCS-INDEX.md`), and the standing list #474, #483, #515, #331, #332, #374. Deferred to release: #285, #247, and **#567's remainder**
-(150 English msgids with no translation — operator, 29.08.2026: leave them, regenerate the `.pot`
-and rebuild the `.mo` before release).
+**Open cards after s109 — `Инбокс` holds #694 (his call), #503 is in `В работе` until #702 merges.**
+Still open: **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**,
+**#644** (ten cards verified by code in s109 — findings are comments on each card; prioritisation
+stays his), **#652**, **#639**, **#689** (RFC 6265 §5.4 tie ordering — deliberately not fixed),
+**#692** (audited in s109: two of its three points came back empty, the copy half is unstarted),
+**#694**, **#695**, **#701** (per-option `disabled_reason`, filed from #503), and the standing list
+#474, #331, #332. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids —
+operator, 29.08.2026: leave them, regenerate `.pot` and rebuild `.mo` before release).
+
+⚠ **#289 must be re-read before it is triaged again.** It is filed as "недостижимо сегодня" pending a
+multi-country provider — and `Dadata_Provider::DEFAULT_COUNTRIES` has been nine countries by default
+for some time. Its own entry condition has fired (measured s109).
 
 **#621 is held behind #639 deliberately.** The cheap `WC_Order` subclass was measured and REVERTED
 in s103 — `get_order()` must preserve the caller's concrete order class, or a `WC_Subscription`
@@ -84,11 +86,8 @@ boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `session
 
 - **#531** and **#542** (both s95) SHIPPED; the surviving rules are the `guard_custom_settlement()`
   line below and the `src/` TypeScript row in `AGENTS.md`. History: `sessions/s95.md`.
-- **#437 — the scope conversation HAPPENED (31.08.2026); the card is takeable now.** His principle:
-  *we offer narrowing, we never force it; the merchant's only switch is the region field itself* —
-  which retires decisions 8 and 9 outright. Live remainder is decision 1, half-finished. Scope on
-  the card, reasoning in the spec's status banner.
-  Detail on the card and in the spec's own status banner.
+- **#437 CLOSED in s109.** His principle stands as the durable part: *we offer narrowing, we never
+  force it; the merchant's only switch is the region field itself* — decisions 8 and 9 are retired.
 
 **TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
 
@@ -115,7 +114,7 @@ ownership rather than a name heuristic. Gotcha:
 | ~~**#518**~~ | **CLOSED 27.08.2026 — PR #586, accepted live by the operator.** A pickup selection now makes the settlement record EXPLICIT, and the address stays unlocked after a reload. His acceptance note became its own card: the lock is not scoped to pickup-type shipping methods, so under a courier method no pickup selection can clear it. **This row claimed «DECIDED, still NOT started» for two sessions after the card closed** — the miss that prompted the #644 audit. |
 | ~~**#473**~~ | **CLOSED in s98 (#571).** The ownership guard now sits at the top of the `updated_checkout` loop, as it already did in `applyTakeover()`. Two facts worth keeping: the bare `$field.val()` restore is reachable in principle but was NOT reproduced live in four rig scenarios (the cascade's own restore gets there first), and the card's SECOND half — a second select2 from `maybeInitSelect2()` — **cannot happen at all**: it acts on `source_kind === 'suggest'`, ownership tests `'location'`, and `source_kind` is a single scalar (`class-field.php:265,315`). |
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
-| **#483** | `set_label()` on a location field never reaches the markup; the checkout shows WooCommerce's own labels. **Not a regression** — the same was true before #481. Possibly correct behaviour; filed as a question in Инбокс. |
+| ~~**#483**~~ | **CLOSED in s109 (PR #697).** And the card's diagnosis was wrong: the label DOES reach `get_checkout_fields()`; WooCommerce's `address-i18n.js` then overwrites the rendered `<label>` from `get_country_locale()['default']`, which carries one for `state`/`city`/`address_1`/`postcode`. A final-DOM reading cannot tell "never rendered" from "rendered and replaced". Contract: `set_label()` applies only to fields WC does not define itself. |
 
 **Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
 both columns, but exactly **one live cascade**, on the column that currently determines delivery,
