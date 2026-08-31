@@ -1556,6 +1556,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * Whether WooCommerce actually kept a field on the checkout form for the given section.
+		 *
+		 * A seam, deliberately, rather than a bare `WC()->checkout()->get_checkout_fields()`
+		 * call: mocking the `WC` function with Brain Monkey DEFINES it globally and PHP cannot
+		 * un-define it, so it leaks into every later test in the process and breaks the ones
+		 * that assert WooCommerce is ABSENT (gotcha `brain-monkey-function-pollution`).
+		 * Overriding a method costs a subclass and pollutes nothing — the same reason
+		 * {@see self::wc_customer()} exists.
+		 *
+		 * Reads {@see \WC_Checkout::get_checkout_fields()}, which memoizes PER REQUEST. This
+		 * method's only caller, {@see self::validate()}, runs from `handle_checkout_process()`
+		 * (on `woocommerce_checkout_process`) and `process()` (on
+		 * `woocommerce_checkout_order_processed`) — both strictly AFTER
+		 * `WC_Checkout::process_checkout()`'s OWN first call to `get_posted_data()` →
+		 * `get_checkout_fields()` has already applied `woocommerce_checkout_fields` (our own
+		 * {@see self::inject()}) and cached the result; `validate_checkout()` reuses that cache
+		 * and never re-applies the filter (verified call order — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy::merge_chosen_shipping_methods()}'s
+		 * own docblock for the exact `WC_Checkout::process_checkout()` sequence this rests on).
+		 * So this read is safe despite `inject()` being hooked on the very filter whose cached
+		 * result it reads: by the time `validate()` calls this, the filter has already run for
+		 * this request and will not run again.
+		 *
+		 * WC unavailable → presence is UNKNOWN, and the lean is NOT rendered: an un-enforced
+		 * required field is recoverable, an order that can never be placed is not (issue #708).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id      field id as WooCommerce keys its checkout fields
+		 * @param string $section WC fieldset key (e.g. `'billing'`, `'shipping'`, `'order'`)
+		 *
+		 * @return bool
+		 */
+		protected function field_rendered_by_woocommerce( string $id, string $section ): bool {
+			if ( ! function_exists( 'WC' ) || ! method_exists( WC(), 'checkout' ) || ! WC()->checkout() ) {
+				return false;
+			}
+
+			$fields = WC()->checkout()->get_checkout_fields( $section );
+
+			return is_array( $fields ) && array_key_exists( $id, $fields );
+		}
+
+		/**
 		 * Validates sanitized field values, blocking checkout on any failure.
 		 *
 		 * A required field that is blank fails. A field whose `validate_callback` returns
@@ -1566,6 +1610,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * which handles both plain booleans and conditional condition-spec arrays (A2 gating).
 		 * Pass `$state` with the runtime context (chosen shipping method, billing country) so
 		 * condition-spec `required` values can be evaluated correctly.
+		 *
+		 * A field carrying a `takeover_condition` is deliberately left OFF the WooCommerce form
+		 * by {@see self::inject()} — "takeover fields are owned entirely by the CLIENT" (see
+		 * that method's own docblock). Enforcing `required` on such a field regardless made
+		 * checkout permanently unblockable whenever nobody actually rendered it (issue #708):
+		 * the client-side takeover can fail to apply (its condition is FALSE for this country),
+		 * and separately WooCommerce's own per-field visibility settings (e.g.
+		 * `woocommerce_checkout_company_field = hidden`) can remove the field regardless of
+		 * anything this framework decided. So a takeover field's `required` is enforced ONLY
+		 * when BOTH hold:
+		 *  1. OWNERSHIP — its `takeover_condition` evaluates `true` for this submit's country
+		 *     (the same `['country' => ...]` context shape {@see self::inject_states()} builds);
+		 *  2. PRESENCE — {@see self::field_rendered_by_woocommerce()} confirms WooCommerce
+		 *     actually kept the field for its section.
+		 * Either failing skips the required check for that field only; it still runs its
+		 * `validate_callback` as normal. A field WITHOUT a `takeover_condition` is injected by
+		 * `inject()` and present by construction — this guard never touches it, so its
+		 * behaviour is unchanged.
 		 *
 		 * After the per-field loop an independent pickup backstop runs when
 		 * {@see set_requires_pickup_methods()} has been called: if the chosen method is one of
@@ -1605,6 +1667,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              {@see Checkout_Fields::get_fields()} directly, so a Location-Provider
 		 *              field's Rule 7b fan-out is validated under the ids it actually attaches
 		 *              to (issue #458).
+		 * @since 2.0.2 A takeover field's `required` is now enforced only when its condition
+		 *              owns the field AND WooCommerce actually rendered it (issue #708).
 		 *
 		 * @param array<string, mixed> $values clean values keyed by field id
 		 * @param array<string, mixed> $state  flat checkout-state map, e.g.
@@ -1619,6 +1683,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			foreach ( $this->effective_fields() as $id => $field ) {
 				$value    = $values[ $id ] ?? '';
 				$required = Checkout_Condition::is_required( $field['required'], $state );
+
+				if ( $required && null !== $field['takeover_condition'] ) {
+					$owns_field = (bool) ( $field['takeover_condition'] )( [ 'country' => (string) ( $state['country'] ?? '' ) ] );
+					$required   = $owns_field && $this->field_rendered_by_woocommerce( $id, (string) $field['section'] );
+				}
 
 				if ( $required && self::is_blank( $value ) ) {
 					$this->add_error( self::required_message( $field ) );
