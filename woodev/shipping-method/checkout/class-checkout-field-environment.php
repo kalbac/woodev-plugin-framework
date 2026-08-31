@@ -17,17 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Environment' ) ) :
 
-	/**
-	 * Immutable value object carrying the two facts the «Поля» availability rules
-	 * gate on: whether the store serves the block checkout, and how many countries
-	 * it ships to.
-	 *
-	 * PHP 7.4 target — no constructor property promotion, so the two properties are
-	 * declared and assigned long-hand.
-	 *
-	 * @since 2.0.2
-	 */
-	final class Checkout_Field_Environment {
+	class Checkout_Field_Environment {
 
 		/**
 		 * Whether WooCommerce currently serves the checkout BLOCK (as opposed to the
@@ -46,16 +36,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_En
 		public $shipping_country_count;
 
 		/**
+		 * The store's shipping countries, code => name
+		 * ({@see \WC_Countries::get_shipping_countries()}). Card #503's
+		 * `phone_field_format` option needs the actual list (not just the count) to
+		 * build one select option per country. Optional, defaulting to `[]`, so
+		 * every existing 2-arg call site (this class predates card #503) keeps
+		 * working unchanged — clean-break policy allows a signature change here,
+		 * but there is no reason to force a mechanical edit on every call site
+		 * that has no use for the new fact.
+		 *
+		 * @var array<string,string>
+		 */
+		public $shipping_countries;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param bool $block_checkout          whether the block checkout is in use.
-		 * @param int  $shipping_country_count  how many countries the store ships to.
+		 * @param bool                 $block_checkout          whether the block checkout is in use.
+		 * @param int                  $shipping_country_count  how many countries the store ships to.
+		 * @param array<string,string> $shipping_countries      the store's shipping countries, code => name.
 		 */
-		public function __construct( bool $block_checkout, int $shipping_country_count ) {
+		public function __construct( bool $block_checkout, int $shipping_country_count, array $shipping_countries = [] ) {
 			$this->block_checkout         = $block_checkout;
 			$this->shipping_country_count = $shipping_country_count;
+			$this->shipping_countries     = $shipping_countries;
 		}
 
 		/**
@@ -74,16 +80,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_En
 		 * WooCommerce itself is inactive.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also resolves `$shipping_countries` (card #503).
 		 *
 		 * @return self
 		 */
 		public static function from_wc(): self {
-			$block = \Woodev_Blocks_Handler::is_checkout_block_in_use();
-			$count = function_exists( 'WC' ) && WC()->countries
-				? count( WC()->countries->get_shipping_countries() )
-				: 0;
+			$block     = \Woodev_Blocks_Handler::is_checkout_block_in_use();
+			$countries = function_exists( 'WC' ) && WC()->countries
+				? WC()->countries->get_shipping_countries()
+				: [];
 
-			return new self( $block, $count );
+			return new self( $block, count( $countries ), $countries );
 		}
 	}
 

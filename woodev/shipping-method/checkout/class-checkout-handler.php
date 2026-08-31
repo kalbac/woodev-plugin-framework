@@ -598,17 +598,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				true
 			);
 
+			// Checkout field policy (Task 6, issue #362): store-level, reached through
+			// the tab singleton rather than constructed here — its availability rules
+			// must not be computed twice with a different answer than the «Поля»
+			// section itself uses. Card #503's phone-mask config (below) reads the
+			// SAME instance for the identical reason.
+			$field_settings = \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->get_field_settings();
+
 			$config          = ( new Checkout_Config(
 				$this->plugin_id(),
 				rtrim( rest_url( 'woodev/v1' ), '/' ),
 				wp_create_nonce( 'wp_rest' ),
 				$this->wc_country_codes(),
 				$this->location_service(),
-				// Checkout field policy (Task 6, issue #362): store-level, reached through
-				// the tab singleton rather than constructed here — its availability rules
-				// must not be computed twice with a different answer than the «Поля»
-				// section itself uses.
-				\Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab::instance()->get_field_settings()
+				$field_settings
 			) )->build( Checkout_Fields::from_array( array_values( $this->effective_fields() ) ) );
 			// No `required` string here any more (#274): the client no longer renders an
 			// inline «Заполните обязательное поле.» under the field or under the pickup
@@ -669,6 +672,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				// "wired now, lands with zero code changes once the file exists" discipline as
 				// the two scripts above (see `enqueue_script_if_built()`'s own docblock).
 				$this->enqueue_style_if_built( 'woodev-location-styles', 'css/frontend/location.css', [] );
+			}
+
+			// Card #503: the phone-input mask. Its config rides inside this SAME `$config`
+			// object rather than a second `wp_localize_script()` call — `phone-mask.js`
+			// discovers it by the same `woodev_checkout_field_config_` PREFIX scan
+			// `checkout-field-classic.js` already uses. The script is enqueued only when
+			// the merchant turned the option on AND on the classic checkout — «Не
+			// использовать» (the default) and the block checkout both mean zero extra
+			// request, not an inert one.
+			$config['phone_mask'] = $field_settings->get_phone_mask_config();
+
+			if ( 'off' !== $config['phone_mask']['mode'] && ! \Woodev_Blocks_Handler::is_checkout_block_in_use() ) {
+				$mask_path = self::asset_path( 'js/frontend/phone-mask.js' );
+
+				wp_enqueue_script(
+					'woodev-phone-mask',
+					self::asset_url( 'js/frontend/phone-mask.js' ),
+					// Depends on `woodev-checkout-field-classic` purely for LOAD ORDER: WP prints
+					// a handle's `wp_localize_script()` data immediately before that handle's own
+					// `<script>` tag, so by the time this file runs, `window.woodev_checkout_field_config_*`
+					// is already on `window` — the same guarantee `location-select-modes.js` relies
+					// on for `wc_country_select_params` (see the comment on that enqueue above).
+					[ 'jquery', 'woodev-checkout-field-classic' ],
+					file_exists( $mask_path ) ? (string) filemtime( $mask_path ) : (string) \Woodev_Plugin::VERSION,
+					true
+				);
 			}
 
 			wp_localize_script(

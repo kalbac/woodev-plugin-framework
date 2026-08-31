@@ -73,15 +73,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 			parent::__construct( 'checkout_fields' );
 		}
 
-		/**
-		 * Gets the settings ids this handler owns, in registration order. Used by
-		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab} to build the
-		 * `Settings_Section` without duplicating this handler's own field list.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return string[]
-		 */
 		public function get_owned_setting_ids(): array {
 			return [
 				'field_order_preset',
@@ -89,6 +80,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				'region_field',
 				'address_field',
 				'postcode_field',
+				'phone_field_format',
 			];
 		}
 
@@ -143,6 +135,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 *  - `postcode_field` — `hide_for_pickup` allowed only on the classic checkout
 		 *    (`remove` works on both); clamps to `show` when the stored value names an
 		 *    option not currently offered.
+		 *  - `phone_field_format` — never disabled here either, returned as stored.
+		 *    {@see Checkout_Field_Policy} calls `effective()` for every owned id, so this
+		 *    id needs SOME answer, but it has no `field_order_preset`/`region_field`-style
+		 *    `'show'` fallback to clamp to — a country losing its pattern is a
+		 *    {@see self::get_phone_mask_config()}/JS-side no-op, never a rewrite (see that
+		 *    method's own docblock).
 		 *
 		 * @since 2.0.2
 		 *
@@ -156,6 +154,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 
 			if ( 'field_order_preset' === $id ) {
 				return (bool) $this->get_value( $id );
+			}
+
+			if ( 'phone_field_format' === $id ) {
+				return (string) $this->get_value( $id );
 			}
 
 			switch ( $id ) {
@@ -288,6 +290,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				]
 			);
 
+			$this->register_setting(
+				'phone_field_format',
+				\Woodev_Setting::TYPE_STRING,
+				[
+					'name'    => __( 'Формат поля телефон', 'woodev-plugin-framework' ),
+					'options' => $this->phone_field_format_options(),
+					'default' => 'off',
+				]
+			);
+			$this->register_control(
+				'phone_field_format',
+				\Woodev_Control::TYPE_SELECT,
+				[
+					'tooltip' => __( 'Маска ввода телефона на чекауте — не проверка формата (за неё отвечает перевозчик), а только удобство: лишний символ ввести нельзя, недобранный номер отправить можно. «Автоматически» — маска следует за страной, которую выбрал покупатель. Конкретная страна жёстко закрепляет маску за собой, независимо от выбора покупателя. Работает только на классическом чекауте.', 'woodev-plugin-framework' ),
+				]
+			);
+
 			$this->apply_availability();
 		}
 
@@ -337,6 +356,69 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 					trim( $postcode_control->get_description() . ' ' . __( 'Значение «Скрывать для методов ПВЗ» недоступно на блочном чекауте.', 'woodev-plugin-framework' ) )
 				);
 			}
+		}
+
+
+		/**
+		 * Builds the `phone_field_format` select's options: «Не использовать»,
+		 * «Автоматически», then one entry per shipping country (design per card
+		 * #503). A country with no known mask ({@see Phone_Mask_Patterns::get()})
+		 * is NOT hidden and NOT dropped from the list — a merchant scanning the
+		 * list must be able to see every country the store ships to — but its
+		 * label says so, so picking it is never a silently dead choice.
+		 *
+		 * This is a label-embedded reason, not the control-level
+		 * `disabled`/`disabled_reason` mechanism {@see \Woodev_Control} carries
+		 * elsewhere in this class (`country_field`, `address_field`,
+		 * `postcode_field`): that mechanism disables the WHOLE control with ONE
+		 * reason, never a single option among many, and the React `SelectField`
+		 * component ({@see \Woodev\Framework\Settings\Field_Schema}, `select-field.js`)
+		 * has no per-option disabled affordance to plug into — confirmed by
+		 * reading both before choosing this shape. Filing that gap as a follow-up
+		 * card is more honest than pretending the mechanism already fits.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,string>
+		 */
+		private function phone_field_format_options(): array {
+			$options = [
+				'off'  => __( 'Не использовать', 'woodev-plugin-framework' ),
+				'auto' => __( 'Автоматически', 'woodev-plugin-framework' ),
+			];
+
+			$patterns = Phone_Mask_Patterns::get();
+
+			foreach ( $this->env->shipping_countries as $code => $name ) {
+				$options[ $code ] = isset( $patterns[ $code ] )
+					? $name
+					// translators: %s: country name.
+					: sprintf( __( '%s (маска не описана)', 'woodev-plugin-framework' ), $name );
+			}
+
+			return $options;
+		}
+
+		/**
+		 * The `phone-mask.js` config block: which mode the merchant picked, and
+		 * the country → template table it needs to act on that mode. Read
+		 * directly from the STORED value (never {@see self::effective()}) —
+		 * unlike this class's other four settings, `phone_field_format`'s
+		 * availability does not depend on the checkout-experience/country-count
+		 * facts {@see Checkout_Field_Environment} carries; a country losing its
+		 * pattern (a plugin unhooking {@see Phone_Mask_Patterns::FILTER_PATTERNS})
+		 * degrades to a no-op on the JS side (same as picking «Не использовать»),
+		 * never to a clamp-and-rewrite.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{mode: string, patterns: array<string,string>}
+		 */
+		public function get_phone_mask_config(): array {
+			return [
+				'mode'     => (string) $this->get_value( 'phone_field_format' ),
+				'patterns' => Phone_Mask_Patterns::get(),
+			];
 		}
 	}
 

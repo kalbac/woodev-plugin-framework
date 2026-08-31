@@ -20,6 +20,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-control.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/class-setting.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-api/abstract-class-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-environment.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-phone-mask-patterns.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-policy.php';
 
@@ -53,7 +54,7 @@ final class CheckoutFieldSettingsTest extends TestCase {
 		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
 
 		$this->assertSame(
-			[ 'field_order_preset', 'country_field', 'region_field', 'address_field', 'postcode_field' ],
+			[ 'field_order_preset', 'country_field', 'region_field', 'address_field', 'postcode_field', 'phone_field_format' ],
 			$s->get_owned_setting_ids()
 		);
 		$this->assertTrue( $s->get_value( 'field_order_preset' ) );
@@ -61,6 +62,7 @@ final class CheckoutFieldSettingsTest extends TestCase {
 		$this->assertSame( 'show', $s->get_value( 'country_field' ) );
 		$this->assertSame( 'show', $s->get_value( 'region_field' ) );
 		$this->assertSame( 'show', $s->get_value( 'address_field' ) );
+		$this->assertSame( 'off', $s->get_value( 'phone_field_format' ) );
 	}
 
 	public function test_single_country_classic_checkout_disables_nothing(): void {
@@ -216,5 +218,75 @@ final class CheckoutFieldSettingsTest extends TestCase {
 			$this->assertNotNull( $control, "Setting \"{$id}\" has no control at all — a tooltip needs one." );
 			$this->assertNotSame( '', $control->get_tooltip(), "Setting \"{$id}\" has an empty tooltip." );
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// phone_field_format (card #503) — registration, offered options, the
+	// disabled-country (no known pattern) case, and the JS config block.
+	// -------------------------------------------------------------------------
+
+	public function test_phone_field_format_offers_off_auto_then_every_shipping_country(): void {
+		$s = new Checkout_Field_Settings(
+			new Checkout_Field_Environment( false, 3, [ 'RU' => 'Россия', 'BY' => 'Беларусь', 'DE' => 'Германия' ] )
+		);
+
+		$options = $s->get_setting( 'phone_field_format' )->get_options();
+
+		$this->assertSame( [ 'off', 'auto', 'RU', 'BY', 'DE' ], array_keys( $options ) );
+	}
+
+	public function test_a_shipping_country_with_a_known_pattern_keeps_its_plain_name(): void {
+		$s = new Checkout_Field_Settings(
+			new Checkout_Field_Environment( false, 1, [ 'RU' => 'Россия' ] )
+		);
+
+		$this->assertSame( 'Россия', $s->get_setting( 'phone_field_format' )->get_options()['RU'] );
+	}
+
+	/**
+	 * The disabled-country case (design note in card #503): a country with no
+	 * known mask template is never hidden from the list and the control is
+	 * never disabled outright — it stays selectable (picking it degrades to a
+	 * no-op on the JS side, same as «Не использовать») but its OWN label says
+	 * so, so it is never a silently dead choice. See
+	 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::phone_field_format_options()}'s
+	 * docblock for why this is a label-embedded reason rather than this
+	 * class's usual control-level `disabled`/`disabled_reason`.
+	 */
+	public function test_a_shipping_country_without_a_known_pattern_is_shown_but_marked_unavailable(): void {
+		$s = new Checkout_Field_Settings(
+			new Checkout_Field_Environment( false, 1, [ 'DE' => 'Германия' ] )
+		);
+
+		$options = $s->get_setting( 'phone_field_format' )->get_options();
+
+		$this->assertArrayHasKey( 'DE', $options );
+		$this->assertStringContainsString( 'Германия', $options['DE'] );
+		$this->assertStringContainsString( 'маска не описана', $options['DE'] );
+		$this->assertFalse( $s->get_setting( 'phone_field_format' )->get_control()->is_disabled() );
+	}
+
+	public function test_default_is_off(): void {
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1, [ 'RU' => 'Россия' ] ) );
+
+		$this->assertSame( 'off', $s->get_value( 'phone_field_format' ) );
+	}
+
+	public function test_get_phone_mask_config_reads_the_stored_mode_and_carries_the_pattern_table(): void {
+		Functions\when( 'get_option' )->alias( fn( $k, $d = false ) => 'woodev_checkout_fields_phone_field_format' === $k ? 'auto' : $d );
+
+		$s      = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1, [ 'RU' => 'Россия' ] ) );
+		$config = $s->get_phone_mask_config();
+
+		$this->assertSame( 'auto', $config['mode'] );
+		$this->assertArrayHasKey( 'RU', $config['patterns'] );
+		$this->assertStringContainsString( '#', $config['patterns']['RU'] );
+	}
+
+	public function test_get_phone_mask_config_defaults_to_off(): void {
+		$s      = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+		$config = $s->get_phone_mask_config();
+
+		$this->assertSame( 'off', $config['mode'] );
 	}
 }
