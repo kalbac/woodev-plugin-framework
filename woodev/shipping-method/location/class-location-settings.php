@@ -287,15 +287,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			// found a case one shared value could not express: НП = `ajax-select2`
 			// while region stays `typeahead`, or the reverse).
 			//
-			// Issue #404: the two axes no longer always offer the SAME values —
-			// `$this->field_mode_region_options` and
-			// `$this->field_mode_settlement_options` are two SEPARATE maps, the
-			// caller has already narrowed the settlement one to drop
-			// `related-list` when the region axis is not itself `related-list`
-			// (an unscoped country-wide list DOES work, issue #407, but is not
-			// guaranteed COMPLETE — `related-list`'s "load once, search
-			// locally" promise only reliably holds scoped to a region).
-			//
 			// `field_mode_region` alone carries a `show_if` on `region_field`
 			// (owned by the sibling `Checkout_Field_Settings` handler — resolved
 			// across handlers by `Composite_Settings_Handler`): once the region
@@ -306,12 +297,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			// control; `Composite_Settings_Handler::filter_visible_values()`
 			// splits a submission by owning child BEFORE evaluating conditions,
 			// so a cross-handler condition has no server-side enforcement power
-			// of its own). The settlement axis's issue #404 condition is
-			// enforced the SAME way — narrowed OFFERED options plus a read-side
-			// clamp in `Location_Provider_Registry::get_field_mode_settlement()`
-			// — even though both axes live in THIS handler and a same-handler
-			// `show_if` would carry real server-side enforcement here; one
-			// mechanism per concern beats two that must agree.
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_FIELD_MODE_REGION,
 				\Woodev_Setting::TYPE_STRING,
@@ -350,14 +335,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT,
 				\Woodev_Control::TYPE_SELECT,
 				[
-					// Issue #404: «Предустановленный список» is offered here only when
-					// the region axis is ALSO «Предустановленный список» — an unscoped
-					// country-wide list DOES work (issue #407), but `/location/list`
-					// caps every response, so it is not guaranteed COMPLETE the way a
-					// region-scoped one is. Issue #407: no BLOCKING mechanism exists
-					// or is planned — the field stays usable throughout, it just
-					// narrows to the chosen region once one is picked.
-					'tooltip' => __( 'Как покупатель выбирает населённый пункт — те же три варианта, что и у поля «Регион» (см. подсказку там). «Предустановленный список» доступен здесь, только если для «Региона» тоже выбран «Предустановленный список»: этот режим обещает список, загруженный целиком, — а по всей стране такой список слишком велик, чтобы гарантированно загрузиться полностью, тогда как по одному региону это, как правило, так. Пока регион не выбран, список показывает пункты по всей стране, но не обязательно все; после выбора региона сужается до него и становится полным — поле при этом остаётся доступным, блокировки нет.', 'woodev-plugin-framework' ),
+					'tooltip' => __( 'Как покупатель выбирает населённый пункт. «Текст с подсказками» — обычное поле, варианты появляются по мере ввода. «Список с поиском» — раскрывающийся список, который запрашивает варианты у провайдера на каждый введённый символ.', 'woodev-plugin-framework' ),
 				]
 			);
 

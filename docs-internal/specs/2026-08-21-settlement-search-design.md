@@ -1,6 +1,6 @@
 # Settlement search — replacing the preset settlement list
 
-> Design, 2026-08-21 (s84). Decided with the operator in conversation; nothing implemented yet.
+> Design, 2026-08-21 (s84). Decision 1 implemented in s109; remaining decisions are not part of #437.
 > Supersedes the settlement half of `2026-08-18-shipping-settings-v2-design.md`.
 
 ## The problem, stated correctly
@@ -10,7 +10,7 @@
 plugin's "Связанный список"): **3–5 seconds to render**, and the resulting `<select>` stays
 palpably slow to interact with afterwards.
 
-The current mitigation is `Location_Controller::LIST_HARD_CAP = 500` plus a `truncated` flag.
+The former mitigation was `Location_Controller::LIST_HARD_CAP = 500` plus a `truncated` flag.
 **Both halves are wrong:**
 
 - 500 is a **blind prefix**. We never know which settlements fall off, so no value of N is
@@ -48,27 +48,23 @@ the discriminator is not in the name — it is the **region**.
 
 ### 1. The settlement axis is never a flat preset list
 
-Removed as a mode. `list_localities()` for settlements and `LIST_HARD_CAP` are **deleted, not
-tuned**. #411 closes by the truncation ceasing to exist, not by warning about it.
+Removed as a mode. The settlement axis no longer offers `related-list`; `LIST_HARD_CAP`, the
+`limit` request argument, and the `truncated` response field are **deleted, not tuned**. The
+`/location/list` route remains for the region axis. #411 closes by the truncation ceasing to exist,
+not by warning about it.
 
-The stored option value for the removed mode **migrates to search**. Installed sites must see their
-setting in place after the upgrade, not an empty field.
-
-> **Amended 24.08.2026 (operator): no migration will be written.** Two reasons, and the second is
-> the load-bearing one.
+> **Amended 24.08.2026 (operator), settled in s109: no migration will be written.** Two reasons,
+> and the second is the load-bearing one.
 >
 > 1. There are no live consumers of the framework yet — the operator is its only user.
 > 2. **The failure this clause guards against cannot happen anyway.**
->    `Location_Provider_Registry::get_field_mode_settlement()` already clamps on READ:
->    `in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD`. A stored value that is
->    no longer offered falls back to a valid mode — it never renders as an empty field. The
+>    `Location_Provider_Registry::get_field_mode_settlement()` clamps on READ. A stored value that
+>    is no longer offered falls back to a valid mode — it never renders as an empty field. The
 >    "migration" would only be choosing WHICH valid mode it lands on.
 >
-> So what remains is a one-line taste question inside that clamp, to be settled when #437 is
-> actually written: a stored `related-list` on the settlement axis currently lands on
-> `typeahead` (plain text with suggestions), and the argument for landing it on `ajax-select2`
-> instead is that a preset list was a dropdown and search is its successor, so the shopper's UI
-> changes less. **No upgrade routine, no data touched, no migration code.**
+> The read-side decision is `related-list` → `ajax-select2`: a preset list was a dropdown and the
+> searchable list is its successor, so the shopper's UI changes less. **No upgrade routine, no data
+> touched, no migration code.**
 
 ### 2. The provider contract for settlements becomes a search
 
