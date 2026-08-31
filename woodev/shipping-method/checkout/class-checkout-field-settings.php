@@ -195,7 +195,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				'field_order_preset',
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Единый порядок и формат полей адреса', 'woodev-plugin-framework' ),
+					'name'    => __( 'Единый порядок полей', 'woodev-plugin-framework' ),
 					'default' => true,
 				]
 			);

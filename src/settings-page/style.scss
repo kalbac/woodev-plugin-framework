@@ -104,6 +104,24 @@
 			margin-left: auto;
 		}
 	}
+
+	// EXCEPTION (operator, 31.08.2026): a GROUPED block keeps the shared card
+	// layout. `.woodev-field__option-group` is its own bordered card of flush rows
+	// — there is no label column inside it to line up with, and the rule above
+	// would break the card apart. Restores every property the override changed,
+	// rather than relying on specificity to leave some of them behind.
+	.woodev-field__option-group .woodev-field__toggle-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 20px;
+		max-width: none;
+		padding: 16px 17px;
+
+		.woodev-field__toggle-label .woodev-field__tip {
+			margin-left: 0;
+		}
+	}
 }
 
 .woodev-connection {

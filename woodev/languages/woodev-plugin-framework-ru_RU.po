@@ -2106,7 +2106,7 @@ msgid "Поле «Город» было изменено сторонним ко
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:198
-msgid "Единый порядок и формат полей адреса"
+msgid "Единый порядок полей"
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:206
