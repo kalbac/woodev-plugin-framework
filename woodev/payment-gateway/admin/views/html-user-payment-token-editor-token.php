@@ -45,7 +45,7 @@
 
 				<?php
 				// Build the input attributes
-				$attributes = array();
+				$attributes = [];
 
 				foreach ( $field['attributes'] as $name => $value ) {
 					$attributes[] = esc_attr( $name ) . '="' . esc_attr( $value ) . '"';

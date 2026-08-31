@@ -85,7 +85,9 @@ if ( ! class_exists( 'Woodev_Packer_Virtual_Box' ) ) :
 			// a items placed side-by-side along L, b along W, c stacked along H.
 			// c is set to ceil(N / (a×b)) — the minimum layers needed to hold all items.
 			for ( $a = 1; $a <= $n; $a++ ) {
-				for ( $b = 1; $b <= (int) ceil( $n / $a ); $b++ ) {
+				$max_b = (int) ceil( $n / $a );
+
+				for ( $b = 1; $b <= $max_b; $b++ ) {
 					$c = (int) ceil( $n / ( $a * $b ) );
 
 					$l = $sum_l[ $a ];

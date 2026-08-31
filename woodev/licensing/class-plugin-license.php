@@ -87,7 +87,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *
 		 * @var array<string, Woodev_Plugins_License>
 		 */
-		private static $registered_instances = array();
+		private static $registered_instances = [];
 
 		/**
 		 * Download ids registered by MORE THAN ONE distinct plugin (§9.3).
@@ -101,7 +101,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *
 		 * @var array<string, bool>
 		 */
-		private static $ambiguous_download_ids = array();
+		private static $ambiguous_download_ids = [];
 
 		/**
 		 * Class constructor
@@ -195,16 +195,16 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			// The command vocabulary needs no registration step: the dispatcher builds
 			// its SEALED registry internally (get_commands(), holistic-round ruling).
 
-			add_action( 'admin_notices', array( $this, 'notices' ) );
+			add_action( 'admin_notices', [ $this, 'notices' ] );
 
-			add_action( 'admin_print_scripts-plugins.php', array( $this, 'plugin_screen_scripts' ) );
+			add_action( 'admin_print_scripts-plugins.php', [ $this, 'plugin_screen_scripts' ] );
 
 			add_action(
 				'in_plugin_update_message-' . plugin_basename( $this->plugin->get_plugin_file() ),
-				array(
+				[
 					$this,
 					'plugin_row_license_missing',
-				),
+				],
 				10,
 				2
 			);
@@ -244,7 +244,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function get_license_status( $status_name ) {
 
-			$statuses = array(
+			$statuses = [
 				'missing'               => __( 'Лицензия не найдена', 'woodev-plugin-framework' ),
 				'missing_url'           => __( 'URL сайта не передан', 'woodev-plugin-framework' ),
 				'license_not_activable' => __( 'Это родительский ключ комплекта', 'woodev-plugin-framework' ),
@@ -258,7 +258,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'site_inactive'         => __( 'Сайт не активирован для этой лицензии', 'woodev-plugin-framework' ),
 				'invalid'               => __( 'Неверный лицензионный ключ', 'woodev-plugin-framework' ),
 				'valid'                 => __( 'Лицензия активна', 'woodev-plugin-framework' ),
-			);
+			];
 
 			return isset( $statuses[ $status_name ] ) ? $statuses[ $status_name ] : __( 'Неизвестный статус', 'woodev-plugin-framework' );
 		}
@@ -279,24 +279,24 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			if ( ! in_array(
 				self::strtolower( $action ),
-				array(
+				[
 					'activate_license',
 					'deactivate_license',
 					'check_license',
 					'get_version',
-				)
+				]
 			) ) {
 				return false;
 			}
 
 			// Data to send to the API.
-			$api_params = array(
+			$api_params = [
 				'edd_action' => $action,
 				'license'    => $license_key,
 				'item_id'    => $this->plugin->get_download_id(),
 				'url'        => home_url(),
 				'version'    => $this->plugin->get_version(),
-			);
+			];
 
 			// D-W3 carrier scope (holistic-round ruling): the weekly check_license
 			// call and the updater get_version poll are the ONLY command/ack
@@ -315,11 +315,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			// re-review #1, lost-ack protection §9.9.
 			$ack_store        = ( $is_check_license && class_exists( 'Woodev_License_Command_Acks' ) ) ? new Woodev_License_Command_Acks() : null;
 			$has_pending_acks = false;
-			$sent_ack_nonces  = array();
+			$sent_ack_nonces  = [];
 
 			if ( null !== $ack_store ) {
 				$pending = $ack_store->get_pending();
-				if ( array() !== $pending ) {
+				if ( [] !== $pending ) {
 					$api_params['consumed_command_nonces'] = $pending;
 					$has_pending_acks                      = true;
 					$sent_ack_nonces                       = array_values( array_filter( array_column( $pending, 'nonce' ), 'is_string' ) );
@@ -369,7 +369,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 							}
 							if ( is_array( $acks_received ) ) {
 								$confirmed = array_values( array_intersect( array_filter( $acks_received, 'is_string' ), $sent_ack_nonces ) );
-								if ( array() !== $confirmed ) {
+								if ( [] !== $confirmed ) {
 									$ack_store->confirm_received( $confirmed );
 								}
 							}
@@ -595,7 +595,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			// renewal-checkout link is a single source of truth (get_renewal_url()).
 			$messages = new Woodev_License_Messages( $this->woodev_license );
 
-			return array(
+			return [
 				'plugin_id'       => (string) $this->plugin->get_download_id(),
 				'plugin_name'     => $this->plugin->get_plugin_name(),
 				'license_key'     => (string) $this->license_key,
@@ -613,7 +613,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'beta_enabled'    => (bool) $this->plugin->is_beta_allowed(),
 				// Additive (2.0.2): renewal-checkout URL for the «Продлить» button.
 				'renewal_url'     => $messages->get_renewal_url(),
-			);
+			];
 		}
 
 		/**
@@ -632,7 +632,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			$status = $this->woodev_license->get_display_status();
 
-			$error_statuses = array(
+			$error_statuses = [
 				'expired',
 				'disabled',
 				'revoked',
@@ -645,7 +645,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				'site_inactive',
 				'no_activations_left',
 				'license_not_activable',
-			);
+			];
 
 			if ( in_array( $status, $error_statuses, true ) ) {
 				return 'error';
@@ -735,12 +735,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				}
 
 				$this->woodev_license->update(
-					array(
+					[
 						'license' => $license_data->license,
 						'success' => $license_data->success,
 						'error'   => $license_data->error,
 						'expires' => $license_data->expires,
-					)
+					]
 				);
 
 				if ( ! empty( $this->woodev_license->license ) && $this->woodev_license->success ) {
@@ -810,12 +810,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				$this->get_authority_claims()->consume_from_response( $license_data->get_response_data() );
 
 				$this->woodev_license->update(
-					array(
+					[
 						'license' => $license_data->license,
 						'success' => $license_data->success,
 						'error'   => $license_data->error,
 						'expires' => $license_data->expires,
-					)
+					]
 				);
 
 				if ( false === $this->woodev_license->success ) {
@@ -879,7 +879,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 						'</a>'
 					),
 					sprintf( 'woodev-%s-missing-license', $this->plugin->get_id_dasherized() ),
-					array( 'notice_class' => "error {$this->item_shortname}-license-error" )
+					[ 'notice_class' => "error {$this->item_shortname}-license-error" ]
 				);
 			}
 		}
@@ -1037,11 +1037,11 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 
 			return ! in_array(
 				true,
-				array(
+				[
 					$this->is_expired(),
 					$this->is_disabled(),
 					$this->is_invalid(),
-				),
+				],
 				true
 			);
 		}
@@ -1107,10 +1107,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function is_disabled() {
 			return $this->has_statuses(
-				array(
+				[
 					'disabled',
 					'revoked',
-				)
+				]
 			);
 		}
 
@@ -1121,12 +1121,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 */
 		public function is_invalid() {
 			return $this->has_statuses(
-				array(
+				[
 					'invalid',
 					'invalid_item_id',
 					'item_name_mismatch',
 					'key_mismatch',
-				)
+				]
 			);
 		}
 
@@ -1148,7 +1148,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 *
 		 * @return bool
 		 */
-		private function has_statuses( $statuses = array() ) {
+		private function has_statuses( $statuses = [] ) {
 			return in_array( $this->woodev_license->license, $statuses, true );
 		}
 	}

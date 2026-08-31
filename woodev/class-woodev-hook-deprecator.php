@@ -27,11 +27,11 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 		public function __construct( $plugin_name, $hooks ) {
 
 			$this->plugin_name = $plugin_name;
-			$this->hooks       = array_map( array( $this, 'set_hook_defaults' ), $hooks );
+			$this->hooks       = array_map( [ $this, 'set_hook_defaults' ], $hooks );
 
 			$this->map_deprecated_hooks();
 
-			add_action( 'shutdown', array( $this, 'trigger_deprecated_errors' ), 999 );
+			add_action( 'shutdown', [ $this, 'trigger_deprecated_errors' ], 999 );
 		}
 
 
@@ -43,11 +43,11 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 		 */
 		protected function set_hook_defaults( $hook_params ) {
 
-			$defaults = array(
+			$defaults = [
 				'removed'     => false,
 				'map'         => false,
 				'replacement' => '',
-			);
+			];
 
 			return wp_parse_args( $hook_params, $defaults );
 		}
@@ -61,7 +61,7 @@ if ( ! class_exists( 'Woodev_Hook_Deprecator' ) ) :
 			foreach ( $this->hooks as $old_hook => $hook ) {
 
 				if ( ! empty( $hook['replacement'] ) && $hook['removed'] && $hook['map'] ) {
-					add_filter( $hook['replacement'], array( $this, 'map_deprecated_hook' ), 10, 10 );
+					add_filter( $hook['replacement'], [ $this, 'map_deprecated_hook' ], 10, 10 );
 				}
 			}
 		}

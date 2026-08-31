@@ -90,7 +90,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 
 			self::$notices_rendered = true;
 
-			$notices = get_option( self::NOTICES_OPTION, array() );
+			$notices = get_option( self::NOTICES_OPTION, [] );
 
 			if ( ! is_array( $notices ) || empty( $notices ) ) {
 				return;
@@ -109,7 +109,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 				$notice_handler->add_admin_notice(
 					(string) $entry['message'],
 					$message_id,
-					array( 'notice_class' => 'error' )
+					[ 'notice_class' => 'error' ]
 				);
 			}
 		}
@@ -135,7 +135,7 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 
 			$plugin_id = (string) $plugin->get_id();
 
-			$notices = get_option( self::NOTICES_OPTION, array() );
+			$notices = get_option( self::NOTICES_OPTION, [] );
 
 			if ( ! is_array( $notices ) || ! array_key_exists( $plugin_id, $notices ) ) {
 				return;
@@ -290,10 +290,10 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 		 */
 		private function write_notice( string $plugin_id, string $plugin_name, ?string $support_url = null ): void {
 
-			$notices = get_option( self::NOTICES_OPTION, array() );
+			$notices = get_option( self::NOTICES_OPTION, [] );
 
 			if ( ! is_array( $notices ) ) {
-				$notices = array();
+				$notices = [];
 			}
 
 			$support_url = is_string( $support_url ) ? trim( $support_url ) : '';
@@ -316,10 +316,10 @@ if ( ! class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) :
 				);
 			}
 
-			$notices[ $plugin_id ] = array(
+			$notices[ $plugin_id ] = [
 				'message' => $message,
 				'ts'      => time(),
-			);
+			];
 
 			update_option( self::NOTICES_OPTION, $notices, 'no' );
 		}

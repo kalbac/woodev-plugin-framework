@@ -52,13 +52,13 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 * Adds the action and filter hooks.
 		 */
 		protected function add_hooks() {
-			add_action( 'wp_ajax_wc_' . $this->get_id() . '_log_script_event', array( $this, 'ajax_log_event' ) );
+			add_action( 'wp_ajax_wc_' . $this->get_id() . '_log_script_event', [ $this, 'ajax_log_event' ] );
 			add_action(
 				'wp_ajax_nopriv_wc_' . $this->get_id() . '_log_script_event',
-				array(
+				[
 					$this,
 					'ajax_log_event',
-				)
+				]
 			);
 		}
 
@@ -102,7 +102,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 *
 		 * @return string
 		 */
-		protected function get_safe_handler_js( array $additional_args = array(), $handler_name = '', $object_name = '' ) {
+		protected function get_safe_handler_js( array $additional_args = [], $handler_name = '', $object_name = '' ) {
 
 			if ( ! $handler_name ) {
 				$handler_name = $this->get_js_handler_class_name();
@@ -143,7 +143,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 *
 		 * @return string
 		 */
-		protected function get_handler_js( array $additional_args = array(), $handler_name = '', $object_name = '' ) {
+		protected function get_handler_js( array $additional_args = [], $handler_name = '', $object_name = '' ) {
 
 			$args = array_merge( $additional_args, $this->get_js_handler_args() );
 
@@ -173,7 +173,7 @@ if ( ! class_exists( 'Woodev_Script_Handler' ) ) :
 		 * @return array
 		 */
 		protected function get_js_handler_args() {
-			return array();
+			return [];
 		}
 
 

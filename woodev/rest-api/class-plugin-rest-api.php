@@ -38,9 +38,9 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 			}
 
 			// add plugin data to the system status
-			add_filter( 'woocommerce_rest_prepare_system_status', array( $this, 'add_system_status_data' ), 10, 3 );
+			add_filter( 'woocommerce_rest_prepare_system_status', [ $this, 'add_system_status_data' ], 10, 3 );
 			// registers new WC REST API routes
-			add_action( 'rest_api_init', array( $this, 'register_routes' ) );
+			add_action( 'rest_api_init', [ $this, 'register_routes' ] );
 		}
 
 		/**
@@ -57,9 +57,9 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		 */
 		public function add_system_status_data( $response, $system_status, $request ) {
 
-			$data = array(
+			$data = [
 				'is_payment_gateway' => $this->get_plugin() instanceof Woodev_Payment_Gateway_Plugin,
-			);
+			];
 
 			$data = array_merge( $data, $this->get_system_status_data() );
 
@@ -87,7 +87,7 @@ if ( ! class_exists( 'Woodev_REST_API' ) ) :
 		 * @return array
 		 */
 		protected function get_system_status_data() {
-			return array();
+			return [];
 		}
 
 		/**

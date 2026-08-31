@@ -24,24 +24,24 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 
 			$this->plugin = $plugin;
 
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
 
 			// capture feature
 			if ( $this->get_plugin()->supports_capture_charge() ) {
 
-				add_action( 'woocommerce_order_item_add_action_buttons', array( $this, 'add_capture_button' ) );
+				add_action( 'woocommerce_order_item_add_action_buttons', [ $this, 'add_capture_button' ] );
 
 				add_action(
 					'wp_ajax_wc_' . $this->get_plugin()->get_id() . '_capture_charge',
-					array(
+					[
 						$this,
 						'ajax_process_capture',
-					)
+					]
 				);
 
 				// bulk capture order action
-				add_action( 'admin_footer-edit.php', array( $this, 'maybe_add_capture_charge_bulk_order_action' ) );
-				add_action( 'load-edit.php', array( $this, 'process_capture_charge_bulk_order_action' ) );
+				add_action( 'admin_footer-edit.php', [ $this, 'maybe_add_capture_charge_bulk_order_action' ] );
+				add_action( 'load-edit.php', [ $this, 'process_capture_charge_bulk_order_action' ] );
 			}
 		}
 
@@ -85,12 +85,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 		 */
 		protected function enqueue_edit_order_assets( WC_Order $order ) {
 
-			wp_enqueue_script( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-admin-order.js', array( 'jquery' ), Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/admin/woodev-payment-gateway-admin-order.js', [ 'jquery' ], Woodev_Plugin::VERSION, true );
 
 			wp_localize_script(
 				'woodev-payment-gateway-admin-order',
 				'woodev_payment_gateway_admin_order',
-				array(
+				[
 					'ajax_url'       => admin_url( 'admin-ajax.php' ),
 					'gateway_id'     => $order->get_payment_method( 'edit' ),
 					'order_id'       => $order->get_id(),
@@ -98,7 +98,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 					'capture_action' => 'wc_' . $this->get_plugin()->get_id() . '_capture_charge',
 					'capture_nonce'  => wp_create_nonce( 'wc_' . $this->get_plugin()->get_id() . '_capture_charge' ),
 					'capture_error'  => __( 'Something went wrong, and the capture could no be completed. Please try again.', 'woodev-plugin-framework' ),
-				)
+				]
 			);
 
 			wp_enqueue_style( 'woodev-payment-gateway-admin-order', $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/admin/woodev-payment-gateway-admin-order.css', Woodev_Plugin::VERSION );
@@ -240,11 +240,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_Order' ) ) :
 			}
 
 			$tooltip = '';
-			$classes = array(
+			$classes = [
 				'button',
 				'woodev-payment-gateway-capture',
 				'wc-' . $gateway->get_id_dasherized() . '-capture',
-			);
+			];
 
 			// indicate if the partial-capture UI can be shown
 			if ( $gateway->supports_credit_card_partial_capture() && $gateway->is_partial_capture_enabled() ) {

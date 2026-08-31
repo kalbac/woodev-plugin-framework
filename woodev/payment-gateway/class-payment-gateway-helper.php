@@ -114,7 +114,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 		 */
 		public static function card_type_from_account_number( $account_number ) {
 
-			$types = array(
+			$types = [
 				self::CARD_TYPE_VISA       => '/^4/',
 				self::CARD_TYPE_MASTERCARD => '/^(5[1-5]|2[2-7])/',
 				self::CARD_TYPE_AMEX       => '/^3[47]/',
@@ -123,7 +123,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 				self::CARD_TYPE_JCB        => '/^35/',
 				self::CARD_TYPE_MAESTRO    => '/^(5018|5020|5038|6304|6759|676[1-3])/',
 				self::CARD_TYPE_LASER      => '/^(6706|6771|6709)/',
-			);
+			];
 
 			foreach ( $types as $type => $pattern ) {
 
@@ -144,10 +144,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 		 */
 		public static function get_loan_type_name( $type ) {
 
-			$types = array(
+			$types = [
 				'credit'      => esc_html__( 'Loan', 'woodev-plugin-framework' ),
 				'installment' => esc_html__( 'Installment', 'woodev-plugin-framework' ),
-			);
+			];
 
 			$name = isset( $types[ $type ] ) ? $types[ $type ] : $type;
 
@@ -169,12 +169,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 			$type = self::normalize_card_type( $payment_type );
 
 			// known payment type names, excluding credit cards
-			$payment_types = array(
+			$payment_types = [
 				'paypal' => esc_html__( 'PayPal', 'woodev-plugin-framework' ),
 				'card'   => esc_html__( 'Credit / Debit Card', 'woodev-plugin-framework' ),
 				'bank'   => esc_html__( 'Bank Account', 'woodev-plugin-framework' ),
 				'loan'   => esc_html__( 'Loan', 'woodev-plugin-framework' ),
-			);
+			];
 
 			// add the credit card names
 			$payment_types = array_merge( wp_list_pluck( self::get_card_types(), 'name' ), $payment_types );
@@ -213,48 +213,48 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Helper' ) ) :
 		 */
 		public static function get_card_types() {
 
-			return array(
-				self::CARD_TYPE_VISA       => array(
+			return [
+				self::CARD_TYPE_VISA       => [
 					'name'       => esc_html_x( 'Visa', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-				self::CARD_TYPE_MASTERCARD => array(
+					'variations' => [],
+				],
+				self::CARD_TYPE_MASTERCARD => [
 					'name'       => esc_html_x( 'MasterCard', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array( 'mc', 'master-card' ),
-				),
-				self::CARD_TYPE_AMEX       => array(
+					'variations' => [ 'mc', 'master-card' ],
+				],
+				self::CARD_TYPE_AMEX       => [
 					'name'       => esc_html_x( 'American Express', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array( 'americanexpress' ),
-				),
-				self::CARD_TYPE_DINERSCLUB => array(
+					'variations' => [ 'americanexpress' ],
+				],
+				self::CARD_TYPE_DINERSCLUB => [
 					'name'       => esc_html_x( 'Diners Club', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array( 'diners' ),
-				),
-				self::CARD_TYPE_DISCOVER   => array(
+					'variations' => [ 'diners' ],
+				],
+				self::CARD_TYPE_DISCOVER   => [
 					'name'       => esc_html_x( 'Discover', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array( 'disc' ),
-				),
-				self::CARD_TYPE_JCB        => array(
+					'variations' => [ 'disc' ],
+				],
+				self::CARD_TYPE_JCB        => [
 					'name'       => esc_html_x( 'JCB', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-				self::CARD_TYPE_CARTEBLEUE => array(
+					'variations' => [],
+				],
+				self::CARD_TYPE_CARTEBLEUE => [
 					'name'       => esc_html_x( 'CarteBleue', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-				self::CARD_TYPE_MAESTRO    => array(
+					'variations' => [],
+				],
+				self::CARD_TYPE_MAESTRO    => [
 					'name'       => esc_html_x( 'Maestro', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-				self::CARD_TYPE_LASER      => array(
+					'variations' => [],
+				],
+				self::CARD_TYPE_LASER      => [
 					'name'       => esc_html_x( 'Laser', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-				self::CARD_TYPE_MIR        => array(
+					'variations' => [],
+				],
+				self::CARD_TYPE_MIR        => [
 					'name'       => esc_html_x( 'MIR', 'credit card type', 'woodev-plugin-framework' ),
-					'variations' => array(),
-				),
-			);
+					'variations' => [],
+				],
+			];
 		}
 	}
 

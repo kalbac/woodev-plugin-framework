@@ -114,13 +114,13 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 
 			$entries = $this->load_and_prune();
 
-			$entry = array(
+			$entry = [
 				'nonce'    => $nonce,
 				'status'   => $status,
 				'terminal' => ( 'failed' !== $status ),
 				'protocol' => 1,
 				'ts'       => $this->now(),
-			);
+			];
 
 			$entries[] = $entry;
 
@@ -128,7 +128,7 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 			$count = count( $entries );
 			while ( $count > self::MAX_PENDING_ACKS ) {
 				array_shift( $entries );
-				$count--;
+				--$count;
 			}
 
 			$this->save( $entries );
@@ -172,7 +172,7 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 		 */
 		public function confirm_received( array $nonces ): void {
 
-			if ( array() === $nonces ) {
+			if ( [] === $nonces ) {
 				// Nothing to remove — but still prune retention.
 				$entries = $this->load_and_prune();
 				$this->save( $entries );
@@ -182,7 +182,7 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 			$confirmed = array_flip( $nonces );
 			$entries   = $this->load_and_prune();
 
-			$remaining = array();
+			$remaining = [];
 			foreach ( $entries as $entry ) {
 				if ( ! isset( $confirmed[ $entry['nonce'] ] ) ) {
 					$remaining[] = $entry;
@@ -208,11 +208,11 @@ if ( ! class_exists( 'Woodev_License_Command_Acks' ) ) :
 			$raw = get_option( self::OPTION_NAME );
 
 			if ( ! is_array( $raw ) ) {
-				return array();
+				return [];
 			}
 
 			$cutoff  = $this->now() - self::RETENTION_SECONDS;
-			$entries = array();
+			$entries = [];
 
 			foreach ( $raw as $entry ) {
 				if ( ! is_array( $entry ) ) {

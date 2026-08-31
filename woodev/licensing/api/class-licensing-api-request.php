@@ -16,7 +16,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 			$path   = $this->path;
 			$params = $this->get_params();
 
-			if ( in_array( $this->get_method(), array( 'GET', 'POST' ) ) && ! empty( $params ) ) {
+			if ( in_array( $this->get_method(), [ 'GET', 'POST' ] ) && ! empty( $params ) ) {
 				$path .= '?' . http_build_query( $this->get_params(), '', '&' );
 			}
 
@@ -42,7 +42,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 			$path   = $this->path;
 			$params = $this->get_params();
 
-			if ( in_array( $this->get_method(), array( 'GET', 'POST' ) ) && ! empty( $params ) ) {
+			if ( in_array( $this->get_method(), [ 'GET', 'POST' ] ) && ! empty( $params ) ) {
 				$path .= '?' . http_build_query( $this->get_masked_params(), '', '&' );
 			}
 
@@ -51,7 +51,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 
 		public function to_string() {
 
-			if ( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
+			if ( in_array( $this->get_method(), [ 'GET', 'POST' ], true ) ) {
 				// return wp_json_encode( $this->get_params() );
 				return self::print_r( $this->get_params(), true );
 			}
@@ -71,7 +71,7 @@ if ( ! class_exists( 'Woodev_Licensing_API_Request' ) ) :
 		 */
 		public function to_string_safe() {
 
-			if ( in_array( $this->get_method(), array( 'GET', 'POST' ), true ) ) {
+			if ( in_array( $this->get_method(), [ 'GET', 'POST' ], true ) ) {
 				return self::print_r( $this->get_masked_params(), true );
 			}
 

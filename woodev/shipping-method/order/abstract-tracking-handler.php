@@ -89,7 +89,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Ha
 			try {
 				$response = $this->api->get_tracking( $tracking_number );
 			} catch ( \Woodev_API_Exception $exception ) {
-				return array();
+				return [];
 			}
 
 			return $this->map_events( $response );
@@ -161,12 +161,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Ha
 		 * @phpstan-return Tracking_Event
 		 */
 		protected static function make_event( string $status, string $description = '', int $timestamp = 0, string $location = '' ): array {
-			return array(
+			return [
 				'status'      => $status,
 				'description' => $description,
 				'timestamp'   => $timestamp,
 				'location'    => $location,
-			);
+			];
 		}
 
 		/**

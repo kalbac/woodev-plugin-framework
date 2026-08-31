@@ -51,15 +51,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			parent::add_hooks();
 
-			add_action( 'wp', array( $this, 'init' ) );
+			add_action( 'wp', [ $this, 'init' ] );
 
 			// save a payment method via AJAX
 			add_action(
 				'wp_ajax_wc_' . $this->get_plugin()->get_id() . '_save_payment_method',
-				array(
+				[
 					$this,
 					'ajax_save_payment_method',
-				)
+				]
 			);
 		}
 
@@ -97,54 +97,54 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			$this->load_tokens();
 
 			// styles/scripts
-			add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_styles_scripts' ) );
+			add_action( 'wp_enqueue_scripts', [ $this, 'maybe_enqueue_styles_scripts' ] );
 
 			add_filter(
 				'woocommerce_payment_methods_list_item',
-				array(
+				[
 					$this,
 					'add_payment_methods_list_item_id',
-				),
+				],
 				10,
 				2
 			);
 			add_filter(
 				'woocommerce_payment_methods_list_item',
-				array(
+				[
 					$this,
 					'add_payment_methods_list_item_edit_action',
-				),
+				],
 				10,
 				2
 			);
 
-			add_filter( 'woocommerce_account_payment_methods_columns', array( $this, 'add_payment_methods_columns' ) );
+			add_filter( 'woocommerce_account_payment_methods_columns', [ $this, 'add_payment_methods_columns' ] );
 
 			add_action(
 				'woocommerce_account_payment_methods_column_title',
-				array(
+				[
 					$this,
 					'add_payment_method_title',
-				)
+				]
 			);
 			add_action(
 				'woocommerce_account_payment_methods_column_details',
-				array(
+				[
 					$this,
 					'add_payment_method_details',
-				)
+				]
 			);
 			add_action(
 				'woocommerce_account_payment_methods_column_default',
-				array(
+				[
 					$this,
 					'add_payment_method_default',
-				)
+				]
 			);
 
 			// map Framework payment methods actions to WooCommerce actions for backwards compatibility
-			add_action( 'woocommerce_before_account_payment_methods', array( $this, 'before_payment_methods_table' ) );
-			add_action( 'woocommerce_after_account_payment_methods', array( $this, 'after_payment_methods_table' ) );
+			add_action( 'woocommerce_before_account_payment_methods', [ $this, 'before_payment_methods_table' ] );
+			add_action( 'woocommerce_after_account_payment_methods', [ $this, 'after_payment_methods_table' ] );
 
 			// handle custom payment method actions
 			$this->handle_payment_method_actions();
@@ -161,17 +161,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 
 			$handle = 'woodev-payment-gateway-my-payment-methods';
 
-			wp_register_script( 'jquery-tiptip', WC()->plugin_url() . '/assets/js/jquery-tiptip/jquery.tipTip.min.js', array( 'jquery' ), Woodev_Helper::get_wc_version(), true );
+			wp_register_script( 'jquery-tiptip', WC()->plugin_url() . '/assets/js/jquery-tiptip/jquery.tipTip.min.js', [ 'jquery' ], Woodev_Helper::get_wc_version(), true );
 
-			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', array( 'dashicons' ), Woodev_Plugin::VERSION );
+			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', [ 'dashicons' ], Woodev_Plugin::VERSION );
 
 			wp_enqueue_script(
 				$handle,
 				$this->get_plugin()->get_payment_gateway_framework_assets_url() . '/dist/frontend/' . $handle . '.js',
-				array(
+				[
 					'jquery-tiptip',
 					'jquery',
-				),
+				],
 				Woodev_Plugin::VERSION
 			);
 		}
@@ -188,7 +188,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 				return $this->tokens;
 			}
 
-			$this->credit_card_tokens = array();
+			$this->credit_card_tokens = [];
 
 			foreach ( $this->get_plugin()->get_gateways() as $gateway ) {
 
@@ -276,16 +276,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 			// add new actions for FW tokens belonging to this gateway
 			if ( $token = $this->get_token_by_id( $core_token->get_token() ) ) {
 
-				$new_actions = array(
-					'edit' => array(
+				$new_actions = [
+					'edit' => [
 						'url'  => '#',
 						'name' => esc_html__( 'Edit', 'woodev-plugin-framework' ),
-					),
-					'save' => array(
+					],
+					'save' => [
 						'url'  => '#',
 						'name' => esc_html__( 'Save', 'woodev-plugin-framework' ),
-					),
-				);
+					],
+				];
 
 				/**
 				 * My Payment Methods Table Method Actions Filter.
@@ -542,19 +542,19 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 		 */
 		protected function get_js_handler_args() {
 
-			return array(
+			return [
 				'id'              => $this->get_plugin()->get_id(),
 				'slug'            => $this->get_plugin()->get_id_dasherized(),
 				'has_core_tokens' => (bool) wc_get_customer_saved_methods_list( get_current_user_id() ),
 				'ajax_url'        => admin_url( 'admin-ajax.php' ),
 				'ajax_nonce'      => wp_create_nonce( 'wc_' . $this->get_plugin()->get_id() . '_save_payment_method' ),
-				'i18n'            => array(
+				'i18n'            => [
 					'edit_button'   => esc_html__( 'Edit', 'woodev-plugin-framework' ),
 					'cancel_button' => esc_html__( 'Cancel', 'woodev-plugin-framework' ),
 					'save_error'    => esc_html__( 'Oops, there was an error updating your payment method. Please try again.', 'woodev-plugin-framework' ),
 					'delete_ays'    => esc_html__( 'Are you sure you want to delete this payment method?', 'woodev-plugin-framework' ),
-				),
-			);
+				],
+			];
 		}
 
 
@@ -753,7 +753,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_My_Payment_Methods' ) ) :
 					throw new Woodev_Payment_Gateway_Exception( 'Invalid token' );
 				}
 
-				$data = array();
+				$data = [];
 
 				parse_str( Woodev_Helper::get_posted_value( 'data' ), $data );
 

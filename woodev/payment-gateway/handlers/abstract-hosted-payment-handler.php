@@ -19,22 +19,22 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 			parent::add_hooks();
 
 			// renders the payment page
-			add_action( 'woocommerce_receipt_' . $this->get_gateway()->get_id(), array( $this, 'payment_page' ) );
+			add_action( 'woocommerce_receipt_' . $this->get_gateway()->get_id(), [ $this, 'payment_page' ] );
 
 			// payment notification listener hook
 			if ( ! has_action(
 				'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment',
-				array(
+				[
 					$this,
 					'handle_transaction_response_request',
-				)
+				]
 			) ) {
 				add_action(
 					'woocommerce_api_' . $this->get_gateway()->get_id() . '_process_payment',
-					array(
+					[
 						$this,
 						'handle_transaction_response_request',
-					)
+					]
 				);
 			}
 		}
@@ -57,10 +57,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 				$payment_url = $order->get_checkout_payment_url( true );
 			}
 
-			return array(
+			return [
 				'result'   => 'success',
 				'redirect' => $payment_url,
-			);
+			];
 		}
 
 
@@ -81,7 +81,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Hosted_Payment_Handler' ) 
 		 * @return array
 		 */
 		public function get_order_payment_params( WC_Order $order ) {
-			return array();
+			return [];
 		}
 
 

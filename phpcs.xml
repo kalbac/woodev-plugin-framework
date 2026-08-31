@@ -73,7 +73,17 @@
 		 Проверяем совместимость с PHP 7.4 и выше
 	====================================================== -->
 	<config name="testVersion" value="7.4-"/>
-	<arg name="warning-severity" value="0"/>
+	<!-- =====================================================
+		 Warning-уровень ВКЛЮЧЁН (#139).
+		 Раньше здесь стоял value="0", и это глушило весь warning-уровень
+		 рулсета разом: 1789 нарушений из 19 снифов были невидимы, а
+		 «phpcs clean» ничего про них не говорил. Замер 31.08.2026 показал,
+		 что 1397 из них — длина строки и ещё 355 — косметика выравнивания;
+		 на весь остальной warning-уровень приходилось 37 нарушений.
+		 Поэтому шумные снифы гасятся ниже ПОШТУЧНО и с причиной, а не
+		 оптом одним value="0" — иначе новый код нарушает 16 снифов молча.
+	==================================================== -->
+	<arg name="warning-severity" value="1"/>
 	<rule ref="PHPCompatibility"/>
 	<rule ref="PHPCompatibilityWP"/>
 	
@@ -117,12 +127,33 @@
 		</properties>
 	</rule>
 
+	<!-- Конвенция «только короткий синтаксис []» из AGENTS.md — ДО #116(в) она
+		 держалась только вниманием автора: конфиг лишь РАЗРЕШАЛ [], но не запрещал
+		 array(). Снифф даёт ERROR (замерено: 640 в 73 файлах, все чинятся phpcbf),
+		 поэтому от warning-severity он не зависит. -->
+	<rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
+
 	<!-- Разрешаем длинные строки до 120 символов (WordPress по умолчанию 100) -->
 	<rule ref="Generic.Files.LineLength">
 		<properties>
 			<property name="lineLimit" value="120"/>
 			<property name="absoluteLineLimit" value="0"/>
 		</properties>
+		<!-- 120 — МЯГКАЯ цель, и она не роняет прогон (#139, решение по замеру
+			 31.08.2026). В дереве 1393 строки длиннее 120 в 138 файлах: переписать
+			 их — диф без единого поведенческого выигрыша и с ненулевым риском
+			 регрессии. Держать ради этого весь warning-уровень выключенным было
+			 дороже: длина строки и остальные 18 снифов — разные вопросы, и здесь
+			 они разведены.
+
+			 МЕРИТЬ — отдельным рулсетом phpcs-line-length.xml, он для этого и
+			 заведён. Флагами из командной строки эту проверку НЕ оживить:
+			 exclude-pattern ниже действует независимо от severity, а свойство
+			 lineLimit из CLI не задаётся. Проверено: попытка померить флагами
+			 возвращает пустой отчёт, и без отдельного файла «мягкая цель»
+			 осталась бы неизмеримой — то самое состояние, на которое жалуется
+			 #139. Команда записана в описании того файла. -->
+		<exclude-pattern>*</exclude-pattern>
 	</rule>
 
 	<!-- =====================================================
@@ -476,6 +507,62 @@
 
 	<!-- mt_rand() используется намеренно там где нужна скорость, не криптобезопасность -->
 	<rule ref="WordPress.WP.AlternativeFunctions.rand_mt_rand">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- =====================================================
+		 Warning-уровень: поштучные исключения (#139, замер 31.08.2026).
+		 Раньше всё это молчало под warning-severity=0 вместе с настоящими
+		 находками. Каждый снифф ниже погашен с причиной — новые нарушения
+		 остальных 16 снифов теперь роняют прогон.
+	==================================================== -->
+
+	<!-- Выравнивание => и присваиваний — чистая косметика (352 места). phpcbf их
+		 чинит, но авто-выравнивание даёт диф по всему дереву и портит git blame
+		 ради нуля. Гасим так же, как остальную косметику в этом конфиге. -->
+	<rule ref="WordPress.Arrays.MultipleStatementAlignment">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Generic.Formatting.MultipleStatementAlignment">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- $capability приходит переменной (свойство/аргумент), снифф не умеет её
+		 вычислить статически и честно об этом пишет — 17 мест, все такие.
+		 Это не «неизвестная capability», это неразрешимость на уровне сниффа. -->
+	<rule ref="WordPress.WP.Capabilities.Undetermined">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- base64_decode() в лицензировании — разбор Ed25519-подписи и конверта,
+		 а не обфускация кода (class-license-envelope-verifier.php,
+		 class-license-command-dispatcher.php). Парный к уже исключённому
+		 obfuscation_base64_encode выше. -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Снифф не прослеживает значение интервала через переменную и сообщает
+		 «could not detect the interval value» — интервал задан, просто не литералом. -->
+	<rule ref="WordPress.WP.CronInterval.ChangeDetected">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+
+	<!-- Ещё пять зарезервированных слов как имена параметров — тот же легаси
+		 случай, что уже исключённые default/string/array/class выше. -->
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.boolFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.listFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.matchFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.parentFound">
+		<exclude-pattern>*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames.returnFound">
 		<exclude-pattern>*</exclude-pattern>
 	</rule>
 

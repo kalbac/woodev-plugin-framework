@@ -173,11 +173,11 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 				}
 			}
 
-			$record = array(
+			$record = [
 				's' => 'processing',
 				'c' => $this->now(),
 				'e' => min( $expires_at, $this->now() + self::MAX_TTL ),
-			);
+			];
 
 			// Atomic insert: the UNIQUE option_name index makes the concurrent loser fail.
 			if ( false === add_option( $name, $record, '', 'no' ) ) {
@@ -210,10 +210,10 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 
 			if ( ! is_array( $record ) ) {
 				// Row pruned mid-action: re-create, capped by the signed expiry.
-				$record = array(
+				$record = [
 					'c' => $this->now(),
 					'e' => min( $expires_at, $this->now() + self::MAX_TTL ),
-				);
+				];
 			}
 
 			$record['s'] = 'consumed';
@@ -270,7 +270,7 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 				}
 
 				if ( (int) ( $record['e'] ?? 0 ) >= $this->now() ) {
-					$count++;
+					++$count;
 				}
 			}
 
@@ -289,7 +289,7 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 			global $wpdb;
 
 			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
-				return array();
+				return [];
 			}
 
 			$like = $wpdb->esc_like( self::OPTION_PREFIX ) . '%';
@@ -302,7 +302,7 @@ if ( ! class_exists( 'Woodev_License_Command_Nonce_Store' ) ) :
 
 			$rows = $wpdb->get_results( $query );
 
-			return is_array( $rows ) ? $rows : array();
+			return is_array( $rows ) ? $rows : [];
 		}
 
 		/**

@@ -93,7 +93,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				$address_hash = md5(
 					wp_json_encode(
 						array_filter(
-							array(
+							[
 								$order->get_billing_first_name(),
 								$order->get_billing_last_name(),
 								$order->get_billing_address_1(),
@@ -102,7 +102,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 								$order->get_billing_state(),
 								$order->get_billing_country(),
 								$order->get_billing_postcode(),
-							)
+							]
 						)
 					)
 				);
@@ -177,7 +177,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			}
 
 			// get existing tokens
-			$tokens = $this->get_tokens( $user_id, array( 'environment_id' => $environment_id ) );
+			$tokens = $this->get_tokens( $user_id, [ 'environment_id' => $environment_id ] );
 
 			// if this token is set as active, mark all others as false
 			if ( $token->is_default() ) {
@@ -211,7 +211,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				$environment_id = $this->get_environment_id();
 			}
 
-			$tokens = $this->get_tokens( $user_id, array( 'environment_id' => $environment_id ) );
+			$tokens = $this->get_tokens( $user_id, [ 'environment_id' => $environment_id ] );
 
 			if ( isset( $tokens[ $token ] ) ) {
 				return $tokens[ $token ];
@@ -236,7 +236,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				$environment_id = $this->get_environment_id();
 			}
 
-			$tokens = $this->get_tokens( $user_id, array( 'environment_id' => $environment_id ) );
+			$tokens = $this->get_tokens( $user_id, [ 'environment_id' => $environment_id ] );
 
 			if ( isset( $tokens[ $token->get_id() ] ) ) {
 				$tokens[ $token->get_id() ] = $token;
@@ -278,7 +278,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 
 				try {
 
-					$response = $this->get_gateway()->get_api()->remove_tokenized_payment_method( $token->get_id(), $this->get_gateway()->get_customer_id( $user_id, array( 'environment_id' => $environment_id ) ) );
+					$response = $this->get_gateway()->get_api()->remove_tokenized_payment_method( $token->get_id(), $this->get_gateway()->get_customer_id( $user_id, [ 'environment_id' => $environment_id ] ) );
 
 					if ( ! $response->transaction_approved() && ! $this->should_delete_token( $token, $response ) ) {
 						return false;
@@ -325,7 +325,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			}
 
 			// get existing tokens
-			$tokens = $this->get_tokens( $user_id, array( 'environment_id' => $environment_id ) );
+			$tokens = $this->get_tokens( $user_id, [ 'environment_id' => $environment_id ] );
 
 			if ( ! isset( $tokens[ $token->get_id() ] ) ) {
 				return false;
@@ -378,7 +378,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			}
 
 			// get existing tokens
-			$tokens = $this->get_tokens( $user_id, array( 'environment_id' => $environment_id ) );
+			$tokens = $this->get_tokens( $user_id, [ 'environment_id' => $environment_id ] );
 
 			// mark $token as the only active
 			foreach ( $tokens as $key => $_token ) {
@@ -405,7 +405,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 *      `environment_id` - defaults to plugin current environment
 		 * @return array|Woodev_Payment_Gateway_Payment_Token[] associative array of string token to Woodev_Payment_Gateway_Payment_Token object
 		 */
-		public function get_tokens( $user_id, $args = array() ) {
+		public function get_tokens( $user_id, $args = [] ) {
 
 			// default to current environment
 			if ( ! isset( $args['environment_id'] ) ) {
@@ -413,7 +413,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 			}
 
 			if ( ! isset( $args['customer_id'] ) ) {
-				$args['customer_id'] = $this->get_gateway()->get_customer_id( $user_id, array( 'environment_id' => $args['environment_id'] ) );
+				$args['customer_id'] = $this->get_gateway()->get_customer_id( $user_id, [ 'environment_id' => $args['environment_id'] ] );
 			}
 
 			$environment_id = $args['environment_id'];
@@ -430,8 +430,8 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 				return $this->tokens[ $environment_id ][ $user_id ];
 			}
 
-			$this->tokens[ $environment_id ][ $user_id ] = array();
-			$tokens                                      = array();
+			$this->tokens[ $environment_id ][ $user_id ] = [];
+			$tokens                                      = [];
 
 			// retrieve the datastore persisted tokens first, so we have them for
 			// gateways that don't support fetching them over an API, as well as the
@@ -662,7 +662,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 * @return array associative array of string token to Woodev_Payment_Gateway_Payment_Token objects
 		 */
 		protected function get_merge_attributes() {
-			return array( 'last_four', 'card_type', 'exp_month', 'exp_year', 'nickname' );
+			return [ 'last_four', 'card_type', 'exp_month', 'exp_year', 'nickname' ];
 		}
 
 
@@ -828,7 +828,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Tokens_Handler' ) ) :
 		 */
 		protected function format_for_db( $tokens ) {
 
-			$_tokens = array();
+			$_tokens = [];
 
 			// to database format
 			foreach ( $tokens as $key => $token ) {

@@ -38,7 +38,7 @@ if ( ! class_exists( 'Woodev_REST_V1_Registrar' ) ) :
 		 *
 		 * @var array<string, object>
 		 */
-		private static $controllers = array();
+		private static $controllers = [];
 
 		/**
 		 * Whether the single rest_api_init hook has already been added.
@@ -76,7 +76,7 @@ if ( ! class_exists( 'Woodev_REST_V1_Registrar' ) ) :
 			}
 
 			if ( ! self::$hooked ) {
-				add_action( 'rest_api_init', array( self::class, 'handle_rest_api_init' ) );
+				add_action( 'rest_api_init', [ self::class, 'handle_rest_api_init' ] );
 				self::$hooked = true;
 			}
 		}

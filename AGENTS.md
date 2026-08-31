@@ -190,7 +190,7 @@ composer install
 composer check              # phpcs + phpstan + unit tests
 
 # Individual checks
-composer phpcs              # code style check
+composer phpcs              # code style check (warning level IS on since #139)
 composer phpcbf             # auto-fix code style
 composer phpstan            # static analysis
 composer test               # unit tests (Brain Monkey, no WP)
@@ -211,6 +211,10 @@ mkdocs serve                # preview public docs locally
 npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
 ```
 
+- **Line length is the one thing `composer phpcs` does NOT check** (#139). 120 is a soft target
+  (1393 lines already over), so measure it on demand:
+  `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev`. Every other
+  warning-level sniff DOES fail the run now — see that file's description for why it needs its own.
 - **Enable the commit-msg gate once per clone: `git config core.hooksPath .githooks`.** It refuses a
   GitHub closing keyword (`closes`/`fixes`/`resolves #N`) anywhere except alone on its own line —
   GitHub executes those literally even inside a quote, and s81 closed three cards that way while

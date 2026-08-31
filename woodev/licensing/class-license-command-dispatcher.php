@@ -133,7 +133,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 *
 		 * @var array<string, int>
 		 */
-		const HTTP_MAP = array(
+		const HTTP_MAP = [
 			'executed'                    => 200,
 			'already'                     => 200,
 			'malformed'                   => 400,
@@ -148,7 +148,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 			'replayed'                    => 410,
 			'rate_limited'                => 429,
 			'failed'                      => 500,
-		);
+		];
 
 		/**
 		 * Exact payload key whitelist (frozen §9.8; `args` is the single optional
@@ -159,7 +159,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 *
 		 * @var array<int, string>
 		 */
-		const PAYLOAD_KEYS = array( 'protocol', 'command', 'site', 'plugin_id', 'nonce', 'issued_at', 'expires_at' );
+		const PAYLOAD_KEYS = [ 'protocol', 'command', 'site', 'plugin_id', 'nonce', 'issued_at', 'expires_at' ];
 
 		/**
 		 * The SEALED command vocabulary, lazily built by get_commands(). Null until
@@ -195,12 +195,12 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		private static function get_commands(): array {
 
 			if ( null === self::$commands && class_exists( 'Woodev_License_Command_Deactivate_Plugin' ) ) {
-				self::$commands = array(
+				self::$commands = [
 					'deactivate_plugin' => new Woodev_License_Command_Deactivate_Plugin(),
-				);
+				];
 			}
 
-			return self::$commands ?? array();
+			return self::$commands ?? [];
 		}
 
 		/**
@@ -477,10 +477,10 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 * @return array{status: string, http: int}
 		 */
 		private static function terminal( string $status ): array {
-			return array(
+			return [
 				'status' => $status,
 				'http'   => self::HTTP_MAP[ $status ] ?? 500,
-			);
+			];
 		}
 
 		/**
@@ -492,11 +492,11 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 * @return array{status: string, reason: string, http: int}
 		 */
 		private static function reject( string $reason ): array {
-			return array(
+			return [
 				'status' => 'rejected',
 				'reason' => $reason,
 				'http'   => self::HTTP_MAP[ $reason ] ?? 400,
-			);
+			];
 		}
 
 		/**
@@ -559,10 +559,10 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 				|| ! isset( $window['n'], $window['t0'] )
 				|| ( $now - (int) $window['t0'] ) > self::RATE_LIMIT_WINDOW
 			) {
-				$window = array(
+				$window = [
 					'n'  => 1,
 					't0' => $now,
-				);
+				];
 			} else {
 				$window['n'] = (int) $window['n'] + 1;
 			}
@@ -584,7 +584,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 
 			// Top-level keys ⊆ {payload, signature, kid}; payload + signature required.
 			foreach ( array_keys( $envelope ) as $key ) {
-				if ( ! in_array( $key, array( 'payload', 'signature', 'kid' ), true ) ) {
+				if ( ! in_array( $key, [ 'payload', 'signature', 'kid' ], true ) ) {
 					return false;
 				}
 			}
@@ -620,7 +620,7 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		private static function is_payload_schema_valid( array $payload ): bool {
 
 			$required = self::PAYLOAD_KEYS;
-			$allowed  = array_merge( $required, array( 'args' ) );
+			$allowed  = array_merge( $required, [ 'args' ] );
 
 			foreach ( $required as $key ) {
 				if ( ! array_key_exists( $key, $payload ) ) {

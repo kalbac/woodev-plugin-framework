@@ -298,7 +298,7 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 			// status or the presentation can't classify it (falls through to the «unknown»
 			// fallback and the user gets stranded). A free-text error keeps `license`, so a
 			// bad key resolves to 'invalid' → editable «bad-key» group + the right message.
-			if ( '' !== $error && in_array( $license, array( '', 'invalid' ), true ) && 1 === preg_match( '/^[a-z][a-z0-9_]*$/', $error ) ) {
+			if ( '' !== $error && in_array( $license, [ '', 'invalid' ], true ) && 1 === preg_match( '/^[a-z][a-z0-9_]*$/', $error ) ) {
 				return $error;
 			}
 
@@ -311,7 +311,7 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 		 * @return array
 		 */
 		private function get_editable_keys() {
-			return array( 'license', 'error', 'success', 'expires' );
+			return [ 'license', 'error', 'success', 'expires' ];
 		}
 	}
 

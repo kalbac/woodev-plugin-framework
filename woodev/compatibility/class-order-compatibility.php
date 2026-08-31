@@ -37,10 +37,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 			foreach ( $meta_data as $meta ) {
 
-				$item_meta[] = array(
+				$item_meta[] = [
 					'label' => $meta->display_key,
 					'value' => $meta->value,
-				);
+				];
 			}
 
 			return $item_meta;
@@ -55,10 +55,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 		public static function get_orders_screen_url(): string {
 
 			if ( Woodev_Plugin_Compatibility::is_hpos_enabled() ) {
-				return add_query_arg( array( 'page' => 'wc-orders' ), admin_url( 'admin.php' ) );
+				return add_query_arg( [ 'page' => 'wc-orders' ], admin_url( 'admin.php' ) );
 			}
 
-			return add_query_arg( array( 'post_type' => 'shop_order' ), admin_url( 'edit.php' ) );
+			return add_query_arg( [ 'post_type' => 'shop_order' ], admin_url( 'edit.php' ) );
 		}
 
 

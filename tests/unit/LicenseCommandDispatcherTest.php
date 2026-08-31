@@ -1282,14 +1282,14 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/woodev/handlers/class-cron-handler.php' );
 
 		$this->assertStringContainsString(
-			"add_action( 'woodev_weekly_scheduled_events', array( \$this, 'prune_license_command_nonces' ) )",
+			"add_action( 'woodev_weekly_scheduled_events', [ \$this, 'prune_license_command_nonces' ] )",
 			$source,
 			'Cron_Handler must add the prune listener on the existing weekly hook.'
 		);
 
 		// The existing license-check listener on the same hook must remain.
 		$this->assertStringContainsString(
-			"add_action( 'woodev_weekly_scheduled_events', array( \$this, 'weekly_license_check' ) )",
+			"add_action( 'woodev_weekly_scheduled_events', [ \$this, 'weekly_license_check' ] )",
 			$source,
 			'The existing weekly_license_check listener must remain on the hook.'
 		);

@@ -48,7 +48,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				return $this->validate_credit_card_fields( $is_valid );
 			} else {
 				$method_name = 'validate_' . str_replace( '-', '_', strtolower( $this->get_payment_type() ) ) . '_fields';
-				if ( is_callable( array( $this, $method_name ) ) ) {
+				if ( is_callable( [ $this, $method_name ] ) ) {
 					return $this->$method_name( $is_valid );
 				}
 			}
@@ -147,7 +147,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			$is_valid = true;
 
 			// validate card number
-			$account_number = str_replace( array( ' ', '-' ), '', $account_number );
+			$account_number = str_replace( [ ' ', '-' ], '', $account_number );
 
 			if ( empty( $account_number ) ) {
 
@@ -308,26 +308,26 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					 */
 					do_action( 'wc_payment_gateway_' . $this->get_id() . '_payment_processed', $order, $this );
 
-					return array(
+					return [
 						'result'   => 'success',
 						'redirect' => $this->get_return_url( $order ),
-					);
+					];
 
 				} else {
 
-					return array(
+					return [
 						'result'  => 'failure',
 						'message' => 'The transaction failed.',
-					);
+					];
 				}
 			} catch ( Woodev_Plugin_Exception $e ) {
 
 				$this->mark_order_as_failed( $order, $e->getMessage() );
 
-				return array(
+				return [
 					'result'  => 'failure',
 					'message' => $e->getMessage(),
-				);
+				];
 			}
 		}
 
@@ -348,7 +348,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 			$new_billing_hash = md5(
 				wp_json_encode(
 					array_filter(
-						array(
+						[
 							$order->get_billing_first_name(),
 							$order->get_billing_last_name(),
 							$order->get_billing_address_1(),
@@ -357,7 +357,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 							$order->get_billing_state(),
 							$order->get_billing_country(),
 							$order->get_billing_postcode(),
-						)
+						]
 					)
 				)
 			);
@@ -449,10 +449,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 				// common attributes
 				$order->payment->account_number = str_replace(
-					array(
+					[
 						' ',
 						'-',
-					),
+					],
 					'',
 					Woodev_Helper::get_posted_value( 'wc-' . $this->get_id_dasherized() . '-account-number' )
 				);
@@ -704,11 +704,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			} catch ( Woodev_Plugin_Exception $e ) {
 
-				$result = array(
+				$result = [
 					/* translators: Placeholders: %s - failure message. Payment method as in a specific credit card, e-check or bank account */
 					'message' => sprintf( esc_html__( 'Oops, adding your new payment method failed: %s', 'woodev-plugin-framework' ), $e->getMessage() ),
 					'success' => false,
-				);
+				];
 			}
 
 			Woodev_Helper::wc_add_notice( $result['message'], $result['success'] ? 'success' : 'error' );
@@ -775,10 +775,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				 */
 				do_action( 'wc_payment_gateway_' . $this->get_id() . '_payment_method_added', $token->get_id(), $order->get_user_id(), $response );
 
-				$result = array(
+				$result = [
 					'message' => $message,
 					'success' => true,
-				);
+				];
 
 			} else {
 
@@ -792,10 +792,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 					$message = 'Unknown Error';
 				}
 
-				$result = array(
+				$result = [
 					'message' => $message,
 					'success' => false,
-				);
+				];
 			}
 
 			/**
@@ -840,12 +840,12 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			$user = get_userdata( get_current_user_id() );
 
-			$properties = array(
+			$properties = [
 				'currency'    => get_woocommerce_currency(), // default to base store currency
 				'customer_id' => $user->ID,
-			);
+			];
 
-			$defaults = array(
+			$defaults = [
 
 				// billing
 				'billing_first_name'  => '',
@@ -871,7 +871,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 				'shipping_state'      => '',
 				'shipping_country'    => '',
 
-			);
+			];
 
 			foreach ( $defaults as $prop => $value ) {
 
@@ -954,11 +954,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 
 			$data = (array) get_user_meta( get_current_user_id(), $user_meta_key, true );
 
-			$new_data = array(
+			$new_data = [
 				'trans_id'    => $response->get_transaction_id() ? $response->get_transaction_id() : null,
 				'trans_date'  => current_time( 'mysql' ),
 				'environment' => $this->get_environment(),
-			);
+			];
 
 			$data[] = array_merge( $new_data, $this->get_add_payment_method_payment_gateway_transaction_data( $response ) );
 
@@ -979,7 +979,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Direct' ) ) :
 		 * @return array
 		 */
 		protected function get_add_payment_method_payment_gateway_transaction_data( $response ) {
-			return array();
+			return [];
 		}
 
 		/**

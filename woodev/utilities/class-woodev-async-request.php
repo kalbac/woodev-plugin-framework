@@ -24,7 +24,7 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 		protected $identifier;
 
 		/** @var array request data */
-		protected $data = array();
+		protected $data = [];
 
 
 		/**
@@ -33,8 +33,8 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 		public function __construct() {
 			$this->identifier = $this->prefix . '_' . $this->action;
 
-			add_action( 'wp_ajax_' . $this->identifier, array( $this, 'maybe_handle' ) );
-			add_action( 'wp_ajax_nopriv_' . $this->identifier, array( $this, 'maybe_handle' ) );
+			add_action( 'wp_ajax_' . $this->identifier, [ $this, 'maybe_handle' ] );
+			add_action( 'wp_ajax_nopriv_' . $this->identifier, [ $this, 'maybe_handle' ] );
 		}
 
 
@@ -77,10 +77,10 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 				return $this->query_args;
 			}
 
-			return array(
+			return [
 				'action' => $this->identifier,
 				'nonce'  => wp_create_nonce( $this->identifier ),
-			);
+			];
 		}
 
 
@@ -110,13 +110,13 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 				return $this->request_args;
 			}
 
-			return array(
+			return [
 				'timeout'   => 0.01,
 				'blocking'  => false,
 				'body'      => $this->data,
 				'cookies'   => $_COOKIE,
 				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
-			);
+			];
 		}
 
 

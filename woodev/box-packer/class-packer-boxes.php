@@ -17,12 +17,12 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 				throw new Woodev_Packer_Exception( __( 'No items to pack!', 'woodev-plugin-framework' ) );
 			}
 
-			$this->packages = array();
+			$this->packages = [];
 			$this->boxes    = $this->order_boxes_by_volume( $this->boxes );
 
 			if ( ! $this->boxes ) {
 				$this->items_cannot_pack = $this->items;
-				$this->items             = array();
+				$this->items             = [];
 			}
 			// Keep looping until packed
 			while ( ! empty( $this->items ) ) {
@@ -32,7 +32,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 
 				if ( $best_package->get_success_percent() === 0.0 ) {
 					$this->items_cannot_pack = $this->items;
-					$this->items             = array();
+					$this->items             = [];
 				} else {
 					$this->items      = $best_package->get_nofit_items();
 					$this->packages[] = $best_package;
@@ -46,7 +46,7 @@ if ( ! class_exists( 'Woodev_Packer_Boxes' ) ) :
 		 * @return Woodev_Box_Packer_Packed_Box Best packed package possible
 		 */
 		private function find_best_packed_box(): ?Woodev_Box_Packer_Packed_Box {
-			$packages = array();
+			$packages = [];
 			foreach ( $this->boxes as $box ) {
 				$packages[] = new Woodev_Box_Packer_Packed_Box( $box, $this->items );
 			}

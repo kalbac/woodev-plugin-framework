@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<ruleset name="Woodev Line Length">
+	<description>
+		Отдельный рулсет ровно для одной проверки: длина строки против мягкой цели 120 (#139).
+
+		Зачем отдельный файл. В основном phpcs.xml Generic.Files.LineLength намеренно погашен
+		exclude-pattern, потому что в дереве больше тысячи длинных строк и ронять на них CI мы не
+		хотим. Но погашенное правило нельзя оживить флагом: exclude-pattern действует независимо
+		от warning-severity, а свойства сниффа (lineLimit) нельзя задать из командной строки. Так
+		что без этого файла «мягкая цель» была бы неизмерима, то есть существовала бы только на
+		бумаге — ровно то состояние, на которое жалуется #139.
+
+		Как пользоваться:
+			vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev
+		Замер 31.08.2026 на df7a64b: 1397 нарушений.
+
+		Это НЕ гейт: в CI не запускается, прогон не роняет. Инструмент ревьюера.
+	</description>
+
+	<file>./woodev</file>
+	<arg name="extensions" value="php"/>
+	<arg name="warning-severity" value="1"/>
+	<!-- ОБЯЗАТЕЛЬНО и не косметика: WordPress-Core раскрывает таб в 4 символа,
+		 и длина строки считается ПОСЛЕ раскрытия. Без этой строки тот же снифф
+		 на том же дереве даёт 1002 вместо 1397 — то есть занижает почти на треть
+		 и перестаёт соответствовать основному рулсету (замерено 31.08.2026). -->
+	<arg name="tab-width" value="4"/>
+
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/tests/*</exclude-pattern>
+	<exclude-pattern>*/assets/build/*</exclude-pattern>
+
+	<rule ref="Generic.Files.LineLength">
+		<properties>
+			<property name="lineLimit" value="120"/>
+			<property name="absoluteLineLimit" value="0"/>
+		</properties>
+	</rule>
+</ruleset>

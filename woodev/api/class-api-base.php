@@ -13,7 +13,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		protected $request_uri;
 
 		/** @var array request headers */
-		protected $request_headers = array();
+		protected $request_headers = [];
 
 		/** @var string request user-agent */
 		protected $request_user_agent;
@@ -146,7 +146,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			$start_time    = microtime( true );
 
 			if ( $this->get_plugin()->require_tls_1_2() ) {
-				add_action( 'http_api_curl', array( $this, 'set_tls_1_2_request' ), 10, 3 );
+				add_action( 'http_api_curl', [ $this, 'set_tls_1_2_request' ], 10, 3 );
 			}
 
 			$response = $this->do_remote_request_with_challenge_redirects( $this->get_request_uri(), $this->get_request_args() );
@@ -324,7 +324,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		private static function resolve_challenge_redirect_uri( string $request_uri, string $location ): string {
 
-			$base = parse_url( $request_uri );
+			$base = wp_parse_url( $request_uri );
 
 			if ( ! is_array( $base ) || empty( $base['scheme'] ) || empty( $base['host'] ) ) {
 				return $location;
@@ -449,8 +449,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		private static function is_same_origin_uri( string $first_uri, string $second_uri ): bool {
 
-			$first  = parse_url( $first_uri );
-			$second = parse_url( $second_uri );
+			$first  = wp_parse_url( $first_uri );
+			$second = wp_parse_url( $second_uri );
 
 			if ( ! is_array( $first ) || ! is_array( $second ) ) {
 				return false;
@@ -492,7 +492,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		private static function get_uri_origin( string $uri ): string {
 
-			$parsed = parse_url( $uri );
+			$parsed = wp_parse_url( $uri );
 
 			if ( ! is_array( $parsed ) || empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
 				return strtolower( $uri );
@@ -513,7 +513,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		private static function get_uri_path( string $uri ): string {
 
-			$path = parse_url( $uri, PHP_URL_PATH );
+			$path = wp_parse_url( $uri, PHP_URL_PATH );
 
 			return is_string( $path ) && '' !== $path ? $path : '/';
 		}
@@ -2053,7 +2053,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 
 		protected function get_request_args() {
 
-			$args = array(
+			$args = [
 				'method'      => $this->get_request_method(),
 				'timeout'     => MINUTE_IN_SECONDS,
 				'redirection' => 0,
@@ -2063,8 +2063,8 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 				'user-agent'  => $this->get_request_user_agent(),
 				'headers'     => $this->get_request_headers(),
 				'body'        => $this->get_request_body(),
-				'cookies'     => array(),
-			);
+				'cookies'     => [],
+			];
 
 			return apply_filters( 'woodev_' . $this->get_api_id() . '_http_request_args', $args, $this );
 		}
@@ -2080,7 +2080,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected function get_request_body() {
 
-			if ( in_array( strtoupper( $this->get_request_method() ), array( 'GET', 'HEAD' ) ) ) {
+			if ( in_array( strtoupper( $this->get_request_method() ), [ 'GET', 'HEAD' ] ) ) {
 				return '';
 			}
 
@@ -2138,7 +2138,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 */
 		protected function get_sanitized_request_body() {
 
-			if ( in_array( strtoupper( $this->get_request_method() ), array( 'GET', 'HEAD' ) ) ) {
+			if ( in_array( strtoupper( $this->get_request_method() ), [ 'GET', 'HEAD' ] ) ) {
 				return '';
 			}
 
@@ -2354,14 +2354,14 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 		 * @return array
 		 */
 		protected function get_request_data_for_broadcast() {
-			return array(
+			return [
 				'method'     => $this->get_request_method(),
 				'uri'        => $this->get_sanitized_request_uri(),
 				'user-agent' => $this->get_request_user_agent(),
 				'headers'    => $this->get_sanitized_request_headers(),
 				'body'       => $this->get_sanitized_request_body(),
 				'duration'   => $this->get_request_duration() . 's', // seconds
-			);
+			];
 		}
 
 		protected function get_response_handler() {
@@ -2490,7 +2490,7 @@ if ( ! class_exists( 'Woodev_API_Base' ) ) :
 			return $this->get_plugin()->get_id();
 		}
 
-		abstract protected function get_new_request( $args = array() );
+		abstract protected function get_new_request( $args = [] );
 
 		abstract protected function get_plugin();
 

@@ -46,10 +46,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		private $gateways;
 
 		/** @var array optional array of currency codes this gateway is allowed for */
-		private $currencies = array();
+		private $currencies = [];
 
 		/** @var array named features that this gateway supports which require action from the parent plugin, including 'tokenization' */
-		private $supports = array();
+		private $supports = [];
 
 		/** @var array|bool gateway IDs that require SSL, or bool for all/none */
 		private $require_ssl;
@@ -131,16 +131,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		private function add_hooks() {
 
 			// add classes to WC Payment Methods
-			add_filter( 'woocommerce_payment_gateways', array( $this, 'load_gateways' ) );
+			add_filter( 'woocommerce_payment_gateways', [ $this, 'load_gateways' ] );
 
 			// adjust the available gateways in certain cases
-			add_filter( 'woocommerce_available_payment_gateways', array( $this, 'adjust_available_gateways' ) );
+			add_filter( 'woocommerce_available_payment_gateways', [ $this, 'adjust_available_gateways' ] );
 
 			// my payment methods feature
-			add_action( 'init', array( $this, 'maybe_init_my_payment_methods' ) );
+			add_action( 'init', [ $this, 'maybe_init_my_payment_methods' ] );
 
 			// add gateway information to the system status report
-			add_action( 'woocommerce_system_status_report', array( $this, 'add_system_status_information' ) );
+			add_action( 'woocommerce_system_status_report', [ $this, 'add_system_status_information' ] );
 		}
 
 		/**
@@ -325,7 +325,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 			}
 
 			// a configure link per gateway
-			$custom_actions = array();
+			$custom_actions = [];
 
 			foreach ( $this->get_gateway_ids() as $gateway_id ) {
 				$custom_actions[ 'configure_' . $gateway_id ] = $this->get_settings_link( $gateway_id );
@@ -420,9 +420,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 						$this->get_admin_notice_handler()->add_admin_notice(
 							$message,
 							'ssl-required',
-							array(
+							[
 								'notice_class' => 'error',
-							)
+							]
 						);
 
 						// just show the message once for plugins with multiple gateway support
@@ -436,10 +436,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					$this->get_admin_notice_handler()->add_admin_notice(
 						$message,
 						'tls-1-2-required',
-						array(
+						[
 							'notice_class'            => 'notice-warning',
 							'always_show_on_settings' => false,
-						)
+						]
 					);
 
 					// just show the message once for plugins with multiple gateway support
@@ -463,7 +463,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 				// we might have a currency issue, go through any gateways provided by this plugin and see which ones (or all) have any unmet currency requirements
 				// (gateway classes will already be instantiated, so it's not like this is a huge deal)
-				$gateways = array();
+				$gateways = [];
 				foreach ( $this->get_gateways() as $gateway ) {
 					if ( $gateway->is_enabled() && ! $gateway->currency_is_accepted() ) {
 						$gateways[] = $gateway;
@@ -503,9 +503,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 				$this->get_admin_notice_handler()->add_admin_notice(
 					$message,
 					'accepted-currency' . $suffix,
-					array(
+					[
 						'notice_class' => 'error',
-					)
+					]
 				);
 
 			}
@@ -533,9 +533,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 					$this->get_admin_notice_handler()->add_admin_notice(
 						$message,
 						'debug-in-production',
-						array(
+						[
 							'notice_class' => 'notice-warning',
-						)
+						]
 					);
 
 					break;
@@ -586,7 +586,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 								$note->set_content( $gateway->get_not_configured_error_message() );
 							}
 
-							$note->set_actions( array() );
+							$note->set_actions( [] );
 
 							// add the action buttons if not on the gateway's configuration page
 							if ( ! $this->is_payment_gateway_configuration_page( $gateway->get_id() ) ) {
@@ -606,9 +606,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 						$this->get_admin_notice_handler()->add_admin_notice(
 							$gateway->get_not_configured_error_message(),
 							$gateway->get_id() . '-not-configured',
-							array(
+							[
 								'notice_class' => 'error',
-							)
+							]
 						);
 					}
 
@@ -747,11 +747,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 */
 		public function get_payment_gateway_configuration_url( $gateway_id ) {
 			return add_query_arg(
-				array(
+				[
 					'page'    => 'wc-settings',
 					'tab'     => 'checkout',
 					'section' => $gateway_id,
-				),
+				],
 				admin_url( 'admin.php' )
 			);
 		}
@@ -781,10 +781,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 		 * @since 1.0.0
 		 */
 		public function add_gateway( $gateway_id, $gateway_class_name ) {
-			$this->gateways[ $gateway_id ] = array(
+			$this->gateways[ $gateway_id ] = [
 				'gateway_class_name' => $gateway_class_name,
 				'gateway'            => null,
-			);
+			];
 		}
 
 		/**
@@ -798,7 +798,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			assert( ! empty( $this->gateways ) );
 
-			$gateway_class_names = array();
+			$gateway_class_names = [];
 
 			foreach ( $this->gateways as $gateway ) {
 				$gateway_class_names[] = $gateway['gateway_class_name'];
@@ -834,7 +834,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Plugin' ) ) :
 
 			assert( ! empty( $this->gateways ) );
 
-			$gateways = array();
+			$gateways = [];
 
 			foreach ( $this->get_gateway_ids() as $gateway_id ) {
 				$gateways[] = $this->get_gateway( $gateway_id );

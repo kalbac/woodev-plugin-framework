@@ -50,10 +50,10 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 */
 		protected function add_hooks() {
 
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
 
-			add_action( 'wp_ajax_' . $this->get_job_handler()->get_identifier() . '_process_batch', array( $this, 'ajax_process_batch' ) );
-			add_action( 'wp_ajax_' . $this->get_job_handler()->get_identifier() . '_cancel_job', array( $this, 'ajax_cancel_job' ) );
+			add_action( 'wp_ajax_' . $this->get_job_handler()->get_identifier() . '_process_batch', [ $this, 'ajax_process_batch' ] );
+			add_action( 'wp_ajax_' . $this->get_job_handler()->get_identifier() . '_cancel_job', [ $this, 'ajax_cancel_job' ] );
 		}
 
 
@@ -61,7 +61,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 * Enqueues the scripts.
 		 */
 		public function enqueue_scripts() {
-			wp_enqueue_script( $this->get_job_handler()->get_identifier() . '_batch_handler', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-admin-job-batch-handler.min.js', array( 'jquery' ), $this->get_plugin()->get_version() );
+			wp_enqueue_script( $this->get_job_handler()->get_identifier() . '_batch_handler', $this->get_plugin()->get_framework_assets_url() . '/js/admin/woodev-admin-job-batch-handler.min.js', [ 'jquery' ], $this->get_plugin()->get_version() );
 		}
 
 
@@ -96,11 +96,11 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 		 */
 		protected function get_js_args() {
 
-			return array(
+			return [
 				'id'            => $this->get_job_handler()->get_identifier(),
 				'process_nonce' => wp_create_nonce( $this->get_job_handler()->get_identifier() . '_process_batch' ),
 				'cancel_nonce'  => wp_create_nonce( $this->get_job_handler()->get_identifier() . '_cancel_job' ),
-			);
+			];
 		}
 
 
@@ -148,7 +148,7 @@ if ( ! class_exists( 'Woodev_Job_Batch_Handler' ) ) :
 
 			} catch ( Woodev_Plugin_Exception $e ) {
 
-				$data = ( ! empty( $job ) ) ? (array) $job : array();
+				$data = ( ! empty( $job ) ) ? (array) $job : [];
 
 				$data['message'] = $e->getMessage();
 

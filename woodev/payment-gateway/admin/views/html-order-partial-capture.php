@@ -14,17 +14,17 @@
 
 		<tr>
 			<td class="label"><?php esc_html_e( 'Authorization total', 'woodev-plugin-framework' ); ?>:</td>
-			<td class="total"><?php echo wc_price( $authorization_total, array( 'currency' => $order->get_currency() ) ); ?></td>
+			<td class="total"><?php echo wc_price( $authorization_total, [ 'currency' => $order->get_currency() ] ); ?></td>
 		</tr>
 		<tr>
 			<td class="label"><?php esc_html_e( 'Amount already captured', 'woodev-plugin-framework' ); ?>:</td>
-			<td class="total"><?php echo wc_price( $total_captured, array( 'currency' => $order->get_currency() ) ); ?></td>
+			<td class="total"><?php echo wc_price( $total_captured, [ 'currency' => $order->get_currency() ] ); ?></td>
 		</tr>
 
 		<?php if ( $remaining_total > 0 ) : ?>
 			<tr>
 				<td class="label"><?php esc_html_e( 'Remaining order total', 'woodev-plugin-framework' ); ?>:</td>
-				<td class="total"><?php echo wc_price( $remaining_total, array( 'currency' => $order->get_currency() ) ); ?></td>
+				<td class="total"><?php echo wc_price( $remaining_total, [ 'currency' => $order->get_currency() ] ); ?></td>
 			</tr>
 		<?php endif; ?>
 
@@ -46,7 +46,7 @@
 	<div class="clear"></div>
 	<div class="capture-actions">
 
-		<?php $amount = '<span class="capture-amount">' . wc_price( 0, array( 'currency' => $order->get_currency() ) ) . '</span>'; ?>
+		<?php $amount = '<span class="capture-amount">' . wc_price( 0, [ 'currency' => $order->get_currency() ] ) . '</span>'; ?>
 
 		<button type="button" class="button button-primary capture-action" disabled="disabled"><?php printf( esc_html__( 'Capture %s', 'woodev-plugin-framework' ), $amount ); ?></button>
 		<button type="button" class="button cancel-action"><?php _e( 'Cancel', 'woodev-plugin-framework' ); ?></button>

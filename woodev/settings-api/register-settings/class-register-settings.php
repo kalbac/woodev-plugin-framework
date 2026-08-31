@@ -11,7 +11,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 	 */
 	abstract class Woodev_Register_Settings {
 
-		protected $settings = array();
+		protected $settings = [];
 		protected $option;
 
 		/**
@@ -20,7 +20,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		public function __construct( $option ) {
 			$this->option = $option;
 
-			add_action( 'admin_init', array( $this, 'register_settings' ) );
+			add_action( 'admin_init', [ $this, 'register_settings' ] );
 		}
 
 		/**
@@ -33,7 +33,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		/**
 		 * Function to set default options on a fresh install.
 		 */
-		public function set_defaults( $settings = array() ) {
+		public function set_defaults( $settings = [] ) {
 
 			if ( false === get_option( $this->option ) ) {
 
@@ -64,7 +64,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		 * Return all the settings.
 		 */
 		public function get_settings() {
-			$saved_settings = is_array( get_option( $this->option ) ) ? get_option( $this->option ) : array();
+			$saved_settings = is_array( get_option( $this->option ) ) ? get_option( $this->option ) : [];
 
 			return array_merge( $this->settings, $saved_settings );
 		}
@@ -87,7 +87,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		/**
 		 * Updates the settings in the database.
 		 */
-		public function update_settings( $settings = array() ) {
+		public function update_settings( $settings = [] ) {
 
 			$old_settings = get_option( $this->option );
 
@@ -121,7 +121,7 @@ if ( ! class_exists( 'Woodev_Register_Settings' ) ) :
 		 */
 		public function get_setting_value( $id ) {
 
-			$settings = is_array( get_option( $this->option ) ) ? get_option( $this->option ) : array();
+			$settings = is_array( get_option( $this->option ) ) ? get_option( $this->option ) : [];
 
 			$this->settings = $settings;
 

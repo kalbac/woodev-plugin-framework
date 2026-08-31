@@ -82,6 +82,12 @@ final class ApiBaseChallengeRedirectTest extends TestCase {
 			return $value;
 		} );
 		Functions\when( 'do_action' )->justReturn( null );
+		// #139: the class moved from parse_url() to wp_parse_url() (WPCS
+		// AlternativeFunctions). Brain Monkey defines no WP functions, so the
+		// wrapper needs the same stub the other suites already give it.
+		Functions\when( 'wp_parse_url' )->alias( static function ( $url, $component = -1 ) {
+			return -1 === $component ? parse_url( (string) $url ) : parse_url( (string) $url, $component );
+		} );
 	}
 
 	/** @param int $code HTTP status code. @param array<string, mixed> $headers Response headers. @return array<string, mixed> */

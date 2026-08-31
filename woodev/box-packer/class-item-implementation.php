@@ -36,7 +36,7 @@ if ( ! class_exists( 'Woodev_Packer_Item_Implementation' ) ) :
 		 * @param null|mixed $internal_data .
 		 */
 		public function __construct( float $length, float $width, float $height, float $weight = 0.0, float $money_value = 0.0, $internal_data = null ) {
-			$dimensions = array( $length, $width, $height );
+			$dimensions = [ $length, $width, $height ];
 			sort( $dimensions );
 			$this->length        = (float) $dimensions[2];
 			$this->width         = (float) $dimensions[1];

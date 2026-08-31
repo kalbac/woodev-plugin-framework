@@ -70,11 +70,11 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 				md5(
 					implode(
 						'_',
-						array(
+						[
 							$this->get_request_uri(),
 							$this->get_request_body(),
 							$this->get_request_cache_lifetime(),
-						)
+						]
 					)
 				)
 			);
@@ -171,10 +171,10 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 			if ( $this->is_request_cacheable() ) {
 				$request_data = array_merge(
 					$request_data,
-					array(
+					[
 						'force_refresh' => $this->get_request()->should_refresh(),
 						'should_cache'  => $this->get_request()->should_cache(),
-					)
+					]
 				);
 			}
 
@@ -193,7 +193,7 @@ if ( ! class_exists( 'Woodev_Cacheable_API_Base' ) ) :
 			$response_data = parent::get_response_data_for_broadcast();
 
 			if ( $this->is_request_cacheable() ) {
-				$response_data = array_merge( $response_data, array( 'from_cache' => $this->is_response_loaded_from_cache() ) );
+				$response_data = array_merge( $response_data, [ 'from_cache' => $this->is_response_loaded_from_cache() ] );
 			}
 
 			return $response_data;

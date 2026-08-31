@@ -148,13 +148,13 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				$request_uri .= '?' . (string) $parts['query'];
 			}
 
-			return array(
+			return [
 				'host'        => $host,
 				'request_uri' => $request_uri,
 				'method'      => strtoupper( $method ),
 				'body'        => $body,
 				'timestamp'   => $timestamp,
-			);
+			];
 		}
 
 		/**
@@ -181,13 +181,13 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			$auth = $this->get_auth();
 			$user = $this->get_user_data();
 
-			return array(
+			return [
 				'connected' => '' !== (string) ( $auth['access_token'] ?? '' ),
 				'name'      => (string) ( $user['name'] ?? '' ),
 				'email'     => (string) ( $user['email'] ?? '' ),
 				'avatar'    => (string) ( $user['avatar'] ?? '' ),
 				'url'       => (string) ( $auth['url'] ?? $this->api_base() ),
-			);
+			];
 		}
 
 		/**
@@ -207,11 +207,11 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		public function get_connect_url(): string {
 
 			$url = add_query_arg(
-				array(
+				[
 					'page'                   => self::PAGE_SLUG,
 					'woodev-account-connect' => '1',
 					'_wpnonce'               => wp_create_nonce( 'woodev_account_connect' ),
-				),
+				],
 				admin_url( 'admin.php' )
 			);
 
@@ -229,7 +229,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		 */
 		private function get_auth(): array {
 			$data = get_option( self::OPTION_KEY );
-			return ( is_array( $data ) && isset( $data['auth'] ) && is_array( $data['auth'] ) ) ? $data['auth'] : array();
+			return ( is_array( $data ) && isset( $data['auth'] ) && is_array( $data['auth'] ) ) ? $data['auth'] : [];
 		}
 
 		/**
@@ -241,7 +241,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		 */
 		private function get_user_data(): array {
 			$data = get_option( self::OPTION_KEY );
-			return ( is_array( $data ) && isset( $data['auth_user_data'] ) && is_array( $data['auth_user_data'] ) ) ? $data['auth_user_data'] : array();
+			return ( is_array( $data ) && isset( $data['auth_user_data'] ) && is_array( $data['auth_user_data'] ) ) ? $data['auth_user_data'] : [];
 		}
 
 		/**
@@ -257,10 +257,10 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		private function store_auth( array $auth, array $user_data ): void {
 			update_option(
 				self::OPTION_KEY,
-				array(
+				[
 					'auth'           => $auth,
 					'auth_user_data' => $user_data,
-				),
+				],
 				false
 			);
 		}
@@ -310,7 +310,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 		 *
 		 * @return array<string,mixed>|WP_Error
 		 */
-		public function request( string $method, string $path, array $body = array(), int $timeout = 15 ) {
+		public function request( string $method, string $path, array $body = [], int $timeout = 15 ) {
 
 			$auth = $this->get_auth();
 			$key  = (string) ( $auth['access_token_secret'] ?? '' );
@@ -320,7 +320,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			}
 
 			$json_body = '';
-			if ( array() !== $body ) {
+			if ( [] !== $body ) {
 				$json_body = wp_json_encode( $body );
 				if ( false === $json_body ) {
 					return new WP_Error( 'woodev_account_encode_error', __( 'Не удалось подготовить запрос.', 'woodev-plugin-framework' ) );
@@ -348,15 +348,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				$key
 			);
 
-			$args = array(
+			$args = [
 				'method'  => $method,
 				'timeout' => max( 1, $timeout ),
-				'headers' => array(
+				'headers' => [
 					'Authorization'      => 'Bearer ' . (string) $auth['access_token'],
 					'X-Woodev-Signature' => $signature,
 					'X-Woodev-Timestamp' => $timestamp,
-				),
-			);
+				],
+			];
 
 			if ( '' !== $json_body ) {
 				$args['headers']['Content-Type'] = 'application/json';
@@ -378,7 +378,7 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
 
-			return is_array( $decoded ) ? $decoded : array();
+			return is_array( $decoded ) ? $decoded : [];
 		}
 
 		/**
@@ -430,27 +430,27 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			$home_url     = home_url();
 			$return_nonce = wp_create_nonce( 'woodev_account_return' );
 			$redirect_uri = add_query_arg(
-				array(
+				[
 					'page'                  => self::PAGE_SLUG,
 					'woodev-account-return' => '1',
 					'state'                 => $state,
 					'_wpnonce'              => $return_nonce,
-				),
+				],
 				admin_url( 'admin.php' )
 			);
 
 			$response = wp_safe_remote_post(
 				$this->endpoint( '/oauth/request_token' ),
-				array(
+				[
 					'timeout' => 15,
-					'headers' => array( 'Content-Type' => 'application/json' ),
+					'headers' => [ 'Content-Type' => 'application/json' ],
 					'body'    => wp_json_encode(
-						array(
+						[
 							'home_url'     => $home_url,
 							'redirect_uri' => $redirect_uri,
-						)
+						]
 					),
-				)
+				]
 			);
 
 			$secret = '';
@@ -469,12 +469,12 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			// tamper-checks it byte-for-byte).
 			set_transient(
 				$this->handshake_key( $state ),
-				array(
+				[
 					'secret'       => $secret,
 					'redirect_uri' => $redirect_uri,
 					'home_url'     => $home_url,
 					'user_id'      => get_current_user_id(),
-				),
+				],
 				15 * MINUTE_IN_SECONDS
 			);
 
@@ -482,14 +482,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 			// is the configured/filtered authorize origin only (browser-facing). The
 			// connector's authorize screen is a front-end ?woodev_account_authorize=1
 			// request (not REST), so cookie login works there.
+			// phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- cross-origin by design; the host is the configured authorize origin, never request data. wp_safe_redirect() cannot reach it (#139).
 			wp_redirect(
 				add_query_arg(
-					array(
+					[
 						'woodev_account_authorize' => '1',
 						'home_url'                 => rawurlencode( $home_url ),
 						'redirect_uri'             => rawurlencode( $redirect_uri ),
 						'secret'                   => $secret,
-					),
+					],
 					$this->authorize_url()
 				)
 			);
@@ -544,10 +545,10 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			wp_safe_redirect(
 				add_query_arg(
-					array(
+					[
 						'page'                     => self::PAGE_SLUG,
 						'woodev-account-connected' => '1',
-					),
+					],
 					admin_url( 'admin.php' )
 				)
 			);
@@ -569,10 +570,10 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$url       = $this->endpoint( '/oauth/access_token' );
 			$json_body = wp_json_encode(
-				array(
+				[
 					'request_token' => $request_token,
 					'home_url'      => home_url(),
-				)
+				]
 			);
 
 			if ( false === $json_body ) {
@@ -587,15 +588,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			$response = wp_safe_remote_post(
 				$url,
-				array(
+				[
 					'timeout' => 15,
-					'headers' => array(
+					'headers' => [
 						'Content-Type'       => 'application/json',
 						'X-Woodev-Signature' => $signature,
 						'X-Woodev-Timestamp' => $timestamp,
-					),
+					],
 					'body'    => $json_body,
-				)
+				]
 			);
 
 			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
@@ -615,15 +616,15 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			// Store tokens FIRST so the immediate signed /oauth/me uses them.
 			$this->store_auth(
-				array(
+				[
 					'access_token'        => (string) $tokens['access_token'],
 					'access_token_secret' => (string) $tokens['access_token_secret'],
 					'site_id'             => (string) ( $tokens['site_id'] ?? '' ),
 					'url'                 => $this->api_base(),
 					'user_id'             => get_current_user_id(),
 					'updated'             => time(),
-				),
-				array()
+				],
+				[]
 			);
 
 			// A new connection invalidates any purchases cached for a prior account.
@@ -638,11 +639,11 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 				$auth = $this->get_auth();
 				$this->store_auth(
 					$auth,
-					array(
+					[
 						'name'   => (string) ( $me['name'] ?? '' ),
 						'email'  => (string) ( $me['email'] ?? '' ),
 						'avatar' => (string) ( $me['avatar'] ?? '' ),
-					)
+					]
 				);
 			}
 
@@ -664,10 +665,10 @@ if ( ! class_exists( 'Woodev_Account_Connection' ) ) :
 
 			wp_safe_redirect(
 				add_query_arg(
-					array(
+					[
 						'page'                  => self::PAGE_SLUG,
 						'woodev-account-failed' => '1',
-					),
+					],
 					admin_url( 'admin.php' )
 				)
 			);

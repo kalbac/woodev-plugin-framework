@@ -54,14 +54,14 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 			$this->plugin = $plugin;
 
 			// CRON actions
-			add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
-			add_action( 'wp', array( $this, 'schedule_events' ) );
-			add_action( 'woodev_weekly_scheduled_events', array( $this, 'weekly_license_check' ) );
+			add_filter( 'cron_schedules', [ $this, 'add_schedules' ] );
+			add_action( 'wp', [ $this, 'schedule_events' ] );
+			add_action( 'woodev_weekly_scheduled_events', [ $this, 'weekly_license_check' ] );
 			// Piggyback the scheduled prune on the EXISTING weekly event (no new cron
 			// hook = no new cron contract — §9.2). The hook name/recurrence/payload are
 			// untouched; this is an added listener only.
-			add_action( 'woodev_weekly_scheduled_events', array( $this, 'prune_license_command_nonces' ) );
-			add_action( 'wp_ajax_woodev_verify_license', array( $this, 'ajax_verify_license' ) );
+			add_action( 'woodev_weekly_scheduled_events', [ $this, 'prune_license_command_nonces' ] );
+			add_action( 'wp_ajax_woodev_verify_license', [ $this, 'ajax_verify_license' ] );
 		}
 
 		/**
@@ -101,13 +101,13 @@ if ( ! class_exists( '\Woodev\Framework\Handlers\Cron_Handler' ) ) :
 		 *
 		 * @return array
 		 */
-		public function add_schedules( $schedules = array() ) {
+		public function add_schedules( $schedules = [] ) {
 
 			if ( ! isset( $schedules['weekly'] ) ) {
-				$schedules['weekly'] = array(
+				$schedules['weekly'] = [
 					'interval' => WEEK_IN_SECONDS,
 					'display'  => __( 'Once Weekly', 'woodev-plugin-framework' ),
-				);
+				];
 			}
 
 			return $schedules;

@@ -97,9 +97,9 @@ if ( ! class_exists( 'Woodev_REST_API_License_Command' ) ) :
 			register_rest_route(
 				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
 				'/license-command',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'handle_command' ),
+					'callback'            => [ $this, 'handle_command' ],
 					// LOCKED operator decision (§9.3): auth IS the Ed25519 signature.
 					// There is no WP user in the server→client signed-command flow.
 					// '__return_true' is the standard WP idiom for a fully public route.
@@ -108,7 +108,7 @@ if ( ! class_exists( 'Woodev_REST_API_License_Command' ) ) :
 					// errors BEFORE the signature check, leaking schema information to
 					// unauthenticated callers (§9.4 indistinguishable-rejection rule).
 					// The dispatcher validates everything internally.
-				)
+				]
 			);
 		}
 
@@ -162,14 +162,14 @@ if ( ! class_exists( 'Woodev_REST_API_License_Command' ) ) :
 					$reason = 'failed';
 				}
 
-				$body = array(
+				$body = [
 					'status' => 'rejected',
 					'reason' => $reason,
-				);
+				];
 			} else {
-				$body = array(
+				$body = [
 					'status' => $status,
-				);
+				];
 			}
 
 			return new \WP_REST_Response( $body, $http );
