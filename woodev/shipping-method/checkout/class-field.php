@@ -95,6 +95,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Field' ) ) :
 		/**
 		 * Sets the human-readable label shown in the checkout form.
 		 *
+		 * IMPORTANT — this is INERT on a field WooCommerce declares itself, and that is
+		 * deliberate (#483, operator decision 31.08.2026). The label does reach
+		 * `WC()->checkout()->get_checkout_fields()`, but for a native address field
+		 * (`billing_city`, `billing_state`, `billing_address_1`, `billing_postcode`, and
+		 * their `shipping_*` twins) WooCommerce's own
+		 * `assets/js/frontend/address-i18n.js` overwrites the rendered `<label>` on
+		 * `country_to_state_changing` with the country locale's label — and
+		 * `WC_Countries::get_country_locale()['default']` carries a label for exactly
+		 * those fields (measured on the rig, 31.08.2026). Taking such a field over with
+		 * {@see source_location()} does not change that.
+		 *
+		 * That is the wanted behaviour, not a defect to fix: shops routinely rename
+		 * WooCommerce's address labels from their own code or a third-party plugin, and a
+		 * framework-supplied label would compete with that rename. So this setter applies
+		 * only to fields WooCommerce does NOT define itself — the host plugin's own.
+		 *
+		 * Deliberately no `_doing_it_wrong()`: the call is harmless, and the notice would
+		 * be production noise.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $label field label.
