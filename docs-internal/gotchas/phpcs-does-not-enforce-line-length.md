@@ -1,6 +1,6 @@
-# `composer phpcs` does not enforce the 120-char limit, and never sees `tests/`
+# `composer phpcs` sees NO warning-level sniff at all — line length is only the most visible one
 
-**Namespace:** `[tooling/phpcs]` · **Discovered:** s45 (2026-07-31)
+**Namespace:** `[tooling/phpcs]` · **Discovered:** s45 (2026-07-31) · **Scope measured:** s109 (31.08.2026)
 
 ## The trap
 
@@ -45,6 +45,65 @@ Do this for **test files too** — they are outside phpcs entirely, so nothing e
 The real fix is tracked as issue #139: either raise `warning-severity` and set `absoluteLineLimit`
 so CI enforces it, or write down that the limit is a manual check and put it in the review
 checklist. Until one of those lands, a clean phpcs run says nothing about line length.
+
+## The scope is the whole warning level, not one metric (measured s109)
+
+`warning-severity 0` is a GLOBAL argument (`phpcs.xml:76`), not a property of the line-length rule.
+Every warning-level sniff in the ruleset is silenced by it. Measured across `woodev/` on
+31.08.2026 with `--warning-severity=1 --error-severity=0`:
+
+**1786 violations from 19 sniffs**, none of which `composer phpcs` reports today.
+
+| sniff | count |
+|---|---|
+| `Generic.Files.LineLength.TooLong` | 1393 (137 files) |
+| `Generic.Formatting.MultipleStatementAlignment.*` | 54 |
+| `WordPress.WP.Capabilities.Undetermined` | 17 |
+| `WordPress.WP.AlternativeFunctions.parse_url_parse_url` | 5 |
+| `Generic.CodeAnalysis.ForLoopWithTestFunctionCall` | 3 |
+| `WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode` | 3 |
+| `WordPress.Security.SafeRedirect.wp_redirect_wp_redirect` | 1 |
+| `WordPress.WP.CronInterval.ChangeDetected` | 1 |
+| reserved-keyword parameter names, `rand`, `error_log` | 6 |
+
+One of them is a **security** sniff. So "phpcs clean" is not merely weak evidence about line
+length — it is silent about an entire severity tier, including checks nobody would knowingly
+disable. `phpcbf` can fix 356 of these automatically; line length is NOT among them.
+
+## ⚠ How to probe this WITHOUT fooling yourself
+
+A long **comment** made of one unbreakable word reports nothing even at `--warning-severity=1`, and
+that looks like proof the rule is broken in some other way. It is not: `LineLengthSniff.php:155-176`
+deliberately skips a comment-only line whose first non-breaking word already exceeds the limit —
+otherwise a long URL in a comment could never be written at all.
+
+❌ A probe that proves nothing:
+
+```php
+<?php
+// xxxxxxxx…140 x's, no spaces…xxxxxxxx
+```
+
+✅ A probe that works — real code, with spaces to break on:
+
+```php
+<?php
+class Woodev_Probe_Long_Line {
+	public function run(): string {
+		$value = 'aaaa' . 'bbbb' . /* … out past 120 columns … */ . 'oooo';
+		return $value;
+	}
+}
+```
+
+```
+vendor/bin/phpcs probe.php                       → . 1 / 1 (100%)   silent
+vendor/bin/phpcs --warning-severity=1 probe.php  → 4 | WARNING | Line exceeds 120 characters;
+                                                      contains 150 characters
+```
+
+Put the probe in the **scratchpad** and copy it in, never author it inside the repo.
+
 
 ## Related
 
