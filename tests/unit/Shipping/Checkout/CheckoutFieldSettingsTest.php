@@ -13,6 +13,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Environment;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Policy;
 use Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings;
+use Woodev\Framework\Shipping\Checkout\Phone_Mask_Patterns;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
@@ -225,14 +226,15 @@ final class CheckoutFieldSettingsTest extends TestCase {
 	// disabled-country (no known pattern) case, and the JS config block.
 	// -------------------------------------------------------------------------
 
-	public function test_phone_field_format_offers_off_auto_then_every_shipping_country(): void {
+	public function test_phone_field_format_offers_off_auto_then_only_shipping_countries_with_a_mask(): void {
 		$s = new Checkout_Field_Settings(
 			new Checkout_Field_Environment( false, 3, [ 'RU' => 'Россия', 'BY' => 'Беларусь', 'DE' => 'Германия' ] )
 		);
 
 		$options = $s->get_setting( 'phone_field_format' )->get_options();
 
-		$this->assertSame( [ 'off', 'auto', 'RU', 'BY', 'DE' ], array_keys( $options ) );
+		// DE ships but has no template, so it earns no row (operator, 31.08.2026).
+		$this->assertSame( [ 'off', 'auto', 'RU', 'BY' ], array_keys( $options ) );
 	}
 
 	public function test_a_shipping_country_with_a_known_pattern_keeps_its_plain_name(): void {
@@ -244,26 +246,65 @@ final class CheckoutFieldSettingsTest extends TestCase {
 	}
 
 	/**
-	 * The disabled-country case (design note in card #503): a country with no
-	 * known mask template is never hidden from the list and the control is
-	 * never disabled outright — it stays selectable (picking it degrades to a
-	 * no-op on the JS side, same as «Не использовать») but its OWN label says
-	 * so, so it is never a silently dead choice. See
-	 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Field_Settings::phone_field_format_options()}'s
-	 * docblock for why this is a label-embedded reason rather than this
-	 * class's usual control-level `disabled`/`disabled_reason`.
+	 * Operator decision, 31.08.2026: a shipping country with no mask template
+	 * gets NO row at all. The card originally asked for it to be listed and
+	 * marked — which reads fine on a two-country store and collapses on one
+	 * shipping worldwide (measured on the rig: 248 entries, 236 of them
+	 * «(маска не описана)», against a table of twelve). An option that does
+	 * nothing when picked earns no row.
+	 *
+	 * `off`/`auto` always remain, so the control is never empty and is never
+	 * disabled outright.
 	 */
-	public function test_a_shipping_country_without_a_known_pattern_is_shown_but_marked_unavailable(): void {
+	public function test_a_shipping_country_without_a_known_pattern_is_not_offered(): void {
 		$s = new Checkout_Field_Settings(
 			new Checkout_Field_Environment( false, 1, [ 'DE' => 'Германия' ] )
 		);
 
 		$options = $s->get_setting( 'phone_field_format' )->get_options();
 
-		$this->assertArrayHasKey( 'DE', $options );
-		$this->assertStringContainsString( 'Германия', $options['DE'] );
-		$this->assertStringContainsString( 'маска не описана', $options['DE'] );
+		$this->assertArrayNotHasKey( 'DE', $options );
+		$this->assertSame( [ 'off', 'auto' ], array_keys( $options ) );
 		$this->assertFalse( $s->get_setting( 'phone_field_format' )->get_control()->is_disabled() );
+	}
+
+	/**
+	 * The intersection has TWO halves, and this pins the half the previous test
+	 * does not: a country that HAS a mask but the store does not ship to is not
+	 * offered either — it cannot produce an order, so its mask is irrelevant.
+	 */
+	public function test_a_mask_country_the_store_does_not_ship_to_is_not_offered(): void {
+		$s = new Checkout_Field_Settings(
+			new Checkout_Field_Environment( false, 1, [ 'RU' => 'Россия' ] )
+		);
+
+		$options = $s->get_setting( 'phone_field_format' )->get_options();
+
+		$this->assertArrayHasKey( 'RU', $options );
+		$this->assertArrayNotHasKey( 'KZ', $options, 'KZ has a template but is not a shipping country here' );
+	}
+
+	/**
+	 * The extension path the operator asked to keep working: a plugin adds a
+	 * country by filtering the pattern table, and that country then appears in
+	 * this select on its own — no second registration step.
+	 */
+	public function test_a_country_added_through_the_filter_becomes_selectable(): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) {
+				if ( Phone_Mask_Patterns::FILTER_PATTERNS === $tag ) {
+					return array_merge( [ 'DE' => '+49 ### #######' ], (array) $default );
+				}
+
+				return $default;
+			}
+		);
+
+		$s = new Checkout_Field_Settings(
+			new Checkout_Field_Environment( false, 1, [ 'DE' => 'Германия' ] )
+		);
+
+		$this->assertSame( 'Германия', $s->get_setting( 'phone_field_format' )->get_options()['DE'] );
 	}
 
 	public function test_default_is_off(): void {

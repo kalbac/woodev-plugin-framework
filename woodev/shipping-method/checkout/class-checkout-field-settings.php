@@ -370,21 +370,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 
 		/**
 		 * Builds the `phone_field_format` select's options: «Не использовать»,
-		 * «Автоматически», then one entry per shipping country (design per card
-		 * #503). A country with no known mask ({@see Phone_Mask_Patterns::get()})
-		 * is NOT hidden and NOT dropped from the list — a merchant scanning the
-		 * list must be able to see every country the store ships to — but its
-		 * label says so, so picking it is never a silently dead choice.
+		 * «Автоматически», then the INTERSECTION of the store's shipping countries
+		 * with the countries that actually have a mask
+		 * ({@see Phone_Mask_Patterns::get()}).
 		 *
-		 * This is a label-embedded reason, not the control-level
-		 * `disabled`/`disabled_reason` mechanism {@see \Woodev_Control} carries
-		 * elsewhere in this class (`country_field`, `address_field`,
-		 * `postcode_field`): that mechanism disables the WHOLE control with ONE
-		 * reason, never a single option among many, and the React `SelectField`
-		 * component ({@see \Woodev\Framework\Settings\Field_Schema}, `select-field.js`)
-		 * has no per-option disabled affordance to plug into — confirmed by
-		 * reading both before choosing this shape. Filing that gap as a follow-up
-		 * card is more honest than pretending the mechanism already fits.
+		 * The intersection is the whole design (operator decision, 31.08.2026).
+		 * The card originally said to list every shipping country and mark the
+		 * ones with no mask — which reads fine on a store shipping to two
+		 * countries and collapses on one shipping worldwide: measured on the rig
+		 * the same day, that produced **248 entries, 236 of them «(маска не
+		 * описана)»**, against a table of twelve. An option that does nothing when
+		 * picked earns no row.
+		 *
+		 * Both halves of the intersection matter. A country the store does not
+		 * ship to cannot produce an order, so its mask is irrelevant; a country
+		 * with no template has nothing to apply, so «Автоматически» and a pinned
+		 * choice would both be no-ops.
+		 *
+		 * A plugin ADDS a country by filtering the table, and it then appears here
+		 * on its own — no second registration step:
+		 *
+		 *     add_filter( Phone_Mask_Patterns::FILTER_PATTERNS, function ( array $masks ) {
+		 *         return array_merge( [ 'UZ' => '+998 ## ### ####' ], $masks );
+		 *     } );
+		 *
+		 * A template is a `#`-placeholder string, not a regex — every other
+		 * character is rendered literally. `phone-mask.js`'s `formatPhone()` is
+		 * the sole reader of that shape.
 		 *
 		 * @since 2.0.2
 		 *
@@ -399,10 +411,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 			$patterns = Phone_Mask_Patterns::get();
 
 			foreach ( $this->env->shipping_countries as $code => $name ) {
-				$options[ $code ] = isset( $patterns[ $code ] )
-					? $name
-					// translators: %s: country name.
-					: sprintf( __( '%s (маска не описана)', 'woodev-plugin-framework' ), $name );
+				if ( isset( $patterns[ $code ] ) ) {
+					$options[ $code ] = $name;
+				}
 			}
 
 			return $options;
