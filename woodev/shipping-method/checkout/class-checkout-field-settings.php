@@ -73,6 +73,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 			parent::__construct( 'checkout_fields' );
 		}
 
+		/**
+		 * Gets the settings ids this handler owns, in registration order. Used by
+		 * {@see \Woodev\Framework\Shipping\Settings\Shipping_Settings_Tab} to build the
+		 * `Settings_Section` without duplicating this handler's own field list.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
 		public function get_owned_setting_ids(): array {
 			return [
 				'field_order_preset',
