@@ -12,6 +12,12 @@
 @use '../components/tabs';
 @use '../components/location-picker';
 
+// The settings surface's own label-column width. Wider than the shared
+// `$label-col` token (182px) because the operator set it by eye on the rig,
+// 31.08.2026, and it must stay ONE number: the select rows and the boolean
+// rows both read it, and they misalign the moment only one of them changes.
+$settings-label-col: 200px;
+
 .woodev-settings {
 	// Full-width (zam.1) — no fixed max-width; the Card frames the content.
 
@@ -55,7 +61,11 @@
 	// dividers; rows are separated by rhythm only).
 	.woodev-field {
 		display: grid;
-		grid-template-columns: wd.$label-col minmax( 0, wd.$control-col );
+		// 200px, not `$label-col`'s 182px (operator, set by eye on the rig 31.08.2026).
+		// Declared HERE and reused by the boolean row below — the first pass changed
+		// only the boolean row and the two columns stopped matching, which is exactly
+		// the misalignment this was meant to fix. One number, two call sites.
+		grid-template-columns: $settings-label-col minmax( 0, wd.$control-col );
 		align-items: start;
 		gap: wd.$gap-lg;
 		margin: 0;
@@ -88,14 +98,10 @@
 	// one, rather than discovering it cramped.
 	.woodev-field__toggle-row {
 		display: grid;
-		// 200px, not `$label-col`'s 182px — the operator set this by eye on the rig,
-		// 31.08.2026. Deliberately a literal: the boolean row's label column is NOT
-		// the same width as the select rows', so tying it to the token would be a lie
-		// about why the number is what it is.
-		grid-template-columns: 200px minmax( 0, wd.$control-col );
+		grid-template-columns: $settings-label-col minmax( 0, wd.$control-col );
 		align-items: start;
 		gap: wd.$gap-lg;
-		max-width: calc( 200px + #{ wd.$control-col } + #{ wd.$gap-lg } );
+		max-width: calc( #{ $settings-label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
 
 		.woodev-field__toggle-meta {
