@@ -17,9 +17,9 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 		/** @var Woodev_Box_Packer_Item[] */
 		private $items_to_pack;
 		/** @var Woodev_Box_Packer_Item[] */
-		private $packed_items = array();
+		private $packed_items = [];
 		/** @var Woodev_Box_Packer_Item[] */
-		private $nofit_items = array();
+		private $nofit_items = [];
 		/** @var float */
 		private $success_percent = 0.0;
 
@@ -97,8 +97,8 @@ if ( ! class_exists( 'Woodev_Box_Packer_Packed_Box' ) ) :
 				return;
 			}
 
-			$packed        = array();
-			$unpacked      = array();
+			$packed        = [];
+			$unpacked      = [];
 			$packed_weight = $this->box->get_weight();
 			$packed_volume = 0;
 			$packed_value  = 0;

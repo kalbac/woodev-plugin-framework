@@ -24,7 +24,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 			// auto-capture on order status change if enabled
 			if ( $gateway->supports_credit_card_capture() && $gateway->is_paid_capture_enabled() ) {
-				add_action( 'woocommerce_order_status_changed', array( $this, 'maybe_capture_paid_order' ), 10, 3 );
+				add_action( 'woocommerce_order_status_changed', [ $this, 'maybe_capture_paid_order' ], 10, 3 );
 			}
 		}
 
@@ -175,7 +175,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					// prevent stock from being reduced when payment is completed as this is done when the charge was authorized;
 					// use a handler-specific callback (not the generic __return_false) so remove_filter() below can never
 					// touch an identical __return_false callback a consumer plugin may have added independently
-					add_filter( 'woocommerce_payment_complete_reduce_order_stock', array( $this, 'suppress_order_stock_reduction' ), 100 );
+					add_filter( 'woocommerce_payment_complete_reduce_order_stock', [ $this, 'suppress_order_stock_reduction' ], 100 );
 
 					try {
 						// complete the order
@@ -183,15 +183,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					} finally {
 						// always remove the filter, even if payment_complete() throws, so it never leaks into a
 						// later payment_complete() call for a different order in the same request (e.g. bulk capture)
-						remove_filter( 'woocommerce_payment_complete_reduce_order_stock', array( $this, 'suppress_order_stock_reduction' ), 100 );
+						remove_filter( 'woocommerce_payment_complete_reduce_order_stock', [ $this, 'suppress_order_stock_reduction' ], 100 );
 					}
 				}
 
-				return array(
+				return [
 					'success' => true,
 					'code'    => 200,
 					'message' => $message,
-				);
+				];
 
 			} catch ( Woodev_Plugin_Exception $exception ) {
 
@@ -208,11 +208,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					$order->add_order_note( $note_message );
 				}
 
-				return array(
+				return [
 					'success' => false,
 					'code'    => $exception->getCode(),
 					'message' => $exception->getMessage(),
-				);
+				];
 			}
 		}
 
@@ -300,11 +300,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		public function is_order_ready_for_capture( WC_Order $order ) {
 			return ! in_array(
 				$order->get_status(),
-				array(
+				[
 					'cancelled',
 					'refunded',
 					'failed',
-				),
+				],
 				true
 			) && $this->get_gateway()->get_order_meta( $order, 'trans_id' );
 		}
@@ -355,10 +355,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 		public function is_order_captured( WC_Order $order ) {
 			return in_array(
 				$this->get_gateway()->get_order_meta( $order, 'charge_captured' ),
-				array(
+				[
 					'yes',
 					'partial',
-				),
+				],
 				true
 			);
 		}

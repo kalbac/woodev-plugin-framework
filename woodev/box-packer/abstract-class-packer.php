@@ -29,14 +29,14 @@ abstract class Woodev_Packer implements Woodev_Packer_Interface {
 	 * @return Woodev_Box_Packer_Packed_Box[]
 	 */
 	public function get_packages(): array {
-		return $this->packages ?: array();
+		return $this->packages ?: [];
 	}
 
 	/**
 	 * @return Woodev_Box_Packer_Item[]
 	 */
 	public function get_items_cannot_pack(): array {
-		return $this->items_cannot_pack ?: array();
+		return $this->items_cannot_pack ?: [];
 	}
 
 	/**

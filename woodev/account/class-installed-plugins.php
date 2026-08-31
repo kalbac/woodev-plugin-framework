@@ -28,7 +28,7 @@ if ( ! class_exists( 'Woodev_Installed_Plugins' ) ) :
 		 */
 		public static function download_ids( array $plugins ): array {
 
-			$ids = array();
+			$ids = [];
 
 			foreach ( $plugins as $plugin ) {
 

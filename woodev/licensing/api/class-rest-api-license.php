@@ -68,58 +68,58 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 			register_rest_route(
 				$namespace,
 				'/licenses/(?P<plugin_id>[\w-]+)',
-				array(
+				[
 					'methods'             => 'GET',
-					'callback'            => array( $this, 'get_item' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-				)
+					'callback'            => [ $this, 'get_item' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+				]
 			);
 
 			register_rest_route(
 				$namespace,
 				'/licenses/(?P<plugin_id>[\w-]+)/verify',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'verify_item' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-					'args'                => array(
-						'license_key' => array(
+					'callback'            => [ $this, 'verify_item' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+					'args'                => [
+						'license_key' => [
 							'type'              => 'string',
 							'required'          => true,
 							'sanitize_callback' => 'sanitize_text_field',
-							'validate_callback' => array( $this, 'validate_license_key' ),
-						),
-					),
-				)
+							'validate_callback' => [ $this, 'validate_license_key' ],
+						],
+					],
+				]
 			);
 
 			register_rest_route(
 				$namespace,
 				'/licenses/(?P<plugin_id>[\w-]+)/deactivate',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'deactivate_item' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-				)
+					'callback'            => [ $this, 'deactivate_item' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+				]
 			);
 
 			register_rest_route(
 				$namespace,
 				'/licenses/(?P<plugin_id>[\w-]+)/beta',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'set_beta' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-					'args'                => array(
-						'enabled' => array(
+					'callback'            => [ $this, 'set_beta' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+					'args'                => [
+						'enabled' => [
 							'type'              => 'boolean',
 							'required'          => true,
 							'validate_callback' => static function ( $value ) {
 								return is_bool( $value );
 							},
-						),
-					),
-				)
+						],
+					],
+				]
 			);
 		}
 
@@ -141,7 +141,7 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 			return new WP_Error(
 				'woodev_license_forbidden',
 				esc_html__( 'Недостаточно прав для управления лицензиями.', 'woodev-plugin-framework' ),
-				array( 'status' => rest_authorization_required_code() )
+				[ 'status' => rest_authorization_required_code() ]
 			);
 		}
 
@@ -299,7 +299,7 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 				return new WP_Error(
 					'woodev_license_unknown_plugin',
 					esc_html__( 'Плагин с указанным идентификатором не найден.', 'woodev-plugin-framework' ),
-					array( 'status' => 404 )
+					[ 'status' => 404 ]
 				);
 			}
 
@@ -335,7 +335,7 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 				return new WP_Error(
 					'woodev_license_request_failed',
 					$message,
-					array( 'status' => 502 )
+					[ 'status' => 502 ]
 				);
 			}
 		}

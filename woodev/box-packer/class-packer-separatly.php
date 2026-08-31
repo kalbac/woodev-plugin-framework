@@ -62,7 +62,7 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 
 				$packed_box->get_packed_items();
 				$this->packages[] = $packed_box;
-				$index++;
+				++$index;
 			}
 
 			$this->items = [];

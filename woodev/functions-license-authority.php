@@ -55,7 +55,7 @@ if ( ! function_exists( 'woodev_normalize_site' ) ) {
 
 		$scheme = strtolower( (string) $parts['scheme'] );
 
-		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+		if ( ! in_array( $scheme, [ 'http', 'https' ], true ) ) {
 			return null;
 		}
 

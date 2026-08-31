@@ -75,10 +75,10 @@ if ( ! class_exists( Woocommerce_Helper::class, false ) ) :
 				$item_meta = [];
 
 				foreach ( $meta_data as $meta ) {
-					$item_meta[] = array(
+					$item_meta[] = [
 						'label' => $meta->display_key,
 						'value' => $meta->value,
-					);
+					];
 				}
 
 				if ( ! empty( $item_meta ) ) {
@@ -144,11 +144,11 @@ if ( ! class_exists( Woocommerce_Helper::class, false ) ) :
 			}
 
 			$virtual_products = wc_get_products(
-				array(
+				[
 					'virtual' => true,
 					'status'  => 'publish',
 					'limit'   => 1,
-				)
+				]
 			);
 
 			return count( $virtual_products ) > 0;

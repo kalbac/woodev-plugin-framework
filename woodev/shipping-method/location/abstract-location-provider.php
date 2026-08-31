@@ -324,6 +324,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Abstract_Location
 						sprintf(
 							'%s::declare_suggest_levels() returned an unknown level (%s); must be one of %s.',
 							static::class,
+							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- renders the offending value into a programming-error exception text, is_scalar()-guarded; not debug output (#139).
 							is_scalar( $level ) ? var_export( $level, true ) : gettype( $level ),
 							implode( ', ', Location_Record::LEVELS )
 						)

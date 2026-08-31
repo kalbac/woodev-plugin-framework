@@ -154,7 +154,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 		private function get_body( array $api_params ) {
 			return wp_parse_args(
 				$api_params,
-				array(
+				[
 					'url'               => home_url(),
 					'author'            => 'Woodev',
 					'email'             => get_option( 'admin_email' ),
@@ -164,7 +164,7 @@ if ( ! class_exists( 'Woodev_Licensing_API' ) ) :
 					// funnels through here (dispatch() AND the updater), so the server
 					// sees it on check_license, activate/deactivate and get_version.
 					'framework_version' => Woodev_Plugin::VERSION,
-				)
+				]
 			);
 		}
 

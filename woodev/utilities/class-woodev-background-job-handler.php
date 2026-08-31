@@ -73,13 +73,13 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		protected function add_hooks() {
 
 			// cron healthcheck
-			add_action( $this->cron_hook_identifier, array( $this, 'handle_cron_healthcheck' ) );
-			add_filter( 'cron_schedules', array( $this, 'schedule_cron_healthcheck' ) );
+			add_action( $this->cron_hook_identifier, [ $this, 'handle_cron_healthcheck' ] );
+			add_filter( 'cron_schedules', [ $this, 'schedule_cron_healthcheck' ] );
 
 			// debugging & testing
-			add_action( "wp_ajax_nopriv_{$this->identifier}_test", array( $this, 'handle_connection_test_response' ) );
-			add_filter( 'woocommerce_debug_tools', array( $this, 'add_debug_tool' ) );
-			add_filter( 'gettext', array( $this, 'translate_success_message' ), 10, 3 );
+			add_action( "wp_ajax_nopriv_{$this->identifier}_test", [ $this, 'handle_connection_test_response' ] );
+			add_filter( 'woocommerce_debug_tools', [ $this, 'add_debug_tool' ] );
+			add_filter( 'gettext', [ $this, 'translate_success_message' ], 10, 3 );
 		}
 
 
@@ -129,7 +129,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			 *
 			 * @see WC_Session_Handler::init() when the action is hooked
 			 */
-			$callback  = array( WC()->session, 'maybe_update_nonce_user_logged_out' );
+			$callback  = [ WC()->session, 'maybe_update_nonce_user_logged_out' ];
 			$arguments = 2;
 
 			remove_filter( 'nonce_user_logged_out', $callback );
@@ -190,7 +190,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			// add a random artificial delay to prevent a race condition if 2 or more processes are trying to
 			// process the job queue at the very same moment in time and neither of them have yet set the lock
 			// before the others are calling this method
-			usleep( rand( 100000, 300000 ) );
+			usleep( wp_rand( 100000, 300000 ) );
 
 			return (bool) get_transient( "{$this->identifier}_process_lock" );
 		}
@@ -368,22 +368,22 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			// ensure a few must-have attributes
 			$attrs = wp_parse_args(
-				array(
+				[
 					'id'         => $job_id,
 					'created_at' => current_time( 'mysql' ),
 					'created_by' => get_current_user_id(),
 					'status'     => 'queued',
-				),
+				],
 				$attrs
 			);
 
 			$wpdb->insert(
 				$wpdb->options,
-				array(
+				[
 					'option_name'  => "{$this->identifier}_job_{$job_id}",
 					'option_value' => wp_json_encode( $attrs ),
 					'autoload'     => 'no',
-				)
+				]
 			);
 
 			$job = new stdClass();
@@ -495,25 +495,25 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		 *
 		 * @return stdClass[]|object[]|null Found jobs or null if none found
 		 */
-		public function get_jobs( $args = array() ) {
+		public function get_jobs( $args = [] ) {
 			global $wpdb;
 
 			$args = wp_parse_args(
 				$args,
-				array(
+				[
 					'order'   => 'DESC',
 					'orderby' => 'option_id',
-				)
+				]
 			);
 
-			$replacements = array( $this->identifier . '_job_%' );
+			$replacements = [ $this->identifier . '_job_%' ];
 			$status_query = '';
 
 			// prepare status query
 			if ( ! empty( $args['status'] ) ) {
 
 				$statuses     = (array) $args['status'];
-				$placeholders = array();
+				$placeholders = [];
 
 				foreach ( $statuses as $status ) {
 
@@ -546,7 +546,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 				return null;
 			}
 
-			$jobs = array();
+			$jobs = [];
 
 			foreach ( $results as $result ) {
 
@@ -828,7 +828,7 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 				return false;
 			}
 
-			$wpdb->delete( $wpdb->options, array( 'option_name' => "{$this->identifier}_job_{$job->id}" ) );
+			$wpdb->delete( $wpdb->options, [ 'option_name' => "{$this->identifier}_job_{$job->id}" ] );
 
 			/**
 			 * Runs after a job is deleted.
@@ -892,10 +892,10 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 			$interval          = is_numeric( $filtered_interval ) && (int) $filtered_interval > 0 ? (int) $filtered_interval : $interval;
 
 			// adds every 5 minutes to the existing schedules.
-			$schedules[ $this->identifier . '_cron_interval' ] = array(
+			$schedules[ $this->identifier . '_cron_interval' ] = [
 				'interval' => MINUTE_IN_SECONDS * $interval,
 				'display'  => sprintf( _n( 'Every %d Minute', 'Every %d Minutes', $interval, 'woodev-plugin-framework' ), $interval ),
-			);
+			];
 
 			return $schedules;
 		}
@@ -1012,8 +1012,8 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 
 			return $wpdb->update(
 				$wpdb->options,
-				array( 'option_value' => wp_json_encode( $job ) ),
-				array( 'option_name' => "{$this->identifier}_job_{$job->id}" )
+				[ 'option_value' => wp_json_encode( $job ) ],
+				[ 'option_name' => "{$this->identifier}_job_{$job->id}" ]
 			);
 		}
 
@@ -1054,12 +1054,12 @@ if ( ! class_exists( 'Woodev_Background_Job_Handler' ) ) :
 		public function add_debug_tool( $tools ) {
 
 			// this key is not unique to the plugin to avoid duplicate tools
-			$tools['woodev_background_job_test'] = array(
+			$tools['woodev_background_job_test'] = [
 				'name'     => __( 'Background Processing Test', 'woodev-plugin-framework' ),
 				'button'   => __( 'Run Test', 'woodev-plugin-framework' ),
 				'desc'     => __( 'This tool will test whether your server is capable of processing background jobs.', 'woodev-plugin-framework' ),
-				'callback' => array( $this, 'run_debug_tool' ),
-			);
+				'callback' => [ $this, 'run_debug_tool' ],
+			];
 
 			return $tools;
 		}

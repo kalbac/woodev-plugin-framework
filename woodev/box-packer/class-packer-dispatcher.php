@@ -155,7 +155,9 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 					$input->get_weight()
 				);
 
-				for ( $q = 0; $q < $input->get_quantity(); $q++ ) {
+				$quantity = $input->get_quantity();
+
+				for ( $q = 0; $q < $quantity; $q++ ) {
 					$packages[] = new Woodev_Packer_Package_Result(
 						$unit->get_length(),
 						$unit->get_width(),
@@ -214,7 +216,9 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 			$units = [];
 
 			foreach ( $items as $input ) {
-				for ( $q = 0; $q < $input->get_quantity(); $q++ ) {
+				$quantity = $input->get_quantity();
+
+				for ( $q = 0; $q < $quantity; $q++ ) {
 					$units[] = new Woodev_Packer_Item_Implementation(
 						$input->get_length(),
 						$input->get_width(),

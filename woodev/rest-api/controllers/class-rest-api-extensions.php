@@ -99,11 +99,11 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			register_rest_route(
 				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
 				'/extensions',
-				array(
+				[
 					'methods'             => 'GET',
-					'callback'            => array( $this, 'get_items' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-				)
+					'callback'            => [ $this, 'get_items' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+				]
 			);
 		}
 
@@ -125,7 +125,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			return new WP_Error(
 				'woodev_extensions_forbidden',
 				esc_html__( 'Недостаточно прав для просмотра каталога плагинов.', 'woodev-plugin-framework' ),
-				array( 'status' => rest_authorization_required_code() )
+				[ 'status' => rest_authorization_required_code() ]
 			);
 		}
 
@@ -157,14 +157,14 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			$products   = $this->fetch_products();
 			$categories = $this->fetch_categories();
 
-			$payload = array(
+			$payload = [
 				'categories' => $categories,
 				'products'   => $products,
-				'stale'      => ( array() === $products ),
-			);
+				'stale'      => ( [] === $products ),
+			];
 
 			// Cache only a complete fetch; a partial/failed one stays retryable.
-			if ( array() !== $products && array() !== $categories ) {
+			if ( [] !== $products && [] !== $categories ) {
 				set_transient( self::CACHE_KEY, $payload, WEEK_IN_SECONDS );
 			}
 
@@ -183,17 +183,17 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			$body = $this->remote_json( $this->store_base() . '/edd-api/v2/categories' );
 
 			if ( ! $body || ! isset( $body->categories ) || ! is_array( $body->categories ) ) {
-				return array();
+				return [];
 			}
 
-			$out = array();
+			$out = [];
 
 			foreach ( $body->categories as $cat ) {
 				if ( isset( $cat->slug, $cat->label ) ) {
-					$out[] = array(
+					$out[] = [
 						'slug'  => (string) $cat->slug,
 						'label' => (string) $cat->label,
-					);
+					];
 				}
 			}
 
@@ -209,14 +209,14 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 */
 		private function fetch_products(): array {
 
-			$url  = add_query_arg( array( 'number' => -1 ), $this->store_base() . '/edd-api/v2/products/' );
+			$url  = add_query_arg( [ 'number' => -1 ], $this->store_base() . '/edd-api/v2/products/' );
 			$body = $this->remote_json( $url );
 
 			if ( ! $body || ! isset( $body->products ) || ! is_array( $body->products ) ) {
-				return array();
+				return [];
 			}
 
-			$out = array();
+			$out = [];
 
 			foreach ( $body->products as $raw ) {
 				$product = self::normalize_product( $raw );
@@ -239,7 +239,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 		 */
 		private function remote_json( string $url ) {
 
-			$response = wp_safe_remote_get( $url, array( 'timeout' => self::FETCH_TIMEOUT ) );
+			$response = wp_safe_remote_get( $url, [ 'timeout' => self::FETCH_TIMEOUT ] );
 
 			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 				return null;
@@ -317,7 +317,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 
 			$slug = (string) ( $info->slug ?? '' );
 
-			$categories = array();
+			$categories = [];
 			if ( isset( $info->category ) && is_array( $info->category ) ) {
 				foreach ( $info->category as $cat ) {
 					if ( isset( $cat->slug ) ) {
@@ -332,7 +332,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				? round( (int) $raw->rating / 20, 1 )
 				: null;
 
-			return array(
+			return [
 				'id'         => (int) $info->id,
 				'slug'       => $slug,
 				'title'      => (string) ( $info->title ?? '' ),
@@ -343,7 +343,7 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 				'free'       => $price <= 0,
 				'rating'     => $rating,
 				'categories' => $categories,
-			);
+			];
 		}
 
 		/**
@@ -363,12 +363,12 @@ if ( ! class_exists( 'Woodev_REST_API_Extensions' ) ) :
 			}
 
 			return add_query_arg(
-				array(
+				[
 					'utm_source'   => 'extensionsscreen',
 					'utm_medium'   => 'product',
 					'utm_campaign' => 'woodevplugin',
 					'utm_content'  => $content,
-				),
+				],
 				$url
 			);
 		}

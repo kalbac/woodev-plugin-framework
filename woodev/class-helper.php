@@ -274,7 +274,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function array_insert_after( array $array, string $insert_key, array $element ): array {
 
-			$new_array = array();
+			$new_array = [];
 
 			foreach ( $array as $key => $value ) {
 
@@ -316,7 +316,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 * @param string|array $element_key   name for element, e.g. <per_page>
 		 * @param string|array $element_value value for element, e.g. 100
 		 */
-		public static function array_to_xml( XMLWriter $xml_writer, $element_key, $element_value = array() ) {
+		public static function array_to_xml( XMLWriter $xml_writer, $element_key, $element_value = [] ) {
 
 			if ( is_array( $element_value ) ) {
 
@@ -599,10 +599,10 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function is_woocommerce_active(): bool {
 
-			$active_plugins = (array) get_option( 'active_plugins', array() );
+			$active_plugins = (array) get_option( 'active_plugins', [] );
 
 			if ( is_multisite() ) {
-				$active_plugins = array_merge( $active_plugins, get_site_option( 'active_sitewide_plugins', array() ) );
+				$active_plugins = array_merge( $active_plugins, get_site_option( 'active_sitewide_plugins', [] ) );
 			}
 
 			return in_array( 'woocommerce/woocommerce.php', $active_plugins ) || array_key_exists( 'woocommerce/woocommerce.php', $active_plugins );
@@ -725,7 +725,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		 */
 		public static function trigger_error( $message, $type = E_USER_NOTICE ) {
 
-			if ( is_callable( array( __CLASS__, 'is_ajax' ) ) && self::is_ajax() ) {
+			if ( is_callable( [ __CLASS__, 'is_ajax' ] ) && self::is_ajax() ) {
 
 				switch ( $type ) {
 
@@ -901,24 +901,24 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 		public static function is_wc_navigation_enabled(): bool {
 
 			return is_callable(
-				array(
+				[
 					\Automattic\WooCommerce\Admin\Features\Navigation\Screen::class,
 					'register_post_type',
-				)
+				]
 			) &&
 				is_callable(
-					array(
+					[
 						\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
 						'add_plugin_item',
-					)
+					]
 				) &&
 				is_callable(
-					array(
+					[
 						\Automattic\WooCommerce\Admin\Features\Navigation\Menu::class,
 						'add_plugin_category',
-					)
+					]
 				) &&
-				is_callable( array( \Automattic\WooCommerce\Admin\Features\Features::class, 'is_enabled' ) ) &&
+				is_callable( [ \Automattic\WooCommerce\Admin\Features\Features::class, 'is_enabled' ] ) &&
 				\Automattic\WooCommerce\Admin\Features\Features::is_enabled( 'navigation' );
 		}
 
@@ -968,7 +968,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 
 		public static function convert_country_code( $code ) {
 
-			$countries = array(
+			$countries = [
 				'AF' => 'AFG',
 				'AL' => 'ALB',
 				'DZ' => 'DZA',
@@ -1213,7 +1213,7 @@ if ( ! class_exists( 'Woodev_Helper' ) ) :
 				'AC' => 'ASC',
 				'TA' => 'TAA',
 				'AQ' => 'ATA',
-			);
+			];
 
 			if ( 3 === strlen( $code ) ) {
 				$countries = array_flip( $countries );

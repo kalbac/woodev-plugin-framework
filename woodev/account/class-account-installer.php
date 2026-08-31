@@ -32,7 +32,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return new WP_Error(
 					'woodev_install_invalid',
 					__( 'Некорректный идентификатор плагина.', 'woodev-plugin-framework' ),
-					array( 'status' => 400 )
+					[ 'status' => 400 ]
 				);
 			}
 
@@ -42,13 +42,13 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return new WP_Error(
 					'woodev_install_not_connected',
 					__( 'Аккаунт woodev.ru не подключён.', 'woodev-plugin-framework' ),
-					array( 'status' => 400 )
+					[ 'status' => 400 ]
 				);
 			}
 
 			// Generous timeout: the store may be slow generating the package URL
 			// under load (the catalog fetch hit the same class of timeout, s26).
-			$response = $connection->request( 'GET', '/download/' . $download_id, array(), 30 );
+			$response = $connection->request( 'GET', '/download/' . $download_id, [], 30 );
 
 			if ( is_wp_error( $response ) ) {
 				return $response;
@@ -63,7 +63,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return new WP_Error(
 					'woodev_install_bad_package',
 					__( 'Не удалось получить корректную ссылку на плагин.', 'woodev-plugin-framework' ),
-					array( 'status' => 502 )
+					[ 'status' => 502 ]
 				);
 			}
 
@@ -99,7 +99,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 			$host   = strtolower( (string) ( $parts['host'] ?? '' ) );
 
 			// Reject non-http(s), hostless, and credential-embedding URLs outright.
-			if ( ! in_array( $scheme, array( 'http', 'https' ), true ) || '' === $host ) {
+			if ( ! in_array( $scheme, [ 'http', 'https' ], true ) || '' === $host ) {
 				return false;
 			}
 
@@ -129,7 +129,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 			 *
 			 * @param array<int,string> $hosts Allowed lower-cased hosts.
 			 */
-			$allowed = (array) apply_filters( 'woodev_account_install_allowed_hosts', array( $store_host ) );
+			$allowed = (array) apply_filters( 'woodev_account_install_allowed_hosts', [ $store_host ] );
 			$allowed = array_filter( array_map( 'strtolower', array_map( 'strval', $allowed ) ) );
 
 			return in_array( $host, $allowed, true );
@@ -158,7 +158,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return new WP_Error(
 					'woodev_install_upgrader_missing',
 					__( 'Механизм установки недоступен.', 'woodev-plugin-framework' ),
-					array( 'status' => 500 )
+					[ 'status' => 500 ]
 				);
 			}
 
@@ -181,7 +181,7 @@ if ( ! class_exists( 'Woodev_Account_Installer' ) ) :
 				return new WP_Error(
 					'woodev_install_failed',
 					__( 'Не удалось установить плагин.', 'woodev-plugin-framework' ),
-					array( 'status' => 500 )
+					[ 'status' => 500 ]
 				);
 			}
 

@@ -14,7 +14,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		protected $plugin;
 
 		/** @var array the token editor for each gateway * */
-		protected $token_editors = array();
+		protected $token_editors = [];
 
 
 		/**
@@ -27,32 +27,32 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 			$this->plugin = $plugin;
 
 			// Set up a token editor for each gateway
-			add_action( 'admin_init', array( $this, 'init_token_editors' ) );
+			add_action( 'admin_init', [ $this, 'init_token_editors' ] );
 
 			// Add the settings section
-			add_action( 'show_user_profile', array( $this, 'add_profile_section' ) );
-			add_action( 'edit_user_profile', array( $this, 'add_profile_section' ) );
+			add_action( 'show_user_profile', [ $this, 'add_profile_section' ] );
+			add_action( 'edit_user_profile', [ $this, 'add_profile_section' ] );
 
 			// Save the settings
-			add_action( 'personal_options_update', array( $this, 'save_profile_fields' ) );
-			add_action( 'edit_user_profile_update', array( $this, 'save_profile_fields' ) );
+			add_action( 'personal_options_update', [ $this, 'save_profile_fields' ] );
+			add_action( 'edit_user_profile_update', [ $this, 'save_profile_fields' ] );
 
 			// Display the token editor markup inside the  profile section
 			add_action(
 				'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile',
-				array(
+				[
 					$this,
 					'display_token_editors',
-				)
+				]
 			);
 
 			// Display the customer ID field markup inside the  profile section
 			add_action(
 				'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_user_profile',
-				array(
+				[
 					$this,
 					'display_customer_id_fields',
-				)
+				]
 			);
 		}
 
@@ -105,7 +105,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				$gateway = $this->get_plugin()->get_gateway( $gateway_id );
 
 				// if the gateway supports a customer ID but none is saved, don't display the token tables
-				if ( $gateway && $gateway->supports_customer_id() && ! $gateway->get_customer_id( $user->ID, array( 'autocreate' => false ) ) ) {
+				if ( $gateway && $gateway->supports_customer_id() && ! $gateway->get_customer_id( $user->ID, [ 'autocreate' => false ] ) ) {
 					continue;
 				}
 
@@ -249,7 +249,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 
 			$unique_meta_key = '';
 
-			$fields = array();
+			$fields = [];
 
 			foreach ( $this->get_tokenized_gateways() as $gateway ) {
 
@@ -269,16 +269,16 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 				// If the plugin has multiple gateways configured for multiple environments, append the environment name to keep things straight
 				$label .= ( $this->has_multiple_environments() ) ? ' ' . sprintf( __( '(%s)', 'woodev-plugin-framework' ), $gateway->get_environment_name() ) : '';
 
-				$fields[] = array(
+				$fields[] = [
 					'label' => $label,
 					'name'  => $meta_key,
 					'value' => $gateway->get_customer_id(
 						$user_id,
-						array(
+						[
 							'autocreate' => false,
-						)
+						]
 					),
-				);
+				];
 
 				$unique_meta_key = $meta_key;
 			}
@@ -294,7 +294,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		 */
 		protected function get_unique_environments() {
 
-			$environments = array();
+			$environments = [];
 
 			foreach ( $this->get_tokenized_gateways() as $gateway ) {
 				$environments[ $gateway->get_environment() ] = $gateway->get_environment_name();
@@ -311,7 +311,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Admin_User_Handler' ) ) :
 		 */
 		protected function get_tokenized_gateways() {
 
-			$gateways = array();
+			$gateways = [];
 
 			foreach ( $this->get_plugin()->get_gateways() as $gateway ) {
 

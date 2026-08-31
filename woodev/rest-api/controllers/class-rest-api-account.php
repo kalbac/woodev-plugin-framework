@@ -67,41 +67,41 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 			register_rest_route(
 				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
 				'/account/disconnect',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'handle_disconnect' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-				)
+					'callback'            => [ $this, 'handle_disconnect' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+				]
 			);
 
 			register_rest_route(
 				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
 				'/account/purchases',
-				array(
+				[
 					'methods'             => 'GET',
-					'callback'            => array( $this, 'handle_purchases' ),
-					'permission_callback' => array( $this, 'check_permissions' ),
-				)
+					'callback'            => [ $this, 'handle_purchases' ],
+					'permission_callback' => [ $this, 'check_permissions' ],
+				]
 			);
 
 			register_rest_route(
 				Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
 				'/account/install',
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'handle_install' ),
-					'permission_callback' => array( $this, 'check_install_permissions' ),
-					'args'                => array(
-						'download_id' => array(
+					'callback'            => [ $this, 'handle_install' ],
+					'permission_callback' => [ $this, 'check_install_permissions' ],
+					'args'                => [
+						'download_id' => [
 							'required'          => true,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
 							'validate_callback' => static function ( $value ) {
 								return is_numeric( $value ) && (int) $value > 0;
 							},
-						),
-					),
-				)
+						],
+					],
+				]
 			);
 		}
 
@@ -123,7 +123,7 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 			return new WP_Error(
 				'woodev_account_forbidden',
 				esc_html__( 'Недостаточно прав для управления подключением аккаунта.', 'woodev-plugin-framework' ),
-				array( 'status' => rest_authorization_required_code() )
+				[ 'status' => rest_authorization_required_code() ]
 			);
 		}
 
@@ -146,7 +146,7 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 			return new WP_Error(
 				'woodev_account_forbidden',
 				esc_html__( 'Недостаточно прав для установки плагинов.', 'woodev-plugin-framework' ),
-				array( 'status' => rest_authorization_required_code() )
+				[ 'status' => rest_authorization_required_code() ]
 			);
 		}
 
@@ -174,7 +174,7 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 				return $result;
 			}
 
-			return rest_ensure_response( array( 'installed' => true ) );
+			return rest_ensure_response( [ 'installed' => true ] );
 		}
 
 		/**
@@ -192,7 +192,7 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 
 			delete_transient( self::PURCHASES_CACHE_KEY );
 
-			return rest_ensure_response( array( 'connected' => false ) );
+			return rest_ensure_response( [ 'connected' => false ] );
 		}
 
 		/**
@@ -218,10 +218,10 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 
 			if ( ! $connection->is_connected() ) {
 				return rest_ensure_response(
-					array(
-						'purchases' => array(),
-						'purchased' => array(),
-					)
+					[
+						'purchases' => [],
+						'purchased' => [],
+					]
 				);
 			}
 
@@ -240,19 +240,19 @@ if ( ! class_exists( 'Woodev_REST_API_Account' ) ) :
 			// rather than serving — and caching — a fake empty success for the TTL.
 			if ( is_wp_error( $response ) || ! isset( $response['purchases'] ) || ! is_array( $response['purchases'] ) ) {
 				return rest_ensure_response(
-					array(
-						'purchases' => array(),
-						'purchased' => array(),
+					[
+						'purchases' => [],
+						'purchased' => [],
 						'stale'     => true,
-					)
+					]
 				);
 			}
 
 			$purchases = Woodev_Account_Purchases::normalize( $response );
-			$payload   = array(
+			$payload   = [
 				'purchases' => $purchases,
 				'purchased' => Woodev_Account_Purchases::download_ids( $purchases ),
-			);
+			];
 
 			set_transient( self::PURCHASES_CACHE_KEY, $payload, 5 * MINUTE_IN_SECONDS );
 

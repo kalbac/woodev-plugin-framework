@@ -28,7 +28,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		protected $js_handler_base_class_name = 'Woodev_Payment_Form_Handler';
 
 		/** @var array memoization of gateways for which the payment JS has been rendered */
-		protected $payment_form_js_rendered = array();
+		protected $payment_form_js_rendered = [];
 
 
 		/**
@@ -56,23 +56,23 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 			$gateway_id = $this->get_gateway()->get_id();
 
 			// payment form description
-			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_payment_form_description' ), 15 );
+			add_action( "wc_{$gateway_id}_payment_form_start", [ $this, 'render_payment_form_description' ], 15 );
 
 			// saved payment methods
-			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_saved_payment_methods' ), 20 );
+			add_action( "wc_{$gateway_id}_payment_form_start", [ $this, 'render_saved_payment_methods' ], 20 );
 
 			// fieldset start
-			add_action( "wc_{$gateway_id}_payment_form_start", array( $this, 'render_fieldset_start' ), 30 );
+			add_action( "wc_{$gateway_id}_payment_form_start", [ $this, 'render_fieldset_start' ], 30 );
 
 			// payment fields
-			add_action( "wc_{$gateway_id}_payment_form", array( $this, 'render_payment_fields' ), 0 );
+			add_action( "wc_{$gateway_id}_payment_form", [ $this, 'render_payment_fields' ], 0 );
 
 			// fieldset end
-			add_action( "wc_{$gateway_id}_payment_form_end", array( $this, 'render_fieldset_end' ), 5 );
+			add_action( "wc_{$gateway_id}_payment_form_end", [ $this, 'render_fieldset_end' ], 5 );
 
 			// payment form JS
-			add_action( "wc_{$gateway_id}_payment_form_end", array( $this, 'render_js' ), 5 );
-			add_action( 'wp_footer', array( $this, 'maybe_render_js' ) );
+			add_action( "wc_{$gateway_id}_payment_form_end", [ $this, 'render_js' ], 5 );
+			add_action( 'wp_footer', [ $this, 'maybe_render_js' ] );
 		}
 
 
@@ -107,7 +107,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 				return $this->tokens;
 			}
 
-			$tokens = array();
+			$tokens = [];
 
 			if ( $this->tokenization_allowed() && is_user_logged_in() ) {
 
@@ -246,7 +246,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 					break;
 
 				default:
-					$fields = array();
+					$fields = [];
 					break;
 			}
 
@@ -282,65 +282,65 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 
 			$defaults = $this->get_gateway()->get_payment_method_defaults();
 
-			$fields = array(
-				'card-number' => array(
+			$fields = [
+				'card-number' => [
 					'type'              => 'tel',
 					'label'             => esc_html__( 'Card Number', 'woodev-plugin-framework' ),
 					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-number',
 					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-account-number',
 					'placeholder'       => '•••• •••• •••• ••••',
 					'required'          => true,
-					'class'             => array( 'form-row-wide' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-account-number' ),
+					'class'             => [ 'form-row-wide' ],
+					'input_class'       => [ 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-account-number' ],
 					'maxlength'         => 20,
-					'custom_attributes' => array(
+					'custom_attributes' => [
 						'autocomplete'   => 'cc-number',
 						'autocorrect'    => 'no',
 						'autocapitalize' => 'no',
 						'spellcheck'     => 'no',
-					),
+					],
 					'value'             => $defaults['account-number'],
-				),
-				'card-expiry' => array(
+				],
+				'card-expiry' => [
 					'type'              => 'tel',
 					'label'             => esc_html__( 'Expiration (MM/YY)', 'woodev-plugin-framework' ),
 					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-expiry',
 					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-expiry',
 					'placeholder'       => esc_html__( 'MM / YY', 'woodev-plugin-framework' ),
 					'required'          => true,
-					'class'             => array( 'form-row-first' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-expiry' ),
-					'custom_attributes' => array(
+					'class'             => [ 'form-row-first' ],
+					'input_class'       => [ 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-expiry' ],
+					'custom_attributes' => [
 						'autocomplete'   => 'cc-exp',
 						'autocorrect'    => 'no',
 						'autocapitalize' => 'no',
 						'spellcheck'     => 'no',
 						'maxlength'      => 7, // the spaces before and after the slash are counted
-					),
+					],
 					'value'             => $defaults['expiry'],
-				),
-			);
+				],
+			];
 
 			if ( $this->get_gateway()->csc_enabled() ) {
 
-				$fields['card-csc'] = array(
+				$fields['card-csc'] = [
 					'type'              => 'tel',
 					'label'             => esc_html__( 'Card Security Code', 'woodev-plugin-framework' ),
 					'id'                => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-csc',
 					'name'              => 'wc-' . $this->get_gateway()->get_id_dasherized() . '-csc',
 					'placeholder'       => esc_html__( 'CSC', 'woodev-plugin-framework' ),
 					'required'          => true,
-					'class'             => array( 'form-row-last' ),
-					'input_class'       => array( 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-csc' ),
+					'class'             => [ 'form-row-last' ],
+					'input_class'       => [ 'js-woodev-payment-gateway-credit-card-form-input js-woodev-payment-gateway-credit-card-form-csc' ],
 					'maxlength'         => 4,
-					'custom_attributes' => array(
+					'custom_attributes' => [
 						'autocomplete'   => 'off',
 						'autocorrect'    => 'no',
 						'autocapitalize' => 'no',
 						'spellcheck'     => 'no',
-					),
+					],
 					'value'             => $defaults['csc'],
-				);
+				];
 			}
 
 			/**
@@ -860,14 +860,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 		 */
 		protected function get_js_handler_args() {
 
-			$args = array(
+			$args = [
 				'plugin_id'               => $this->get_gateway()->get_plugin()->get_id(),
 				'id'                      => $this->get_gateway()->get_id(),
 				'id_dasherized'           => $this->get_gateway()->get_id_dasherized(),
 				'type'                    => $this->get_gateway()->get_payment_type(),
 				'csc_required'            => $this->get_gateway()->csc_enabled(),
 				'csc_required_for_tokens' => $this->get_gateway()->csc_enabled_for_tokens(),
-			);
+			];
 
 			if ( $this->get_gateway()->supports_card_types() ) {
 
@@ -876,10 +876,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Payment_Form' ) ) :
 				if ( is_array( $card_types ) && ! empty( $card_types ) ) {
 
 					$args['enabled_card_types'] = array_map(
-						array(
+						[
 							Woodev_Payment_Gateway_Helper::class,
 							'normalize_card_type',
-						),
+						],
 						$card_types
 					);
 				}

@@ -277,7 +277,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 */
 		public function get_active_plugin_instances(): array {
 
-			$instances = array();
+			$instances = [];
 
 			foreach ( $this->active_plugins as $plugin ) {
 
@@ -289,7 +289,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 				$main_class = $definition->get_main_class();
 
-				if ( null === $main_class || ! is_callable( array( $main_class, 'instance' ) ) ) {
+				if ( null === $main_class || ! is_callable( [ $main_class, 'instance' ] ) ) {
 					continue;
 				}
 

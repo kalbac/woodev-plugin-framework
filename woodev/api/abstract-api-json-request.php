@@ -10,7 +10,7 @@ if ( ! class_exists( 'Woodev_API_JSON_Request' ) ) :
 
 		protected $path;
 
-		protected $params = array();
+		protected $params = [];
 
 		public function get_method() {
 			return $this->method;

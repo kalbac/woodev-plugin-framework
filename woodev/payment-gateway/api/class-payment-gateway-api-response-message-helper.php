@@ -42,7 +42,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_API_Response_Message_Helper' ) ) :
 		 * @return string a user message, combining all $message_ids
 		 */
 		public function get_user_messages( $message_ids ) {
-			$messages = array();
+			$messages = [];
 
 			foreach ( $message_ids as $message_id ) {
 				$messages[] = $this->get_user_message( $message_id );

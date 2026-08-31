@@ -198,16 +198,16 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		 *
 		 * @return string.
 		 */
-		private function get_link_helper( $base_url = 'https://woodev.ru', $query_args = array(), $raw = false ) {
+		private function get_link_helper( $base_url = 'https://woodev.ru', $query_args = [], $raw = false ) {
 
 			$args = wp_parse_args(
 				$query_args,
-				array(
+				[
 					'utm_source'   => str_replace( '.', '_', wp_parse_url( home_url(), PHP_URL_HOST ) ),
 					'utm_medium'   => is_admin() ? Woodev_Helper::get_current_screen()->id : 'organic',
 					'utm_content'  => $this->license_data->license,
 					'utm_campaign' => 'woodev',
-				)
+				]
 			);
 
 			// Ensure we sanitize the medium and content.
@@ -240,11 +240,11 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 		private function get_renewal_link( $raw = false ) {
 			return $this->get_link_helper(
 				'https://woodev.ru/checkout/',
-				array(
+				[
 					'utm_medium'      => 'license-notice',
 					'edd_license_key' => $this->license_data->get_license_key(),
 					'download_id'     => $this->license_data->item_id,
-				),
+				],
 				$raw
 			);
 		}
@@ -303,7 +303,7 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 					$message = sprintf(
 					/* translators: 1. opening link tag; 2. closing link tag. */
 						__( 'Без лицензии: функционал плагина ограничен. Обратитесь в %1$sподдержку%2$s.', 'woodev-plugin-framework' ),
-						'<a href="' . $this->get_link_helper( 'https://woodev.ru/support/', array( 'utm_medium' => 'license-notice' ) ) . '" target="_blank">',
+						'<a href="' . $this->get_link_helper( 'https://woodev.ru/support/', [ 'utm_medium' => 'license-notice' ] ) . '" target="_blank">',
 						'</a>'
 					);
 					break;
@@ -369,13 +369,13 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			$url = $this->get_link_helper(
 				'https://woodev.ru/support/',
-				array(
+				[
 					'utm_medium' => 'license-notice',
 					'wpf4766_3'  => urlencode( 'Проблемы с лицензией' ),
 					'wpf4766_5'  => $this->license_data->item_id,
 					'wpf4766_7'  => site_url(),
 					'wpf4766-6'  => $this->license_data->get_license_key(),
-				)
+				]
 			);
 
 			return sprintf(
@@ -395,12 +395,12 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			$url = $this->get_link_helper(
 				'https://woodev.ru/my-account/',
-				array(
+				[
 					'utm_medium' => 'license-notice',
 					'action'     => 'manage_licenses',
 					'payment_id' => $this->license_data->payment_id,
 					'view'       => 'upgrades',
-				)
+				]
 			);
 
 			return sprintf(
@@ -420,11 +420,11 @@ if ( ! class_exists( 'Woodev_License_Messages' ) ) :
 
 			$url = $this->get_link_helper(
 				'https://woodev.ru/my-account/',
-				array(
+				[
 					'utm_medium' => 'license-notice',
 					'action'     => 'manage_licenses',
 					'payment_id' => $this->license_data->payment_id,
-				)
+				]
 			);
 
 			return sprintf(

@@ -10,13 +10,13 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 	class Woodev_Plugin_Dependencies {
 
 		/** @var array required PHP extensions */
-		protected $php_extensions = array();
+		protected $php_extensions = [];
 
 		/** @var array required PHP functions */
-		protected $php_functions = array();
+		protected $php_functions = [];
 
 		/** @var array required PHP settings */
-		protected $php_settings = array();
+		protected $php_settings = [];
 
 		/** @var Woodev_Plugin plugin instance */
 		protected $plugin;
@@ -34,7 +34,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 		 *     @type array $php_settings   PHP settings dependencies
 		 * }
 		 */
-		public function __construct( Woodev_Plugin $plugin, $args = array() ) {
+		public function __construct( Woodev_Plugin $plugin, $args = [] ) {
 
 			$this->plugin = $plugin;
 
@@ -59,21 +59,21 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 
 			$dependencies = wp_parse_args(
 				$args,
-				array(
-					'php_extensions' => array(),
-					'php_functions'  => array(),
-					'php_settings'   => array(),
-				)
+				[
+					'php_extensions' => [],
+					'php_functions'  => [],
+					'php_settings'   => [],
+				]
 			);
 
-			$default_settings = array(
+			$default_settings = [
 				'suhosin.post.max_array_index_length'    => 256,
 				'suhosin.post.max_totalname_length'      => 65535,
 				'suhosin.post.max_vars'                  => 1024,
 				'suhosin.request.max_array_index_length' => 256,
 				'suhosin.request.max_totalname_length'   => 65535,
 				'suhosin.request.max_vars'               => 1024,
-			);
+			];
 
 			// override any default settings requirements if the plugin specifies them
 			if ( ! empty( $dependencies['php_settings'] ) ) {
@@ -88,7 +88,7 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 		 * Adds the action & filter hooks.
 		 */
 		protected function add_hooks() {
-			add_action( 'admin_init', array( $this, 'add_admin_notices' ) );
+			add_action( 'admin_init', [ $this, 'add_admin_notices' ] );
 		}
 
 
@@ -269,9 +269,9 @@ if ( ! class_exists( 'Woodev_Plugin_Dependencies' ) ) :
 			$this->get_plugin()->get_admin_notice_handler()->add_admin_notice(
 				$message,
 				$id,
-				array(
+				[
 					'notice_class' => $notice_class,
-				)
+				]
 			);
 		}
 

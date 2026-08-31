@@ -45,15 +45,15 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 
 			$this->woodev_plugin = $woodev_plugin;
 
-			add_action( 'admin_menu', array( $this, 'admin_menu' ) );
-			add_action( 'admin_menu', array( $this, 'menu_remove_top_item' ), 100 );
-			add_action( 'admin_menu', array( $this, 'licenses_menu' ), 20 );
+			add_action( 'admin_menu', [ $this, 'admin_menu' ] );
+			add_action( 'admin_menu', [ $this, 'menu_remove_top_item' ], 100 );
+			add_action( 'admin_menu', [ $this, 'licenses_menu' ], 20 );
 
 			if ( apply_filters( 'woodev_show_extensions_page', true ) ) {
-				add_action( 'admin_menu', array( $this, 'extensions_menu' ), 30 );
+				add_action( 'admin_menu', [ $this, 'extensions_menu' ], 30 );
 			}
 
-			add_filter( 'menu_order', array( $this, 'menu_order' ) );
+			add_filter( 'menu_order', [ $this, 'menu_order' ] );
 
 			$this->init_plugin_install_tab();
 		}
@@ -73,7 +73,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			global $menu;
 
 			if ( current_user_can( 'manage_options' ) ) {
-				$menu[] = array( '', 'read', 'separator-woodev', '', 'wp-menu-separator woodev' );
+				$menu[] = [ '', 'read', 'separator-woodev', '', 'wp-menu-separator woodev' ];
 			}
 
 			add_menu_page(
@@ -95,10 +95,10 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				__( 'Licenses', 'woodev-plugin-framework' ),
 				'manage_options',
 				'woodev-licenses',
-				array( $this, 'license_page' )
+				[ $this, 'license_page' ]
 			);
 
-			add_action( 'admin_print_scripts-' . $license_page, array( $this, 'load_licenses_page_scripts' ) );
+			add_action( 'admin_print_scripts-' . $license_page, [ $this, 'load_licenses_page_scripts' ] );
 		}
 
 		/**
@@ -123,10 +123,10 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			if ( file_exists( $asset_file ) ) {
 				$asset = include $asset_file;
 			} else {
-				$asset = array(
-					'dependencies' => array(),
+				$asset = [
+					'dependencies' => [],
 					'version'      => $this->woodev_plugin->get_version(),
-				);
+				];
 			}
 
 			$build_url = $this->woodev_plugin->get_framework_assets_url() . '/build/license-page';
@@ -138,7 +138,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			wp_enqueue_style(
 				'woodev-license-app',
 				$build_url . '/style-index.css',
-				array( 'wp-components' ),
+				[ 'wp-components' ],
 				$asset['version']
 			);
 
@@ -152,7 +152,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			);
 
 			// Collect initial state for every registered license engine.
-			$states = array();
+			$states = [];
 			foreach ( Woodev_Plugins_License::get_registered_instances() as $license_engine ) {
 				$states[] = $license_engine->get_state();
 			}
@@ -161,11 +161,11 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			wp_add_inline_script(
 				'woodev-license-app',
 				'window.woodevLicenses = ' . wp_json_encode(
-					array(
+					[
 						'restRoot'   => esc_url_raw( rest_url() ),
 						'restNonce'  => wp_create_nonce( 'wp_rest' ),
 						'plugins'    => array_values( $states ),
-					)
+					]
 				) . ';',
 				'before'
 			);
@@ -239,11 +239,11 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 				__( 'Плагины', 'woodev-plugin-framework' ),
 				'manage_options',
 				'woodev-extensions',
-				array( $this, 'extensions_page' )
+				[ $this, 'extensions_page' ]
 			);
 
-			add_action( 'admin_print_scripts-' . $extensions_suffix, array( $this, 'load_plugins_page_scripts' ) );
-			add_action( 'load-' . $extensions_suffix, array( $this, 'handle_account_page_load' ) );
+			add_action( 'admin_print_scripts-' . $extensions_suffix, [ $this, 'load_plugins_page_scripts' ] );
+			add_action( 'load-' . $extensions_suffix, [ $this, 'handle_account_page_load' ] );
 		}
 
 		public function handle_account_page_load(): void {
@@ -263,7 +263,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			// The connect/return handlers above redirect+exit; this only runs on the
 			// post-redirect landing, where it surfaces the connect outcome (success or
 			// the stored failure/denial message) as an admin notice.
-			add_action( 'admin_notices', array( $connection, 'render_connect_notice' ) );
+			add_action( 'admin_notices', [ $connection, 'render_connect_notice' ] );
 		}
 
 		/**
@@ -287,10 +287,10 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			if ( file_exists( $asset_file ) ) {
 				$asset = include $asset_file;
 			} else {
-				$asset = array(
-					'dependencies' => array(),
+				$asset = [
+					'dependencies' => [],
 					'version'      => $this->woodev_plugin->get_version(),
-				);
+				];
 			}
 
 			$build_url = $this->woodev_plugin->get_framework_assets_url() . '/build/plugins-page';
@@ -302,7 +302,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			wp_enqueue_style(
 				'woodev-plugins-app',
 				$build_url . '/style-index.css',
-				array( 'wp-components' ),
+				[ 'wp-components' ],
 				$asset['version']
 			);
 
@@ -329,7 +329,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 			wp_add_inline_script(
 				'woodev-plugins-app',
 				'window.woodevExtensions = ' . wp_json_encode(
-					array(
+					[
 						'restRoot'       => esc_url_raw( rest_url() ),
 						'restNonce'      => wp_create_nonce( 'wp_rest' ),
 						/**
@@ -344,7 +344,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 						'accountEnabled' => (bool) apply_filters( 'woodev_extensions_account_enabled', true ),
 						'account'        => $account,
 						'installed'      => $installed,
-					)
+					]
 				) . ';',
 				'before'
 			);
@@ -367,7 +367,7 @@ if ( ! class_exists( 'Woodev_Admin_Pages' ) ) :
 		 */
 		public function menu_order( $menu_order ) {
 			// Initialize our custom order array.
-			$woodev_menu_order = array();
+			$woodev_menu_order = [];
 
 			// Get the index of our custom separator.
 			$woodev_separator = array_search( 'separator-woodev', $menu_order, true );

@@ -24,7 +24,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 
 		private static function get( $locale = '' ) {
 
-			$table = array(
+			$table = [
 				'А' => 'A',
 				'Б' => 'B',
 				'В' => 'V',
@@ -99,7 +99,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 				'ѣ' => 'ye',
 				'ѳ' => 'fh',
 				'ѵ' => 'yh',
-			);
+			];
 
 			switch ( $locale ) {
 				// Belorussian.
@@ -291,7 +291,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 					$table['ý'] = 'o';
 					break;
 				case 'he_IL':
-					$table = array(
+					$table = [
 						'א' => '',
 						'ב' => 'b',
 						'ג' => 'g',
@@ -319,7 +319,7 @@ if ( ! class_exists( 'Woodev_String_Conversion' ) ) :
 						'ר' => 'r',
 						'ש' => 'sh',
 						'ת' => 'th',
-					);
+					];
 					for ( $code = 0x0590; $code <= 0x05CF; $code++ ) {
 						$table[ self::mb_chr( $code ) ] = '';
 					}

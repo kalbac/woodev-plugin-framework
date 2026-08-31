@@ -50,7 +50,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		private $text_domain;
 
 		/** @var array memoized list of active plugins */
-		private $active_plugins = array();
+		private $active_plugins = [];
 
 		/** @var Woodev_Plugin_Dependencies dependency handler instance */
 		private $dependency_handler;
@@ -386,13 +386,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		private function add_hooks() {
 
 			// initialize the plugin
-			add_action( 'plugins_loaded', array( $this, 'init_plugin' ), 15 );
+			add_action( 'plugins_loaded', [ $this, 'init_plugin' ], 15 );
 
 			// initialize the plugin admin
-			add_action( 'admin_init', array( $this, 'init_admin' ), 0 );
+			add_action( 'admin_init', [ $this, 'init_admin' ], 0 );
 
 			// Load plugin updater
-			add_action( 'init', array( $this, 'load_updater' ) );
+			add_action( 'init', [ $this, 'load_updater' ] );
 
 			// Register the woodev/v1 extensions catalog REST controller. Idempotent;
 			// must boot in all contexts because REST requests are not is_admin().
@@ -402,22 +402,22 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			Woodev_REST_API_Account::boot();
 
 			add_action( 'wp_enqueue_scripts', [ $this, 'frontend_enqueue_scripts' ] );
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
 
 			// add the admin notices
-			add_action( 'admin_notices', array( $this, 'add_admin_notices' ) );
-			add_action( 'admin_footer', array( $this, 'add_delayed_admin_notices' ) );
+			add_action( 'admin_notices', [ $this, 'add_admin_notices' ] );
+			add_action( 'admin_footer', [ $this, 'add_delayed_admin_notices' ] );
 
 			// run competitor detection on admin screens (never the front end)
-			add_action( 'current_screen', array( $this, 'run_competitor_notices' ) );
+			add_action( 'current_screen', [ $this, 'run_competitor_notices' ] );
 
 			// add a 'Configure' link to the plugin action links
 			add_filter(
 				'plugin_action_links_' . plugin_basename( $this->get_plugin_file() ),
-				array(
+				[
 					$this,
 					'plugin_action_links',
-				)
+				]
 			);
 
 			// automatically log HTTP requests from Woodev_API_Base
@@ -550,12 +550,12 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			if ( $this->is_plugin_settings() ) {
 
-				wp_enqueue_style( 'jquery-confirm', $this->get_framework_assets_url() . '/css/admin/jquery-confirm.min.css', array(), '3.3.2' );
+				wp_enqueue_style( 'jquery-confirm', $this->get_framework_assets_url() . '/css/admin/jquery-confirm.min.css', [], '3.3.2' );
 				wp_enqueue_style( 'font-awesome', $this->get_framework_assets_url() . '/css/admin/font-awesome.min.css', null, '4.7.0' );
 				wp_enqueue_style( 'admin-confirm', $this->get_framework_assets_url() . '/css/admin/admin-confirm.css', null, $this->get_version() );
 
-				wp_register_script( 'jquery-confirm', $this->get_framework_assets_url() . '/js/admin/jquery.jquery-confirm.min.js', array( 'jquery' ), '3.3.2', false );
-				wp_enqueue_script( 'woodev-admin-script', $this->get_framework_assets_url() . '/js/admin/woodev-admin-script.js', array( 'jquery-confirm' ), $this->get_version() );
+				wp_register_script( 'jquery-confirm', $this->get_framework_assets_url() . '/js/admin/jquery.jquery-confirm.min.js', [ 'jquery' ], '3.3.2', false );
+				wp_enqueue_script( 'woodev-admin-script', $this->get_framework_assets_url() . '/js/admin/woodev-admin-script.js', [ 'jquery-confirm' ], $this->get_version() );
 
 				wp_localize_script( 'woodev-admin-script', 'woodev_admin_strings', $this->get_admin_js_strings() );
 			}
@@ -754,8 +754,8 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		private function get_framework_deprecated_hooks() {
 
 			$plugin_id          = $this->get_id();
-			$deprecated_hooks   = array();
-			$deprecated_filters = array(
+			$deprecated_hooks   = [];
+			$deprecated_filters = [
 				/** @see Woodev_Payment_Gateway_My_Payment_Methods handler - once migrated to WC core tokens UI, we removed these and have no replacement */
 				"wc_{$plugin_id}_my_payment_methods_table_html",
 				"wc_{$plugin_id}_my_payment_methods_table_head_html",
@@ -766,7 +766,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				"wc_{$plugin_id}_my_payment_methods_table_body_row_data",
 				"wc_{$plugin_id}_my_payment_methods_table_method_expiry_html",
 				"wc_{$plugin_id}_my_payment_methods_table_actions_html",
-			);
+			];
 
 			foreach ( $deprecated_filters as $deprecated_filter ) {
 				$deprecated_hooks[ $deprecated_filter ] = [
@@ -795,7 +795,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * @return array
 		 */
 		protected function get_deprecated_hooks() {
-			return array();
+			return [];
 		}
 
 		/**
@@ -905,10 +905,10 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
 				add_action(
 					'woodev_' . $this->get_id() . '_api_request_performed',
-					array(
+					[
 						$this,
 						'log_api_request',
-					),
+					],
 					10,
 					2
 				);
@@ -940,7 +940,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 */
 		public function get_api_log_message( $data ) {
 
-			$messages = array();
+			$messages = [];
 
 			$messages[] = isset( $data['uri'] ) && $data['uri'] ? 'Запрос' : 'Ответ';
 
@@ -1486,13 +1486,13 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 				if ( ! array_key_exists( $plugin_name, $this->active_plugins ) ) {
 
-					$active_plugins = (array) get_option( 'active_plugins', array() );
+					$active_plugins = (array) get_option( 'active_plugins', [] );
 
 					if ( is_multisite() ) {
-						$active_plugins = array_merge( $active_plugins, array_keys( get_site_option( 'active_sitewide_plugins', array() ) ) );
+						$active_plugins = array_merge( $active_plugins, array_keys( get_site_option( 'active_sitewide_plugins', [] ) ) );
 					}
 
-					$plugin_filenames = array();
+					$plugin_filenames = [];
 
 					foreach ( $active_plugins as $plugin ) {
 

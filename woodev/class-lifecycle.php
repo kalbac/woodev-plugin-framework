@@ -41,27 +41,27 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		protected function add_hooks() {
 
 			// handle activation
-			add_action( 'admin_init', array( $this, 'handle_activation' ) );
+			add_action( 'admin_init', [ $this, 'handle_activation' ] );
 
 			// handle deactivation
-			add_action( 'deactivate_' . $this->get_plugin()->get_plugin_file(), array( $this, 'handle_deactivation' ) );
+			add_action( 'deactivate_' . $this->get_plugin()->get_plugin_file(), [ $this, 'handle_deactivation' ] );
 
 			if ( is_admin() && ! wp_doing_ajax() ) {
 
 				// initialize the plugin lifecycle
-				add_action( 'wp_loaded', array( $this, 'init' ) );
+				add_action( 'wp_loaded', [ $this, 'init' ] );
 
 				// add the admin notices
-				add_action( 'init', array( $this, 'add_admin_notices' ) );
+				add_action( 'init', [ $this, 'add_admin_notices' ] );
 			}
 
 			// catch any milestones triggered by action
 			add_action(
 				'woodev_' . $this->get_plugin()->get_id() . '_milestone_reached',
-				array(
+				[
 					$this,
 					'trigger_milestone',
-				),
+				],
 				10,
 				3
 			);
@@ -252,13 +252,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			foreach ( $this->upgrade_versions as $upgrade_version ) {
 
-				$upgrade_method = 'upgrade_to_' . str_replace( array( '.', '-' ), '_', $upgrade_version );
+				$upgrade_method = 'upgrade_to_' . str_replace( [ '.', '-' ], '_', $upgrade_version );
 
 				if ( version_compare( $installed_version, $upgrade_version, '<' ) && is_callable(
-					array(
+					[
 						$this,
 						$upgrade_method,
-					)
+					]
 				) ) {
 
 					$this->get_plugin()->log( "Starting upgrade to v{$upgrade_version}" );
@@ -297,9 +297,9 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 					$this->get_plugin()->get_admin_notice_handler()->add_admin_notice(
 						$message,
 						$id,
-						array(
+						[
 							'always_show_on_settings' => false,
-						)
+						]
 					);
 
 					// only display one notice at a time
@@ -353,7 +353,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 			if ( $this->get_plugin()->get_reviews_url() ) {
 
 				// to be prepended at random to each milestone notice
-				$exclamations = array(
+				$exclamations = [
 					__( 'Awesome', 'woodev-plugin-framework' ),
 					__( 'Fantastic', 'woodev-plugin-framework' ),
 					__( 'Amazing', 'woodev-plugin-framework' ),
@@ -361,7 +361,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 					__( 'Wonderful', 'woodev-plugin-framework' ),
 					__( 'Perfect', 'woodev-plugin-framework' ),
 					__( 'Congratulations', 'woodev-plugin-framework' ),
-				);
+				];
 
 				$message = $exclamations[ array_rand( $exclamations ) ] . ', ' . esc_html( $custom_message ) . ' ';
 
@@ -419,12 +419,12 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 *
 		 * @return false|int
 		 */
-		public function add_upgrade_event( string $from_version, array $data = array() ) {
+		public function add_upgrade_event( string $from_version, array $data = [] ) {
 
 			$data = array_merge(
-				array(
+				[
 					'from_version' => $from_version,
-				),
+				],
 				$data
 			);
 
@@ -441,13 +441,13 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 *
 		 * @return false|int
 		 */
-		public function add_migrate_event( string $from_plugin, string $from_version = '', array $data = array() ) {
+		public function add_migrate_event( string $from_plugin, string $from_version = '', array $data = [] ) {
 
 			$data = array_merge(
-				array(
+				[
 					'from_plugin'  => $from_plugin,
 					'from_version' => $from_version,
-				),
+				],
 				$data
 			);
 
@@ -467,16 +467,16 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 *
 		 * @return false|int
 		 */
-		public function store_event( string $name, array $data = array() ) {
+		public function store_event( string $name, array $data = [] ) {
 			global $wpdb;
 
 			$history = $this->get_event_history();
 
-			$event = array(
+			$event = [
 				'name'    => self::clean_event_value( $name ),
 				'time'    => (int) current_time( 'timestamp' ),
 				'version' => self::clean_event_value( $this->get_plugin()->get_version() ),
-			);
+			];
 
 			if ( ! empty( $data ) ) {
 				$event['data'] = self::clean_event_value( $data );
@@ -489,15 +489,15 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 
 			return $wpdb->replace(
 				$wpdb->options,
-				array(
+				[
 					'option_name'  => $this->get_event_history_option_name(),
 					'option_value' => wp_json_encode( $history ),
 					'autoload'     => 'no',
-				),
-				array(
+				],
+				[
 					'%s',
 					'%s',
-				)
+				]
 			);
 		}
 
@@ -511,7 +511,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		public function get_event_history(): array {
 			global $wpdb;
 
-			$history = array();
+			$history = [];
 
 			$results = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $this->get_event_history_option_name() ) );
 
@@ -519,7 +519,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 				$history = json_decode( $results, true );
 			}
 
-			return is_array( $history ) ? $history : array();
+			return is_array( $history ) ? $history : [];
 		}
 
 		/**
@@ -534,7 +534,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		private static function clean_event_value( $value ) {
 
 			if ( is_array( $value ) ) {
-				return array_map( array( __CLASS__, 'clean_event_value' ), $value );
+				return array_map( [ __CLASS__, 'clean_event_value' ], $value );
 			}
 
 			if ( is_scalar( $value ) ) {
@@ -564,7 +564,7 @@ if ( ! class_exists( 'Woodev_Lifecycle' ) ) :
 		 * @return array
 		 */
 		protected function get_milestone_messages(): array {
-			return get_option( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_messages', array() );
+			return get_option( 'woodev_' . $this->get_plugin()->get_id() . '_milestone_messages', [] );
 		}
 
 

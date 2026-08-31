@@ -321,7 +321,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 */
 		protected function schedule_retry( \WC_Order $order ): void {
 
-			$this->retry_handler->create_job( array( 'data' => array( $order->get_id() ) ) );
+			$this->retry_handler->create_job( [ 'data' => [ $order->get_id() ] ] );
 
 			$this->retry_handler->dispatch();
 		}

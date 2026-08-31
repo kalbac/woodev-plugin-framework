@@ -183,7 +183,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		private $inherit_settings;
 
 		/** @var array of shared setting names, if any. Used when a single plugin supports multiple payment gateway variants sharing credentials. */
-		private $shared_settings = array();
+		private $shared_settings = [];
 
 		/** @var Woodev_Payment_Gateway_Payment_Tokens_Handler payment tokens handler instance */
 		protected $payment_tokens_handler;
@@ -302,10 +302,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			// filter order received text for held orders
 			add_filter(
 				'woocommerce_thankyou_order_received_text',
-				array(
+				[
 					$this,
 					'maybe_render_held_order_received_text',
-				),
+				],
 				10,
 				2
 			);
@@ -315,15 +315,15 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				// save settings
 				add_action(
 					'woocommerce_update_options_payment_gateways_' . $this->get_id(),
-					array(
+					[
 						$this,
 						'process_admin_options',
-					)
+					]
 				);
 			}
 
 			// Enqueue the necessary scripts & styles
-			add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
 
 			// add API request logging
 			$this->add_api_request_logging();
@@ -380,7 +380,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		protected function load_shared_settings() {
 
 			// get any other sibling gateways
-			$other_gateway_ids = array_diff( $this->get_plugin()->get_gateway_ids(), array( $this->get_id() ) );
+			$other_gateway_ids = array_diff( $this->get_plugin()->get_gateway_ids(), [ $this->get_id() ] );
 
 			// determine if any sibling gateways have any configured shared settings
 			foreach ( $other_gateway_ids as $other_gateway_id ) {
@@ -441,10 +441,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			$handle = 'woodev-payment-gateway-payment-form';
 
 			// Frontend JS
-			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/' . $handle . '.js', array( 'jquery-payment' ), Woodev_Plugin::VERSION, true );
+			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/' . $handle . '.js', [ 'jquery-payment' ], Woodev_Plugin::VERSION, true );
 
 			// Frontend CSS
-			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', array(), Woodev_Plugin::VERSION );
+			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', [], Woodev_Plugin::VERSION );
 
 			// localized JS params
 			$this->localize_script( $handle, $this->get_payment_form_js_localized_script_params(), 'woodev_payment_gateway_payment_form_params' );
@@ -470,7 +470,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			 */
 			return apply_filters(
 				'woodev_payment_gateway_payment_form_js_localized_script_params',
-				array(
+				[
 					'card_number_missing'            => esc_html__( 'Card number is missing', 'woodev-plugin-framework' ),
 					'card_number_invalid'            => esc_html__( 'Card number is invalid', 'woodev-plugin-framework' ),
 					'card_number_digits_invalid'     => esc_html__( 'Card number is invalid (only digits allowed)', 'woodev-plugin-framework' ),
@@ -479,7 +479,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'cvv_digits_invalid'             => esc_html__( 'Card security code is invalid (only digits are allowed)', 'woodev-plugin-framework' ),
 					'cvv_length_invalid'             => esc_html__( 'Card security code is invalid (must be 3 or 4 digits)', 'woodev-plugin-framework' ),
 					'card_exp_date_invalid'          => esc_html__( 'Card expiration date is invalid', 'woodev-plugin-framework' ),
-				)
+				]
 			);
 		}
 
@@ -510,7 +510,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				 */
 				$js_url = apply_filters( 'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_javascript_url', $js_url );
 
-				wp_enqueue_script( $handle, $js_url, array(), $this->get_plugin()->get_version(), true );
+				wp_enqueue_script( $handle, $js_url, [], $this->get_plugin()->get_version(), true );
 			}
 
 			// CSS
@@ -530,7 +530,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				 */
 				$css_url = apply_filters( 'wc_payment_gateway_' . $this->get_plugin()->get_id() . '_css_url', $css_url );
 
-				wp_enqueue_style( $handle, $css_url, array(), $this->get_plugin()->get_version() );
+				wp_enqueue_style( $handle, $css_url, [], $this->get_plugin()->get_version() );
 			}
 
 			// localized JS script params
@@ -684,7 +684,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 * @since 1.0.0
 		 */
 		protected function add_pay_page_handler() {
-			add_action( 'woocommerce_receipt_' . $this->get_id(), array( $this, 'payment_page' ) );
+			add_action( 'woocommerce_receipt_' . $this->get_id(), [ $this, 'payment_page' ] );
 		}
 
 		/**
@@ -742,11 +742,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			assert( $this->supports_payment_form() );
 
-			$defaults = array(
+			$defaults = [
 				'account-number' => '',
 				'expiry'         => '',
 				'csc'            => '',
-			);
+			];
 
 			if ( $this->is_test_environment() ) {
 				$defaults['expiry'] = '01/' . ( date( 'y' ) + 1 );
@@ -864,30 +864,30 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function init_form_fields() {
 
 			// common top form fields
-			$this->form_fields = array(
+			$this->form_fields = [
 
-				'enabled'     => array(
+				'enabled'     => [
 					'title'   => esc_html__( 'Enable / Disable', 'woodev-plugin-framework' ),
 					'label'   => esc_html__( 'Enable this gateway', 'woodev-plugin-framework' ),
 					'type'    => 'checkbox',
 					'default' => 'no',
-				),
+				],
 
-				'title'       => array(
+				'title'       => [
 					'title'    => esc_html__( 'Title', 'woodev-plugin-framework' ),
 					'type'     => 'text',
 					'desc_tip' => esc_html__( 'Payment method title that the customer will see during checkout.', 'woodev-plugin-framework' ),
 					'default'  => $this->get_default_title(),
-				),
+				],
 
-				'description' => array(
+				'description' => [
 					'title'    => esc_html__( 'Description', 'woodev-plugin-framework' ),
 					'type'     => 'textarea',
 					'desc_tip' => esc_html__( 'Payment method description that the customer will see during checkout.', 'woodev-plugin-framework' ),
 					'default'  => $this->get_default_description(),
-				),
+				],
 
-			);
+			];
 
 			// Card Security Code (CVV) field
 			if ( $this->is_credit_card_gateway() ) {
@@ -911,29 +911,29 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			// add "detailed customer decline messages" option if the feature is supported
 			if ( $this->supports( self::FEATURE_DETAILED_CUSTOMER_DECLINE_MESSAGES ) ) {
-				$this->form_fields['enable_customer_decline_messages'] = array(
+				$this->form_fields['enable_customer_decline_messages'] = [
 					'title'   => esc_html__( 'Detailed Decline Messages', 'woodev-plugin-framework' ),
 					'type'    => 'checkbox',
 					'label'   => esc_html__( 'Check to enable detailed decline messages to the customer during checkout when possible, rather than a generic decline message.', 'woodev-plugin-framework' ),
 					'default' => 'no',
-				);
+				];
 			}
 
 			// debug mode
-			$this->form_fields['debug_mode'] = array(
+			$this->form_fields['debug_mode'] = [
 				'title'   => esc_html__( 'Debug Mode', 'woodev-plugin-framework' ),
 				'type'    => 'select',
 				/* translators: Placeholders: %1$s - <a> tag, %2$s - </a> tag */
 				'desc'    => sprintf( esc_html__( 'Show Detailed Error Messages and API requests/responses on the checkout page and/or save them to the %1$sdebug log%2$s', 'woodev-plugin-framework' ), '<a href="' . Woodev_Helper::get_wc_log_file_url( $this->get_id() ) . '">', '</a>' ),
 				'default' => self::DEBUG_MODE_OFF,
-				'options' => array(
+				'options' => [
 					self::DEBUG_MODE_OFF      => esc_html__( 'Off', 'woodev-plugin-framework' ),
 					self::DEBUG_MODE_CHECKOUT => esc_html__( 'Show on Checkout Page', 'woodev-plugin-framework' ),
 					self::DEBUG_MODE_LOG      => esc_html__( 'Save to Log', 'woodev-plugin-framework' ),
 					/* translators: show debugging information on both checkout page and in the log */
 					self::DEBUG_MODE_BOTH     => esc_html__( 'Both', 'woodev-plugin-framework' ),
-				),
-			);
+				],
+			];
 
 			// if there is more than just the production environment available
 			if ( count( $this->get_environments() ) > 1 ) {
@@ -987,14 +987,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function add_environment_form_fields( $form_fields ) {
 
-			$form_fields['environment'] = array(
+			$form_fields['environment'] = [
 				/* translators: environment as in a software environment (test/production) */
 				'title'    => esc_html__( 'Environment', 'woodev-plugin-framework' ),
 				'type'     => 'select',
 				'default'  => key( $this->get_environments() ),  // default to first defined environment
 				'desc_tip' => esc_html__( 'Select the gateway environment to use for transactions.', 'woodev-plugin-framework' ),
 				'options'  => $this->get_environments(),
-			);
+			];
 
 			return $form_fields;
 		}
@@ -1014,9 +1014,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		protected function add_shared_settings_form_fields( $form_fields ) {
 
 			// get any sibling gateways
-			$other_gateway_ids                  = array_diff( $this->get_plugin()->get_gateway_ids(), array( $this->get_id() ) );
-			$configured_other_gateway_ids       = array();
-			$inherit_settings_other_gateway_ids = array();
+			$other_gateway_ids                  = array_diff( $this->get_plugin()->get_gateway_ids(), [ $this->get_id() ] );
+			$configured_other_gateway_ids       = [];
+			$inherit_settings_other_gateway_ids = [];
 
 			// determine if any sibling gateways have any configured shared settings
 			foreach ( $other_gateway_ids as $other_gateway_id ) {
@@ -1039,20 +1039,20 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				}
 			}
 
-			$form_fields['connection_settings'] = array(
+			$form_fields['connection_settings'] = [
 				'title' => esc_html__( 'Connection Settings', 'woodev-plugin-framework' ),
 				'type'  => 'title',
-			);
+			];
 
 			// disable the field if the sibling gateway is already inheriting settings
-			$form_fields['inherit_settings'] = array(
+			$form_fields['inherit_settings'] = [
 				'title'       => esc_html__( 'Share connection settings', 'woodev-plugin-framework' ),
 				'type'        => 'checkbox',
 				'label'       => esc_html__( 'Use connection/authentication settings from other gateway', 'woodev-plugin-framework' ),
 				'default'     => count( $configured_other_gateway_ids ) > 0 ? 'yes' : 'no',
 				'disabled'    => count( $inherit_settings_other_gateway_ids ) > 0,
 				'description' => count( $inherit_settings_other_gateway_ids ) > 0 ? esc_html__( 'Disabled because the other gateway is using these settings', 'woodev-plugin-framework' ) : '',
-			);
+			];
 
 			return $form_fields;
 		}
@@ -1067,21 +1067,21 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		 */
 		protected function add_csc_form_fields( $form_fields ) {
 
-			$form_fields['enable_csc'] = array(
+			$form_fields['enable_csc'] = [
 				'title'   => esc_html__( 'Card Verification (CSC)', 'woodev-plugin-framework' ),
 				'label'   => esc_html__( 'Display the Card Security Code (CV2) field on checkout', 'woodev-plugin-framework' ),
 				'type'    => 'checkbox',
 				'default' => 'yes',
-			);
+			];
 
 			if ( $this->supports_tokenization() ) {
 
-				$form_fields['enable_token_csc'] = array(
+				$form_fields['enable_token_csc'] = [
 					'title'   => esc_html__( 'Saved Card Verification', 'woodev-plugin-framework' ),
 					'label'   => esc_html__( 'Display the Card Security Code field when paying with a saved card', 'woodev-plugin-framework' ),
 					'type'    => 'checkbox',
 					'default' => 'yes',
-				);
+				];
 			}
 
 			return $form_fields;
@@ -1389,7 +1389,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			$order->customer_id = '';
 
 			// logged in customer?
-			if ( 0 != $order->get_user_id() && false !== ( $customer_id = $this->get_customer_id( $order->get_user_id(), array( 'order' => $order ) ) ) ) {
+			if ( 0 != $order->get_user_id() && false !== ( $customer_id = $this->get_customer_id( $order->get_user_id(), [ 'order' => $order ] ) ) ) {
 				$order->customer_id = $customer_id;
 			}
 
@@ -1443,7 +1443,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				$message_method = 'get_' . $response->get_payment_type() . '_transaction_approved_message';
 
-				if ( is_callable( array( $this, $message_method ) ) ) {
+				if ( is_callable( [ $this, $message_method ] ) ) {
 					$order->add_order_note( $this->$message_method( $order, $response ) );
 				}
 			}
@@ -1707,9 +1707,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$this->get_method_title(),
 				wc_price(
 					$order->refund->amount,
-					array(
+					[
 						'currency' => $order->get_currency(),
-					)
+					]
 				)
 			);
 
@@ -1932,10 +1932,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 				add_filter(
 					'woocommerce_order_fully_refunded_status',
-					array(
+					[
 						$this,
 						'maybe_cancel_voided_order',
-					),
+					],
 					10,
 					2
 				);
@@ -1976,10 +1976,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			if ( empty( $this->voided_order_messages ) ) {
 				remove_filter(
 					'woocommerce_order_fully_refunded_status',
-					array(
+					[
 						$this,
 						'maybe_cancel_voided_order',
-					),
+					],
 					10
 				);
 			}
@@ -2275,9 +2275,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					esc_html__( 'Total amount: %s', 'woodev-plugin-framework' ),
 					wc_price(
 						$order->payment->credit_amount,
-						array(
+						[
 							'currency' => $order->get_currency(),
-						)
+						]
 					)
 				);
 			}
@@ -2287,9 +2287,9 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					esc_html__( 'Down payment: %s', 'woodev-plugin-framework' ),
 					wc_price(
 						$order->payment->first_payment,
-						array(
+						[
 							'currency' => $order->get_currency(),
-						)
+						]
 					)
 				);
 			}
@@ -2699,35 +2699,35 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			assert( $this->supports_credit_card_authorization() && $this->supports_credit_card_charge() );
 
-			$form_fields['transaction_type'] = array(
+			$form_fields['transaction_type'] = [
 				'title'    => esc_html__( 'Transaction Type', 'woodev-plugin-framework' ),
 				'type'     => 'select',
 				'desc_tip' => esc_html__( 'Select how transactions should be processed. Charge submits all transactions for settlement, Authorization simply authorizes the order total for capture later.', 'woodev-plugin-framework' ),
 				'default'  => self::TRANSACTION_TYPE_CHARGE,
-				'options'  => array(
+				'options'  => [
 					self::TRANSACTION_TYPE_CHARGE        => esc_html_x( 'Charge', 'noun, credit card transaction type', 'woodev-plugin-framework' ),
 					self::TRANSACTION_TYPE_AUTHORIZATION => esc_html_x( 'Authorization', 'credit card transaction type', 'woodev-plugin-framework' ),
-				),
-			);
+				],
+			];
 
 			if ( $this->supports_credit_card_charge_virtual() ) {
 
-				$form_fields['charge_virtual_orders'] = array(
+				$form_fields['charge_virtual_orders'] = [
 					'label'       => esc_html__( 'Charge Virtual-Only Orders', 'woodev-plugin-framework' ),
 					'type'        => 'checkbox',
 					'description' => esc_html__( 'If the order contains exclusively virtual items, enable this to immediately charge, rather than authorize, the transaction.', 'woodev-plugin-framework' ),
 					'default'     => 'no',
-				);
+				];
 			}
 
 			if ( $this->supports_credit_card_partial_capture() ) {
 
-				$form_fields['enable_partial_capture'] = array(
+				$form_fields['enable_partial_capture'] = [
 					'label'       => esc_html__( 'Enable Partial Capture', 'woodev-plugin-framework' ),
 					'type'        => 'checkbox',
 					'description' => esc_html__( 'Allow orders to be partially captured multiple times.', 'woodev-plugin-framework' ),
 					'default'     => 'no',
-				);
+				];
 			}
 
 			if ( $this->supports_credit_card_capture() ) {
@@ -2736,7 +2736,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				$paid_statuses = array_map( 'wc_get_order_status_name', wc_get_is_paid_statuses() );
 				$conjuction    = _x( 'or', 'coordinating conjunction for a list of order statuses: on-hold, processing, or completed', 'woodev-plugin-framework' );
 
-				$form_fields['enable_paid_capture'] = array(
+				$form_fields['enable_paid_capture'] = [
 					'label'       => __( 'Capture Paid Orders', 'woodev-plugin-framework' ),
 					'type'        => 'checkbox',
 					'description' => sprintf(
@@ -2744,7 +2744,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 						esc_html( ! empty( $paid_statuses ) ? Woodev_Helper::list_array_items( $paid_statuses, $conjuction ) : __( 'a paid status', 'woodev-plugin-framework' ) )
 					),
 					'default'     => 'no',
-				);
+				];
 			}
 
 			return $form_fields;
@@ -2893,7 +2893,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			assert( $this->supports_card_types() );
 
-			$form_fields['card_types'] = array(
+			$form_fields['card_types'] = [
 				'title'       => esc_html__( 'Accepted Card Logos', 'woodev-plugin-framework' ),
 				'type'        => 'multiselect',
 				'desc_tip'    => __( 'These are the card logos that are displayed to customers as accepted during checkout.', 'woodev-plugin-framework' ),
@@ -2907,7 +2907,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 				'class'       => 'wc-enhanced-select',
 				'css'         => 'width: 350px;',
 				'options'     => $this->get_available_card_types(),
-			);
+			];
 
 			return $form_fields;
 		}
@@ -2925,7 +2925,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			// default available card types
 			if ( ! isset( $this->available_card_types ) ) {
 
-				$this->available_card_types = array(
+				$this->available_card_types = [
 					'VISA'   => esc_html_x( 'Visa', 'credit card type', 'woodev-plugin-framework' ),
 					'MC'     => esc_html_x( 'MasterCard', 'credit card type', 'woodev-plugin-framework' ),
 					'AMEX'   => esc_html_x( 'American Express', 'credit card type', 'woodev-plugin-framework' ),
@@ -2933,7 +2933,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 					'DINERS' => esc_html_x( 'Diners', 'credit card type', 'woodev-plugin-framework' ),
 					'JCB'    => esc_html_x( 'JCB', 'credit card type', 'woodev-plugin-framework' ),
 					'MIR'    => esc_html_x( 'MIR', 'credit card type', 'woodev-plugin-framework' ),
-				);
+				];
 
 			}
 
@@ -2984,13 +2984,13 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			assert( $this->supports_tokenization() );
 
-			$form_fields['tokenization'] = array(
+			$form_fields['tokenization'] = [
 				/* translators: http://www.cybersource.com/products/payment_security/payment_tokenization/ and https://en.wikipedia.org/wiki/Tokenization_(data_security) */
 				'title'   => esc_html__( 'Tokenization', 'woodev-plugin-framework' ),
 				'label'   => esc_html__( 'Allow customers to securely save their payment details for future checkout.', 'woodev-plugin-framework' ),
 				'type'    => 'checkbox',
 				'default' => 'no',
-			);
+			];
 
 			return $form_fields;
 		}
@@ -3215,7 +3215,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			// default set of environments consists of 'production'
 			if ( ! isset( $this->environments ) ) {
-				$this->environments = array( self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ) );
+				$this->environments = [ self::ENVIRONMENT_PRODUCTION => esc_html_x( 'Production', 'software environment', 'woodev-plugin-framework' ) ];
 			}
 
 			return $this->environments;
@@ -3354,7 +3354,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function add_support( $feature ) {
 
 			if ( ! is_array( $feature ) ) {
-				$feature = array( $feature );
+				$feature = [ $feature ];
 			}
 
 			foreach ( $feature as $name ) {
@@ -3385,7 +3385,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 		public function remove_support( $feature ) {
 
 			if ( ! is_array( $feature ) ) {
-				$feature = array( $feature );
+				$feature = [ $feature ];
 			}
 
 			foreach ( $feature as $name ) {
@@ -3601,7 +3601,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 			if ( ! has_action( 'woodev_' . $this->get_id() . '_api_request_performed' ) ) {
 				add_action(
 					'woodev_' . $this->get_id() . '_api_request_performed',
-					array( $this, 'log_api_request' ),
+					[ $this, 'log_api_request' ],
 					10,
 					2
 				);

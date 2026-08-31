@@ -42,17 +42,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			// payment notification listener hook
 			if ( ! has_action(
 				'woocommerce_api_' . strtolower( get_class( $this ) ),
-				array(
+				[
 					$this,
 					'handle_transaction_response_request',
-				)
+				]
 			) ) {
 				add_action(
 					'woocommerce_api_' . strtolower( get_class( $this ) ),
-					array(
+					[
 						$this,
 						'handle_transaction_response_request',
-					)
+					]
 				);
 			}
 		}
@@ -92,17 +92,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			if ( ! $payment_url ) {
 				// be sure to have either set a notice via `wc_add_notice` to be
 				// displayed, or have thrown an exception with a message
-				return array( 'result' => 'failure' );
+				return [ 'result' => 'failure' ];
 			}
 
-			if ( $this->empty_cart_before_redirect() && is_callable( array( WC()->cart, 'empty_cart' ) ) ) {
+			if ( $this->empty_cart_before_redirect() && is_callable( [ WC()->cart, 'empty_cart' ] ) ) {
 				WC()->cart->empty_cart();
 			}
 
-			return array(
+			return [
 				'result'   => 'success',
 				'redirect' => $payment_url,
-			);
+			];
 		}
 
 
@@ -183,11 +183,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 			$request_params = $this->get_hosted_pay_page_params( $order );
 
 			// standardized request data, for logging purposes
-			$request = array(
+			$request = [
 				'method' => 'POST',
 				'uri'    => $this->get_hosted_pay_page_url( $order ),
 				'body'   => print_r( $request_params, true ),
-			);
+			];
 
 			// log the request
 			$this->log_hosted_pay_page_request( $request );
@@ -277,14 +277,14 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 */
 		protected function get_auto_post_form_args( WC_Order $order ) {
 
-			$args = array(
+			$args = [
 				'submit_url'     => $this->get_hosted_pay_page_url( $order ),
 				'cancel_url'     => $order->get_cancel_order_url(),
 				'message'        => __( 'Thank you for your order, please click the button below to pay.', 'woodev-plugin-framework' ),
 				'thanks_message' => __( 'Thank you for your order. We are now redirecting you to complete payment.', 'woodev-plugin-framework' ),
 				'button_text'    => __( 'Pay Now', 'woodev-plugin-framework' ),
 				'cancel_text'    => __( 'Cancel Order', 'woodev-plugin-framework' ),
-			);
+			];
 
 			/**
 			 * Filter the auto post form display arguments.
@@ -315,7 +315,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 *
 		 * @return string
 		 */
-		protected function get_auto_post_form_params_html( $request_params = array() ) {
+		protected function get_auto_post_form_params_html( $request_params = [] ) {
 
 			$html = '';
 
@@ -339,7 +339,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 */
 		protected function get_hosted_pay_page_params( $order ) {
 			// stub method
-			return array();
+			return [];
 		}
 
 
@@ -564,7 +564,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Hosted' ) ) :
 		 */
 		protected function process_tokenization_response( WC_Order $order, $response ) {
 
-			if ( is_callable( array( $response, 'get_customer_id' ) ) && $response->get_customer_id() ) {
+			if ( is_callable( [ $response, 'get_customer_id' ] ) && $response->get_customer_id() ) {
 				$order->customer_id = $response->get_customer_id();
 			}
 

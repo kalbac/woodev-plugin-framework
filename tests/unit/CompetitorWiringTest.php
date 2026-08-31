@@ -47,7 +47,7 @@ class CompetitorWiringTest extends TestCase {
 
 	public function test_current_screen_hook_is_registered(): void {
 		$this->assertStringContainsString(
-			"add_action( 'current_screen', array( \$this, 'run_competitor_notices' ) )",
+			"add_action( 'current_screen', [ \$this, 'run_competitor_notices' ] )",
 			$this->source
 		);
 	}

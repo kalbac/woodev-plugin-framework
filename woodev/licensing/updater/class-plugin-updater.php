@@ -49,12 +49,12 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			$this->plugin                   = $plugin;
 			$this->api_handler              = new Woodev_Licensing_API( $this->plugin );
 			$this->api_url                  = trailingslashit( $this->api_handler->get_url() );
-			$this->api_data                 = array(
+			$this->api_data                 = [
 				'version' => $this->plugin->get_version(),
 				'item_id' => $this->plugin->get_download_id(),
 				'license' => $this->plugin->get_license_instance()->get_license(),
-				'beta'    => is_callable( array( $this->plugin, 'is_beta_allowed' ) ) && $this->plugin->is_beta_allowed(),
-			);
+				'beta'    => is_callable( [ $this->plugin, 'is_beta_allowed' ] ) && $this->plugin->is_beta_allowed(),
+			];
 			$this->name                     = $this->plugin->get_plugin_file();
 			$this->slug                     = basename( $this->plugin->get_plugin_file(), '.php' );
 			$this->version                  = $this->plugin->get_version();
@@ -72,10 +72,10 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @uses add_filter()
 		 */
 		private function init(): void {
-			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
-			add_filter( 'plugins_api', array( $this, 'plugins_api_filter' ), 10, 3 );
-			add_action( 'after_plugin_row', array( $this, 'show_update_notification' ), 10, 2 );
-			add_action( 'admin_init', array( $this, 'show_changelog' ) );
+			add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'check_update' ] );
+			add_filter( 'plugins_api', [ $this, 'plugins_api_filter' ], 10, 3 );
+			add_action( 'after_plugin_row', [ $this, 'show_update_notification' ], 10, 2 );
+			add_action( 'admin_init', [ $this, 'show_changelog' ] );
 		}
 
 		/**
@@ -131,10 +131,10 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			if ( false === $version_info || ( $this->api_handler->is_debug_enabled() && isset( $_GET['force-check'] ) ) ) {
 
 				$version_info = $this->api_request(
-					array(
+					[
 						'slug' => $this->slug,
 						'beta' => $this->beta,
-					)
+					]
 				);
 
 				if ( ! $version_info ) {
@@ -251,23 +251,23 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			$changelog_link = '';
 			if ( ! empty( $update_cache->response[ $this->name ]->sections->changelog ) ) {
 				$changelog_link = add_query_arg(
-					array(
+					[
 						'woodev_action' => 'view_plugin_changelog',
 						'plugin'        => urlencode( $this->name ),
 						'slug'          => urlencode( $this->slug ),
 						'TB_iframe'     => 'true',
 						'width'         => 772,
 						'height'        => 911,
-					),
+					],
 					self_admin_url( 'index.php' )
 				);
 			}
 
 			$update_link = add_query_arg(
-				array(
+				[
 					'action' => 'upgrade-plugin',
 					'plugin' => urlencode( $this->name ),
-				),
+				],
 				self_admin_url( 'update.php' )
 			);
 
@@ -348,15 +348,15 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				return $_data;
 			}
 
-			$to_send = array(
+			$to_send = [
 				'slug'   => $this->slug,
 				'is_ssl' => is_ssl(),
-				'fields' => array(
-					'banners' => array(),
+				'fields' => [
+					'banners' => [],
 					'reviews' => false,
-					'icons'   => array(),
-				),
-			);
+					'icons'   => [],
+				],
+			];
 
 			// Get the transient where we store the api request for this plugin for 24 hours
 			$edd_api_request_transient = $this->get_cached_version_info();
@@ -417,9 +417,9 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 */
 		private function convert_object_to_array( $data ): array {
 			if ( ! is_array( $data ) && ! is_object( $data ) ) {
-				return array();
+				return [];
 			}
-			$new_data = array();
+			$new_data = [];
 			foreach ( $data as $key => $value ) {
 				$new_data[ $key ] = is_object( $value ) ? $this->convert_object_to_array( $value ) : $value;
 			}
@@ -518,7 +518,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 			if ( ! current_user_can( 'update_plugins' ) ) {
-				wp_die( esc_html__( 'You do not have permission to install plugin updates', 'woodev-plugin-framework' ), esc_html__( 'Error', 'woodev-plugin-framework' ), array( 'response' => 403 ) );
+				wp_die( esc_html__( 'You do not have permission to install plugin updates', 'woodev-plugin-framework' ), esc_html__( 'Error', 'woodev-plugin-framework' ), [ 'response' => 403 ] );
 			}
 
 			$version_info = $this->get_repo_api_data();
@@ -596,12 +596,12 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				// intersection with the nonces THIS request actually sent; when nothing
 				// was sent, skip entirely. A rogue/buggy response must never clear an
 				// ack recorded while the request was in flight (lost-ack §9.9).
-				if ( null !== $ack_store && array() !== $this->sent_ack_nonces ) {
+				if ( null !== $ack_store && [] !== $this->sent_ack_nonces ) {
 					try {
 						$acks_received = isset( $response->acks_received ) ? $response->acks_received : null;
 						if ( is_array( $acks_received ) ) {
 							$confirmed = array_values( array_intersect( array_filter( $acks_received, 'is_string' ), $this->sent_ack_nonces ) );
-							if ( array() !== $confirmed ) {
+							if ( [] !== $confirmed ) {
 								$ack_store->confirm_received( $confirmed );
 							}
 						}
@@ -691,13 +691,13 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				$cache_key = $this->get_cache_key();
 			}
 
-			$data = array(
+			$data = [
 				'timeout' => strtotime( '+3 hours', time() ),
 				'value'   => wp_json_encode( $value ),
 				// OB-3 F10: stamp the source licensing endpoint so a later read can
 				// reject a value cached against a different woodev_license_base_url.
 				'source'  => $this->api_url,
-			);
+			];
 
 			update_option( $cache_key, $data, false );
 		}
@@ -714,7 +714,7 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 		 * @return array
 		 */
 		private function get_api_params(): array {
-			$params = array(
+			$params = [
 				'edd_action'  => 'get_version',
 				'license'     => ! empty( $this->api_data['license'] ) ? $this->api_data['license'] : '',
 				'item_id'     => isset( $this->api_data['item_id'] ) ? $this->api_data['item_id'] : false,
@@ -727,17 +727,17 @@ if ( ! class_exists( 'Woodev_Plugin_Updater' ) ) :
 				// server can bind acks. RAW home_url() — the server normalizes before
 				// signing (plan decision 2); the wire value is NOT normalized here.
 				'url'         => home_url(),
-			);
+			];
 
 			// D-W3 / §9.5: attach pending acks ONLY when non-empty so the request shape
 			// remains byte-for-byte identical to the pre-ack shape when there is nothing
 			// to send (EDD wire contract). The sent nonce set is stashed so the response
 			// handler can confirm ONLY what THIS request carried (s8-p5 re-review #1).
-			$this->sent_ack_nonces = array();
+			$this->sent_ack_nonces = [];
 
 			if ( class_exists( 'Woodev_License_Command_Acks' ) ) {
 				$pending = ( new Woodev_License_Command_Acks() )->get_pending();
-				if ( array() !== $pending ) {
+				if ( [] !== $pending ) {
 					$params['consumed_command_nonces'] = $pending;
 					$this->sent_ack_nonces             = array_values( array_filter( array_column( $pending, 'nonce' ), 'is_string' ) );
 				}

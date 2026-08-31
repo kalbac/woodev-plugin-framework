@@ -13,13 +13,13 @@ if ( ! class_exists( 'Woodev_Admin_Message_Handler' ) ) :
 
 		private $message_id;
 
-		private $messages = array();
+		private $messages = [];
 
-		private $errors = array();
+		private $errors = [];
 
-		private $warnings = array();
+		private $warnings = [];
 
-		private $infos = array();
+		private $infos = [];
 
 		public function __construct( $message_id = null ) {
 
@@ -27,7 +27,7 @@ if ( ! class_exists( 'Woodev_Admin_Message_Handler' ) ) :
 
 			$this->load_messages();
 
-			add_filter( 'wp_redirect', array( $this, 'redirect' ), 1, 2 );
+			add_filter( 'wp_redirect', [ $this, 'redirect' ], 1, 2 );
 		}
 
 		public function set_messages() {
@@ -36,12 +36,12 @@ if ( ! class_exists( 'Woodev_Admin_Message_Handler' ) ) :
 
 				set_transient(
 					self::MESSAGE_TRANSIENT_PREFIX . $this->get_message_id(),
-					array(
+					[
 						'errors'   => $this->errors,
 						'warnings' => $this->warnings,
 						'infos'    => $this->infos,
 						'messages' => $this->messages,
-					),
+					],
 					60 * 60
 				);
 
@@ -146,18 +146,18 @@ if ( ! class_exists( 'Woodev_Admin_Message_Handler' ) ) :
 			return isset( $this->infos[ $index ] ) ? $this->infos[ $index ] : '';
 		}
 
-		public function show_messages( $params = array() ) {
+		public function show_messages( $params = [] ) {
 
 			$params = wp_parse_args(
 				$params,
-				array(
-					'capabilities' => array(
+				[
+					'capabilities' => [
 						'manage_woocommerce',
-					),
-				)
+					],
+				]
 			);
 
-			$check_user_capabilities = array();
+			$check_user_capabilities = [];
 
 			foreach ( $params['capabilities'] as $capability ) {
 				$check_user_capabilities[] = current_user_can( $capability );

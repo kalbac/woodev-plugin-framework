@@ -45,10 +45,10 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 			// filter order received text for held orders
 			add_filter(
 				'woocommerce_thankyou_order_received_text',
-				array(
+				[
 					$this,
 					'maybe_render_held_order_received_text',
-				),
+				],
 				10,
 				2
 			);
@@ -201,7 +201,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Abstract_Payment_Handler' ) ) :
 
 					$message_method = 'get_' . $response->get_payment_type() . '_transaction_approved_message';
 
-					if ( is_callable( array( $this->get_gateway(), $message_method ) ) ) {
+					if ( is_callable( [ $this->get_gateway(), $message_method ] ) ) {
 						$message = $this->get_gateway()->$message_method( $order, $response );
 					}
 				}

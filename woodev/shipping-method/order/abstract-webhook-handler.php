@@ -79,7 +79,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 		 * @return void
 		 */
 		public function register(): void {
-			add_action( 'rest_api_init', array( $this, 'register_route' ) );
+			add_action( 'rest_api_init', [ $this, 'register_route' ] );
 		}
 
 		/**
@@ -99,11 +99,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 			register_rest_route(
 				$this->get_namespace(),
 				$this->get_route(),
-				array(
+				[
 					'methods'             => 'POST',
-					'callback'            => array( $this, 'handle_request' ),
-					'permission_callback' => array( $this, 'verify_request' ),
-				)
+					'callback'            => [ $this, 'handle_request' ],
+					'permission_callback' => [ $this, 'verify_request' ],
+				]
 			);
 		}
 
@@ -154,7 +154,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 			 */
 			do_action( $this->hook( 'webhook_received' ), $payload, $request );
 
-			return new \WP_REST_Response( array( 'received' => true ), 200 );
+			return new \WP_REST_Response( [ 'received' => true ], 200 );
 		}
 
 		/**

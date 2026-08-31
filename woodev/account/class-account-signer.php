@@ -31,13 +31,13 @@ if ( ! class_exists( 'Woodev_Account_Signer' ) ) :
 		public static function sign( array $request, string $key ): string {
 
 			$payload = wp_json_encode(
-				array(
+				[
 					'host'        => (string) ( $request['host'] ?? '' ),
 					'request_uri' => (string) ( $request['request_uri'] ?? '' ),
 					'method'      => strtoupper( (string) ( $request['method'] ?? '' ) ),
 					'body'        => (string) ( $request['body'] ?? '' ),
 					'timestamp'   => (string) ( $request['timestamp'] ?? '' ),
-				)
+				]
 			);
 
 			return hash_hmac( 'sha256', (string) $payload, $key );

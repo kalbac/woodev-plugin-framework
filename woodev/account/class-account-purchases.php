@@ -32,10 +32,10 @@ if ( ! class_exists( 'Woodev_Account_Purchases' ) ) :
 
 			$items = ( is_array( $response ) && isset( $response['purchases'] ) && is_array( $response['purchases'] ) )
 				? $response['purchases']
-				: array();
+				: [];
 
-			$seen = array();
-			$out  = array();
+			$seen = [];
+			$out  = [];
 
 			foreach ( $items as $item ) {
 
@@ -51,12 +51,12 @@ if ( ! class_exists( 'Woodev_Account_Purchases' ) ) :
 
 				$seen[ $id ] = true;
 
-				$out[] = array(
+				$out[] = [
 					'id'    => $id,
 					'title' => isset( $item['title'] ) ? (string) $item['title'] : '',
 					'icon'  => isset( $item['icon'] ) ? esc_url_raw( (string) $item['icon'] ) : '',
 					'date'  => isset( $item['date'] ) ? (string) $item['date'] : '',
-				);
+				];
 			}
 
 			return $out;
@@ -74,7 +74,7 @@ if ( ! class_exists( 'Woodev_Account_Purchases' ) ) :
 		 */
 		public static function download_ids( array $purchases ): array {
 
-			$ids = array();
+			$ids = [];
 
 			foreach ( $purchases as $purchase ) {
 
