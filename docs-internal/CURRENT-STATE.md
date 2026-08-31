@@ -109,7 +109,7 @@ ownership rather than a name heuristic. Gotcha:
 
 | Card | State |
 |---|---|
-| **#437** | **Implemented in s109.** Removed the `/location/list` cap, request `limit`, and `truncated` response; a stored settlement `related-list` now reads as `ajax-select2` without rewriting the option. Its remaining spec work is tracked separately. |
+| ~~**#437**~~ | **CLOSED in s109.** `/location/list` lost `LIST_HARD_CAP`, `limit` and `truncated`; a stored `related-list` now reads as `ajax-select2`, option untouched, no migration. Decisions 8/9 retired by the operator 31.08.2026. Detail: `sessions/s109.md`. |
 | ~~**#488**~~ | **CLOSED (D1-D8).** The one fact still load-bearing: `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure THROWS. History: `sessions/s89.md`-`s92.md`. |
 | ~~**#512**~~ | **DONE — #548 (s95).** Surviving contract fact: `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key — documented on both methods and PINNED by a test. The `VARCHAR(191)` length question was measured and closed with no guard (100+ chars of headroom). |
 | ~~**#518**~~ | **CLOSED 27.08.2026 — PR #586, accepted live by the operator.** A pickup selection now makes the settlement record EXPLICIT, and the address stays unlocked after a reload. His acceptance note became its own card: the lock is not scoped to pickup-type shipping methods, so under a courier method no pickup selection can clear it. **This row claimed «DECIDED, still NOT started» for two sessions after the card closed** — the miss that prompted the #644 audit. |

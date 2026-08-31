@@ -1353,8 +1353,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * settlements under any provider or any region-axis setting.
 		 *
 		 * Issue #404 previously offered it, gated on the region axis being
-		 * `related-list` itself. The settlement axis now has a searchable-list
-		 * successor, so it is never offered regardless of the region setting.
+		 * `related-list` itself, on the reasoning that a region-SCOPED settlement
+		 * list "is far more likely to genuinely be the whole set" than a
+		 * country-wide one. That premise was DISPROVEN by measurement on
+		 * 24.08.2026: a region-scoped settlement list for Новосибирская область
+		 * came back at exactly 500 records — the `/location/list` cap of the day,
+		 * hit silently, with the customer given no way to reach the rest. A mode
+		 * whose one promise cannot be kept is not a mode, so the gate went rather
+		 * than being tightened. The cap itself is gone too (#437, s109): with
+		 * this mode off the settlement axis, `/location/list` only ever enumerates
+		 * regions (~85 for RU), and there is nothing left to cut.
 		 *
 		 * A store that had already stored `related-list` for settlements is
 		 * not rewritten; {@see self::get_field_mode_settlement()} clamps it
@@ -1531,7 +1539,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
 			$offered = self::offered_field_modes_for( $this->get_active_provider(), true );
 
-			if ( self::MODE_RELATED_LIST === $stored ) {
+			// A store that saved `related-list` before the settlement axis stopped
+			// offering it lands on the SEARCHABLE list, not on plain text: the
+			// preset list was a dropdown, and `ajax-select2` is its successor
+			// (operator's own argument, #437). Guarded on `$offered` all the same —
+			// `ajax-select2` is unconditional today (#380), and this must not start
+			// returning an unoffered mode the day that changes.
+			if ( self::MODE_RELATED_LIST === $stored && in_array( self::MODE_AJAX_SELECT2, $offered, true ) ) {
 				return self::MODE_AJAX_SELECT2;
 			}
 
