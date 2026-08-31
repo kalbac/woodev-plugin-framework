@@ -1353,25 +1353,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * settlements under any provider or any region-axis setting.
 		 *
 		 * Issue #404 previously offered it, gated on the region axis being
-		 * `related-list` itself, on the reasoning that a region-SCOPED
-		 * settlement list "is far more likely to genuinely be the whole
-		 * set" than a country-wide one — `related-list` promises a list
-		 * loaded ONCE and searched locally, and
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller}
-		 * caps every `/location/list` response at `LIST_HARD_CAP` and flags
-		 * `truncated: true`, a flag this axis's client drops. That premise
-		 * was DISPROVEN by measurement on 24.08.2026: a region-scoped
-		 * settlement list came back at exactly 500 = `LIST_HARD_CAP`, i.e.
-		 * silently truncated, with the customer given no way to reach the
-		 * rest. A mode whose one promise cannot be kept is not a mode, so
-		 * the gate is gone rather than tightened — the same conclusion
-		 * `specs/2026-08-21-settlement-search-design.md` (#437) reaches for
-		 * its own reasons.
+		 * `related-list` itself, on the reasoning that a region-SCOPED settlement
+		 * list "is far more likely to genuinely be the whole set" than a
+		 * country-wide one. That premise was DISPROVEN by measurement on
+		 * 24.08.2026: a region-scoped settlement list for Новосибирская область
+		 * came back at exactly 500 records — the `/location/list` cap of the day,
+		 * hit silently, with the customer given no way to reach the rest. A mode
+		 * whose one promise cannot be kept is not a mode, so the gate went rather
+		 * than being tightened. The cap itself is gone too (#437, s109): with
+		 * this mode off the settlement axis, `/location/list` only ever enumerates
+		 * regions (~85 for RU), and there is nothing left to cut.
 		 *
 		 * A store that had already stored `related-list` for settlements is
 		 * not rewritten; {@see self::get_field_mode_settlement()} clamps it
 		 * away on READ against this very list (design §7's "clamp on read"),
-		 * so it degrades to `typeahead` and the stored option stays inert.
+		 * so it degrades to `ajax-select2` and the stored option stays inert.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Added the settlement-axis condition (issue #404).
@@ -1517,7 +1513,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * third (operator decision, 24.08.2026 — see
 		 * {@see self::offered_field_modes_for()} for the measurement that
 		 * settled it). A store that had already stored `related-list` is NOT
-		 * rewritten; it degrades to `typeahead` here and the stored option
+		 * rewritten; it degrades to `ajax-select2` here and the stored option
 		 * stays inert (design §7's "clamp on read" pattern, the same
 		 * discipline {@see self::get_field_mode_region()} already applies for
 		 * `region_field=remove`). Deliberately a READ-side clamp rather than a
@@ -1542,6 +1538,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 
 			$stored  = (string) $this->settings_handler->get_value( self::SETTING_FIELD_MODE_SETTLEMENT );
 			$offered = self::offered_field_modes_for( $this->get_active_provider(), true );
+
+			// A store that saved `related-list` before the settlement axis stopped
+			// offering it lands on the SEARCHABLE list, not on plain text: the
+			// preset list was a dropdown, and `ajax-select2` is its successor
+			// (operator's own argument, #437). Guarded on `$offered` all the same —
+			// `ajax-select2` is unconditional today (#380), and this must not start
+			// returning an unoffered mode the day that changes.
+			if ( self::MODE_RELATED_LIST === $stored && in_array( self::MODE_AJAX_SELECT2, $offered, true ) ) {
+				return self::MODE_AJAX_SELECT2;
+			}
 
 			return in_array( $stored, $offered, true ) ? $stored : self::MODE_TYPEAHEAD;
 		}

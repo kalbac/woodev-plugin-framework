@@ -320,7 +320,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 					// Issue #373: `tooltip` is the default explainer (what the field
 					// does), `description` is reserved for the clickable link — the
 					// operator's own rule, matching his "Client ID СДЭК" example.
-					'tooltip'     => __( 'API-ключ сервиса DaData (Suggestions API) — без него подсказки городов и адресов на чекауте работать не будут.', 'woodev-plugin-framework' ),
+					'tooltip'     => __( 'API-ключ сервиса DaData (Suggestions API) — без него подсказки городов и адресов в форме оформления заказа работать не будут.', 'woodev-plugin-framework' ),
 					'description' => __( 'Получить токен можно в <a href="https://dadata.ru/profile/#info" target="_blank" rel="noopener noreferrer">личном кабинете DaData</a>.', 'woodev-plugin-framework' ),
 					'default'     => '',
 					'required'    => true,
@@ -329,7 +329,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				self::FIELD_CLEAN_SECRET => [
 					'name'        => __( 'Секретный ключ DaData (Clean API)', 'woodev-plugin-framework' ),
 					'type'        => \Woodev_Setting::TYPE_STRING,
-					'tooltip'     => __( 'Секретный ключ платного тарифа DaData Clean API — нужен только для нормализации свободно введённых адресов; без него подсказки на чекауте продолжают работать как обычно.', 'woodev-plugin-framework' ),
+					'tooltip'     => __( 'Секретный ключ платного тарифа DaData Clean API — нужен только для нормализации свободно введённых адресов; без него подсказки в форме оформления заказа продолжают работать как обычно.', 'woodev-plugin-framework' ),
 					'description' => __( 'Ключ доступен там же — в <a href="https://dadata.ru/profile/#info" target="_blank" rel="noopener noreferrer">личном кабинете DaData</a>, на вкладке Clean API.', 'woodev-plugin-framework' ),
 					'default'     => '',
 					'required'    => false,
