@@ -6,10 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-08-31 (s109).** `main` clean, **no open PRs, no worktrees**. s109 merged **#697, #698,
-#699, #700, #702, #703** and closed **#483, #374, #515, #437, #503**, plus **#153** (duplicate) and
-**#155** (fixed by the panels rewrite) from the #644 sweep. Filed **#701**; wrote **ADR-011**.
-History → `sessions/s109.md`, `sessions/s108.md`.
+**As of 2026-08-31 (s110).** `main` clean at **`c321d6a`**, **no open PRs, no worktrees**. s110 merged
+**#705** and closed **#139** and **#289**; rewrote **#310** to its live remnant; decided **#701**
+(a record, not work) and settled the **#474** doc contradiction. The **#644 tail is finished** — 48
+cards verified against the CODE across two workers, 13 comments — and **#695**'s reconciliation pass
+is done. **71 open cards.** History → `sessions/s110.md`, `sessions/s109.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -20,11 +21,12 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s109), sodium enabled, after
-PR #702/#703:** unit **3364** / 8302 / **1 skipped**; **integration 129 / 506 — re-measured this
-session, the s107 figure held**; jest **1598** in **23** suites. phpcs clean, phpstan left to CI.
-⚠ A gate number is only true against a NAMED COMMIT: the same session read 3355 before #700 and
-3351 after it.
+**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s110), sodium enabled, against
+`c321d6a`:** unit **3364** / 8302 / **1 skipped**; jest **1598** in **23** suites; phpcs clean —
+**now with the warning level ON**; phpstan no errors. **Integration 129 / 506 carried from s109 and
+NOT re-measured in s110** (no PHP behaviour changed; CI's three wp-env stacks passed on PR #705).
+⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
+`main` in one evening.
 
 ⚠ **`phpstan` locally now needs `--memory-limit=4G`.** At 2G — the value CI uses and the older
 gotcha recommends — the parallel worker dies on the memory limit and prints `Found 1 error` plus
@@ -52,22 +54,24 @@ Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused.
 
-**Open cards after s109 — `Инбокс` holds #694 (his call); nothing in `В работе`.** Still open: **#621** (item 1 measured; the FIX is untouched and held BEHIND **#639**), **#589**,
-**#644** (ten cards verified by code in s109 — findings are comments on each card; prioritisation
-stays his), **#652**, **#639**, **#689** (RFC 6265 §5.4 tie ordering — deliberately not fixed),
-**#692** (audited in s109: two of its three points came back empty, the copy half is unstarted),
-**#694**, **#695**, **#701** (per-option `disabled_reason` — filed from #503 and its DRIVER IS GONE:
-pattern-less countries are no longer listed, so nothing needs disabling; a research record, not
-work), and the standing list #474, #331, #332. Deferred to release: #285, #247, and **#567's remainder** (150 English msgids —
-operator, 29.08.2026: leave them, regenerate `.pot` and rebuild `.mo` before release).
+**Open cards after s110 — 71. `Инбокс` holds #694 (his call); `В работе` holds #116** (only its part
+(а) is left). **Eight cards genuinely need HIS answer, and the list is now verified rather than
+assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
+`reviews/2026-08-31-644-prioritisation-material.md` §4, which also records why #639, #621, #285,
+#567, #701, #247, #689, #589 and #371 were considered and excluded. Still open and NOT waiting on
+him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
+decide by measurement, see below), **#310** (rewritten in s110 to one button), **#701** (a research
+record with a stated entry condition, held the same way #689 is). Deferred to release: #285, #247,
+and **#567's remainder** (150 English msgids — operator, 29.08.2026: leave them, regenerate `.pot`
+and rebuild `.mo` before release).
 
-⚠ **#289 must be re-read before it is triaged again.** It is filed as "недостижимо сегодня" pending a
-multi-country provider — and `Dadata_Provider::DEFAULT_COUNTRIES` has been nine countries by default
-for some time. Its own entry condition has fired (measured s109).
+**`location.levels` is a per-country matrix** (`levels[country][level]`), and the client reads it
+that way; `location.countries` stays a flat chain-wide union and is never combined with it naively.
+#289, closed s110.
 
-**#621 is held behind #639 deliberately.** The cheap `WC_Order` subclass was measured and REVERTED in
-s103 — `get_order()` must preserve the caller's concrete order class or a `WC_Subscription` silently
-becomes a plain order. Detail: `sessions/s103.md`.
+**#621 is held behind #639 deliberately**, and its cheap fix is already disproven: `get_order()`
+must preserve the caller's concrete order class, or a `WC_Subscription` silently becomes a plain
+order (measured and reverted, `sessions/s103.md`).
 
 **i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
 English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
@@ -79,14 +83,29 @@ decided by WHO READS IT, not by how dangerous it looks.** MERCHANT or plugin aut
 → redacted. Every LOG sink redacts unconditionally (**#594**); this rule governs RESPONSE and NOTE
 boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `sessions/s101.md`.
 
+**#474 is ARCHITECTURAL — decide by measurement, do not ask.** Its own card text calls it the
+operator's call; that text is older than the s108 reclassification recorded here, and this side
+governs. Said so on the card in s110 so the two stop disagreeing; the card was not otherwise touched.
+
+**The phpcs warning level is ARMED since s110 (#139)** — `warning-severity=0` used to silence 19
+sniffs wholesale. Sixteen now fail the run; the noisy ones are excluded individually, each with its
+reason. **Line length is the one deliberate hole and it has its own ruleset:**
+`vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev` → **1393 in 138
+files**. It needs a separate file because a rule silenced by `exclude-pattern` cannot be revived by
+any CLI flag, and its `tab-width=4` is load-bearing (without it the same sniff reports 1002). Gotcha
+`a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`. The `[]`-only convention
+is enforced too now (`Generic.Arrays.DisallowLongArraySyntax`, ERROR, 633 sites fixed by `phpcbf`).
+
+⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
+something. This is the reading-budget gate working, not a defect.
+
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
 
-- **#531**/**#542** (s95) SHIPPED; surviving rules: `guard_custom_settlement()` below and the `src/`
+- *We offer narrowing, we never force it; the merchant's only switch is the region field itself*
+  (#437). Surviving rules from #531/#542: `guard_custom_settlement()` below, and the `src/`
   TypeScript row in `AGENTS.md`.
-- **#437 CLOSED in s109.** His principle stands as the durable part: *we offer narrowing, we never
-  force it; the merchant's only switch is the region field itself* — decisions 8 and 9 are retired.
 
 **FIRST vendored runtime JS in the framework: IMask, pinned, for the checkout phone mask.** Its
 country table is GENERATED (`npm run generate:phone-masks`, `lint:phone-masks` fails when stale);
@@ -139,9 +158,8 @@ flakiness, the three field modes and their Russian labels — is one line each u
 `[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
 anyway. Scan the tag for your task; do not keep a second copy here.
 
-**✅ #405 IS rig-verified as of s95** — the s83 note saying otherwise was writing a decoy option.
-Before probing `test-cdek` credentials, read the gotcha
-`the-cdek-fixture-credentials-are-not-the-option-they-look-like`.
+⚠ Before probing `test-cdek` credentials, read the gotcha
+`the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
 **Operator decision, #409 and again #546 (27.08.2026):** `@since` records the **planned release**,
 which is and stays **`2.0.2`** — «иначе врём потребителям, у нас по факту ещё даже 2.0.0 не было».
@@ -149,29 +167,23 @@ which is and stays **`2.0.2`** — «иначе врём потребителя�
 `2.0.2` was normalised down in #555; `2.0.0` and `2.0.1` are historical v2 tagging and were left
 alone — a separate question nobody has decided.
 
-✅ **Codex is BACK and is the critic again** — subscription renewed 28.08.2026 (s102), smoke-tested
-through Orca the same day rather than assumed: real Codex TUI, live shell, and a four-fact canary
-answered with three exact hits. The fourth (a commit hash) lost its leading character — not
-fabrication, but why every Codex round still gets one fact you already know. Recipe and the two
-ways CLI 0.150.1 departs from it: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
+✅ **Every Codex round gets a CANARY — a few facts you already know, answered before anything else.**
+It earns its keep: in s110 the canary made the critic say «не смог прочитать» for the one fact it
+could not obtain instead of inventing it, and exposed that its file list was misread. Recipe:
+gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
 ✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.**
 
-⚠ **Everything s107 wrote about HOW to start it was corrected by measurement in s108 (#683).** A
-native `orca orchestration worker-start --agent codex` started it **in one command**, in a real
-Codex TUI, defaulting to `gpt-5.6-terra`. From that worker: the **Orca CLI is reachable**, its tool
-shell is **PowerShell 7.6.5** (not bash), and `git rev-parse --show-toplevel` works in the worktree
-**with `.git` untouched**. So the relative-`gitdir` rewrite is a remedy for the case where Codex's
-tool shell happens to be a POSIX one — **not a step 0**, and which shell it gets is the variable to
-measure FIRST. `worktree.useRelativePaths` is still never the fix; it takes the main checkout down.
+⚠ **`orca orchestration worker-start --agent codex` starts it in ONE command** (s108 #683,
+confirmed again in s110 for four workers). Its tool shell is the variable to measure first — the
+relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0; `worktree.useRelativePaths`
+is never the fix.
 
-⚠ **What actually breaks: the dispatch body does not always reach Codex's prompt** — the worker
-receives the Orca preamble and no task, and honestly reports having nothing to do. Re-deliver with
-`orca terminal send --text "<brief>" --enter`, and **read the buffer back to confirm the TASK text
-is there**, not just the preamble. This is very likely why s107's worker "traded the task for a
-receipt": it never had a task. Card **#683**; gotchas
-`codex-in-wsl-needs-a-relative-gitdir` and `starting-codex-under-orca-needs-four-steps-not-one`
-both rewritten. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+⚠ **`input_accepted` is not proof the brief arrived — READ THE BUFFER BACK.** The dispatch body does
+not always reach the prompt, and the worker then honestly reports having nothing to do. ⚠ And read
+the buffer's SIZE before concluding: the tail is truncated, so a missing phrase can simply have
+scrolled off (that misled the coordinator once in s110). Recipe:
+[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **kilo is the FALLBACK critic, not the default** (it held the seat 27.08–28.08 while the
 subscription was unpaid) and has its own traps — Orca cannot supervise it, and the model must be
@@ -183,7 +195,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **251**.
+Gotchas: **254**.
 
 ## Program status (high level)
 
@@ -224,11 +236,9 @@ Gotchas: **251**.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
 
-`docs/` (GH Pages) still teaches the v1 positional `register_plugin( '1.4.0', … )`, a **tombstone**
-in v2 (quarantines the caller, never registers); the live API is `register_loader_definition([…])`,
-and versions are hardcoded instead of `%%FRAMEWORK_VERSION%%`. Affected: `getting-started.md`,
-`core-framework.md`, `payment-gateway.md`, `shipping-method.md`, `README.md`. **Do NOT touch public
-docs yet** — he is the only consumer; they get rewritten once everything is ready.
+`docs/` still teaches the v1 positional `register_plugin()`, a v2 **tombstone**, and hardcodes
+versions instead of `%%FRAMEWORK_VERSION%%` (5 files). **Do NOT touch public docs yet** — he is the
+only consumer; they get rewritten once everything is ready.
 
 ## Next Actions
 

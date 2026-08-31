@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 250 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 254 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -155,6 +155,7 @@
 - [testing/unit] **A mutation sweep over branch conditions reads as complete and is not.** → [mutation-sweep-branch-only-false-confidence](gotchas/mutation-sweep-branch-only-false-confidence.md) (s45)
 
 - [testing/unit] **An invented fixture tests your assumptions, not the carrier.** → [an-invented-fixture-tests-your-assumptions-not-the-carrier](gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
+- [testing/unit] **Tests that assert on framework source AS TEXT break on any mechanical reformat (633 `array()`->`[]` cost 47 failures), and swapping a plain function for a WP wrapper inside a PRIVATE method breaks suites that `grep` cannot find.** → [a-source-asserting-test-breaks-on-mechanical-reformatting](gotchas/a-source-asserting-test-breaks-on-mechanical-reformatting.md) (s110)
 
 ### [js/*] — JavaScript language traps
 - [js/select-value-space] **A select2 `language` callback returning `undefined` renders a BLANK message: the merge is `$.extend({}, EN, ours)`, so defining the key shadows English forever. OMIT it instead.** → [a-select2-language-callback-that-returns-undefined-renders-blank](gotchas/a-select2-language-callback-that-returns-undefined-renders-blank.md) (s93)
@@ -316,6 +317,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/git] **`git diff --name-only` splices git's EOL warnings from STDERR into the file list, so it names files nobody touched — it fooled the coordinator AND the Codex critic in the same hour. `git status --short` is the authority.** → [git-diff-name-only-interleaves-eol-warnings](gotchas/git-diff-name-only-interleaves-eol-warnings.md) (s110)
+- [tooling/phpcs] **A rule silenced by `exclude-pattern` cannot be revived by any CLI flag, so a documented "measure it on demand" command returns an empty report that reads as "no violations".** → [a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli](gotchas/a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli.md) (s110)
 - [tooling/parallel-agents] **Codex's tool shell is NOT fixed — bash in s107, PowerShell in s108 on the same machine. The unreadable `gitdir` and `orca` off PATH are both downstream of it, so measure it first; the relative-`gitdir` rewrite is conditional, not a step 0.** → [codex-in-wsl-needs-a-relative-gitdir](gotchas/codex-in-wsl-needs-a-relative-gitdir.md) (s107, fixed s108)
 - [tooling/serena] **Serena IGNORES `tests/` — symbolic ops there fail with "while the path is ignored", so `Read`/`Edit` is the only tool and is NOT a rule violation (and test files escape the CRLF flip).** → [serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there](gotchas/serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there.md) (s105)
 - [tooling/orca] **A BACKGROUNDED `check --wait` holds the FIFO waiter, so every later wait returns empty in seconds and reads as "the worker produced nothing"; `--json` is also a keepalive STREAM, not one object.** → [a-backgrounded-orca-check-wait-starves-every-later-waiter](gotchas/a-backgrounded-orca-check-wait-starves-every-later-waiter.md) (s105)
