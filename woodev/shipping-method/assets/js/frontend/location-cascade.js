@@ -1459,6 +1459,49 @@
 	 * @param {string} level
 	 * @returns {string[]}
 	 */
+	/**
+	 * The keys a record is contained by, INCLUDING its own — the client-side
+	 * mirror of `Location_Record::is_within()`'s reflexive containment.
+	 *
+	 * A record's own key belongs here because a provider deliberately omits it
+	 * from `ancestors`: `Dadata_Provider::ancestor_keys_from_dadata_fields()`
+	 * drops an ancestor equal to the row's own id, saying that identity "is
+	 * answered by is_within() separately, never carried twice over". For a city
+	 * of federal significance the region and the settlement ARE one entity with
+	 * one key, so such a record publishes NO ancestors at all and every test
+	 * written against the raw set silently fails open or closed (issue #707).
+	 * Measured live: Moscow, Saint Petersburg, Sevastopol and Baikonur, plus
+	 * 5 of 8 Belarusian, 5 of 8 Kazakh and 3 of 7 Uzbek cities measured.
+	 */
+	function containmentKeysOf( record ) {
+		var keys = record && Array.isArray( record.ancestors ) ? record.ancestors.slice() : [];
+
+		if ( record && record.key && keys.indexOf( record.key ) === -1 ) {
+			keys.push( record.key );
+		}
+
+		return keys;
+	}
+
+	/**
+	 * Whether `key` names `record` itself or one of its published ancestors —
+	 * the client-side mirror of `Location_Record::is_within()`. An empty `key`
+	 * always answers false, exactly as the PHP side does.
+	 */
+	function recordIsWithin( record, key ) {
+		return !! key && containmentKeysOf( record ).indexOf( key ) !== -1;
+	}
+
+	/**
+	 * The RAW published ancestor set of the record standing at `level`.
+	 *
+	 * Deliberately NOT `containmentKeysOf()` (issue #707): the #538 branch below
+	 * treats an empty set as "this provider cannot answer" and fails OPEN, and
+	 * from the data alone that case is indistinguishable from a record that is
+	 * its own region. Making it reflexive here would silently convert #538's
+	 * "an absent answer must never hide entries" into "hide everything the
+	 * absent answer does not vouch for". See that branch's own note.
+	 */
 	function ancestorsOfCurrent( entry, level ) {
 		var record = entry.records[ level ];
 
@@ -1485,7 +1528,11 @@
 				var ancestors = item.record && Array.isArray( item.record.ancestors ) ? item.record.ancestors : [];
 
 				if ( within ) {
-					return ancestors.indexOf( within ) !== -1;
+					// Reflexive on purpose (issue #707): `within` is the parent level's
+					// recorded key, and for a city of federal significance that key IS the
+					// settlement's own. Testing the raw ancestor set dropped such a city
+					// from its OWN scoped list.
+					return recordIsWithin( item.record, within );
 				}
 
 				// ISSUE #538 — A REGION THE CUSTOMER DID NOT PICK STILL SCOPES THE LIST.
@@ -1502,14 +1549,30 @@
 				// entries, three of them in Saint Petersburg.
 				//
 				// So this asks the one question the layer's own design says it CAN answer — do
-				// these two localities share an ancestor — instead of naming which ancestor is
-				// which. It is reached only when nothing recorded a parent key, so a real
+				// these two localities share a containing key — instead of naming which ancestor
+				// is which. It is reached only when nothing recorded a parent key, so a real
 				// customer region pick keeps taking the exact branch above, unchanged.
 				//
 				// ⚠ INFERRED, not measured, and safe either way: a provider that also publishes a
 				// COUNTRY-level ancestor would make every entry intersect, degrading this to
 				// "show everything" — the pre-#538 behaviour, never hiding coverage. Measured for
 				// `test-cdek`: it publishes the region only (`ancestors: ["test-cdek:r81"]`).
+				//
+				// ⚠ ISSUE #707 LANDS HERE TOO, AND IS DELIBERATELY NOT FIXED HERE.
+				// A settlement that IS its own region (DaData's Moscow, Saint Petersburg,
+				// Sevastopol, Baikonur, and many BY/KZ/UZ cities) publishes an EMPTY ancestor
+				// set, so it takes the escape hatch below and the list shows every region's
+				// entries — the operator's measured symptom, «the popular list is shown for all
+				// regions when the region was filled in automatically».
+				//
+				// It is NOT reflexive here on purpose: from the data alone «this provider
+				// publishes no ancestry» and «this record is its own region» are the SAME empty
+				// array, and #538 decided the first must fail OPEN — `an absent answer must
+				// never hide entries`, pinned by its own test. Making this branch reflexive
+				// would silently overturn that decision for the unknown-ancestry case too.
+				// The `within` branch above CAN be reflexive safely, because there a parent key
+				// was actually recorded, so the question is answerable.
+				// Distinguishing the two needs a decision that is not this fix's to take.
 				if ( ! siblingAncestors.length ) {
 					return true;
 				}
