@@ -2180,6 +2180,26 @@ msgstr ""
 msgid "Значение «Скрывать для методов ПВЗ» недоступно в блочной форме оформления заказа."
 msgstr ""
 
+#: shipping-method/checkout/class-checkout-field-settings.php:287
+msgid "Формат поля телефон"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:296
+msgid "Маска ввода телефона в форме оформления заказа — не проверка формата (за неё отвечает перевозчик), а только удобство: лишний символ ввести нельзя, недобранный номер отправить можно. «Автоматически» — маска следует за страной, которую выбрал покупатель. Конкретная страна жёстко закрепляет маску за собой, независимо от выбора покупателя. Работает только в классической форме оформления заказа."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:376
+msgid "Не использовать"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:377
+msgid "Автоматически"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:386
+msgid "%s (маска не описана)"
+msgstr ""
+
 #: shipping-method/checkout/class-checkout-handler.php:1586
 msgid "This shipping method requires you to choose a pickup point."
 msgstr "Для этого способа доставки нужно выбрать пункт выдачи заказов."

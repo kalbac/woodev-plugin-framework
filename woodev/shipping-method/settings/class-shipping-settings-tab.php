@@ -297,6 +297,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 			}
 
 			$field_ids[] = 'postcode_field';
+			$field_ids[] = 'phone_field_format';
 
 			// Issue #378: the static description is PREPENDED to
 			// `get_section_note()`'s own runtime note (Task 7's settlement-invariant

@@ -32,6 +32,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-secti
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-provider.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-settings-page-registry.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/settings-page/class-composite-settings-handler.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-phone-mask-patterns.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/class-checkout-field-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-map-settings.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/settings/class-shipping-settings-tab.php';
