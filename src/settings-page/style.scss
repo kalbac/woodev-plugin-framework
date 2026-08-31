@@ -71,15 +71,37 @@
 		min-width: 0;
 	}
 
-	// Toggle rows align to the same grid width as other fields (so the pill sits
-	// at the control column's right edge, not the card's), and the meta label
-	// lines up flush-left with other labels (no extra inset).
+	// Boolean rows join the SAME grid as every other field (operator decision,
+	// 31.08.2026): label column | control column. Two consequences he asked for —
+	// the tip icons form ONE column with the select/text rows instead of trailing
+	// each label's own text length, and the pill lines up with the LEFT edge of the
+	// control column instead of floating at the row's right edge.
+	//
+	// The shared `_field.scss` keeps the inline flex layout on purpose — the wizard
+	// and the gallery have no label column to line up with. This override is scoped
+	// to the settings surface for exactly that reason.
+	//
+	// ⚠ A boolean's `description` / `disabled_reason` live inside the meta block, so
+	// they now render inside the 182px label column. No boolean setting carries
+	// either today (measured in the #692 audit: all 15 rendered controls have a
+	// tooltip and none has a description); widen the row if one ever gains a long
+	// one, rather than discovering it cramped.
 	.woodev-field__toggle-row {
+		display: grid;
+		grid-template-columns: wd.$label-col minmax( 0, wd.$control-col );
+		align-items: start;
+		gap: wd.$gap-lg;
 		max-width: calc( #{ wd.$label-col } + #{ wd.$control-col } + #{ wd.$gap-lg } );
 		padding: wd.$gap 0;
 
 		.woodev-field__toggle-meta {
 			padding: 0;
+		}
+
+		// Same trick `.woodev-field__label` uses: the label is a flex box the width of
+		// its grid column, so `auto` pushes the tip to that column's right edge.
+		.woodev-field__toggle-label .woodev-field__tip {
+			margin-left: auto;
 		}
 	}
 }

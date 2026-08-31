@@ -2731,7 +2731,7 @@ msgid "Could not verify the pickup point. Please try placing your order again in
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:97
-msgid "Расположение кнопки выбора пункта выдачи"
+msgid "Расположение кнопки"
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:99
@@ -2747,7 +2747,7 @@ msgid "«В строке выбранного метода» — кнопка с
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:117
-msgid "Заполнять адрес доставки адресом пункта выдачи"
+msgid "Подстановка адреса"
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:125
@@ -2755,7 +2755,7 @@ msgid "Когда включено, после выбора пункта выд�
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:133
-msgid "Закрывать карту сразу после выбора пункта"
+msgid "Закрывать карту"
 msgstr ""
 
 #: shipping-method/pickup/class-pickup-map-settings.php:141

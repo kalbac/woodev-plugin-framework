@@ -94,7 +94,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_button_placement',
 				\Woodev_Setting::TYPE_STRING,
 				[
-					'name'    => __( 'Расположение кнопки выбора пункта выдачи', 'woodev-plugin-framework' ),
+					'name'    => __( 'Расположение кнопки', 'woodev-plugin-framework' ),
 					'options' => [
 						'rate'   => __( 'В строке выбранного метода', 'woodev-plugin-framework' ),
 						'review' => __( 'После списка методов', 'woodev-plugin-framework' ),
@@ -114,7 +114,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_replace_address',
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Заполнять адрес доставки адресом пункта выдачи', 'woodev-plugin-framework' ),
+					'name'    => __( 'Подстановка адреса', 'woodev-plugin-framework' ),
 					'default' => true,
 				]
 			);
@@ -130,7 +130,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings
 				'pickup_close_on_select',
 				\Woodev_Setting::TYPE_BOOLEAN,
 				[
-					'name'    => __( 'Закрывать карту сразу после выбора пункта', 'woodev-plugin-framework' ),
+					'name'    => __( 'Закрывать карту', 'woodev-plugin-framework' ),
 					'default' => false,
 				]
 			);
