@@ -79,9 +79,8 @@ This project has **two documentation directories** with different audiences, pub
 2. Follow format rules in `docs-internal/DOCS-SCHEMA.md`
 3. Session logs and gotchas excluded from markdownlint (in `.markdownlintignore`)
 4. All files tracked in git — never gitignore docs-internal/ (the only ignored path is the gate's
-   generated `next-session-prompt.md.prev` snapshot). **This repo is PUBLIC again** since
-   27.08.2026 — it was private 25.08–27.08, and the switch back lifted the Actions billing block
-   (public repos on standard runners consume no quota). Card #583.
+   generated `next-session-prompt.md.prev` snapshot). The repo is PUBLIC, so Actions consume no
+   quota — history and the two-second-failure symptom: card #583 + its gotcha.
 
 **What goes here:**
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
@@ -194,16 +193,16 @@ composer phpcs              # code style check (warning level IS on since #139)
 composer phpcbf             # auto-fix code style
 composer phpstan            # static analysis
 composer test               # unit tests (Brain Monkey, no WP)
-composer test:unit          # unit tests only
 composer test:integration   # integration tests (requires wp-env)
 
 # Run single test file
 ./vendor/bin/phpunit tests/unit/BootstrapTest.php
 
 # JS tests + build
-npm run test:js                                   # jest (800 tests) — CI gate (test-js job); jest-unit.config.js scopes roots, agent worktrees excluded
-npm run build                                     # build the 5 React bundles (CI has an assets-parity job)
-npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI gate (test-js job)
+npm run test:js                                   # jest — CI gate (test-js job); jest-unit.config.js scopes roots, agent worktrees excluded
+npm run test:e2e                                  # Playwright vs the LIVE RIG (:8973), not CI — #723
+npm run build                                     # build the 5 React bundles (CI: assets-parity job)
+npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI (test-js)
 npm run typecheck                                 # tsc --noEmit over src/ — CI gate (test-js job)
 
 # Docs
