@@ -495,4 +495,137 @@ class CheckoutHandlerInjectTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'data-input-classes', $out['billing']['billing_city']['custom_attributes'] ?? [] );
 	}
+
+	// -------------------------------------------------------------------------
+	// reconcile_pickup_declarations() — issue #709. WP_DEBUG-gated, so every test
+	// here defines the constant itself and runs in its own process
+	// (`define()` cannot be undone, same reasoning `Functions\when( 'WC' )` needs
+	// `@runInSeparateProcess` for elsewhere in this suite — see
+	// CheckoutConfigTest::config_with_states()'s own docblock).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Lazy defaults everywhere (no explicit Pickup_Field list, no
+	 * set_requires_pickup_methods() call) can never diverge from the truth by
+	 * construction — this is the common case and must stay completely silent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_stays_silent_when_every_declaration_is_derived(): void {
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+		define( 'WP_DEBUG', true );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		$fields = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point' )->to_array(),
+		] );
+		// set_requires_pickup_methods() deliberately never called.
+		( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * An explicit `Pickup_Field` id list that disagrees with `is_pickup_shipping()`
+	 * (here, WC() is unavailable, so the truth is `[]`) must fire `_doing_it_wrong()`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_fires_when_pickup_field_list_diverges_from_the_truth(): void {
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+		define( 'WP_DEBUG', true );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
+
+		$fields = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'some_method' ] )->to_array(),
+		] );
+		( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * An explicit `set_requires_pickup_methods()` list that disagrees with the truth
+	 * must also fire `_doing_it_wrong()`, even with no `Pickup_Field` in the mix at all.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_fires_when_backstop_list_diverges_from_the_truth(): void {
+		define( 'WP_DEBUG', true );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
+
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'some_method' ] );
+		$handler->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * `set_requires_pickup_methods( [] )` is an intentional opt-out (see that
+	 * method's own docblock, issue #709) — never treated as a divergence, even
+	 * against a non-trivial truth.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_does_not_fire_for_an_explicit_empty_backstop_list(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+		define( 'WP_DEBUG', true );
+
+		$pickup   = new Checkout_Config_Fake_Shipping_Method( 'truth_pickup', true );
+		$shipping = new class( [ $pickup ] ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			// inject() -> current_country() reads WC()->customer; null degrades to ''.
+			public $customer = null;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		// The Pickup_Field side is lazy — it agrees with the truth on its own — so this
+		// isolates the backstop's own exemption rather than tripping the (correct)
+		// "no Pickup_Field at all for a real pickup method" divergence instead.
+		$fields  = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point' )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [] );
+		$handler->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * The gate is per REQUEST, not per `inject()` call — `inject()` runs on every
+	 * `woocommerce_checkout_fields` pass, including AJAX totals refreshes, and a
+	 * genuine divergence must not spam the log once per pass.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_runs_at_most_once_per_request(): void {
+		define( 'WP_DEBUG', true );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
+
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'some_method' ] );
+		$handler->inject( [ 'order' => [] ] );
+		$handler->inject( [ 'order' => [] ] );
+	}
 }

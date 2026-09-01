@@ -153,4 +153,15 @@ class CheckoutFieldsTest extends TestCase {
 		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
 		Checkout_Fields::from_array( [ Field::create( 'a' )->set_required( true )->to_array() ] );
 	}
+
+	/**
+	 * `is_pickup_method` (issue #709) is registered at exactly the moment
+	 * {@see \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create()}'s own
+	 * docblock says the real id list cannot yet be resolved — it must be accepted
+	 * here, at registration time, with no `value` key at all.
+	 */
+	public function test_is_pickup_method_operator_does_not_trigger_doing_it_wrong(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+		Checkout_Fields::from_array( [ Field::create( 'pvz' )->set_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'is_pickup_method' ] )->to_array() ] );
+	}
 }

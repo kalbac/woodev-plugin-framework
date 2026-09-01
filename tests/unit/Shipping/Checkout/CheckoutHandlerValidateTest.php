@@ -739,6 +739,166 @@ class CheckoutHandlerValidateTest extends TestCase {
 			)
 		);
 	}
+
+	// -----------------------------------------------------------------------
+	// Part D — lazy defaults derived from is_pickup_shipping() (issue #709)
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A method declaring `is_pickup_shipping() = true` and NOTHING else — no
+	 * explicit `Pickup_Field` id list, no `set_requires_pickup_methods()` call —
+	 * still gets BOTH the per-field required condition and the independent backstop,
+	 * both derived from the SAME `Checkout_Config::pickup_method_ids()` truth. A
+	 * different (courier) method stays entirely unaffected.
+	 *
+	 * `@runInSeparateProcess`: `Functions\when( 'WC' )` permanently instruments the
+	 * global `WC()` function for the rest of the PHP process (see
+	 * `CheckoutConfigTest::config_with_states()`'s own docblock for the 21-test
+	 * breakage this caused when first done inline).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_pickup_method_with_no_explicit_declarations_still_gets_required_and_backstop(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+
+		$courier = new Checkout_Config_Fake_Shipping_Method( 'test_courier', false );
+		$pickup  = new Checkout_Config_Fake_Shipping_Method( 'test_pickup', true );
+
+		$shipping = new class( [ $courier, $pickup ] ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+
+		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+
+		$fields  = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point' )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		// Deliberately never called: set_requires_pickup_methods().
+
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->atLeast()->once();
+		$this->assertFalse(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'test_pickup' ] ),
+			'is_pickup_shipping() = true must be enough on its own to require the pickup field and trip the backstop'
+		);
+
+		$this->assertTrue(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'test_courier' ] ),
+			'a non-pickup method must stay entirely unaffected by the derived default'
+		);
+	}
+
+	/**
+	 * An explicit `Pickup_Field` id list and an explicit `set_requires_pickup_methods()`
+	 * list both still OVERRIDE the derived default — even when they deliberately name a
+	 * DIFFERENT method than the one `is_pickup_shipping()` marks as pickup. Proves the
+	 * override is real, not merely unreachable because it happens to match the truth.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_explicit_lists_override_the_derived_default_even_when_they_disagree_with_it(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+
+		$pickup = new Checkout_Config_Fake_Shipping_Method( 'truth_pickup', true );
+
+		$shipping = new class( [ $pickup ] ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+
+		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+
+		// Explicit lists both name 'other_method' — deliberately NOT 'truth_pickup'.
+		$fields  = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'other_method' ] )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'other_method' ] );
+
+		\Brain\Monkey\Functions\when( 'wc_add_notice' )->justReturn( null );
+		$this->assertTrue(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'truth_pickup' ] ),
+			'the explicit lists name a different method, so is_pickup_shipping() truth for truth_pickup must not leak in'
+		);
+
+		// The explicit override still works for the method it DOES name.
+		$this->assertFalse(
+			$handler->validate( [ 'carrier_pickup_point' => '' ], [ 'chosen_shipping_method' => 'other_method' ] )
+		);
+	}
+
+	/**
+	 * `set_requires_pickup_methods( [] )` is a real, explicit "turn the backstop off" —
+	 * distinct from never calling it — and disables the backstop even when a genuine
+	 * pickup method exists per `is_pickup_shipping()`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_explicit_empty_backstop_list_disables_it_even_when_a_real_pickup_method_exists(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+
+		$pickup = new Checkout_Config_Fake_Shipping_Method( 'truth_pickup', true );
+
+		$shipping = new class( [ $pickup ] ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+
+		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+
+		// No pickup-slot field at all — isolates the backstop from the per-field loop.
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
+		$handler->set_requires_pickup_methods( [] );
+
+		\Brain\Monkey\Functions\expect( 'wc_add_notice' )->never();
+		$this->assertTrue( $handler->validate( [], [ 'chosen_shipping_method' => 'truth_pickup' ] ) );
+	}
 }
 
 /**

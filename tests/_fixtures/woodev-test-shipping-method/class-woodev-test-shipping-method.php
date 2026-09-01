@@ -48,9 +48,18 @@ class Woodev_Test_Shipping_Method extends Shipping_Method {
 
 	/**
 	 * @inheritDoc
+	 *
+	 * `'pickup'` since issue #709 (was `'courier'`): this method already carried a
+	 * `Pickup_Field` slot, a `set_requires_pickup_methods()` backstop entry, and a
+	 * `Selection_Scope::type_for_method()` answer — three of the four pickup
+	 * declarations already agreed it was a pickup method; only this one, the
+	 * framework's actual source of truth, disagreed. That mismatch was #709's own
+	 * live reproduction on the rig (a pickup button beside a required, un-hidden
+	 * address) and made #652 scenarios 3/4 untestable. See
+	 * docs-internal/wiki/local-rig.md for the measured before/after.
 	 */
 	public function get_delivery_type(): string {
-		return 'courier';
+		return 'pickup';
 	}
 
 	/**
