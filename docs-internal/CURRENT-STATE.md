@@ -302,8 +302,7 @@ only consumer; they get rewritten once everything is ready.
   bbox-filtered) — under any other default locality the modal honestly says «no pickup points» and
   pickup is untestable. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
 
-  **STANDARD values, read off the container (s100), never off a doc** — the s93 handoff had two of
-  them wrong and a correctly-absent row was read as a regression:
+  **STANDARD values, read off the container, never off a doc** (the s93 handoff had two wrong):
 
   | Option | Value |
   |---|---|
