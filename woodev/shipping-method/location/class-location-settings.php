@@ -348,13 +348,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			 * unlike the cross-handler `region_field` condition on
 			 * `field_mode_region` above.
 			 *
-			 * Explanatory text lives in the CONTROL's `tooltip`, not the
-			 * setting's `description` (operator convention, 25.08.2026,
-			 * AGENTS.md Conventions): `description` is reserved for text
-			 * carrying an interactive element (e.g. an `<a href>`), which
-			 * this field has none of — same shape as `field_mode_region`/
-			 * `field_mode_settlement` above, whose own copy lives in their
-			 * controls' tooltips too.
+			 * Split across both help-text slots (#692, AGENTS.md Conventions →
+			 * `Settings help text`, corrected 31.08.2026): the tooltip carries
+			 * the plain "what this does" explanation, while the reliability
+			 * warning below is promoted to the setting's `description` because
+			 * it must be SEEN, not merely hoverable — the same criterion as the
+			 * rule's own worked example about log volume. `field_mode_region`/
+			 * `field_mode_settlement` above stay tooltip-only: they explain a
+			 * `select`'s option differences, not a consequence a merchant could
+			 * miss by not hovering.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
@@ -372,7 +374,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,
 				\Woodev_Control::TYPE_CHECKBOX,
 				[
-					'tooltip' => __( 'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.', 'woodev-plugin-framework' ),
+					'tooltip'     => __( 'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке.', 'woodev-plugin-framework' ),
+					'description' => __( 'Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.', 'woodev-plugin-framework' ),
 				]
 			);
 
