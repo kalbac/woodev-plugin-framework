@@ -934,6 +934,25 @@
 			var fields = entry.store.allFields()
 
 			Object.keys( fields ).forEach( function( fieldId ) {
+				// ISSUE #721 — the client half of #708. A takeover field is owned by the
+				// CLIENT, so `Checkout_Handler::inject()` deliberately never puts it on the
+				// form, and WooCommerce's own per-field visibility settings can drop its
+				// native field too (`woocommerce_checkout_company_field = hidden`). Such a
+				// field is `required`, absent and permanently empty, so this gate disabled
+				// «Оформить заказ» forever while the SERVER accepted the very same order —
+				// measured on the rig 01.09.2026, order created cleanly once the button was
+				// forced through the console.
+				//
+				// So: a field the customer cannot see cannot be a reason to block them.
+				// Presence is the question, and it is asked only of takeover fields — every
+				// other field is injected by us and is on the form by construction, where an
+				// absent one is OUR bug and should stay loud rather than silently un-block.
+				// This mirrors `Checkout_Handler::validate()`'s own guard, which is why both
+				// halves now agree instead of one blocking what the other allows.
+				if( entry.store.hasTakeover( fieldId ) && ! $( '#' + fieldId ).length ) {
+					return
+				}
+
 				var required = entry.store.evaluateRequired( fieldId )
 				var value    = entry.store.getValue( fieldId )
 				var invalid  = required && ( value === undefined || value === null || String( value ) === '' )
