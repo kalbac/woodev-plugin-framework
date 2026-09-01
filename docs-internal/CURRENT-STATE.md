@@ -59,9 +59,10 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s111 — 76.** #116, #708, #694 and #695 CLOSED in s111. **Eight cards genuinely need HIS answer, and the list is now verified rather than assumed** — #644, #652, #694, #692, #331/#332, #695, #141 — see
-`reviews/2026-08-31-644-prioritisation-material.md` §4, which also records why #639, #621, #285,
-#567, #701, #247, #689, #589 and #371 were considered and excluded. Still open and NOT waiting on
+**Open cards after s111 — 75.** **Only THREE still need HIS answer** — #644 (prioritisation), #652
+(scenario 1, his rig) and #331/#332 (his own "not now"). #692 needs nobody: its own body says
+«развилок нет», and the "waiting" list had simply inherited it from the s108 triage. Rationale for
+the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on
 him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
 decide by measurement, see below), **#310** (rewritten in s110 to one button), **#701** (a research
 record with a stated entry condition, held the same way #689 is). Deferred to release: #285, #247,
@@ -72,50 +73,40 @@ and rebuild `.mo` before release).
 that way; `location.countries` stays a flat chain-wide union and is never combined with it naively.
 #289, closed s110.
 
-**#621 is held behind #639 deliberately**, and its cheap fix is already disproven: `get_order()`
-must preserve the caller's concrete order class, or a `WC_Subscription` silently becomes a plain
-order (measured and reverted, `sessions/s103.md`).
+**#621 is held behind #639**, and its cheap fix is disproven: `get_order()` must preserve the
+caller's concrete order class or a `WC_Subscription` becomes a plain order (`sessions/s103.md`).
 
 **i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
 English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
 anything not on a screen need not be wrapped in `__()` at all**; classify by the RENDER PATH, never
 by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
 
-**Operator decision, 27.08.2026 (#608, #610) — whether a foreign exception's raw text may stand is
-decided by WHO READS IT, not by how dangerous it looks.** MERCHANT or plugin author → kept; CUSTOMER
-→ redacted. Every LOG sink redacts unconditionally (**#594**); this rule governs RESPONSE and NOTE
-boundaries only. Reasoning and per-site table: cards **#608**/**#610**, `sessions/s101.md`.
+**A foreign exception's raw text is decided by WHO READS IT** (#608/#610): merchant or plugin
+author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
+and NOTE boundaries only. Per-site table: the cards + `sessions/s101.md`.
 
 **#474 is ARCHITECTURAL — decide by measurement, do not ask.** Its own card text calls it the
 operator's call; that text is older than the s108 reclassification recorded here, and this side
 governs. Said so on the card in s110 so the two stop disagreeing; the card was not otherwise touched.
 
-**The phpcs warning level is ARMED since s110 (#139)** — `warning-severity=0` used to silence 19
-sniffs wholesale. Sixteen now fail the run; the noisy ones are excluded individually, each with its
-reason. **Line length is the one deliberate hole and it has its own ruleset:**
+**The phpcs warning level is ARMED since s110 (#139)**; noisy sniffs are excluded individually with
+reasons. **Line length is the one deliberate hole, with its own ruleset:**
 `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev` → **1393 in 138
-files**. It needs a separate file because a rule silenced by `exclude-pattern` cannot be revived by
-any CLI flag, and its `tab-width=4` is load-bearing (without it the same sniff reports 1002). Gotcha
-`a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`. The `[]`-only convention
-is enforced too now (`Generic.Arrays.DisallowLongArraySyntax`, ERROR, 633 sites fixed by `phpcbf`).
+files** — a separate file because a rule silenced by `exclude-pattern` cannot be revived from the
+CLI, and its `tab-width=4` is load-bearing (gotcha
+`a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`). `[]`-only is enforced
+too (`Generic.Arrays.DisallowLongArraySyntax`).
 
 ⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
 something. This is the reading-budget gate working, not a defect.
 
-**The three checkout defects are all CLOSED after s111.** **#708** (PR #717): `validate()` enforces
-a takeover field's `required` only when its condition owns the field AND WooCommerce rendered it —
-the card's own recommendation was measured INCOMPLETE. **#707** (PR #719 + his rig pass): ask
-`Location_Record::is_within()`, never `ancestors()` raw.
-✅ **#707 CLOSED by his rig pass** — «популярные теперь отображаются для выбранного региона, даже
-если он выбран автоматически». The inference held: a region IS derived for Moscow now, so the client
-takes the fixed scoped branch and never reaches #538's escape hatch. **#538 was never touched and
-its test stays green.**
-
-⚠ **#721 — the rule was implemented TWICE and #708 fixed only the server.** `refreshGate()` in
-`checkout-field-classic.js` disabled «Place order» forever on takeover fields WooCommerce never
-rendered, while the server accepted the very same order. Fixed in PR #722; the gate had **zero**
-test coverage before it. Gotcha
-`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`.
+**#708**: `validate()` enforces a takeover field's `required` only when its condition owns the field
+AND WooCommerce rendered it. **#707**: ask `Location_Record::is_within()`, never `ancestors()` raw.
+✅ **All checkout defects from the s110 rig pass are CLOSED and accepted by him on the rig**
+(#707 #708 #709 #721). The one rule worth carrying: **the «required» rule is implemented TWICE**,
+server `validate()` and the browser's `refreshGate()`, and fixing one leaves the other — gotcha
+`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`. #538 was never touched
+and its test stays green.
 **#709 CLOSED** (PR #720): `is_pickup_shipping()` is the single source for the other THREE
 declarations, resolved LAZILY (a new `is_pickup_method` spec operator — `Pickup_Field::create()`
 runs before WC loads shipping methods, so an eager default is impossible).
@@ -131,6 +122,18 @@ only if >1), default view the aggregate table, gated on it being cheap. `SHIPPIN
 #714**.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
+
+**Operator decisions, 02.09.2026 — both taken after his rig pass:**
+
+- **#725 — the «Place order» gate stays OURS-fields-only and becomes OPTIONAL** (checkbox, default
+  ON, tooltip saying «поля, нужные для ДОСТАВКИ» — that word is what makes the partial scope
+  honest). ⚠ Measured: **WooCommerce NEVER disables that button itself**, so the gate exists only
+  because #274 added it. Subtask: section «Поля» → **«Форма заказа»**, slug `fields` → `checkout`
+  (safe — render-time id, persisted nowhere). Full reasoning and the rejected options: the card.
+- **#141 — DELETE the warehouse scaffold NOW**, not after the Yandex measurement: warehouses are a
+  CARRIER feature and would live in the plugin either way, so the measurement cannot change the
+  framework code's fate. ⚠ The fixture's `wc_yandex_delivery_warehouses` table name is an
+  installed-site contract and must survive. File list + the deletion tail: the card.
 
 **Operator decisions still shaping the work:**
 
