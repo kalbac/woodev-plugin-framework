@@ -229,6 +229,15 @@ jobs:
       - name: Typecheck src/
         run: npm run typecheck
 
+      # Оба гейта — про СГЕНЕРИРОВАННЫЕ артефакты, которые лежат в репозитории как обычные
+      # файлы. Пока их никто не прогонял в CI, устаревание было невидимым: скрипт
+      # lint:phone-masks существовал с s109 и НЕ был подключён вовсе (найдено в s112, #704).
+      - name: Phone-mask table is current (#503)
+        run: npm run lint:phone-masks
+
+      - name: Vendored IMask matches package.json and the enqueue version (#704)
+        run: npm run lint:imask
+
       - name: Run JS tests
         run: npm run test:js
 
