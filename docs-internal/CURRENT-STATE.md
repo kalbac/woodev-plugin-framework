@@ -59,7 +59,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s111 — 75.** **Only THREE still need HIS answer** — #644 (prioritisation), #652
+**Open cards after s111 — 74.** **Only THREE still need HIS answer** — #644 (prioritisation), #652
 (scenario 1, his rig) and #331/#332 (his own "not now"). #692 needs nobody: its own body says
 «развилок нет», and the "waiting" list had simply inherited it from the s108 triage. Rationale for
 the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on
