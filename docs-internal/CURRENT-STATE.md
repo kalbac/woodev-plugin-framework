@@ -6,10 +6,10 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-01 (s111).** `main` clean at **`afb3a92`**. s111 merged **#716 #717 #718 #719** and
-closed **#116**, **#708**, **#694** and **#695**; half-fixed **#707** (the card stays OPEN for one
-fork — see below); filed **#712 #713 #714**. **76 open cards.** History → `sessions/s111.md`,
-`sessions/s110.md`.
+**As of 2026-09-01 (s111).** `main` clean at **`0b5dfd2`**. s111 merged **#716 #717 #718 #719 #720**
+and closed **#116**, **#708**, **#709**, **#694** and **#695**; half-fixed **#707** (the card stays
+OPEN for one fork — see below); filed **#712 #713 #714**. **75 open cards.** History →
+`sessions/s111.md`, `sessions/s110.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -20,16 +20,16 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 31.08.2026 IN THE PRIMARY CHECKOUT (s110), sodium enabled, against
-`c321d6a`:** unit **3364** / 8302 / **1 skipped**; jest **1598** in **23** suites; phpcs clean —
-**now with the warning level ON**; phpstan no errors. **Integration 129 / 506 carried from s109 and
-NOT re-measured in s110** (no PHP behaviour changed; CI's three wp-env stacks passed on PR #705).
+**Baselines on `main`, measured 01.09.2026 IN THE PRIMARY CHECKOUT (s111), sodium enabled, against
+`0b5dfd2`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
+**1599** in **23** suites; phpcs clean — **with the warning level ON**; phpstan no errors.
+**Integration 129 / 506, re-measured three times in s111** (the last after the fixture flip).
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
-⚠ **`phpstan` locally needs `--memory-limit=4G`.** At 2G (CI's value) the parallel worker dies and
-prints `Found 1 error` + "result is incomplete", which reads like a real failure over your diff. CI
-stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
+⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
+`Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
+Gotcha `phpstan-windows-parallel-worker-segfault`.
 
 ⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — off it reads 67, on it
 reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
@@ -42,10 +42,10 @@ a failure reproduces locally with the same command. Why it had been green by acc
 and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
 so a bare `npm run test:js` is correct on its own (#188).
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure before comparing**
-(s93, s100). And **a green unit suite is not sufficient where our code meets someone else's
-contract**: s96's #551 round 1 was green, falsified and CI-clean, and returned Galicia for Moscow.
-Gotcha `a-mocked-provider-proves-the-mock-not-the-contract`.
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100). And
+**a green unit suite is not sufficient where our code meets someone else's contract**: s96's #551
+round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Gotcha
+`a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
@@ -98,14 +98,20 @@ something. This is the reading-budget gate working, not a defect.
 
 **The three checkout defects, after s111.** **#708 CLOSED** (PR #717): `validate()` enforces a
 takeover field's `required` only when its condition owns the field AND WooCommerce actually rendered
-it. The card's own recommended option was measured INCOMPLETE — the fixture's two takeover fields
-have different conditions, so it would have left `billing_address_2` blocking on RU.
-**#707 half-closed** (PR #719) and OPEN for one fork — the PHP derivation and the scoped client
-branch are reflexive now; the #538 sibling branch is NOT, because "no ancestry published" and "this
-record is its own region" are the same empty array and #538 deliberately fails OPEN there.
-⚠ **A rig pass may close #707 outright**: now that a region IS derived for Moscow, the client may
-take the (fixed) scoped branch instead of the escape hatch. That is an inference, not a measurement.
-**#709** — still open, in flight at the end of s111.
+it — the card's own recommendation was measured INCOMPLETE (the fixture's two takeover fields carry
+different conditions). **#707 half-closed** (PR #719), OPEN for one fork: the PHP derivation and the
+scoped client branch are reflexive now, the #538 sibling branch is NOT — "no ancestry published" and
+"is its own region" are the same empty array there, and #538 deliberately fails OPEN.
+⚠ **A rig pass may close #707 outright** (a region IS derived for Moscow now, so the client may take
+the fixed branch). An inference, not a measurement.
+**#709 CLOSED** (PR #720): `is_pickup_shipping()` is the single source for the other THREE
+declarations, resolved LAZILY (a new `is_pickup_method` spec operator — `Pickup_Field::create()`
+runs before WC loads shipping methods, so an eager default is impossible).
+`Selection_Scope::type_for_method()` stays plugin-owned — it answers "which KIND of point", not
+"whether" — and is covered by a `WP_DEBUG`-gated reconciliation instead.
+⚠ The fixture's `get_delivery_type()` flipped `courier` → `pickup`, so on the rig
+`woodev_test_shipping` now hides address/postcode and shows the pickup button, and the mu-plugin's
+method is partly redundant. **#652 scenarios 3 and 4 are testable again** — worth his rig glance.
 
 ✅ **#694/#695 are written into the docs (s111).** SP-10: one landing page, tab per carrier (drawn
 only if >1), default view the aggregate table, gated on it being cheap. `SHIPPING-PLANS.md`/
@@ -145,13 +151,8 @@ ownership, never a name heuristic). Gotcha `the-classic-adapter-reverts-a-select
 
 | Card | State |
 |---|---|
-| ~~**#437**~~ | **CLOSED in s109.** `/location/list` lost `LIST_HARD_CAP`, `limit` and `truncated`; a stored `related-list` now reads as `ajax-select2`, option untouched, no migration. Decisions 8/9 retired by the operator 31.08.2026. Detail: `sessions/s109.md`. |
-| ~~**#488**~~ | **CLOSED (D1-D8).** The one fact still load-bearing: `null` from `resolve_key()` means exactly one thing — "asked, answered, does not know this key" — because D6 DELETES the row on it; every other failure THROWS. History: `sessions/s89.md`-`s92.md`. |
-| ~~**#512**~~ | **DONE — #548 (s95).** Surviving contract fact: `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key — documented on both methods and PINNED by a test. The `VARCHAR(191)` length question was measured and closed with no guard (100+ chars of headroom). |
-| ~~**#518**~~ | **CLOSED 27.08.2026 — PR #586.** A pickup selection makes the settlement record EXPLICIT and the address stays unlocked after a reload. This row claimed «DECIDED, still NOT started» for two sessions after the card closed — the miss that prompted #644. |
-| ~~**#473**~~ | **CLOSED in s98 (#571).** Ownership guard sits at the top of the `updated_checkout` loop. Its second half cannot happen at all: `maybeInitSelect2()` acts on `source_kind === 'suggest'` while ownership tests `'location'`, and `source_kind` is a single scalar (`class-field.php:265,315`). |
-| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Operator decision needed** — public contract. |
-| ~~**#483**~~ | **CLOSED in s109 (PR #697).** Contract: `set_label()` applies only to fields WC does not define itself — for a native one `address-i18n.js` overwrites the rendered `<label>` from the country locale AFTER render. Gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`. |
+| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Architectural — decide by measurement** (s108/s110), not by asking. |
+| closed | **#437 #483** (s109), **#488 #512 #518 #473** — history in `sessions/`. Three contract facts survive them: `null` from `resolve_key()` means ONLY "asked, answered, does not know this key" (D6 deletes the row; every other failure THROWS); `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key, pinned by a test; and `set_label()` applies only to fields WC does not define itself — for a native one `address-i18n.js` rewrites the rendered `<label>` AFTER render (gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`). |
 
 **Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
 both columns, but exactly **one live cascade**, on the column that currently determines delivery,
