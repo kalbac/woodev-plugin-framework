@@ -2,18 +2,22 @@
 /**
  * Woodev Checkout Field Settings
  *
- * Store-level settings handler owning the «Поля» section of the «Доставка» tab
- * (design S1/S9). Registered with the `checkout_fields` option namespace
+ * Store-level settings handler owning the «Форма заказа» section of the «Доставка»
+ * tab (design S1/S9; renamed from «Поля» by issue #725, which also added the first
+ * setting here that is a checkout-behaviour toggle rather than a field-presence/type
+ * control). Registered with the `checkout_fields` option namespace
  * (`woodev_checkout_fields_*`) so it never collides with `Location_Settings`'s
  * `woodev_location_*` options.
  *
- * Owns five settings, each a single select naming genuinely different mechanisms
- * (design S4): `field_order_preset` (checkbox), `country_field`, `region_field`,
- * `address_field`, `postcode_field`. `remove` takes the field out of the DOM — its
- * value never reaches the order; `hide`/`hide_for_pickup` only visually hides it —
- * its value (e.g. an address written by the pickup point) still reaches the order.
- * The two mechanisms are never conflated; the framework never REMOVES the address
- * field, only hides it.
+ * The five field-shape settings are each a single select naming genuinely different
+ * mechanisms (design S4): `country_field`, `region_field`, `address_field`,
+ * `postcode_field`, plus the `field_order_preset` checkbox. `remove` takes the field
+ * out of the DOM — its value never reaches the order; `hide`/`hide_for_pickup` only
+ * visually hides it — its value (e.g. an address written by the pickup point) still
+ * reaches the order. The two mechanisms are never conflated; the framework never
+ * REMOVES the address field, only hides it. `block_place_order` (issue #725) is a
+ * sixth, unrelated checkbox: it does not describe any field, only whether the
+ * checkout blocks submission client-side while a required delivery field is empty.
  *
  * Availability (design §3.2) is computed once at construction from an injected
  * {@see Checkout_Field_Environment}, so a control that cannot currently be used
@@ -21,13 +25,16 @@
  * The block checkout never reads `woocommerce_checkout_fields` — only
  * `woocommerce_get_country_locale` (measured on WC 11.0.1) — so `address_field`,
  * `country_field`, and the postcode `hide_for_pickup` VALUE only work on the
- * classic checkout; `field_order_preset` and `region_field` reach both checkouts
- * and are never disabled.
+ * classic checkout; `field_order_preset`, `region_field`, and `block_place_order`
+ * reach both checkouts and are never disabled (though `block_place_order`'s only
+ * current CONSUMER, `refreshGate()`, is itself classic-only — see
+ * `checkout-field-classic.js`).
  *
  * {@see self::effective()} is this class's real contract with the rest of the
- * system (Task 6's `Checkout_Field_Policy` calls it for all five ids): the stored
- * value clamped to what is currently allowed (design §7 — clamp on READ, never
- * rewrite), mirroring
+ * system (Task 6's `Checkout_Field_Policy` calls it for all field-shape ids, and
+ * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config} calls it for
+ * `block_place_order`): the stored value clamped to what is currently allowed
+ * (design §7 — clamp on READ, never rewrite), mirroring
  * {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::get_field_mode_region()}.
  *
  * @since 2.0.2
@@ -42,7 +49,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Settings' ) ) :
 
 	/**
-	 * Settings handler for the checkout field policy («Поля» section).
+	 * Settings handler for the checkout field policy and behaviour toggles
+	 * («Форма заказа» section).
 	 *
 	 * @since 2.0.2
 	 */
@@ -79,6 +87,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 * `Settings_Section` without duplicating this handler's own field list.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `block_place_order` (issue #725) — a checkout-behaviour
+		 *              toggle, not a field-presence/type control, but this handler is
+		 *              still where it lives: the same store-level «Форма заказа» section
+		 *              carries both kinds of setting now.
 		 *
 		 * @return string[]
 		 */
@@ -90,6 +102,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				'address_field',
 				'postcode_field',
 				'phone_field_format',
+				'block_place_order',
 			];
 		}
 
@@ -150,6 +163,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 *    `'show'` fallback to clamp to — a country losing its pattern is a
 		 *    {@see self::get_phone_mask_config()}/JS-side no-op, never a rewrite (see that
 		 *    method's own docblock).
+		 *  - `block_place_order` (issue #725) — never disabled either, returned as stored
+		 *    (cast to bool); it is a checkout-behaviour toggle, not a field-presence rule,
+		 *    so no checkout experience makes it inapplicable.
 		 *
 		 * @since 2.0.2
 		 *
@@ -161,7 +177,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 		 */
 		public function effective( string $id ) {
 
-			if ( 'field_order_preset' === $id ) {
+			if ( 'field_order_preset' === $id || 'block_place_order' === $id ) {
 				return (bool) $this->get_value( $id );
 			}
 
@@ -313,6 +329,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Se
 				\Woodev_Control::TYPE_SELECT,
 				[
 					'tooltip' => __( 'Маска ввода телефона в форме оформления заказа — не проверка формата (за неё отвечает перевозчик), а только удобство: лишний символ ввести нельзя, недобранный номер отправить можно. «Автоматически» — маска следует за страной, которую выбрал покупатель. Конкретная страна жёстко закрепляет маску за собой, независимо от выбора покупателя. Работает только в классической форме оформления заказа.', 'woodev-plugin-framework' ),
+				]
+			);
+
+			// Issue #725: default ON so an existing installation keeps behaving exactly as
+			// today. Turning it OFF does not change the SERVER side — `Checkout_Handler::validate()`
+			// keeps rejecting a missing required delivery field on submit either way; this
+			// option only governs whether the browser also disables the button as an early
+			// UX signal (`refreshGate()` in `checkout-field-classic.js`). See gotcha
+			// `the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other` —
+			// this is a deliberate, one-half-only change.
+			$this->register_setting(
+				'block_place_order',
+				\Woodev_Setting::TYPE_BOOLEAN,
+				[
+					'name'    => __( 'Блокировать оформление заказа', 'woodev-plugin-framework' ),
+					'default' => true,
+				]
+			);
+			$this->register_control(
+				'block_place_order',
+				\Woodev_Control::TYPE_CHECKBOX,
+				[
+					'tooltip' => __( 'Пока не заполнены обязательные поля, нужные для доставки, кнопка «Оформить заказ» остаётся недоступной. Остальные обязательные поля формы WooCommerce проверяет при отправке.', 'woodev-plugin-framework' ),
 				]
 			);
 

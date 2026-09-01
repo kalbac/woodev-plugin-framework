@@ -52,6 +52,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 	 *     'postcode' => string, // 'show' | 'hide_for_pickup' | 'remove'
 	 *     'country'  => string, // 'show' | 'hide'
 	 *   ],
+	 *   // Issue #725: the merchant's «Блокировать оформление заказа» checkbox — whether
+	 *   // `refreshGate()` (checkout-field-classic.js) may disable `#place_order` while a
+	 *   // required DELIVERY field is empty. This is a client-side UX signal ONLY; the
+	 *   // SERVER side (`Checkout_Handler::validate()`) always rejects a missing required
+	 *   // field on submit regardless of this flag — see gotcha
+	 *   // `the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`.
+	 *   // `true` when no `field_settings` collaborator was injected (older caller, or a
+	 *   // unit test that does not care), matching this option's default so an existing
+	 *   // installation behaves exactly as before this flag existed.
+	 *   'block_place_order' => bool,
 	 *   'pickup_method_ids' => string[], // WC_Shipping_Method::$id of every pickup-shipping method.
 	 *   // Present only when a Location_Service was injected AND is_active() (Task 9):
 	 *   'location' => [
@@ -228,6 +238,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *              collapse to the same value (issue #308 item 2).
 		 * @since 2.0.2 Added `field_policy` and `pickup_method_ids` (checkout field policy
 		 *              Task 6, issue #362).
+		 * @since 2.0.2 Added `block_place_order` (issue #725) — client-side-only, the
+		 *              server's required-field rejection on submit is unaffected.
 		 *
 		 * @param Checkout_Fields $fields Normalized field definitions to emit.
 		 *
@@ -247,6 +259,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 		 *     nonce: string,
 		 *     takeover: array<string, array<string, bool>>,
 		 *     field_policy: array{address: string, postcode: string, country: string},
+		 *     block_place_order: bool,
 		 *     pickup_method_ids: string[],
 		 *     location?: array{
 		 *         endpoints: array{suggest: string, select: string},
@@ -297,6 +310,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'nonce'             => $this->nonce,
 				'takeover'          => $takeover,
 				'field_policy'      => $this->build_field_policy(),
+				'block_place_order' => $this->resolve_block_place_order(),
 				'pickup_method_ids' => self::pickup_method_ids(),
 			];
 
@@ -337,6 +351,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 				'postcode' => $this->field_settings->effective( 'postcode_field' ),
 				'country'  => $this->field_settings->effective( 'country_field' ),
 			];
+		}
+
+
+		/**
+		 * Resolves `block_place_order` (issue #725): whether `refreshGate()`
+		 * (`checkout-field-classic.js`) is allowed to disable `#place_order` while a
+		 * required delivery field is empty. Client-side UX signal ONLY — this method
+		 * never touches, and has no bearing on, the SERVER's own required-field
+		 * rejection in `Checkout_Handler::validate()`, which runs unconditionally on
+		 * submit either way.
+		 *
+		 * `null` {@see self::$field_settings} (no policy handler was injected — an
+		 * older caller, or a unit test that does not care) resolves to `true`, the
+		 * same value the setting itself defaults to, so an existing installation's
+		 * behaviour is unchanged either way this collaborator is or isn't wired up.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		private function resolve_block_place_order(): bool {
+			if ( null === $this->field_settings ) {
+				return true;
+			}
+
+			return (bool) $this->field_settings->effective( 'block_place_order' );
 		}
 
 		/**

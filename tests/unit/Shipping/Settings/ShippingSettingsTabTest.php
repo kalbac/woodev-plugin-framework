@@ -102,19 +102,37 @@ class ShippingSettingsTabTest extends TestCase {
 	public function test_sections_follow_declarations(): void {
 		$tab = Shipping_Settings_Tab::instance();
 
-		$tab->declare_shipping_plugin(); // any Shipping_Plugin → tab + «Поля».
+		$tab->declare_shipping_plugin(); // any Shipping_Plugin → tab + «Форма заказа».
 		$this->assertTrue( $tab->is_needed() );
 		$this->assertSame(
-			[ 'fields' ],
+			[ 'checkout' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
 		);
 
 		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider', 'field_mode' ] );
 		$tab->declare_map_needed();
 		$this->assertSame(
-			[ 'location', 'fields', 'map' ],
+			[ 'location', 'checkout', 'map' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $tab->build_sections() )
 		);
+	}
+
+	/**
+	 * Issue #725: the section renamed «Поля» → «Форма заказа» (id `fields` →
+	 * `checkout`) and now also carries the new `block_place_order` behaviour
+	 * toggle, not just field-shape controls.
+	 */
+	public function test_checkout_section_carries_the_new_title_and_the_place_order_toggle(): void {
+		$tab = Shipping_Settings_Tab::instance();
+		$tab->declare_shipping_plugin();
+
+		$section = current(
+			array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() )
+		);
+
+		$this->assertNotFalse( $section, 'No section with id "checkout" was built.' );
+		$this->assertSame( 'Форма заказа', $section->get_label() );
+		$this->assertContains( 'block_place_order', $section->get_setting_ids() );
 	}
 
 	/**
@@ -129,7 +147,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$tab->set_location_section( $this->location_handler_stub(), [ 'active_provider' ] );
 
 		$fields_section = current(
-			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+			array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() )
 		);
 
 		$ids = $fields_section->get_setting_ids();
@@ -137,7 +155,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$settlement_index = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_FIELD_MODE_SETTLEMENT, $ids, true );
 		$allow_index       = array_search( \Woodev\Framework\Shipping\Location\Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT, $ids, true );
 
-		$this->assertNotFalse( $settlement_index, '"field_mode_settlement" is missing from the «Поля» section.' );
+		$this->assertNotFalse( $settlement_index, '"field_mode_settlement" is missing from the «Форма заказа» section.' );
 		$this->assertSame( $settlement_index + 1, $allow_index, '"allow_custom_settlement" must sit directly after "field_mode_settlement".' );
 	}
 
@@ -151,7 +169,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$tab->declare_shipping_plugin();
 
 		$fields_section = current(
-			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+			array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() )
 		);
 
 		$this->assertNotContains(
@@ -194,14 +212,14 @@ class ShippingSettingsTabTest extends TestCase {
 		$this->assertSame( 'Доставка', $provider->get_label() );
 		$this->assertInstanceOf( Composite_Settings_Handler::class, $provider->get_handler() );
 		$this->assertSame(
-			[ 'location', 'fields', 'map' ],
+			[ 'location', 'checkout', 'map' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $provider->get_sections() )
 		);
 	}
 
 	/**
 	 * Without a location handler or a Pickup_Handler, register() still builds a valid
-	 * composite over the «Поля» handler alone — «Локация» and «Карта» simply never
+	 * composite over the «Форма заказа» handler alone — «Локация» and «Карта» simply never
 	 * declared themselves.
 	 */
 	public function test_register_without_location_or_map_still_registers_fields_only(): void {
@@ -212,7 +230,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$provider = Settings_Page_Registry::instance()->get_provider( Shipping_Settings_Tab::SERVICE_ID );
 
 		$this->assertSame(
-			[ 'fields' ],
+			[ 'checkout' ],
 			array_map( static function ( $s ) { return $s->get_id(); }, $provider->get_sections() )
 		);
 	}
@@ -244,7 +262,7 @@ class ShippingSettingsTabTest extends TestCase {
 	/**
 	 * Copy coverage (issue #378) — every section built here must carry a
 	 * non-empty description, so the next section added never ships bare.
-	 * Covers all three sections at once («Локация», «Поля», «Карта»).
+	 * Covers all three sections at once («Локация», «Форма заказа», «Карта»).
 	 */
 	public function test_every_section_has_a_non_empty_description(): void {
 		$tab = Shipping_Settings_Tab::instance();
@@ -255,7 +273,7 @@ class ShippingSettingsTabTest extends TestCase {
 
 		$sections = $tab->build_sections();
 
-		$this->assertSame( [ 'location', 'fields', 'map' ], array_map( static fn( $s ) => $s->get_id(), $sections ) );
+		$this->assertSame( [ 'location', 'checkout', 'map' ], array_map( static fn( $s ) => $s->get_id(), $sections ) );
 
 		foreach ( $sections as $section ) {
 			$this->assertNotSame(
@@ -267,7 +285,8 @@ class ShippingSettingsTabTest extends TestCase {
 	}
 
 	/**
-	 * «Поля»'s description is the STATIC issue #378 copy, PREPENDED to
+	 * «Форма заказа»'s description is the STATIC issue #378 copy (extended by issue
+	 * #725 to also name the place-order behaviour toggle), PREPENDED to
 	 * `get_section_note()`'s own runtime note rather than replacing it — both
 	 * notes are legitimate at once (Task 7's settlement-invariant report).
 	 */
@@ -278,7 +297,7 @@ class ShippingSettingsTabTest extends TestCase {
 		// No override recorded → get_section_note() is '' → the static copy
 		// stands alone, with no dangling separator.
 		$fields_section = current(
-			array_filter( $tab->build_sections(), static fn( $s ) => 'fields' === $s->get_id() )
+			array_filter( $tab->build_sections(), static fn( $s ) => 'checkout' === $s->get_id() )
 		);
 
 		$this->assertStringContainsString( 'конструктор полей', $fields_section->get_description() );
@@ -292,7 +311,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$tab->declare_shipping_plugin();
 
 		$this->assertSame(
-			[ 'fields' ],
+			[ 'checkout' ],
 			array_map( static fn( $s ) => $s->get_id(), $tab->build_sections() )
 		);
 	}
@@ -324,7 +343,7 @@ class ShippingSettingsTabTest extends TestCase {
 		$sections = $tab->build_sections();
 
 		$this->assertSame(
-			[ 'location', 'fields', 'map', 'tools' ],
+			[ 'location', 'checkout', 'map', 'tools' ],
 			array_map( static fn( $s ) => $s->get_id(), $sections )
 		);
 
