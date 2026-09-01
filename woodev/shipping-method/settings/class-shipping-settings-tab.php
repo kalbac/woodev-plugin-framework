@@ -3,15 +3,17 @@
  * Woodev Shipping Settings Tab
  *
  * Registrar of the store-level «Доставка» tab (design S1/S9, issue #362). Consolidates
- * three sections that used to be their own settings surfaces (or, for «Поля»/«Карта»,
+ * three sections that used to be their own settings surfaces (or, for «Форма заказа»/«Карта»,
  * never had one at all): «Локация» (Task 3's `Location_Provider_Registry`, demoted from
- * its own tab to this tab's first section), «Поля» (checkout field policy, Task 5) and
- * «Карта» (pickup map behaviour, Task 8).
+ * its own tab to this tab's first section), «Форма заказа» — id `checkout`, renamed from
+ * «Поля»/`fields` by issue #725 once the section started also carrying checkout-behaviour
+ * toggles alongside the field-shape controls (checkout field policy, Task 5) — and «Карта»
+ * (pickup map behaviour, Task 8).
  *
  * Section visibility is DERIVED from what plugins actually supply, never configured
  * (spec S9) — the same `declare_needed()` shape `Location_Provider_Registry` already
  * uses: any {@see \Woodev\Framework\Shipping\Shipping_Plugin} → the tab itself and its
- * «Поля» section; a plugin that also needs the Location Provider layer → «Локация»
+ * «Форма заказа» section; a plugin that also needs the Location Provider layer → «Локация»
  * (handed over by `Location_Provider_Registry::register_settings()` instead of that
  * class registering a tab of its own); a constructed
  * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler} → «Карта».
@@ -164,7 +166,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 		}
 
 		/**
-		 * Declares that a shipping plugin exists — opens the tab and its «Поля» section.
+		 * Declares that a shipping plugin exists — opens the tab and its «Форма заказа» section.
 		 * Idempotent, same shape as `Location_Provider_Registry::declare_needed()`.
 		 *
 		 * @since 2.0.2
@@ -274,11 +276,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 				);
 			}
 
-			// «Поля» interleaves the checkout-field ids (Checkout_Field_Settings) with
-			// the location field-mode axes + address suggestions (Location_Settings) —
-			// issue #380's operator-specified order: field type controls sit directly
-			// next to the field they describe. The location-owned ids only exist when
-			// a location handler was actually handed over (see set_location_section()).
+			// «Форма заказа» (renamed from «Поля» by issue #725) interleaves the
+			// checkout-field ids (Checkout_Field_Settings) with the location field-mode
+			// axes + address suggestions (Location_Settings) — issue #380's
+			// operator-specified order: field type controls sit directly next to the
+			// field they describe. The location-owned ids only exist when a location
+			// handler was actually handed over (see set_location_section()).
 			$field_ids = [ 'field_order_preset', 'country_field', 'region_field' ];
 
 			if ( null !== $this->location_handler ) {
@@ -298,23 +301,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Settings
 
 			$field_ids[] = 'postcode_field';
 			$field_ids[] = 'phone_field_format';
+			// Issue #725: a checkout-BEHAVIOUR toggle, not a field-presence/type
+			// control, so it goes last rather than interleaved among the field ids
+			// above.
+			$field_ids[] = 'block_place_order';
 
-			// Issue #378: the static description is PREPENDED to
-			// `get_section_note()`'s own runtime note (Task 7's settlement-invariant
-			// report, empty on most stores) rather than replacing it — both are
-			// legitimate at once, same "don't clobber a sibling note" discipline the
-			// disabled_reason/description split already follows elsewhere in this
-			// codebase.
-			$fields_description = trim(
-				__( 'Определяет, какие поля адреса показываются в форме оформления заказа, в каком порядке и как вводится регион с населённым пунктом — это не конструктор полей, а набор правил присутствия и типа для уже существующих полей.', 'woodev-plugin-framework' )
+			// Issue #378's static description is PREPENDED to `get_section_note()`'s own
+			// runtime note (Task 7's settlement-invariant report, empty on most stores)
+			// rather than replacing it — both are legitimate at once, same "don't clobber
+			// a sibling note" discipline the disabled_reason/description split already
+			// follows elsewhere in this codebase. Issue #725 extended the static sentence
+			// itself to also name the new behaviour toggle, since the section is no
+			// longer fields-only.
+			$section_description = trim(
+				__( 'Определяет, какие поля адреса показываются в форме оформления заказа, в каком порядке и как вводится регион с населённым пунктом, а также — блокируется ли кнопка «Оформить заказ», пока не заполнены обязательные поля доставки: это не конструктор полей, а набор правил присутствия и поведения для уже существующих элементов формы.', 'woodev-plugin-framework' )
 				. ' ' . $this->get_field_settings()->get_section_note()
 			);
 
 			$sections[] = Settings_Section::create(
-				'fields',
-				__( 'Поля', 'woodev-plugin-framework' ),
+				'checkout',
+				__( 'Форма заказа', 'woodev-plugin-framework' ),
 				$field_ids,
-				$fields_description
+				$section_description
 			);
 
 			if ( $this->map_needed ) {

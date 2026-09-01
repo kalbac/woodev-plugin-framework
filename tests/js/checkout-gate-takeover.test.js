@@ -52,19 +52,23 @@ function installMarkup() {
 /**
  * @param {Object} extraFields   Additional `fields` entries.
  * @param {Object} extraTakeover Additional `takeover` entries.
+ * @param {Object} extraConfig   Additional top-level config keys (e.g. `block_place_order`).
  * @returns {Object}
  */
-function buildConfig( extraFields, extraTakeover ) {
-	return {
-		endpoint: ENDPOINT,
-		nonce:    'test-nonce',
-		i18n:     { placeholder: 'Выберите…' },
-		fields:   Object.assign(
-			{ billing_city: { source_kind: 'suggest', required: true } },
-			extraFields || {}
-		),
-		takeover: Object.assign( { billing_city: { RU: false, BY: false } }, extraTakeover || {} ),
-	};
+function buildConfig( extraFields, extraTakeover, extraConfig ) {
+	return Object.assign(
+		{
+			endpoint: ENDPOINT,
+			nonce:    'test-nonce',
+			i18n:     { placeholder: 'Выберите…' },
+			fields:   Object.assign(
+				{ billing_city: { source_kind: 'suggest', required: true } },
+				extraFields || {}
+			),
+			takeover: Object.assign( { billing_city: { RU: false, BY: false } }, extraTakeover || {} ),
+		},
+		extraConfig || {}
+	);
 }
 
 /**
@@ -167,5 +171,58 @@ describe( 'A2 gate versus takeover fields (issue #721)', () => {
 		) );
 
 		expect( placeOrderDisabled() ).toBe( false );
+	} );
+} );
+
+/**
+ * The «Блокировать оформление заказа» checkbox (issue #725) — `block_place_order` on
+ * the checkout config. Default ON (absent key ≡ `true`) is already covered by every
+ * test above, which never sets the key at all and still expects the gate to fire.
+ */
+describe( 'place-order gate on/off — «Блокировать оформление заказа» (issue #725)', () => {
+
+	it( 'gates as before when the flag is explicitly on', () => {
+		installMarkup();
+		document.getElementById( 'billing_city' ).value = '';
+
+		boot( buildConfig( {}, {}, { block_place_order: true } ) );
+
+		expect( placeOrderDisabled() ).toBe( true );
+	} );
+
+	it( 'leaves #place_order alone when the flag is off, even for a change that would otherwise block it', () => {
+		installMarkup();
+		document.getElementById( 'billing_city' ).value = '';
+
+		boot( buildConfig( {}, {}, { block_place_order: false } ) );
+
+		expect( placeOrderDisabled() ).toBe( false );
+
+		// A later change that WOULD block the button if the gate were on must still be
+		// a pure no-op — the gate must not even re-evaluate required fields.
+		global.jQuery( '#billing_city' ).val( '' ).trigger( 'change' );
+
+		expect( placeOrderDisabled() ).toBe( false );
+	} );
+
+	it( 'releases a disabled button exactly once at boot, then never touches it again — not even to re-enable it', () => {
+		installMarkup();
+
+		// Simulates the button carrying a disabled state from before this run of the
+		// gate (an earlier script instance, a restored page, etc.) — with the flag
+		// off, this must be cleared exactly once at boot.
+		document.getElementById( 'place_order' ).disabled = true;
+
+		boot( buildConfig( {}, {}, { block_place_order: false } ) );
+
+		expect( placeOrderDisabled() ).toBe( false );
+
+		// Some OTHER plugin now legitimately disables the button (e.g. a payment
+		// method still loading). The gate — off — must never touch it again, in
+		// EITHER direction.
+		document.getElementById( 'place_order' ).disabled = true;
+		global.jQuery( '#billing_city' ).val( '' ).trigger( 'change' );
+
+		expect( placeOrderDisabled() ).toBe( true );
 	} );
 } );

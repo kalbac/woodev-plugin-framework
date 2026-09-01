@@ -657,6 +657,55 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// block_place_order (issue #725) — client-side-only place-order gate flag
+	// -------------------------------------------------------------------------
+
+	public function test_block_place_order_defaults_to_true_when_no_settings_injected(): void {
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config['block_place_order'] );
+	}
+
+	/**
+	 * Reads through the SAME `Checkout_Field_Settings::effective()` contract as
+	 * `field_policy` — proves Checkout_Config genuinely calls it (through the
+	 * injected collaborator) rather than assuming the default in every case.
+	 */
+	public function test_block_place_order_reads_the_effective_value_from_the_injected_settings_handler(): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( $name ) {
+				return false !== strpos( (string) $name, 'block_place_order' ) ? false : null;
+			}
+		);
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $tag, $default = null ) {
+				return $default;
+			}
+		);
+
+		$settings = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$config_off = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], null, $settings ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertFalse( $config_off['block_place_order'] );
+
+		Functions\when( 'get_option' )->justReturn( null );
+
+		$settings_on = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$config_on = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ], null, $settings_on ) )
+			->build( Checkout_Fields::from_array( [] ) );
+
+		$this->assertTrue( $config_on['block_place_order'] );
+	}
+
+	// -------------------------------------------------------------------------
 	// resolve_required() — the `is_pickup_method` sentinel (issue #709)
 	// -------------------------------------------------------------------------
 

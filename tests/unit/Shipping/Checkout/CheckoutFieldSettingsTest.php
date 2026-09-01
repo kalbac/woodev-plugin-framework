@@ -55,7 +55,7 @@ final class CheckoutFieldSettingsTest extends TestCase {
 		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
 
 		$this->assertSame(
-			[ 'field_order_preset', 'country_field', 'region_field', 'address_field', 'postcode_field', 'phone_field_format' ],
+			[ 'field_order_preset', 'country_field', 'region_field', 'address_field', 'postcode_field', 'phone_field_format', 'block_place_order' ],
 			$s->get_owned_setting_ids()
 		);
 		$this->assertTrue( $s->get_value( 'field_order_preset' ) );
@@ -64,6 +64,7 @@ final class CheckoutFieldSettingsTest extends TestCase {
 		$this->assertSame( 'show', $s->get_value( 'region_field' ) );
 		$this->assertSame( 'show', $s->get_value( 'address_field' ) );
 		$this->assertSame( 'off', $s->get_value( 'phone_field_format' ) );
+		$this->assertTrue( $s->get_value( 'block_place_order' ) );
 	}
 
 	public function test_single_country_classic_checkout_disables_nothing(): void {
@@ -165,6 +166,32 @@ final class CheckoutFieldSettingsTest extends TestCase {
 
 		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
 		$s->effective( 'not_a_real_setting' );
+	}
+
+	// -------------------------------------------------------------------------
+	// block_place_order (issue #725) — default ON, never clamped by environment.
+	// -------------------------------------------------------------------------
+
+	public function test_block_place_order_defaults_to_enabled_and_appears_in_the_owned_ids(): void {
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( false, 1 ) );
+
+		$this->assertContains( 'block_place_order', $s->get_owned_setting_ids() );
+		$this->assertTrue( $s->get_value( 'block_place_order' ) );
+		$this->assertTrue( $s->effective( 'block_place_order' ) );
+	}
+
+	/**
+	 * Neither checkout experience nor the store's shipping-country count makes this
+	 * option inapplicable — it is a behaviour toggle, not a field-presence rule, so
+	 * `effective()` returns the stored value as-is in every environment.
+	 */
+	public function test_block_place_order_is_never_clamped_and_passes_through_the_stored_value(): void {
+		Functions\when( 'get_option' )->alias( fn( $k, $d = false ) => 'woodev_checkout_fields_block_place_order' === $k ? false : $d );
+
+		$s = new Checkout_Field_Settings( new Checkout_Field_Environment( true, 3 ) );
+
+		$this->assertFalse( $s->effective( 'block_place_order' ) );
+		$this->assertFalse( $s->get_setting( 'block_place_order' )->get_control()->is_disabled() );
 	}
 
 	// -------------------------------------------------------------------------
