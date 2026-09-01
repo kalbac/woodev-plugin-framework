@@ -74,6 +74,94 @@ if ( 'integration' === $test_suite ) {
 		}
 	}
 
+	// Minimal WP_REST_Request stand-in for unit context (no WordPress loaded).
+	//
+	// SHARED ON PURPOSE (issue #140). Four test files used to declare their own
+	// `WP_REST_Request`. Measured before changing anything, because the card's stated
+	// mechanism turned out to be only half right:
+	//
+	//   LicenseCommandRestTest              GLOBAL         \WP_REST_Request
+	//   LocationDefaultCountrySeamTest      namespaced     Woodev\Tests\Unit\Shipping\...
+	//   LocationControllerTest              namespaced     Woodev\Tests\Unit\Shipping\Rest_Api\...
+	//   PickupControllerTest                namespaced     SAME namespace as the line above
+	//
+	// So there was NO global-versus-namespaced race: the three shipping doubles were
+	// made namespace-scoped deliberately, exactly to avoid colliding with the global one.
+	// Two real problems remained, and this shared stub fixes both:
+	//
+	// 1. The last two share ONE namespace, so they are two declarations of one class and
+	//    the first file loaded wins. Their bodies happen to be identical today, which is
+	//    why nothing has broken yet — but the moment one needs a method the other lacks,
+	//    PHPUnit's traversal order decides whether the suite passes.
+	// 2. A namespace-scoped double CANNOT satisfy a global `\WP_REST_Request` parameter
+	//    type. That — not a race — is why the REST callbacks in `Pickup_Controller`,
+	//    `Field_Source_Controller` and `Location_Controller` carried no type declaration
+	//    at all, and why adding the correct hint during SP-5 fatally broke four tests.
+	//    The project's own "types on every parameter" rule (AGENT-RULES Rule 4) was being
+	//    violated by a TEST, not by the code.
+	//
+	// One global stub, declared before any test file loads, removes both.
+	//
+	// The body below is the UNION of what those four declared, so every previous caller
+	// keeps working:
+	//   - `$body` / `get_body()`      — LicenseCommandRestTest
+	//   - `get_param()`               — all three shipping tests, identical implementation
+	//   - `get_header()`              — ditto; the seam test passed no headers and always
+	//                                   got null, which an empty `$headers` reproduces
+	//
+	// ⚠ `get_header()` deliberately does NOT normalise the key, unlike the real
+	// \WP_REST_Request. That was PickupControllerTest's explicit choice and it is
+	// load-bearing: a production caller asking for a differently-cased header than the
+	// browser sends must MISS here, so the test fails instead of passing by luck.
+	//
+	// Guarded so a real WP_REST_Request wins if one is ever present.
+	if ( ! class_exists( 'WP_REST_Request', false ) ) {
+		class WP_REST_Request {
+
+			/** @var string raw request body. */
+			public $body = '';
+
+			/** @var array<string, mixed> */
+			private $params;
+
+			/** @var array<string, string> */
+			private $headers;
+
+			/**
+			 * @param array<string, mixed>  $params  request params.
+			 * @param array<string, string> $headers request headers, keyed exactly as
+			 *                                       {@see self::get_header()} is asked for them.
+			 * @param string                $body    raw request body.
+			 */
+			public function __construct( array $params = [], array $headers = [], string $body = '' ) {
+				$this->params  = $params;
+				$this->headers = $headers;
+				$this->body    = $body;
+			}
+
+			/**
+			 * @param string $key param name.
+			 * @return mixed
+			 */
+			public function get_param( $key ) {
+				return $this->params[ $key ] ?? null;
+			}
+
+			/**
+			 * @param string $key header name, NOT normalised — see the note above.
+			 * @return string|null
+			 */
+			public function get_header( $key ) {
+				return $this->headers[ $key ] ?? null;
+			}
+
+			/** @return string */
+			public function get_body() {
+				return $this->body;
+			}
+		}
+	}
+
 	bootstrap_unit_tests();
 }
 

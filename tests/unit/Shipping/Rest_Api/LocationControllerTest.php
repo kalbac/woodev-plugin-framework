@@ -17,6 +17,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
+use WP_REST_Request;
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Location\Abstract_Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider;
@@ -48,49 +49,6 @@ if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 // that file's own require for the full rationale).
 if ( ! class_exists( '\\WC_Geolocation' ) ) {
 	require_once __DIR__ . '/wc-geolocation-stub.php';
-}
-
-/**
- * Minimal \WP_REST_Request stand-in — identical shape/rationale to
- * PickupControllerTest's own namespace-scoped double (see that file's
- * docblock for why this is namespace-scoped rather than global).
- */
-if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
-	class WP_REST_Request {
-
-		/** @var array<string, mixed> */
-		private array $params;
-
-		/** @var array<string, string> */
-		private array $headers;
-
-		/**
-		 * @param array<string, mixed>  $params  request params.
-		 * @param array<string, string> $headers request headers.
-		 */
-		public function __construct( array $params = [], array $headers = [] ) {
-			$this->params  = $params;
-			$this->headers = $headers;
-		}
-
-		/**
-		 * @param string $key param name.
-		 *
-		 * @return mixed|null
-		 */
-		public function get_param( $key ) {
-			return $this->params[ $key ] ?? null;
-		}
-
-		/**
-		 * @param string $key header name.
-		 *
-		 * @return string|null
-		 */
-		public function get_header( $key ) {
-			return $this->headers[ $key ] ?? null;
-		}
-	}
 }
 
 require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';

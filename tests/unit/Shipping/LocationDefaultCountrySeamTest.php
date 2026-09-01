@@ -48,43 +48,6 @@ namespace Woodev\Tests\Unit\Shipping {
 	require_once dirname( __DIR__, 3 ) . '/woodev/shipping-method/rest-api/class-location-controller.php';
 
 	/**
-	 * Minimal \WP_REST_Request stand-in — namespace-scoped, mirrors the same
-	 * double `LocationControllerTest` already defines in its own namespace.
-	 */
-	if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
-		class WP_REST_Request {
-
-			/** @var array<string, mixed> */
-			private array $params;
-
-			/**
-			 * @param array<string, mixed> $params request params.
-			 */
-			public function __construct( array $params = [] ) {
-				$this->params = $params;
-			}
-
-			/**
-			 * @param string $key param name.
-			 *
-			 * @return mixed|null
-			 */
-			public function get_param( $key ) {
-				return $this->params[ $key ] ?? null;
-			}
-
-			/**
-			 * @param string $key header name.
-			 *
-			 * @return string|null
-			 */
-			public function get_header( $key ) {
-				return null;
-			}
-		}
-	}
-
-	/**
 	 * A single {@see Location_Service} double shared by BOTH sides of the seam
 	 * this file pins — every method Checkout_Config's location block AND
 	 * Location_Controller's `/suggest` route read is fixed here EXCEPT
@@ -272,7 +235,7 @@ namespace Woodev\Tests\Unit\Shipping {
 			// pins a shape production could never produce (PR #320 review, finding 4). Mirrors
 			// LocationControllerTest's own `'country' => ''` convention for this exact case.
 			$ctrl    = new Seam_Location_Controller_Probe( $service );
-			$request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+			$request = new \WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
 			$ctrl->handle_suggest_request( $request );
 
 			$this->assertSame( 'KZ', $config['location']['defaultCountry'] );
@@ -316,12 +279,12 @@ namespace Woodev\Tests\Unit\Shipping {
 			$ctrl = new Seam_Location_Controller_Probe( $service );
 
 			// Side 2: the /suggest route (issue #296), for cross-comparison.
-			$suggest_request = new WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+			$suggest_request = new \WP_REST_Request( [ 'q' => 'Ал', 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
 			$ctrl->handle_suggest_request( $suggest_request );
 
 			// Side 3: the /list route (issue #321) — the fallback this card added
 			// to handle_list_request().
-			$list_request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
+			$list_request = new \WP_REST_Request( [ 'level' => Location_Record::LEVEL_REGION, 'country' => '' ] );
 			$response     = $ctrl->handle_list_request( $list_request );
 
 			$this->assertNotInstanceOf( \WP_Error::class, $response, '/list must not 400 on an empty country — that is the whole bug this card closes' );
