@@ -87,4 +87,62 @@ class PresetsTest extends TestCase {
 			->to_array();
 		$this->assertSame( 'Пункт самовывоза', $a['error_label'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// Lazy default — issue #709: $pickup_method_ids is now optional. Omitted, the
+	// field's required-ness is derived from is_pickup_shipping() at EVALUATION time
+	// (see Checkout_Config::resolve_required()), never baked into an id list here.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Omitting the id list produces the `is_pickup_method` sentinel operator — no
+	 * `value` key at all, so the spec genuinely "stops naming ids" (card #709).
+	 */
+	public function test_pickup_field_omitted_list_uses_the_is_pickup_method_operator(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point' )->to_array();
+
+		$this->assertSame( 'chosen_shipping_method', $a['required']['state'] );
+		$this->assertSame( 'is_pickup_method', $a['required']['operator'] );
+		$this->assertArrayNotHasKey( 'value', $a['required'] );
+		$this->assertTrue( $a['is_pickup_slot'] );
+		$this->assertSame( 'hidden', $a['type'] );
+	}
+
+	/**
+	 * Explicit `null` (the default) behaves identically to omitting the argument —
+	 * pins the default value itself, not only the omitted-argument call shape.
+	 */
+	public function test_pickup_field_explicit_null_list_also_derives(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point', null )->to_array();
+
+		$this->assertSame( 'is_pickup_method', $a['required']['operator'] );
+	}
+
+	/**
+	 * The lazy default must never touch `WC()->shipping()` while the field is being
+	 * BUILT (card #709's own trap: `Pickup_Field::create()` can run before WooCommerce
+	 * has lazily loaded the shipping-method class at all — see that method's own
+	 * docblock). `WC()` is undefined for this entire test file/process — if
+	 * `create()` called it eagerly, this would fatal with "Call to undefined
+	 * function WC()" rather than merely assert something wrong.
+	 */
+	public function test_pickup_field_omitted_list_does_not_touch_wc_shipping_when_built(): void {
+		$this->assertFalse( function_exists( 'WC' ), 'WC() must be undefined for this pin to mean anything.' );
+
+		$a = Pickup_Field::create( 'carrier_pickup_point' )->to_array();
+
+		$this->assertSame( 'is_pickup_method', $a['required']['operator'] );
+	}
+
+	/**
+	 * An explicit id list — even an empty one — is a real override, never confused
+	 * with "omitted": `[]` means "never required by this mechanism", a DIFFERENT
+	 * outcome from the derived default silently degrading to the same shape.
+	 */
+	public function test_pickup_field_explicit_empty_list_is_a_real_override_not_the_derive_default(): void {
+		$a = Pickup_Field::create( 'carrier_pickup_point', [] )->to_array();
+
+		$this->assertSame( 'in', $a['required']['operator'] );
+		$this->assertSame( [], $a['required']['value'] );
+	}
 }

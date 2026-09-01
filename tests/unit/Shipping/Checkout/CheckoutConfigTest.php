@@ -657,6 +657,123 @@ class CheckoutConfigTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// resolve_required() — the `is_pickup_method` sentinel (issue #709)
+	// -------------------------------------------------------------------------
+
+	public function test_resolve_required_leaves_a_plain_bool_untouched(): void {
+		$this->assertTrue( Checkout_Config::resolve_required( true ) );
+		$this->assertFalse( Checkout_Config::resolve_required( false ) );
+	}
+
+	public function test_resolve_required_leaves_an_explicit_in_spec_untouched(): void {
+		$spec = [ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'carrier_pickup' ] ];
+
+		$this->assertSame( $spec, Checkout_Config::resolve_required( $spec ) );
+	}
+
+	/**
+	 * Without WC() available, `pickup_method_ids()` degrades to `[]` (see the test
+	 * above) — this pins that `resolve_required()` genuinely REWRITES the sentinel
+	 * operator to a concrete `in` spec rather than leaving it as-is, even when the
+	 * derived list happens to be empty.
+	 */
+	public function test_resolve_required_rewrites_the_sentinel_to_a_concrete_in_spec(): void {
+		$resolved = Checkout_Config::resolve_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'is_pickup_method' ] );
+
+		$this->assertSame(
+			[ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [] ],
+			$resolved
+		);
+	}
+
+	/**
+	 * The sentinel is recognised inside a multi-condition `conditions` array too —
+	 * a plugin combining it with e.g. a country check must not have it silently
+	 * ignored.
+	 */
+	public function test_resolve_required_recurses_into_a_multi_condition_spec(): void {
+		$resolved = Checkout_Config::resolve_required(
+			[
+				'relation'   => 'AND',
+				'conditions' => [
+					[ 'state' => 'chosen_shipping_method', 'operator' => 'is_pickup_method' ],
+					[ 'state' => 'country', 'operator' => '=', 'value' => 'RU' ],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [] ],
+			$resolved['conditions'][0]
+		);
+		$this->assertSame(
+			[ 'state' => 'country', 'operator' => '=', 'value' => 'RU' ],
+			$resolved['conditions'][1]
+		);
+	}
+
+	/**
+	 * End-to-end with a REAL pickup method registered through `WC()->shipping()`:
+	 * `resolve_required()` — and, through it, `build()` — must publish the SAME id
+	 * list `pickup_method_ids()` itself derives, proving decision #1 (one source of
+	 * truth) actually reaches a `Pickup_Field`'s omitted-list default and the
+	 * browser-bound config in the same step.
+	 *
+	 * `@runInSeparateProcess`: `Functions\when( 'WC' )` permanently instruments the
+	 * global `WC()` function for the rest of the PHP process once used (see
+	 * `config_with_states()`'s own docblock above for the 21-test breakage this
+	 * caused when first done inline) — isolated here for the identical reason.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_required_and_build_derive_real_ids_from_is_pickup_shipping(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+
+		$courier = new Checkout_Config_Fake_Shipping_Method( 'test_courier', false );
+		$pickup  = new Checkout_Config_Fake_Shipping_Method( 'test_pickup', true );
+
+		$shipping = new class( [ $courier, $pickup ] ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+
+		Functions\when( 'WC' )->justReturn( $wc );
+
+		$this->assertSame( [ 'test_pickup' ], Checkout_Config::pickup_method_ids() );
+
+		$resolved = Checkout_Config::resolve_required( [ 'state' => 'chosen_shipping_method', 'operator' => 'is_pickup_method' ] );
+		$this->assertSame( [ 'test_pickup' ], $resolved['value'] );
+
+		// Full round trip: a lazily-declared Pickup_Field publishes the SAME ids to
+		// the browser through build() — no plugin ever named 'test_pickup'.
+		$fields = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point' )->to_array(),
+		] );
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertSame(
+			[ 'state' => 'chosen_shipping_method', 'operator' => 'in', 'value' => [ 'test_pickup' ] ],
+			$config['fields']['carrier_pickup_point']['required']
+		);
+	}
+
+	// -------------------------------------------------------------------------
 	// location block — absent when inactive/unwired
 	// -------------------------------------------------------------------------
 

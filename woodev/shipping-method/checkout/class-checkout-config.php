@@ -274,7 +274,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 					'source_kind'            => $def['source_kind'],
 					'location_level'         => $def['location_level'] ?? null,
 					'depends_on'             => $def['depends_on'],
-					'required'               => $def['required'],
+					'required'               => self::resolve_required( $def['required'] ),
 					'is_pickup_slot'         => $def['is_pickup_slot'],
 					'pickup_slot_placements' => $def['is_pickup_slot']
 						? $this->resolve_pickup_slot_placements( $id )
@@ -386,6 +386,66 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Config' 
 			}
 
 			return array_values( array_unique( $ids ) );
+		}
+
+		/**
+		 * Resolves the `is_pickup_method` condition-spec sentinel (issue #709) into a
+		 * concrete `{state: chosen_shipping_method, operator: in, value: [...]}` spec,
+		 * using the CURRENT {@see self::pickup_method_ids()}. A plain bool, or an array
+		 * that carries no `is_pickup_method` operator anywhere in it, is returned
+		 * unchanged.
+		 *
+		 * WHY THIS LIVES HERE AND NOT IN `Checkout_Condition`. That class's own docblock
+		 * declares it "Pure PHP — no WooCommerce calls", and `Checkout_Fields`' docblock
+		 * makes the same claim about itself — both stay true with this method here
+		 * instead: `Checkout_Condition::is_required()` never sees the sentinel, because
+		 * both of this method's callers —
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::validate()} and
+		 * {@see self::build()} — resolve it FIRST, at the same moment they already call
+		 * {@see self::pickup_method_ids()} for their own purposes (validating a submit;
+		 * publishing `pickup_method_ids` to the browser). That is also why the
+		 * `checkout-field-store.js` JS mirror needed no changes for #709: it only ever
+		 * receives the ALREADY-RESOLVED spec via {@see self::build()}, exactly the same
+		 * shape an explicit id list has always produced.
+		 *
+		 * Never resolved any earlier than this (registration time, inside
+		 * {@see \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create()}) on
+		 * purpose — see that method's own docblock for why touching
+		 * {@see self::pickup_method_ids()} there would be premature.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool|array<string, mixed> $required Normalized `required` value, possibly
+		 *                                             carrying the `is_pickup_method` sentinel,
+		 *                                             at the top level or inside a
+		 *                                             multi-condition `conditions` array.
+		 *
+		 * @return bool|array<string, mixed> The same value with every `is_pickup_method`
+		 *                                   condition rewritten to a concrete `in` spec.
+		 */
+		public static function resolve_required( $required ) {
+			if ( ! is_array( $required ) ) {
+				return $required;
+			}
+
+			if ( isset( $required['conditions'] ) && is_array( $required['conditions'] ) ) {
+				$required['conditions'] = array_map(
+					static fn( $condition ) => is_array( $condition ) ? self::resolve_required( $condition ) : $condition,
+					$required['conditions']
+				);
+
+				return $required;
+			}
+
+			if ( isset( $required['operator'] ) && 'is_pickup_method' === $required['operator'] ) {
+				return [
+					'state'    => (string) ( $required['state'] ?? 'chosen_shipping_method' ),
+					'operator' => 'in',
+					'value'    => self::pickup_method_ids(),
+				];
+			}
+
+			return $required;
 		}
 
 		/**

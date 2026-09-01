@@ -170,10 +170,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * be either a single `{state, operator, value}` triplet (identified by having an
 		 * `operator` key) or a multi-condition `{relation, conditions[]}` object (identified
 		 * by having a `conditions` key). Every `operator` value must be in the closed set
-		 * `{=, !=, in, not_in}`. Any violation fires `_doing_it_wrong()` so the problem
-		 * is caught in development and CI rather than silently at checkout.
+		 * `{=, !=, in, not_in, is_pickup_method}`. Any violation fires `_doing_it_wrong()` so
+		 * the problem is caught in development and CI rather than silently at checkout.
+		 *
+		 * `is_pickup_method` (issue #709) is the ONLY operator this class never itself
+		 * evaluates: it carries no `value` at all — see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create()} — and is
+		 * rewritten to a concrete `in` spec by
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::resolve_required()} before
+		 * {@see Checkout_Condition::is_required()} (which stays unaware of it, and of
+		 * WooCommerce entirely) ever sees it. It is accepted HERE, at registration time,
+		 * because registration is exactly the too-early moment
+		 * {@see \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create()}'s own
+		 * docblock warns a real id list cannot yet be resolved.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Accepts `is_pickup_method` (issue #709).
 		 *
 		 * @param bool|array<string, mixed> $required Normalized `required` value from the descriptor.
 		 *
@@ -184,7 +196,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 				return; // Plain bool — always valid.
 			}
 
-			$valid_operators = [ '=', '!=', 'in', 'not_in' ];
+			$valid_operators = [ '=', '!=', 'in', 'not_in', 'is_pickup_method' ];
 			$caller          = 'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields::add';
 
 			if ( isset( $required['operator'] ) ) {

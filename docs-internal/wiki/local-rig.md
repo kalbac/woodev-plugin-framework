@@ -48,6 +48,27 @@ of #709.
 ⚠ **The mu-plugin is container-only and dies with the volume.** Reinstall by writing the file into
 `wp-content/mu-plugins/` — note the cli container needs `docker exec -u root` to write there.
 
+### s111 (#709): `woodev_test_shipping` flipped to genuinely `pickup`, mu-plugin patch no longer needed
+
+Card #709 fixed the underlying defect the table above measured: `Pickup_Field::create()` and
+`set_requires_pickup_methods()` now DEFAULT to deriving their id list from
+`is_pickup_shipping()` when the plugin never supplies one, instead of requiring a separate,
+independently-maintained copy. With that fixed, the fixture's OWN three already-agreeing
+declarations (`Pickup_Field`, the backstop, `Selection_Scope::type_for_method()`) needed only ONE
+change to become fully coherent: `Woodev_Test_Shipping_Method::get_delivery_type()` is now
+`'pickup'`, not `'courier'` — see `tests/_fixtures/woodev-test-shipping-method/class-woodev-test-shipping-method.php`.
+
+`woodev_test_shipping` is therefore now a single, correctly-declared pickup method in EVERY
+mechanism at once, in-repo — #652 scenarios 3 and 4 no longer need the container-only mu-plugin's
+patch-over to be reachable at all. The mu-plugin (`woodev_test_pickup_shipping`) can stay as a
+second, independent pickup method for other purposes, but its `wp_loaded:20` patch of the
+fixture's OWN handler (the two bullets above) is now redundant and safe to remove next time
+someone touches that file — nothing in the fixture needs a broadened id list any more.
+
+A new WP_DEBUG-gated `_doing_it_wrong()` reconciliation (`Checkout_Handler::reconcile_pickup_declarations()`,
+`Pickup_Handler::reconcile_pickup_scope()`) now fires, once per request, if a plugin's declarations
+ever drift apart again — this is what would have caught the original defect during development.
+
 ## `woocommerce_checkout_company_field` is `optional`, deliberately
 
 ⚠ **Measured `hidden` again on 01.09.2026 (s110)** — someone took the documented revert below, so

@@ -65,14 +65,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		/**
 		 * Shipping method ids that unconditionally require a non-empty pickup field.
 		 *
-		 * Populated via {@see set_requires_pickup_methods()}. When non-empty,
-		 * {@see validate()} runs an independent backstop guard after the per-field
-		 * loop to ensure a pickup method can never be placed without a pickup point —
-		 * regardless of the field's condition-spec.
+		 * Populated via {@see set_requires_pickup_methods()}. `null` (never called) means
+		 * "derive it": {@see validate()} falls back to
+		 * {@see Checkout_Config::pickup_method_ids()}, resolved LAZILY at validate() time —
+		 * never here at construction, which can run before WooCommerce has lazily loaded
+		 * the shipping-method class at all (issue #709). Explicitly calling
+		 * {@see set_requires_pickup_methods()} — even with `[]` — is a real override that
+		 * disables the backstop entirely, distinct from never having called it.
 		 *
-		 * @var string[]
+		 * When resolved non-empty, {@see validate()} runs an independent backstop guard
+		 * after the per-field loop to ensure a pickup method can never be placed without a
+		 * pickup point — regardless of the field's condition-spec.
+		 *
+		 * @since 1.5.0
+		 * @since 2.0.2 `null` (never set) now means "derive from `pickup_method_ids()`"
+		 *              rather than "never enforce" (issue #709).
+		 *
+		 * @var string[]|null
 		 */
-		private array $requires_pickup_methods = [];
+		private ?array $requires_pickup_methods = null;
+
+		/**
+		 * Whether {@see reconcile_pickup_declarations()} has already run this request
+		 * (issue #709). Process-static, not per-instance: several plugins may each build
+		 * their own `Checkout_Handler`, and the point of the gate is "at most once per
+		 * request", not "at most once per handler".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var bool
+		 */
+		private static bool $pickup_declarations_reconciled = false;
 
 		/**
 		 * Registry of native WC field ids claimed by a plugin_id.
@@ -146,7 +169,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * where a malformed or missing condition-spec would otherwise silently let an order
 		 * place without a mandatory pickup point.
 		 *
+		 * CALLING THIS IS NOW OPTIONAL (issue #709). A plugin that never calls it gets the
+		 * SAME backstop for free, derived from
+		 * {@see Checkout_Config::pickup_method_ids()} — i.e. from every registered method's
+		 * own {@see \Woodev\Framework\Shipping\Shipping_Method::is_pickup_shipping()} — rather
+		 * than no backstop at all. Calling this explicitly, even with `[]`, is a real
+		 * override: `[]` disables the backstop, distinct from never calling it (see
+		 * {@see self::$requires_pickup_methods}'s own docblock).
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 No longer required for the backstop to run at all — an uncalled
+		 *              instance now derives its list instead of leaving the backstop off
+		 *              (issue #709).
 		 *
 		 * @param string[] $ids Shipping method ids, e.g. `[ 'carrier_pickup', 'carrier_pickup_express' ]`.
 		 *
@@ -1262,6 +1296,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return array<string, mixed>
 		 */
 		public function inject( array $checkout_fields, string $section = 'order' ): array {
+			$this->reconcile_pickup_declarations();
+
 			$country = $this->current_country();
 
 			foreach ( $this->effective_fields() as $id => $field ) {
@@ -1606,8 +1642,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * `false` or a {@see \WP_Error} fails. Every failure adds a WooCommerce error
 		 * notice — which halts checkout — and the method returns `false` overall.
 		 *
-		 * The `required` descriptor is resolved via {@see Checkout_Condition::is_required()}
-		 * which handles both plain booleans and conditional condition-spec arrays (A2 gating).
+		 * The `required` descriptor is first passed through
+		 * {@see Checkout_Config::resolve_required()} — a no-op unless it carries the
+		 * `is_pickup_method` sentinel (issue #709; see
+		 * {@see \Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create()}) — then
+		 * resolved via {@see Checkout_Condition::is_required()} which handles both plain
+		 * booleans and conditional condition-spec arrays (A2 gating).
 		 * Pass `$state` with the runtime context (chosen shipping method, billing country) so
 		 * condition-spec `required` values can be evaluated correctly.
 		 *
@@ -1682,7 +1722,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			foreach ( $this->effective_fields() as $id => $field ) {
 				$value    = $values[ $id ] ?? '';
-				$required = Checkout_Condition::is_required( $field['required'], $state );
+				$required = Checkout_Condition::is_required( Checkout_Config::resolve_required( $field['required'] ), $state );
 
 				if ( $required && null !== $field['takeover_condition'] ) {
 					$owns_field = (bool) ( $field['takeover_condition'] )( [ 'country' => (string) ( $state['country'] ?? '' ) ] );
@@ -1712,10 +1752,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			// Independent pickup backstop: runs after the per-field loop regardless of spec.
-			if ( [] !== $this->requires_pickup_methods ) {
+			// `null` (never called set_requires_pickup_methods()) derives the list from
+			// Checkout_Config::pickup_method_ids() instead of leaving the backstop off
+			// (issue #709) — resolved HERE, lazily, every validate() call, never cached at
+			// construction time.
+			$requires_pickup_methods = $this->requires_pickup_methods ?? Checkout_Config::pickup_method_ids();
+
+			if ( [] !== $requires_pickup_methods ) {
 				$chosen = (string) ( $state['chosen_shipping_method'] ?? '' );
 
-				if ( self::chosen_method_matches( $chosen, $this->requires_pickup_methods ) ) {
+				if ( self::chosen_method_matches( $chosen, $requires_pickup_methods ) ) {
 					foreach ( $this->pickup_slot_fields() as $pickup_field ) {
 						$pickup_value = $values[ $pickup_field['id'] ] ?? '';
 
@@ -1827,6 +1873,102 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 					}
 				)
 			);
+		}
+
+		/**
+		 * Reconciles the two pickup-declaration mechanisms this class alone can see —
+		 * {@see Presets\Pickup_Field}'s per-field condition-spec and
+		 * {@see self::$requires_pickup_methods}'s backstop list — against the framework's
+		 * single source of truth, {@see Checkout_Config::pickup_method_ids()} (issue #709).
+		 * Fires `_doing_it_wrong()` on any mismatch; silent when every mechanism agrees.
+		 *
+		 * WHAT THIS CANNOT CATCH: since #709 both mechanisms above DEFAULT to the derived
+		 * truth (a plugin that never supplies an explicit list cannot diverge from it by
+		 * construction), so a mismatch here only ever means a plugin supplied an EXPLICIT
+		 * list that disagrees. The fourth mechanism,
+		 * {@see \Woodev\Framework\Shipping\Pickup\Selection_Scope::type_for_method()}, is
+		 * plugin-owned and cannot be derived at all — it is reconciled separately, in
+		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler}, against the same truth,
+		 * for the one method id a request can actually observe (the currently chosen one).
+		 *
+		 * AN EXPLICIT `set_requires_pickup_methods( [] )` IS NOT A DIVERGENCE. The backstop
+		 * is an optional redundant safety net ({@see self::set_requires_pickup_methods()}'s
+		 * own docblock: "when set..."); a plugin that explicitly turns it off has made a
+		 * deliberate choice, not forgotten to keep a list in sync, so an empty explicit list
+		 * is exempt from this comparison regardless of what the truth says.
+		 *
+		 * Gated on `WP_DEBUG` and on running at most ONCE PER REQUEST — never on a normal
+		 * production checkout, and never spamming the log once per `inject()` call (this
+		 * runs on every `woocommerce_checkout_fields` pass, including AJAX totals
+		 * refreshes).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function reconcile_pickup_declarations(): void {
+			if ( self::$pickup_declarations_reconciled || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			self::$pickup_declarations_reconciled = true;
+
+			$truth = Checkout_Config::pickup_method_ids();
+
+			$field_ids = [];
+			foreach ( $this->pickup_slot_fields() as $slot ) {
+				$resolved = Checkout_Config::resolve_required( $slot['required'] ?? false );
+
+				if ( is_array( $resolved ) && 'in' === ( $resolved['operator'] ?? '' ) && is_array( $resolved['value'] ?? null ) ) {
+					foreach ( $resolved['value'] as $id ) {
+						$field_ids[] = (string) $id;
+					}
+				}
+			}
+			$field_ids = array_values( array_unique( $field_ids ) );
+
+			$backstop_ids   = $this->requires_pickup_methods ?? $truth;
+			$backstop_ok    = [] === $backstop_ids || self::ids_match( $truth, $backstop_ids );
+			$field_ids_ok   = self::ids_match( $truth, $field_ids );
+
+			if ( $field_ids_ok && $backstop_ok ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler',
+				sprintf(
+					/* translators: 1: is_pickup_shipping()-derived ids, 2: Pickup_Field ids, 3: set_requires_pickup_methods() ids */
+					'Pickup-method declarations disagree (issue #709). Shipping_Method::is_pickup_shipping() says [%1$s], but the checkout\'s Pickup_Field id list is [%2$s] and set_requires_pickup_methods() is [%3$s]. A method the customer can actually place an order under may end up with a pickup button and no hidden address, or a hidden address and no pickup button.',
+					implode( ', ', $truth ),
+					implode( ', ', $field_ids ),
+					implode( ', ', $backstop_ids )
+				),
+				'2.0.2'
+			);
+		}
+
+		/**
+		 * Whether two method-id lists name the same SET of ids — order- and
+		 * duplicate-insensitive, since none of the three mechanisms
+		 * {@see self::reconcile_pickup_declarations()} compares guarantees either.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $a
+		 * @param string[] $b
+		 *
+		 * @return bool
+		 */
+		private static function ids_match( array $a, array $b ): bool {
+			$normalize = static function ( array $ids ): array {
+				$ids = array_values( array_unique( array_map( 'strval', $ids ) ) );
+				sort( $ids );
+
+				return $ids;
+			};
+
+			return $normalize( $a ) === $normalize( $b );
 		}
 
 		/**

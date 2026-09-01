@@ -374,6 +374,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Selection_Scope $selection_scope;
 
 		/**
+		 * Whether {@see reconcile_pickup_scope()} has already run this request (issue
+		 * #709). Process-static — the gate means "at most once per request", not "at
+		 * most once per Pickup_Handler instance".
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private static bool $pickup_scope_reconciled = false;
+
+		/**
 		 * The owning plugin, or null when the plugin has not wired the Location Provider
 		 * layer (Task 15; issue #159). "No plugin → no location context" — the same
 		 * discipline {@see self::$selection_scope} already applies: the framework never
@@ -2755,6 +2765,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Reconciles `type_for_method()` against
+		 *              {@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids()}
+		 *              (issue #709).
 		 *
 		 * @return array{locality: string, type: string}|null `null` when no scope is
 		 *                                                     wired, or the chosen
@@ -2775,6 +2788,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 
 			$type = $scope->type_for_method( $method );
 
+			self::reconcile_pickup_scope( $method, null !== $type );
+
 			if ( null === $type ) {
 				return null;
 			}
@@ -2783,6 +2798,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'locality' => $scope->current_locality(),
 				'type'     => $type,
 			];
+		}
+
+		/**
+		 * Reconciles {@see Selection_Scope::type_for_method()} — the one pickup
+		 * declaration that cannot be derived from
+		 * {@see \Woodev\Framework\Shipping\Shipping_Method::is_pickup_shipping()} — against
+		 * the framework's single source of truth for the other three (issue #709).
+		 *
+		 * ONE DIRECTION ONLY, DELIBERATELY: fires only when the scope CLAIMS a type for
+		 * this method (`$scope_says_pickup` true) but the truth says the method is not a
+		 * pickup method at all. The other direction — truth says pickup, this scope says
+		 * `null` — is NOT checked, because `WC()->shipping()->get_shipping_methods()` (and
+		 * therefore `pickup_method_ids()`) spans EVERY active plugin's methods, while a
+		 * single `Selection_Scope` instance only ever speaks for its own plugin's methods;
+		 * `null` for a foreign plugin's pickup method is correct, not a divergence. A scope
+		 * claiming involvement with a method the truth disowns has no such excuse — that
+		 * combination is always this scope's own contradiction.
+		 *
+		 * Gated on `WP_DEBUG` and on running at most once per request; skipped for `''`,
+		 * which the {@see Selection_Scope} interface itself defines as "unknown", never a
+		 * real method choice worth reconciling against.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $method_id         Bare shipping-method id (no `:instance_id` suffix).
+		 * @param bool   $scope_says_pickup Whether `type_for_method()` answered non-null.
+		 *
+		 * @return void
+		 */
+		private static function reconcile_pickup_scope( string $method_id, bool $scope_says_pickup ): void {
+			if ( '' === $method_id || self::$pickup_scope_reconciled || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			self::$pickup_scope_reconciled = true;
+
+			if ( ! $scope_says_pickup ) {
+				return;
+			}
+
+			$truth_says_pickup = in_array(
+				$method_id,
+				\Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids(),
+				true
+			);
+
+			if ( $truth_says_pickup ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				'Woodev\\Framework\\Shipping\\Pickup\\Selection_Scope::type_for_method',
+				sprintf(
+					/* translators: %s: shipping method id */
+					'Selection_Scope::type_for_method() names shipping method "%s" as a pickup method (issue #709), but Shipping_Method::is_pickup_shipping() says it is not. A point chosen under this method may be restored for a method that no longer hides its address fields, or never asked for a point at all.',
+					$method_id
+				),
+				'2.0.2'
+			);
 		}
 
 		/**
