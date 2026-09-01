@@ -35,7 +35,12 @@ symbolically — faster and more accurate than a raw file read.
 | Edit a function body | `replace_symbol_body` |
 | Add code around a symbol | `insert_after_symbol` / `insert_before_symbol` |
 
-`Read`/`Edit`/`Write` remain correct for non-source files (markdown, JSON, YAML, `.env`).
+`Read`/`Edit`/`Write` remain correct for non-source files (markdown, JSON, YAML, `.env`) — **and
+for the directories Serena is configured to ignore: `tests/**`, `docs/**`, `.github/**`, `.ai/**`,
+`.serena/**`, `.claude/**`** (`.serena/project.yml` → `ignored_paths`). A symbolic call there fails
+with `… while the path is ignored`, so the built-in tools are the ONLY tool and using them is not a
+rule violation. **Say this in any brief that touches test files** — omitting it sends the worker
+looking for a Serena route that does not exist (s105, again in s112).
 
 Dashboard: <http://localhost:24282/dashboard> · Docs: <https://oraios.github.io/serena/> ·
 Known traps: gotchas `serena-replace-content-eol-flip`, `serena-index-vs-git-worktree`.

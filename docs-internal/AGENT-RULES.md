@@ -56,6 +56,17 @@ Before writing any new code block:
 
 Exception: `Read`, `Glob`, `Grep` built-in tools are fine for markdown, JSON, YAML, and non-PHP files.
 
+**And for whole directories Serena is configured to ignore.** `.serena/project.yml` sets
+`ignored_paths` to **`tests/**`, `docs/**`, `.github/**`, `.ai/**`, `.serena/**`, `.claude/**`**.
+A symbolic operation against any of them fails flatly with `… while the path is ignored` — so
+there `Read`/`Edit`/`Write` are not a fallback, they are **the only tool, and using them is not a
+rule violation**. Every brief that touches test files must say so; one that repeats the bare
+"never `Read` a `.php` file" line is asking for the impossible and costs the worker a detour.
+Recorded in s105, and it cost a worker time again in s112 because this rule text still omitted it —
+which is why the exception now lives here rather than only in the gotcha. Detail, including how to
+tell this apart from a genuine Serena outage: gotcha
+`serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there`.
+
 **Enforcement (operator decision, s60 / 2026-08-09):** this rule is mandatory, not best-effort —
 measured effect is fewer mistakes and fewer tokens. Three hard requirements:
 
