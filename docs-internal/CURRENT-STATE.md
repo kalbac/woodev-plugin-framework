@@ -295,12 +295,12 @@ only consumer; they get rewritten once everything is ready.
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ⚠ **The rig is NOT in its standard state right now (01.09.2026):** the operator switched
-  `woodev_location_active_provider` to **`dadata`** for #652 scenario 2, which clamped
-  `field_mode_region` to `ajax-select2` (DaData structurally cannot offer `related-list`). Popular
-  settlements now hold 5 seeded `dadata` rows alongside the 6 `test-cdek` ones. **Restore to the
-  table below before any pickup/location work** — and re-pick a settlement, because a stored
-  customer location survives a provider switch.
+- ✅ **Rig restored to standard 01.09.2026 (s111)**: `field_mode_region` back to `related-list`,
+  default locality back to `test-cdek:44`, and user 1's stored `woodev_customer_location` DELETED
+  so the default applies (a stored location outranks it). Verified: both columns read «Москва» and
+  the modal lists points. ⚠ **All 13 fixture pickup points are in MOSCOW** (`fixture-points.php`,
+  bbox-filtered) — under any other default locality the modal honestly says «no pickup points» and
+  pickup is untestable. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
 
   **STANDARD values, read off the container (s100), never off a doc** — the s93 handoff had two of
   them wrong and a correctly-absent row was read as a regression:
