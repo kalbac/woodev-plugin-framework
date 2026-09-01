@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 259 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 260 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -341,6 +341,7 @@
 - [tooling/parallel-agents] **Edits landing in the wrong checkout, twice over: a worker's Serena `activate_project` aimed at the repo root, and the COORDINATOR's Bash cwd drifting into a worktree — relative-path edits then die with it.** → [serena-activate-path-must-be-the-worker-s-worktree](gotchas/serena-activate-path-must-be-the-worker-s-worktree.md) (s83, extended s108)
 - [tooling/parallel-agents] **Two agents editing one file is the ORCHESTRATOR's bug — one `git checkout` erased another agent's finished, uncommitted work.** → [two-agents-one-file-is-the-orchestrator-s-bug](gotchas/two-agents-one-file-is-the-orchestrator-s-bug.md) (s82)
 - [tooling/parallel-agents] **A green suite in a worktree is not the same suite — five contract tests SKIP there because `plugins-reference/` is gitignored. Compare the skip count, not the assertion count.** → [a-worktree-silently-skips-five-contract-tests](gotchas/a-worktree-silently-skips-five-contract-tests.md) (s84)
+- [tooling/parallel-agents] **`orca worktree rm` refuses on the CRLF-only files every fresh worktree is BORN with, and `git checkout --` cannot clean them — prove `diff --ignore-cr-at-eol` is empty, then `--force`.** → [orca-worktree-rm-refuses-on-the-crlf-files-the-worktree-was-born-with](gotchas/orca-worktree-rm-refuses-on-the-crlf-files-the-worktree-was-born-with.md) (s111)
 - [tooling/references] **`plugins-reference/` bundles framework 1.3.3/1.4.0, so it cannot contain ANY v2 symbol — a zero hit count there never measures how many consumers a v2 API has.** → [plugins-reference-predates-every-v2-api](gotchas/plugins-reference-predates-every-v2-api.md) (s111)
 - [tooling/parallel-agents] **Generated bundles must be built in the PRIMARY CHECKOUT — webpack resolves the shared `node_modules` symlink out of the worktree, so its build can never match CI.** → [local-npm-run-build-is-not-assets-parity-evidence](gotchas/local-npm-run-build-is-not-assets-parity-evidence.md) (s84)
 - [tooling/parallel-agents] **Every fresh worktree starts dirty with seven CRLF-only files — a worker running `git add -A` commits 483 lines of line-ending churn.** → [an-orca-worktree-starts-dirty-with-crlf-churn](gotchas/an-orca-worktree-starts-dirty-with-crlf-churn.md) (s84)

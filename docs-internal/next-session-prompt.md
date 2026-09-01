@@ -150,7 +150,7 @@
 |---|---|
 | Дерево | **`main`**, чисто · Открытые PR — **нет** · Ворктри — **нет** |
 | Доска | `В работе` — пусто; **74** открытых; на доске 338 элементов |
-| Готчи | **259** · ADR — **11** |
+| Готчи | **260** · ADR — **11** |
 | Гейты | unit **3393**/8355/**1**; jest **1603**/24; phpcs и phpstan чисто; интеграция **129**/506; e2e **7/7** |
 | Риг | ✅ **ШТАТНОЕ состояние**, восстановлен 02.09.2026 — значения в `CURRENT-STATE.md` |
 
@@ -161,4 +161,4 @@
 - [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md) — риговый проход и что автоматизировано
 - [gotchas/the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other.md](gotchas/the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other.md) — главный урок s111
 - [DOCS-SCHEMA.md](DOCS-SCHEMA.md) — формат этого файла и гейт к нему
-- [GOTCHAS.md](GOTCHAS.md) — 259 готчей
+- [GOTCHAS.md](GOTCHAS.md) — 260 готчей
