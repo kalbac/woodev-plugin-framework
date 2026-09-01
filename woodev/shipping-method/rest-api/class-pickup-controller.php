@@ -483,7 +483,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @return true|\WP_Error
 		 */
-		public function check_select_permission( $request ) {
+		public function check_select_permission( \WP_REST_Request $request ) {
 
 			$nonce = $request->get_header( 'X-WP-Nonce' );
 
@@ -528,7 +528,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @return \WP_REST_Response|\WP_Error
 		 */
-		public function handle_select_request( $request ) {
+		public function handle_select_request( \WP_REST_Request $request ) {
 
 			// FIRST, before the point lookup: a throttled request must not reach
 			// Point_Source::fetch_details() — nor the domain seam behind it, which is the one
@@ -754,14 +754,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * through {@see self::get_points_data()}, and turns a carrier
 		 * `\Woodev_API_Exception` into a `502 WP_Error` (see the class docblock).
 		 *
-		 * `$request` is deliberately left without a native `\WP_REST_Request` type-hint
-		 * (docblock-only, matching every REST callback in this codebase): a hand-written
-		 * WC-free unit test needs a lightweight `get_param()` double, and the GLOBAL
-		 * `\WP_REST_Request` symbol may already have been declared, more narrowly, by a
-		 * different test file's own stub loaded earlier in the same PHPUnit process — a
-		 * native type-hint against that symbol would then reject a perfectly good
-		 * namespace-scoped test double, or crash outright against an incompatible one.
-		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -770,7 +762,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @return \WP_REST_Response|\WP_Error
 		 */
-		public function handle_points_request( $request ) {
+		public function handle_points_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_pickup_pts_rl_', self::POINTS_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -802,8 +794,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * {@see self::handle_points_request()} (its own, separate rate-limit budget — see
 		 * {@see DETAILS_RATE_LIMIT_MAX}). An unknown point (the source legitimately has
 		 * nothing for that id) is a `404`, distinct from the `502` a carrier outage
-		 * produces. `$request` is left untyped for the same reason as
-		 * {@see self::handle_points_request()} — see its docblock.
+		 * produces.
 		 *
 		 * @internal
 		 *
@@ -813,7 +804,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *
 		 * @return \WP_REST_Response|\WP_Error
 		 */
-		public function handle_point_request( $request ) {
+		public function handle_point_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_pickup_dtl_rl_', self::DETAILS_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();

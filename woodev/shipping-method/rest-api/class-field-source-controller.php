@@ -170,7 +170,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Field_Source_Cont
 		 *
 		 * @return \WP_REST_Response|\WP_Error
 		 */
-		public function handle_request( $request ) {
+		public function handle_request( \WP_REST_Request $request ) {
 
 			// No plugin_id guard needed: the route path embeds this controller's plugin id
 			// as a literal segment (see register_routes()), so only this plugin's requests

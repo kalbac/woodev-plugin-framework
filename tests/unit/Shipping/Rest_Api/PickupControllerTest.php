@@ -15,6 +15,7 @@
 
 namespace Woodev\Tests\Unit\Shipping\Rest_Api;
 
+use WP_REST_Request;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
@@ -37,62 +38,6 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-selec
 
 if ( ! class_exists( '\\WP_REST_Controller' ) ) {
 	require_once __DIR__ . '/wp-rest-controller-stub.php';
-}
-
-/**
- * Minimal \WP_REST_Request stand-in: an array-accessible parameter bag.
- *
- * Declared namespace-scoped (Woodev\Tests\Unit\Shipping\Rest_Api\WP_REST_Request), so it
- * never collides with another suite's GLOBAL-namespace \WP_REST_Request stub sharing the
- * same process — guarding against `class_exists( 'WP_REST_Request', false )` (a global
- * lookup) would wrongly skip this declaration whenever another suite's global stub loaded
- * first, leaving THIS namespace without the class its own tests reference unqualified.
- * Pickup_Controller's callbacks leave `$request` untyped for exactly this reason (see
- * Pickup_Controller::handle_points_request()'s docblock), so this namespace-scoped
- * double — not the real global \WP_REST_Request — is what those tests pass in.
- */
-if ( ! class_exists( __NAMESPACE__ . '\\WP_REST_Request', false ) ) {
-	class WP_REST_Request {
-
-		/** @var array<string, mixed> */
-		private array $params;
-
-		/** @var array<string, string> */
-		private array $headers;
-
-		/**
-		 * @param array<string, mixed>  $params  request params.
-		 * @param array<string, string> $headers request headers, keyed exactly as
-		 *                                       {@see self::get_header()} is asked for them —
-		 *                                       the real \WP_REST_Request normalises the key,
-		 *                                       this double deliberately does not, so a
-		 *                                       production caller asking for a differently-cased
-		 *                                       header than the browser sends is a MISS here and
-		 *                                       the test fails rather than passing by luck.
-		 */
-		public function __construct( array $params = [], array $headers = [] ) {
-			$this->params  = $params;
-			$this->headers = $headers;
-		}
-
-		/**
-		 * @param string $key param name.
-		 *
-		 * @return mixed|null
-		 */
-		public function get_param( $key ) {
-			return $this->params[ $key ] ?? null;
-		}
-
-		/**
-		 * @param string $key header name.
-		 *
-		 * @return string|null
-		 */
-		public function get_header( $key ) {
-			return $this->headers[ $key ] ?? null;
-		}
-	}
 }
 
 require_once dirname( __DIR__, 4 ) . '/woodev/http/trait-rest-rate-limit.php';

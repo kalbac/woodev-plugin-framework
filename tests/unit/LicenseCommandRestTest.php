@@ -83,27 +83,6 @@ namespace {
 	}
 
 	/**
-	 * Minimal WP_REST_Request stand-in for unit context.
-	 *
-	 * The controller's handle_command() types its parameter as WP_REST_Request
-	 * (project convention, critic finding 4); the unit tests build a Mockery mock
-	 * OF THIS CLASS so the type declaration is satisfied without loading WP.
-	 * Guarded so a real class (or a sibling test's stub) wins.
-	 */
-	if ( ! class_exists( 'WP_REST_Request', false ) ) {
-		class WP_REST_Request {
-
-			/** @var string */
-			public $body = '';
-
-			/** @return string */
-			public function get_body() {
-				return $this->body;
-			}
-		}
-	}
-
-	/**
 	 * Controller probe: overrides the dispatch() seam to return a fixed result.
 	 *
 	 * Same subclass-for-seam pattern as Probe_Command_Dispatcher. The production
