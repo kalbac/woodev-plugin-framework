@@ -190,11 +190,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/providers/class-dadata-api-client.php';
 			require_once $path . '/location/providers/class-dadata-provider.php';
 
-			// pickup models and warehouse persistence
+			// pickup models
 			require_once $path . '/pickup/class-pickup-point.php';
-			require_once $path . '/pickup/class-warehouse.php';
-			require_once $path . '/pickup/interface-warehouse-store.php';
-			require_once $path . '/pickup/class-abstract-warehouse-store.php';
 
 			// checkout fields + handler backbone
 			require_once $path . '/checkout/class-checkout-fields.php';
@@ -206,13 +203,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/order/abstract-tracking-handler.php';
 			require_once $path . '/order/abstract-webhook-handler.php';
 
-			// admin bootstrap + order/warehouse admin handlers
+			// admin bootstrap + order admin handler
 			require_once $path . '/admin/class-shipping-admin.php';
 			require_once $path . '/admin/class-shipping-admin-order.php';
-			require_once $path . '/admin/class-warehouse-admin.php';
-
-			// warehouses REST controller base
-			require_once $path . '/rest-api/abstract-warehouses-controller.php';
 		}
 
 		/**

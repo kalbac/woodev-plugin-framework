@@ -123,6 +123,11 @@ now returns warehouses; may even be removed from Yandex). Origin (sender point) 
 fields** (city/address/contacts in the Auth/Sender section), not a subsystem. If "enter sender once for all
 carriers" is ever wanted → add it as a new service to the §9 registry then, no rewrite.
 
+**Update 02.09.2026 (#141):** a generic warehouse scaffold (`Warehouse`, `Warehouse_Store`,
+`Abstract_Warehouse_Store`, `Warehouse_Admin`, `Abstract_Warehouses_Controller`) had been built before
+this decision landed and survived undeleted for a year. It has now been removed from the framework — this
+decision is true of the actual code for the first time.
+
 ### §7 — Pickup points + map ✅
 
 - Frame confirmed: button → Backbone modal → select → AJAX → session → order meta; universal map, plugin
