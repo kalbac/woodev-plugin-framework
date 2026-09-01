@@ -4,8 +4,8 @@
  *
  * REST bootstrap for a shipping plugin (spec §4.4) — the shipping counterpart of
  * {@see \Woodev_Payment_Gateway_REST_API}. It extends the framework's base REST
- * handler ({@see \Woodev_REST_API}) and wires the shipping module's warehouses +
- * pickup-points controllers in addition to the inherited settings controller.
+ * handler ({@see \Woodev_REST_API}) and wires the shipping module's plugin-supplied
+ * REST controllers (e.g. pickup-points) in addition to the inherited settings controller.
  *
  * The REST namespace is the plugin's id-dasherized slug
  * ({@see Shipping_REST_API::get_namespace()}, e.g. yandex `yandex_delivery` →
@@ -40,7 +40,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API
 		 * Registers the shipping REST API routes.
 		 *
 		 * Runs the inherited registration (the plugin settings controller) and then
-		 * registers each plugin-supplied controller (warehouses + pickup-points). Each
+		 * registers each plugin-supplied controller (e.g. pickup-points). Each
 		 * controller owns its `rest_base` and registers under the plugin's REST namespace
 		 * ({@see Shipping_REST_API::get_namespace()}).
 		 *
@@ -65,8 +65,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Shipping_REST_API
 		/**
 		 * Gets the REST controllers to register.
 		 *
-		 * The framework ships only the abstract warehouses + pickup-points controller
-		 * bases; a concrete plugin overrides this to return its instantiated controllers.
+		 * The framework ships no default REST controllers of its own here; a concrete
+		 * plugin overrides this to return its instantiated controllers (e.g. the
+		 * framework's ready-made {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}).
 		 * The default returns none, so the bootstrap never instantiates a controller that
 		 * has not shipped.
 		 *

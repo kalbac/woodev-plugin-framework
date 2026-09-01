@@ -6,7 +6,7 @@
  * counterpart of the payment-gateway admin wiring done inside
  * {@see \Woodev_Payment_Gateway_Plugin::init_admin()}. It instantiates nothing the
  * framework cannot know: a carrier constructs it with its own admin handler objects
- * (order, warehouse) and its own admin page definitions, then this class owns the WP
+ * (e.g. order) and its own admin page definitions, then this class owns the WP
  * plumbing — it registers the handlers on `admin_init` and the menu pages on
  * `admin_menu`.
  *
@@ -50,7 +50,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin' ) ) 
 		/** @var Shipping_Plugin the plugin instance this admin suite belongs to */
 		private Shipping_Plugin $plugin;
 
-		/** @var object[] plugin-supplied admin handler objects (order, warehouse, …) registered on admin_init */
+		/** @var object[] plugin-supplied admin handler objects (order, …) registered on admin_init */
 		private array $handlers;
 
 		/** @var array<string, array<string, mixed>> plugin-supplied admin page definitions: logical name => { slug (installed-site contract), parent, page_title, menu_title, capability, callback } */
@@ -62,7 +62,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin' ) ) 
 		 * @since 1.5.0
 		 *
 		 * @param Shipping_Plugin                     $plugin   the plugin instance
-		 * @param object[]                            $handlers admin handler objects to register on admin_init; each one exposing a `register()` method (e.g. the order and warehouse admin handlers)
+		 * @param object[]                            $handlers admin handler objects to register on admin_init; each one exposing a `register()` method (e.g. the order admin handler)
 		 * @param array<string, array<string, mixed>> $pages    admin page definitions keyed by a logical name; each carries the plugin-supplied `slug` (the installed-site contract the framework never derives) plus optional `parent`, `page_title`, `menu_title`, `capability` and `callback`
 		 */
 		public function __construct( Shipping_Plugin $plugin, array $handlers = [], array $pages = [] ) {

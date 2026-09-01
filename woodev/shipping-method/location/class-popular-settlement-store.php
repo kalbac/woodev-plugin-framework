@@ -8,11 +8,11 @@
  * on the site — `provider_id` is part of every row (spec D3) so switching the active
  * provider never surfaces another provider's entries.
  *
- * A NEW framework mechanism, not an existing data contract — see
- * {@see \Woodev\Framework\Shipping\Pickup\Abstract_Warehouse_Store}, the precedent
- * this mirrors (dbDelta-backed table, own install path). Unlike that class this one
+ * A NEW framework mechanism, not an existing data contract — mirrors the same
+ * dbDelta-backed table, own-install-path precedent the framework previously used for
+ * its warehouse store scaffold (removed by #141). Unlike that precedent this one
  * is concrete, not abstract: the schema is fixed by spec D3, not plugin-owned. Unlike
- * that class, this one also does NOT bind `$wpdb` eagerly in its constructor (round 2
+ * that precedent, this one also does NOT bind `$wpdb` eagerly in its constructor (round 2
  * critic finding, HIGH 1) — `new self()` is always cheap/safe (e.g. to register a
  * lazy accessor on {@see Location_Provider_Registry} at hook-registration time); the
  * global is only ever touched by {@see self::wpdb()}, lazily, on first real DB access.
@@ -280,9 +280,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Popular_Settlemen
 		/**
 		 * Creates or migrates the backing table from {@see self::get_schema()}.
 		 *
-		 * A new framework mechanism, not an existing contract — see
-		 * {@see \Woodev\Framework\Shipping\Pickup\Abstract_Warehouse_Store::install()},
-		 * the precedent this mirrors. Idempotent (`dbDelta()`); callers are expected
+		 * A new framework mechanism, not an existing contract — mirrors the same
+		 * dbDelta-backed install-path precedent the framework previously used for its
+		 * warehouse store scaffold (removed by #141). Idempotent (`dbDelta()`); callers are expected
 		 * to gate how often this actually runs (see
 		 * {@see Location_Provider_Registry::maybe_install_popular_settlements_table()}),
 		 * not to call it on every request.

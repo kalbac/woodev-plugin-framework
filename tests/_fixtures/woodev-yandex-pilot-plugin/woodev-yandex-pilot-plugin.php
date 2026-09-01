@@ -52,9 +52,11 @@ function woodev_yandex_pilot_plugin_loader_definition(): array {
  * Loads the yandex-shaped pilot fixture classes through an include-based callback.
  *
  * Constructs the plugin first (which loads the framework shipping bases), then pulls
- * in the framework PVZ collaborators the fixture extends — these live under
- * `pickup/` and are NOT auto-included by {@see Shipping_Plugin::includes()} — before
- * declaring the fixture's pickup method, warehouse store, map provider and source.
+ * in the framework PVZ collaborator the fixture extends — {@see Pickup_Point} lives
+ * under `pickup/` and is NOT auto-included by {@see Shipping_Plugin::includes()} —
+ * before declaring the fixture's pickup method, warehouse store, map provider and
+ * source. The warehouse store is now self-contained (#141) and needs no framework
+ * require.
  *
  * @return void
  */
@@ -68,9 +70,6 @@ function woodev_yandex_pilot_plugin_init(): void {
 	$framework = $plugin->get_shipping_framework_path();
 
 	require_once $framework . '/pickup/class-pickup-point.php';
-	require_once $framework . '/pickup/class-warehouse.php';
-	require_once $framework . '/pickup/interface-warehouse-store.php';
-	require_once $framework . '/pickup/class-abstract-warehouse-store.php';
 
 	require_once $plugin_path . '/class-yandex-pilot-map-provider.php';
 	require_once $plugin_path . '/class-yandex-pilot-warehouse-store.php';

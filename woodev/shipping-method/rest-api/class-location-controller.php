@@ -20,8 +20,8 @@
  * bootstrap keyed to one plugin's own REST namespace. (Contradicts the plan's
  * file list, which named `class-shipping-rest-api.php` as the registration
  * site — see that file's own docblock: "concrete controllers are wired through
- * `get_rest_controllers()`" is only ever true for the warehouses controller in
- * this codebase; `Field_Source_Controller` and `Pickup_Controller` both
+ * `get_rest_controllers()`" was only ever true for the warehouses controller that
+ * used to exist in this codebase (removed by #141); `Field_Source_Controller` and `Pickup_Controller` both
  * self-register via their OWNING HANDLER's own `add_action( 'rest_api_init', … )`
  * instead, and Location has no per-plugin handler to be that owner, so the
  * registry itself — already the fleet-wide hook owner — is the correct home.)
@@ -639,10 +639,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 
 		/**
 		 * Guards the two admin-only `/default-locality/*` routes (Task 14) with
-		 * the WooCommerce shop-manager capability — mirrors
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Abstract_Warehouses_Controller::check_permissions()}'s
-		 * own `wc_rest_check_manager_permissions()`-first, `manage_woocommerce`
-		 * fallback precedent exactly. UNLIKE `/suggest`/`/select`/`/list` above —
+		 * the WooCommerce shop-manager capability — the same `wc_rest_check_manager_permissions()`-
+		 * first, `manage_woocommerce` fallback pattern used for admin-only REST guards
+		 * elsewhere in this codebase. UNLIKE `/suggest`/`/select`/`/list` above —
 		 * a capability check is the right tool here specifically because these
 		 * two routes have no legitimate guest caller at all (only the settings
 		 * page's own admin picker reaches them), whereas `/select`'s nonce-only
