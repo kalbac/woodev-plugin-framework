@@ -52,3 +52,6 @@ Thumbs.db
 
 # Visual brainstorming companion (local only)
 .superpowers/
+
+# Playwright e2e artifacts (traces, screenshots) — issue #723
+artifacts/

@@ -16,6 +16,8 @@
     "start:settings": "wp-scripts start ./src/settings-page/index.js --output-path=woodev/assets/build/settings-page",
     "start:gallery": "wp-scripts start ./src/ui-kit-gallery/index.js --output-path=woodev/assets/build/ui-kit-gallery",
     "test:js": "wp-scripts test-unit-js",
+    "test:e2e": "playwright test --config=playwright.config.js",
+    "test:e2e:headed": "playwright test --config=playwright.config.js --headed",
     "lint:docs": "node scripts/lint-docs.mjs",
     "lint:ts-baseline": "node scripts/lint-ts-baseline.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
