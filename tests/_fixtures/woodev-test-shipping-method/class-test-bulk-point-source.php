@@ -42,24 +42,30 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		public const WEIGHT_LIMITED_POINT_ID = 'FIX-BULK-4';
 
 		/**
-		 * The fixture's one static "city" — every fixture point's own `locality` field
-		 * (see fixture-points.php) is this exact string.
-		 */
-		private const FIXTURE_LOCALITY = 'Москва';
-
-		/**
-		 * Accepted rig aliases for {@see self::FIXTURE_LOCALITY} (Task 15; issue #159 rig
+		 * The fixture's localities (issue #270) — every fixture point's own `locality`
+		 * field (see fixture-points.php) is one of these exact canonical (Cyrillic) keys.
+		 * Each canonical name maps to its accepted rig aliases (Task 15; issue #159 rig
 		 * verification, s71) — the DaData ACCOUNT configured for this rig's
 		 * `WOODEV_TEST_DADATA_TOKEN` answers RU settlement suggestions with English display
 		 * names ("Moscow", not "Москва" — a DaData account-level response-language setting,
 		 * unrelated to this framework's own request shape, which sends no `language`
-		 * parameter at all). Matching ONLY the Cyrillic constant would make the record-based
-		 * addressing path this task adds unreachable on the actual rig, even though the
-		 * mechanism itself (locality KEY out, record + resolved identity back in) is
-		 * correct — this alias list is what makes the demo visible without weakening the
-		 * unit-tested Cyrillic path, which stays exact.
+		 * parameter at all). Matching ONLY the Cyrillic key would make the record-based
+		 * addressing path unreachable on the actual rig, even though the mechanism itself
+		 * (locality KEY out, record + resolved identity back in) is correct — the alias
+		 * lists are what make the demo visible without weakening the unit-tested Cyrillic
+		 * path, which stays exact.
+		 *
+		 * The "Москва" => [ 'Москва', 'Moscow' ] pair is the only one actually confirmed
+		 * against a live DaData response (s71). The "Санкт-Петербург" and "Краснодар"
+		 * English aliases below are PLAUSIBLE, UNVERIFIED spellings — nobody has checked
+		 * what this rig's DaData account actually returns for those two settlements; see
+		 * task #270's report for the caveat.
 		 */
-		private const FIXTURE_LOCALITY_ALIASES = [ 'Москва', 'Moscow' ];
+		private const LOCALITY_ALIASES = [
+			'Москва'          => [ 'Москва', 'Moscow' ],
+			'Санкт-Петербург' => [ 'Санкт-Петербург', 'Saint Petersburg', 'St. Petersburg', 'St Petersburg' ],
+			'Краснодар'       => [ 'Краснодар', 'Krasnodar' ],
+		];
 
 		/**
 		 * @inheritDoc
@@ -69,8 +75,10 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		}
 
 		/**
-		 * Returns every fixture point when the requested locality is this fixture's own
-		 * city, or an empty list otherwise (issue #162; Task 15/#159).
+		 * Returns the fixture points BELONGING TO the requested locality (matched via
+		 * {@see self::resolve_locality()} and then filtered against each point's own
+		 * `locality` field — issue #270), or an empty list when the requested locality
+		 * resolves to none of {@see self::LOCALITY_ALIASES} (issue #162; Task 15/#159).
 		 *
 		 * ADDRESSING SOURCE (Task 15; issue #159): when the Location Provider layer
 		 * attached a record ({@see \Woodev\Framework\Shipping\Pickup\Point_Query::get_record()}),
@@ -95,13 +103,20 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		 * @inheritDoc
 		 */
 		public function fetch_points( \Woodev\Framework\Shipping\Pickup\Point_Query $query ): array {
-			if ( ! $this->locality_matches( $this->requested_locality_name( $query ) ) ) {
+			$locality = $this->resolve_locality( $this->requested_locality_name( $query ) );
+
+			if ( null === $locality ) {
 				return [];
 			}
 
+			$points_for_locality = array_filter(
+				$this->all_points(),
+				static fn( array $payload ): bool => $locality === ( $payload['locality'] ?? null )
+			);
+
 			return array_values( array_filter( array_map(
 				[ \Woodev\Framework\Shipping\Pickup\Pickup_Point::class, 'from_array' ],
-				$this->all_points()
+				$points_for_locality
 			) ) );
 		}
 
@@ -133,26 +148,33 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		}
 
 		/**
-		 * Whether the requested locality names this fixture's own city, ignoring case
-		 * and surrounding whitespace.
+		 * Resolves the requested locality name to one of this fixture's canonical
+		 * (Cyrillic) locality keys via {@see self::LOCALITY_ALIASES}, ignoring case and
+		 * surrounding whitespace, or `null` when it names none of them.
+		 *
+		 * Matching is case-/whitespace-insensitive but otherwise exact: no
+		 * transliteration, no fuzzy/partial matching (issue #162's explicit decision,
+		 * unchanged by #270's move to per-locality filtering).
 		 *
 		 * @param string|null $locality Requested locality name — see
 		 *                               {@see self::requested_locality_name()}; the
 		 *                               null-coalesce below covers a query naming neither
 		 *                               a record nor a legacy `locality` string.
 		 *
-		 * @return bool
+		 * @return string|null The canonical locality key, or null if unmatched.
 		 */
-		private function locality_matches( ?string $locality ): bool {
+		private function resolve_locality( ?string $locality ): ?string {
 			$normalized = mb_strtolower( trim( $locality ?? '' ) );
 
-			foreach ( self::FIXTURE_LOCALITY_ALIASES as $alias ) {
-				if ( $normalized === mb_strtolower( $alias ) ) {
-					return true;
+			foreach ( self::LOCALITY_ALIASES as $canonical => $aliases ) {
+				foreach ( $aliases as $alias ) {
+					if ( $normalized === mb_strtolower( $alias ) ) {
+						return $canonical;
+					}
 				}
 			}
 
-			return false;
+			return null;
 		}
 
 		/**
@@ -169,14 +191,18 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		}
 
 		/**
-		 * The fixture's Moscow points — every field populated.
+		 * Every fixture point across every locality this fixture serves — every field
+		 * populated. {@see self::fetch_points()} is what filters this down to the
+		 * requested locality; this method itself does not filter.
 		 *
-		 * SP-map Task 1: the fixture was grown from the original 5 static points
-		 * (still present, ids included, as the first 5 entries) to ~49 points
-		 * across 2 types, including a co-located pair on identical coordinates —
-		 * see the docblock in fixture-points.php for why. Delegated to a standalone
-		 * data file so the unit suite can assert on its shape without loading the
-		 * whole plugin.
+		 * SP-map Task 1: the fixture was grown from the original 5 static Moscow points
+		 * (still present, ids included, as the first 5 entries) to ~49 Moscow points
+		 * across 2 types, including a co-located pair on identical coordinates — see the
+		 * docblock in fixture-points.php for why. Issue #270 added a second and third
+		 * locality (Санкт-Петербург, Краснодар) on top, each with its own real
+		 * coordinates and ids — see that file's own docblock. Delegated to a standalone
+		 * data file so the unit suite can assert on its shape without loading the whole
+		 * plugin.
 		 *
 		 * @return array<int, array<string, mixed>>
 		 */

@@ -25,6 +25,19 @@
  * points, ids included (`FIX-BULK-1`..`FIX-BULK-5`) — rig state and older session
  * notes reference these ids by name, so they must not move or change shape.
  *
+ * MULTI-LOCALITY (issue #270): every point below this file's Moscow section (all of
+ * which carry `locality => 'Москва'`) belongs to a SECOND or THIRD locality —
+ * `Санкт-Петербург` (own ids, own real St Petersburg coordinates, never a relabelled
+ * Moscow point — `Woodev_Test_Bulk_Point_Source` filters by locality and the map
+ * filters by bounding box, so a point carrying Moscow coordinates under an SPb
+ * locality would silently vanish from the SPb map) and `Краснодар` (deliberately
+ * EXACTLY ONE point — card #150, "single point in a city breaks map tile zoom",
+ * had no fixture scenario to reproduce it against before this). Before #270 this
+ * fixture — and `Woodev_Test_Bulk_Point_Source::fetch_points()` — served Moscow
+ * only; any locality other than Moscow came back empty, which read as "no pickup
+ * points" and cost real debugging time (02.09.2026) before it was recognised as the
+ * fixture's own limit, not a defect.
+ *
  * @package Woodev_Test_Shipping_Method
  */
 
@@ -442,11 +455,128 @@ $domain_seam_points = [
 	],
 ];
 
+// -----------------------------------------------------------------------------
+// Issue #270: a second locality — Санкт-Петербург (region 78) — with its own ids
+// and real St Petersburg coordinates (never Moscow points relabelled). Small on
+// purpose: this fixture's job is to prove two localities coexist without
+// overwriting each other, not to duplicate Moscow's map-presentation scale.
+// -----------------------------------------------------------------------------
+
+$spb_points = [
+	[
+		'id'              => 'FIX-SPB-1',
+		'name'            => 'ПВЗ «Невский проспект»',
+		'lat'             => 59.9343,
+		'lng'             => 30.3351,
+		'address'         => 'Санкт-Петербург, Невский проспект, д. 28',
+		'short_address'   => 'Невский пр-т, 28',
+		'locality'        => 'Санкт-Петербург',
+		'postal_code'     => '191186',
+		'phone'           => '+7 812 200-00-01',
+		'instruction'     => 'Вход со стороны Думской улицы.',
+		'work_time'       => 'Пн-Вс 10:00-21:00',
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [ 'Примерка' ],
+	],
+	[
+		'id'              => 'FIX-SPB-2',
+		'name'            => 'ПВЗ «Московский проспект»',
+		'lat'             => 59.8944,
+		'lng'             => 30.3193,
+		'address'         => 'Санкт-Петербург, Московский проспект, д. 108',
+		'short_address'   => 'Московский пр-т, 108',
+		'locality'        => 'Санкт-Петербург',
+		'postal_code'     => '196084',
+		'phone'           => '+7 812 200-00-02',
+		'instruction'     => '',
+		'work_time'       => 'Пн-Сб 09:00-20:00',
+		'payment_methods' => [ 'Картой при получении' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [],
+	],
+	[
+		'id'              => 'FIX-SPB-3',
+		'name'            => 'Постамат «Владимирский проспект»',
+		'lat'             => 59.9271,
+		'lng'             => 30.3505,
+		'address'         => 'Санкт-Петербург, Владимирский проспект, д. 19',
+		'short_address'   => 'Владимирский пр-т, 19',
+		'locality'        => 'Санкт-Петербург',
+		'postal_code'     => '191002',
+		'phone'           => '',
+		'instruction'     => 'Ячейка автоматической выдачи, код из SMS.',
+		'work_time'       => 'Круглосуточно',
+		'payment_methods' => [ 'Картой при получении' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'POSTAMAT', 'label' => 'Постамат' ],
+		'accepts_cod'     => false,
+		'max_weight'      => 15000,
+		'services'        => [],
+	],
+	[
+		'id'              => 'FIX-SPB-4',
+		'name'            => 'ПВЗ «Васильевский остров»',
+		'lat'             => 59.9386,
+		'lng'             => 30.2765,
+		'address'         => 'Санкт-Петербург, Средний проспект В.О., д. 41',
+		'short_address'   => 'Средний пр-т В.О., 41',
+		'locality'        => 'Санкт-Петербург',
+		'postal_code'     => '199004',
+		'phone'           => '+7 812 200-00-04',
+		'instruction'     => 'Домофон, код на двери.',
+		'work_time'       => 'Пн-Вс 09:00-21:00',
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [ 'Проверка вложений' ],
+	],
+];
+
+// -----------------------------------------------------------------------------
+// Issue #270: a THIRD locality — Краснодар (region 23) — with DELIBERATELY EXACTLY
+// ONE point. This is the scenario card #150 ("одна точка в городе — зум ломает
+// тайлы") needs and could not test at all before this: a single-marker map with
+// nothing else to compute a bounding box against.
+// -----------------------------------------------------------------------------
+
+$krasnodar_points = [
+	[
+		'id'              => 'FIX-KRD-1',
+		'name'            => 'ПВЗ «Красная улица»',
+		'lat'             => 45.0355,
+		'lng'             => 38.9753,
+		'address'         => 'Краснодар, ул. Красная, д. 176',
+		'short_address'   => 'Красная, 176',
+		'locality'        => 'Краснодар',
+		'postal_code'     => '350000',
+		'phone'           => '+7 861 200-00-01',
+		'instruction'     => '',
+		'work_time'       => 'Пн-Вс 09:00-20:00',
+		'payment_methods' => [ 'Картой при получении', 'Наложенный платёж' ],
+		'photos'          => [],
+		'type'            => [ 'code' => 'PVZ', 'label' => 'Пункт выдачи заказов' ],
+		'accepts_cod'     => true,
+		'max_weight'      => null,
+		'services'        => [],
+	],
+];
+
 return array_merge(
 	$original_five,
 	$grid_points,
 	$postamat_points,
 	$colocated_points,
 	$long_address_point,
-	$domain_seam_points
+	$domain_seam_points,
+	$spb_points,
+	$krasnodar_points
 );
