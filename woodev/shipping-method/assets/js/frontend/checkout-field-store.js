@@ -300,6 +300,24 @@
 			return ( _takeover[ fieldId ] && _takeover[ fieldId ][ country ] ) === true;
 		}
 
+		/**
+		 * Whether this field DECLARES a takeover condition at all — regardless of which
+		 * countries it actually claims.
+		 *
+		 * Distinct from {@see takeoverFor} on purpose (issue #721). `Checkout_Config` writes
+		 * a `takeover` entry only when the descriptor carried a callable `takeover_condition`,
+		 * so the KEY's presence means "the client owns this field's rendering", while the
+		 * per-country value means "…and it owns it here". A field can declare takeover and
+		 * answer `false` for the current country — `billing_company` does exactly that for RU
+		 * (#294) — and it is still a field the server deliberately never injected.
+		 *
+		 * @param {string} fieldId
+		 * @returns {boolean}
+		 */
+		function hasTakeover( fieldId ) {
+			return Object.prototype.hasOwnProperty.call( _takeover, fieldId );
+		}
+
 		// -----------------------------------------------------------------
 		// Read-only accessors
 		// -----------------------------------------------------------------
@@ -349,6 +367,7 @@
 			evaluateRequired: evaluateRequired,
 			childrenOf:      childrenOf,
 			takeoverFor:     takeoverFor,
+			hasTakeover:     hasTakeover,
 			getField:        getField,
 			allFields:       allFields,
 			getEndpoint:     getEndpoint,
