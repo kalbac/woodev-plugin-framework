@@ -2,6 +2,9 @@
 
 **Namespace:** `[tooling/git]`
 **Discovered:** s111 (2026-09-01)
+**Fired again:** s112 (2026-09-02), PR #733 → #111, **with the brief explicitly warning about it.**
+That is the part worth knowing: a warning in the instructions is not enough, because the negated
+form is what a careful author reaches for. See "Why a warning does not prevent it" below.
 
 ## What happened
 
@@ -36,6 +39,7 @@ including in a sentence that denies it.** Rephrase instead:
 ```markdown
 ❌ ### Why this does not close #707
 ❌ This does not fix #707 completely.
+❌ Does **not** close #111 — the audit is complete but two files need an operator call.
 
 ✅ ### Why #707 stays open
 ✅ This is half of #707; the remaining fork is on the card.
@@ -58,6 +62,30 @@ A `closed` event landing one second before a `referenced` event for the merge co
 gotcha's signature. ⚠ Also note that `gh project item-list` **silently truncates at `--limit`** —
 this board holds 338 items, so a default or `--limit 300` call reports cards as "not on board" when
 they are simply past the cut.
+
+## Why a warning does not prevent it (s112)
+
+s112's brief for #111 carried the rule verbatim — *"write no `closes/fixes/resolves #N` phrasing in
+the PR body; GitHub executes the keyword even inside a negation"* — and the PR body still said
+**"Does **not** close #111"**. The card closed. Reopened by hand with an explanation.
+
+This is not carelessness. The author had a real thing to communicate ("the sweep is unfinished"),
+and the most natural English for it puts the forbidden verb next to the number. Telling someone
+*not* to write a phrase is weak precisely when that phrase is the obvious one.
+
+**So state the positive form, not the prohibition.** The instruction that works is a template to
+copy, not a rule to remember:
+
+```markdown
+✅ Refs #111 — <what remains, and who decides it>
+✅ Карточка #111 остаётся открытой: <причина>
+```
+
+`Refs` is not in GitHub's keyword list, so it links without closing. Put the number and the word
+`Refs` adjacent, and never let any of the nine keywords share a sentence with an issue number.
+
+**And check afterwards.** One `gh issue view <N> --json state` after every merge costs nothing and
+is the only thing that actually catches this — both times it fired, the merge itself looked fine.
 
 ## Related
 
