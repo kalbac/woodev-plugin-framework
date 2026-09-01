@@ -6,10 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-01 (s111).** `main` clean at **`0b5dfd2`**. s111 merged **#716 #717 #718 #719 #720**
-and closed **#116**, **#708**, **#709**, **#694** and **#695**; half-fixed **#707** (the card stays
-OPEN for one fork — see below); filed **#712 #713 #714**. **75 open cards.** History →
-`sessions/s111.md`, `sessions/s110.md`.
+**As of 2026-09-01 (s111).** `main` clean at **`404ad09`**. s111 merged **#716–#720 and #722** and
+closed **#116**, **#707**, **#708**, **#709**, **#721**, **#694**, **#695**; filed **#712 #713
+#714**. **74 open cards.** The operator's rig pass CLOSED #707 (his measurement, not a decision —
+the #538 fork never had to be settled) and FOUND **#721**, the client half of #708. History →
+`sessions/s111.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,8 +22,8 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 01.09.2026 IN THE PRIMARY CHECKOUT (s111), sodium enabled, against
-`0b5dfd2`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
-**1599** in **23** suites; phpcs clean — **with the warning level ON**; phpstan no errors.
+`404ad09`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
+**1603** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors.
 **Integration 129 / 506, re-measured three times in s111** (the last after the fixture flip).
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
@@ -96,14 +97,20 @@ is enforced too now (`Generic.Arrays.DisallowLongArraySyntax`, ERROR, 633 sites 
 ⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
 something. This is the reading-budget gate working, not a defect.
 
-**The three checkout defects, after s111.** **#708 CLOSED** (PR #717): `validate()` enforces a
-takeover field's `required` only when its condition owns the field AND WooCommerce actually rendered
-it — the card's own recommendation was measured INCOMPLETE (the fixture's two takeover fields carry
-different conditions). **#707 half-closed** (PR #719), OPEN for one fork: the PHP derivation and the
-scoped client branch are reflexive now, the #538 sibling branch is NOT — "no ancestry published" and
-"is its own region" are the same empty array there, and #538 deliberately fails OPEN.
-⚠ **A rig pass may close #707 outright** (a region IS derived for Moscow now, so the client may take
-the fixed branch). An inference, not a measurement.
+**The three checkout defects are all CLOSED after s111.** **#708** (PR #717): `validate()` enforces
+a takeover field's `required` only when its condition owns the field AND WooCommerce rendered it —
+the card's own recommendation was measured INCOMPLETE. **#707** (PR #719 + his rig pass): ask
+`Location_Record::is_within()`, never `ancestors()` raw.
+✅ **#707 CLOSED by his rig pass** — «популярные теперь отображаются для выбранного региона, даже
+если он выбран автоматически». The inference held: a region IS derived for Moscow now, so the client
+takes the fixed scoped branch and never reaches #538's escape hatch. **#538 was never touched and
+its test stays green.**
+
+⚠ **#721 — the rule was implemented TWICE and #708 fixed only the server.** `refreshGate()` in
+`checkout-field-classic.js` disabled «Place order» forever on takeover fields WooCommerce never
+rendered, while the server accepted the very same order. Fixed in PR #722; the gate had **zero**
+test coverage before it. Gotcha
+`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`.
 **#709 CLOSED** (PR #720): `is_pickup_shipping()` is the single source for the other THREE
 declarations, resolved LAZILY (a new `is_pickup_method` spec operator — `Pickup_Field::create()`
 runs before WC loads shipping methods, so an eager default is impossible).
@@ -204,7 +211,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **257**.
+Gotchas: **259**.
 
 ## Program status (high level)
 
