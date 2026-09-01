@@ -22,7 +22,7 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 01.09.2026 IN THE PRIMARY CHECKOUT (s111), sodium enabled, against
-`404ad09`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
+`b6e5719`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
 **1603** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors.
 **Integration 129 / 506, re-measured three times in s111** (the last after the fixture flip).
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
@@ -38,6 +38,11 @@ reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotch
 
 ✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606, s102) on the target PHP version only, so
 a failure reproduces locally with the same command. Why it had been green by accident: `sessions/s102.md`.
+
+✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
+~2.5 min, pinning the walkthrough 20+ sessions ran by hand. Costs nothing new (Playwright ships with
+`@wordpress/scripts`). ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
+Detail: `wiki/rig-pickup-walkthrough.md`.
 
 ✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
 and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
@@ -184,10 +189,8 @@ anyway. Scan the tag for your task; do not keep a second copy here.
 (#409, #546; full rule in `AGENT-RULES.md` Rule 5, which now also covers INHERITED code → `1.0.0`).
 **Nothing above `2.0.2` remains — #116(a) closed it in s111**; #555 had not normalised them.
 
-✅ **Every Codex round gets a CANARY — a few facts you already know, answered before anything else.**
-It earns its keep: in s110 the canary made the critic say «не смог прочитать» for the one fact it
-could not obtain instead of inventing it, and exposed that its file list was misread. Recipe:
-gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
+✅ **Every Codex round gets a CANARY** — facts you already know, answered first; it caught a
+misread file list in s110. Recipe: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
 ✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.**
 
@@ -196,10 +199,9 @@ confirmed again in s110 for four workers). Its tool shell is the variable to mea
 relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0; `worktree.useRelativePaths`
 is never the fix.
 
-⚠ **`input_accepted` is not proof the brief arrived — READ THE BUFFER BACK.** The dispatch body does
-not always reach the prompt, and the worker then honestly reports having nothing to do. ⚠ And read
-the buffer's SIZE before concluding: the tail is truncated, so a missing phrase can simply have
-scrolled off (that misled the coordinator once in s110). Recipe:
+⚠ **`input_accepted` is not proof the brief arrived.** In s111 `worker-read` and `terminal read`
+returned EMPTY buffers all session for live, working agents — the reliable signals were the terminal
+TITLE (the worker sets it from its task) and `git status --short` in its worktree. Recipe:
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
 **kilo is the FALLBACK critic, not the default** — Orca cannot supervise it and the model must be
