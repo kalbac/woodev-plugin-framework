@@ -79,6 +79,20 @@ overridden anyway — only its *structure* is worth having.
   carries an update burden — the pinned version has to be bumped deliberately, and nothing bumps it
   automatically. 15.8 KB gzip rides on the checkout, and only when a merchant turns the mask on
   (the script is not enqueued at all for the default «Не использовать», nor on the block checkout).
+- **Amended 02.09.2026 (s112, card #704) — the update burden is now mechanised, and the decision
+  above is unchanged.** «Nothing bumps it automatically» was the honest cost when this ADR was
+  written, and #704 was filed against exactly that sentence: Dependabot cannot see a file in the
+  repository, only an entry in `package.json`, so a year of known upstream bugs could have shipped
+  unnoticed. `imask` is now a **devDependency** — visible to Dependabot — and
+  `bin/generate-imask-vendor.mjs` produces the vendored bundle from it. What did NOT change: the
+  shipped asset is still a plain vendored file served raw, with no build step at this layer, and
+  `imask` is never enqueued from `node_modules`. The devDependency is the *source*, exactly as
+  `libphonenumber-js` is the source of the mask table in point 3 — the same shape, applied twice.
+  `npm run lint:imask` fails when the bundle, `package.json` and the `woodev-imask` enqueue version
+  disagree, which retires the prose reminder that previously sat in two code comments.
+- **Found while doing it:** `npm run lint:phone-masks` had existed since s109 and **was never wired
+  into CI**, so point 2's staleness guard was not actually running anywhere. Both gates are now
+  steps in the `test-js` job. A generator without a gate is a convention, not a guarantee.
 - **Guarded:** `PhoneMaskPatternsTest::test_every_template_matches_its_country_number_plan` pins
   every template against a committed fixture of number plans. It was watched RED against the
   original Turkmen template before being accepted. The fixture is committed rather than read from

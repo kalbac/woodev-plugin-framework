@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 260 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 261 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -101,6 +101,7 @@
 
 ### [rig/*] — Local verification rig
 - [rig/probes] **`docker cp` INTO the wp-env container fails on a bind mount and `wp eval-file` then reports an ordinary "does not exist" — pipe the probe in with `docker exec -i sh -c 'cat > …'`.** → [docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead](gotchas/docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead.md) (s106)
+- [rig/fixtures] **The rig runs the LIVE Yandex point source (`WOODEV_TEST_PICKUP_LIVE_YANDEX`, which WINS over the strategy constant), so a change to the fixture bulk source may never reach it.** → [the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it](gotchas/the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it.md) (s112)
 - [rig/fixtures] **`woodev_location_default_locality_record` stores a WHOLE `Location_Record`, not the key `test-cdek:44` the docs abbreviate it to — handing it to `resolve_key()` fatals.** → [the-default-locality-option-stores-a-whole-record-not-a-key](gotchas/the-default-locality-option-stores-a-whole-record-not-a-key.md) (s106)
 - [rig/fixtures] **The `geoip` default-locality policy resolves NOTHING on a local rig — the customer's IP is `127.0.0.1` — and reads as a broken feature. Pin a real IP via `HTTP_X_REAL_IP`.** → [the-geoip-default-locality-cannot-resolve-on-a-local-rig](gotchas/the-geoip-default-locality-cannot-resolve-on-a-local-rig.md) (s99)
 - [rig/fixtures] **The test-cdek credentials are NOT `woodev_location_cdek_*` — that option is a decoy nothing reads; a bad-key experiment there silently installs nothing.** → [the-cdek-fixture-credentials-are-not-the-option-they-look-like](gotchas/the-cdek-fixture-credentials-are-not-the-option-they-look-like.md) (s95)

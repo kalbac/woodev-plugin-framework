@@ -2,11 +2,12 @@
 
 **Namespace:** `[tooling/*]`
 **Found:** s105 (30.08.2026), editing a test file on PR #661.
+**Recurred:** s112 (02.09.2026) — and the recurrence is the interesting part, see below.
 
 ## The trap
 
-`CLAUDE.md` and `AGENT-RULES.md` state the rule without an exception: **never use `Read` on a
-`.php` file, always go through Serena.** Every subagent brief is required to repeat it.
+`CLAUDE.md` and `AGENT-RULES.md` used to state the rule without an exception: **never use `Read` on
+a `.php` file, always go through Serena.** Every subagent brief is required to repeat it.
 
 But this project's Serena config **ignores `tests/`**. Any symbolic operation against a path under
 it fails:
@@ -30,6 +31,25 @@ environment defect the rule is about: retry, and report it rather than silently 
 |---|---|---|
 | `… while the path is ignored` | the path is outside Serena's scope by config | use `Read`/`Edit` — expected, no exception needed |
 | `CONNECT_TIMEOUT after 120000ms` | Serena is not up for that project yet | retry `activate_project`; if it persists, report it, and scope + record any fallback |
+
+## Why it recurred, and what actually fixed it (s112)
+
+s105 wrote this file and correctly named the root cause in its own first paragraph — the rule text
+in `CLAUDE.md` and `AGENT-RULES.md` carried no exception. **Nobody changed that text.** Seven
+sessions later a #270 worker was handed a brief repeating the bare rule, spent its opening moves
+proving Serena would not serve `tests/`, and reported the config back as if it were news.
+
+A gotcha describing a defect in a rule does not fix the rule. **The exception now lives in
+`AGENT-RULES.md` → "Use Serena MCP" and in `CLAUDE.md`'s Serena section**, where a session actually
+reads it, and both name the full ignore list rather than `tests/` alone:
+
+```
+tests/**  docs/**  .github/**  .ai/**  .serena/**  .claude/**
+```
+
+(read off `.serena/project.yml` → `ignored_paths`, s112). The lesson generalises: when a gotcha's
+own text says "the rule says X and the rule is wrong", the fix belongs in the rule that session
+start loads, not only in the gotcha that a session opens on demand.
 
 ## One benefit worth knowing
 

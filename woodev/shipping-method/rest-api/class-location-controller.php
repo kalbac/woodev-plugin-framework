@@ -559,7 +559,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return true|\WP_Error
 		 */
-		public function check_select_permission( $request ) {
+		public function check_select_permission( \WP_REST_Request $request ) {
 
 			$nonce = $request->get_header( 'X-WP-Nonce' );
 
@@ -655,7 +655,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return true|\WP_Error
 		 */
-		public function check_admin_permission( $request ) {
+		public function check_admin_permission( \WP_REST_Request $request ) {
 
 			$allowed = function_exists( 'wc_rest_check_manager_permissions' )
 				? wc_rest_check_manager_permissions( 'settings', 'read' )
@@ -708,7 +708,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
 		 */
-		public function handle_suggest_request( $request ) {
+		public function handle_suggest_request( \WP_REST_Request $request ) {
 			return $this->perform_suggest( $request, 'woodev_location_sug_rl_' );
 		}
 
@@ -738,7 +738,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{suggestions: array<int, array<string, mixed>>}
 		 */
-		public function handle_admin_suggest_request( $request ) {
+		public function handle_admin_suggest_request( \WP_REST_Request $request ) {
 			$provider_override = $this->normalize_param( $request->get_param( 'provider' ) );
 
 			return $this->perform_suggest(
@@ -1122,7 +1122,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{localities: array<int, array<string, mixed>>, within_status: string, scope_narrowing: string}
 		 */
-		public function handle_list_request( $request ) {
+		public function handle_list_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_location_list_rl_', self::LIST_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -1237,7 +1237,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{current: array{key: string, level: string}, persisted: bool, chain: array<string, array{key: string, level: string}>}|array{cancelled: bool, reason: string, message: string, current: null, persisted: bool, chain: array<string, array{key: string, level: string}>}
 		 */
-		public function handle_select_request( $request ) {
+		public function handle_select_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_location_sel_rl_', self::SELECT_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -1448,7 +1448,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{chain: array<string, array{key: string, level: string}>, implicit: bool}
 		 */
-		public function handle_forget_request( $request ) {
+		public function handle_forget_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_location_sel_rl_', self::SELECT_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();
@@ -1692,7 +1692,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Location_Controll
 		 *
 		 * @return \WP_REST_Response|\WP_Error|array{location: array{key: string, label: string, level: string, record: array<string, mixed>}|null}
 		 */
-		public function handle_admin_locate_request( $request ) {
+		public function handle_admin_locate_request( \WP_REST_Request $request ) {
 
 			if ( $this->is_rate_limited( 'woodev_location_admin_loc_rl_', self::ADMIN_LOCATE_RATE_LIMIT_MAX ) ) {
 				return $this->rate_limited_error();

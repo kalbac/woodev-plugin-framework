@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-01 (s111).** `main` clean at **`404ad09`**. s111 merged **#716–#720 and #722** and
-closed **#116**, **#707**, **#708**, **#709**, **#721**, **#694**, **#695**; filed **#712 #713
-#714**. **74 open cards.** The operator's rig pass CLOSED #707 (his measurement, not a decision —
-the #538 fork never had to be settled) and FOUND **#721**, the client half of #708. History →
-`sessions/s111.md`.
+**As of 2026-09-02 (s112).** `main` clean. s112 merged **#726–#730 and #733** and closed **#141**,
+**#725**, **#704**, **#270**, **#140**; filed **#734**; **reopened #111** (a PR body wrote «does
+**not** close #111» and GitHub closed it anyway). **70 open cards.** **PR #731 (#692) and PR #732
+(#171) are green and DELIBERATELY UNMERGED** — both change what the operator looks at, and his
+overnight merge licence was granted specifically for #725. History → `sessions/s112.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -21,10 +21,11 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 01.09.2026 IN THE PRIMARY CHECKOUT (s111), sodium enabled, against
-`b6e5719`:** unit **3393** / 8355 / **1 skipped**, green under `--order-by=reverse` too; jest
-**1603** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors.
-**Integration 129 / 506, re-measured three times in s111** (the last after the fixture flip).
+**Baselines on `main`, measured 02.09.2026 IN THE PRIMARY CHECKOUT (s112), sodium enabled, against
+`0267e82`:** unit **3384** / 8306 / **1 skipped**, green under `--order-by=reverse` too; jest
+**1606** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors;
+**integration 129 / 506**; **e2e 7 / 7** against the live rig. The unit count moved from s111's 3393
+because #141 deleted two test files (−18) and #270/#725 added tests (+9).
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -59,9 +60,10 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s111 — 74.** **Only THREE still need HIS answer** — #644 (prioritisation), #652
-(scenario 1, his rig) and #331/#332 (his own "not now"). #692 needs nobody: its own body says
-«развилок нет», and the "waiting" list had simply inherited it from the s108 triage. Rationale for
+**Open cards after s112 — 70.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
+rig), #331/#332 (his own "not now"), and now **#734** (does the rig stay on the live Yandex point
+source?) plus the two PRs held for his eyes — **#731** (#692, merchant copy) and **#732** (#171,
+keyboard focus). **#111 is reopened** and needs his call on two CANDIDATE files. Rationale for
 the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on
 him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
 decide by measurement, see below), **#310** (rewritten in s110 to one button), **#701** (a research
@@ -100,40 +102,26 @@ too (`Generic.Arrays.DisallowLongArraySyntax`).
 ⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
 something. This is the reading-budget gate working, not a defect.
 
-**#708**: `validate()` enforces a takeover field's `required` only when its condition owns the field
-AND WooCommerce rendered it. **#707**: ask `Location_Record::is_within()`, never `ancestors()` raw.
-✅ **All checkout defects from the s110 rig pass are CLOSED and accepted by him on the rig**
-(#707 #708 #709 #721). The one rule worth carrying: **the «required» rule is implemented TWICE**,
-server `validate()` and the browser's `refreshGate()`, and fixing one leaves the other — gotcha
-`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`. #538 was never touched
-and its test stays green.
-**#709 CLOSED** (PR #720): `is_pickup_shipping()` is the single source for the other THREE
-declarations, resolved LAZILY (a new `is_pickup_method` spec operator — `Pickup_Field::create()`
-runs before WC loads shipping methods, so an eager default is impossible).
-`Selection_Scope::type_for_method()` stays plugin-owned — it answers "which KIND of point", not
-"whether" — and is covered by a `WP_DEBUG`-gated reconciliation instead.
-⚠ The fixture's `get_delivery_type()` flipped `courier` → `pickup`, so on the rig
-`woodev_test_shipping` now hides address/postcode and shows the pickup button, and the mu-plugin's
-method is partly redundant. **#652 scenarios 3 and 4 are testable again** — worth his rig glance.
+**The checkout invariants that survive their cards** — #708: `validate()` enforces a takeover
+field's `required` only when its condition owns the field AND WooCommerce rendered it. #707: ask
+`Location_Record::is_within()`, never `ancestors()` raw. #709: `is_pickup_shipping()` is the single
+source for the other three declarations, resolved LAZILY. **And the one that keeps costing
+sessions: the «required» rule is implemented TWICE** — server `validate()` and the browser's
+`refreshGate()` — so fixing one leaves the other (gotcha
+`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`). #725 touched only the
+browser half, deliberately and with a comment saying so.
 
-✅ **#694/#695 are written into the docs (s111).** SP-10: one landing page, tab per carrier (drawn
-only if >1), default view the aggregate table, gated on it being cheap. `SHIPPING-PLANS.md`/
-`PLANS.md` archived to `docs-internal/archive/`; live remainder is in `specs/` + cards **#712 #713
-#714**.
+**The «Place order» block is OPTIONAL since s112** (#725, PR #727): checkbox «Блокировать
+оформление заказа», default ON. Turning it off makes `refreshGate()` **leave the button alone**, not
+force-enable it. ⚠ Measured: **WooCommerce NEVER disables that button itself** — the gate exists
+only because #274 added it. The settings section is now **«Форма заказа»**, slug **`checkout`**
+(was «Поля»/`fields`).
+
+**The warehouse scaffold is GONE** (#141, PR #726) — §17 finally true. The pilot fixture's
+`wc_yandex_delivery_warehouses` table name survived as an installed-site contract, asserted by a
+still-green test.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
-
-**Operator decisions, 02.09.2026 — both taken after his rig pass:**
-
-- **#725 — the «Place order» gate stays OURS-fields-only and becomes OPTIONAL** (checkbox, default
-  ON, tooltip saying «поля, нужные для ДОСТАВКИ» — that word is what makes the partial scope
-  honest). ⚠ Measured: **WooCommerce NEVER disables that button itself**, so the gate exists only
-  because #274 added it. Subtask: section «Поля» → **«Форма заказа»**, slug `fields` → `checkout`
-  (safe — render-time id, persisted nowhere). Full reasoning and the rejected options: the card.
-- **#141 — DELETE the warehouse scaffold NOW**, not after the Yandex measurement: warehouses are a
-  CARRIER feature and would live in the plugin either way, so the measurement cannot change the
-  framework code's fate. ⚠ The fixture's `wc_yandex_delivery_warehouses` table name is an
-  installed-site contract and must survive. File list + the deletion tail: the card.
 
 **Operator decisions still shaping the work:**
 
@@ -216,7 +204,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **260**.
+Gotchas: **261**.
 
 ## Program status (high level)
 
@@ -298,12 +286,22 @@ only consumer; they get rewritten once everything is ready.
 
 - **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ✅ **Rig restored to standard 01.09.2026 (s111)**: `field_mode_region` back to `related-list`,
-  default locality back to `test-cdek:44`, and user 1's stored `woodev_customer_location` DELETED
-  so the default applies (a stored location outranks it). Verified: both columns read «Москва» and
-  the modal lists points. ⚠ **All 13 fixture pickup points are in MOSCOW** (`fixture-points.php`,
-  bbox-filtered) — under any other default locality the modal honestly says «no pickup points» and
-  pickup is untestable. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
+- ✅ **Rig at standard, re-verified 02.09.2026 (s112)** after a measurement that mutated it three
+  ways and restored all three: the two pickup constants, `woodev_customer_location` (byte-identical
+  to its prior value) and the WC customer city/state. Confirmed by reopening the modal — map, tiles
+  and clustered Moscow points. `field_mode_region` is `related-list`, default locality
+  `test-cdek:44`. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
+- ⚠ **THE RIG DOES NOT RUN THE FIXTURE POINT SOURCE.** `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` in
+  the container's `wp-config.php`, and that flag **wins over everything** — ahead of the Pochta flag
+  and ahead of `WOODEV_TEST_PICKUP_STRATEGY` (`viewport`) entirely. The modal serves **300 real
+  Yandex.Market points around Moscow**, never the fixture's. So a change to
+  `Woodev_Test_Bulk_Point_Source` is **invisible on the rig** until both constants are flipped
+  (`false` / `bulk`) — and put back afterwards. Measured s112; card **#734**, gotcha
+  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
+  ⚠ The older line «all 13 fixture points are in Moscow, so any other locality says no points» was
+  about the FIXTURE source and is no longer the rig's behaviour on two counts: #270 gave the fixture
+  **three** localities (Москва 52 / Санкт-Петербург 4 / **Краснодар exactly 1**, the shape #150
+  needs), and the rig is not using it anyway.
 
   **STANDARD values, read off the container, never off a doc** (the s93 handoff had two wrong):
 

@@ -721,9 +721,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				// Card #503 round 2 (the IMask rewrite): IMask (MIT, https://imask.js.org),
 				// VENDORED rather than CDN-loaded — a shop's checkout must not depend on a
 				// third-party host — with no build step at this layer. Its own handle so
-				// `phone-mask.js` can depend on it for load order; bump the version string
-				// here AND `imask.min.js`'s own header comment together when updating it —
-				// that header records the exact upstream version this file was fetched at.
+				// `phone-mask.js` can depend on it for load order.
+				//
+				// Card #704: the vendored file is GENERATED from the `imask` devDependency
+				// (`npm run generate:imask`), so `package.json` is the single source of the
+				// version and Dependabot can see it. This string must equal that version;
+				// `npm run lint:imask` fails the build when the two drift, which is why the
+				// old "remember to update both places by hand" note is gone.
 				wp_enqueue_script(
 					'woodev-imask',
 					self::asset_url( 'js/vendor/imask.min.js' ),
