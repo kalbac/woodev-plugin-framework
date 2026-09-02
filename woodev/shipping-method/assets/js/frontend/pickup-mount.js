@@ -1894,6 +1894,20 @@
 		 *  'viewport'` only) — what a type-filter change or {@see refresh} re-fetches against. */
 		var lastBbox = null;
 
+		/** @type {number[]|null} issue #163's distance anchor — the initial resolved viewport's
+		 *  centre, captured ONCE per {@see start} cycle (see {@see anchorCaptured}) via
+		 *  `provider.getCenter()` and handed to `panels.setAnchor()`. Never updated after that:
+		 *  panning/dragging the map does not move it, only `addressFocused` (an address search)
+		 *  overrides it, unchanged from before this issue. Also what `searchReset` falls back to
+		 *  (see that listener below) rather than clearing the anchor outright, so the list never
+		 *  silently loses its ordering once a search is dropped. */
+		var initialAnchor = null;
+
+		/** @type {boolean} has {@see initialAnchor} already been captured this {@see start}
+		 *  cycle? Reset alongside `lastBbox` on every `start()` (initial open AND every retry).
+		 *  Guards the FIRST `visibleChange` only — see that listener below. */
+		var anchorCaptured = false;
+
 		/** @type {string|null} the point the card currently shows, as the `cardOpened` funnel last
 		 *  reported it — the staleness guard for {@see refreshPointDetails}. A plain id, not a
 		 *  generation, because unlike a confirmation a detail fetch is idempotent and re-opening
@@ -3799,10 +3813,19 @@
 			// "your address" pin and the stale `searchResults`, both owned by `clearAddress()`
 			// (see map-provider-yandex.js's own docblock on why that file, not this one, owns it).
 			//
+			// Issue #163: also falls the list's distance anchor BACK to {@see initialAnchor}
+			// rather than clearing it to null — the list never silently loses its ordering just
+			// because a search was dropped, it returns to sorting from where it opened. Not
+			// `panels.setAnchor( null )`: that would fire `anchorCleared` (wired above to this
+			// SAME `clearAddress()` call, so nothing is lost by not routing through it here) and
+			// leave the list with no anchor at all until the next search, which is the exact
+			// dead-until-a-search state #163 was filed about.
 			panels.on( 'searchReset', function() {
 				if ( provider && 'function' === typeof provider.clearAddress ) {
 					provider.clearAddress();
 				}
+
+				panels.setAnchor( initialAnchor );
 			} );
 
 			// Task 17 (spec V-5): the message card's own retry control (an empty/failed fetch —
@@ -3832,6 +3855,8 @@
 
 			provider = new ProviderCtor();
 			lastBbox = null;
+			initialAnchor = null;
+			anchorCaptured = false;
 
 			// #234: a retry rebuilds the provider from scratch, so the drawn set restarts
 			// from nothing too. Paired with forgetPointDetails() per resetPointPool()'s
@@ -3897,6 +3922,23 @@
 					// drawing something there, and suppressing the message is the safe
 					// direction (a missing message beats a false one over a full map).
 					visibleGroupCount = ( keys || [] ).length;
+
+					// Issue #163: the FIRST `visibleChange` this start() cycle is also the first
+					// moment the initial camera move has settled under BOTH strategies (see
+					// `getCenter()`'s own docblock) — so this is where {@see initialAnchor} is
+					// captured, once, BEFORE `panels.setVisible()` below runs its own render, so
+					// the very first list render already shows distances ordered from it. Never
+					// re-captured on a later pan/drag — that is the whole point of #163's fix.
+					if ( ! anchorCaptured ) {
+						anchorCaptured = true;
+
+						var center = ( provider && 'function' === typeof provider.getCenter ) ? provider.getCenter() : null;
+
+						if ( center ) {
+							initialAnchor = center;
+							panels.setAnchor( center );
+						}
+					}
 
 					panels.setVisible( groups );
 				} );

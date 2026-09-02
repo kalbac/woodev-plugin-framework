@@ -118,6 +118,13 @@ function createYmapsStub( options ) {
 		this.state = state;
 		this.options = mapOptions;
 		this.bounds = [ [ 10, 20 ], [ 11, 21 ] ];
+		// Issue #163's seam — `getCenter()` reads this. Seeded from the constructor's own
+		// `state.center` (the pre-move default `_buildMap()` opens on), then kept in step by
+		// `setCenter()`/`setBounds()`/`panTo()` below, EACH ONLY AT THE MOMENT ITS OWN PROMISE
+		// RESOLVES (never at call time) — mirroring the real API's async-camera-move discipline
+		// this file's own docblock calls its "first lesson", so `deferSetBounds: true` tests can
+		// prove a `getCenter()` read is the POST-move centre, never the pre-move one.
+		this.center = state && state.center;
 		this.setBoundsCalls = [];
 		this.setCenterCalls = [];
 		this.panToCalls = [];
@@ -210,10 +217,15 @@ function createYmapsStub( options ) {
 			return new Promise( ( resolve ) => {
 				self._pendingCameraMoves.push( {
 					matches: ( target ) => JSON.stringify( target ) === JSON.stringify( center ),
-					resolve,
+					resolve: () => {
+						self.center = center;
+						resolve();
+					},
 				} );
 			} );
 		}
+
+		this.center = center;
 
 		return Promise.resolve();
 	};
@@ -227,10 +239,15 @@ function createYmapsStub( options ) {
 			return new Promise( ( resolve ) => {
 				self._pendingCameraMoves.push( {
 					matches: ( target ) => JSON.stringify( target ) === JSON.stringify( coords ),
-					resolve,
+					resolve: () => {
+						self.center = coords;
+						resolve();
+					},
 				} );
 			} );
 		}
+
+		this.center = coords;
 
 		return Promise.resolve();
 	};
@@ -251,6 +268,16 @@ function createYmapsStub( options ) {
 			this._pendingCameraMoves.splice( index, 1 )[ 0 ].resolve();
 		}
 	};
+	// `centerOfBounds()` — a plain corner midpoint, not a projection-aware centroid: plenty for a
+	// test double, since every `getCenter()` test below picks bounds whose midpoint IS the value
+	// it asserts, the same "control the fixture, not the arithmetic" approach `boundsFor()`'s own
+	// callers already take elsewhere in this file.
+	function centerOfBounds( bounds ) {
+		return [
+			( bounds[ 0 ][ 0 ] + bounds[ 1 ][ 0 ] ) / 2,
+			( bounds[ 0 ][ 1 ] + bounds[ 1 ][ 1 ] ) / 2,
+		];
+	}
 	Map.prototype.setBounds = function( bounds, boundsOptions ) {
 		const self = this;
 
@@ -262,6 +289,7 @@ function createYmapsStub( options ) {
 					bounds,
 					resolve: () => {
 						self.bounds = bounds;
+						self.center = centerOfBounds( bounds );
 						resolve();
 					},
 				} );
@@ -269,6 +297,7 @@ function createYmapsStub( options ) {
 		}
 
 		this.bounds = bounds;
+		this.center = centerOfBounds( bounds );
 
 		return Promise.resolve();
 	};
@@ -290,6 +319,9 @@ function createYmapsStub( options ) {
 		if ( -1 !== index ) {
 			this._pendingSetBounds.splice( index, 1 )[ 0 ].resolve();
 		}
+	};
+	Map.prototype.getCenter = function() {
+		return this.center;
 	};
 	Map.prototype.fireBoundsChange = function() {
 		( this._eventHandlers.boundschange || [] ).forEach( ( cb ) => cb() );
@@ -1547,6 +1579,39 @@ test( 'the bulk camera fit is animated (live-review fix — every camera move ge
 	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options ).toEqual( { checkZoomRange: true, duration: 400 } );
 } );
 
+// Issue #163's seam — getCenter() — under `bulk` this file only has one camera settle to read:
+// the initial fit `setPoints()` runs on its FIRST call, since `_resolveInitialViewport()` is a
+// no-op for this strategy (see that method's own docblock).
+test( 'getCenter() reflects the bulk fit\'s settled centre once setPoints() resolves', async () => {
+	const provider = await init( { strategy: 'bulk', locality: 'Москва' } );
+
+	await provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	const bounds = ymapsStub.lastMap.setBoundsCalls[ 0 ].bounds;
+
+	expect( provider.getCenter() ).toEqual( [
+		( bounds[ 0 ][ 0 ] + bounds[ 1 ][ 0 ] ) / 2,
+		( bounds[ 0 ][ 1 ] + bounds[ 1 ][ 1 ] ) / 2,
+	] );
+} );
+
+test( 'getCenter() under bulk is the POST-fit centre — read before setPoints()\'s own setBounds() '
+	+ 'settles would still be the pre-fit (default) centre, and every distance computed from it '
+	+ 'would be wrong (see the file docblock\'s first lesson)', async () => {
+	const provider = await init( { strategy: 'bulk' }, { deferSetBounds: true } );
+	const before = provider.getCenter();
+
+	provider.setPoints( [ group( 'a', 55.70, 37.60 ), group( 'b', 55.80, 37.70 ) ] );
+
+	// The fit's setBounds() was called but has not resolved yet.
+	expect( provider.getCenter() ).toEqual( before );
+
+	ymapsStub.lastMap.resolveNextSetBounds();
+	await flushPromises();
+
+	expect( provider.getCenter() ).not.toEqual( before );
+} );
+
 // Review follow-up (HIGH): the bulk fit's setBounds() was fire-and-forget and visibleChange was
 // emitted from the map's PRE-fit bounds — the s46 failure verbatim, reproduced INSIDE this
 // rewrite. Points sitting outside the technical placeholder viewport used to report an empty (or
@@ -1693,6 +1758,49 @@ test( 'the initial-viewport fit is animated (live-review fix — every camera mo
 	await init( { strategy: 'viewport', locality: 'Москва' } );
 
 	expect( ymapsStub.lastMap.setBoundsCalls[ 0 ].options ).toEqual( { checkZoomRange: true, duration: 400 } );
+} );
+
+// Issue #163's seam — getCenter() — under `viewport` the one settle to read is
+// `_resolveInitialViewport()`'s own geocode-then-setBounds fit, awaited inside `init()`.
+test( 'getCenter() reflects the geocoded locality\'s centre once the initial viewport has settled', async () => {
+	const provider = await init( { strategy: 'viewport', locality: 'Москва' } );
+
+	// The default `geocodeResult` resolves bounds [[10,20],[11,21]] — see createYmapsStub().
+	expect( provider.getCenter() ).toEqual( [ 10.5, 20.5 ] );
+} );
+
+test( 'getCenter() under viewport is the POST-move centre — read before setBounds() settles '
+	+ 'would be the pre-move (default) centre, and every distance computed from it would be '
+	+ 'wrong (issue #163)', async () => {
+	ymapsStub = createYmapsStub( { deferSetBounds: true } );
+
+	const postMoveBounds = [ [ 55, 37 ], [ 56, 38 ] ];
+
+	ymapsStub.geocodeResult = makeGeocodeResult( postMoveBounds );
+
+	const config = makeConfig( { strategy: 'viewport', locality: 'Казань' } );
+
+	window[ config.ns ] = ymapsStub;
+
+	const provider = new WoodevYandexMapProvider();
+	const initPromise = provider.init( document.createElement( 'div' ), config );
+
+	await flushPromises();
+
+	// setBounds() was called but has not resolved yet — getCenter() is still the PRE-move
+	// default the map opened at, never the post-move one.
+	expect( provider.getCenter() ).toEqual( config.defaultLocation.center );
+
+	ymapsStub.lastMap.resolveNextSetBounds(); // simulate the camera move completing
+	await initPromise;
+
+	expect( provider.getCenter() ).toEqual( [ 55.5, 37.5 ] );
+} );
+
+test( 'getCenter() returns null before init() has built a map', () => {
+	const provider = new WoodevYandexMapProvider();
+
+	expect( provider.getCenter() ).toBeNull();
 } );
 
 test( 'falls back to the plugin default when the geocode is empty', async () => {

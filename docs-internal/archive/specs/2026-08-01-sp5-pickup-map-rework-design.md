@@ -604,9 +604,15 @@ same place. CTA reads «Продолжить оформление заказа»
 ### 7.1 Sidebar contents
 
 Only points currently inside the viewport, via `ymaps.geoQuery(...).searchInside(map)`. Sorted by
-distance from the **anchor**: the searched address when a search is active, otherwise the map centre —
-one rule, not two modes. Capped at 300 entries. Recomputed on `boundschange`. Item shows
-`short_address` in bold, then `name` and `locality`. Empty state when nothing is in frame.
+distance from the **anchor**: the searched address when a search is active, otherwise the centre of
+the initial viewport, set once when the picker opens and never updated afterwards — one rule, not
+two modes. (Decided issue #163, 02.09.2026: a LIVE map-centre anchor was considered — the literal
+reading of "one rule, not two modes" above — and rejected. `boundsChange`, the event a live anchor
+would have followed, is emitted on the `viewport` strategy only; `bulk` has no such event, so "one
+rule" would have become exactly two. A live anchor would also re-sort the list under the customer's
+cursor on every drag, which was the original bug report's own objection to it.) Capped at 300
+entries. Recomputed on `boundschange`. Item shows `short_address` in bold, then `name` and
+`locality`. Empty state when nothing is in frame.
 
 ### 7.2 Distances
 

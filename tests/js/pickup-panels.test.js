@@ -73,6 +73,11 @@ it( 'starts closed', () => {
 	expect( panels.root.parentNode.classList.contains( 'is-open' ) ).toBe( false );
 } );
 
+// Issue #163's Panels-level pin: `Panels` itself never cared WHERE an anchor came from — the
+// bug was that nothing ever called `setAnchor()` before an address search. `pickup-mount.js` now
+// calls it once at open, with the initial viewport's centre, BEFORE the first `setVisible()` —
+// exactly the `setAnchor()`-then-`setVisible()` sequence this test already drives. See
+// `pickup-mount.test.js` for the wiring decision itself (capture-once, `searchReset`'s fallback).
 it( 'sorts by distance from the anchor', () => {
 	const panels = new Panels( document.createElement( 'div' ), config );
 	panels.render();

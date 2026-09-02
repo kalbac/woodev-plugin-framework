@@ -74,22 +74,39 @@
  * of its own — a caller polling for "did the customer just clear their search" had no signal to
  * poll (the reset control that used to call `setAnchor( null )` for the customer was deleted in
  * Task 7, spec V-11, along with the header it lived in). Task 11's search layout reset button
- * (below) does NOT call `setAnchor( null )` itself — it only emits `searchReset`; translating that
- * into an actual `setAnchor( null )` call is the mount's job (Task 20), so the event contract here
- * still does not depend on where the call comes from. `setAnchor( null )` emits this event EVERY time it is
- * called with a falsy `latLng`, so the mount can drop whatever provider-side state belongs to the
- * search (Task 20's mount wires this straight to the map provider's own `clearAddress()`, which is
- * what actually removes the "your address" pin — see `map-provider-yandex.js`'s own docblock on
- * why THAT file, not this one, owns dropping it). `setAnchor( latLng )` with a non-null value
- * never fires it.
+ * (below) does NOT call `setAnchor( null )` itself — it only emits `searchReset`. `setAnchor( null )`
+ * emits this event EVERY time it is called with a falsy `latLng`, so a listener can drop whatever
+ * provider-side state belongs to the search — the mount wires `anchorCleared` straight to the map
+ * provider's own `clearAddress()`, which is what actually removes the "your address" pin (see
+ * `map-provider-yandex.js`'s own docblock on why THAT file, not this one, owns dropping it).
+ * `setAnchor( latLng )` with a non-null value never fires it.
+ *
+ * Issue #163 (once the anchor became "the open-time viewport centre, set once", not "the map
+ * centre, live"): the mount's `searchReset` listener no longer calls `setAnchor( null )` at all —
+ * it falls the anchor BACK to the open-time one instead (`setAnchor( initialAnchor )`, a non-null
+ * value), so the list never loses its ordering just because a search was dropped. `clearAddress()`
+ * still runs on `searchReset`, directly, unconditionally — never gated behind `anchorCleared` any
+ * more, since nothing today calls `setAnchor( null )` to fire it through that route. The event
+ * itself is untouched: it still exists, still fires on a falsy `latLng`, for whichever future
+ * caller needs "the anchor was cleared, not just moved" as a distinct signal from "the anchor
+ * moved to the open-time centre".
  *
  * SORTING HAS ONE RULE, NOT TWO MODES: both the list and any future search
  * result are ordered by distance from a SINGLE anchor point set via
- * `setAnchor()` — the map centre by default, a searched address when a
- * search is active (Task 15 sets it the same way). Distances render only
- * when an anchor is set; with no anchor, the list keeps the caller-supplied
- * order verbatim (deterministic — it never reshuffles on its own between
- * calls with the same input).
+ * `setAnchor()` — the centre of the initial viewport, set ONCE when the
+ * picker opens (`pickup-mount.js` reads it from the map provider's
+ * `getCenter()` the first time `visibleChange` fires — see that method's own
+ * docblock), a searched address when a search is active (Task 15 sets it the
+ * same way). Distances render from the FIRST list render onward, not only
+ * after a search (issue #163) — the open-time anchor is always there.
+ * Panning/dragging the map does NOT move the anchor: a live map-centre
+ * anchor was considered and rejected for #163, because `boundsChange` is
+ * emitted on the `viewport` strategy ONLY (`map-provider-yandex.js`), so
+ * `bulk` would have had no event to follow it with — "one rule, not two
+ * modes" would have become exactly two. With no anchor at all (never
+ * reachable in practice today, see {@see Panels.prototype.setAnchor}), the
+ * list keeps the caller-supplied order verbatim (deterministic — it never
+ * reshuffles on its own between calls with the same input).
  *
  * THE RENDERED LIST IS CAPPED AT {@see LIST_CAP} ITEMS — silently dropping the tail is not
  * acceptable (spec), so the cap keeps the HEAD of the caller-supplied/sorted order, never an
@@ -2629,10 +2646,15 @@
 	};
 
 	/**
-	 * Sets (or clears) the distance anchor — the map centre by default, a
-	 * searched address when a search is active (Task 15); one rule, not two
-	 * modes (see the file docblock). Re-renders the list immediately so an
-	 * already-open list re-sorts without waiting for the next `setVisible()`.
+	 * Sets (or clears) the distance anchor — the centre of the initial viewport by default, set
+	 * ONCE when the picker opens and never updated as the customer pans/drags afterwards
+	 * (`pickup-mount.js` calls this the first time the map provider's `visibleChange` fires — see
+	 * `map-provider-yandex.js`'s `getCenter()` docblock for why that moment works under both map
+	 * strategies), or a searched address when a search is active (Task 15); one rule, not two
+	 * modes (see the file docblock). A live map-centre anchor was considered for issue #163 and
+	 * rejected — `boundsChange` is `viewport`-strategy-only, so `bulk` would have had nothing to
+	 * follow it with. Re-renders the list immediately so an already-open list re-sorts without
+	 * waiting for the next `setVisible()`.
 	 *
 	 * `label` (Task 15) is the searched address text; it used to switch the list header to the
 	 * `nearestTo` template and show a reset control, both DELETED in Task 7 (spec V-11) along
