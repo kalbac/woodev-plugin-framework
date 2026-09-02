@@ -374,14 +374,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Selection_Scope $selection_scope;
 
 		/**
-		 * Whether {@see reconcile_pickup_scope()} has already run this request (issue
-		 * #709). Process-static — the gate means "at most once per request", not "at
-		 * most once per Pickup_Handler instance".
+		 * Method ids for which {@see reconcile_pickup_scope()} has already reconciled
+		 * a scope claim this request (issue #749), keyed by METHOD ID — never a bare
+		 * process-wide bool.
+		 *
+		 * The check {@see reconcile_pickup_scope()} performs is per-method AND
+		 * per-scope by its own nature (see that method's docblock): a single
+		 * `Selection_Scope` instance only ever speaks for its own plugin's methods.
+		 * A bare bool would let only the FIRST method checked in a request ever be
+		 * reconciled, silently skipping every other method — and every other
+		 * plugin's methods — for the rest of the request: the same defect issue #736
+		 * fixed for
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::$pickup_declarations_reconciled}
+		 * and issue #746 fixed for {@see self::$location_context_wiring_reconciled}.
 		 *
 		 * @since 2.0.2
-		 * @var bool
+		 * @var array<string, true>
 		 */
-		private static bool $pickup_scope_reconciled = false;
+		private static array $pickup_scope_reconciled = [];
 
 		/**
 		 * The owning plugin, or null when the plugin has not wired the Location Provider
@@ -405,14 +415,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * missing `$plugin` for a given plugin identity this request (issue #746), keyed
 		 * by PLUGIN ID — never a bare process-wide bool.
 		 *
-		 * A bare bool (the shape {@see self::$pickup_scope_reconciled} above uses for a
-		 * genuinely once-per-request check) would break here: every plugin using this
-		 * framework builds its OWN `Pickup_Handler`, so a single flag would let only the
-		 * FIRST plugin constructed in a request ever be checked, silently skipping every
-		 * later plugin's own missing `$plugin` for the rest of the request — the exact
-		 * defect issue #736 fixed for
-		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::$pickup_declarations_reconciled},
-		 * which this property mirrors.
+		 * A bare process-wide bool would break here: every plugin using this framework
+		 * builds its OWN `Pickup_Handler`, so a single flag would let only the FIRST
+		 * plugin constructed in a request ever be checked, silently skipping every later
+		 * plugin's own missing `$plugin` for the rest of the request — the exact defect
+		 * issue #736 fixed for
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::$pickup_declarations_reconciled}
+		 * and issue #749 fixed for {@see self::$pickup_scope_reconciled}, which this
+		 * property mirrors.
 		 *
 		 * @since 2.0.2
 		 * @var array<string, true>
@@ -2956,11 +2966,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * claiming involvement with a method the truth disowns has no such excuse — that
 		 * combination is always this scope's own contradiction.
 		 *
-		 * Gated on `WP_DEBUG` and on running at most once per request; skipped for `''`,
-		 * which the {@see Selection_Scope} interface itself defines as "unknown", never a
-		 * real method choice worth reconciling against.
+		 * Gated on `WP_DEBUG`; skipped for `''`, which the {@see Selection_Scope} interface
+		 * itself defines as "unknown", never a real method choice worth reconciling
+		 * against. Reconciled AT MOST ONCE PER METHOD ID — never once per request — because
+		 * the check above is per-method AND per-scope by its own nature: a process-wide
+		 * flag would let only the first method checked in a request ever be reconciled,
+		 * silently skipping every other method (issue #749; same defect class as issue
+		 * #736). The gate ({@see self::$pickup_scope_reconciled}) is consumed only once
+		 * `$scope_says_pickup` is true, so a call where the scope has no opinion on this
+		 * method leaves the gate open for a later call that does.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Gate corrected to be keyed per method id and consumed only once
+		 *              the scope has an opinion, rather than a bare once-per-request bool
+		 *              spent on the first call regardless of what it claimed (issue #749).
 		 *
 		 * @param string $method_id         Bare shipping-method id (no `:instance_id` suffix).
 		 * @param bool   $scope_says_pickup Whether `type_for_method()` answered non-null.
@@ -2968,15 +2987,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		private static function reconcile_pickup_scope( string $method_id, bool $scope_says_pickup ): void {
-			if ( '' === $method_id || self::$pickup_scope_reconciled || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			if ( '' === $method_id || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
 				return;
 			}
 
-			self::$pickup_scope_reconciled = true;
+			if ( ! empty( self::$pickup_scope_reconciled[ $method_id ] ) ) {
+				return;
+			}
 
 			if ( ! $scope_says_pickup ) {
 				return;
 			}
+
+			self::$pickup_scope_reconciled[ $method_id ] = true;
 
 			$truth_says_pickup = in_array(
 				$method_id,
