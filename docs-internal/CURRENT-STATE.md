@@ -8,7 +8,7 @@
 
 **As of 2026-09-02 (s112).** `main` clean, **no open PRs**. s112 merged **#726–#733 and #735** and
 closed **#141 #725 #704 #270 #140 #171 #692**; filed **#734 #736 #737**; **reopened #111** (a PR
-body wrote «does **not** close #111» and GitHub closed it anyway). **69 open cards.** The operator
+body wrote «does **not** close #111» and GitHub closed it anyway). **70 open cards.** The operator
 ran his own rig pass the same evening: **#171 accepted**, **#692's split REJECTED** («это перебор,
 ему место в тултипе») and reverted before merge, «Форма заказа»/`section=checkout` accepted.
 History → `sessions/s112.md`.
