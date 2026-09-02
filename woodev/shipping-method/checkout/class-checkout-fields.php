@@ -272,11 +272,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 		 * checkout config unchanged — coerced/defaulted the same way `depends_on`
 		 * already is.
 		 *
+		 * A field with `source_kind === 'location'` and a `takeover_condition` is a
+		 * contradictory descriptor (issue #474): both layers claim to own the same DOM
+		 * element, and the §8 takeover adapter already refuses to touch a location field
+		 * ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler}), so the takeover
+		 * the plugin author asked for would otherwise be dropped silently. This method
+		 * drops `takeover_condition` for such a field and reports it once via
+		 * `_doing_it_wrong()` — the same enforcement point every other builder conflict
+		 * in this layer uses (e.g. {@see self::validate_required_spec()}).
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Added `section`, `depends_on`, `source`, `source_kind`,
 		 *              `takeover_condition`, `location_level`, `error_label`,
 		 *              `required_message`; `required` array preserved verbatim;
 		 *              `is_pickup_slot` bool (default false).
+		 * @since 2.0.2 Drops `takeover_condition` (with a `_doing_it_wrong()` notice)
+		 *              when `source_kind` is `'location'` (issue #474).
 		 *
 		 * @param array<string, mixed> $definition raw field definition
 		 *
@@ -303,11 +314,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 			$sanitize = $definition['sanitize_callback'] ?? null;
 			$validate = $definition['validate_callback'] ?? null;
 			$source   = $definition['source'] ?? null;
-			$takeover = $definition['takeover_condition'] ?? null;
 			$required = $definition['required'] ?? false;
+			$id       = (string) ( $definition['id'] ?? '' );
+
+			$source_kind = isset( $definition['source_kind'] ) && '' !== (string) $definition['source_kind']
+				? (string) $definition['source_kind']
+				: null;
+
+			$takeover = $definition['takeover_condition'] ?? null;
+			$takeover = is_callable( $takeover ) ? $takeover : null;
+
+			if ( 'location' === $source_kind && null !== $takeover ) {
+				_doing_it_wrong(
+					'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields::normalize',
+					sprintf(
+						/* translators: %s: field id */
+						'Field "%s" declares both source_location() and set_takeover_condition(). The location source owns this field, so its takeover condition was dropped.',
+						$id
+					),
+					'2.0.2'
+				);
+				$takeover = null;
+			}
 
 			return [
-				'id'                 => (string) ( $definition['id'] ?? '' ),
+				'id'                 => $id,
 				'type'               => (string) ( $definition['type'] ?? 'text' ),
 				'label'              => (string) ( $definition['label'] ?? '' ),
 				'error_label'        => (string) ( $definition['error_label'] ?? '' ),
@@ -319,13 +350,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Fields' 
 					? (string) $definition['depends_on']
 					: null,
 				'source'             => is_callable( $source ) ? $source : null,
-				'source_kind'        => isset( $definition['source_kind'] ) && '' !== (string) $definition['source_kind']
-					? (string) $definition['source_kind']
-					: null,
+				'source_kind'        => $source_kind,
 				'location_level'     => isset( $definition['location_level'] ) && '' !== (string) $definition['location_level']
 					? (string) $definition['location_level']
 					: null,
-				'takeover_condition' => is_callable( $takeover ) ? $takeover : null,
+				'takeover_condition' => $takeover,
 				'sanitize_callback'  => is_callable( $sanitize ) ? $sanitize : null,
 				'validate_callback'  => is_callable( $validate ) ? $validate : null,
 				'is_pickup_slot'     => (bool) ( $definition['is_pickup_slot'] ?? false ),
