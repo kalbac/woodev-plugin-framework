@@ -56,6 +56,43 @@ function woodev_realistic_shipping_plugin_init(): void {
 	require_once $plugin_path . '/includes/abstract-class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-pickup-shipping-method.php';
+	// Card #734: this carrier's OWN pickup point source — see that file's header for why a
+	// second fixture carrier exists and why its Краснодар entry holds exactly one point.
+	require_once $plugin_path . '/includes/class-realistic-point-source.php';
 
 	woodev_realistic_shipping_plugin();
 }
+
+/**
+ * Registers this fixture with the framework bootstrap on a LIVE WordPress boot (card #734).
+ *
+ * Until s112 this fixture was driven only from PHPUnit, where the test calls
+ * `register_loader_definition()` itself — so on a real site nothing ever registered it and
+ * its shipping methods did not appear at all. The rig needs it registered, because it is now
+ * the SECOND carrier: its own pickup handler, its own point source, its own REST route.
+ *
+ * Mixed-fleet probe, same shape and same reason as the sibling fixture's: if an outdated (v1)
+ * vendored framework copy won the class rendezvous it has no `register_loader_definition()`,
+ * so probe for the method and stay dormant rather than fatal.
+ */
+$woodev_realistic_shipping_framework_dir = defined( 'WOODEV_FRAMEWORK_DIR' )
+	? WOODEV_FRAMEWORK_DIR
+	: dirname( __DIR__, 2 );
+
+$woodev_realistic_shipping_bootstrap_file = $woodev_realistic_shipping_framework_dir . '/woodev/bootstrap.php';
+
+if ( file_exists( $woodev_realistic_shipping_bootstrap_file ) ) {
+
+	if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
+		require_once $woodev_realistic_shipping_bootstrap_file;
+	}
+
+	$woodev_realistic_shipping_bootstrap = Woodev_Plugin_Bootstrap::instance();
+
+	if ( method_exists( $woodev_realistic_shipping_bootstrap, 'register_loader_definition' ) ) {
+		$woodev_realistic_shipping_bootstrap->register_loader_definition(
+			woodev_realistic_shipping_plugin_loader_definition()
+		);
+	}
+}
+

@@ -44,6 +44,121 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		return self::$instance ??= new self();
 	}
 
+	/** @var \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null Pickup handler, built lazily (#734). */
+	private $pickup_handler = null;
+
+	/** @var \Woodev\Framework\Shipping\Checkout\Checkout_Handler|null Checkout handler, built lazily (#734). */
+	private $checkout_handler_instance = null;
+
+	/**
+	 * Builds and registers this fixture's pickup layer (card #734).
+	 *
+	 * WHY A SECOND CARRIER EXISTS AT ALL. The framework keys a `Pickup_Handler` — and with it
+	 * a `Point_Source` and a REST route `/shipping/pickup/{plugin_id}/points` — to a PLUGIN,
+	 * never to a shipping method. The rig used to hang both of its pickup methods off one
+	 * fixture plugin, so they could not serve different points, and with the rig's standard
+	 * `WOODEV_TEST_PICKUP_LIVE_YANDEX` the static data was unreachable through the UI at all.
+	 * This fixture is the SECOND carrier: its own source, its own route, its own points —
+	 * exactly the arrangement a real shop has with several carrier plugins installed, which
+	 * the rig previously could not reproduce in any way.
+	 *
+	 * Called from `init_shipping_pickup()` rather than the constructor so it runs after the
+	 * base class has finished wiring, and guarded so the fixture stays loadable in the unit
+	 * suite, where the pickup classes are not necessarily included.
+	 *
+	 * @return void
+	 */
+	private function init_realistic_pickup(): void {
+
+		if ( null !== $this->pickup_handler ) {
+			return;
+		}
+
+		if ( ! class_exists( '\Woodev\Framework\Shipping\Pickup\Pickup_Handler' )
+			|| ! class_exists( '\Woodev\Framework\Shipping\Map\Yandex_Map_Provider' )
+			|| ! class_exists( 'Woodev_Realistic_Point_Source' ) ) {
+			return;
+		}
+
+		// A fixture key, never a real one: under PHPUnit no ymaps script is ever fetched, and a
+		// real carrier plugin supplies its own key from the Yandex developer console.
+		$map_provider = new \Woodev\Framework\Shipping\Map\Yandex_Map_Provider( 'FIXTURE-FAKE-YANDEX-KEY' );
+
+		// Centred on Moscow, matching the majority of this fixture's own points, so the map
+		// opens on its data rather than on the whole world.
+		$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
+			'woodev-realistic-shipping',
+			'realistic_pickup_point',
+			new \Woodev_Realistic_Point_Source(),
+			$map_provider,
+			[ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ]
+		);
+
+		$this->pickup_handler->register();
+	}
+
+	/**
+	 * Returns this fixture's pickup handler — used by tests and by the rig.
+	 *
+	 * @return \Woodev\Framework\Shipping\Pickup\Pickup_Handler|null
+	 */
+	public function get_pickup_handler(): ?\Woodev\Framework\Shipping\Pickup\Pickup_Handler {
+
+		$this->init_realistic_pickup();
+
+		return $this->pickup_handler;
+	}
+
+	/**
+	 * The checkout backbone for this carrier — one field, the pickup slot (card #734).
+	 *
+	 * The base class registers whatever this returns (see `Shipping_Plugin`), and without it
+	 * there is no `carrier_pickup_point` field and therefore no pickup button on the checkout
+	 * for this carrier's method. Only the SECOND rig method id is listed, so choosing the
+	 * first carrier's method never shows this one's button.
+	 *
+	 * @return \Woodev\Framework\Shipping\Checkout\Checkout_Handler|null
+	 */
+	public function get_checkout_handler(): ?\Woodev\Framework\Shipping\Checkout\Checkout_Handler {
+
+		if ( null !== $this->checkout_handler_instance ) {
+			return $this->checkout_handler_instance;
+		}
+
+		if ( ! class_exists( '\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field' )
+			|| ! class_exists( '\Woodev\Framework\Shipping\Checkout\Checkout_Fields' ) ) {
+			return null;
+		}
+
+		$this->init_realistic_pickup();
+
+		$fields = \Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array(
+			[
+				// ⚠ ITS OWN FIELD ID, not the sibling's `carrier_pickup_point`. Two carriers on one
+				// checkout each inject into `woocommerce_checkout_fields`, which is keyed by field
+				// id — sharing an id leaves ONE field in the DOM, belonging to whichever handler
+				// ran last, and the other carrier's button silently never appears. Measured on the
+				// rig in s112: the second carrier's trigger was absent until this id was split.
+				// No label, deliberately: the visible control is the button and the modal, and a
+				// non-empty label would render a stray form row for a hidden field.
+				\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
+					'realistic_pickup_point',
+					[ 'woodev_realistic_pickup_shipping' ]
+				),
+			]
+		);
+
+		$this->checkout_handler_instance = new \Woodev\Framework\Shipping\Checkout\Checkout_Handler(
+			$fields,
+			'woodev_realistic_shipping'
+		);
+
+		$this->checkout_handler_instance->set_requires_pickup_methods( [ 'woodev_realistic_pickup_shipping' ] );
+
+		return $this->checkout_handler_instance;
+	}
+
+
 	/**
 	 * No-op dependency handler for isolated fixture construction.
 	 *
@@ -79,6 +194,23 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 * @return void
 	 */
 	protected function init_hook_deprecator() {}
+
+	/**
+	 * No-op updater for isolated fixture construction (card #734).
+	 *
+	 * The base class hooks `load_updater()` on `init` and it dereferences
+	 * `get_license_instance()->get_license()`. This fixture no-ops `init_license_handler()`,
+	 * so that accessor is null and the real `load_updater()` fatals with «Call to a member
+	 * function get_license() on null» in ANY admin, cron or WP-CLI context.
+	 *
+	 * ⚠ It never surfaced before s112 because this fixture had only ever been driven from
+	 * PHPUnit, where nothing fires `init`. It fataled the rig the moment the fixture was
+	 * booted by a real WordPress for the first time — a green unit suite said nothing about
+	 * it, which is the whole lesson.
+	 *
+	 * @return void
+	 */
+	public function load_updater() {}
 
 	/**
 	 * No-op lifecycle handler for isolated fixture construction.
