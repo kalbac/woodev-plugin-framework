@@ -86,16 +86,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private ?array $requires_pickup_methods = null;
 
 		/**
-		 * Whether {@see reconcile_pickup_declarations()} has already run this request
-		 * (issue #709). Process-static, not per-instance: several plugins may each build
-		 * their own `Checkout_Handler`, and the point of the gate is "at most once per
-		 * request", not "at most once per handler".
+		 * Whether {@see reconcile_pickup_declarations()} has already run this request,
+		 * PER HANDLER IDENTITY (issue #709; keying fixed for #736). Process-static, not
+		 * per-instance, so several `Checkout_Handler` objects built for the SAME plugin
+		 * within one request still only reconcile once — but keyed by {@see self::plugin_id()}
+		 * so that several DIFFERENT plugins, each building their own handler, are each
+		 * reconciled independently. A bare per-request bool (the original #709 shape) let
+		 * only the first handler constructed ever run this check — every other plugin's
+		 * declarations went unchecked for the rest of the request.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Keyed by {@see self::plugin_id()} instead of a single bool (#736).
 		 *
-		 * @var bool
+		 * @var array<string, bool>
 		 */
-		private static bool $pickup_declarations_reconciled = false;
+		private static array $pickup_declarations_reconciled = [];
 
 		/**
 		 * Registry of native WC field ids claimed by a plugin_id.
@@ -902,17 +907,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Resets the static native-field registry.
+		 * Resets the static native-field registry and the pickup-declaration
+		 * reconciliation gate.
 		 *
 		 * Provided for unit-test teardown so that tests that register handlers with
-		 * conflicting native-field ids do not bleed state into subsequent tests.
+		 * conflicting native-field ids, or that exercise {@see reconcile_pickup_declarations()},
+		 * do not bleed state into subsequent tests.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also resets {@see self::$pickup_declarations_reconciled} (#736).
 		 *
 		 * @return void
 		 */
 		public static function reset_native_field_registry(): void {
-			self::$native_field_registry = [];
+			self::$native_field_registry          = [];
+			self::$pickup_declarations_reconciled = [];
 		}
 
 		/**
@@ -1886,12 +1895,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * single source of truth, {@see Checkout_Config::pickup_method_ids()} (issue #709).
 		 * Fires `_doing_it_wrong()` on any mismatch; silent when every mechanism agrees.
 		 *
+		 * REWRITTEN FOR #736: the original #709 check compared THIS HANDLER's declared
+		 * ids against the truth by SET EQUALITY. On a shop running two or more Woodev
+		 * shipping plugins — the ordinary production arrangement — every handler legally
+		 * declares only its OWN methods, a strict subset of the fleet-wide truth, so
+		 * equality never held and the check fired on every checkout. Ownership cannot be
+		 * inferred from anything a handler holds (`$hook_prefix` is a free-form
+		 * constructor arg, unrelated to the plugin id string {@see Checkout_Config} would
+		 * need to filter by), so this now checks two things a single handler genuinely
+		 * CAN know without any ownership information:
+		 *
+		 *  (a) SOUNDNESS — every id this handler declares, in the Pickup_Field list and in
+		 *      an explicit backstop, must be a MEMBER of the truth (a subset check, not
+		 *      equality). An id that is not a real pickup method at all — a typo, or a
+		 *      pickup button wired to a non-pickup method — is a genuine defect.
+		 *  (b) AGREEMENT — this handler's own two mechanisms must agree WITH EACH OTHER:
+		 *      the Pickup_Field id list vs. an EXPLICIT `set_requires_pickup_methods()`
+		 *      list. Only applies when the backstop was explicitly set — an unset backstop
+		 *      derives from the fleet-wide truth by design (see {@see validate()}'s own
+		 *      backstop resolution), so it is not a per-plugin "declaration" to compare.
+		 *
 		 * WHAT THIS CANNOT CATCH: since #709 both mechanisms above DEFAULT to the derived
 		 * truth (a plugin that never supplies an explicit list cannot diverge from it by
 		 * construction), so a mismatch here only ever means a plugin supplied an EXPLICIT
-		 * list that disagrees. The fourth mechanism,
-		 * {@see \Woodev\Framework\Shipping\Pickup\Selection_Scope::type_for_method()}, is
-		 * plugin-owned and cannot be derived at all — it is reconciled separately, in
+		 * list that is unsound or that disagrees with its own other mechanism. Dropped by
+		 * #736: the old "handler's ids equal the WHOLE fleet" requirement caught one real
+		 * class of defect this rewrite cannot — a plugin that has a pickup method it
+		 * declared to NEITHER mechanism at all (nothing here would notice a pickup method
+		 * that is simply never wired to a Pickup_Field or a backstop entry). Catching that
+		 * would need OWNERSHIP information — which plugin a given truth id belongs to —
+		 * that no handler currently exposes (see #736's own investigation notes); a
+		 * follow-up card names that seam if it becomes worth building. The fourth
+		 * mechanism, {@see \Woodev\Framework\Shipping\Pickup\Selection_Scope::type_for_method()},
+		 * is plugin-owned and cannot be derived at all — it is reconciled separately, in
 		 * {@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler}, against the same truth,
 		 * for the one method id a request can actually observe (the currently chosen one).
 		 *
@@ -1899,25 +1935,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * is an optional redundant safety net ({@see self::set_requires_pickup_methods()}'s
 		 * own docblock: "when set..."); a plugin that explicitly turns it off has made a
 		 * deliberate choice, not forgotten to keep a list in sync, so an empty explicit list
-		 * is exempt from this comparison regardless of what the truth says.
+		 * is exempt from the agreement check regardless of what the field list says.
 		 *
-		 * Gated on `WP_DEBUG` and on running at most ONCE PER REQUEST — never on a normal
-		 * production checkout, and never spamming the log once per `inject()` call (this
-		 * runs on every `woocommerce_checkout_fields` pass, including AJAX totals
-		 * refreshes).
+		 * EMPTY TRUTH IS SKIPPED, NOT FLAGGED. {@see Checkout_Config::pickup_method_ids()}
+		 * returns `[]` when WooCommerce's shipping subsystem is unavailable — its own
+		 * guard, deliberately, for the unit suite. Reconciling against a truth this
+		 * process could not read would flag every declared id as unsound, which is a false
+		 * positive about the environment, not the plugin's declarations.
+		 *
+		 * Gated on `WP_DEBUG` and on running at most ONCE PER REQUEST PER HANDLER IDENTITY
+		 * (keyed by {@see self::plugin_id()}) — never on a normal production checkout, and
+		 * never spamming the log once per `inject()` call (this runs on every
+		 * `woocommerce_checkout_fields` pass, including AJAX totals refreshes) — while still
+		 * checking EVERY plugin's handler once, not only the first one built (#736; the
+		 * original #709 gate was a single process-wide bool, so only the first handler
+		 * constructed in a request was ever reconciled).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Compares subset-membership and cross-mechanism agreement instead of
+		 *              set equality against the fleet-wide truth, skips an unreadable
+		 *              (empty) truth, and reconciles every handler identity once per
+		 *              request instead of only the first one built (#736).
 		 *
 		 * @return void
 		 */
 		private function reconcile_pickup_declarations(): void {
-			if ( self::$pickup_declarations_reconciled || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			$plugin_id = $this->plugin_id();
+
+			if ( ! empty( self::$pickup_declarations_reconciled[ $plugin_id ] ) || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
 				return;
 			}
 
-			self::$pickup_declarations_reconciled = true;
+			self::$pickup_declarations_reconciled[ $plugin_id ] = true;
 
 			$truth = Checkout_Config::pickup_method_ids();
+
+			if ( [] === $truth ) {
+				// Cannot reconcile against a truth this process could not read.
+				return;
+			}
 
 			$field_ids = [];
 			foreach ( $this->pickup_slot_fields() as $slot ) {
@@ -1931,22 +1987,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 			$field_ids = array_values( array_unique( $field_ids ) );
 
-			$backstop_ids   = $this->requires_pickup_methods ?? $truth;
-			$backstop_ok    = [] === $backstop_ids || self::ids_match( $truth, $backstop_ids );
-			$field_ids_ok   = self::ids_match( $truth, $field_ids );
+			$explicit_backstop = null !== $this->requires_pickup_methods;
+			$backstop_ids      = $this->requires_pickup_methods ?? $truth;
 
-			if ( $field_ids_ok && $backstop_ok ) {
+			$unsound_ids = array_values(
+				array_unique(
+					array_merge(
+						array_diff( $field_ids, $truth ),
+						$explicit_backstop ? array_diff( $backstop_ids, $truth ) : []
+					)
+				)
+			);
+
+			$disagree = $explicit_backstop && [] !== $backstop_ids && ! self::ids_match( $field_ids, $backstop_ids );
+
+			if ( [] === $unsound_ids && ! $disagree ) {
 				return;
+			}
+
+			$messages = [];
+
+			if ( [] !== $unsound_ids ) {
+				$messages[] = sprintf(
+					'declares pickup method id(s) [%s] that are not a registered pickup method (see Shipping_Method::is_pickup_shipping()).',
+					implode( ', ', $unsound_ids )
+				);
+			}
+
+			if ( $disagree ) {
+				$messages[] = sprintf(
+					'the Pickup_Field id list [%1$s] and set_requires_pickup_methods() [%2$s] disagree.',
+					implode( ', ', $field_ids ),
+					implode( ', ', $backstop_ids )
+				);
 			}
 
 			_doing_it_wrong(
 				'Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler',
 				sprintf(
-					/* translators: 1: is_pickup_shipping()-derived ids, 2: Pickup_Field ids, 3: set_requires_pickup_methods() ids */
-					'Pickup-method declarations disagree (issue #709). Shipping_Method::is_pickup_shipping() says [%1$s], but the checkout\'s Pickup_Field id list is [%2$s] and set_requires_pickup_methods() is [%3$s]. A method the customer can actually place an order under may end up with a pickup button and no hidden address, or a hidden address and no pickup button.',
-					implode( ', ', $truth ),
-					implode( ', ', $field_ids ),
-					implode( ', ', $backstop_ids )
+					'Pickup-method declarations for plugin "%1$s" are unsound (issue #736): %2$s',
+					$plugin_id,
+					implode( ' ', $messages )
 				),
 				'2.0.2'
 			);
