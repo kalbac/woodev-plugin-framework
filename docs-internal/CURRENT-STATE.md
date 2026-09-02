@@ -6,12 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-02 (s112).** `main` clean, **no open PRs**. s112 merged **#726–#733** and closed
-**#141 #725 #704 #270 #140 #171 #692**; filed **#734**; **reopened #111** (a PR body wrote «does
-**not** close #111» and GitHub closed it anyway). **68 open cards.** The operator ran his own rig
-pass the same evening: **#171 accepted**, **#692's split REJECTED** («это перебор, ему место в
-тултипе») and reverted before merge, «Форма заказа»/`section=checkout` accepted. History →
-`sessions/s112.md`.
+**As of 2026-09-02 (s112).** `main` clean, **no open PRs**. s112 merged **#726–#733 and #735** and
+closed **#141 #725 #704 #270 #140 #171 #692**; filed **#734 #736 #737**; **reopened #111** (a PR
+body wrote «does **not** close #111» and GitHub closed it anyway). **69 open cards.** The operator
+ran his own rig pass the same evening: **#171 accepted**, **#692's split REJECTED** («это перебор,
+ему место в тултипе») and reverted before merge, «Форма заказа»/`section=checkout` accepted.
+History → `sessions/s112.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
@@ -23,10 +23,9 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines on `main`, measured 02.09.2026 IN THE PRIMARY CHECKOUT (s112), sodium enabled, against
-`0267e82`:** unit **3384** / 8306 / **1 skipped**, green under `--order-by=reverse` too; jest
-**1606** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors;
-**integration 129 / 506**; **e2e 7 / 7** against the live rig. The unit count moved from s111's 3393
-because #141 deleted two test files (−18) and #270/#725 added tests (+9).
+`6624081`:** unit **3391** / 8328 / **1 skipped**, green under `--order-by=reverse` too; jest
+**1610** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors;
+**integration 129 / 506**; **e2e 7 / 7** against the live rig.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -205,7 +204,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **261**.
+Gotchas: **262**.
 
 ## Program status (high level)
 
@@ -255,24 +254,15 @@ only consumer; they get rewritten once everything is ready.
 ✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
 27.08.2026, история на **#583**.
 
-Полный список открытых карточек — в блоке «Open cards after s108» выше; он и есть источник правды,
-здесь только порядок и запреты.
+**Порядок работ и объём — в `next-session-prompt.md` → «С чего начать».** Этот файл держит только
+состояние и запреты; список из шести карточек, живший здесь с s108, устарел целиком — все шесть
+закрыты (#515 #374 #483 #437 #503 в s109, #653 в s108).
 
-1. **#515**, **#374**, **#483**, **#437**, **#503** — все разблокированы 31.08.2026 и берутся без
-   вопросов. Порядок и объём каждой — в `next-session-prompt.md` → «С чего начать».
-2. **#644** — доделать поштучную сверку открытых карточек по КОДУ: аудит 29.08.2026 проверил так
-   лишь ~10, остальные оттриажены по заголовку. Расстановка приоритетов — ЕГО, сверка — агента.
-3. **#589** — шов «IP → координаты». Только если найдётся ВТОРОЙ потребитель.
-4. **#689** — косметика по RFC 6265 §5.4, отклонена осознанно; брать только если появится потребитель.
-
-🙋 **Ждут решения ОПЕРАТОРА — список СИЛЬНО сократился 31.08.2026.** Брейншторм s108 обнаружил,
-что **девять из одиннадцати** «ждущих» карточек ответ уже имели, прямо на себе, и этот файл держал
-работу зря. Реально его ждут только: **#644** (расстановка приоритетов), **#652** (его глаза на
-риге) и **#331**/**#332** (он сам поставил «не сейчас» 15.08.2026). Решены в s108: **#483**,
-**#374**, **#437**; закрыта **#653**. Ответы давно лежали на карточках: **#503**, **#515**,
-**#247**. **#474** отнесена к архитектурным — решать замером, не спрашивать. **#621** держится за
-**#639** (условие входа: 2-3 плагина оплаты разных типов). **Отложено до релиза:** #285, #247,
-остаток #567.
+🙋 **Ждут решения ОПЕРАТОРА:** **#644** (расстановка приоритетов), **#652** (его глаза на риге),
+**#331**/**#332** (его «не сейчас» от 15.08.2026), **#734** (риг: держать ли первого перевозчика на
+живом Яндексе), **#737** (нужен ли ещё риговый mu-метод) и остаток **#111** (два файла-кандидата).
+**#474** — архитектурная, решать замером, не спрашивать. **#621** держится за **#639**.
+**Отложено до релиза:** #285, #247, остаток #567.
 
 **Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
 миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали
@@ -292,17 +282,26 @@ only consumer; they get rewritten once everything is ready.
   to its prior value) and the WC customer city/state. Confirmed by reopening the modal — map, tiles
   and clustered Moscow points. `field_mode_region` is `related-list`, default locality
   `test-cdek:44`. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
-- ⚠ **THE RIG DOES NOT RUN THE FIXTURE POINT SOURCE.** `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` in
-  the container's `wp-config.php`, and that flag **wins over everything** — ahead of the Pochta flag
-  and ahead of `WOODEV_TEST_PICKUP_STRATEGY` (`viewport`) entirely. The modal serves **300 real
-  Yandex.Market points around Moscow**, never the fixture's. So a change to
-  `Woodev_Test_Bulk_Point_Source` is **invisible on the rig** until both constants are flipped
-  (`false` / `bulk`) — and put back afterwards. Measured s112; card **#734**, gotcha
-  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
-  ⚠ The older line «all 13 fixture points are in Moscow, so any other locality says no points» was
-  about the FIXTURE source and is no longer the rig's behaviour on two counts: #270 gave the fixture
-  **three** localities (Москва 52 / Санкт-Петербург 4 / **Краснодар exactly 1**, the shape #150
-  needs), and the rig is not using it anyway.
+- ✅ **THE RIG RUNS TWO CARRIERS SIDE BY SIDE since s112** (#734, PR #735) — the ordinary production
+  arrangement, which it could not reproduce before. The framework separates pickup sources per
+  PLUGIN, never per method (`Pickup_Controller` builds a distinct route per plugin on purpose), so
+  the second carrier is a second fixture plugin, not a second method:
+
+  | method | source | REST route | checkout field |
+  |---|---|---|---|
+  | `woodev_test_shipping` | LIVE Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` | `carrier_pickup_point` |
+  | `woodev_realistic_pickup_shipping` | static fixture — Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` | `realistic_pickup_point` |
+
+  Each button is visible only under its own method. **#150 is testable at last**: Краснодар is the
+  single-point city whose bounds degenerate, and a test pins that count — do not add a second point.
+  ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` still WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the
+  FIRST carrier, so a change to `Woodev_Test_Bulk_Point_Source` still never reaches the rig; reach
+  static data through the second carrier instead of flipping constants. Gotchas
+  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it` and
+  `standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see`.
+  ⚠ Rig state this required, not tracked by git: `npx wp-env start` (new mapping),
+  `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
+  instance **5**.
 
   **STANDARD values, read off the container, never off a doc** (the s93 handoff had two wrong):
 

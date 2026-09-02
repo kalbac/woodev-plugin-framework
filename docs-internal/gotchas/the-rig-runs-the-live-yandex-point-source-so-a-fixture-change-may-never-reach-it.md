@@ -76,6 +76,26 @@ With the bulk source active and the customer in Краснодар, the points e
 `{"points":[]}` even though the source returns one point for that name when called directly. The
 locality is lost somewhere between the checkout and the source. Not diagnosed — card **#734**.
 
+## How it was resolved (s112, later the same day)
+
+The operator's decision was NOT to flip constants by hand and NOT to add a filter to the framework
+(an earlier proposal of mine, withdrawn as treating a rig problem with product code). Instead an
+EXISTING fixture — `woodev-realistic-shipping-plugin` — was given its own pickup layer, so the rig
+now runs **two carriers side by side**, each with its own `Point_Source`, its own
+`Pickup_Handler` and its own route:
+
+| method | source | route |
+|---|---|---|
+| `woodev_test_shipping` | live Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` |
+| `woodev_realistic_pickup_shipping` | static fixture: Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` |
+
+So the constants below no longer need flipping to reach static data, and **#150 is testable at
+last** — Краснодар is the single-point city it always needed. The constant precedence documented
+here is still true and still worth knowing; it is simply no longer the only way in.
+
+Traps met while doing it: gotcha
+`standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see`.
+
 ## Related
 
 - [rig-checkout-url-is-the-block-checkout](rig-checkout-url-is-the-block-checkout.md) — the other "the rig is not what you assume" trap
