@@ -1125,6 +1125,79 @@ describe( 'setVerdictPending', () => {
 	} );
 } );
 
+// #171: `renderCard()` fully rebuilds the card on every redraw (`empty()`, then header/body/footer
+// again) — that used to silently drop the customer's keyboard focus to `document.body` and reset
+// the scrolled-down card back to the top on every one of those redraws, including the busy/pending
+// toggle a confirmation click triggers TWICE in a row (#169). `mount()` (above) attaches
+// `panels._stage` to `document.body`, which is what lets `.focus()` below actually take — a
+// disconnected node can never become `document.activeElement`, in jsdom same as a real browser.
+describe( 'focus and scroll position survive a card redraw (#171)', () => {
+	const busyConfig = { ...cardConfig, i18n: { ...cardConfig.i18n, confirming: 'Проверяем…' } };
+
+	it( 'a redraw while the CTA is focused leaves focus on the rebuilt CTA', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.openCard( g, 'p1', 'list' );
+		panels.root.querySelector( '.woodev-pickup-card__cta' ).focus();
+
+		panels.openCard( g, 'p1', 'list' ); // a full rebuild — same call `setPointVerdict`'s own test above uses.
+
+		expect( document.activeElement ).toBe( panels.root.querySelector( '.woodev-pickup-card__cta' ) );
+	} );
+
+	// The CTA is `disabled` for the DURATION of the busy state (see `buildCardFooter()`'s own
+	// `locked` guard) — a disabled control cannot legitimately hold focus, and a real browser
+	// (jsdom included) simply refuses `.focus()` on one, so focus genuinely parks on
+	// `document.body` while «Проверяем…» shows; that part is a browser constraint, not a bug this
+	// fix can lift. What #171 actually promises for the #169 sequence is that `body` is a
+	// WAYPOINT, never a dead end: the instant the CTA is usable again, focus lands back on it.
+	it( 'the busy toggle («Забрать здесь» → «Проверяем…» → back) restores focus once the CTA re-enables', () => {
+		const panels = mount( busyConfig );
+		panels.openCard( { key: 'k', size: 1, points: [ point() ] } );
+		panels.root.querySelector( '.woodev-pickup-card__cta' ).focus();
+
+		expect( document.activeElement.textContent ).toBe( 'Забрать здесь' );
+
+		panels.setSelectionBusy( true );
+
+		expect( panels.root.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( 'Проверяем…' );
+		expect( document.activeElement ).toBe( document.body );
+
+		panels.setSelectionBusy( false );
+
+		const cta = panels.root.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.textContent ).toBe( 'Забрать здесь' );
+		expect( document.activeElement ).toBe( cta );
+	} );
+
+	it( 'preserves the card\'s scroll position across a redraw', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.openCard( g, 'p1', 'list' );
+		panels.root.querySelector( '.woodev-pickup-card' ).scrollTop = 120;
+
+		panels.openCard( g, 'p1', 'list' ); // full rebuild.
+
+		expect( panels.root.querySelector( '.woodev-pickup-card' ).scrollTop ).toBe( 120 );
+	} );
+
+	it( 'does not steal focus back once it has been deliberately moved off the card', () => {
+		const panels = mount( cardConfig );
+		const g = { key: 'k', size: 1, points: [ point() ] };
+		panels.openCard( g, 'p1', 'list' );
+		panels.root.querySelector( '.woodev-pickup-card__cta' ).focus();
+
+		const elsewhere = document.createElement( 'button' );
+		document.body.appendChild( elsewhere );
+		elsewhere.focus();
+
+		panels.openCard( g, 'p1', 'list' ); // full rebuild, same as the CTA-focused test above.
+
+		expect( document.activeElement ).toBe( elsewhere );
+	} );
+} );
+
 // -----------------------------------------------------------------------
 // Task 9 (spec D-6/D-7): a domain refusal is remembered on the held point (so a re-render or a
 // later tab switch still shows it); a transport failure is shown once and forgotten on the next

@@ -1449,6 +1449,85 @@
 	}
 
 	/**
+	 * Captures which element inside `self._cardEl` currently holds focus, as a class-token +
+	 * position pair rather than a node reference — the node itself is about to be discarded by
+	 * `renderCard()`'s own `empty()`, so nothing that outlives the rebuild can point at it
+	 * directly. The first token of `className` is this file's own BEM convention for a stable,
+	 * state-independent identity (the CTA's OWN modifier, `is-busy`, is exactly the kind of
+	 * second token this deliberately ignores — see {@see buildCardFooter}), so the signature
+	 * still matches after a redraw that only flipped a modifier class.
+	 *
+	 * Stored on `self._cardFocusIntent` (#171) rather than returned and used once: the
+	 * busy/pending toggle (`setSelectionBusy()`/`setVerdictPending()`) DISABLES the CTA for the
+	 * very redraw that runs this function, and a disabled control can never actually receive
+	 * focus — the browser refuses `.focus()` on one outright, jsdom included, see
+	 * {@see restoreCardFocus} — so a plain capture-then-restore pass would lose the memory on
+	 * that exact frame and never recover it once the CTA becomes focusable again. Persisting the
+	 * intent across calls is what lets a LATER `renderCard()` put focus back once it can — the
+	 * «Забрать здесь» → «Проверяем…» → back sequence (#169) the card names as the motivating case.
+	 *
+	 * Three outcomes, evaluated on every `renderCard()` call:
+	 * - focus is currently somewhere inside the card → record a fresh signature for it,
+	 *   replacing whatever was stored before (the customer is demonstrably still engaged here).
+	 * - focus is on `document.body` → leave the stored intent untouched. Removing a focused node
+	 *   and a `disabled` CTA refusing focus both park focus on `body` as a side effect of THIS
+	 *   file's own redraw, never a customer action — treating that as "moved away" would silently
+	 *   drop the very intent this exists to carry across the disabled frame.
+	 * - focus is anywhere else (outside the card, not `body`) → the customer, or a click handler
+	 *   that ran before this call, genuinely moved focus elsewhere; drop the stored intent so this
+	 *   or a later redraw does not steal it back (the naive save/restore bug the card warns about).
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function captureCardFocusIntent( self ) {
+		var active = ( 'undefined' !== typeof document ) ? document.activeElement : null;
+
+		if ( active && active !== self._cardEl && self._cardEl.contains( active ) ) {
+			var token = ( active.className || '' ).split( /\s+/ )[ 0 ];
+
+			self._cardFocusIntent = token
+				? { className: token, index: Array.prototype.indexOf.call( self._cardEl.getElementsByClassName( token ), active ) }
+				: null;
+
+			return;
+		}
+
+		if ( active && active !== document.body ) {
+			self._cardFocusIntent = null;
+		}
+	}
+
+	/**
+	 * Applies a signature {@see captureCardFocusIntent} stored, against the FRESH markup
+	 * `self._cardEl` now holds — never the detached node the signature was taken from, which the
+	 * rebuild already discarded.
+	 *
+	 * Only fires when `document.activeElement` is STILL `body` at this point, i.e. nothing
+	 * between the capture and here already focused something else. Skips a `disabled` match
+	 * rather than forcing it — a disabled control cannot legitimately hold focus, and forcing it
+	 * would silently re-drop focus to `body` anyway, which is the exact #171 bug — and does NOT
+	 * clear `self._cardFocusIntent` on a skip: leaving it in place is what lets a LATER redraw,
+	 * once the control re-enables, pick the restore back up (see {@see captureCardFocusIntent}).
+	 *
+	 * @param {Panels} self
+	 * @returns {void}
+	 */
+	function restoreCardFocus( self ) {
+		var signature = self._cardFocusIntent;
+
+		if ( ! signature || 'undefined' === typeof document || document.activeElement !== document.body ) {
+			return;
+		}
+
+		var target = self._cardEl.getElementsByClassName( signature.className )[ signature.index ];
+
+		if ( target && ! target.disabled ) {
+			target.focus();
+		}
+	}
+
+	/**
 	 * Fully rebuilds the card from `self`'s current `_activeGroup`/
 	 * `_activeIndex`/`_selectedId` — a no-op when no group is open. Called on
 	 * every `openCard()`, tab click, and `setSelectedId()` while a card is
@@ -1466,15 +1545,32 @@
 	 * docblock's "THE TYPE FILTER" note: a different group can keep that last type alive) — the
 	 * card closes instead of showing an excluded point or an empty box.
 	 *
+	 * #171: every full rebuild below used to drop the customer's focus and scroll position —
+	 * `empty()` discards the CTA/tabs/close button along with everything else, so a keyboard or
+	 * screen-reader user confirming a point (which redraws the card TWICE, busy then settled) was
+	 * silently dropped to `document.body`, and a customer scrolled down to the hours/services was
+	 * thrown back to the top. Centralised HERE, the one place every caller's redraw funnels
+	 * through, rather than patched at the `setSelectionBusy()` call site #169 added — see
+	 * {@see captureCardFocusIntent}/{@see restoreCardFocus} for the focus half; `scrollTop` is
+	 * read below BEFORE `empty()` (the only moment it still reflects the customer's actual
+	 * position) and written back only once the new header/body/footer are in the DOM (setting it
+	 * against the just-emptied, zero-height card would clamp to 0 in a real browser).
+	 *
 	 * @param {Panels} self
 	 * @returns {void}
 	 */
 	function renderCard( self ) {
+		captureCardFocusIntent( self );
+
+		var scrollTop = self._cardEl.scrollTop;
+
 		empty( self._cardEl );
 
 		var group = self._activeGroup;
 
 		if ( ! group ) {
+			self._cardFocusIntent = null;
+
 			return;
 		}
 
@@ -1494,6 +1590,7 @@
 				// Nothing left in this group passes the filter — close rather than show an
 				// excluded point or an empty card (see this function's own docblock).
 				self._activeGroup = null;
+				self._cardFocusIntent = null;
 				self._stage.classList.remove( 'is-card' );
 
 				return;
@@ -1506,6 +1603,9 @@
 		self._cardEl.appendChild( buildCardHeader( self, group, point ) );
 		self._cardEl.appendChild( buildCardBody( self._config, point ) );
 		self._cardEl.appendChild( buildCardFooter( self, point ) );
+
+		self._cardEl.scrollTop = scrollTop;
+		restoreCardFocus( self );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1919,6 +2019,13 @@
 		this._verdictPending = false;
 		this._activeGroup = null;
 		this._activeIndex = 0;
+
+		/**
+		 * @type {{className: string, index: number}|null} which focusable element inside
+		 * `_cardEl` a customer's keyboard/screen-reader focus was on across the most recent
+		 * `renderCard()` — see {@see captureCardFocusIntent}/{@see restoreCardFocus} (#171).
+		 */
+		this._cardFocusIntent = null;
 		this._listeners = {};
 
 		// Task 16: the type filter menu accumulates first-seen types across
@@ -3192,6 +3299,7 @@
 	Panels.prototype.openList = function() {
 		this._stage.classList.remove( 'is-card' );
 		this._activeGroup = null;
+		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
 
 		setStageOpen( this, true );
 	};
@@ -3281,6 +3389,7 @@
 	Panels.prototype.closeCard = function() {
 		this._stage.classList.remove( 'is-card' );
 		this._activeGroup = null;
+		this._cardFocusIntent = null; // #171 — the card is gone; nothing left to restore focus into.
 	};
 
 	/**
