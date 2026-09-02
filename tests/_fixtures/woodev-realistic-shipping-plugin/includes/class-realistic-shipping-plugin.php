@@ -86,12 +86,31 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 
 		// Centred on Moscow, matching the majority of this fixture's own points, so the map
 		// opens on its data rather than on the whole world.
+		//
+		// Arguments 6-13 are the framework's own defaults, restated only because the
+		// constructor is positional and PHP 7.4 (which CI checks) has no named arguments —
+		// same reasoning as woodev-test-shipping-method's own construction call. Argument
+		// 14 (Task 15; issue #159) is `$this`: without it `Pickup_Handler::location_context()`
+		// returns null, the browser config carries no `location` block, and the pickup
+		// picker silently falls back to DOM-read locality NAME addressing instead of the
+		// Location Provider layer's namespaced key — exactly the defect issue #746 reports.
+		// This is the framework's SECOND carrier, so the rig now exercises the main,
+		// key-addressed path through BOTH carriers rather than only the first.
 		$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 			'woodev-realistic-shipping',
 			'realistic_pickup_point',
 			new \Woodev_Realistic_Point_Source(),
 			$map_provider,
-			[ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ]
+			[ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ],
+			null,
+			null,
+			[],
+			'#06aedd',
+			'',
+			true,
+			false,
+			null,
+			$this
 		);
 
 		$this->pickup_handler->register();
