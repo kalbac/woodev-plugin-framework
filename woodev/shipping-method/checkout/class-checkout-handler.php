@@ -2089,6 +2089,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * The pickup-slot field ids that must NOT be persisted for a given chosen method.
+		 *
+		 * Server-side half of issue #745 — the classic checkout only HIDES an out-of-scope
+		 * pickup slot's hidden input (`checkout-field-classic.js`'s `placeSlot()`), never
+		 * `disabled`, so `form.checkout.serialize()` still submits it
+		 * ({@see self::save()}'s own docblock, and the client half is deliberately out of
+		 * scope here — gotcha
+		 * `the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`).
+		 *
+		 * REUSES {@see self::validate()}'s own backstop predicate verbatim rather than
+		 * inventing a second one: the same `$requires_pickup_methods` list
+		 * ({@see self::set_requires_pickup_methods()}, falling back lazily to
+		 * {@see Checkout_Config::pickup_method_ids()} on every call — issue #709, never
+		 * cached at construction) and the same {@see self::chosen_method_matches()} matcher.
+		 * When that list is empty, this returns `[]` too — exactly like `validate()`'s own
+		 * `[] !== $requires_pickup_methods` gate leaves its backstop off entirely, this
+		 * leaves persistence untouched rather than guessing at staleness with no known list.
+		 *
+		 * KNOWN LIMIT, not fixed here: `Checkout_Config::pickup_method_ids()` is FLEET-wide,
+		 * so a plugin that never calls `set_requires_pickup_methods()` gets a fallback list
+		 * that also contains OTHER carriers' pickup method ids. A two-carrier store is then
+		 * only correctly covered when each handler declares its own ids explicitly.
+		 * Deriving a handler's OWN methods was measured impossible in s113:
+		 * {@see \Woodev\Framework\Shipping\Shipping_Method::get_plugin()} is
+		 * `abstract protected`, and a handler's `$plugin_id` (`hook_prefix`) token has no
+		 * derivable relation to a plugin id (`woodev_realistic_shipping` vs.
+		 * `woodev-realistic-shipping`) — not re-attempted here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $chosen_shipping_method the chosen method for this submit (bare id,
+		 *                                        or `id:instance_id`)
+		 *
+		 * @return string[] pickup-slot field ids whose posted value must be dropped
+		 */
+		private function stale_pickup_field_ids( string $chosen_shipping_method ): array {
+			$requires_pickup_methods = $this->requires_pickup_methods ?? Checkout_Config::pickup_method_ids();
+
+			if ( [] === $requires_pickup_methods || self::chosen_method_matches( $chosen_shipping_method, $requires_pickup_methods ) ) {
+				return [];
+			}
+
+			$ids = [];
+
+			foreach ( $this->pickup_slot_fields() as $pickup_field ) {
+				$ids[] = (string) $pickup_field['id'];
+			}
+
+			return $ids;
+		}
+
+		/**
+		 * Drops every stale pickup-slot value ({@see self::stale_pickup_field_ids()}) from a
+		 * clean values map, keyed by field id — a non-pickup-slot field is never touched.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $values                 clean values keyed by field id
+		 * @param string               $chosen_shipping_method the chosen method for this submit
+		 *
+		 * @return array<string, mixed> $values with stale pickup-slot entries removed
+		 */
+		private function drop_stale_pickup_values( array $values, string $chosen_shipping_method ): array {
+			foreach ( $this->stale_pickup_field_ids( $chosen_shipping_method ) as $id ) {
+				unset( $values[ $id ] );
+			}
+
+			return $values;
+		}
+
+		/**
 		 * Saves the managed field values onto the order (HPOS-safe).
 		 *
 		 * Persists each value under the field id as the order-meta key via
@@ -2101,6 +2172,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * properties; writing them again as plugin meta double-stores the value and causes
 		 * drift after edits/refunds. See {@see self::is_native_wc_field()}.
 		 *
+		 * A pickup-slot field whose OWN method does not match the chosen shipping method
+		 * (issue #745) is dropped from `$values` before the loop even starts, via
+		 * {@see self::drop_stale_pickup_values()} — so it is skipped by `persist_field()`
+		 * exactly like an absent key, and it never reaches the per-field
+		 * `checkout_field_saved` hook or the final `checkout_data_saved` payload below
+		 * either; those two hooks are part of the same contract as order meta, and leaving
+		 * the stale value in them would only move the bug into a plugin's hook consumer.
+		 * `$chosen_shipping_method` defaults to `null` so this stays self-sufficient for a
+		 * direct call ({@see self::save()} is `public`, and {@see self::process()} is not
+		 * its only caller): `null` derives the method itself from `$_POST` via
+		 * {@see self::chosen_shipping_method()}, the exact same seam
+		 * {@see self::handle_checkout_process()} already uses. `process()` instead passes
+		 * the method it already resolved from `$posted`, so both entry points agree without
+		 * a second `$_POST` read. That `$_POST` derivation only runs when this handler has
+		 * declared at least one pickup-slot field at all — a handler with none can never
+		 * have a stale pickup value to drop, so a direct `save()` call never pays for (or
+		 * depends on) `$_POST` being readable when it has nothing to check.
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Native WC address fields (`billing_*` / `shipping_*`) are skipped.
 		 * @since 2.0.2 Iterates {@see self::effective_fields()} instead of
@@ -2108,13 +2197,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              field's Rule 7b fan-out only ever produces `billing_*`/`shipping_*`
 		 *              ids, so {@see self::is_native_wc_field()} still skips every variant
 		 *              here — this loop never persists plugin meta for one (issue #458).
+		 * @since 2.0.2 A pickup-slot field whose own method was not chosen is dropped
+		 *              before persistence and before both save hooks (issue #745).
 		 *
-		 * @param \WC_Order|int        $order  order object or id to save onto
-		 * @param array<string, mixed> $values clean values keyed by field id
+		 * @param \WC_Order|int        $order                  order object or id to save onto
+		 * @param array<string, mixed> $values                 clean values keyed by field id
+		 * @param string|null          $chosen_shipping_method the chosen method for this
+		 *                                                     submit, or `null` to derive it
+		 *                                                     from `$_POST`
 		 *
 		 * @return void
 		 */
-		public function save( $order, array $values ): void {
+		public function save( $order, array $values, ?string $chosen_shipping_method = null ): void {
+			if ( [] !== $this->pickup_slot_fields() ) {
+				$values = $this->drop_stale_pickup_values(
+					$values,
+					$chosen_shipping_method ?? $this->chosen_shipping_method()
+				);
+			}
+
 			foreach ( $this->effective_fields() as $id => $field ) {
 				if ( ! array_key_exists( $id, $values ) ) {
 					continue;
@@ -2160,9 +2261,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * can abort the order. On success the values are persisted and a final forward
 		 * hook fires.
 		 *
+		 * A pickup-slot field whose own method was not chosen (issue #745) is dropped via
+		 * {@see self::drop_stale_pickup_values()} AFTER `validate()` returns — validate()
+		 * itself still sees the raw sanitized `$values`, so a dropped value can never turn
+		 * into a validation error it did not already produce on its own; only what gets
+		 * persisted, and what the `checkout_processed` payload below carries, changes.
+		 *
 		 * @since 1.5.0
 		 * @since 2.0.2 Builds a `$state` map from the `$posted` data and threads it through
 		 *              `validate()` for consistent conditional-required evaluation at save time.
+		 * @since 2.0.2 Drops stale pickup-slot values before `save()` and before the
+		 *              `checkout_processed` payload (issue #745).
 		 *
 		 * @param array<string, mixed> $posted raw posted data (e.g. `$_POST`)
 		 * @param \WC_Order|int        $order  order object or id to save onto
@@ -2180,7 +2289,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$this->save( $order, $values );
+			$persisted_values = $this->drop_stale_pickup_values( $values, $state['chosen_shipping_method'] );
+
+			$this->save( $order, $persisted_values, $state['chosen_shipping_method'] );
 
 			/**
 			 * Fires after posted checkout data is sanitized, validated and saved.
@@ -2190,7 +2301,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			 * @param \WC_Order|int        $order  the order saved onto
 			 * @param array<string, mixed> $values the saved values keyed by field id
 			 */
-			do_action( $this->hook( 'checkout_processed' ), $order, $values );
+			do_action( $this->hook( 'checkout_processed' ), $order, $persisted_values );
 
 			return true;
 		}
