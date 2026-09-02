@@ -91,7 +91,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * runtime is NOT loaded on this path — a legacy v1 copy is in charge of
 		 * Woodev_Plugin_Bootstrap for the whole request.
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @param string              $plugin_file The dormant plugin's entry __FILE__.
 		 * @param array<string,mixed> $definition  The definition passed to register().
@@ -119,7 +119,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * Renders the fleet-wide OB-1 dormant notice: names every quarantined v2 plugin and,
 		 * best-effort, the legacy (v1) plugin whose framework copy is blocking them (#104).
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @return void
 		 */
@@ -192,7 +192,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * source); falls back to the name the plugin declared in its register() definition;
 		 * falls back to its bare filename as a last, always-truthful resort. Never guesses.
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @param string $plugin_file   The dormant plugin's entry __FILE__.
 		 * @param string $fallback_name The plugin_name from its definition, or ''.
@@ -225,7 +225,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * copy. Returns '' when the owner cannot be determined; the caller then falls back to
 		 * generic, still-truthful wording rather than printing a path or a guess.
 		 *
-		 * @since 2.0.3
+		 * @since 2.0.2
 		 *
 		 * @return string Conflicting plugin display name, or '' if undeterminable.
 		 */
