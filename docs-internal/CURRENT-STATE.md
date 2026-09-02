@@ -6,15 +6,17 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-02 (s112).** `main` clean, **no open PRs**. s112 merged **#726–#733 and #735** and
-closed **#141 #725 #704 #270 #140 #171 #692**; filed **#734 #736 #737**; **reopened #111** (a PR
-body wrote «does **not** close #111» and GitHub closed it anyway). **70 open cards.** The operator
-ran his own rig pass the same evening: **#171 accepted**, **#692's split REJECTED** («это перебор,
-ему место в тултипе») and reverted before merge, «Форма заказа»/`section=checkout` accepted.
-History → `sessions/s112.md`.
+**As of 2026-09-02 (s113).** `main` clean of PRs except **#743**, which is HELD for his rig pass.
+s113 merged **#739 #740 #742** and closed **#736 #474 #111 #738**; filed **#738 #741**. **68 open
+cards.** Two cards were settled by MEASUREMENT that overturned the card's own proposal (#736's
+per-plugin filter is unbuildable; #474's throw would be the layer's only one).
+⚠ **The working tree is PARKED on `kalbac/fix-163-list-anchor`** for his pass — the rig serves the
+working tree. Return it to `main` when the pass is over.
+History → `sessions/s113.md`, `sessions/s112.md`.
 
-✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
-so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
+⚠ **The main checkout is PARKED on `kalbac/fix-163-list-anchor` (s113), not on `main`.** The rig
+serves the working tree, so this is deliberate — #743 is customer-visible and waits on his pass.
+Put it back on `main` the moment that pass is over.
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
 no quota, so the s98 billing block lifted the moment it was switched. Account, cost measurement and
@@ -22,10 +24,10 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines on `main`, measured 02.09.2026 IN THE PRIMARY CHECKOUT (s112), sodium enabled, against
-`6624081`:** unit **3391** / 8328 / **1 skipped**, green under `--order-by=reverse` too; jest
-**1610** in **24** suites; phpcs clean — **with the warning level ON**; phpstan no errors;
-**integration 129 / 506**; **e2e 7 / 7** against the live rig.
+**Baselines measured 02.09.2026 IN THE PRIMARY CHECKOUT (s113), sodium enabled, against
+`dc0c15c`:** unit **3401** / 8348 / **1 skipped**; jest **1610** in **24** suites; phpcs clean —
+**with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
+the live rig.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -60,15 +62,15 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s112 — 70.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
-rig), #331/#332 (his own "not now"), and now **#734** (does the rig stay on the live Yandex point
-source?) plus the two PRs held for his eyes — **#731** (#692, merchant copy) and **#732** (#171,
-keyboard focus). **#111 is reopened** and needs his call on two CANDIDATE files. Rationale for
-the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on
-him: **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#474** (architectural —
-decide by measurement, see below), **#310** (rewritten in s110 to one button), **#701** (a research
-record with a stated entry condition, held the same way #689 is). Deferred to release: #285, #247,
-and **#567's remainder** (150 English msgids — operator, 29.08.2026: leave them, regenerate `.pot`
+**Open cards after s113 — 68.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
+rig), #331/#332 (his own "not now"), **#734** (does the rig stay on the live Yandex point source?),
+**#737** (is another rig mu-method still wanted?) and **PR #743** (#163, customer-visible — the tree
+is parked on its branch for that pass). Rationale for the rest:
+`reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him: **#621**
+(held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one button),
+**#701** (a research record with a stated entry condition, held the same way #689 is), **#741**
+(teach the `test-cdek` fixture Краснодар — it blocks #150). Deferred to release: #285, #247, and
+**#567's remainder** (150 English msgids — operator, 29.08.2026: leave them, regenerate `.pot`
 and rebuild `.mo` before release).
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`), and the client reads it
@@ -87,9 +89,11 @@ by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-
 author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
 and NOTE boundaries only. Per-site table: the cards + `sessions/s101.md`.
 
-**#474 is ARCHITECTURAL — decide by measurement, do not ask.** Its own card text calls it the
-operator's call; that text is older than the s108 reclassification recorded here, and this side
-governs. Said so on the card in s110 so the two stop disagreeing; the card was not otherwise touched.
+**#474 CLOSED in s113 by that measurement** (PR #739). The layer holds **17 `_doing_it_wrong()`
+against one `throw`**, and the throw is a failed lookup, not a builder-conflict report — so
+`Checkout_Fields::normalize()` drops a location field's `takeover_condition` and reports it, and the
+card's own preferred `\LogicException` would have been the layer's first. The rule that produced
+this still stands: an architectural card is decided by measurement, not by asking.
 
 **The phpcs warning level is ARMED since s110 (#139)**; noisy sniffs are excluded individually with
 reasons. **Line length is the one deliberate hole, with its own ruleset:**
@@ -204,7 +208,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **262**.
+Gotchas: **264**.
 
 ## Program status (high level)
 
@@ -260,8 +264,8 @@ only consumer; they get rewritten once everything is ready.
 
 🙋 **Ждут решения ОПЕРАТОРА:** **#644** (расстановка приоритетов), **#652** (его глаза на риге),
 **#331**/**#332** (его «не сейчас» от 15.08.2026), **#734** (риг: держать ли первого перевозчика на
-живом Яндексе), **#737** (нужен ли ещё риговый mu-метод) и остаток **#111** (два файла-кандидата).
-**#474** — архитектурная, решать замером, не спрашивать. **#621** держится за **#639**.
+живом Яндексе), **#737** (нужен ли ещё риговый mu-метод) и **PR #743** (#163 — риговый проход;
+дерево под него припарковано). **#621** держится за **#639**.
 **Отложено до релиза:** #285, #247, остаток #567.
 
 **Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
