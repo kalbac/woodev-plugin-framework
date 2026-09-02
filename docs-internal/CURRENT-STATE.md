@@ -6,9 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-03 (s113).** `main` clean, **no open PRs, no worktrees**. s113 merged **#739 #740
-#742 #743** and closed **#736 #474 #111 #738 #163 #150**; **#741** was filed and closed the same
-session as mistaken. **65 open cards.**
+**As of 2026-09-03 (s113).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s113 merged
+**#739 #740 #742 #743** and closed **#736 #474 #111 #738 #163 #150 #734 #737 #741**; filed **#738
+#741 #744 #745 #746**. **66 open cards.** ⚠ **The next session is an AUTONOMOUS OVERNIGHT** — its
+scope, its do-not-touch list and what goes on the operator's desk in the morning are in
+`next-session-prompt.md`, which is written in that shape.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
@@ -111,11 +113,9 @@ sessions: the «required» rule is implemented TWICE** — server `validate()` a
 `the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`). #725 touched only the
 browser half, deliberately and with a comment saying so.
 
-**The «Place order» block is OPTIONAL since s112** (#725, PR #727): checkbox «Блокировать
-оформление заказа», default ON. Turning it off makes `refreshGate()` **leave the button alone**, not
-force-enable it. ⚠ Measured: **WooCommerce NEVER disables that button itself** — the gate exists
-only because #274 added it. The settings section is now **«Форма заказа»**, slug **`checkout`**
-(was «Поля»/`fields`).
+**The «Place order» block is OPTIONAL** (#725, s112): checkbox «Блокировать оформление заказа»,
+default ON; off makes `refreshGate()` **leave the button alone**, not force-enable it. ⚠ WooCommerce
+NEVER disables that button itself. Settings section «Форма заказа», slug `checkout`.
 
 **The warehouse scaffold is GONE** (#141, s112) — §17 finally true. `wc_yandex_delivery_warehouses`
 survived as an installed-site contract, asserted by a still-green test.
@@ -203,7 +203,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **264**.
+Gotchas: **265**.
 
 ## Program status (high level)
 

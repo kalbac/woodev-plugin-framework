@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 264 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 265 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -254,6 +254,7 @@
 - [shipping/checkout] **A `private static` "once per request" gate in a class each plugin builds its own copy of checks only the FIRST plugin — silently, with no failure to see.** → [a-process-static-once-per-request-gate-checks-only-the-first-plugin](gotchas/a-process-static-once-per-request-gate-checks-only-the-first-plugin.md) (s113)
 
 ### [shipping/pickup] — Pickup point picker / ymaps
+- [shipping/pickup] **A `Pickup_Handler` built without its plugin (the 14th positional arg) SILENTLY addresses the carrier by a DOM-read place name instead of the locality key — and gives the source no record and no resolved identity.** → [a-pickup-handler-built-without-its-plugin-silently-addresses-by-name](gotchas/a-pickup-handler-built-without-its-plugin-silently-addresses-by-name.md) (s113)
 - [shipping/pickup] **A restore tied to a server confirmation looks like a render artefact — settle "who did this" with a timestamped ledger AND a control, never by watching.** → [a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact](gotchas/a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact.md) (s77)
 - [shipping/pickup] **Two hook registrations in a reference can mean two OPTIONS, not two outputs.** → [two-hook-registrations-can-mean-two-options-not-two-outputs](gotchas/two-hook-registrations-can-mean-two-options-not-two-outputs.md) (s73)
 - [shipping/pickup] **A capability flag that removes a whole UI layer silences every branch that REPORTED through it.** → [a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it](gotchas/a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it.md) (s66)
