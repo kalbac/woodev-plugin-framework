@@ -281,10 +281,8 @@ only consumer; they get rewritten once everything is ready.
   to its prior value) and the WC customer city/state. Confirmed by reopening the modal — map, tiles
   and clustered Moscow points. `field_mode_region` is `related-list`, default locality
   `test-cdek:44`. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
-- ✅ **THE RIG RUNS TWO CARRIERS SIDE BY SIDE since s112** (#734, PR #735) — the ordinary production
-  arrangement, which it could not reproduce before. The framework separates pickup sources per
-  PLUGIN, never per method (`Pickup_Controller` builds a distinct route per plugin on purpose), so
-  the second carrier is a second fixture plugin, not a second method:
+- ✅ **TWO CARRIERS SIDE BY SIDE since s112** (#734/#735) — the ordinary production arrangement.
+  Sources separate per PLUGIN, never per method, so a second carrier is a second plugin:
 
   | method | source | REST route | checkout field |
   |---|---|---|---|
@@ -294,14 +292,18 @@ only consumer; they get rewritten once everything is ready.
   Each button is visible only under its own method. **#150 was tested through this and CLOSED in
   s113 — it does not reproduce**: Краснодар is the single-point city whose bounds degenerate, tiles
   render fully at max zoom, and a test pins that count — do not add a second point.
+  ⚠ **The SECOND carrier runs the LEGACY addressing path** (#746): its `Pickup_Handler` is built
+  without the plugin argument, so it has no `location` config block and addresses the source by a
+  DOM-read locality NAME, while the first carrier correctly sends the KEY (`test-cdek:44`). Measured
+  03.09.2026. Any rig measurement through the second carrier is exercising the fallback.
+
   ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734).**
   With two carriers the rig now shows both shapes at once (live data and clustering on one,
   deterministic fixture data on the other), which is closer to production than either alone.
-  ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` still WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the
-  FIRST carrier, so a change to `Woodev_Test_Bulk_Point_Source` still never reaches the rig; reach
-  static data through the second carrier instead of flipping constants. Gotchas
-  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it` and
-  `standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see`.
+  ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the FIRST
+  carrier, so a `Woodev_Test_Bulk_Point_Source` change never reaches the rig — reach static data
+  through the second carrier. Gotcha
+  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
   ⚠ Rig state this required, not tracked by git: `npx wp-env start` (new mapping),
   `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
   instance **5**.
