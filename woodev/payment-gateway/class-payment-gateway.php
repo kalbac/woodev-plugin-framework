@@ -440,8 +440,11 @@ if ( ! class_exists( 'Woodev_Payment_Gateway' ) ) :
 
 			$handle = 'woodev-payment-gateway-payment-form';
 
-			// Frontend JS
-			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/' . $handle . '.js', [ 'jquery-payment' ], Woodev_Plugin::VERSION, true );
+			// Frontend JS. The handle stays 'woodev-payment-gateway-payment-form' (third parties
+			// may depend on it for wp_add_inline_script() or as a dependency), but the file it
+			// enqueues is 'woodev-payment-gateway-frontend.js' — the payment-form JS shipped
+			// under that name, not "$handle . '.js'"; see #738.
+			wp_enqueue_script( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/js/frontend/woodev-payment-gateway-frontend.js', [ 'jquery-payment' ], Woodev_Plugin::VERSION, true );
 
 			// Frontend CSS
 			wp_enqueue_style( $handle, $this->get_plugin()->get_payment_gateway_framework_assets_url() . '/css/frontend/' . $handle . '.css', [], Woodev_Plugin::VERSION );
