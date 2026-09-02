@@ -497,12 +497,58 @@ class CheckoutHandlerInjectTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
-	// reconcile_pickup_declarations() — issue #709. WP_DEBUG-gated, so every test
-	// here defines the constant itself and runs in its own process
+	// reconcile_pickup_declarations() — issue #709, rewritten for #736 (fleet-wide
+	// SET EQUALITY was unsound on any shop running two or more Woodev shipping
+	// plugins — every handler legally declares only ITS OWN methods, a strict
+	// subset of the fleet truth, so equality never held). WP_DEBUG-gated, so every
+	// test here defines the constant itself and runs in its own process
 	// (`define()` cannot be undone, same reasoning `Functions\when( 'WC' )` needs
 	// `@runInSeparateProcess` for elsewhere in this suite — see
 	// CheckoutConfigTest::config_with_states()'s own docblock).
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Builds a `WC()` double whose `shipping()->get_shipping_methods()` reports the
+	 * given ids as pickup methods (`is_pickup_shipping() === true`), so
+	 * `Checkout_Config::pickup_method_ids()` returns a real, non-empty truth.
+	 *
+	 * Requires `CheckoutConfigPickupMethodFixture.php` (for
+	 * `Checkout_Config_Fake_Shipping_Method`) to already be `require_once`'d by the
+	 * caller — same split every other test in this block that needs a real truth uses.
+	 *
+	 * @param string[] $pickup_ids
+	 *
+	 * @return void
+	 */
+	private function mock_pickup_truth( array $pickup_ids ): void {
+		$methods = array_map(
+			static fn( string $id ) => new Checkout_Config_Fake_Shipping_Method( $id, true ),
+			$pickup_ids
+		);
+
+		$shipping = new class( $methods ) {
+			private array $methods;
+			public function __construct( array $methods ) {
+				$this->methods = $methods;
+			}
+			public function get_shipping_methods(): array {
+				return $this->methods;
+			}
+		};
+		$wc = new class( $shipping ) {
+			public $shipping_service;
+			// inject() -> current_country() reads WC()->customer; null degrades to ''.
+			public $customer = null;
+			public function __construct( $shipping_service ) {
+				$this->shipping_service = $shipping_service;
+			}
+			public function shipping() {
+				return $this->shipping_service;
+			}
+		};
+
+		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+	}
 
 	/**
 	 * Lazy defaults everywhere (no explicit Pickup_Field list, no
@@ -526,38 +572,144 @@ class CheckoutHandlerInjectTest extends TestCase {
 	}
 
 	/**
-	 * An explicit `Pickup_Field` id list that disagrees with `is_pickup_shipping()`
-	 * (here, WC() is unavailable, so the truth is `[]`) must fire `_doing_it_wrong()`.
+	 * #736 REGRESSION TEST — the exact defect the card reports. Two plugins, each
+	 * declaring only ITS OWN pickup method (both mechanisms, and both mechanisms
+	 * agreeing with each other), on a fleet-wide truth that is the UNION of both.
+	 * The pre-#736 code compared each handler's own subset against the whole fleet
+	 * by set equality, which never holds for a legitimate multi-plugin declaration —
+	 * so this must stay completely silent for BOTH handlers.
+	 *
+	 * Confirmed to fail against the pre-#736 implementation (reverted the production
+	 * file only, kept this test, ran it in isolation: `_doing_it_wrong` fired for the
+	 * first handler because `['plugin_a_pickup'] !== ['plugin_a_pickup','plugin_b_pickup']`)
+	 * and to pass against the fix.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_reconciliation_fires_when_pickup_field_list_diverges_from_the_truth(): void {
+	public function test_reconciliation_stays_silent_for_two_plugins_each_declaring_only_their_own_methods(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
 		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
 		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'plugin_a_pickup', 'plugin_b_pickup' ] );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		$handler_a = new Checkout_Handler(
+			Checkout_Fields::from_array( [
+				\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'plugin_a_pickup_point', [ 'plugin_a_pickup' ] )->to_array(),
+			] ),
+			'plugin_a'
+		);
+		$handler_a->set_requires_pickup_methods( [ 'plugin_a_pickup' ] );
+
+		$handler_b = new Checkout_Handler(
+			Checkout_Fields::from_array( [
+				\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'plugin_b_pickup_point', [ 'plugin_b_pickup' ] )->to_array(),
+			] ),
+			'plugin_b'
+		);
+		$handler_b->set_requires_pickup_methods( [ 'plugin_b_pickup' ] );
+
+		$handler_a->inject( [ 'order' => [] ] );
+		$handler_b->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * Section-2 defect (#736): the pre-fix gate was a single process-wide bool, so
+	 * only the FIRST `Checkout_Handler` built in a request was ever reconciled —
+	 * every other plugin's declarations went unchecked for the rest of the request.
+	 * Two handlers, each with a genuine divergence, must each fire their own notice.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_reconciles_every_handler_identity_not_only_the_first(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'method_a', 'method_b' ] );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->twice();
+
+		$handler_a = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'plugin_a' );
+		$handler_a->set_requires_pickup_methods( [ 'not_a_real_pickup_method' ] );
+
+		$handler_b = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'plugin_b' );
+		$handler_b->set_requires_pickup_methods( [ 'also_not_a_real_pickup_method' ] );
+
+		$handler_a->inject( [ 'order' => [] ] );
+		$handler_b->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * An explicit `Pickup_Field` id list naming an id that is not a member of the
+	 * truth at all — a typo, or a pickup button wired to a non-pickup method — is a
+	 * genuine defect and must fire `_doing_it_wrong()`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_fires_for_a_field_id_that_is_not_in_the_truth(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'real_pickup_method' ] );
 
 		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
 
 		$fields = Checkout_Fields::from_array( [
-			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'some_method' ] )->to_array(),
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'not_a_real_pickup_method' ] )->to_array(),
 		] );
 		( new Checkout_Handler( $fields, 'carrier' ) )->inject( [ 'order' => [] ] );
 	}
 
 	/**
-	 * An explicit `set_requires_pickup_methods()` list that disagrees with the truth
-	 * must also fire `_doing_it_wrong()`, even with no `Pickup_Field` in the mix at all.
+	 * An explicit `set_requires_pickup_methods()` list naming an id that is not a
+	 * member of the truth must also fire `_doing_it_wrong()`, even with no
+	 * `Pickup_Field` in the mix at all.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_reconciliation_fires_when_backstop_list_diverges_from_the_truth(): void {
+	public function test_reconciliation_fires_for_a_backstop_id_that_is_not_in_the_truth(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
 		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'real_pickup_method' ] );
 
 		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
 
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
-		$handler->set_requires_pickup_methods( [ 'some_method' ] );
+		$handler->set_requires_pickup_methods( [ 'not_a_real_pickup_method' ] );
+		$handler->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * Both lists are individually sound (each id is a real pickup method per the
+	 * truth) but they disagree WITH EACH OTHER — the Pickup_Field id list names a
+	 * different method than the explicit backstop. That is a genuine same-plugin
+	 * divergence and must fire `_doing_it_wrong()`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_fires_when_field_list_and_backstop_disagree_with_each_other(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
+		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'method_a', 'method_b' ] );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
+
+		$fields = Checkout_Fields::from_array( [
+			\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create( 'carrier_pickup_point', [ 'method_a' ] )->to_array(),
+		] );
+		$handler = new Checkout_Handler( $fields, 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'method_b' ] );
 		$handler->inject( [ 'order' => [] ] );
 	}
 
@@ -574,28 +726,7 @@ class CheckoutHandlerInjectTest extends TestCase {
 		require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/checkout/presets/class-pickup-field.php';
 		define( 'WP_DEBUG', true );
 
-		$pickup   = new Checkout_Config_Fake_Shipping_Method( 'truth_pickup', true );
-		$shipping = new class( [ $pickup ] ) {
-			private array $methods;
-			public function __construct( array $methods ) {
-				$this->methods = $methods;
-			}
-			public function get_shipping_methods(): array {
-				return $this->methods;
-			}
-		};
-		$wc = new class( $shipping ) {
-			public $shipping_service;
-			// inject() -> current_country() reads WC()->customer; null degrades to ''.
-			public $customer = null;
-			public function __construct( $shipping_service ) {
-				$this->shipping_service = $shipping_service;
-			}
-			public function shipping() {
-				return $this->shipping_service;
-			}
-		};
-		\Brain\Monkey\Functions\when( 'WC' )->justReturn( $wc );
+		$this->mock_pickup_truth( [ 'truth_pickup' ] );
 
 		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
 
@@ -611,20 +742,45 @@ class CheckoutHandlerInjectTest extends TestCase {
 	}
 
 	/**
-	 * The gate is per REQUEST, not per `inject()` call — `inject()` runs on every
-	 * `woocommerce_checkout_fields` pass, including AJAX totals refreshes, and a
-	 * genuine divergence must not spam the log once per pass.
+	 * `Checkout_Config::pickup_method_ids()` returns `[]` when WooCommerce's shipping
+	 * subsystem is unavailable (its own guard, deliberately, for the unit suite) —
+	 * WC() is never mocked here, so the truth is `[]`. Reconciling against a truth
+	 * this process could not read would flag every declared id as unsound; instead
+	 * the whole check must be skipped, silently, even with an otherwise-divergent
+	 * explicit backstop.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_reconciliation_runs_at_most_once_per_request(): void {
+	public function test_reconciliation_is_silent_when_the_truth_is_unreadable(): void {
 		define( 'WP_DEBUG', true );
+
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
+		$handler->set_requires_pickup_methods( [ 'some_method' ] );
+		$handler->inject( [ 'order' => [] ] );
+	}
+
+	/**
+	 * The gate is per REQUEST PER HANDLER IDENTITY, not per `inject()` call —
+	 * `inject()` runs on every `woocommerce_checkout_fields` pass, including AJAX
+	 * totals refreshes, and a genuine divergence must not spam the log once per pass
+	 * for the SAME handler.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_reconciliation_runs_at_most_once_per_request_for_the_same_handler(): void {
+		require_once __DIR__ . '/CheckoutConfigPickupMethodFixture.php';
+		define( 'WP_DEBUG', true );
+
+		$this->mock_pickup_truth( [ 'real_pickup_method' ] );
 
 		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->once();
 
 		$handler = new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' );
-		$handler->set_requires_pickup_methods( [ 'some_method' ] );
+		$handler->set_requires_pickup_methods( [ 'not_a_real_pickup_method' ] );
 		$handler->inject( [ 'order' => [] ] );
 		$handler->inject( [ 'order' => [] ] );
 	}
