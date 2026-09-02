@@ -10,11 +10,8 @@
 #742 #743** and closed **#736 #474 #111 #738 #163 #150**; **#741** was filed and closed the same
 session as mistaken. **65 open cards.**
 
-⚠ **Three findings of s113 were CORRECTED the next morning, and the corrections are the durable
-part.** `test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary, so a grep
-over its file says nothing about which cities it knows; the pickup modal drops `locality` when the
-region and settlement disagree (the region select's values are UPPERCASE), not because of the
-record; and #150 does not reproduce at all. History → `sessions/s113.md`, `sessions/s112.md`.
+⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
+its file says nothing about which cities it knows. History → `sessions/s113.md`.
 
 ✅ **The main checkout is back on `main`** — the #163 branch was parked there for the operator's
 pass, he merged it, and the tree was returned. The rig serves the working tree, so whenever a branch
@@ -90,11 +87,9 @@ by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-
 author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
 and NOTE boundaries only. Per-site table: the cards + `sessions/s101.md`.
 
-**#474 CLOSED in s113 by that measurement** (PR #739). The layer holds **17 `_doing_it_wrong()`
-against one `throw`**, and the throw is a failed lookup, not a builder-conflict report — so
-`Checkout_Fields::normalize()` drops a location field's `takeover_condition` and reports it, and the
-card's own preferred `\LogicException` would have been the layer's first. The rule that produced
-this still stands: an architectural card is decided by measurement, not by asking.
+**The checkout layer REPORTS a builder conflict, it does not throw** — 17 `_doing_it_wrong()`
+against one `throw`, and that throw is a failed lookup. A location field's `takeover_condition` is
+dropped and reported (#474, s113). An architectural card is decided by measurement, not by asking.
 
 **The phpcs warning level is ARMED since s110 (#139)**; noisy sniffs are excluded individually with
 reasons. **Line length is the one deliberate hole, with its own ruleset:**
@@ -122,9 +117,8 @@ force-enable it. ⚠ Measured: **WooCommerce NEVER disables that button itself**
 only because #274 added it. The settings section is now **«Форма заказа»**, slug **`checkout`**
 (was «Поля»/`fields`).
 
-**The warehouse scaffold is GONE** (#141, PR #726) — §17 finally true. The pilot fixture's
-`wc_yandex_delivery_warehouses` table name survived as an installed-site contract, asserted by a
-still-green test.
+**The warehouse scaffold is GONE** (#141, s112) — §17 finally true. `wc_yandex_delivery_warehouses`
+survived as an installed-site contract, asserted by a still-green test.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -297,8 +291,12 @@ only consumer; they get rewritten once everything is ready.
   | `woodev_test_shipping` | LIVE Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` | `carrier_pickup_point` |
   | `woodev_realistic_pickup_shipping` | static fixture — Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` | `realistic_pickup_point` |
 
-  Each button is visible only under its own method. **#150 is testable at last**: Краснодар is the
-  single-point city whose bounds degenerate, and a test pins that count — do not add a second point.
+  Each button is visible only under its own method. **#150 was tested through this and CLOSED in
+  s113 — it does not reproduce**: Краснодар is the single-point city whose bounds degenerate, tiles
+  render fully at max zoom, and a test pins that count — do not add a second point.
+  ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734).**
+  With two carriers the rig now shows both shapes at once (live data and clustering on one,
+  deterministic fixture data on the other), which is closer to production than either alone.
   ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` still WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the
   FIRST carrier, so a change to `Woodev_Test_Bulk_Point_Source` still never reaches the rig; reach
   static data through the second carrier instead of flipping constants. Gotchas
@@ -320,10 +318,14 @@ only consumer; they get rewritten once everything is ready.
   | `woodev_location_allow_custom_settlement` | `no` |
   | checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
 
-  `mu-plugins/` holds `zz-rig-test-pickup-shipping.php` (extended in s110 — the pickup method is now
-  declared in every registry reachable by public API) and `zz-rig-yandex-key.php`. Switching to
-  `geoip` needs `dadata` + a pinned non-local IP: gotcha
-  `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
+  `mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113. `zz-rig-test-pickup-shipping.php`
+  and its third pickup method `woodev_test_pickup_shipping` were **REMOVED** (#737, operator
+  03.09.2026): the second carrier covers those scenarios properly, while the mu-method was a
+  half-declared carrier whose chosen point never survived a reload. It is not tracked by git; a copy
+  is kept outside the repo, and restoring it means dropping the file back into `mu-plugins/`.
+  Verified after removal: the method is gone from the checkout, both real carriers still work, and
+  the #736 reconciliation stays silent. Switching to `geoip` needs `dadata` + a pinned non-local IP:
+  gotcha `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
 - **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
