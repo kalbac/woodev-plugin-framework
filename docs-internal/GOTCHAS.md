@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 262 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 264 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -111,6 +111,7 @@
 - [rig/browser] **The rig serves the working tree — a branch switch silently un-fixes things (a docs-only checkout of `main` counts), and a concurrent agent's half-written edit fatals every request.** → [rig-serves-the-working-tree-branch-switch-reverts-fixes](gotchas/rig-serves-the-working-tree-branch-switch-reverts-fixes.md) (s56, s81, s86)
 - [rig/browser] **Playwright MCP does not fire WooCommerce's checkout submit; chrome-devtools MCP does.** → [playwright-mcp-does-not-fire-wc-checkout-ajax](gotchas/playwright-mcp-does-not-fire-wc-checkout-ajax.md) (s44)
 - [rig/browser] **A cached asset under an unchanged `?ver=` reads as a feature that does not work — a hard reload is not enough.** → [a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature](gotchas/a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature.md) (s90)
+- [rig/browser] **The pickup modal's `locality` comes from the RESOLVED location record, not the city field — an unresolvable city drops the parameter and returns an empty list on a healthy 200.** → [the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field](gotchas/the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field.md) (s113)
 
 ### [framework/wiring] — Responsibilities that moved
 - [framework/wiring] **A module writing into another module's field must ANNOUNCE the write — otherwise the owner reads it as the user's.** → [a-module-that-writes-into-another-modules-field-must-announce-it](gotchas/a-module-that-writes-into-another-modules-field-must-announce-it.md) (s75)
@@ -250,6 +251,7 @@
 - [shipping/checkout] **A second store instance silently diverges — the checkout store needs an instance registry.** → [js-store-instance-registry-cross-module](gotchas/js-store-instance-registry-cross-module.md) (s45)
 - [shipping/checkout] **`disabled` drops a checkout field from `form.checkout.serialize()`; `readonly` is inert on a `<select>`.** → [disabled-drops-a-checkout-field-from-the-form-readonly-is-inert-on-select](gotchas/disabled-drops-a-checkout-field-from-the-form-readonly-is-inert-on-select.md) (s90)
 - [shipping/checkout] **`.woocommerce-input-wrapper` is `display: inline`, so an absolutely-positioned child centres on the line box, not the control.** → [the-woocommerce-input-wrapper-is-display-inline-so-absolute-children-miscentre](gotchas/the-woocommerce-input-wrapper-is-display-inline-so-absolute-children-miscentre.md) (s90)
+- [shipping/checkout] **A `private static` "once per request" gate in a class each plugin builds its own copy of checks only the FIRST plugin — silently, with no failure to see.** → [a-process-static-once-per-request-gate-checks-only-the-first-plugin](gotchas/a-process-static-once-per-request-gate-checks-only-the-first-plugin.md) (s113)
 
 ### [shipping/pickup] — Pickup point picker / ymaps
 - [shipping/pickup] **A restore tied to a server confirmation looks like a render artefact — settle "who did this" with a timestamped ledger AND a control, never by watching.** → [a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact](gotchas/a-restore-tied-to-a-server-confirmation-looks-like-a-render-artefact.md) (s77)
