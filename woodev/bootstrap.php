@@ -165,7 +165,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 				sprintf(
 					/* translators: %s — list of plugin names. */
 					__(
-						'Следующие плагины собраны для устаревшей версии фреймворка Woodev и поэтому были отключены: %s. Пожалуйста, обновите их.',
+						'Следующие плагины устарели и поэтому не были запущены: %s. Обновите их до последней версии.',
 						'woodev-plugin-framework'
 					),
 					$name_list
