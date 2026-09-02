@@ -1,7 +1,13 @@
-# The pickup modal's `locality` comes from the RESOLVED RECORD, not the city field
+# The pickup modal sends NO `locality` unless region and settlement AGREE
 
-**Namespace:** `[rig/browser]` · **Measured:** s113 (02.09.2026), on the live rig, while trying to
-reproduce #150 (the single-point city) through the interface.
+**Namespace:** `[rig/browser]` · **Measured:** s113 (02–03.09.2026), on the live rig, first while
+failing to reach #150's single-point city and then while actually reaching it.
+
+> ⚠ **This file's first version (02.09.2026) blamed the wrong thing** — it said the locality comes
+> from the resolved record "not the city field", and concluded that the `test-cdek` provider did not
+> know Краснодар. Both halves were wrong: the provider is a client of the live CDEK test contour and
+> knows every city in it, and setting the record alone changes nothing. The real cause is below.
+> Card #741, filed on that wrong premise, is closed as `not planned`.
 
 ## The trap
 
@@ -12,40 +18,40 @@ GET /wp-json/woodev/v1/shipping/pickup/woodev-realistic-shipping/points?locality
 → 200, 3 points
 ```
 
-It is natural to assume that string comes from the checkout's city input, so the obvious way to
-drive the modal to another city is to type into `#billing_city` / `#shipping_city` and fire
-`update_checkout`. **It does not work, and it fails in a way that looks like a broken carrier
-rather than a wrong move.** Measured in the browser: after setting the city field by hand, the very
-next request is
+Change the checkout's city and the parameter can vanish entirely:
 
 ```text
 GET /wp-json/woodev/v1/shipping/pickup/woodev-realistic-shipping/points
 → 200, 0 points
 ```
 
-— the `locality` parameter is **gone entirely**, and the list renders empty with no error, no
-console message and a perfectly healthy 200.
+No error, no console message, an empty list on a perfectly healthy 200 — which reads as "this
+carrier has nothing here" when the truth is "nobody ever asked".
 
-## Why
+## Why — the region field gates it, and its values are UPPERCASE
 
-`locality` is derived from the location layer's RESOLVED RECORD (the region → settlement chain,
-stored in `woodev_customer_location`), never from the raw text in the field. Typing a city the
-active provider cannot resolve leaves the chain with no settlement record, and a handler with no
-record sends no locality at all.
+`locality` is produced by the location chain, and the chain only resolves when the **region and the
+settlement agree**. The region field is a `<select>` whose option VALUES are upper-case
+(`МОСКВА`, `КРАСНОДАРСКИЙ КРАЙ`) while its labels are title-case (`Москва`, `Краснодарский край`).
 
-So an empty pickup list after a city change means "the location chain did not resolve", which is a
-completely different diagnosis from "the point source returned nothing".
+Every way of half-setting that pair produces the silent empty result:
 
-## Consequence when reproducing a locality-specific bug
+- typing a new city while the region still holds the old one → mismatch → no locality
+- writing `billing_state` as `'Москва'` instead of `'МОСКВА'` → **the select renders EMPTY**
+  (nothing matches the option value) → no locality
+- calling `Location_Service::set_customer_record()` alone → the fields still drive the request, so
+  the locality does not change at all
 
-You can only reach a city the ACTIVE location provider actually knows. On the standard rig that
-provider is `test-cdek`, and it knows only Москва, Санкт-Петербург and a handful of
-regions/districts. That is why #150's single-point city (Краснодар, which the realistic carrier's
-point source does serve) is unreachable through the interface — card #741.
+Setting a matching pair works first time:
 
-## ✅ How to check which of the two failed
+```text
+billing_state = КРАСНОДАРСКИЙ КРАЙ   billing_city = Краснодар
+→ ?locality=Краснодар → 1 point
+```
 
-Wrap `fetch`/`XMLHttpRequest.open` before opening the modal and read the URL back:
+## ✅ How to tell the two failures apart
+
+Wrap `fetch` before opening the modal and read the URL back:
 
 ```js
 window.__f = [];
@@ -53,15 +59,17 @@ const of = window.fetch;
 window.fetch = function (...a) { window.__f.push(String(a[0])); return of.apply(this, a); };
 ```
 
-- URL **carries** `locality=…` and the list is empty → the point SOURCE has nothing there.
-- URL **omits** `locality` → the location CHAIN did not resolve; the source was never asked.
+- URL **carries** `locality=…` and the list is empty → the point SOURCE really has nothing there.
+- URL **omits** `locality` → the region/settlement pair does not resolve; the source was never
+  asked. Check `#billing_state`'s rendered value FIRST — an empty select is the tell.
 
-## Do not "fix" it by forging the option
+## Restoring the rig after such a measurement
 
-`woodev_customer_location` stores a whole `Location_Record`, not a key — see
-[the-default-locality-option-stores-a-whole-record-not-a-key.md](the-default-locality-option-stores-a-whole-record-not-a-key.md).
-A hand-built record behaves unpredictably and proves nothing. Teach the fixture provider the city
-instead.
+Back up `woodev_customer_location` **and** `billing_state`/`billing_city` before writing any of
+them, and verify the restore by reopening the modal and seeing the expected row count — not by
+comparing the record alone. A stale WooCommerce SESSION can also hold the old pair after the user
+meta is restored; the record matching its backup byte-for-byte does **not** prove the checkout is
+back.
 
 ## Related
 

@@ -6,17 +6,19 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-02 (s113).** `main` clean of PRs except **#743**, which is HELD for his rig pass.
-s113 merged **#739 #740 #742** and closed **#736 #474 #111 #738**; filed **#738 #741**. **68 open
-cards.** Two cards were settled by MEASUREMENT that overturned the card's own proposal (#736's
-per-plugin filter is unbuildable; #474's throw would be the layer's only one).
-⚠ **The working tree is PARKED on `kalbac/fix-163-list-anchor`** for his pass — the rig serves the
-working tree. Return it to `main` when the pass is over.
-History → `sessions/s113.md`, `sessions/s112.md`.
+**As of 2026-09-03 (s113).** `main` clean, **no open PRs, no worktrees**. s113 merged **#739 #740
+#742 #743** and closed **#736 #474 #111 #738 #163 #150**; **#741** was filed and closed the same
+session as mistaken. **65 open cards.**
 
-⚠ **The main checkout is PARKED on `kalbac/fix-163-list-anchor` (s113), not on `main`.** The rig
-serves the working tree, so this is deliberate — #743 is customer-visible and waits on his pass.
-Put it back on `main` the moment that pass is over.
+⚠ **Three findings of s113 were CORRECTED the next morning, and the corrections are the durable
+part.** `test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary, so a grep
+over its file says nothing about which cities it knows; the pickup modal drops `locality` when the
+region and settlement disagree (the region select's values are UPPERCASE), not because of the
+record; and #150 does not reproduce at all. History → `sessions/s113.md`, `sessions/s112.md`.
+
+✅ **The main checkout is back on `main`** — the #163 branch was parked there for the operator's
+pass, he merged it, and the tree was returned. The rig serves the working tree, so whenever a branch
+is parked here, say so AND put it back.
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
 no quota, so the s98 billing block lifted the moment it was switched. Account, cost measurement and
@@ -24,8 +26,8 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines measured 02.09.2026 IN THE PRIMARY CHECKOUT (s113), sodium enabled, against
-`dc0c15c`:** unit **3401** / 8348 / **1 skipped**; jest **1610** in **24** suites; phpcs clean —
+**Baselines measured 02–03.09.2026 IN THE PRIMARY CHECKOUT (s113), sodium enabled:** unit
+**3401** / 8348 / **1 skipped** (against `dc0c15c`); jest **1621** in **24** suites (after #743); phpcs clean —
 **with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
 the live rig.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
@@ -62,16 +64,15 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s113 — 68.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
-rig), #331/#332 (his own "not now"), **#734** (does the rig stay on the live Yandex point source?),
-**#737** (is another rig mu-method still wanted?) and **PR #743** (#163, customer-visible — the tree
-is parked on its branch for that pass). Rationale for the rest:
-`reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him: **#621**
-(held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one button),
-**#701** (a research record with a stated entry condition, held the same way #689 is), **#741**
-(teach the `test-cdek` fixture Краснодар — it blocks #150). Deferred to release: #285, #247, and
-**#567's remainder** (150 English msgids — operator, 29.08.2026: leave them, regenerate `.pot`
-and rebuild `.mo` before release).
+**Open cards after s113 — 65.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
+rig), #331/#332 (his own "not now"), **#734** (the work is DONE — only his choice about the live
+Yandex source and its undiagnosed point 3 remain) and **#737** (is the rig mu-method still wanted?
+measured: it WIDENS the first fixture's field and backstop, so removing it is safe). Rationale for
+the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:
+**#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one
+button), **#701** (a research record with a stated entry condition, held the same way #689 is).
+Deferred to release: #285, #247, and **#567's remainder** (150 English msgids — operator,
+29.08.2026: leave them, regenerate `.pot` and rebuild `.mo` before release).
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`), and the client reads it
 that way; `location.countries` stays a flat chain-wide union and is never combined with it naively.
