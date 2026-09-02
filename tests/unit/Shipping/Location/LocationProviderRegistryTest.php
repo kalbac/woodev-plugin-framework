@@ -3670,6 +3670,9 @@ final class LocationProviderRegistryTest extends TestCase {
 		$this->assertFalse( $setting->get_default() );
 		$this->assertSame( \Woodev_Control::TYPE_CHECKBOX, $setting->get_control()->get_type() );
 		$this->assertSame( 'Города вне списка', $setting->get_name() );
+		// #692: BOTH sentences stay in the tooltip and this option carries no
+		// `description` — operator verdict on the rig, 02.09.2026. The audit had
+		// split them; he looked at it rendered and called it перебор.
 		$this->assertSame(
 			'Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке. Стабильность расчёта доставки для таких заказов не гарантируется: перевозчику нужен точный населённый пункт, и по произвольному тексту тариф может не рассчитаться.',
 			$setting->get_control()->get_tooltip()

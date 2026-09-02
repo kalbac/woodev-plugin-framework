@@ -348,13 +348,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Settings
 			 * unlike the cross-handler `region_field` condition on
 			 * `field_mode_region` above.
 			 *
-			 * Explanatory text lives in the CONTROL's `tooltip`, not the
-			 * setting's `description` (operator convention, 25.08.2026,
-			 * AGENTS.md Conventions): `description` is reserved for text
-			 * carrying an interactive element (e.g. an `<a href>`), which
-			 * this field has none of — same shape as `field_mode_region`/
-			 * `field_mode_settlement` above, whose own copy lives in their
-			 * controls' tooltips too.
+			 * BOTH sentences stay in the CONTROL's `tooltip`, and this option has no
+			 * `description` — **operator verdict, 02.09.2026, taken on the rig** (#692).
+			 * The audit had promoted the reliability warning to `description` on the
+			 * reasoning that a consequence must be SEEN rather than hovered; he looked at
+			 * it rendered and called it перебор — «ему место в тултипе».
+			 *
+			 * ⚠ Do NOT read this as "a warning never earns `description`". The rule in
+			 * `AGENTS.md` → `Settings help text` is unchanged and still lists "the text
+			 * must be SEEN" as a legitimate reason; his own worked example for it (the
+			 * one about log volume) still stands. This is a calibration point for ONE
+			 * option: a caveat attached to an off-by-default switch, which a merchant only
+			 * reaches by deliberately turning something on, did not clear that bar for him.
+			 * Re-splitting it is re-litigating a settled decision.
 			 */
 			$this->register_setting(
 				Location_Provider_Registry::SETTING_ALLOW_CUSTOM_SETTLEMENT,

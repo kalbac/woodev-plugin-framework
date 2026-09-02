@@ -317,9 +317,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Providers\\Dadata
 				self::FIELD_TOKEN        => [
 					'name'        => __( 'Токен API DaData', 'woodev-plugin-framework' ),
 					'type'        => \Woodev_Setting::TYPE_STRING,
-					// Issue #373: `tooltip` is the default explainer (what the field
-					// does), `description` is reserved for the clickable link — the
-					// operator's own rule, matching his "Client ID СДЭК" example.
+					// Issue #373 (widened #692, AGENTS.md Conventions → `Settings help
+					// text`, corrected 31.08.2026): `tooltip` is the default explainer
+					// (what the field does); `description` earns its place here
+					// because the link must be reachable, not just hoverable —
+					// matching the operator's own "Client ID СДЭК" example.
 					'tooltip'     => __( 'API-ключ сервиса DaData (Suggestions API) — без него подсказки городов и адресов в форме оформления заказа работать не будут.', 'woodev-plugin-framework' ),
 					'description' => __( 'Получить токен можно в <a href="https://dadata.ru/profile/#info" target="_blank" rel="noopener noreferrer">личном кабинете DaData</a>.', 'woodev-plugin-framework' ),
 					'default'     => '',
