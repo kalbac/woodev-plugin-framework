@@ -376,6 +376,27 @@ class CheckoutConfigTest extends TestCase {
 		$this->assertArrayNotHasKey( 'billing_city', $config['takeover'] );
 	}
 
+	/**
+	 * A field declaring both source_location() and set_takeover_condition() (issue
+	 * #474) has its condition dropped at normalize() time, so the emitted config
+	 * carries no `takeover` map entry for it — matching what the §8 adapter already
+	 * does (it refuses a location field regardless).
+	 */
+	public function test_location_field_with_takeover_condition_emits_no_takeover_map_entry(): void {
+		Functions\expect( '_doing_it_wrong' )->atLeast()->once();
+
+		$fields = Checkout_Fields::from_array( [
+			Field::create( 'billing_city' )
+				->source_location( 'settlement' )
+				->set_takeover_condition( static fn() => true )
+				->to_array(),
+		] );
+		$config = ( new Checkout_Config( 'carrier', 'https://x/wp-json/woodev/v1', 'N', [ 'RU' ] ) )->build( $fields );
+
+		$this->assertArrayNotHasKey( 'billing_city', $config['takeover'] );
+		$this->assertSame( 'location', $config['fields']['billing_city']['source_kind'] );
+	}
+
 	// -------------------------------------------------------------------------
 	// location_level on the per-field emitted shape — Task 9
 	// -------------------------------------------------------------------------

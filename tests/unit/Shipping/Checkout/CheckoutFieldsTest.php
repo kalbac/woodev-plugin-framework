@@ -104,6 +104,60 @@ class CheckoutFieldsTest extends TestCase {
 		$this->assertSame( 'region', Checkout_Fields::normalize( [ 'id' => 'x', 'location_level' => 'region' ] )['location_level'] );
 	}
 
+	// -------------------------------------------------------------------------
+	// takeover_condition vs. source_location() — mutually exclusive (issue #474)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A field declaring BOTH source_location() and set_takeover_condition() is a
+	 * contradictory descriptor: the location source owns the field, so the
+	 * takeover condition must be dropped and reported via _doing_it_wrong().
+	 */
+	public function test_normalize_drops_takeover_condition_on_location_field_and_warns(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->atLeast()->once();
+
+		$field = Checkout_Fields::normalize(
+			Field::create( 'billing_city' )
+				->source_location( 'settlement' )
+				->set_takeover_condition( static fn() => true )
+				->to_array()
+		);
+
+		$this->assertNull( $field['takeover_condition'] );
+		$this->assertSame( 'location', $field['source_kind'] );
+	}
+
+	/**
+	 * A location field with NO takeover condition is a normal, legitimate
+	 * configuration — must stay silent.
+	 */
+	public function test_normalize_location_field_without_takeover_is_silent(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		$field = Checkout_Fields::normalize(
+			Field::create( 'billing_city' )->source_location( 'settlement' )->to_array()
+		);
+
+		$this->assertNull( $field['takeover_condition'] );
+		$this->assertSame( 'location', $field['source_kind'] );
+	}
+
+	/**
+	 * A takeover field that is NOT location-backed (the §8 demo's ordinary use
+	 * case) must keep its condition untouched and stay silent.
+	 */
+	public function test_normalize_takeover_field_that_is_not_location_is_silent(): void {
+		\Brain\Monkey\Functions\expect( '_doing_it_wrong' )->never();
+
+		$condition = static fn() => true;
+		$field     = Checkout_Fields::normalize(
+			Field::create( 'billing_state' )->set_takeover_condition( $condition )->to_array()
+		);
+
+		$this->assertSame( $condition, $field['takeover_condition'] );
+		$this->assertNull( $field['source_kind'] );
+	}
+
 	public function test_normalize_is_pickup_slot_defaults_to_false(): void {
 		$field = Checkout_Fields::normalize( [ 'id' => 'x' ] );
 		$this->assertFalse( $field['is_pickup_slot'] );
