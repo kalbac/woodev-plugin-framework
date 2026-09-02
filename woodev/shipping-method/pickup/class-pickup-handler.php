@@ -401,6 +401,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		private ?Shipping_Plugin $plugin;
 
 		/**
+		 * Whether {@see self::reconcile_location_context_wiring()} has already reported a
+		 * missing `$plugin` for a given plugin identity this request (issue #746), keyed
+		 * by PLUGIN ID — never a bare process-wide bool.
+		 *
+		 * A bare bool (the shape {@see self::$pickup_scope_reconciled} above uses for a
+		 * genuinely once-per-request check) would break here: every plugin using this
+		 * framework builds its OWN `Pickup_Handler`, so a single flag would let only the
+		 * FIRST plugin constructed in a request ever be checked, silently skipping every
+		 * later plugin's own missing `$plugin` for the rest of the request — the exact
+		 * defect issue #736 fixed for
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::$pickup_declarations_reconciled},
+		 * which this property mirrors.
+		 *
+		 * @since 2.0.2
+		 * @var array<string, true>
+		 */
+		private static array $location_context_wiring_reconciled = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * `$order_handler` and `$point_field_logical` are optional and go together: when
@@ -415,6 +434,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *              {@see self::get_js_config()} time, never a per-carrier constructor
 		 *              argument. A caller passing either positionally now passes the wrong
 		 *              value into whichever later parameter shifted into its place.
+		 * @since 2.0.2 Reports a missing `$plugin` via `_doing_it_wrong()`, under `WP_DEBUG`,
+		 *              when the shop's Location Provider layer is otherwise active (issue
+		 *              #746) — see {@see self::reconcile_location_context_wiring()}. Silent
+		 *              until now: omitting `$plugin` degrades {@see self::location_context()}
+		 *              to `null` and the browser's pickup picker to a DOM-read locality NAME
+		 *              instead of the layer's namespaced KEY, with no difference in behaviour
+		 *              on an unambiguous settlement — the exact silent regression the card
+		 *              reports.
 		 *
 		 * @param string                      $plugin_id           plugin identifier (REST route +
 		 *                                                          JS config global name).
@@ -493,7 +520,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                          no record, and the browser config
 		 *                                                          carries no `location` block,
 		 *                                                          exactly as before this parameter
-		 *                                                          existed.
+		 *                                                          existed. Omitting it while the
+		 *                                                          shop's Location Provider layer is
+		 *                                                          active reports once via
+		 *                                                          `_doing_it_wrong()` under
+		 *                                                          `WP_DEBUG` (issue #746); see
+		 *                                                          {@see self::reconcile_location_context_wiring()}.
 		 *
 		 * @throws \InvalidArgumentException when `$default_location` does not have a valid
 		 *                                    `center` (two floats/ints, lat within ±90, lng
@@ -538,6 +570,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// own docblock for why a Pickup_Handler built lazily, after `init` priority 25
 			// already fired, is too late for the section to appear.
 			Shipping_Settings_Tab::instance()->declare_map_needed();
+
+			// Issue #746: a missing $plugin degrades pickup addressing to a DOM-read
+			// locality NAME instead of the Location Provider layer's namespaced KEY —
+			// silently, unless the layer is actually active. See
+			// self::reconcile_location_context_wiring()'s own docblock for why this runs
+			// here rather than in register(), and why the gate is keyed by plugin id.
+			$this->reconcile_location_context_wiring();
 		}
 
 		/**
@@ -2502,6 +2541,107 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'record'            => $record,
 				'resolved_identity' => $resolved_identity,
 			];
+		}
+
+
+		/**
+		 * Reports, via `_doing_it_wrong()`, a `Pickup_Handler` built WITHOUT `$plugin`
+		 * while the shop's Location Provider layer is otherwise active (issue #746).
+		 *
+		 * THE DEFECT THIS CLOSES: {@see self::$plugin} being `null` degrades
+		 * {@see self::location_context()} to `null`, {@see self::location_config_block()}
+		 * to omitting the browser's `location` block entirely, and
+		 * `pickup-mount.js::resolveLocalityKey()` to a silent fallback onto a DOM-read
+		 * locality NAME instead of the layer's namespaced KEY (`provider_id:native_id`,
+		 * the #159 contract) — with NO difference in observable behaviour on an
+		 * unambiguous settlement name. A plugin author who forgets the constructor's last
+		 * argument previously learned about this only in production, on an ambiguous name.
+		 *
+		 * GATED ON THE LAYER BEING ACTIVE, not merely on `$plugin` being `null` — a shop
+		 * with no Location Provider configured at all has nothing to degrade FROM: every
+		 * `Pickup_Handler` on it already addresses by name, wired or not, so warning every
+		 * such shop's plugins would be noise about a choice that changes nothing.
+		 * {@see self::location_layer_active()} (Location_Service::is_active(), the same
+		 * method the layer itself exposes for exactly this "is it actually usable right
+		 * now" question — see that method's own docblock) is deliberately independent of
+		 * `$plugin`: it asks whether the SHOP's layer is active, not whether the plugin
+		 * that failed to wire it would have known — reusing `$plugin->get_location_service()`
+		 * here is impossible in the one case this method exists to catch, `$plugin` being
+		 * `null`.
+		 *
+		 * RUNS FROM THE CONSTRUCTOR, not `register()`. Both fixture plugins in this repo
+		 * construct and `register()` a `Pickup_Handler` back to back, on the same request,
+		 * so timing never separates the two in practice; the constructor is also where
+		 * {@see self::$plugin} is first known and where this class already runs an
+		 * unconditional side effect on every build ({@see Shipping_Settings_Tab::declare_map_needed()}
+		 * above). `Location_Provider_Registry::declare_needed()` — the gate
+		 * {@see self::location_layer_active()} reads — runs from a plugin's `add_hooks()`
+		 * at `plugins_loaded`, always before any shipping method (and therefore any
+		 * `Pickup_Handler`) constructs on `init`, so the fleet-wide "is anything active"
+		 * answer is already settled by the time this check runs.
+		 *
+		 * KEYED PER PLUGIN IDENTITY ({@see self::$plugin_id}), never a bare process-wide
+		 * bool — see {@see self::$location_context_wiring_reconciled}'s own docblock for
+		 * why: every plugin builds its own `Pickup_Handler`, so a single flag would only
+		 * ever catch the first one built in a request (issue #736's own lesson, applied
+		 * here before a `Pickup_Handler` equivalent of that defect could ship at all).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function reconcile_location_context_wiring(): void {
+			if ( null !== $this->plugin || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			if ( ! empty( self::$location_context_wiring_reconciled[ $this->plugin_id ] ) ) {
+				return;
+			}
+
+			self::$location_context_wiring_reconciled[ $this->plugin_id ] = true;
+
+			if ( ! $this->location_layer_active() ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler',
+				sprintf(
+					'Pickup_Handler for plugin "%1$s" was constructed without its $plugin argument (issue #159/#746) while the shop\'s Location Provider layer is active: location_context() returns null, the browser config carries no `location` block, and the pickup picker silently falls back to a DOM-read locality NAME instead of the layer\'s namespaced locality KEY. This is ambiguous addressing that works today only because the current locality name happens to be unique — pass the owning plugin as the constructor\'s last argument.',
+					$this->plugin_id
+				),
+				'2.0.2'
+			);
+		}
+
+		/**
+		 * Whether the shop's Location Provider layer is active right now — a fresh,
+		 * plugin-independent {@see Location_Service::is_active()} (Task 6's own "gate
+		 * open, provider active, provider configured" question), used ONLY by
+		 * {@see self::reconcile_location_context_wiring()} for the one case where
+		 * `$plugin->get_location_service()` is unavailable: `$plugin` is `null`.
+		 *
+		 * Building a fresh {@see Location_Service} rather than requiring a plugin mirrors
+		 * the same "just need the layer, no specific plugin" idiom already used by
+		 * {@see \Woodev\Framework\Shipping\Location\Location_Settings} and
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Location_Controller} — every
+		 * collaborator {@see Location_Service::__construct()} takes is optional and
+		 * defaults to the shared production singleton
+		 * ({@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::instance()}),
+		 * so this never builds a second, disagreeing registry.
+		 *
+		 * `protected` — the same test-seam discipline as {@see self::wc_cart()} and
+		 * siblings: a test substitutes a fixed answer without the
+		 * registry/provider/settings machinery `LocationServiceTest` already exercises
+		 * for real.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function location_layer_active(): bool {
+			return ( new Location_Service() )->is_active();
 		}
 
 		/**

@@ -82,15 +82,21 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 		 *
 		 * ADDRESSING SOURCE (Task 15; issue #159): when the Location Provider layer
 		 * attached a record ({@see \Woodev\Framework\Shipping\Pickup\Point_Query::get_record()}),
-		 * this fixture matches the record's OWN settlement name — the browser no longer
-		 * sends a bare, DOM-read city string at all; it sends the layer's locality KEY,
-		 * opaque to this class, and the framework separately resolves the customer's
-		 * current record server-side ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::location_context()}).
-		 * Falls back to the legacy `$query->get_locality()` string ONLY when no record was
-		 * attached — the shape every EXISTING unit test in this repo still builds by hand
-		 * (`Point_Query::from_request( [ 'locality' => 'Москва' ] )`, no
-		 * `with_location()` call) — so this fixture keeps answering both shapes rather
-		 * than breaking a test suite this task did not touch.
+		 * this fixture matches the record's OWN settlement name. On THIS fixture's own
+		 * checkout — whose `Pickup_Handler` is wired with its owning plugin, see
+		 * `woodev-test-shipping-method.php`'s own construction call — the browser sends
+		 * the layer's locality KEY, opaque to this class, rather than a bare DOM-read city
+		 * string, and the framework separately resolves the customer's current record
+		 * server-side ({@see \Woodev\Framework\Shipping\Pickup\Pickup_Handler::location_context()}).
+		 * That is a per-plugin WIRING CHOICE, not a framework-wide guarantee (issue #746):
+		 * a `Pickup_Handler` built without its plugin still degrades — silently unless the
+		 * shop's Location Provider layer is active — to the exact bare-name shape this
+		 * class also answers. This class falls back to the legacy `$query->get_locality()`
+		 * string ONLY when no record was attached — the shape every EXISTING unit test in
+		 * this repo still builds by hand (`Point_Query::from_request( [ 'locality' =>
+		 * 'Москва' ] )`, no `with_location()` call), and the same shape a `Pickup_Handler`
+		 * without its plugin degrades to in production — so this fixture keeps answering
+		 * both shapes rather than breaking a test suite this task did not touch.
 		 *
 		 * Matching is case-/surrounding-whitespace-insensitive — a real DaData settlement
 		 * suggestion's own casing is not guaranteed to match this fixture's literal
