@@ -6,11 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-02 (s112).** `main` clean. s112 merged **#726–#730 and #733** and closed **#141**,
-**#725**, **#704**, **#270**, **#140**; filed **#734**; **reopened #111** (a PR body wrote «does
-**not** close #111» and GitHub closed it anyway). **70 open cards.** **PR #731 (#692) and PR #732
-(#171) are green and DELIBERATELY UNMERGED** — both change what the operator looks at, and his
-overnight merge licence was granted specifically for #725. History → `sessions/s112.md`.
+**As of 2026-09-02 (s112).** `main` clean, **no open PRs**. s112 merged **#726–#733** and closed
+**#141 #725 #704 #270 #140 #171 #692**; filed **#734**; **reopened #111** (a PR body wrote «does
+**not** close #111» and GitHub closed it anyway). **68 open cards.** The operator ran his own rig
+pass the same evening: **#171 accepted**, **#692's split REJECTED** («это перебор, ему место в
+тултипе») and reverted before merge, «Форма заказа»/`section=checkout` accepted. History →
+`sessions/s112.md`.
 
 ✅ **The main checkout is on `main`** (verified 27.08.2026, s100). The rig serves the working tree,
 so whenever a branch is parked there for a pass, say so here AND put it back afterwards.
