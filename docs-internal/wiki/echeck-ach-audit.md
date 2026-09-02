@@ -10,7 +10,11 @@
 > (~9 code references left, plus i18n catalogs) and Phases 2/4 have largely been
 > executed: the eCheck response interface file is deleted, the eCheck images
 > (`card-echeck.svg`/`.png`, `sample-check.png`) are gone, and the shared frontend
-> JS/CSS files — which still exist as shared assets — no longer contain eCheck code.
+> JS file no longer contains eCheck code. **Update (s113, 2026-09-02):** the paired CSS file
+> (`woodev-payment-gateway-frontend.css`) was confirmed dead — no PHP referenced it — and
+> deleted in #111. The JS file (`woodev-payment-gateway-frontend.js`) is NOT a leftover: it is
+> the only definition of `Woodev_Payment_Form_Handler`, required by the payment form gateway;
+> see #738 for the enqueue defect that was hiding this.
 > The WP-bump precondition ("must be preceded by" below) was satisfied in s36.
 
 ## Scope: 14 files, 6 categories
@@ -170,8 +174,12 @@ Remove the dedicated eCheck response interface:
 ### Phase 4: Asset cleanup (non-breaking)
 
 Remove eCheck-specific assets:
-- `assets/js/frontend/woodev-payment-gateway-frontend.js` — eCheck validation logic
-- `assets/css/frontend/woodev-payment-gateway-frontend.css` — eCheck form styling
+- `assets/js/frontend/woodev-payment-gateway-frontend.js` — eCheck validation logic. **Do NOT
+  delete the file** (s113, 2026-09-02): it is the only definition of
+  `Woodev_Payment_Form_Handler`, required by the payment form gateway (#738). Remove any
+  remaining eCheck-specific code in place instead.
+- `assets/css/frontend/woodev-payment-gateway-frontend.css` — eCheck form styling. Confirmed
+  dead and deleted in #111 (s113, 2026-09-02).
 - `assets/css/frontend/woodev-payment-gateway-payment-form.css` — eCheck form styling
 - `assets/images/card-echeck.svg` / `card-echeck.png` / `sample-check.png`
 
