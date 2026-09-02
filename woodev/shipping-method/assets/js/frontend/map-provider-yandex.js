@@ -27,7 +27,7 @@
  * is free to pan/zoom themselves under `bulk` too, even though nothing needs re-fetching there.
  *
  * PUBLIC SURFACE: `init( container, config )`, `setPoints( groups )`, `focusGroup( key, options )`,
- * `setTypeFilter( codes )`, `setMargin( open, width )`, `getFocusedKey()`,
+ * `setTypeFilter( codes )`, `setMargin( open, width )`, `getFocusedKey()`, `getCenter()`,
  * `matchLoadedPoints( query )`, `suggestAddresses( query )`, `resolveAddress( displayName )`,
  * `focusAddress( latLng, label )`, `clearAddress()`, `on( event, cb )`, `destroy()`. Events out:
  * `pointClick( key )`, `clusterClick( { coords } )`, `boundsChange( bbox )`, `bboxTooWide()`,
@@ -1617,6 +1617,28 @@
 	};
 
 	/**
+	 * The map's CURRENT centre `[lat, lng]` — issue #163's seam. `pickup-mount.js` reads this
+	 * exactly once per session, the first time `visibleChange` fires, to set the panels'
+	 * distance anchor to "the centre of the initial viewport" (see `pickup-panels.js`'s own
+	 * `setAnchor()` docblock) without ever following the camera afterwards. A synchronous
+	 * accessor rather than a one-shot event deliberately: BOTH the `viewport` strategy's
+	 * initial fit ({@see _resolveInitialViewport}, awaited inside {@see init}) and the `bulk`
+	 * strategy's initial fit ({@see setPoints}'s own, on its first call) already settle their
+	 * camera BEFORE their respective first `visibleChange` — so a caller reading this from
+	 * inside that handler always sees the POST-move centre, never the pre-move one (the file
+	 * docblock's first lesson). This is what makes the accessor work identically under both
+	 * strategies where a live `boundsChange`-driven anchor could not: that event is
+	 * `viewport`-only (see {@see _emitZoomChange}'s own comment), so following it would have
+	 * turned "one rule, not two modes" into exactly two.
+	 *
+	 * @since 2.0.2
+	 * @returns {number[]|null} `[lat, lng]`, or null before {@see init} has built the map.
+	 */
+	WoodevYandexMapProvider.prototype.getCenter = function() {
+		return this.map ? this.map.getCenter() : null;
+	};
+
+	/**
 	 * Checks the map's CURRENT bounds against the server's own bbox cap (D-4) and emits
 	 * exactly one of `boundsChange`/`bboxTooWide` accordingly — called once for the initial
 	 * viewport and again on every `boundschange`, under `strategy: 'viewport'` only.
@@ -2551,9 +2573,10 @@
 	 * indistinguishable from "a real search came back with zero rows", so the panels re-opened
 	 * the results box it had just closed. This method now emits a plain `searchCleared` event
 	 * instead, so the panels can tell the two apart. The panels' own reset control (`«Сбросить»`)
-	 * emits NO event of its own — it only calls `setAnchor( null )` internally (see the file
-	 * docblock's "ADDRESS SEARCH" section) — so THIS method is what Task 20's mount wiring calls
-	 * when the customer clears the search. Idempotent: a call with no prior search state is a
+	 * calls neither this method nor `setAnchor()` itself — it only emits `searchReset`
+	 * (`pickup-panels.js`'s own file docblock, "EVENT SEMANTICS"/`anchorCleared` section) — so
+	 * THIS method is what Task 20's mount wiring calls when the customer clears the search.
+	 * Idempotent: a call with no prior search state is a
 	 * safe no-op beyond the unconditional `searchCleared` emit, which every caller can rely on
 	 * firing every time. Draws/removes no pin — there has never been one to remove since D4.
 	 *

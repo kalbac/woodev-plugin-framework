@@ -608,6 +608,13 @@ distance from the **anchor**: the searched address when a search is active, othe
 one rule, not two modes. Capped at 300 entries. Recomputed on `boundschange`. Item shows
 `short_address` in bold, then `name` and `locality`. Empty state when nothing is in frame.
 
+> ⚠ **Superseded s113 (02.09.2026), issue #163 — the paragraph above records the s47 design, not
+> current behaviour.** The anchor is the centre of the INITIAL viewport, set once when the picker
+> opens, and it does not follow the map. A live map centre was rejected: `boundsChange`, the event
+> it would have followed, is emitted on the `viewport` strategy only, so `bulk` has none and "one
+> rule" would have become exactly two — and a live anchor re-sorts the list under the customer's
+> cursor on every drag, which was #163's own objection to it.
+
 ### 7.2 Distances
 
 Haversine, computed by us, formatted from the region part of the resolved locale (§D-12). A pure

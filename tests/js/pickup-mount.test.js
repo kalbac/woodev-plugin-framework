@@ -11,8 +11,11 @@
  * resolve, viewport fetches per `boundsChange`); the `ownsChrome` branch (no panels at all for
  * an embedded-style provider); provider↔panels event bridging both ways; the four
  * `woodev_pickup_*` `document.body` events; `refresh()`; the trigger's `i18n.trigger`/
- * `i18n.triggerChange` label toggle; and the "your address" pin cannot outlive the search that
- * created it (the panels' own `anchorCleared` event → `provider.clearAddress()`).
+ * `i18n.triggerChange` label toggle; the "your address" pin cannot outlive the search that
+ * created it (the panels' own `anchorCleared` event → `provider.clearAddress()`); and (issue
+ * #163) the distance anchor being captured ONCE from `provider.getCenter()` on the first
+ * `visibleChange`, never again on a later pan, with `searchReset` falling it back to that
+ * open-time value instead of clearing it.
  *
  * `jest.useFakeTimers()` is installed BEFORE pickup-mount.js is required, so
  * the module's own top-level `setTimeout()` calls (initial mount +
@@ -107,6 +110,11 @@ function StubProvider() {
 	this.zoomByCalls = [];
 	this.matchLoadedPointsCalls = [];
 	this.matchLoadedPointsResult = [];
+	// Issue #163's seam: the real `WoodevYandexMapProvider#getCenter()`'s stub double. `null`
+	// by default — a test that cares sets `provider.center = [ lat, lng ]` BEFORE emitting the
+	// first `visibleChange`, mirroring the real provider only ever having a real centre once
+	// `init()`/the first camera fit has settled.
+	this.center = null;
 	// The real `map-provider-yandex.js` only builds this once `init()` has run and
 	// `config.searchLayoutEl` was truthy — the stub builds it unconditionally up front since no
 	// test in this file exercises the "search disabled" provider-side branch (that is
@@ -199,6 +207,10 @@ StubProvider.prototype.matchLoadedPoints = function( query ) {
 	this.matchLoadedPointsCalls.push( query );
 
 	return this.matchLoadedPointsResult;
+};
+
+StubProvider.prototype.getCenter = function() {
+	return this.center;
 };
 
 /**
@@ -3320,6 +3332,82 @@ test( 'provider visibleChange resolves keys to groups and calls panels.setVisibl
 	expect( session.panels.lastVisible[ 0 ].key ).toBe( '1.0000,2.0000' );
 } );
 
+// -------------------------------------------------------------------------
+// Issue #163 — the distance anchor used to be dead until an address search: `Panels` never got
+// an anchor at all until `addressFocused` first fired. Decided fork (operator, 02.09.2026): the
+// anchor is set ONCE, from the initial resolved viewport's centre, the first time `visibleChange`
+// fires (the one moment BOTH `bulk` and `viewport` have already settled their opening camera move
+// — see `map-provider-yandex.js`'s own `getCenter()` docblock) — and never moves again on its own
+// afterwards, so panning/dragging the map cannot re-sort the list under the customer's cursor.
+// -------------------------------------------------------------------------
+
+test( 'issue #163: the FIRST visibleChange captures provider.getCenter() as the distance anchor, '
+	+ 'BEFORE panels.setVisible() renders — so the very first list render already has it, not only '
+	+ 'after a search', async () => {
+	window.WoodevPickupDataSource = fakeDataSourceFactory( () =>
+		Promise.resolve( [ point( { id: 'a', lat: 1, lng: 2 } ) ] )
+	);
+	const session = await openSession( configWith() );
+	const order = [];
+	const realSetAnchor = session.panels.setAnchor.bind( session.panels );
+	const realSetVisible = session.panels.setVisible.bind( session.panels );
+
+	session.panels.setAnchor = function( latLng, label ) {
+		order.push( 'setAnchor' );
+
+		return realSetAnchor( latLng, label );
+	};
+	session.panels.setVisible = function( groups ) {
+		order.push( 'setVisible' );
+
+		return realSetVisible( groups );
+	};
+
+	session.provider.center = [ 55.70, 37.60 ];
+	session.provider.emit( 'visibleChange', [ '1.0000,2.0000' ] );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [ { latLng: [ 55.70, 37.60 ], label: undefined } ] );
+	expect( order ).toEqual( [ 'setAnchor', 'setVisible' ] );
+} );
+
+test( 'issue #163: a LATER visibleChange (panning/dragging the map) does NOT move the anchor '
+	+ 'again — the operator\'s decided fork explicitly rejects a live map-centre anchor', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.center = [ 55.70, 37.60 ];
+	session.provider.emit( 'visibleChange', [] );
+
+	session.provider.center = [ 10, 20 ]; // the camera moved — simulates a pan/drag.
+	session.provider.emit( 'visibleChange', [] );
+	session.provider.emit( 'visibleChange', [] );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [ { latLng: [ 55.70, 37.60 ], label: undefined } ] );
+} );
+
+test( 'issue #163: an address search still overrides the open-time anchor — this fix did not '
+	+ 'touch the addressFocused path', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.center = [ 55.70, 37.60 ];
+	session.provider.emit( 'visibleChange', [] );
+	session.provider.emit( 'addressFocused', { latLng: [ 1, 2 ], label: 'Тверская 1' } );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [
+		{ latLng: [ 55.70, 37.60 ], label: undefined },
+		{ latLng: [ 1, 2 ], label: 'Тверская 1' },
+	] );
+} );
+
+test( 'issue #163: a provider that cannot report a centre (defensive: no getCenter()) leaves the '
+	+ 'anchor unset rather than throwing', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.getCenter = undefined;
+
+	expect( () => session.provider.emit( 'visibleChange', [] ) ).not.toThrow();
+	expect( session.panels.setAnchorCalls || [] ).toEqual( [] );
+} );
+
 test( 'provider nothingNearby calls panels.showNothingNearby with the same payload', async () => {
 	const session = await openSession( configWith() );
 	const info = { key: 'x', distanceMeters: 999, name: 'Y' };
@@ -4296,6 +4384,33 @@ test( 'panels searchReset clears the provider\'s address state via clearAddress(
 	session.panels.emit( 'searchReset', {} );
 
 	expect( session.provider.clearAddressCalls ).toBe( 1 );
+} );
+
+// Issue #163's decided fork: `searchReset` falls the list's distance anchor BACK to the open-time
+// centre rather than clearing it to null — the list must not lose its ordering just because a
+// search was dropped (the operator's own lean, weighed against `pickup-panels.js`'s
+// `anchorCleared` contract before choosing it — see that file's own docblock).
+test( 'issue #163: searchReset falls the distance anchor back to the open-time centre rather than '
+	+ 'clearing it', async () => {
+	const session = await openSession( configWith() );
+
+	session.provider.center = [ 55.70, 37.60 ];
+	session.provider.emit( 'visibleChange', [] );
+	session.panels.setAnchorCalls = []; // isolate what searchReset itself does.
+
+	session.panels.emit( 'searchReset', {} );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [ { latLng: [ 55.70, 37.60 ], label: undefined } ] );
+	expect( session.provider.clearAddressCalls ).toBe( 1 );
+} );
+
+test( 'issue #163: searchReset with no captured open-time anchor yet clears the anchor outright '
+	+ 'rather than throwing — the pre-existing degrade this fix must not break', async () => {
+	const session = await openSession( configWith() );
+
+	session.panels.emit( 'searchReset', {} );
+
+	expect( session.panels.setAnchorCalls ).toEqual( [ { latLng: null, label: undefined } ] );
 } );
 
 // -------------------------------------------------------------------------
