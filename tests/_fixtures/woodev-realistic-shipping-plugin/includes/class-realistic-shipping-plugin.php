@@ -88,7 +88,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		// opens on its data rather than on the whole world.
 		$this->pickup_handler = new \Woodev\Framework\Shipping\Pickup\Pickup_Handler(
 			'woodev-realistic-shipping',
-			'carrier_pickup_point',
+			'realistic_pickup_point',
 			new \Woodev_Realistic_Point_Source(),
 			$map_provider,
 			[ 'center' => [ 55.76, 37.64 ], 'zoom' => 12 ]
@@ -134,10 +134,15 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 
 		$fields = \Woodev\Framework\Shipping\Checkout\Checkout_Fields::from_array(
 			[
+				// ⚠ ITS OWN FIELD ID, not the sibling's `carrier_pickup_point`. Two carriers on one
+				// checkout each inject into `woocommerce_checkout_fields`, which is keyed by field
+				// id — sharing an id leaves ONE field in the DOM, belonging to whichever handler
+				// ran last, and the other carrier's button silently never appears. Measured on the
+				// rig in s112: the second carrier's trigger was absent until this id was split.
 				// No label, deliberately: the visible control is the button and the modal, and a
 				// non-empty label would render a stray form row for a hidden field.
 				\Woodev\Framework\Shipping\Checkout\Presets\Pickup_Field::create(
-					'carrier_pickup_point',
+					'realistic_pickup_point',
 					[ 'woodev_realistic_pickup_shipping' ]
 				),
 			]
@@ -189,6 +194,23 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 * @return void
 	 */
 	protected function init_hook_deprecator() {}
+
+	/**
+	 * No-op updater for isolated fixture construction (card #734).
+	 *
+	 * The base class hooks `load_updater()` on `init` and it dereferences
+	 * `get_license_instance()->get_license()`. This fixture no-ops `init_license_handler()`,
+	 * so that accessor is null and the real `load_updater()` fatals with «Call to a member
+	 * function get_license() on null» in ANY admin, cron or WP-CLI context.
+	 *
+	 * ⚠ It never surfaced before s112 because this fixture had only ever been driven from
+	 * PHPUnit, where nothing fires `init`. It fataled the rig the moment the fixture was
+	 * booted by a real WordPress for the first time — a green unit suite said nothing about
+	 * it, which is the whole lesson.
+	 *
+	 * @return void
+	 */
+	public function load_updater() {}
 
 	/**
 	 * No-op lifecycle handler for isolated fixture construction.

@@ -94,6 +94,19 @@ function row( page, id ) {
 	return page.locator( `#${ id }_field` );
 }
 
+/**
+ * The pickup trigger OF THE CARRIER UNDER TEST.
+ *
+ * ⚠ Scoped to its slot on purpose (s112, card #734). The rig now runs TWO carrier plugins
+ * side by side — the ordinary production arrangement — so a bare
+ * `button.woodev-pickup-trigger` matches two elements and Playwright fails the whole
+ * assertion with a strict-mode violation rather than a useful message. The slot container is
+ * keyed by the carrier's checkout FIELD id, which is what makes the two distinguishable.
+ *
+ * This walkthrough is about `woodev_test_shipping`, whose field is `carrier_pickup_point`.
+ */
+const PICKUP_TRIGGER = '#woodev-pickup-slot-carrier_pickup_point-review button.woodev-pickup-trigger';
+
 test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 
 	test( 'preconditions: the rig serves a checkout with our fixture methods', async ( { page } ) => {
@@ -138,7 +151,7 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		// hides its CONTAINER (`display: none` on the parent) when the chosen method is not a
 		// pickup one. The first draft of this test asserted `toHaveCount( 0 )` and failed —
 		// correctly, against a wrong expectation of mine, not against the code.
-		await expect( page.locator( 'button.woodev-pickup-trigger' ) ).toBeHidden();
+		await expect( page.locator( PICKUP_TRIGGER ) ).toBeHidden();
 	} );
 
 	test( 'a pickup method hides address and postcode on BOTH columns and offers the trigger', async ( { page } ) => {
@@ -158,7 +171,7 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		}
 
 		// #709: this method is a pickup method in every declaration now, so the control exists.
-		await expect( page.locator( 'button.woodev-pickup-trigger' ) ).toBeVisible();
+		await expect( page.locator( PICKUP_TRIGGER ) ).toBeVisible();
 	} );
 
 	test( 'the A2 gate blocks while no pickup point is chosen, and does NOT block on a courier method (#721)', async ( { page } ) => {
@@ -185,7 +198,7 @@ test.describe( 'classic checkout — pickup walkthrough (#723)', () => {
 		await openCheckout( page );
 		await chooseShipping( page, METHOD_PICKUP );
 
-		await page.locator( 'button.woodev-pickup-trigger' ).click();
+		await page.locator( PICKUP_TRIGGER ).click();
 
 		const dialog = page.locator( '.woodev-modal__content' );
 
