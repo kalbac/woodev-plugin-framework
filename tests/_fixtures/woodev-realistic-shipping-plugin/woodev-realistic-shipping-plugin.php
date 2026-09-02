@@ -56,6 +56,9 @@ function woodev_realistic_shipping_plugin_init(): void {
 	require_once $plugin_path . '/includes/abstract-class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-pickup-shipping-method.php';
+	// Card #734: this carrier's OWN pickup point source — see that file's header for why a
+	// second fixture carrier exists and why its Краснодар entry holds exactly one point.
+	require_once $plugin_path . '/includes/class-realistic-point-source.php';
 
 	woodev_realistic_shipping_plugin();
 }
