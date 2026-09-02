@@ -63,6 +63,28 @@ Measured on 27.08.2026: before the change the system helper was `manager` with n
 local override; after it, github.com resolves through `gh` instantly and other hosts are
 untouched.
 
+## It came back — verify the config, do not assume the fix is in place (s114, 03.09.2026)
+
+Six days after the fix was made and written down as a standing rule, the machine was found
+WITHOUT it: `credential.helper = manager` in the SYSTEM config and **no `github.com` scope at
+all**. A `git push` from the primary checkout hung silently for two minutes before being killed.
+
+So this is not a one-time repair — it is a config that can be absent again, and the symptom
+(silence) is the same one that hides it. **Check before the first push of a session, not after a
+hang:**
+
+```bash
+git config --global --get-regexp credential   # must list a github.com entry, EMPTY then gh
+```
+
+An empty first line followed by the `gh` line is the shape that works; the empty entry is what
+clears `manager` out of the chain, and it is exactly what a hand-rolled
+`git config credential.helper '!gh auth git-credential'` does NOT write.
+
+⚠ **A worker's push succeeding is not evidence your own will.** In s114 four Orca workers pushed
+their branches fine while the coordinator's push from the primary checkout hung — same repo, same
+remote. Do not infer the config from someone else's success.
+
 ## Related
 
 - [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — the other "an agent's shell is not your shell" trap on this machine

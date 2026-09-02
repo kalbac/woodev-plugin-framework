@@ -367,7 +367,7 @@
 - [tooling/git-merge] **Stacked PRs: GitHub CLOSES (never retargets) a downstream PR when its base branch is deleted; `ci.yml` never runs on a PR whose base isn't `main`.** → [stacked-pr-github-mechanics](gotchas/stacked-pr-github-mechanics.md) (s80)
 - [tooling/git-checkout] **`git checkout <ref> -- .` overwrites the whole working tree and silently reverts newer merges — use `git show <ref>:<path>`.** → [git-checkout-ref-dot-overwrites-the-primary-checkout](gotchas/git-checkout-ref-dot-overwrites-the-primary-checkout.md) (s89)
 - [tooling/orca] **Reusing a worker's terminal for a follow-up task needs `--worktree` too, or `worker-start` rejects it as a mismatch.** → [reusing-a-worker-terminal-needs-its-worktree-too](gotchas/reusing-a-worker-terminal-needs-its-worktree-too.md) (s89)
-- [tooling/git-credentials] **Git Credential Manager hangs an agent's `git push` silently — no output, no prompt; fix with `gh auth setup-git`, which writes the empty entry a hand-rolled config does not.** → [git-credential-manager-hangs-silently-in-an-agent-session](gotchas/git-credential-manager-hangs-silently-in-an-agent-session.md) (s100)
+- [tooling/git-credentials] **Git Credential Manager hangs an agent's `git push` silently — no output, no prompt; fix with `gh auth setup-git`, which writes the empty entry a hand-rolled config does not.** → [git-credential-manager-hangs-silently-in-an-agent-session](gotchas/git-credential-manager-hangs-silently-in-an-agent-session.md) (s100, recurred s114)
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

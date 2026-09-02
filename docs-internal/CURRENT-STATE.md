@@ -6,18 +6,14 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-03 (s113).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s113 merged
-**#739 #740 #742 #743** and closed **#736 #474 #111 #738 #163 #150 #734 #737 #741**; filed **#738
-#741 #744 #745 #746**. **66 open cards.** ⚠ **The next session is an AUTONOMOUS OVERNIGHT** — its
-scope, its do-not-touch list and what goes on the operator's desk in the morning are in
-`next-session-prompt.md`, which is written in that shape.
+**As of 2026-09-03 (s114).** `main` clean, **no worktrees, Инбокс EMPTY**, and **ONE open PR:
+[#751](https://github.com/kalbac/woodev-plugin-framework/pull/751)** — fully green and held
+deliberately, because its two admin notices are read by a MERCHANT and he approves wording himself.
+s114 merged **#748 #750 #753** and closed **#745 #746 #749 #744 #106**; filed **#747 #749 #752**.
+**64 open cards** (63 Бэклог + #104 в работе).
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
-
-✅ **The main checkout is back on `main`** — the #163 branch was parked there for the operator's
-pass, he merged it, and the tree was returned. The rig serves the working tree, so whenever a branch
-is parked here, say so AND put it back.
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
 no quota, so the s98 billing block lifted the moment it was switched. Account, cost measurement and
@@ -25,10 +21,11 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines measured 02–03.09.2026 IN THE PRIMARY CHECKOUT (s113), sodium enabled:** unit
-**3401** / 8348 / **1 skipped** (against `dc0c15c`); jest **1621** in **24** suites (after #743); phpcs clean —
-**with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
-the live rig.
+**Baselines measured 03.09.2026 IN THE PRIMARY CHECKOUT (s114), sodium enabled, against
+`6bda26f`:** unit **3413** / 8368 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
+**with the warning level ON**; phpstan no errors; **e2e 7 / 7** against the live rig.
+**Integration was NOT re-measured this session** — its last figure is **129 / 506** (s113,
+02.09.2026), an inference until someone runs it again.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -63,11 +60,10 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s113 — 65.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
-rig), #331/#332 (his own "not now"), **#734** (the work is DONE — only his choice about the live
-Yandex source and its undiagnosed point 3 remain) and **#737** (is the rig mu-method still wanted?
-measured: it WIDENS the first fixture's field and backstop, so removing it is safe). Rationale for
-the rest: `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:
+**Open cards after s114 — 64.** **Waiting on HIM:** **PR #751** (the #104 notice wording), #644
+(prioritisation), #652 (scenario 1, his rig), #331/#332 (his own "not now"), **#706** (deleting
+100+ branches — destructive) and **#747** item 2. Rationale for the rest:
+`reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:
 **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one
 button), **#701** (a research record with a stated entry condition, held the same way #689 is).
 Deferred to release: #285, #247, and **#567's remainder** (150 English msgids — operator,
@@ -116,9 +112,6 @@ browser half, deliberately and with a comment saying so.
 **The «Place order» block is OPTIONAL** (#725, s112): checkbox «Блокировать оформление заказа»,
 default ON; off makes `refreshGate()` **leave the button alone**, not force-enable it. ⚠ WooCommerce
 NEVER disables that button itself. Settings section «Форма заказа», slug `checkout`.
-
-**The warehouse scaffold is GONE** (#141, s112) — §17 finally true. `wc_yandex_delivery_warehouses`
-survived as an installed-site contract, asserted by a still-green test.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -189,11 +182,6 @@ confirmed again in s110 for four workers). Its tool shell is the variable to mea
 relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0; `worktree.useRelativePaths`
 is never the fix.
 
-⚠ **`input_accepted` is not proof the brief arrived.** In s111 `worker-read` and `terminal read`
-returned EMPTY buffers all session for live, working agents — the reliable signals were the terminal
-TITLE (the worker sets it from its task) and `git status --short` in its worktree. Recipe:
-[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
-
 **kilo is the FALLBACK critic, not the default** — Orca cannot supervise it and the model must be
 pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
 
@@ -257,10 +245,11 @@ only consumer; they get rewritten once everything is ready.
 состояние и запреты; список из шести карточек, живший здесь с s108, устарел целиком — все шесть
 закрыты (#515 #374 #483 #437 #503 в s109, #653 в s108).
 
-🙋 **Ждут решения ОПЕРАТОРА:** **#644** (расстановка приоритетов), **#652** (его глаза на риге),
-**#331**/**#332** (его «не сейчас» от 15.08.2026), **#734** (риг: держать ли первого перевозчика на
-живом Яндексе), **#737** (нужен ли ещё риговый mu-метод) и **PR #743** (#163 — риговый проход;
-дерево под него припарковано). **#621** держится за **#639**.
+🙋 **Ждут решения ОПЕРАТОРА:** **PR #751** (формулировки двух уведомлений для мерчанта;
+CI зелёная, ждёт только его слова), **#644** (расстановка приоритетов), **#652** (его глаза на риге),
+**#331**/**#332** (его «не сейчас» от 15.08.2026), **#706** (удаление 100+ веток — разрушительно) и пункт 2
+карточки **#747** (учить ли фикстуру живого Яндекса фильтровать по НП — моя рекомендация «не учить»).
+**#621** держится за **#639**.
 **Отложено до релиза:** #285, #247, остаток #567.
 
 **Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
@@ -292,10 +281,16 @@ only consumer; they get rewritten once everything is ready.
   Each button is visible only under its own method. **#150 was tested through this and CLOSED in
   s113 — it does not reproduce**: Краснодар is the single-point city whose bounds degenerate, tiles
   render fully at max zoom, and a test pins that count — do not add a second point.
-  ⚠ **The SECOND carrier runs the LEGACY addressing path** (#746): its `Pickup_Handler` is built
-  without the plugin argument, so it has no `location` config block and addresses the source by a
-  DOM-read locality NAME, while the first carrier correctly sends the KEY (`test-cdek:44`). Measured
-  03.09.2026. Any rig measurement through the second carrier is exercising the fallback.
+  ✅ **BOTH carriers now run the KEY-addressed path** — #746 (s114) wired the second carrier's
+  `Pickup_Handler` to its plugin. One built WITHOUT it still degrades to DOM-read NAME addressing,
+  but no longer silently: `_doing_it_wrong()` under `WP_DEBUG` while the location layer is active.
+  ⚠ **A consequence that inverts how you measure here:** with a plugin wired the server resolves
+  the CUSTOMER'S RECORD and hands it to the source, and that outranks the `locality` request
+  parameter — so the parameter's **value is inert** and only its **presence** matters (it gates
+  `Point_Query::from_request()`). To measure which city's points come back, change the customer's
+  record, never the URL. Carrier 1 ignores the locality outright: a city that does not exist returns
+  the same 815-point set (#747). Gotcha
+  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
 
   ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734).**
   With two carriers the rig now shows both shapes at once (live data and clustering on one,
