@@ -20,7 +20,7 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines measured 03.09.2026 IN THE PRIMARY CHECKOUT (s114), sodium enabled, against
-`6bda26f`:** unit **3413** / 8368 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
+`79d68e7`:** unit **3417** / 8383 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
 **with the warning level ON**; phpstan no errors; **e2e 7 / 7** against the live rig.
 **Integration was NOT re-measured this session** — its last figure is **129 / 506** (s113,
 02.09.2026), an inference until someone runs it again.
