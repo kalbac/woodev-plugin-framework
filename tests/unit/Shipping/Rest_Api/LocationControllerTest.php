@@ -695,6 +695,28 @@ final class Location_Controller_Probe extends Location_Controller {
 }
 
 /**
+ * #755: overrides ONLY {@see Rest_Rate_Limit_Trait::rate_limit_now()} — the
+ * same seam {@see RestRateLimitTraitTest}'s own fixture pins (`$fixture->now`).
+ * Everything else about rate limiting stays real: `LIST_RATE_LIMIT_MAX`, the
+ * bucket key's `floor( now / window )` derivation, the transient-backed
+ * counter and the controller's own wiring of `is_rate_limited()` into `/list`
+ * all run unmodified — only the wall clock the trait reads is substituted, so
+ * a test can drive (or freeze past) a window rollover on command instead of
+ * racing real seconds.
+ *
+ * @since 2.0.2
+ */
+final class Location_Controller_Clock_Pinned_Probe extends Location_Controller {
+
+	/** @var int|null frozen clock, or null to use the real one. */
+	public ?int $now = null;
+
+	protected function rate_limit_now(): int {
+		return null === $this->now ? time() : $this->now;
+	}
+}
+
+/**
  * Review finding F1(b): spies on {@see Location_Controller::bridge_wc_session()}
  * without needing `WC()`/`wc_load_cart()` to be real functions in the
  * unit-test process — mirrors {@see Location_Controller_Probe}'s own
@@ -2623,12 +2645,24 @@ final class LocationControllerTest extends TestCase {
 	 * `LIST_RATE_LIMIT_MAX` itself, or even proved the limiter is wired into
 	 * `/list` at all — every other `/list` test in this file goes through
 	 * {@see Location_Controller_Probe}, which BYPASSES the limiter entirely.
-	 * This test uses the REAL {@see Location_Controller} (no probe) with the
-	 * real rate-limit storage stubbed (mirrors `RestRateLimitTraitTest`'s own
-	 * fixture setup), so it fails both against a mutant that unhooks the
-	 * limiter from `/list` and against a mutant that changes the budget away
-	 * from 60 (the 61st call is the neighbouring value that pins the exact
-	 * number, not merely "some limit exists").
+	 * This test uses the REAL rate-limit MECHANISM (no bypass) with the real
+	 * storage stubbed (mirrors `RestRateLimitTraitTest`'s own fixture setup),
+	 * via {@see Location_Controller_Clock_Pinned_Probe} — that probe overrides
+	 * ONLY the wall clock the trait reads; the budget, the bucket key's
+	 * `floor( now / window )` derivation and the transient-backed counter all
+	 * still run for real. So this test fails both against a mutant that
+	 * unhooks the limiter from `/list` and against a mutant that changes the
+	 * budget away from 60 (the 61st call is the neighbouring value that pins
+	 * the exact number, not merely "some limit exists").
+	 *
+	 * #755: an earlier version used the real, unpinned clock here. Because the
+	 * window id lives IN the storage key, a suite run whose 61 calls straddled
+	 * a minute boundary reset the bucket mid-run and let the 61st call
+	 * legitimately pass, flaking this assertion. Pinning the clock removes
+	 * that source of flake without weakening what the test proves — see
+	 * {@see test_list_rate_limit_resets_on_window_rollover()} for the
+	 * companion test that turns the window-rollover behaviour itself into an
+	 * explicit, deterministic assertion.
 	 */
 	public function test_list_rate_limit_is_pinned_at_the_real_budget(): void {
 		$store = [];
@@ -2651,7 +2685,8 @@ final class LocationControllerTest extends TestCase {
 
 		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
 		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
-		$ctrl     = new Location_Controller( $service ); // the REAL controller — rate limiting genuinely runs.
+		$ctrl     = new Location_Controller_Clock_Pinned_Probe( $service ); // rate limiting genuinely runs; only the clock is pinned.
+		$ctrl->now = 1_000_000;
 
 		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
 
@@ -2664,6 +2699,73 @@ final class LocationControllerTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'the 61st request must be the one that trips the limiter' );
 		$this->assertSame( 429, $result->get_error_data()['status'] );
+
+		unset( $_SERVER['REMOTE_ADDR'] );
+	}
+
+	/**
+	 * #755: the window-rollover mechanism the budget test above relies on but
+	 * never itself exercises. The storage key is `floor( now / window )`, so
+	 * crossing a window boundary must genuinely reset the counter — that is
+	 * what let the unpinned original test flake (a real-clock run whose 61
+	 * calls straddled a minute boundary saw the SAME reset mid-run and
+	 * wrongly passed a request that should have been refused).
+	 *
+	 * Drives the full 60-request budget at a pinned `T`, confirms a 61st call
+	 * in that same window is still refused (sanity check — the window is
+	 * genuinely exhausted, not merely young), then moves the pinned clock to
+	 * `T + 60` (one window later) and asserts the NEXT call passes: the exact
+	 * request that would have tripped the limiter had the window not rolled
+	 * over. This turns the flake's own mechanism into a deterministic,
+	 * always-reproducible assertion instead of something only a real-clock
+	 * boundary crossing could ever demonstrate.
+	 */
+	public function test_list_rate_limit_resets_on_window_rollover(): void {
+		$store = [];
+
+		Functions\when( 'get_transient' )->alias(
+			static function ( $key ) use ( &$store ) {
+				return $store[ $key ] ?? false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( $key, $value, $ttl ) use ( &$store ) {
+				$store[ $key ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'wp_using_ext_object_cache' )->justReturn( false );
+
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+
+		$provider = new Location_Controller_Fake_List_Provider( static fn() => [] );
+		$service  = new Location_Controller_Fake_Service( true, null, null, true, true, null, null, $provider );
+		$ctrl     = new Location_Controller_Clock_Pinned_Probe( $service );
+		$ctrl->now = 1_000_000;
+
+		$request = new WP_REST_Request( [ 'level' => Location_Record::LEVEL_SETTLEMENT, 'country' => 'RU' ] );
+
+		for ( $i = 0; $i < 60; $i++ ) {
+			$result = $ctrl->handle_list_request( $request );
+			$this->assertNotInstanceOf( \WP_Error::class, $result, "request {$i} must still be within the 60/min budget" );
+		}
+
+		$result = $ctrl->handle_list_request( $request );
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$result,
+			'sanity check: the 61st call within the SAME window must still be refused'
+		);
+
+		$ctrl->now = 1_000_000 + 60;
+
+		$result = $ctrl->handle_list_request( $request );
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			'a lapsed window must start a fresh count — the request that would have tripped the limiter in the old window must now pass'
+		);
 
 		unset( $_SERVER['REMOTE_ADDR'] );
 	}
