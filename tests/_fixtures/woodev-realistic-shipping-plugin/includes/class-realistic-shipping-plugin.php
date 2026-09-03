@@ -193,12 +193,26 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 */
 	protected function init_admin_message_handler() {}
 
-	/**
-	 * No-op admin notice handler for isolated fixture construction.
+	/*
+	 * init_admin_notice_handler() is DELIBERATELY NOT no-opped here (issue #758).
 	 *
-	 * @return void
+	 * Unlike the other init_*() no-ops in this class, this one is a live rig plugin, not
+	 * only a PHPUnit fixture: `get_admin_notice_handler()` is dereferenced 17 times across
+	 * `woodev/` with no null guard, including one call on `admin_footer`
+	 * ({@see \Woodev\Framework\Shipping\Shipping_Plugin::add_debug_setting_notices()}). A
+	 * no-op here left `$admin_notice_handler` null, and `Shipping_Plugin::is_debug_enabled()`
+	 * falls back to `WP_DEBUG` (true on the rig) whenever the `debug_mode` integration
+	 * option is unset — so that admin_footer branch ran on EVERY admin page and fataled
+	 * with "Call to a member function add_admin_notice() on null" for every plugin on the
+	 * site, not only this one. The sibling fixture (`woodev-test-shipping-method`) never
+	 * no-opped this method and never hit the fatal — that is the control that isolates the
+	 * cause to this no-op, not to the framework being unconditionally reachable per se.
+	 *
+	 * `init_admin_message_handler()`, immediately above, stays a no-op: its getter,
+	 * `get_admin_message_handler()`, is dereferenced NOWHERE in the framework (measured:
+	 * zero `get_admin_message_handler()->` call sites), so unlike this one, no-opping it
+	 * is harmless.
 	 */
-	protected function init_admin_notice_handler() {}
 
 	/**
 	 * No-op license handler for isolated fixture construction.

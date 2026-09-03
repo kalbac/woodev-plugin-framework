@@ -133,6 +133,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the admin notice handler instance
 			$this->init_admin_notice_handler();
+			$this->enforce_admin_notice_handler_contract();
 
 			// build the license handler instance
 			$this->init_license_handler();
@@ -198,6 +199,52 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * Plugins can override this with their own handler.
 		 */
 		protected function init_admin_notice_handler() {
+			$this->admin_notice_handler = new Woodev_Admin_Notice_Handler( $this );
+		}
+
+		/**
+		 * Enforces the contract {@see self::init_admin_notice_handler()} exists to fulfil:
+		 * after it runs, {@see self::$admin_notice_handler} MUST be set.
+		 *
+		 * `get_admin_notice_handler()` is dereferenced 17 times across the framework with
+		 * no null check — one of those call sites runs on `admin_footer`
+		 * ({@see \Woodev\Framework\Shipping\Shipping_Plugin::add_debug_setting_notices()}).
+		 * So a subclass that overrides `init_admin_notice_handler()` into a no-op (as
+		 * `Woodev_Realistic_Shipping_Plugin` did from 31.05.2026, issue #758) does not
+		 * merely break its own admin pages — it white-screens every admin page on the
+		 * site for every OTHER plugin too, the first time any of those 17 call sites
+		 * runs. `init_admin_notice_handler()` is itself called unconditionally from
+		 * {@see self::__construct()}, so "no handler" was never a state the framework
+		 * actually supports; it is a subclass breaking the contract, not a valid opt-out.
+		 *
+		 * This reports the violation via `_doing_it_wrong()` under `WP_DEBUG` — the same
+		 * enforcement shape #709/#736/#746 use in this codebase — AND builds the default
+		 * handler anyway, so the 17 existing call sites stay valid. Report-and-recover is
+		 * deliberate, not a compromise: a throw here would fatal on `admin_footer`, which
+		 * is the exact failure this closes, and staying silent is what let the no-op sit
+		 * latent for three months before {@see \Woodev_Realistic_Shipping_Plugin} became a
+		 * live second carrier on the rig and gave it a caller.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enforce_admin_notice_handler_contract() {
+			if ( null !== $this->admin_notice_handler ) {
+				return;
+			}
+
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				_doing_it_wrong(
+					'Woodev_Plugin::init_admin_notice_handler',
+					sprintf(
+						'Plugin "%s" overrode init_admin_notice_handler() without building a Woodev_Admin_Notice_Handler; get_admin_notice_handler() is dereferenced unconditionally throughout the framework, so a default handler was built to avoid fataling admin pages.',
+						esc_html( $this->get_id() )
+					),
+					'2.0.2'
+				);
+			}
+
 			$this->admin_notice_handler = new Woodev_Admin_Notice_Handler( $this );
 		}
 
