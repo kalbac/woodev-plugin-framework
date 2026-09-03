@@ -121,5 +121,10 @@
         "sort-packages": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "woodev": {
+            "planned-release": "2.0.2"
+        }
+    }
 }
