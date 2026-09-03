@@ -211,6 +211,9 @@ Docblocks are **required** on all public and protected methods:
   versions concluded the API was unreleased. In THIS repo's history those members exist since the
   initial import (`01dfbe7`), which is exactly what `1.0.0` already marks in 151 other places.
   `2.0.2` would be equally untrue: it claims the API is new in the coming release.
+- The machine-readable authority for the planned release is `composer.json` →
+  `extra.woodev.planned-release`, and `tests/unit/SinceTagCeilingTest.php` gates every `@since` in
+  `woodev/**` against it (#752) — the #116a sweep above had no gate and regressed within one night.
 - `@param` — all parameters with types
 - `@return` — return type with description
 - `@deprecated` — if applicable, with replacement method
