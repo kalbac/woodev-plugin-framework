@@ -52,6 +52,34 @@ must actually be green before the merge, because they never ran at all.
 It recurred three times in the s87 night, so a single rerun is not always enough; if GitHub's API is
 having a bad hour, wait it out rather than re-running in a loop.
 
+## The 429 variant (s114, 04.09.2026)
+
+Same family, different status code and a different-looking symptom. On PR #761 exactly ONE of the
+three integration legs failed — `WP latest / WC latest-stable / PHP 8.2` — and the test step's error
+was misleading:
+
+```
+✖ Environment not initialized. Run `wp-env start` first.
+```
+
+That is the DOWNSTREAM step complaining. The real failure is in `npx wp-env start`, during
+"Reading configuration":
+
+```
+✖ Response code 429 (Too Many Requests)
+HTTPError: Response code 429 (Too Many Requests)
+  at Request._onResponseBase (.../@wordpress/env/node_modules/got/...)
+```
+
+`wp-env` resolves WordPress/WooCommerce versions over unauthenticated HTTP, so it is rate-limited
+like anything else on a shared runner.
+
+**How to tell it apart from your code in one look:** the other two legs passed on the SAME commit.
+A code regression in a plugin constructor does not fail one WP version and spare two.
+
+✅ `gh run rerun <run-id> --failed` — it went green on the first retry, all three legs `success`.
+Do NOT read the "Environment not initialized" line as a config problem in `.wp-env.json`.
+
 ## Related
 
 - [[pr-conflict-skips-pull-request-ci]] — the other way a job can be absent rather than failing:
