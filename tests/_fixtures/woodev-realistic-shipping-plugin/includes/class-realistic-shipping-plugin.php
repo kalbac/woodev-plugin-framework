@@ -214,12 +214,19 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 * is harmless.
 	 */
 
-	/**
-	 * No-op license handler for isolated fixture construction.
+	/*
+	 * init_license_handler() is DELIBERATELY NOT no-opped here (issue #759).
 	 *
-	 * @return void
+	 * Same shape as init_admin_notice_handler() (#758): `get_license_instance()` is
+	 * dereferenced 13 times across `woodev/` with no null guard, and this fixture is a live
+	 * rig plugin, not only a PHPUnit fixture. The "for isolated fixture construction"
+	 * justification was checked the same way #758 checked it and found to have no
+	 * consumer — grepping `tests/unit/` turns up no test that constructs this class — so it
+	 * bought nothing but a latent fatal identical in shape to #758's. `Woodev_Plugins_License`
+	 * takes only `$this` in its constructor and `init_license_handler()`'s own
+	 * `if ( ! $this->license )` guard makes building it here idempotent, so it is exactly as
+	 * safe to build as the notice handler was.
 	 */
-	protected function init_license_handler() {}
 
 	/**
 	 * No-op hook deprecator for isolated fixture construction.
@@ -231,10 +238,16 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	/**
 	 * No-op updater for isolated fixture construction (card #734).
 	 *
-	 * The base class hooks `load_updater()` on `init` and it dereferences
-	 * `get_license_instance()->get_license()`. This fixture no-ops `init_license_handler()`,
-	 * so that accessor is null and the real `load_updater()` fatals with «Call to a member
-	 * function get_license() on null» in ANY admin, cron or WP-CLI context.
+	 * `load_updater()` is real from `admin`/`cron`/WP-CLI: it dereferences
+	 * `get_license_instance()->get_license()` then calls `construct_updater()`, which news
+	 * up a real `Woodev_Plugin_Updater` backed by the live `Woodev_Licensing_API` HTTP stack.
+	 * Before issue #759, `init_license_handler()` was ALSO no-opped here, so
+	 * `get_license_instance()` returned null and the real `load_updater()` fataled with
+	 * «Call to a member function get_license() on null» — that no-op is gone now (see
+	 * `init_license_handler()` above), so the null-dereference reason is history. This no-op
+	 * stays for a different, still-valid reason: nothing on this fixture/rig plugin should
+	 * make a real license/update-check HTTP call, and `construct_updater()` has no test seam
+	 * to fake that stack away.
 	 *
 	 * ⚠ It never surfaced before s112 because this fixture had only ever been driven from
 	 * PHPUnit, where nothing fires `init`. It fataled the rig the moment the fixture was
@@ -245,12 +258,15 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 */
 	public function load_updater() {}
 
-	/**
-	 * No-op lifecycle handler for isolated fixture construction.
+	/*
+	 * init_lifecycle_handler() is DELIBERATELY NOT no-opped here (issue #759).
 	 *
-	 * @return void
+	 * Same shape as init_admin_notice_handler() (#758): `get_lifecycle_handler()` is
+	 * dereferenced 2 times across `woodev/` with no null guard. `Woodev_Lifecycle` takes only
+	 * `$this` in its constructor and only registers hooks (`add_hooks()`), so building the
+	 * default here carries no more risk than any other subsystem this fixture already builds
+	 * for real.
 	 */
-	protected function init_lifecycle_handler() {}
 
 	/**
 	 * No-op REST API handler for isolated fixture construction.

@@ -289,6 +289,9 @@ class WoocommercePluginTest extends TestCase {
 		Functions\when( 'has_action' )->justReturn( false );
 		Functions\when( 'get_option' )->returnArg( 2 );
 		Functions\when( 'is_multisite' )->justReturn( false );
+		// get_plugin_url() -> plugins_url(): needed since issue #759 made
+		// init_license_handler() build a real Woodev_Plugins_License unconditionally.
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/wp-content/plugins/test-plugin' );
 	}
 
 	/**

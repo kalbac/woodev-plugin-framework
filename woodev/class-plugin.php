@@ -137,12 +137,14 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			// build the license handler instance
 			$this->init_license_handler();
+			$this->enforce_license_handler_contract();
 
 			// build the hook deprecator instance
 			$this->init_hook_deprecator();
 
 			// build the lifecycle handler instance
 			$this->init_lifecycle_handler();
+			$this->enforce_lifecycle_handler_contract();
 
 			// build the translation handler instance
 			$this->init_translation_handler();
@@ -203,6 +205,43 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
+		 * Reports a subsystem construction-contract violation via `_doing_it_wrong()`.
+		 *
+		 * Shared by every `enforce_*_handler_contract()` method in this class. The report
+		 * itself — fully-qualified `init_*()` name as the first `_doing_it_wrong()` argument,
+		 * plugin id and default class name in the message, `2.0.2` as the version — is
+		 * byte-for-byte identical across subsystems; only WHICH property is missing and WHICH
+		 * default class covers for it differs, and per {@see self::enforce_license_handler_contract()}
+		 * and {@see self::enforce_lifecycle_handler_contract()} that half stays three separate,
+		 * explicit, one-purpose methods rather than one generic property-by-reference helper —
+		 * this runs in the constructor of every plugin on every request, so a flat, greppable
+		 * "if null, report, build X" per subsystem is worth more here than the few lines a fully
+		 * generic helper would save.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $init_method   bare name of the overridden init_*() method, e.g. `init_license_handler`
+		 * @param string $default_class the default handler class a compliant init_*() would have built
+		 * @return void
+		 */
+		private function report_subsystem_contract_violation( string $init_method, string $default_class ) {
+			if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			_doing_it_wrong(
+				self::class . '::' . $init_method,
+				sprintf(
+					'Plugin "%s" overrode %s() without building a %s; the framework dereferences it unconditionally elsewhere, so a default instance was built to avoid fataling.',
+					esc_html( $this->get_id() ),
+					$init_method,
+					$default_class
+				),
+				'2.0.2'
+			);
+		}
+
+		/**
 		 * Enforces the contract {@see self::init_admin_notice_handler()} exists to fulfil:
 		 * after it runs, {@see self::$admin_notice_handler} MUST be set.
 		 *
@@ -217,13 +256,16 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * {@see self::__construct()}, so "no handler" was never a state the framework
 		 * actually supports; it is a subclass breaking the contract, not a valid opt-out.
 		 *
-		 * This reports the violation via `_doing_it_wrong()` under `WP_DEBUG` — the same
-		 * enforcement shape #709/#736/#746 use in this codebase — AND builds the default
-		 * handler anyway, so the 17 existing call sites stay valid. Report-and-recover is
-		 * deliberate, not a compromise: a throw here would fatal on `admin_footer`, which
-		 * is the exact failure this closes, and staying silent is what let the no-op sit
-		 * latent for three months before {@see \Woodev_Realistic_Shipping_Plugin} became a
-		 * live second carrier on the rig and gave it a caller.
+		 * This reports the violation via {@see self::report_subsystem_contract_violation()}
+		 * (`_doing_it_wrong()` under `WP_DEBUG` — the same enforcement shape #709/#736/#746
+		 * use in this codebase) AND builds the default handler anyway, so the 17 existing
+		 * call sites stay valid. Report-and-recover is deliberate, not a compromise: a
+		 * throw here would fatal on `admin_footer`, which is the exact failure this closes,
+		 * and staying silent is what let the no-op sit latent for three months before
+		 * {@see \Woodev_Realistic_Shipping_Plugin} became a live second carrier on the rig
+		 * and gave it a caller. Issue #759 found the same shape twice more — see
+		 * {@see self::enforce_license_handler_contract()} and
+		 * {@see self::enforce_lifecycle_handler_contract()}.
 		 *
 		 * @since 2.0.2
 		 *
@@ -234,16 +276,7 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				return;
 			}
 
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				_doing_it_wrong(
-					'Woodev_Plugin::init_admin_notice_handler',
-					sprintf(
-						'Plugin "%s" overrode init_admin_notice_handler() without building a Woodev_Admin_Notice_Handler; get_admin_notice_handler() is dereferenced unconditionally throughout the framework, so a default handler was built to avoid fataling admin pages.',
-						esc_html( $this->get_id() )
-					),
-					'2.0.2'
-				);
-			}
+			$this->report_subsystem_contract_violation( 'init_admin_notice_handler', Woodev_Admin_Notice_Handler::class );
 
 			$this->admin_notice_handler = new Woodev_Admin_Notice_Handler( $this );
 		}
@@ -301,6 +334,38 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		 * upgrade routines.
 		 */
 		protected function init_lifecycle_handler() {
+			$this->lifecycle_handler = new Woodev_Lifecycle( $this );
+		}
+
+		/**
+		 * Enforces the contract {@see self::init_lifecycle_handler()} exists to fulfil:
+		 * after it runs, {@see self::$lifecycle_handler} MUST be set.
+		 *
+		 * `get_lifecycle_handler()` is dereferenced 2 times across the framework with no
+		 * null check. Unlike {@see self::init_license_handler()}, `init_lifecycle_handler()`
+		 * has no internal idempotence guard of its own — it unconditionally assigns
+		 * `$this->lifecycle_handler` — but that only means a normal call always succeeds;
+		 * a subclass override into a no-op still leaves the property null, and
+		 * `init_lifecycle_handler()` is itself called unconditionally from
+		 * {@see self::__construct()}, so "no lifecycle handler" was never a state the
+		 * framework actually supports; it is a subclass breaking the contract, not a valid
+		 * opt-out (issue #759, the same shape as #758's
+		 * {@see self::enforce_admin_notice_handler_contract()}).
+		 *
+		 * Reports via {@see self::report_subsystem_contract_violation()} and builds the
+		 * default anyway, so the 2 existing call sites stay valid.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enforce_lifecycle_handler_contract() {
+			if ( null !== $this->lifecycle_handler ) {
+				return;
+			}
+
+			$this->report_subsystem_contract_violation( 'init_lifecycle_handler', Woodev_Lifecycle::class );
+
 			$this->lifecycle_handler = new Woodev_Lifecycle( $this );
 		}
 
@@ -495,6 +560,39 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 			if ( ! $this->license ) {
 				$this->license = new Woodev_Plugins_License( $this );
 			}
+		}
+
+		/**
+		 * Enforces the contract {@see self::init_license_handler()} exists to fulfil:
+		 * after it runs, {@see self::$license} MUST be set.
+		 *
+		 * `get_license_instance()` is dereferenced 13 times across the framework with no
+		 * null check, and its own lazy self-heal (`if ( ! $this->license ) { $this->init_license_handler(); }`)
+		 * cannot rescue a subclass that overrode `init_license_handler()` into a no-op —
+		 * calling the same no-op again still leaves `$license` null. `init_license_handler()`
+		 * is itself called unconditionally from {@see self::__construct()}, so "no license
+		 * handler" was never a state the framework actually supports; it is a subclass
+		 * breaking the contract, not a valid opt-out (issue #759, the same shape as #758's
+		 * {@see self::enforce_admin_notice_handler_contract()}).
+		 *
+		 * Reports via {@see self::report_subsystem_contract_violation()} and builds the
+		 * default anyway, so the 13 existing call sites stay valid. The null check below
+		 * mirrors `init_license_handler()`'s own `if ( ! $this->license )` guard on purpose:
+		 * a plugin that DID build its own license handler (real or overridden) must keep
+		 * that instance, not have it silently replaced.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function enforce_license_handler_contract() {
+			if ( null !== $this->license ) {
+				return;
+			}
+
+			$this->report_subsystem_contract_violation( 'init_license_handler', Woodev_Plugins_License::class );
+
+			$this->license = new Woodev_Plugins_License( $this );
 		}
 
 		/**
