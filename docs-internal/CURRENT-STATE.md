@@ -6,11 +6,9 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-03 (s114).** `main` clean, **no worktrees, Инбокс EMPTY**, and **ONE open PR:
-[#751](https://github.com/kalbac/woodev-plugin-framework/pull/751)** — fully green and held
-deliberately, because its two admin notices are read by a MERCHANT and he approves wording himself.
-s114 merged **#748 #750 #753** and closed **#745 #746 #749 #744 #106**; filed **#747 #749 #752**.
-**64 open cards** (63 Бэклог + #104 в работе).
+**As of 2026-09-03 (s114).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s114 merged
+**#748 #750 #753 #751** and closed **#745 #746 #749 #744 #106 #104 #747**; filed **#747 #749 #752**.
+**62 open cards.**
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
@@ -60,9 +58,9 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s114 — 64.** **Waiting on HIM:** **PR #751** (the #104 notice wording), #644
-(prioritisation), #652 (scenario 1, his rig), #331/#332 (his own "not now"), **#706** (deleting
-100+ branches — destructive) and **#747** item 2. Rationale for the rest:
+**Open cards after s114 — 62.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
+rig), #331/#332 (his own "not now") and **#706** (deleting 100+ branches — destructive).
+Rationale for the rest:
 `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:
 **#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one
 button), **#701** (a research record with a stated entry condition, held the same way #689 is).
@@ -245,10 +243,8 @@ only consumer; they get rewritten once everything is ready.
 состояние и запреты; список из шести карточек, живший здесь с s108, устарел целиком — все шесть
 закрыты (#515 #374 #483 #437 #503 в s109, #653 в s108).
 
-🙋 **Ждут решения ОПЕРАТОРА:** **PR #751** (формулировки двух уведомлений для мерчанта;
-CI зелёная, ждёт только его слова), **#644** (расстановка приоритетов), **#652** (его глаза на риге),
-**#331**/**#332** (его «не сейчас» от 15.08.2026), **#706** (удаление 100+ веток — разрушительно) и пункт 2
-карточки **#747** (учить ли фикстуру живого Яндекса фильтровать по НП — моя рекомендация «не учить»).
+🙋 **Ждут решения ОПЕРАТОРА:** **#644** (расстановка приоритетов), **#652** (его глаза на риге),
+**#331**/**#332** (его «не сейчас» от 15.08.2026) и **#706** (удаление 100+ веток — разрушительно).
 **#621** держится за **#639**.
 **Отложено до релиза:** #285, #247, остаток #567.
 
