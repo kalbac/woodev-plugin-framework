@@ -173,6 +173,11 @@ class ShippingPluginAdminNoticeHandlerRegressionTest extends TestCase {
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_current_user_id' )->justReturn( 1 );
 		Functions\when( 'get_user_meta' )->justReturn( [] );
+		// get_plugin_url() -> plugins_url(): needed since issue #759 made
+		// init_license_handler() build a real Woodev_Plugins_License unconditionally
+		// (this fixture also no-ops init_license_handler(), so construction now reaches it
+		// via enforce_license_handler_contract() the same way it reaches the notice handler).
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/wp-content/plugins/test-plugin' );
 		// This fixture no-ops init_admin_notice_handler(), so construction itself trips
 		// enforce_admin_notice_handler_contract()'s own _doing_it_wrong() — irrelevant to
 		// what this file asserts (that is AdminNoticeHandlerContractTest's job), so it is

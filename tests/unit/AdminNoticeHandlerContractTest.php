@@ -55,6 +55,15 @@ if ( ! class_exists( 'Woodev_Notice_Contract_Test_Plugin_Base', false ) ) {
 	 * decides for itself — the exact seam these tests exercise. No-op set mirrors
 	 * WoocommercePluginTest.php's own Testable_Wordpress_Plugin, already proven to let
 	 * the real Woodev_Plugin::__construct() run to completion in this suite.
+	 *
+	 * init_license_handler() and init_lifecycle_handler() stop short of a true no-op: since
+	 * issue #759 gave both subsystems the same construction contract this file's own subject
+	 * enforces, leaving either null here would trip THAT contract's `_doing_it_wrong()` call
+	 * on every test in this file, making the exact-call-count assertions below
+	 * non-deterministic. A direct property assignment satisfies each contract's null check
+	 * without pulling in either subsystem's real (heavier) default construction — irrelevant
+	 * to what this file tests. See `SubsystemHandlerContractTest.php` for the license/lifecycle
+	 * contracts themselves.
 	 */
 	abstract class Woodev_Notice_Contract_Test_Plugin_Base extends \Woodev_Plugin {
 
@@ -62,11 +71,15 @@ if ( ! class_exists( 'Woodev_Notice_Contract_Test_Plugin_Base', false ) ) {
 
 		protected function init_admin_message_handler() {}
 
-		protected function init_license_handler() {}
+		protected function init_license_handler() {
+			$this->license = new \stdClass();
+		}
 
 		protected function init_hook_deprecator() {}
 
-		protected function init_lifecycle_handler() {}
+		protected function init_lifecycle_handler() {
+			$this->lifecycle_handler = new \stdClass();
+		}
 
 		protected function init_rest_api_handler() {}
 

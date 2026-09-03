@@ -58,6 +58,11 @@ trait Pilot_Fixture_WP_Stubs {
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'get_option' )->returnArg( 2 );
 		Functions\when( 'is_multisite' )->justReturn( false );
+		// get_plugin_url() -> plugins_url(): needed since issue #759 made
+		// init_license_handler() build a real Woodev_Plugins_License unconditionally
+		// (enforce_license_handler_contract() builds it even when a subclass no-ops the
+		// init method), so every plugin construction now reaches this call.
+		Functions\when( 'plugins_url' )->justReturn( 'https://example.test/wp-content/plugins/test-plugin' );
 
 		if ( $stub_add_filter ) {
 			Functions\when( 'add_filter' )->justReturn( true );
