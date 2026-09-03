@@ -7,8 +7,8 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-03 (s114).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s114 merged
-**#748 #750 #753 #751** and closed **#745 #746 #749 #744 #106 #104 #747**; filed **#747 #749 #752**.
-**62 open cards.**
+**#748 #750 #753 #751 #754** and closed **#745 #746 #749 #744 #106 #104 #747 #752**; filed **#747
+#749 #752 #755**. **62 open cards.**
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
@@ -20,7 +20,7 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines measured 03.09.2026 IN THE PRIMARY CHECKOUT (s114), sodium enabled, against
-`79d68e7`:** unit **3417** / 8383 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
+`c074b9e`:** unit **3433** / 8399 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
 **with the warning level ON**; phpstan no errors; **e2e 7 / 7** against the live rig.
 **Integration was NOT re-measured this session** — its last figure is **129 / 506** (s113,
 02.09.2026), an inference until someone runs it again.
