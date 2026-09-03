@@ -7,8 +7,8 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-03 (s114).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s114 merged
-**#748 #750 #753 #751 #754** and closed **#745 #746 #749 #744 #106 #104 #747 #752**; filed **#747
-#749 #752 #755**. **62 open cards.**
+**#748 #750 #753 #751 #754 #756 #757** and closed **#745 #746 #749 #744 #106 #104 #747 #752 #755
+#713**; filed **#747 #749 #752 #755**. **60 open cards.**
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
@@ -20,10 +20,9 @@ and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing ru
 `CLAUDE.md` → «GitHub Actions budget».
 
 **Baselines measured 03.09.2026 IN THE PRIMARY CHECKOUT (s114), sodium enabled, against
-`c074b9e`:** unit **3433** / 8399 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
-**with the warning level ON**; phpstan no errors; **e2e 7 / 7** against the live rig.
-**Integration was NOT re-measured this session** — its last figure is **129 / 506** (s113,
-02.09.2026), an inference until someone runs it again.
+`739aa45`:** unit **3454** / 8514 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
+**with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
+the live rig. Every figure here was measured in s114 against the commit named above.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -58,7 +57,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s114 — 62.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
+**Open cards after s114 — 60.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
 rig), #331/#332 (his own "not now") and **#706** (deleting 100+ branches — destructive).
 Rationale for the rest:
 `reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:

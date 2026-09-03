@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 265 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 266 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -114,6 +114,7 @@
 - [rig/browser] **The pickup modal sends NO `locality` unless the region and settlement AGREE — and the region select's values are UPPERCASE, so a title-case write renders it empty and drops the parameter silently.** → [the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field](gotchas/the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field.md) (s113)
 
 ### [framework/wiring] — Responsibilities that moved
+- [framework/wiring] **A hook registered as `[ $this, … ]` from a class every plugin builds fires ONCE PER PLUGIN — WordPress keys it by `spl_object_hash()`; a static callback collapses every registration into one.** → [a-hook-registered-from-a-per-plugin-object-fires-once-per-plugin](gotchas/a-hook-registered-from-a-per-plugin-object-fires-once-per-plugin.md) (s114)
 - [framework/wiring] **A module writing into another module's field must ANNOUNCE the write — otherwise the owner reads it as the user's.** → [a-module-that-writes-into-another-modules-field-must-announce-it](gotchas/a-module-that-writes-into-another-modules-field-must-announce-it.md) (s75)
 - [framework/wiring] **An action fired beside a filter must carry the filter's RESULT, not its input.** → [an-action-beside-a-filter-must-carry-the-filters-result](gotchas/an-action-beside-a-filter-must-carry-the-filters-result.md) (s65)
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)

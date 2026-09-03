@@ -83,6 +83,35 @@ orca orchestration worker-read --dispatch <dispatch_id> --limit 50 --json
 the session. It is the cheap answer to "did that background agent really return a result" — a
 question this project has been burned by before.
 
+## Two things s114 paid for
+
+**`orca` can vanish from a Bash call's PATH mid-session, and greps swallow the error.** Three
+orchestration commands in a row returned NOTHING — not an error, just empty output — because the
+shell that ran them resolved no `orca` and the `2>&1 | grep '"ok"'` around each one filtered
+`bash: orca: command not found` away. The binary was there the whole time. Resolve it once per
+command block and use the absolute path:
+
+```bash
+ORCA="/c/Users/maksi/AppData/Local/Programs/orca/resources/bin/orca"
+"$ORCA" orchestration worker-show --dispatch <id> --json
+```
+
+And when an orchestration command prints nothing at all, re-run it WITHOUT the grep before
+concluding anything about the runtime.
+
+**`agent_prompt_stalled` is recoverable in place — but a settled dispatch is not.** A worker came
+back `failed` at stage `dispatch_input` with `last_failure: agent_prompt_stalled`: the brief was
+pasted into the agent's prompt box and never submitted. `worker-start --retry-of <dispatch>` was
+REFUSED (`cannot retry from Dispatch …`); what worked was `worker-stop` → `task-update --status
+ready` → a plain `worker-start` on the same task and the same (still clean) worktree, then
+`terminal send --terminal <handle> --text "" --enter` when the fresh dispatch also sat at
+`input_accepted` with no heartbeat. After that Enter the transcript showed real tool calls
+immediately.
+
+⚠ Writing to a worker's terminal that way makes `worker-release` return `retained`
+(`user_takeover`) when the task finishes — expected, not a failure; clean the terminal up with the
+worktree at session end.
+
 ## Placement — the rule that comes from a real loss
 
 Orca's own guidance is to keep workers in the current worktree and create a new one only when a
