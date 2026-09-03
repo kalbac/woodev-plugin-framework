@@ -116,6 +116,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		private static array $native_field_registry = [];
 
 		/**
+		 * Every `Checkout_Handler` that has called {@see self::register()} this request.
+		 *
+		 * Exists ONLY so {@see self::apply_gateway_coordination()} — a `public static`
+		 * callback, deliberately deduplicated by WordPress's own hook storage (see that
+		 * method's docblock) so it fires exactly once no matter how many carrier plugins
+		 * register a handler — can still reach each plugin's OWN pickup-slot field ids to
+		 * resolve the chosen pickup point. Those field ids are plugin-supplied and opaque to
+		 * the framework ({@see self::pickup_slot_fields()} is deliberately per-instance), so
+		 * a static callback with no `$this` has no other way to reach them.
+		 *
+		 * List-indexed, not keyed — nothing here is ever looked up by identity, only iterated.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var self[]
+		 */
+		private static array $instances = [];
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 1.5.0
@@ -226,6 +245,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Listens for `woodev_shipping_pickup_point_selected` so a
 		 *              confirmed pickup point promotes an implicit locality —
 		 *              issue #518.
+		 * @since 2.0.2 Registers this instance in {@see self::$instances} and wires
+		 *              {@see self::apply_gateway_coordination()} onto
+		 *              `woocommerce_available_payment_gateways` (issue #713).
 		 *
 		 * @return void
 		 */
@@ -239,6 +261,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
 			add_filter( 'woocommerce_checkout_get_value', [ $this, 'handle_checkout_get_value' ], 10, 2 );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'handle_pickup_point_selected' ] );
+
+			self::$instances[] = $this;
+
+			// `[ self::class, 'apply_gateway_coordination' ]` is a STATIC callback: WordPress
+			// keys a registered hook callback by `_wp_filter_build_unique_id()`, which for an
+			// object callback (`[ $this, ... ]`, used by every OTHER hook above) includes
+			// `spl_object_hash( $this )` — a fresh id per instance, so N carrier plugins would
+			// register N distinct callbacks and this filter would fire N times for one
+			// customer decision. For a `[ ClassName, 'method' ]` callback there is no object,
+			// so the id is the same string (`ClassName::method`) every time — WordPress
+			// collapses every plugin's registration into the ONE stored callback, and the
+			// filter fires exactly once per `apply_filters()` call regardless of plugin count.
+			// See {@see self::apply_gateway_coordination()}'s own docblock for why that
+			// "exactly once" guarantee matters here (gotcha
+			// a-process-static-once-per-request-gate-checks-only-the-first-plugin.md).
+			add_filter( 'woocommerce_available_payment_gateways', [ self::class, 'apply_gateway_coordination' ] );
 
 			$this->guard_native_field_conflicts();
 		}
@@ -907,21 +945,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Resets the static native-field registry and the pickup-declaration
-		 * reconciliation gate.
+		 * Resets the static native-field registry, the pickup-declaration
+		 * reconciliation gate, and the registered-instances list.
 		 *
 		 * Provided for unit-test teardown so that tests that register handlers with
-		 * conflicting native-field ids, or that exercise {@see reconcile_pickup_declarations()},
-		 * do not bleed state into subsequent tests.
+		 * conflicting native-field ids, or that exercise {@see reconcile_pickup_declarations()}
+		 * or {@see self::apply_gateway_coordination()}, do not bleed state into subsequent
+		 * tests.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Also resets {@see self::$pickup_declarations_reconciled} (#736).
+		 * @since 2.0.2 Also resets {@see self::$instances} (#713).
 		 *
 		 * @return void
 		 */
 		public static function reset_native_field_registry(): void {
 			self::$native_field_registry          = [];
 			self::$pickup_declarations_reconciled = [];
+			self::$instances                      = [];
 		}
 
 		/**
@@ -2495,14 +2536,202 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * before its checkout hooks fire, so no separate nonce check is performed here.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Delegates to {@see self::resolve_chosen_method_id_from_post()} so
+		 *              {@see self::apply_gateway_coordination()} — `public static`, no `$this`
+		 *              — can reuse the exact same `$_POST` read (issue #713).
 		 *
 		 * @return string bare method id (the `:instance_id` suffix is stripped), or empty string
 		 */
 		private function chosen_shipping_method(): string {
+			return self::resolve_chosen_method_id_from_post();
+		}
+
+		/**
+		 * Reads and normalizes the chosen shipping method from `$_POST`, statically.
+		 *
+		 * The `$_POST` read itself, factored out of {@see self::chosen_shipping_method()} so
+		 * a static caller with no `$this` — {@see self::apply_gateway_coordination()} — reads
+		 * the exact same source rather than a second, potentially-drifting copy. WooCommerce
+		 * verifies the checkout nonce before its checkout hooks fire, so no separate nonce
+		 * check is performed here.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string bare method id (the `:instance_id` suffix is stripped), or empty string
+		 */
+		private static function resolve_chosen_method_id_from_post(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire; values are cleaned in sanitize_posted_data().
 			$method = wc_clean( (string) wp_unslash( $_POST['shipping_method'][0] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
 
 			return self::normalize_method_id( (string) $method );
+		}
+
+
+		/**
+		 * Resolves the `\Woodev\Framework\Shipping\Shipping_Method` instance for a bare
+		 * shipping method id.
+		 *
+		 * Mirrors {@see Checkout_Config::pickup_method_ids()}'s own established idiom for
+		 * exactly this indirection: `WC()->shipping()->get_shipping_methods()`
+		 * (`WC_Shipping::get_shipping_methods()`) returns one instance per REGISTERED method
+		 * id — a default instance, not the customer's per-zone one — which is enough here
+		 * because a `supports_*()` predicate reflects a capability the method CLASS declares
+		 * (typically in its own constructor via {@see \Woodev\Framework\Shipping\Shipping_Method::add_support()}),
+		 * not a per-zone instance setting.
+		 *
+		 * Guarded exactly like {@see Checkout_Config::pickup_method_ids()}, for the same
+		 * reason (see that method's own docblock): `WC()->shipping()` is never gated by
+		 * `is_request( 'frontend' )`, so this only ever degrades when WooCommerce itself is
+		 * not loaded (e.g. the unit suite).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $bare_id bare method id (no `:instance_id` suffix)
+		 *
+		 * @return \Woodev\Framework\Shipping\Shipping_Method|null
+		 */
+		private static function resolve_chosen_shipping_method_instance( string $bare_id ): ?\Woodev\Framework\Shipping\Shipping_Method {
+			if ( '' === $bare_id || ! function_exists( 'WC' ) || ! method_exists( WC(), 'shipping' ) || ! WC()->shipping() ) {
+				return null;
+			}
+
+			foreach ( WC()->shipping()->get_shipping_methods() as $method ) {
+				if ( $method instanceof \Woodev\Framework\Shipping\Shipping_Method && $method->get_id() === $bare_id ) {
+					return $method;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Resolves THIS instance's own posted pickup-point value for the chosen method, or
+		 * `null`.
+		 *
+		 * Reuses {@see self::pickup_slot_fields()} (this plugin's own pickup-slot field
+		 * descriptors) and {@see Checkout_Config::resolve_required()} (resolves the
+		 * `is_pickup_method` condition-spec sentinel the exact same way
+		 * {@see self::stale_pickup_field_ids()} already does) to find the one field, if any,
+		 * whose `required` condition names the chosen method — then reads that field's OWN
+		 * posted value. A plugin whose pickup-slot field does not require the chosen method
+		 * (because the customer picked a DIFFERENT method, possibly another plugin's)
+		 * correctly returns `null` here rather than a stale leftover value — the same reason
+		 * {@see self::drop_stale_pickup_values()} exists.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev\Framework\Shipping\Shipping_Method|null $chosen_method the resolved chosen method, or `null`
+		 *
+		 * @return string|null
+		 */
+		private function resolve_own_pickup_point( ?\Woodev\Framework\Shipping\Shipping_Method $chosen_method ): ?string {
+			if ( null === $chosen_method || ! $chosen_method->is_pickup_shipping() ) {
+				return null;
+			}
+
+			$chosen_id = $chosen_method->get_id();
+
+			foreach ( $this->pickup_slot_fields() as $field ) {
+				$resolved = Checkout_Config::resolve_required( $field['required'] ?? false );
+
+				if ( ! is_array( $resolved ) || 'in' !== ( $resolved['operator'] ?? '' ) || ! is_array( $resolved['value'] ?? null ) ) {
+					continue;
+				}
+
+				if ( ! self::chosen_method_matches( $chosen_id, $resolved['value'] ) ) {
+					continue;
+				}
+
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce before its checkout hooks fire.
+				$value = wc_clean( (string) wp_unslash( $_POST[ (string) $field['id'] ] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+
+				if ( '' !== $value ) {
+					return $value;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Coordinates payment-gateway availability with the customer's chosen shipping
+		 * method and (when applicable) chosen pickup point (issue #713).
+		 *
+		 * WHY `woocommerce_available_payment_gateways`. It is WooCommerce's OWN seam for
+		 * exactly this question (`WC_Payment_Gateways::get_available_payment_gateways()`) —
+		 * already fired on checkout page load, on every `update_order_review` AJAX request
+		 * (which posts the full checkout form, `shipping_method` included, whenever the
+		 * customer changes shipping method or pickup point), and again at order submission.
+		 * Hooking it here means every one of those evaluations re-derives the chosen method
+		 * fresh from `$_POST` (via {@see self::resolve_chosen_method_id_from_post()} — never
+		 * cached across calls), so it always answers for the customer's CURRENT choice.
+		 *
+		 * WHY THIS FIRES EXACTLY ONCE, NOT ONCE PER INSTALLED PLUGIN. Several carrier
+		 * plugins may each build their own `Checkout_Handler` and each call
+		 * {@see self::register()} — see that method's own docblock for why a
+		 * `[ self::class, __FUNCTION__ ]` callback (no `$this`) is exactly what makes
+		 * WordPress collapse every plugin's registration into ONE stored callback. A
+		 * `[ $this, ... ]` callback per plugin — the shape every OTHER hook in `register()`
+		 * uses — would instead fire N times for N plugins during a SINGLE WooCommerce
+		 * evaluation, each carrying a redundant, per-instance-inconsistent copy of the SAME
+		 * logical decision. That is the exact shape of the fleet-vs-plugin bug class already
+		 * caught three times in this codebase (#736, #746, #749) — see gotcha
+		 * `a-process-static-once-per-request-gate-checks-only-the-first-plugin.md`.
+		 *
+		 * WHY THE PICKUP POINT NEEDS {@see self::$instances} AT ALL. A pickup-slot field id
+		 * is plugin-supplied and opaque to the framework — only the plugin whose OWN
+		 * `Checkout_Handler` declared it can recognize it, and this callback, being static,
+		 * has no `$this` of its own. Iterating the small per-request instance list and asking
+		 * each one for {@see self::resolve_own_pickup_point()} is the only way this static
+		 * callback can still answer that question without hardcoding any plugin's field id.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $available_gateways the available payment gateways WooCommerce resolved so far
+		 *
+		 * @return array<string, \WC_Payment_Gateway>
+		 */
+		public static function apply_gateway_coordination( $available_gateways ): array {
+			$available_gateways = is_array( $available_gateways ) ? $available_gateways : [];
+
+			$chosen_method = self::resolve_chosen_shipping_method_instance( self::resolve_chosen_method_id_from_post() );
+			$pickup_point  = null;
+
+			foreach ( self::$instances as $instance ) {
+				$pickup_point = $instance->resolve_own_pickup_point( $chosen_method );
+
+				if ( null !== $pickup_point ) {
+					break;
+				}
+			}
+
+			/**
+			 * Filters the available payment gateways for the customer's chosen shipping
+			 * method and (when applicable) chosen pickup point.
+			 *
+			 * Formalizes, as a framework contract, a decision carrier plugins previously had
+			 * to make by hand — e.g. a pickup carrier unsetting its own COD gateway when the
+			 * chosen pickup point does not accept cash (issue #713). The framework makes NO
+			 * such decision itself: `$available_gateways` is returned unchanged unless a
+			 * consumer removes or modifies an entry — neither
+			 * {@see \Woodev\Framework\Shipping\Shipping_Method::supports_cod()} (nor the other
+			 * two capability predicates) being `false`, nor `$chosen_method` or
+			 * `$pickup_point` being `null`, removes anything here by itself. A consumer that
+			 * wants that behaviour implements it in this filter.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string, \WC_Payment_Gateway> $available_gateways the available payment gateways, keyed by gateway id
+			 * @param \Woodev\Framework\Shipping\Shipping_Method|null $chosen_method the customer's chosen shipping method instance, or `null`
+			 *        when none is chosen yet (e.g. first checkout page load) or it could not be resolved
+			 * @param string|null $pickup_point the posted pickup-point value for the chosen method, or `null` when the
+			 *        chosen method is not a pickup method, or no point has been chosen yet
+			 *
+			 * @return array<string, \WC_Payment_Gateway>
+			 */
+			$available_gateways = apply_filters( 'woodev_shipping_available_payment_gateways', $available_gateways, $chosen_method, $pickup_point );
+
+			return is_array( $available_gateways ) ? $available_gateways : [];
 		}
 
 		/**

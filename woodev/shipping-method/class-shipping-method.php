@@ -44,6 +44,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/** Box-packing feature: lets the method combine package contents into parcels. */
 		const FEATURE_BOX_PACKING = 'box-packing';
 
+		/** COD (cash-on-delivery) payment support feature. */
+		const FEATURE_COD = 'cod';
+
+		/** Insurance support feature. */
+		const FEATURE_INSURANCE = 'insurance';
+
+		/** Declared-value support feature. */
+		const FEATURE_DECLARED_VALUE = 'declared-value';
+
 		/**
 		 * Gets the unique method identifier.
 		 *
@@ -683,6 +692,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 */
 		public function supports_shipping_classes(): bool {
 			return $this->supports( self::FEATURE_SHIPPING_CLASSES );
+		}
+
+
+		/**
+		 * Determines whether this method has declared support for cash-on-delivery (COD) payment.
+		 *
+		 * Named predicate over {@see self::FEATURE_COD}: one point of change and a
+		 * self-documenting capability surface (the convention from Woodev_Payment_Gateway's
+		 * supports_*() wrappers).
+		 *
+		 * BACKWARD SAFETY (issue #713): this answers "did this method DECLARE COD support",
+		 * never "is COD actually possible right now" — that second question is domain logic
+		 * (e.g. whether the chosen pickup point itself accepts cash) and belongs to the host
+		 * plugin, not to this predicate. A method that never calls {@see self::add_support()}
+		 * with `self::FEATURE_COD` simply returns `false` here and is otherwise completely
+		 * unaffected: nothing in the framework starts refusing or removing a gateway, a rate,
+		 * or anything else on the strength of this flag being absent.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_cod(): bool {
+			return $this->supports( self::FEATURE_COD );
+		}
+
+		/**
+		 * Determines whether this method has declared support for shipment insurance.
+		 *
+		 * Named predicate over {@see self::FEATURE_INSURANCE}. Same backward-safety rule as
+		 * {@see self::supports_cod()}: declares intent only, never gates or removes framework
+		 * behaviour by itself, and a method that never opts in returns `false` unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_insurance(): bool {
+			return $this->supports( self::FEATURE_INSURANCE );
+		}
+
+		/**
+		 * Determines whether this method has declared support for a declared (customs/parcel)
+		 * value.
+		 *
+		 * Named predicate over {@see self::FEATURE_DECLARED_VALUE}. Same backward-safety rule
+		 * as {@see self::supports_cod()}: declares intent only, never gates or removes
+		 * framework behaviour by itself, and a method that never opts in returns `false`
+		 * unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_declared_value(): bool {
+			return $this->supports( self::FEATURE_DECLARED_VALUE );
 		}
 
 		/**
