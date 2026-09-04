@@ -202,6 +202,18 @@ if ( indexAt === -1 ) {
 		);
 	}
 
+	// The header states the count in prose. It is written by hand and drifts silently: s115 added
+	// a gotcha, updated CURRENT-STATE and the handoff, and left the header saying 267 of 268 — a
+	// number every later session would have copied forward as fact.
+	const headerCount = /(\d+)\s+atomic gotchas/.exec( gotchas );
+
+	if ( headerCount && Number( headerCount[ 1 ] ) !== files.size ) {
+		fail(
+			`GOTCHAS.md header says ${ headerCount[ 1 ] } atomic gotchas, but ${ files.size } files ` +
+			'exist. The header is read as fact by every session that opens this file.'
+		);
+	}
+
 	notes.push( `gotchas: ${ files.size } files, ${ entries.length } index entries` );
 }
 
