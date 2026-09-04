@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 268 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 269 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION on every incompatible override — 7 here — while a mocked unit suite stays green, because a double is not a subclass. Diff signatures across the chain first.** → [a-stricter-base-class-fatals-on-signatures](gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115)
 - [php/namespaces] **Moving a class into a sub-namespace rebinds every UNQUALIFIED sibling reference in that file at once — no parse error, no PHPCS complaint, and seven targeted test files still green; the full suite dies at load.** → [moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings](gotchas/moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings.md) (s104)
 - [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](gotchas/a-cast-is-not-a-degradation.md) (s102)
 - [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
