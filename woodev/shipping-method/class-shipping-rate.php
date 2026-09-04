@@ -188,7 +188,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 		/**
 		 * Converts the rate to array format for WC_Shipping_Method::add_rate()
 		 *
+		 * The meta is emitted FLAT — exactly the `key => value` pairs the rate was
+		 * built with. `WC_Shipping_Rate::add_meta_data()` stores one order-item meta
+		 * row per pair, so a flat array is what WooCommerce means by `meta_data`.
+		 *
+		 * ⚠ Do NOT re-introduce a wrapper keyed by `$this->method_id`. It was there
+		 * until 2.0.2 and had zero consumers, while it made a migrating plugin unable
+		 * to keep an existing flat meta key: `woocommerce-edostavka` writes
+		 * `edostavka_rate` and reads it back off the shipping order item, which is a
+		 * release-blocking installed-site contract (ADR-005). The wrapper is also
+		 * redundant — the shipping order item already carries its own `method_id`, so
+		 * naming the meta key after the method says nothing new — and on an empty
+		 * meta array it produced one junk row instead of none.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Meta is emitted flat; the `method_id` wrapper is gone (#764).
 		 *
 		 * @return array Rate data in WooCommerce format
 		 */
@@ -197,9 +211,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Rate' ) ) :
 				'id'        => $this->id,
 				'label'     => $this->label,
 				'cost'      => $this->cost,
-				'meta_data' => [
-					$this->method_id => $this->meta_data,
-				],
+				'meta_data' => $this->meta_data,
 			];
 
 			// Only include package if it was explicitly set
