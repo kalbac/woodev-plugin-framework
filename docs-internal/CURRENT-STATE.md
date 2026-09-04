@@ -32,8 +32,8 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines measured 03.09.2026 IN THE PRIMARY CHECKOUT (s114), sodium enabled, against
-`991c988`:** unit **3463** / 8541 / **1 skipped**; jest **1621** in **24** suites; phpcs clean —
+**Baselines — unit re-measured 04.09.2026 (s115) vs `debde7e`: 3487 / 8567 / 1 skipped.** Rest from
+s114 / `991c988`, sodium enabled: jest **1621** in **24** suites; phpcs clean —
 **with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
 the live rig. Every figure here was measured in s114 against the commit named above.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
