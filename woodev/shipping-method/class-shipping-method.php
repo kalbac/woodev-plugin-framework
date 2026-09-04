@@ -77,6 +77,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Constructor.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Applies the merchant's `title` option to `$this->title` (#768).
 		 *
 		 * @param int $instance_id shipping method instance ID
 		 */
@@ -99,10 +100,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			// Initialize and load settings
 			$this->init_settings();
 
+			/*
+			 * Apply the merchant's own title.
+			 *
+			 * `WC_Shipping_Method::get_title()` returns `$this->title` with no fallback of
+			 * any kind, so leaving the property unset leaves the method NAMELESS in the
+			 * shipping-zone table and on the checkout — while `init_form_fields()` above
+			 * still shows the merchant a Title control. The v1 framework did assign it
+			 * here; the v2 rewrite dropped the line, and no fixture noticed because every
+			 * plugin that reached a browser assigned `$this->title` in its own constructor
+			 * (#768).
+			 *
+			 * A subclass that still does so wins: its assignment runs after this one.
+			 */
+			$this->title = (string) $this->get_option( 'title', $this->get_title_fallback() );
+
 			// admin only
 			if ( is_admin() ) {
 				add_action( 'woocommerce_update_options_shipping_' . $this->id, [ $this, 'process_admin_options' ] );
 			}
+		}
+
+		/**
+		 * Gets the title to use when the merchant has left the Title field empty.
+		 *
+		 * An empty title is exactly the symptom being fixed, so the fallback must not be
+		 * empty either. {@see self::get_default_title()} covers the three delivery types;
+		 * `$method_title` — the name the plugin registered the method under — covers a
+		 * method whose type is none of them.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		protected function get_title_fallback(): string {
+
+			$fallback = $this->get_default_title();
+
+			return '' !== $fallback ? $fallback : (string) $this->method_title;
 		}
 
 		public function init_form_fields() {
@@ -122,7 +157,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'description' => [
 					'title'       => esc_html__( 'Description', 'woodev-plugin-framework' ),
 					'type'        => 'textarea',
-					'desc_tip'    => esc_html__( 'Shipping method description that the customer will see during checkout.', 'woodev-plugin-framework' ),
+					'desc_tip'    => esc_html__( 'Shipping method description. WooCommerce shows it under the method name in the block-based order form; the classic order form does not display it.', 'woodev-plugin-framework' ),
 					'default'     => $this->get_default_description(),
 					'css'         => 'max-width:400px;',
 					'placeholder' => esc_attr__( 'Enter description here', 'woodev-plugin-framework' ),
@@ -314,6 +349,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			if ( $rate ) {
+
+				$rate = $this->guard_rate_label( $rate );
+
 				/**
 				 * Shipping Method Before Add Rate Action.
 				 *
@@ -327,6 +365,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 				// Convert Shipping_Rate object to array for WC compatibility
 				$this->add_rate( $rate->to_array() );
+
+				$this->apply_rate_attributes( $rate );
 
 				/**
 				 * Shipping Method After Add Rate Action.
@@ -352,6 +392,88 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * @param Shipping_Method $method Method instance
 			 */
 			do_action( 'woodev_shipping_method_after_calculate_shipping', $package, $rate, $this );
+		}
+
+		/**
+		 * Substitutes the method's own title for an empty rate label.
+		 *
+		 * `WC_Shipping_Method::add_rate()` returns early — silently — when the label is
+		 * empty, which takes the method off the checkout with no fatal and no log line.
+		 * An empty label is not a programming error worth throwing over on the shipping
+		 * calculation path (#766): it is what a merchant produces by clearing the Title
+		 * field. `get_title()` is a real value here since #768 gave the title a fallback,
+		 * so the customer sees a named rate instead of no rate at all.
+		 *
+		 * ⚠ `get_title()` is `apply_filters( 'woocommerce_shipping_method_title', ... )`
+		 * with no type guard of its own, so its return is a THIRD PARTY'S value on the
+		 * checkout path. A non-string return is discarded and the rate is left as it was:
+		 * casting it would fatal on an object, which is the failure this guard exists to
+		 * prevent in the first place.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Rate $rate the calculated rate
+		 *
+		 * @return Shipping_Rate the same rate, or a copy carrying the method's title
+		 */
+		private function guard_rate_label( Shipping_Rate $rate ): Shipping_Rate {
+
+			if ( '' !== trim( $rate->get_label() ) ) {
+				return $rate;
+			}
+
+			$title = $this->get_title();
+
+			if ( ! is_string( $title ) || '' === trim( $title ) ) {
+				return $rate;
+			}
+
+			return $rate->with_label( $title );
+		}
+
+		/**
+		 * Applies the rate attributes `add_rate()` does not accept.
+		 *
+		 * `add_rate()` sets id, method id, instance id, label, cost, taxes and tax status
+		 * on the `WC_Shipping_Rate` it builds — and stops there. `description` and
+		 * `delivery_time` exist on that object (WooCommerce 9.2.0+) and are published per
+		 * rate by the Store API, so they can only be applied to the object afterwards.
+		 *
+		 * The rate's own value wins; the merchant's `description` option is the default
+		 * beneath it, which is what finally gives that settings field an effect (#768).
+		 *
+		 * Both setters are probed with `method_exists()` rather than assumed: the
+		 * framework supports WooCommerce from 7.0, where neither exists.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Shipping_Rate $rate the rate just handed to {@see \WC_Shipping_Method::add_rate()}
+		 */
+		private function apply_rate_attributes( Shipping_Rate $rate ): void {
+
+			$wc_rate = $this->rates[ $rate->get_id() ] ?? null;
+
+			if ( ! $wc_rate instanceof \WC_Shipping_Rate ) {
+				return;
+			}
+
+			$attributes = $rate->get_post_add_rate_attributes();
+
+			$description = (string) ( $attributes['description'] ?? '' );
+
+			if ( '' === $description ) {
+				$description = (string) $this->get_option( 'description', '' );
+			}
+
+			if ( '' !== $description && method_exists( $wc_rate, 'set_description' ) ) {
+				$wc_rate->set_description( $description );
+			}
+
+			$delivery_time = (string) ( $attributes['delivery_time'] ?? '' );
+
+			if ( '' !== $delivery_time && method_exists( $wc_rate, 'set_delivery_time' ) ) {
+				$wc_rate->set_delivery_time( $delivery_time );
+			}
 		}
 
 		/**
