@@ -6,21 +6,28 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-04 (s115).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s115 closed
-**#706** and **part 3 of #644**; filed **#762** (pilot umbrella); **#763** filed AND closed. **60 open
-cards**, every one carrying a «Приоритет» value. What s114 merged and closed → `sessions/s114.md`.
+**As of 2026-09-05 (s116).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s116 closed
+**#764** (PR #765) and filed **#766 #767**. **62 open cards**, every one carrying a «Приоритет».
 
-🎯 **THE PILOT IS LIVE AND `woocommerce-edostavka` RUNS ON v2** (s115, #762), own board **№9**, all
-pushed. Step 1 closed and verified on a real WordPress; the migration lives on branch
-`feat/v2-migration-step-1` and is deliberately NOT in `master`. Its wp-env stand is left running on
-**:8888/:8889** (containers `77ee96…`), separate from this repo's rig on :8973/:8974.
+🎯 **THE PILOT RUNS ON THE v2 SCAFFOLD.** `woocommerce-edostavka`, own board **№9**: `#1` and `#2`
+closed, `#3` and `#4` redefined by measurement and waiting on the operator. Plugin, shipping method
+and integration all extend the framework bases, verified on a live WordPress. Branches
+`feat/v2-migration-step-2` and `feat/v2-migration-step-4a-pickup`, pushed, deliberately NOT in
+`master`. Its wp-env stand runs on **:8888/:8889** (containers `77ee96…`), separate from this repo's
+rig on :8973/:8974. ⚠ **That stand has NO CDEK credentials** — `deliverypoints` returns 0 — so the
+pickup layer cannot be proven there at all; that is what blocks `edostavka#4`.
 
-⚠ **The framework-base migration is NOT divisible** (measured s115, `edostavka#2`): repointing the
-plugin at `Shipping_Plugin` fatals on **seven** incompatible overrides, three of which demand
-CLASSES (`Shipping_Integration`, `Checkout_Handler`, `Abstract_Webhook_Handler`), and the method
-cannot go first because `Shipping_Method::get_plugin()` returns `Shipping_Plugin`. It is one pass
-over four subsystems. ⚠ **A mocked unit suite cannot see any of it** — 248/248 stayed green while
-the plugin was dead (gotcha `a-stricter-base-class-fatals-on-signatures`).
+⚠ **The scaffold migration is NOT divisible, and it is TWICE the size a hand review reported**
+(measured s116): a mechanical signature diff found **13 fatals and 8 unimplemented abstract methods**
+where `edostavka#2` listed 7 — and three of those seven were not conflicts (a `private` base method
+does not clash; the checkout/webhook accessors are nullable by design). The costliest miss:
+`Shipping_Method::calculate_shipping()` is **`final`**. Tooling for this → **#767**.
+⚠ **`register_shipping_methods()` is `final` and filters classes through
+`is_subclass_of( $class, Shipping_Method::class )`, dropping the rest SILENTLY** — a method left on
+`WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
+⚠ **A mocked unit suite cannot see any of it** — 248/248 stayed green while the plugin was dead
+(gotcha `a-stricter-base-class-fatals-on-signatures`). The pilot's suite now loads the REAL base
+instead of an `eval`-ed double, and that was falsified.
 
 ✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
 не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
@@ -51,12 +58,10 @@ Gotcha `phpstan-windows-parallel-worker-segfault`.
 reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606, s102), target PHP only — why it had been
-green by accident: `sessions/s102.md`.
+✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606), target PHP only.
 
 ✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
-~2.5 min, pinning the walkthrough 20+ sessions ran by hand. Costs nothing new (Playwright ships with
-`@wordpress/scripts`). ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
+~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
 Detail: `wiki/rig-pickup-walkthrough.md`.
 
 ✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
@@ -134,15 +139,14 @@ libphonenumber is a devDependency and must never be enqueued; adding a country i
 a typed template. **[ADR-011](adr/011-vendored-imask-and-generated-phone-masks.md)** + gotcha
 `a-hand-typed-format-table-drifts-from-the-real-spec`.
 
-**No jargon in merchant-facing copy** — «чекаут»/«фреймворк» swept in s109; rule in `AGENTS.md`.
-
-**TS was measured and scoped: `src/` only (#542), never the raw-served frontend.**
+**No jargon in merchant-facing copy** — rule in `AGENTS.md`. **TS is scoped to `src/` only** (#542),
+never the raw-served frontend.
 
 **#528 «Города вне списка»** — default OFF, only for «Список с поиском»; ON → select2 `tags`, OFF →
-#517's abandon mechanism gated off. Detail → `sessions/s92.md`.
+#517's abandon mechanism gated off.
 
-**`select2:close` fires BEFORE `select2:select`** (four rig reproductions). Any guard shaped as "the
-pick will cancel the close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
+**`select2:close` fires BEFORE `select2:select`** — any guard shaped as "the pick will cancel the
+close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
 ## ⚠ The checkout location layer
 
@@ -179,17 +183,11 @@ anyway. Scan the tag for your task; do not keep a second copy here.
 (#409, #546; full rule in `AGENT-RULES.md` Rule 5, which now also covers INHERITED code → `1.0.0`).
 **Nothing above `2.0.2` remains — #116(a) closed it in s111**; #555 had not normalised them.
 
-✅ **Every Codex round gets a CANARY** — facts you already know, answered first (s110). Recipe:
-gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
-
-✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.**
-
-⚠ **`worker-start --agent codex` starts it in ONE command** (s108 #683, again s110). Measure its
-tool shell FIRST — the relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0.
-
-**kilo is the FALLBACK critic, not the default** — Orca cannot supervise it and the model must be
-pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md),
-which also holds the worktree rules below.
+**Agents:** Codex is a full worker in a worktree, not only a critic; every Codex round gets a
+CANARY; `worker-start --agent codex` is one command but measure its tool shell first; kilo is the
+FALLBACK critic and its model must be pinned via `--command`. Recipes and the worktree rules:
+[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md) + gotcha
+`starting-codex-under-orca-needs-four-steps-not-one`.
 
 **Orca:** a fresh worktree needs **no install step**; `vendor` must be COPIED, never shared; a fresh
 worktree starts dirty with seven CRLF-only files — **never `git add -A` there**, and remove them
@@ -245,12 +243,10 @@ only consumer; they get rewritten once everything is ready.
 ✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
 27.08.2026, история на **#583**.
 
-🎯 **ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` ИДЁТ** (оператор, 04.09.2026; **#762**, доска **№9**,
-майлстоун `Пилот edostavka`). Шаг 1 ЗАКРЫТ в s115: плагин загружается и работает на v2, проверено
-на живом WP 6.5 / WC 8.9.0. **Шаг 2 переопределён замером и НЕ взят:** метод доставки наследует
-`WC_Shipping_Method` НАПРЯМУЮ, поэтому переход на `Shipping_Method` тянет замену собственного слоя
-ПВЗ (2163 строки) на фреймворочный (21 404) — это архитектурное решение оператора, а не шаг из
-трёх. Пилот снимает заморозку карточек карты: она стоит ИМЕННО до него.
+🎯 **ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` ИДЁТ** (**#762**, доска **№9**, майлстоун
+`Пилот edostavka`). Шаги **1 и 2 ЗАКРЫТЫ**: плагин, метод и интеграция на базах v2, проверено на
+живом WP. **Шаг 4 (ПВЗ) ждёт учётных данных СДЭК на стенде** — без них он недоказуем; шаг 3
+переопределён и ждёт оператора. **Заморозку карточек карты снимает именно шаг 4**, а не каркас.
 
 **Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
 пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`
