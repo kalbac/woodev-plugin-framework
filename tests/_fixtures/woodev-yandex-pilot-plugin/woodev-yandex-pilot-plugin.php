@@ -30,7 +30,7 @@ function woodev_yandex_pilot_plugin_loader_definition(): array {
 		'plugin_version'    => WOODEV_YANDEX_PILOT_VERSION,
 		'framework_version' => '2.0.0',
 		'plugin_file'       => WOODEV_YANDEX_PILOT_FILE,
-		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+		'platform'          => 'woocommerce',
 		'requirements'      => [
 			'php'         => '7.4',
 			'wordpress'   => '6.3',

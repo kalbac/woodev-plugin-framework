@@ -52,7 +52,7 @@ function woodev_test_payment_gateway_plugin_loader_definition(): array {
 		'plugin_version'    => '1.0.0',
 		'framework_version' => '1.4.0',
 		'plugin_file'       => __FILE__,
-		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+		'platform'          => 'woocommerce',
 		'requirements'      => [
 			'php'         => '7.4',
 			'wordpress'   => '6.3',

@@ -26,7 +26,7 @@ function woodev_realistic_payment_plugin_loader_definition(): array {
 		'plugin_version'    => WOODEV_REALISTIC_PAYMENT_VERSION,
 		'framework_version' => '2.0.0',
 		'plugin_file'       => WOODEV_REALISTIC_PAYMENT_FILE,
-		'platform'          => \Woodev\Framework\Framework_Plugin_Loader_Definition::PLATFORM_WOOCOMMERCE,
+		'platform'          => 'woocommerce',
 		'requirements'      => [
 			'php'         => '7.4',
 			'wordpress'   => '6.3',
