@@ -49,6 +49,40 @@ And when reading probe output back, remember the console garbles the DISPLAY too
 through a terminal can show mojibake for a payload that is perfectly fine on disk. Decode with an
 explicit UTF-8 writer before concluding the data is broken.
 
+## The same trap through `gh`, where it PERSISTS — added s115
+
+`curl` gives you an error. `gh` does not: it writes the mangled bytes into GitHub and returns 200,
+so the damage outlives the session.
+
+Creating a board's single-select options with Cyrillic names:
+
+```bash
+gh project field-create 9 --owner kalbac --name "Приоритет" --data-type SINGLE_SELECT \
+  --single-select-options "Сейчас,Следом,Потом,Ждёт оператора,Заморожено,После v2"
+```
+
+The server stored `РЎРµР№С‡Р°СЃ` for `Сейчас` — permanently, on the board the whole team reads.
+
+⚠ **The cause is NOT established.** The byte-identical call created board №6's field correctly the
+same hour, and board №9's incorrectly. Do not write down a mechanism for this; write down the check.
+
+**The check — read the value back FROM THE SERVER, never trust your own echo.** A terminal can
+garble the display of data that is fine, and it can also display fine what it stored broken, so the
+only trustworthy read is a separate query:
+
+```bash
+gh api graphql -f query='{ user(login:"kalbac"){ projectV2(number:6){
+  field(name:"Приоритет"){ ... on ProjectV2SingleSelectField { options { id name } } } } } }' \
+  --jq '.data.user.projectV2.field.options[] | "\(.id)  \(.name)"'
+```
+
+**The fix — write through `gh api graphql`, which carried the same Cyrillic intact every time:**
+`updateProjectV2Field(input:{ fieldId:…, singleSelectOptions:[{name:"Сейчас", color:RED, …}] })`.
+
+⚠ **`updateProjectV2Field` REPLACES the option set, so every option id changes.** Any id you wrote
+into a doc or a script before the repair is now dead. Re-read the ids after any such repair — the
+s115 repair invalidated all six ids it had just recorded.
+
 ## Related
 
 - [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — the same shell mangling arguments, for paths instead of text
