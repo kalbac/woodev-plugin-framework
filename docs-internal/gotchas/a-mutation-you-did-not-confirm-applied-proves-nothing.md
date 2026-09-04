@@ -27,6 +27,45 @@ Every one reported success at the shell level. Two produced a green suite (read 
 — write a test!"), and one *did* change the file but into a **syntax error**, reddening 11 tests
 for a reason unrelated to the mutation — equally misleading in the other direction.
 
+## A sharper form, s115: confirm WHERE it landed, not only THAT it landed
+
+The three s73 cases all failed to change the file at all. s115 found the version that *does* change
+the file — into the wrong place — and it is harder to spot, because every check short of reading
+the diff says success.
+
+Mutating a fixture to prove a new test could fail:
+
+```python
+s.replace("Woodev_Loader::register(", "if ( false ) Woodev_Loader::register(", 1)   # first occurrence
+```
+
+The replacement reported success, the file changed, and the suite stayed **green** — which read as
+"the new test is useless, it does not pin the call". It was the opposite. The file's own docblock
+says *"registers itself … through `Woodev_Loader::register()`"*, so the FIRST occurrence of that
+string is **prose**. The comment got mutated; the call never did.
+
+Any file whose header documents what the code below does — which is every file in this repo — has
+this shape. `replace(..., 1)`, `sed` without an address, and "first match" in an editor all aim at
+the docblock before they aim at the code.
+
+**The check that catches it:** after mutating, grep for the mutation marker and read the line
+number, or print the mutated region. A count is not enough — `grep -c` was 1 in both the right and
+the wrong case.
+
+```bash
+grep -n "if ( false ) Woodev_Loader::register" "$f"    # is that a code line or a comment line?
+```
+
+Anchor on something that cannot appear in prose — the statement's own indentation and following
+line — rather than on the bare symbol name:
+
+```python
+old = "
+Woodev_Loader::register(
+	WOODEV_ENTRY_PATH_FIXTURE_FILE,"
+assert old in s, "real call not found"        # fails loudly instead of hitting the comment
+```
+
 ## ❌ Wrong
 
 ```bash
