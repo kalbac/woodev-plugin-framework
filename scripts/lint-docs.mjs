@@ -15,7 +15,7 @@
 
 import { readFileSync, readdirSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join( dirname( fileURLToPath( import.meta.url ) ), '..' );
@@ -398,6 +398,77 @@ if ( ! existsSync( handoffPath ) ) {
 			// A read-only checkout is fine — git is then the only source, the normal case.
 		}
 	}
+}
+
+/* ------------------------------------------------------------------ *
+ * Relative links must resolve (s115).
+ *
+ * Twice in one session a document pointed at a file that does not exist: the handoff promised
+ * `s112-706-branch-sweep.md`, which was never written, and a gotcha's `## Related` linked a
+ * gotcha slug nobody had created. Both read as authoritative, and both cost the next session the
+ * work of rebuilding what the link claimed was already there.
+ *
+ * Scope is deliberately narrow. `archive/` is a historical snapshot whose links point at the
+ * layout of their own time — rewriting them would falsify the record — and format documents show
+ * `{placeholder}` paths as examples. Neither is a defect, so neither is checked.
+ * ------------------------------------------------------------------ */
+{
+	const mdFiles = [];
+
+	const walk = ( dir ) => {
+		for ( const entry of readdirSync( dir, { withFileTypes: true } ) ) {
+			const full = join( dir, entry.name );
+
+			if ( entry.isDirectory() ) {
+				if ( 'archive' !== entry.name ) {
+					walk( full );
+				}
+			} else if ( entry.name.endsWith( '.md' ) ) {
+				mdFiles.push( full );
+			}
+		}
+	};
+
+	walk( INTERNAL );
+
+	const linkRe = /\[[^\]]{0,200}\]\(([^)\s]+?)(?:\s+"[^"]*")?\)/g;
+	let checked = 0;
+
+	for ( const file of mdFiles ) {
+		// Format documents SHOW the link shape rather than using it — inside fenced code blocks
+		// and HTML comments. Those are examples, not links, so they are removed before matching
+		// (blanked rather than deleted, to keep this cheap and order-independent).
+		const body = read( file )
+			.replace( /```[\s\S]*?```/g, '' )
+			.replace( /<!--[\s\S]*?-->/g, '' );
+
+		for ( const m of body.matchAll( linkRe ) ) {
+			const raw = m[ 1 ];
+
+			// External links, in-page anchors and documented `{placeholder}` examples.
+			if ( /^(https?:|mailto:|#)/.test( raw ) || raw.includes( '{' ) ) {
+				continue;
+			}
+
+			const target = raw.split( '#' )[ 0 ];
+
+			if ( '' === target ) {
+				continue;
+			}
+
+			checked++;
+
+			if ( ! existsSync( resolve( dirname( file ), target ) ) ) {
+				fail(
+					`${ relative( ROOT, file ).replace( /\\/g, '/' ) } links to "${ target }", ` +
+					'which does not exist. A link to a file nobody wrote reads as authoritative ' +
+					'and sends the next session looking for work that was never done.'
+				);
+			}
+		}
+	}
+
+	notes.push( `relative links: ${ checked } checked, ${ mdFiles.length } files (archive/ excluded)` );
 }
 
 /* ------------------------------------------------------------------ *

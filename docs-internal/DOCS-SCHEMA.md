@@ -340,6 +340,25 @@ When editing any gateway file, ask: "does another gateway file need the same upd
 
 ---
 
+## Relative links must resolve (gate, s115)
+
+`npm run lint:docs` fails on a link to a file that does not exist. It was added because this
+happened **twice in one session**: the handoff promised `s112-706-branch-sweep.md`, which was never
+written, and a gotcha's `## Related` pointed at a gotcha slug nobody had created. Both read as
+authoritative, and the second session paid for it by rebuilding the method the first link claimed
+was already recorded.
+
+**Scope, and why it is narrow:**
+
+- `archive/` is EXCLUDED. It is a historical snapshot whose links point at the layout of their own
+  time; rewriting them would falsify the record.
+- Fenced code blocks and HTML comments are EXCLUDED, because format documents (this file,
+  `GOTCHAS.md`) *show* the link shape as an example rather than using it.
+- External links (`http:`, `https:`, `mailto:`) and in-page anchors (`#…`) are not checked.
+
+So the rule is: **in a live document, a link is a promise that the file exists.** If you want to
+name a document that is not written yet, say so in prose — do not link it.
+
 ## Lint Checklist
 
 Before every commit touching docs:
@@ -351,7 +370,8 @@ Before every commit touching docs:
 - [ ] All new/edited `docs-internal/*.md` files are in English (no Russian text)
 - [ ] `SESSION-LOG.md` new index row is at the **top**, and links an existing `sessions/sNN.md`
 - [ ] `sessions/sNN.md` includes PHPStan result + commit hash
-- [ ] `npm run lint:docs` passes (session-start budget, index integrity, no history in CURRENT-STATE)
+- [ ] `npm run lint:docs` passes (session-start budget, index integrity, no history in CURRENT-STATE,
+      **and every relative link resolves** — added s115)
 - [ ] `CURRENT-STATE.md` `Last updated:` date is today
 - [ ] No `[✅]` bugs older than 2 sessions (remove them)
 - [ ] New wiki articles have a `## Related` section

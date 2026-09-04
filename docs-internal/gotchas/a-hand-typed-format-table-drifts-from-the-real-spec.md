@@ -88,5 +88,5 @@ broken table.
 ## Related
 
 - [../adr/011-vendored-imask-and-generated-phone-masks.md](../adr/011-vendored-imask-and-generated-phone-masks.md) — the decision this came out of, with the measured sizes
-- [a-plausible-inference-written-as-fact-is-the-dangerous-one](a-plausible-inference-written-as-fact-is-the-dangerous-one.md) — the same disease at the level of a claim rather than a table
+- [the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist](the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist.md) — the same disease at the level of a single claim rather than a table: something plausible written down as fact, which then stops anyone re-checking it
 - [a-mocked-provider-proves-the-mock-not-the-contract](a-mocked-provider-proves-the-mock-not-the-contract.md) — green tests that pin our own belief instead of the outside world
