@@ -7,16 +7,20 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-04 (s115).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s115 closed
-**#706** and **part 3 of #644**; filed **#762** (pilot umbrella); **#763** filed AND closed. **61 open cards**,
-every one carrying a «Приоритет» value. s114 before it merged **#748 #750 #753 #751 #754 #756 #757
-#760 #761** and closed **#745 #746 #749 #744 #106 #104 #747 #752 #755 #713 #758 #759**.
+**#706** and **part 3 of #644**; filed **#762** (pilot umbrella); **#763** filed AND closed. **60 open
+cards**, every one carrying a «Приоритет» value. What s114 merged and closed → `sessions/s114.md`.
 
-🎯 **THE PILOT IS LIVE AND `woocommerce-edostavka` ALREADY RUNS ON v2** (s115, #762). Its own board
-is **№9**; step 1 (`edostavka#1`) is closed and verified on a real WordPress. ⚠ **Its commits
-(`c7369f7`, `34d21af`, `5df50b0`) are LOCAL — the operator sanctioned the commits, not a push**, and
-pushing would also carry `dfd85cc` from 22.05 that origin has never seen. Its wp-env stand is left
-running on **:8888/:8889** (containers `77ee96…`) — separate from this repo's rig on :8973/:8974.
-The pre-migration bundle is backed up outside both repos, in this session's scratchpad.
+🎯 **THE PILOT IS LIVE AND `woocommerce-edostavka` RUNS ON v2** (s115, #762), own board **№9**, all
+pushed. Step 1 closed and verified on a real WordPress; the migration lives on branch
+`feat/v2-migration-step-1` and is deliberately NOT in `master`. Its wp-env stand is left running on
+**:8888/:8889** (containers `77ee96…`), separate from this repo's rig on :8973/:8974.
+
+⚠ **The framework-base migration is NOT divisible** (measured s115, `edostavka#2`): repointing the
+plugin at `Shipping_Plugin` fatals on **seven** incompatible overrides, three of which demand
+CLASSES (`Shipping_Integration`, `Checkout_Handler`, `Abstract_Webhook_Handler`), and the method
+cannot go first because `Shipping_Method::get_plugin()` returns `Shipping_Plugin`. It is one pass
+over four subsystems. ⚠ **A mocked unit suite cannot see any of it** — 248/248 stayed green while
+the plugin was dead (gotcha `a-stricter-base-class-fatals-on-signatures`).
 
 ✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
 не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
@@ -32,7 +36,7 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines — unit re-measured 04.09.2026 (s115) vs `b1fe9bf`: 3490 / 8574 / 1 skipped.** Rest from
+**Baselines — unit re-measured 04.09.2026 (s115) vs `b1fe9bf`: 3490 / 8574 / 1 skipped (framework prod code unchanged in s115).** Rest from
 s114 / `991c988`, sodium enabled: jest **1621** in **24** suites; phpcs clean —
 **with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
 the live rig. Every figure here was measured in s114 against the commit named above.
@@ -175,26 +179,23 @@ anyway. Scan the tag for your task; do not keep a second copy here.
 (#409, #546; full rule in `AGENT-RULES.md` Rule 5, which now also covers INHERITED code → `1.0.0`).
 **Nothing above `2.0.2` remains — #116(a) closed it in s111**; #555 had not normalised them.
 
-✅ **Every Codex round gets a CANARY** — facts you already know, answered first; it caught a
-misread file list in s110. Recipe: gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
+✅ **Every Codex round gets a CANARY** — facts you already know, answered first (s110). Recipe:
+gotcha `starting-codex-under-orca-needs-four-steps-not-one`.
 
 ✅ **Codex is a full WORKER in a worktree since s107, not only a critic — #510 closed.**
 
-⚠ **`orca orchestration worker-start --agent codex` starts it in ONE command** (s108 #683,
-confirmed again in s110 for four workers). Its tool shell is the variable to measure first — the
-relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0; `worktree.useRelativePaths`
-is never the fix.
+⚠ **`worker-start --agent codex` starts it in ONE command** (s108 #683, again s110). Measure its
+tool shell FIRST — the relative-`gitdir` rewrite is a remedy for a POSIX shell, not a step 0.
 
 **kilo is the FALLBACK critic, not the default** — Orca cannot supervise it and the model must be
-pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).
+pinned via `--command`. Recipe: [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md),
+which also holds the worktree rules below.
 
-**Orca:** a fresh worktree is gate-capable with **no install step** (`orca.yaml` shares
-`node_modules`; `.worktreeinclude` copies `vendor`, `plugins-reference` and local config).
-Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a fresh worktree starts
-dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
-`git worktree remove`.
+**Orca:** a fresh worktree needs **no install step**; `vendor` must be COPIED, never shared; a fresh
+worktree starts dirty with seven CRLF-only files — **never `git add -A` there**, and remove them
+**through Orca**.
 
-Gotchas: **268**.
+Gotchas: **269**.
 
 ## Program status (high level)
 
