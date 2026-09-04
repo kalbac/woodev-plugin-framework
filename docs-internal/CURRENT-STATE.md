@@ -7,7 +7,7 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-04 (s115).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s115 closed
-**#706** and **part 3 of #644**; filed **#762** (pilot umbrella) and **#763**. **61 open cards**,
+**#706** and **part 3 of #644**; filed **#762** (pilot umbrella); **#763** filed AND closed. **61 open cards**,
 every one carrying a «Приоритет» value. s114 before it merged **#748 #750 #753 #751 #754 #756 #757
 #760 #761** and closed **#745 #746 #749 #744 #106 #104 #747 #752 #755 #713 #758 #759**.
 
@@ -32,7 +32,7 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines — unit re-measured 04.09.2026 (s115) vs `debde7e`: 3487 / 8567 / 1 skipped.** Rest from
+**Baselines — unit re-measured 04.09.2026 (s115) vs `b1fe9bf`: 3490 / 8574 / 1 skipped.** Rest from
 s114 / `991c988`, sodium enabled: jest **1621** in **24** suites; phpcs clean —
 **with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
 the live rig. Every figure here was measured in s114 against the commit named above.
