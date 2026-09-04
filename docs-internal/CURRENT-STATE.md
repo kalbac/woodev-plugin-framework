@@ -7,7 +7,7 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-05 (s116).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s116 closed
-**#764** (PR #765) and filed **#766 #767**. **62 open cards**, every one carrying a «Приоритет».
+**#764** (PR #765) and filed **#766 #767**. **63 open cards**, every one carrying a «Приоритет».
 
 🎯 **THE PILOT RUNS ON THE v2 SCAFFOLD.** `woocommerce-edostavka`, own board **№9**: `#1` and `#2`
 closed, `#3` and `#4` redefined by measurement and waiting on the operator. Plugin, shipping method
