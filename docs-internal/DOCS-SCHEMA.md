@@ -6,18 +6,27 @@
 
 ## Language Rule
 
-**All files in `docs-internal/` that agents read must be exclusively in English.**
+**Prose an agent writes for agents is English. What that prose QUOTES keeps its own language.**
+
+⚠ Corrected s115. The rule used to read "exclusively in English", and it was measured against the
+tree: **99 of 305 agent-facing files contain Cyrillic.** They are not drift. Classify by what the
+text IS, the same way `AGENTS.md` classifies an i18n string by its render path rather than by its
+directory.
 
 | Scope | Language |
 |-------|----------|
-| `docs-internal/*.md` | English |
-| `docs-internal/gotchas/*.md` | English |
-| `docs-internal/wiki/*.md` | English |
-| `docs-internal/adr/*.md` | English |
-| `CLAUDE.md`, `QWEN.md` | English |
-| `AGENTS.md` | English |
+| `docs-internal/gotchas/*.md`, `wiki/*.md`, `adr/*.md` — the agent's own explanation | English |
+| `CLAUDE.md`, `QWEN.md`, `AGENTS.md`, `AGENT-RULES.md`, `DOCS-*.md` | English |
+| **The operator's own words, quoted** | **His, verbatim** — a translated quote is no longer evidence of what he decided, and this repo settles arguments by quoting him |
+| **Domain data** (DaData answers, settlement names, method labels, UI captions) | **As it really is** — «Нижегородская обл, г Бор» translated is a false record |
+| **Source strings shown as examples** (i18n msgids, admin notices) | As in the code |
+| `next-session-prompt.md`, `CURRENT-STATE.md`, `SESSION-LOG.md`, `sessions/*.md` | **Either** — the operator reads these himself, and they carry most of the Cyrillic in the tree by design |
 
-**PHP source code strings** (i18n, admin notices) stay in **Russian**. The language rule applies only to agent-facing documentation.
+The point the old wording was protecting is still in force: **an agent must never have to translate
+to understand the reasoning.** Explanation in English; the evidence it rests on stays untouched.
+
+**PHP source code strings** (i18n, admin notices) stay in **Russian** — the language rule applies
+only to agent-facing documentation.
 
 ---
 
@@ -367,7 +376,7 @@ Before every commit touching docs:
 - [ ] Every new gotcha has a corresponding `gotchas/{slug}.md` detail file
 - [ ] Every gotcha detail file has a `## Related` section
 - [ ] `GOTCHAS.md` `Last updated:` date is today
-- [ ] All new/edited `docs-internal/*.md` files are in English (no Russian text)
+- [ ] Agent-facing PROSE in new/edited `docs-internal/*.md` is English; quotes of the operator, domain data and source strings keep their own language (see Language Rule)
 - [ ] `SESSION-LOG.md` new index row is at the **top**, and links an existing `sessions/sNN.md`
 - [ ] `sessions/sNN.md` includes PHPStan result + commit hash
 - [ ] `npm run lint:docs` passes (session-start budget, index integrity, no history in CURRENT-STATE,
