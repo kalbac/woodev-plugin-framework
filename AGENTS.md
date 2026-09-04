@@ -54,23 +54,10 @@ This project has **two documentation directories** with different audiences, pub
 
 ### Working with `docs/` — public documentation
 
-**How to edit:**
-1. Edit `.md` files directly in `docs/`
-2. Preview locally: `mkdocs serve` (requires Python + mkdocs-material)
-3. Use `%%FRAMEWORK_VERSION%%` placeholder for version numbers — CI injects the actual version from `Woodev_Plugin::VERSION` during deploy
-4. Run markdownlint: `npx markdownlint-cli2 "docs/**/*.md"`
-
-**What goes here:**
-- API reference, usage guides, getting-started tutorials
-- Module documentation (settings-api, payment-gateway, shipping-method, etc.)
-- Code examples verified against actual source code
-
-**What does NOT go here:**
-- ❌ Session logs, gotchas, ADRs, bug tracking, phase status
-- ❌ Internal architecture decisions, deferred features
-- ❌ AI agent workflow rules
-
-**Deploy:** Push to `main` → GitHub Actions (`docs.yml`) builds mkdocs → deploys to GH Pages at `https://kalbac.github.io/woodev-plugin-framework/`. Triggers on changes to `docs/**`, `mkdocs.yml`, or `woodev/class-plugin.php`.
+⚠ **Standing operator decision: do NOT touch public docs yet** — he is their only consumer and
+they get rewritten once v2 is ready (`CURRENT-STATE.md` → "Public-docs API staleness").
+How to edit them when that changes, what belongs there, the `%%FRAMEWORK_VERSION%%` placeholder
+rule and the deploy trigger: `docs-internal/DOCS-SCHEMA.md` → "Public docs".
 
 ### Working with `docs-internal/` — internal technical docs
 
@@ -218,14 +205,10 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   GitHub closing keyword (`closes`/`fixes`/`resolves #N`) anywhere except alone on its own line —
   GitHub executes those literally even inside a quote, and s81 closed three cards that way while
   merely describing plans. A deliberate `Closes #123` on its own line still works.
-- **Point github.com at `gh` once per machine: `gh auth setup-git`.** Git for Windows ships
-  `credential.helper = manager` in its SYSTEM config, and Git Credential Manager blocks forever
-  waiting for an interactive prompt nobody can answer — so an agent's `git push` hangs with no
-  output, no error and no prompt (#560, operator decision 27.08.2026). The override is scoped to
-  github.com, so every other host keeps using GCM. Do NOT hand-roll it as
-  `git config credential.helper '!gh auth git-credential'` — that leaves `manager` first in the
-  chain and it still hangs; `gh auth setup-git` writes the empty entry that clears it. Gotcha:
-  `git-credential-manager-hangs-silently-in-an-agent-session`.
+- **Point github.com at `gh` once per machine: `gh auth setup-git`** (#560, operator 27.08.2026).
+  Without it `git push` hangs forever with no output, no error and no prompt. Verify BEFORE the
+  first push: `git config --global --get-regexp credential`. Do not hand-roll the helper — why,
+  and the exact symptom: gotcha `git-credential-manager-hangs-silently-in-an-agent-session`.
 - Never run `npx jest` directly — it loses the wp-scripts jsdom environment (gotcha `npx-jest-bypasses-wp-scripts-jsdom`). `jest-unit.config.js` scopes `roots` to `tests/js`, so a bare `npm run test:js` no longer counts agent worktrees (gotcha `jest-scans-agent-worktrees-inside-the-repo`, fixed s107/#188)
 - Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
 - **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.
@@ -386,6 +369,21 @@ Any out-of-scope idea, bug or tech-debt item that surfaces mid-session:
    | В работе | `34407388` | You are working on it right now |
    | Готово | `c88618cf` | Set by the board itself when the issue closes |
 
+4. Set «Приоритет» — **no open card may be without one** (operator, 04.09.2026, #644 part 3; the
+   board, not this repo's prose, is where priority lives). Same command,
+   `--field-id PVTSSF_lAHOAIbGB84BeLaozhhRouo`.
+
+   | Приоритет | Option id | When |
+   |---|---|---|
+   | Сейчас | `0e25803d` | Being worked right now |
+   | Следом | `adb2b45b` | Next in line |
+   | Потом | `01c993fc` | Live, not urgent |
+   | Ждёт оператора | `30de36ee` | Needs HIS answer before anyone builds it |
+   | Заморожено | `3d79482b` | Held on a STATED external condition — name it on the card |
+   | После v2 | `94cd2fa3` | Deferred idea; must not compete with anything above |
+
+   Milestones carry release gating, not order: `v2.0 релиз`, `Пилот edostavka`.
+
 A code `TODO` must reference an issue (`// TODO(#123): …`) — never stand alone.
 
 ### Lifecycle
@@ -412,5 +410,4 @@ A code `TODO` must reference an issue (`// TODO(#123): …`) — never stand alo
 
 ### `docs-internal/FUTURE-BACKLOG.md` is superseded
 
-It remains as a historical record of items filed before the board existed. **Do not add to it.** If you
-find something there that is still live, move it to an issue rather than editing the file.
+Historical record only — **do not add to it**; move anything still live there to an issue.

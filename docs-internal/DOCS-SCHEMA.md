@@ -357,3 +357,39 @@ Before every commit touching docs:
 - [ ] New wiki articles have a `## Related` section
 - [ ] No new items appended to `FUTURE-BACKLOG.md` (frozen — backlog lives on GitHub board №6)
 - [ ] A board card exists and was moved for the session's work (`В работе` → `Готово`)
+
+---
+
+## Public docs (`docs/`) — how to work with them
+
+Moved here from `AGENTS.md` in s115: it is reference material, not a session-start rule, and
+`AGENTS.md` is read at the start of every session against a 28 KB gate.
+
+⚠ **Right now the operator's standing decision is DO NOT TOUCH public docs** — they teach the v1
+positional `register_plugin()` (a v2 tombstone) and hardcode versions in five files. He is their
+only consumer today; they get rewritten once v2 is ready. See `CURRENT-STATE.md` →
+"Public-docs API staleness".
+
+**How to edit**
+
+1. Edit `.md` files directly in `docs/`.
+2. Preview locally: `mkdocs serve` (needs Python + mkdocs-material).
+3. Use the `%%FRAMEWORK_VERSION%%` placeholder for version numbers — **never hardcode a version**.
+   CI injects the real one from `Woodev_Plugin::VERSION` at deploy time.
+4. Lint: `npx markdownlint-cli2 "docs/**/*.md"`.
+
+**What belongs here:** API reference, usage guides, getting-started tutorials, module
+documentation (settings-api, payment-gateway, shipping-method …), and code examples verified
+against actual source.
+
+**What does NOT:** session logs, gotchas, ADRs, bug tracking, phase status, internal architecture
+decisions, deferred features, AI-agent workflow rules — all of those live in `docs-internal/`.
+
+**Deploy:** push to `main` → GitHub Actions (`docs.yml`) builds mkdocs → GitHub Pages at
+<https://kalbac.github.io/woodev-plugin-framework/>. Triggers on changes to `docs/**`,
+`mkdocs.yml` or `woodev/class-plugin.php`.
+
+## Related
+
+- [AGENTS.md](../AGENTS.md) — the two-tier documentation table this detail was lifted out of
+- [CURRENT-STATE.md](CURRENT-STATE.md) — the standing "do not touch public docs" decision

@@ -62,14 +62,11 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards after s114 — 60.** **Waiting on HIM:** #644 (prioritisation), #652 (scenario 1, his
-rig), #331/#332 (his own "not now") and **#706** (deleting 100+ branches — destructive).
-Rationale for the rest:
-`reviews/2026-08-31-644-prioritisation-material.md` §4. Still open and NOT waiting on him:
-**#621** (held BEHIND **#639**), **#589**, **#639**, **#689**, **#310** (rewritten in s110 to one
-button), **#701** (a research record with a stated entry condition, held the same way #689 is).
-Deferred to release: #285, #247, and **#567's remainder** (150 English msgids — operator,
-29.08.2026: leave them, regenerate `.pot` and rebuild `.mo` before release).
+**Open cards — 61, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+#644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
+`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
+empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
+card list retyped here** — a retyped list is exactly what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`), and the client reads it
 that way; `location.countries` stays a flat chain-wide union and is never combined with it naively.
@@ -243,18 +240,15 @@ only consumer; they get rewritten once everything is ready.
 ✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
 27.08.2026, история на **#583**.
 
-**Порядок работ и объём — в `next-session-prompt.md` → «С чего начать».** Этот файл держит только
-состояние и запреты; список из шести карточек, живший здесь с s108, устарел целиком — все шесть
-закрыты (#515 #374 #483 #437 #503 в s109, #653 в s108).
+🎯 **Следующий крупный блок — ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` на v2** (оператор,
+04.09.2026; карточка **#762**, майлстоун `Пилот edostavka`). Выбран замером против
+yandex-delivery, а не предпочтением: 39 тестовых файлов и PHPStan 0 против НУЛЯ тестов, есть
+удалёнка под доску и CI, дерево почти чистое. Плата — втрое больший объём и бандл 1.3.3.
+Пилот снимает заморозку карточек карты: она стоит ИМЕННО до него.
 
-🙋 **Ждут решения ОПЕРАТОРА:** **#644** (расстановка приоритетов), **#652** (его глаза на риге),
-**#331**/**#332** (его «не сейчас» от 15.08.2026) и **#706** (удаление 100+ веток — разрушительно).
-**#621** держится за **#639**.
-**Отложено до релиза:** #285, #247, остаток #567.
-
-**Техдолг и улучшения карты (181, 152, 148, 182, 174, 173, 151) осознанно НЕ трогаем до пилотной
-миграции** — пилот на живом карьере покажет, какие из этих карточек реальны, а какие мы придумали
-сами. `FUTURE-BACKLOG.md` заморожен; всё остальное живёт на доске №6.
+**Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
+пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`
+заморожен.
 
 ## 🔔 Cross-Project Reminder — Ecosystem Orchestration (dormant)
 
