@@ -9,25 +9,24 @@
 **As of 2026-09-05 (s116).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s116 closed
 **#764** (PR #765) and filed **#766 #767**. **63 open cards**, every one carrying a «Приоритет».
 
-🎯 **THE PILOT RUNS ON THE v2 SCAFFOLD.** `woocommerce-edostavka`, own board **№9**: `#1` and `#2`
-closed, `#3` and `#4` redefined by measurement and waiting on the operator. Plugin, shipping method
-and integration all extend the framework bases, verified on a live WordPress. Branches
-`feat/v2-migration-step-2` and `feat/v2-migration-step-4a-pickup`, pushed, deliberately NOT in
-`master`. Its wp-env stand runs on **:8888/:8889** (containers `77ee96…`), separate from this repo's
-rig on :8973/:8974. ⚠ **That stand has NO CDEK credentials** — `deliverypoints` returns 0 — so the
-pickup layer cannot be proven there at all; that is what blocks `edostavka#4`.
+⛔ **THE PILOT IS STOPPED (operator, 05.09.2026) — s116 went the wrong way.** The task was to WRITE A
+NEW plugin on v2, using the old one as reference and the CDEK docs as the spec. Instead the old
+plugin was refactored with its old screens deliberately preserved, so nothing visibly moved onto the
+framework. **New course: the framework is finished ON FIXTURES**; the shipping plugin is written
+later and from scratch, in its own repo on its own branch, version **2.3.0.0**
+(⚠ `version_compare('2.3.0.0','2.3.2')` is LESS — only valid if 2.3.x never shipped). Post-mortem →
+`sessions/s116.md`. `#762` and `edostavka#3/#4/#5` are FROZEN; the three migration branches are
+parked and `origin/master` (`34d21af`) is intact.
 
-⚠ **The scaffold migration is NOT divisible, and it is TWICE the size a hand review reported**
-(measured s116): a mechanical signature diff found **13 fatals and 8 unimplemented abstract methods**
-where `edostavka#2` listed 7 — and three of those seven were not conflicts (a `private` base method
-does not clash; the checkout/webhook accessors are nullable by design). The costliest miss:
-`Shipping_Method::calculate_shipping()` is **`final`**. Tooling for this → **#767**.
+⚠ **What that detour DID measure, and it stands:** a mechanical signature diff found **13 fatals and
+8 unimplemented abstract methods** where the card listed 7 — three of those seven were not conflicts
+at all. Costliest miss: `Shipping_Method::calculate_shipping()` is **`final`**. Tooling → **#767**.
 ⚠ **`register_shipping_methods()` is `final` and filters classes through
 `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest SILENTLY** — a method left on
 `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
 ⚠ **A mocked unit suite cannot see any of it** — 248/248 stayed green while the plugin was dead
-(gotcha `a-stricter-base-class-fatals-on-signatures`). The pilot's suite now loads the REAL base
-instead of an `eval`-ed double, and that was falsified.
+(gotcha `a-stricter-base-class-fatals-on-signatures`); loading the REAL base makes the suite catch
+it, falsified.
 
 ✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
 не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
@@ -243,10 +242,9 @@ only consumer; they get rewritten once everything is ready.
 ✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
 27.08.2026, история на **#583**.
 
-🎯 **ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` ИДЁТ** (**#762**, доска **№9**, майлстоун
-`Пилот edostavka`). Шаги **1 и 2 ЗАКРЫТЫ**: плагин, метод и интеграция на базах v2, проверено на
-живом WP. **Шаг 4 (ПВЗ) ждёт учётных данных СДЭК на стенде** — без них он недоказуем; шаг 3
-переопределён и ждёт оператора. **Заморозку карточек карты снимает именно шаг 4**, а не каркас.
+⛔ **ПИЛОТ ОСТАНОВЛЕН** (оператор, 05.09.2026; **#762** ЗАМОРОЖЕНА). Доводим фреймворк **на
+фикстурах**; боевой плагин пишется позже и с нуля. Заморозку карточек карты снимет слой ПВЗ нового
+плагина. Живое сейчас — **#766 #767 #768**, все воспроизводятся на фикстурах.
 
 **Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
 пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`
