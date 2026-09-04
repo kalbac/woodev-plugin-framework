@@ -96,7 +96,10 @@ When a task has **3+ independent workstreams each taking > 2 minutes**, use suba
 execution. Do NOT parallelize simple single-file edits or inherently sequential tasks.
 
 **The shape (operator decision, s83): worker = Sonnet 5, critic = Codex, and nobody accepts their
-own work.** Run it through Orca orchestration, not in-process subagents — the worker keeps its own
+own work.** ⚠ That is the DEFAULT pairing, not a cap on Codex: the critic-only restriction was
+lifted 24.08.2026 and Codex is a full worker again — see `CLAUDE.md` → Orca for which model gets
+which task. The invariant that survives both is the last clause: nobody accepts their own work.
+Run it through Orca orchestration, not in-process subagents — the worker keeps its own
 context in its own terminal and the orchestrator reads only the `worker_done` report. Full recipe,
 placement rules and traps: `wiki/orchestrating-agents-with-orca.md`. Never recall an `orca` flag
 from memory; the binary serves its own version-matched guide via `orca skills get orchestration`.
