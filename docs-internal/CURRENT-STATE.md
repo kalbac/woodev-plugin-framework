@@ -6,9 +6,17 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-04 (s114).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s114 merged
-**#748 #750 #753 #751 #754 #756 #757 #760 #761** and closed **#745 #746 #749 #744 #106 #104 #747
-#752 #755 #713 #758 #759**; filed **#747 #749 #752 #755 #758 #759**. **60 open cards.**
+**As of 2026-09-04 (s115).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s115 closed
+**#706** and **part 3 of #644**; filed **#762** (pilot umbrella) and **#763**. **61 open cards**,
+every one carrying a «Приоритет» value. s114 before it merged **#748 #750 #753 #751 #754 #756 #757
+#760 #761** and closed **#745 #746 #749 #744 #106 #104 #747 #752 #755 #713 #758 #759**.
+
+🎯 **THE PILOT IS LIVE AND `woocommerce-edostavka` ALREADY RUNS ON v2** (s115, #762). Its own board
+is **№9**; step 1 (`edostavka#1`) is closed and verified on a real WordPress. ⚠ **Its commits
+(`c7369f7`, `34d21af`, `5df50b0`) are LOCAL — the operator sanctioned the commits, not a push**, and
+pushing would also carry `dfd85cc` from 22.05 that origin has never seen. Its wp-env stand is left
+running on **:8888/:8889** (containers `77ee96…`) — separate from this repo's rig on :8973/:8974.
+The pre-migration bundle is backed up outside both repos, in this session's scratchpad.
 
 ✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
 не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
@@ -39,8 +47,8 @@ Gotcha `phpstan-windows-parallel-worker-segfault`.
 reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606, s102) on the target PHP version only, so
-a failure reproduces locally with the same command. Why it had been green by accident: `sessions/s102.md`.
+✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606, s102), target PHP only — why it had been
+green by accident: `sessions/s102.md`.
 
 ✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
 ~2.5 min, pinning the walkthrough 20+ sessions ran by hand. Costs nothing new (Playwright ships with
@@ -52,8 +60,7 @@ and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.
 so a bare `npm run test:js` is correct on its own (#188).
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100). And
-**a green unit suite is not sufficient where our code meets someone else's contract**: s96's #551
-round 1 was green, falsified and CI-clean, and returned Galicia for Moscow. Gotcha
+**a green unit suite is not sufficient where our code meets someone else's contract** — gotcha
 `a-mocked-provider-proves-the-mock-not-the-contract`.
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
@@ -75,10 +82,9 @@ that way; `location.countries` stays a flat chain-wide union and is never combin
 **#621 is held behind #639**, and its cheap fix is disproven: `get_order()` must preserve the
 caller's concrete order class or a `WC_Subscription` becomes a plain order (`sessions/s103.md`).
 
-**i18n has four rules now, and they are in `AGENTS.md` → Conventions, not here.** Storefront →
-English msgid; admin → a Russian msgid stays, an English one must be translated; **logs and
-anything not on a screen need not be wrapped in `__()` at all**; classify by the RENDER PATH, never
-by the file's directory (gotcha `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
+**i18n — four rules, and they live in `AGENTS.md` → Conventions, not here.** The one that is not
+obvious from them: classify by the RENDER PATH, never by the file's directory (gotcha
+`classify-an-i18n-string-by-its-render-path-not-its-file-path`).
 
 **A foreign exception's raw text is decided by WHO READS IT** (#608/#610): merchant or plugin
 author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
@@ -88,16 +94,14 @@ and NOTE boundaries only. Per-site table: the cards + `sessions/s101.md`.
 against one `throw`, and that throw is a failed lookup. A location field's `takeover_condition` is
 dropped and reported (#474, s113). An architectural card is decided by measurement, not by asking.
 
-**The phpcs warning level is ARMED since s110 (#139)**; noisy sniffs are excluded individually with
-reasons. **Line length is the one deliberate hole, with its own ruleset:**
+**The phpcs warning level is ARMED since s110 (#139)**; `[]`-only is enforced too. **Line length is
+the one deliberate hole and needs its own ruleset** —
 `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev` → **1393 in 138
-files** — a separate file because a rule silenced by `exclude-pattern` cannot be revived from the
-CLI, and its `tab-width=4` is load-bearing (gotcha
-`a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`). `[]`-only is enforced
-too (`Generic.Arrays.DisallowLongArraySyntax`).
+files**; why it cannot be revived from the CLI: gotcha
+`a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`.
 
-⚠ **`AGENTS.md` sits at 28.0 KB of its 28.0 KB gate.** The next addition to it must displace
-something. This is the reading-budget gate working, not a defect.
+⚠ **`AGENTS.md` and this file both run near their 28 KB gates** — any addition must displace
+something. That is the reading-budget gate working, not a defect.
 
 **The checkout invariants that survive their cards** — #708: `validate()` enforces a takeover
 field's `required` only when its condition owns the field AND WooCommerce rendered it. #707: ask
@@ -190,7 +194,7 @@ Worktrees live at `.orca/worktrees/`; `vendor` must be COPIED, never shared; a f
 dirty with seven CRLF-only files — **never `git add -A` there**. Remove them **through Orca**, never
 `git worktree remove`.
 
-Gotchas: **267**.
+Gotchas: **268**.
 
 ## Program status (high level)
 
@@ -240,11 +244,12 @@ only consumer; they get rewritten once everything is ready.
 ✅ **CI работает, мержить можно как обычно** — блок по биллингу снят публичностью репозитория
 27.08.2026, история на **#583**.
 
-🎯 **Следующий крупный блок — ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` на v2** (оператор,
-04.09.2026; карточка **#762**, майлстоун `Пилот edostavka`). Выбран замером против
-yandex-delivery, а не предпочтением: 39 тестовых файлов и PHPStan 0 против НУЛЯ тестов, есть
-удалёнка под доску и CI, дерево почти чистое. Плата — втрое больший объём и бандл 1.3.3.
-Пилот снимает заморозку карточек карты: она стоит ИМЕННО до него.
+🎯 **ПИЛОТНАЯ МИГРАЦИЯ `woocommerce-edostavka` ИДЁТ** (оператор, 04.09.2026; **#762**, доска **№9**,
+майлстоун `Пилот edostavka`). Шаг 1 ЗАКРЫТ в s115: плагин загружается и работает на v2, проверено
+на живом WP 6.5 / WC 8.9.0. **Шаг 2 переопределён замером и НЕ взят:** метод доставки наследует
+`WC_Shipping_Method` НАПРЯМУЮ, поэтому переход на `Shipping_Method` тянет замену собственного слоя
+ПВЗ (2163 строки) на фреймворочный (21 404) — это архитектурное решение оператора, а не шаг из
+трёх. Пилот снимает заморозку карточек карты: она стоит ИМЕННО до него.
 
 **Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
 пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`
