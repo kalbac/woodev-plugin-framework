@@ -14,6 +14,14 @@ contract data captured during Task P2.
 
 **Every item below must be preserved by the eventual rewrite — NOT enforced by this fixture.**
 
+⚠ **Corrected s115: the pilot fixture does NOT validate the load path.** It never calls
+`Woodev_Loader::register()` — it returns a definition array from a function, and
+`EdostavkaPilotFixtureTest` hands that to `register_loader_definition()` with the whole framework
+already loaded by Composer. So it exercises the RESOLVER, not a plugin's entry path, and the real
+entry path stayed unproven until the live migration hit a fatal on its first line (gotcha
+`a-loader-definition-cannot-use-a-framework-class-constant`). The sentence below is kept because
+its second half — which strings are asserted — is still true.
+
 The pilot fixture (`tests/_fixtures/woodev-edostavka-pilot-plugin/`) only validates that an
 edostavka-shaped plugin loads end-to-end through the new Platform v2 load path, and asserts
 exactly two of these strings:
