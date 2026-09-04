@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 270 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 271 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -330,6 +330,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/phpstan] **35 m 37 s on the Windows FS vs 1 m 24 s in the container, same config and verdict. A background task killed with `Stop-Process` reports `completed, exit 0` — the runner, not a gate.** → [run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows](gotchas/run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows.md) (s116)
 - [tooling/git] **`git diff --name-only` splices git's EOL warnings from STDERR into the file list, so it names files nobody touched — it fooled the coordinator AND the Codex critic in the same hour. `git status --short` is the authority.** → [git-diff-name-only-interleaves-eol-warnings](gotchas/git-diff-name-only-interleaves-eol-warnings.md) (s110)
 - [tooling/git] **A PR BODY closes cards behind the commit-msg hook's back — GitHub matches `close #N` inside «why this does not close #N» and ignores the negation. Also: `gh project item-list` silently truncates at `--limit`.** → [a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused](gotchas/a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused.md) (s111)
 - [tooling/phpcs] **A rule silenced by `exclude-pattern` cannot be revived by any CLI flag, so a documented "measure it on demand" command returns an empty report that reads as "no violations".** → [a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli](gotchas/a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli.md) (s110)
