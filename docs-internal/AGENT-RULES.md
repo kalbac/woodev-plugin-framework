@@ -1,5 +1,5 @@
 # Agent Rules — Woodev Plugin Framework
-> For AI agents. Keep updated. Last updated: 2026-08-20 (s83: Orca orchestration is the subagent path).
+> For AI agents. Keep updated. Last updated: 2026-09-04 (s115: Rule 3 names `framework_version`; Codex is not critic-only).
 > Navigation → `DOCS-INDEX.md` | Current status → `CURRENT-STATE.md`
 
 ---

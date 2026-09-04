@@ -1,6 +1,6 @@
 # Docs Schema — Woodev Plugin Framework
 > Format and lint rules for all agent-facing documentation. Read before writing or updating any doc.
-> Applies to ALL agents. Last updated: 2026-08-16 (docs cleanup: sessions/ split, index rules, `npm run lint:docs` gate).
+> Applies to ALL agents. Last updated: 2026-09-04 (s115: language rule corrected against the tree; link + header-count gates; public-docs section).
 
 ---
 
