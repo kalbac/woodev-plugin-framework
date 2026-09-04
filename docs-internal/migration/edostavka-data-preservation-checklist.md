@@ -71,6 +71,23 @@ All other contracts in this document are documented here for the rewrite and are
 | Per-instance method settings | Potential option key shape `woocommerce_edostavka_{instance_id}_settings` for each active zone instance | Inventory exact keys from production plugin behavior and migrate idempotently if used | No — must be verified against production plugin before rewrite |
 | Global method settings | `woocommerce_edostavka_settings` | Preserve / migrate idempotently | **Yes** (asserted) |
 
+### WooCommerce Email IDs — added s115 (04.09.2026), MISSING from the original list
+
+Verified against the live plugin, not inferred. WooCommerce persists each email's settings
+(enabled/disabled, subject, heading, recipients) in an option keyed by the email id, so these are
+installed-site data contracts exactly like a method id — and the original 03.06.2026 checklist
+omitted all three.
+
+| Email class | Current ID | Provenance | Migration action |
+|---|---|---|---|
+| Delivered | `edostavka_delivered_order` | `includes/emails/class-wc-edostavka-delivered-email.php:13` | Preserve byte-for-byte |
+| Not delivered | `edostavka_not_delivered_order` | `includes/emails/class-wc-edostavka-not-delivered-email.php:13` | Preserve byte-for-byte |
+| Tracking | `edostavka_tracking` | `includes/emails/class-wc-edostavka-tracking-email.php:13` | Preserve byte-for-byte |
+
+⚠ All three are built as `sprintf( '%s_…', …->get_method_id() )`, so they are **derived from the
+method id**. Changing the method id silently renames three email settings options as well — the
+blast radius of that one string is wider than the method-id row above suggests.
+
 ## Scheduled Work And Queues
 
 | Contract item | Current shape | Migration action | Enforced by fixture? |
@@ -124,6 +141,23 @@ covered by the pilot fixture:
 - Order meta under `_wc_edostavka_` is preserved via HPOS-safe access.
 - AJAX `edostavka_*` actions, REST namespace `wc/v3`, and webhook endpoints `woocommerce_api_wc_edostavka_*` remain stable.
 - License remains active and updater identity (download ID `216`) stays continuous after migration.
+- The three WooCommerce email ids (`edostavka_delivered_order`, `edostavka_not_delivered_order`,
+  `edostavka_tracking`) remain stable, so merchants keep their email settings.
+
+## Verification pass, s115 (04.09.2026)
+
+Every contract string above was grepped against the live plugin at
+`D:/Projects/wordpress/woocommerce-edostavka` — **all 20 are still present**, so this checklist has
+not gone stale in the 3 months since it was written. Two things it did NOT say:
+
+1. **The three email ids** — now added above.
+2. **The plugin registers through the v1 tombstone.**
+   `woocommerce-edostavka.php:34` calls
+   `Woodev_Plugin_Bootstrap::instance()->register_plugin( '1.3.3', … )` — positional v1 shape.
+   Under v2 that call only quarantines legacy callers (`AGENT-RULES.md` Rule 3), so **this is the
+   first thing that breaks** and the first thing the rewrite must replace with
+   `Woodev_Loader::register( __FILE__, [ … ] )`. Plugin version is `2.3.2`; the `1.3.3` in that
+   call is the bundled FRAMEWORK version, not the plugin's.
 
 ## Related
 
