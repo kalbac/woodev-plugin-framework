@@ -1,5 +1,5 @@
 # AGENTS.md — Woodev Plugin Framework
-> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated. Last updated: 2026-09-04 (s115: backlog rule gained the «Приоритет» field; public-docs how-to moved to DOCS-SCHEMA).
+> For ALL AI agents (Claude, Gemini, Cursor, GPT, etc.). Keep updated.
 > **Claude Code agents:** read `CLAUDE.md` too — it adds the Claude-specific MCP tooling (Serena, Context7). It does not replace this file, and it restates nothing from it.
 > **Architecture reference** (subsystems, base classes, seams): `docs-internal/wiki/architecture.md` — not loaded at session start, open it when the task needs it.
 

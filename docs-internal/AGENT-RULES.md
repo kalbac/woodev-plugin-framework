@@ -1,5 +1,5 @@
 # Agent Rules — Woodev Plugin Framework
-> For AI agents. Keep updated. Last updated: 2026-09-04 (s115: Rule 3 names `framework_version`; Codex is not critic-only).
+> For AI agents. Keep updated.
 > Navigation → `DOCS-INDEX.md` | Current status → `CURRENT-STATE.md`
 
 ---

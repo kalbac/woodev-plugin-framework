@@ -1,8 +1,25 @@
 # Docs Schema — Woodev Plugin Framework
 > Format and lint rules for all agent-facing documentation. Read before writing or updating any doc.
-> Applies to ALL agents. Last updated: 2026-09-04 (s115: language rule corrected against the tree; link + header-count gates; public-docs section).
+> Applies to ALL agents.
 
 ---
+
+## Freshness is git's answer, not a hand-written field (s115)
+
+Rule documents used to carry a `Last updated:` stamp in their header. It was written by hand, so it
+drifted: **all six were stale**, by 9 days to 3 weeks — and the lint checklist meanwhile demanded
+the stamp be current in two files that never had one. A field that lies is worse than no field,
+because a reader treats it as fact.
+
+The stamps are gone. Ask git, which cannot drift:
+
+```bash
+git log -1 --format=%ad --date=short -- docs-internal/AGENT-RULES.md
+```
+
+**What is still stamped, and why:** `sessions/sNN.md` and the handoff carry dates because those are
+statements about WHEN something was measured, not about when a file was edited — a measurement
+without its date is the trap `CURRENT-STATE.md` warns about.
 
 ## Language Rule
 
@@ -375,13 +392,11 @@ Before every commit touching docs:
 - [ ] Every new `GOTCHAS.md` entry has `[topic/slug]` prefix, 1-line summary, and link to detail file
 - [ ] Every new gotcha has a corresponding `gotchas/{slug}.md` detail file
 - [ ] Every gotcha detail file has a `## Related` section
-- [ ] `GOTCHAS.md` `Last updated:` date is today
 - [ ] Agent-facing PROSE in new/edited `docs-internal/*.md` is English; quotes of the operator, domain data and source strings keep their own language (see Language Rule)
 - [ ] `SESSION-LOG.md` new index row is at the **top**, and links an existing `sessions/sNN.md`
 - [ ] `sessions/sNN.md` includes PHPStan result + commit hash
 - [ ] `npm run lint:docs` passes (session-start budget, index integrity, no history in CURRENT-STATE,
       **and every relative link resolves** — added s115)
-- [ ] `CURRENT-STATE.md` `Last updated:` date is today
 - [ ] No `[✅]` bugs older than 2 sessions (remove them)
 - [ ] New wiki articles have a `## Related` section
 - [ ] No new items appended to `FUTURE-BACKLOG.md` (frozen — backlog lives on GitHub board №6)

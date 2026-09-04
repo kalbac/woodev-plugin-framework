@@ -1,7 +1,7 @@
 # Docs Index — Woodev Plugin Framework
 > Navigation hub for AI agents. Read this FIRST in every new session. ~2 min read.
 > `docs-internal/` — internal technical documentation (not published).
-> Last updated: 2026-08-09 (s60 docs audit).
+> Freshness: `git log -1 --format=%ad --date=short -- <file>`.
 
 ---
 
