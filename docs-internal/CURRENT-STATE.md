@@ -6,31 +6,26 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-05 (s117).** `main` = **`be87be1`**, clean, **no open PRs, no worktrees, Инбокс
-EMPTY**. s117 closed **#768 #766** (PR #769) and **#767** (PR #770). **61 open cards**, every one
-carrying a «Приоритет».
+**As of 2026-09-05 (s118).** `main` = **`567218b`**, clean, **no open PRs, no worktrees, Инбокс EMPTY**. s118 closed **#364** (measurement, `not planned`), **#138** (PR #774) and **#771** (PR #776); filed **#773** and **#775**. **60 open cards**, every one carrying a «Приоритет».
 
-⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of
-WRITING A NEW one on v2, so nothing visibly moved onto the framework; post-mortem in
-`sessions/s116.md`. **New course: the framework is finished ON FIXTURES**; the shipping plugin is
-written later and from scratch, own repo, own branch, version **2.3.0.0**
+⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
+A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
+FIXTURES**; the shipping plugin is written later, from scratch, own repo, version **2.3.0.0**
 (⚠ `version_compare('2.3.0.0','2.3.2')` is LESS — valid only if 2.3.x never shipped). `#762` and
-`edostavka#3/#4/#5` are FROZEN; the migration branches are parked, `origin/master` (`34d21af`) intact.
+`edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **Repointing a plugin at a v2 base costs 11 fatals and 8 unimplemented abstracts — run
-`npm run probe:signature` (#767), never a hand count.** s116's 13/8 was corrected in s117; the
-probe, the reasoning and the three rules that make a hand count wrong live in
-[migration/signature-probe.md](migration/signature-probe.md) and the gotcha
-`a-stricter-base-class-fatals-on-signatures`. The costliest genuine miss stands:
-`Shipping_Method::calculate_shipping()` is **`final`**.
-⚠ **`register_shipping_methods()` is `final` and filters classes through
-`is_subclass_of( $class, Shipping_Method::class )`, dropping the rest SILENTLY** — a method left on
+⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs
+**11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand
+count; argument and rules in [migration/signature-probe.md](migration/signature-probe.md) + gotcha
+`a-stricter-base-class-fatals-on-signatures`. (2) `Shipping_Method::calculate_shipping()` is
+**`final`**. (3) `register_shipping_methods()` is `final` and filters through
+`is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on
 `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
 
-✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
-не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
-`WP_DEBUG`, а фреймворк строит дефолт — потому что эти три разыменовываются **17 / 13 / 2** раза без
-проверки на null. Субсистемы с **0** незащищённых вызовов остаются опциональными и не трогаются.
+✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
+уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
+фреймворк строит дефолт — эти три разыменовываются **17 / 13 / 2** раза без проверки на null.
+Субсистемы с **0** незащищённых вызовов остаются опциональными.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
 its file says nothing about which cities it knows. History → `sessions/s113.md`.
@@ -41,12 +36,11 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines — ALL re-measured 05.09.2026 (s117) against `be87be1`, sodium enabled:** unit
-**3522** / 8645 / **1 skipped**; jest **1628** in **25** suites; **integration 138 / 522**; phpcs
-clean — **with the warning level ON**; phpstan level 3 no errors; `lint:docs` OK. Only **e2e 7 / 7**
-is older (s114, against the live rig) and was not re-run here.
-⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
-`main` in one evening.
+**Baselines — ALL re-measured 05.09.2026 (s118) against `567218b`, sodium enabled:** unit
+**3524** / 8647 / **1 skipped**; jest **1628** in **25** suites; **integration 143 / 530**; phpcs
+clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:mo` and
+`lint:docs` OK; **e2e 7 / 7** re-run on the WP 7.1 + WC 11.1.0 rig, no longer stale.
+⚠ The s117 figure «integration 138 / 522» in this file was WRONG — the handoff's 143 / 530 was right.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
 `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
@@ -62,9 +56,13 @@ reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotch
 ~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
 Detail: `wiki/rig-pickup-walkthrough.md`.
 
-✅ **A worktree cannot run integration at all (no wp-env), so running it is the COORDINATOR's job
-and is not optional.** jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`,
-so a bare `npm run test:js` is correct on its own (#188).
+✅ **Integration is the COORDINATOR's job and is not optional.** A worktree cannot run it — and the
+reason is NOT «no wp-env»: the rig containers DO see worktrees (`.wp-env.json` maps the repo root and
+`.orca/` sits inside it), phpunit starts there and then dies resolving the fixtures, because
+`WOODEV_FRAMEWORK_DIR` points at the main checkout (measured s118). Run it from a **detached checkout
+of the branch in the main tree**. `wp i18n make-mo` on a worktree's `.po`, by contrast, works fine.
+jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
+`npm run test:js` is correct on its own (#188).
 
 ⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100). And
 **a green unit suite is not sufficient where our code meets someone else's contract** — gotcha
@@ -76,7 +74,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 IS its own region publishes NO ancestors (#707, gotcha
 `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 61, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 60, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
@@ -92,6 +90,15 @@ caller's concrete order class or a `WC_Subscription` becomes a plain order (`ses
 **i18n — four rules, and they live in `AGENTS.md` → Conventions, not here.** The one that is not
 obvious from them: classify by the RENDER PATH, never by the file's directory (gotcha
 `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
+**И теперь это ПРИНУЖДАЕТСЯ** (#771, s118): `lint:i18n` падает на английском msgid без перевода вне
+`scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
+собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
+ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
+
+**`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
+Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
+`ClassMapCompletenessTest`. ⚠ Обратный сторож — **единственный** гейт на «класс есть в карте, но не
+требуется»: интеграция на этом зелёная, автозагрузчик достаёт класс из `class-map.php`.
 
 **A foreign exception's raw text is decided by WHO READS IT** (#608/#610): merchant or plugin
 author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
@@ -192,10 +199,10 @@ worktree starts dirty with seven CRLF-only files — **never `git add -A` there*
 **through Orca**.
 
 **Building a rate? Read the two `[woocommerce/shipping]` gotchas from s117 first** — `add_rate()`
-silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
+silently ignores `description`/`delivery_time`; stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **275**.
+Gotchas: **278**.
 
 ## Program status (high level)
 
@@ -247,7 +254,7 @@ only consumer; they get rewritten once everything is ready.
 
 ⛔ **ПИЛОТ ОСТАНОВЛЕН** (оператор, 05.09.2026; **#762** ЗАМОРОЖЕНА). Доводим фреймворк **на
 фикстурах**; боевой плагин пишется позже и с нуля. Заморозку карточек карты снимет слой ПВЗ нового
-плагина. **#766 #767 #768 — ЗАКРЫТЫ в s117**; следующее берётся с доски по полю «Приоритет».
+плагина. Следующее берётся с доски по полю «Приоритет», сверив карточку с кодом ДО взятия.
 
 **Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
 пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`
@@ -260,13 +267,10 @@ only consumer; they get rewritten once everything is ready.
 
 ## Local rig
 
-- **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (the adapter is SP-11, unbuilt), where there is no `form.checkout`, no `carrier_pickup_point` and no trigger, which reads as a broken build rather than the wrong URL. Product id `12` fills the cart via `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
+- **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (SP-11 unbuilt), with no `form.checkout` and no trigger, which reads as a broken build rather than the wrong URL. Cart: `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
 - **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ✅ **Rig at standard, re-verified 02.09.2026 (s112)** after a measurement that mutated it three
-  ways and restored all three: the two pickup constants, `woodev_customer_location` (byte-identical
-  to its prior value) and the WC customer city/state. Confirmed by reopening the modal — map, tiles
-  and clustered Moscow points. `field_mode_region` is `related-list`, default locality
-  `test-cdek:44`. Popular settlements still hold 5 `dadata` rows beside the 6 `test-cdek`.
+- ✅ **Rig at standard, re-verified 02.09.2026 (s112)** — modal, map, tiles and clustered Moscow
+  points confirmed. Popular settlements hold 5 `dadata` rows beside the 6 `test-cdek`.
 - ✅ **TWO CARRIERS SIDE BY SIDE since s112** (#734/#735) — the ordinary production arrangement.
   Sources separate per PLUGIN, never per method, so a second carrier is a second plugin:
 
@@ -275,27 +279,21 @@ only consumer; they get rewritten once everything is ready.
   | `woodev_test_shipping` | LIVE Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` | `carrier_pickup_point` |
   | `woodev_realistic_pickup_shipping` | static fixture — Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` | `realistic_pickup_point` |
 
-  Each button is visible only under its own method. **#150 was tested through this and CLOSED in
-  s113 — it does not reproduce**: Краснодар is the single-point city whose bounds degenerate, tiles
-  render fully at max zoom, and a test pins that count — do not add a second point.
+  Each button is visible only under its own method. **#150 was CLOSED in s113 — it does not
+  reproduce**; Краснодар is the single-point city and a test pins that count — do not add a second.
   ✅ **BOTH carriers now run the KEY-addressed path** — #746 (s114) wired the second carrier's
   `Pickup_Handler` to its plugin. One built WITHOUT it still degrades to DOM-read NAME addressing,
   but no longer silently: `_doing_it_wrong()` under `WP_DEBUG` while the location layer is active.
-  ⚠ **A consequence that inverts how you measure here:** with a plugin wired the server resolves
-  the CUSTOMER'S RECORD and hands it to the source, and that outranks the `locality` request
-  parameter — so the parameter's **value is inert** and only its **presence** matters (it gates
-  `Point_Query::from_request()`). To measure which city's points come back, change the customer's
-  record, never the URL. Carrier 1 ignores the locality outright: a city that does not exist returns
-  the same 815-point set (#747). Gotcha
-  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
+  ⚠ **This inverts how you measure here:** with a plugin wired the server resolves the CUSTOMER'S
+  RECORD and that outranks the `locality` parameter — its **value is inert**, only its **presence**
+  matters (it gates `Point_Query::from_request()`). To change which city's points come back, change
+  the customer's record, never the URL (#747).
 
-  ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734).**
-  With two carriers the rig now shows both shapes at once (live data and clustering on one,
-  deterministic fixture data on the other), which is closer to production than either alone.
+  ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734):**
+  the rig shows both shapes at once, which is closer to production than either alone.
   ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the FIRST
   carrier, so a `Woodev_Test_Bulk_Point_Source` change never reaches the rig — reach static data
-  through the second carrier. Gotcha
-  `the-rig-runs-the-live-yandex-point-source-so-a-fixture-change-may-never-reach-it`.
+  through the second carrier (same gotcha as above).
   ⚠ Rig state this required, not tracked by git: `npx wp-env start` (new mapping),
   `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
   instance **5**.
@@ -312,14 +310,9 @@ only consumer; they get rewritten once everything is ready.
   | `woodev_location_allow_custom_settlement` | `no` |
   | checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
 
-  `mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113. `zz-rig-test-pickup-shipping.php`
-  and its third pickup method `woodev_test_pickup_shipping` were **REMOVED** (#737, operator
-  03.09.2026): the second carrier covers those scenarios properly, while the mu-method was a
-  half-declared carrier whose chosen point never survived a reload. It is not tracked by git; a copy
-  is kept outside the repo, and restoring it means dropping the file back into `mu-plugins/`.
-  Verified after removal: the method is gone from the checkout, both real carriers still work, and
-  the #736 reconciliation stays silent. Switching to `geoip` needs `dadata` + a pinned non-local IP:
-  gotcha `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
+  `mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113 — the third pickup method was REMOVED
+  (#737); why, and how to restore it: [wiki/local-rig.md](wiki/local-rig.md). Switching to `geoip`
+  needs `dadata` + a pinned non-local IP: gotcha `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
 - **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.

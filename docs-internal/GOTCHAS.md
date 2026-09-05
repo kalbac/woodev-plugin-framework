@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 277 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 278 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -336,6 +336,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/orca] **`orchestration send` is MAIL, not prompt injection: it returns `ok: true` and the worker never reads it unless it calls `orchestration check` — two workers called it zero times in 28 minutes.** → [orchestration-mail-is-not-read-unless-the-worker-calls-check](gotchas/orchestration-mail-is-not-read-unless-the-worker-calls-check.md) (s118)
 - [tooling/parallel-agents] **A `cd` in the Bash tool PERSISTS across calls (variables do not), so a later `git checkout -b` lands in the worktree you visited.** → [a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree](gotchas/a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree.md) (s117)
 - [tooling/parallel-agents] **`worker-release` answers `ok: true, state: "retained"` and leaves the agent RUNNING — an injected terminal is unsupervised, so Orca owns nothing to close. Read `state`, not `ok`.** → [worker-release-answers-retained-and-leaves-the-terminal-running](gotchas/worker-release-answers-retained-and-leaves-the-terminal-running.md) (s117)
 - [tooling/phpstan] **35 m 37 s on the Windows FS vs 1 m 24 s in the container, same config and verdict. A background task killed with `Stop-Process` reports `completed, exit 0` — the runner, not a gate.** → [run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows](gotchas/run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows.md) (s116)
