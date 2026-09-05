@@ -79,6 +79,14 @@ node scripts/signature-probe.mjs \
   --pair "plugin/class-b.php:B=woodev/base/class-base-b.php:BaseB"
 ```
 
+⚠ **The default pairs need `plugins-reference/`, and that directory is GITIGNORED.** It holds donor
+plugins as a local convenience; it does not exist in CI or in a fresh clone. Run with no arguments
+there and the probe says which pairs it skipped and exits 0 — it is not broken, it has nothing to
+look at. For the same reason the one jest test that reads those real files skips itself when they
+are absent, while every other test builds its own PHP fixtures in a temp directory and so runs
+everywhere. This cost a red CI job on the probe's own PR: `npm run test:js` was green locally,
+because a local checkout has the donor plugins and CI never does.
+
 `--root` (repeatable) controls which directories are scanned to resolve the base's `extends` chain
 beyond the file given in `--pair` — it defaults to `woodev` and `plugins-reference`. `--pair` is
 `subjectFile:SubjectClass=baseFile:BaseClass`; both file paths are relative to the repo root (or
