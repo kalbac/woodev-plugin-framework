@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 278 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 279 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -104,6 +104,7 @@
 - [shipping/location] **A locality's display NAME is not an identifier — the same settlement answers «Москва» or «Moscow» depending on the account's locale.** → [a-locality-display-name-is-not-an-identifier](gotchas/a-locality-display-name-is-not-an-identifier.md) (s71)
 
 ### [rig/*] — Local verification rig
+- [rig/i18n] **The rig runs `en_US`, so NO catalogue translation ever renders there — it can show you an i18n defect and never its fix; `WPLANG` will not flip without installed core languages.** → [the-rig-runs-en-us-so-no-translation-ever-renders-there](gotchas/the-rig-runs-en-us-so-no-translation-ever-renders-there.md) (s118)
 - [rig/fixtures] **A fixture's `init_*() {}` no-op becomes a FATAL the day that fixture is promoted to a live rig plugin — `get_admin_notice_handler()` is dereferenced 17× with no guard, one of them on `admin_footer`.** → [a-fixtures-no-op-becomes-a-fatal-the-day-the-fixture-goes-live](gotchas/a-fixtures-no-op-becomes-a-fatal-the-day-the-fixture-goes-live.md) (s114)
 - [rig/probes] **`docker cp` INTO the wp-env container fails on a bind mount and `wp eval-file` then reports an ordinary "does not exist" — pipe the probe in with `docker exec -i sh -c 'cat > …'`.** → [docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead](gotchas/docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead.md) (s106)
 - [rig/fixtures] **A SECOND carrier plugin has three traps a green unit suite cannot see — self-registration, `load_updater()`, and a shared checkout FIELD id.** → [standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see](gotchas/standing-up-a-second-carrier-plugin-has-three-traps-a-green-unit-suite-cannot-see.md) (s112)

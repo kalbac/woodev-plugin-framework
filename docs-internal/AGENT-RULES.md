@@ -322,6 +322,44 @@ the records and the customer gets filled fields plus a re-locked address field: 
 
 ---
 
+### Rule 8 — A plugin's settings live on `Woodev → Настройки` by default; the WooCommerce «Интеграции» tab stays available for the cases that need it
+
+**Settled by the operator, 05.09.2026 (#777), in his own words:**
+
+> По умолчанию настройки карьера (и не только карьера) мы строим в `Woodev → Настройки`, но при
+> этом от `WooCommerce → Настройки → Интеграции` мы **не отказываемся** полностью, а используем
+> этот раздел **при необходимости**.
+
+So there is a default and there is an exception, and the exception is deliberate rather than
+forbidden. Two consequences for anyone writing a plugin on v2:
+
+**The default has a seam — use it.** `Woodev_Plugin::get_settings_providers()`
+(`woodev/class-plugin.php`, `@since 2.0.2`) returns `Settings_Provider[]` and defaults to `[]`. The
+plugin overrides it; `Woodev_Plugin` already calls
+`Settings\Settings_Page_Registry::instance()->register_plugin( $this )`, and the page is served over
+`woodev/v1/settings`. A multi-carrier plugin returns several providers, one tab each. **This is
+where new settings go unless there is a reason to go elsewhere.**
+
+**The exception also has a seam.** `Shipping_Plugin::get_integration_handler()` returns `null` in
+the base, and `Shipping_Plugin::add_hooks()` only registers `woocommerce_integrations` when a plugin
+returns a `Settings\Shipping_Integration`. A plugin that overrides nothing never appears on the
+WooCommerce tab. Storage is `woocommerce_{plugin_id}_settings` (`WC_Settings_API::get_option_key()`),
+which is an installed-site data contract — see Rule 0 before moving an existing plugin's fields off
+that tab.
+
+⚠ **«При необходимости» is deliberately left to judgement — do NOT invent a hard criterion here and
+present it as his rule.** Bring the concrete case to him instead. What is settled is the DEFAULT and
+the fact that the tab is not deprecated; the boundary between them is not settled and was not asked
+for.
+
+⚠ **The rig fixture on that tab is CORRECT and must not be "fixed" away.**
+`tests/_fixtures/woodev-test-shipping-method/class-test-cdek-integration.php`
+(`Woodev_Test_Cdek_Integration`, CDEK test-contour Client ID/Secret) predates this rule — it came
+from #375, where the operator objected to those OAuth keys rendering inside the «Локация» section
+even though they authenticate every CDEK call. It is the rig's live example of the exception, and
+whether a real plugin would place the same fields there is exactly the judgement call above. Do not
+migrate it as tidy-up; that would remove the only working demonstration of the mechanism.
+
 ## PHP/WP Gotchas Summary
 
 | Topic | Description |

@@ -24,17 +24,16 @@ count; argument and rules in [migration/signature-probe.md](migration/signature-
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
-фреймворк строит дефолт — эти три разыменовываются **17 / 13 / 2** раза без проверки на null.
-Субсистемы с **0** незащищённых вызовов остаются опциональными.
+фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null. Субсистемы с
+**0** незащищённых вызовов остаются опциональными.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
-its file says nothing about which cities it knows. History → `sessions/s113.md`.
+its file says nothing about which cities it knows (`sessions/s113.md`).
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
-no quota, so the s98 billing block lifted the moment it was switched. Account, cost measurement and
-the symptom (every job failing in two seconds with no log, which reads as a red build): card **#583**
-and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
-`CLAUDE.md` → «GitHub Actions budget».
+no quota, so the s98 billing block lifted the moment it was switched. The symptom (every job failing
+in two seconds with no log, which reads as a red build): **#583** + gotcha
+`every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
 **Baselines — ALL re-measured 05.09.2026 (s118) against `567218b`, sodium enabled:** unit
 **3524** / 8647 / **1 skipped**; jest **1628** in **25** suites; **integration 143 / 530**; phpcs
@@ -50,7 +49,7 @@ Gotcha `phpstan-windows-parallel-worker-segfault`.
 reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606), target PHP only.
+✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606), target PHP.
 
 ✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
 ~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
@@ -64,15 +63,14 @@ of the branch in the main tree**. `wp i18n make-mo` on a worktree's `.po`, by co
 jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
 `npm run test:js` is correct on its own (#188).
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100). And
-**a green unit suite is not sufficient where our code meets someone else's contract** — gotcha
-`a-mocked-provider-proves-the-mock-not-the-contract`.
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100); and a
+green unit suite is not sufficient where our code meets someone else's contract (gotcha
+`a-mocked-provider-proves-the-mock-not-the-contract`).
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
-`Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that
-IS its own region publishes NO ancestors (#707, gotcha
-`dadata-collapses-region-and-settlement-into-one-key`).
+`Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
+its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
 **Open cards — 60, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
@@ -80,9 +78,8 @@ IS its own region publishes NO ancestors (#707, gotcha
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
 card list retyped here** — a retyped list is exactly what went stale and got #644 filed.
 
-**`location.levels` is a per-country matrix** (`levels[country][level]`), and the client reads it
-that way; `location.countries` stays a flat chain-wide union and is never combined with it naively.
-#289, closed s110.
+**`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
+way; `location.countries` stays a flat chain-wide union, never naively combined with it (#289, s110).
 
 **#621 is held behind #639**, and its cheap fix is disproven: `get_order()` must preserve the
 caller's concrete order class or a `WC_Subscription` becomes a plain order (`sessions/s103.md`).
@@ -101,15 +98,15 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 требуется»: интеграция на этом зелёная, автозагрузчик достаёт класс из `class-map.php`.
 
 **A foreign exception's raw text is decided by WHO READS IT** (#608/#610): merchant or plugin
-author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). Governs RESPONSE
-and NOTE boundaries only. Per-site table: the cards + `sessions/s101.md`.
+author → kept; customer → redacted; every LOG sink redacts unconditionally (#594). RESPONSE and NOTE
+boundaries only; per-site table on the cards + `sessions/s101.md`.
 
 **The checkout layer REPORTS a builder conflict, it does not throw** — 17 `_doing_it_wrong()`
 against one `throw`, and that throw is a failed lookup. A location field's `takeover_condition` is
 dropped and reported (#474, s113). An architectural card is decided by measurement, not by asking.
 
-**The phpcs warning level is ARMED since s110 (#139)**; `[]`-only is enforced too. **Line length is
-the one deliberate hole and needs its own ruleset** —
+**The phpcs warning level is ARMED since s110 (#139)**; `[]`-only too. **Line length is the one
+deliberate hole and needs its own ruleset** —
 `vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev` → **1393 in 138
 files**; why it cannot be revived from the CLI: gotcha
 `a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`.
@@ -133,6 +130,10 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
+
+- *Настройки плагина по умолчанию — на `Woodev → Настройки`; вкладка WooCommerce «Интеграции»
+  НЕ отменена и используется при необходимости* (#777, 05.09.2026). Швы, контракт хранилища и
+  запрет выдумывать границу за него — `AGENT-RULES.md` Rule 8.
 
 - *We offer narrowing, we never force it; the merchant's only switch is the region field itself*
   (#437). Surviving rules from #531/#542: `guard_custom_settlement()` below, and the `src/`
@@ -165,11 +166,11 @@ ownership, never a name heuristic). Gotcha `the-classic-adapter-reverts-a-select
 | **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Architectural — decide by measurement** (s108/s110), not by asking. |
 | closed | **#437 #483** (s109), **#488 #512 #518 #473** — history in `sessions/`. Three contract facts survive them: `null` from `resolve_key()` means ONLY "asked, answered, does not know this key" (D6 deletes the row; every other failure THROWS); `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key, pinned by a test; and `set_label()` applies only to fields WC does not define itself — for a native one `address-i18n.js` rewrites the rendered `<label>` AFTER render (gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`). |
 
-**Rule 7 now has three parts** (`AGENT-RULES.md`) — 7c was settled 24.08 (#475): the fields live on
-both columns, but exactly **one live cascade**, on the column that currently determines delivery,
-moving in **both directions** on the toggle, **and carrying its records with it**. The live checkbox
-is the only thing that picks the column; `woocommerce_ship_to_destination` merely decides whether the
-checkbox exists (`billing_only`) or what it defaults to — five `file:line` citations are in the rule.
+**Rule 7 has three parts** (`AGENT-RULES.md`, 7c settled 24.08, #475): fields on both columns, but
+exactly **one live cascade**, on the column that currently determines delivery, moving **both ways**
+on the toggle and **carrying its records with it**. The live checkbox alone picks the column;
+`woocommerce_ship_to_destination` only decides whether that checkbox exists (`billing_only`) or how
+it defaults. Five `file:line` citations are in the rule itself.
 
 **⚠ Tooling traps — the ONE number to carry, everything else is in `GOTCHAS.md`.**
 **Compare SKIPPED, not assertions — but only with sodium enabled, where the primary is 1 and any
