@@ -148,4 +148,7 @@ Codex is launched through an Orca terminal (see fact 3 for the four steps), neve
   a different shape: write the brief to a scratchpad file and send a one-line "read this file and do
   what it says" (a pasted brief sits unsubmitted — s100), and word the canary so it survives a
   one-line `--body`, or the critic drops it and its absence reads as the fabrication it exists to
-  catch. Still mandatory when Codex cannot read the worktree at all.
+  catch. Two real limits remain, and neither is "the shell is dead": an input over 32k needs the
+  bundle with the canary IN THE FILE (`a-codex-bundle-over-32k-needs-a-file-and-an-in-file-canary`),
+  and an Orca worktree stays unreadable until its `.git` holds a RELATIVE `gitdir`
+  (`codex-in-wsl-needs-a-relative-gitdir`) — point a critic at the main checkout and neither bites.
