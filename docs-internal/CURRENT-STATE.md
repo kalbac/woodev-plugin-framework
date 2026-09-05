@@ -7,7 +7,7 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-05 (s117).** `main` = **`be87be1`**, clean, **no open PRs, no worktrees, Инбокс
-EMPTY**. s117 closed **#768 #766** (PR #769) and **#767** (PR #770). **60 open cards**, every one
+EMPTY**. s117 closed **#768 #766** (PR #769) and **#767** (PR #770). **61 open cards**, every one
 carrying a «Приоритет».
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026) — s116 went the wrong way.** The task was to WRITE A
