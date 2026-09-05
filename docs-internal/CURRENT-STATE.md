@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-05 (s118).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s118 closed **#364** (measurement), **#138** (PR #774), **#771** (PR #776) and **#777** (his decision → Rule 8); filed **#773 #775 #778**. **61 open cards**, every one carrying a «Приоритет».
+**As of 2026-09-05 (s119).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s119 closed **#644** whole (both remaining parts — the docs contradiction map and all 60 open cards verified against the code), plus **#113 #148 #381**; filed **#779 #780**. **58 open cards**, every one carrying a «Приоритет»; «Сейчас» is empty.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -72,7 +72,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 61, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 58, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
@@ -154,53 +154,45 @@ never the raw-served frontend.
 **`select2:close` fires BEFORE `select2:select`** — any guard shaped as "the pick will cancel the
 close" cannot work. Gotcha `select2-close-fires-before-select2-select`.
 
-## ⚠ The checkout location layer
+## Contracts, traps and tooling — pointers only
 
-**A §8 adapter of ours can look exactly like a third party misbehaving** (#466/#471 — guard on
-ownership, never a name heuristic). Gotcha `the-classic-adapter-reverts-a-select-the-location-cascade-owns`.
+**The checkout location layer's contract facts moved to
+[wiki/architecture.md](wiki/architecture.md) in s119 (#778)** — `resolve_key()`'s `null`,
+`compose(...parse())` not being the identity, `set_label()` on native fields, the ownership guard,
+and the «required» rule's two halves. They are reference: true regardless of which card is open.
 
-### Open in this layer
+**Open architectural question in that layer: #474** — "a location field is never a takeover field"
+is an UNENFORCED invariant. **Decide it by measurement** (s108/s110), not by asking. Everything else
+open in the layer is on the board; do not retype a card list here — that is what got #644 filed.
 
-| Card | State |
-|---|---|
-| **#474** | "A location field is never a takeover field" is an UNENFORCED invariant. **Architectural — decide by measurement** (s108/s110), not by asking. |
-| closed | **#437 #483** (s109), **#488 #512 #518 #473** — history in `sessions/`. Three contract facts survive them: `null` from `resolve_key()` means ONLY "asked, answered, does not know this key" (D6 deletes the row; every other failure THROWS); `compose( ...parse( $k ) )` is NOT the identity for a DERIVED key, pinned by a test; and `set_label()` applies only to fields WC does not define itself — for a native one `address-i18n.js` rewrites the rendered `<label>` AFTER render (gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`). |
+**Rule 7 (which checkout column the cascade attaches to) has three parts and lives in
+`AGENT-RULES.md`**, 7c settled 24.08.2026 (#475), with five `file:line` citations in the rule
+itself. Do not summarise it here; 7b was re-litigated once already because it lived only in a
+session file.
 
-**Rule 7 has three parts** (`AGENT-RULES.md`, 7c settled 24.08, #475): fields on both columns, but
-exactly **one live cascade**, on the column that currently determines delivery, moving **both ways**
-on the toggle and **carrying its records with it**. The live checkbox alone picks the column;
-`woocommerce_ship_to_destination` only decides whether that checkbox exists (`billing_only`) or how
-it defaults. Five `file:line` citations are in the rule itself.
+**⚠ The ONE tooling number to carry: compare SKIPPED, not assertions** — and only with sodium
+enabled, where the primary checkout reads **1** and any checkout without `plugins-reference/` reads
+**6** (gotchas `a-worktree-silently-skips-five-contract-tests`,
+`the-skipped-count-is-dominated-by-whether-sodium-is-enabled`; the old "66" was never a contract).
+Every other trap — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration
+flakiness, the three field modes and their Russian labels — is one line under the `[tooling/*]`,
+`[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start anyway.
 
-**⚠ Tooling traps — the ONE number to carry, everything else is in `GOTCHAS.md`.**
-**Compare SKIPPED, not assertions — but only with sodium enabled, where the primary is 1 and any
-checkout without `plugins-reference/` is 6** (`a-worktree-silently-skips-five-contract-tests` for
-the 5, `the-skipped-count-is-dominated-by-whether-sodium-is-enabled` for why the old "66" was not a
-contract). Every other trap in this
-area — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration-job
-flakiness, the three field modes and their Russian labels — is one line each under the
-`[tooling/*]`, `[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start
-anyway. Scan the tag for your task; do not keep a second copy here.
-
-⚠ Before probing `test-cdek` credentials, read the gotcha
+⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
 
-**`@since` = the PLANNED release, `2.0.2`; `VERSION` = the released one and lags on purpose**
-(#409, #546; full rule in `AGENT-RULES.md` Rule 5, which now also covers INHERITED code → `1.0.0`).
-**Nothing above `2.0.2` remains — #116(a) closed it in s111**; #555 had not normalised them.
+**`@since` = the PLANNED release `2.0.2`; `VERSION` = the released one and lags on purpose**
+(#409, #546; full rule in `AGENT-RULES.md` Rule 5, which also covers INHERITED code → `1.0.0`).
+Nothing above `2.0.2` remains — #116(a) closed that in s111, and `SinceTagCeilingTest` now gates it.
 
-**Agents:** Codex is a full worker in a worktree, not only a critic; every Codex round gets a
-CANARY; `worker-start --agent codex` is one command but measure its tool shell first; kilo is the
-FALLBACK critic and its model must be pinned via `--command`. Recipes and the worktree rules:
-[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md) + gotcha
-`starting-codex-under-orca-needs-four-steps-not-one`.
-
-**Orca:** a fresh worktree needs **no install step**; `vendor` must be COPIED, never shared; a fresh
-worktree starts dirty with seven CRLF-only files — **never `git add -A` there**, and remove them
-**through Orca**.
+**Agents and Orca — the recipes, the caps and the launch traps are
+[wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
+worth carrying without opening it: a fresh worktree needs **no install step** but its `vendor` must
+be COPIED and never shared, and it starts dirty with seven CRLF-only files — **never `git add -A`
+there**, and remove the worktree through Orca.
 
 **Building a rate? Read the two `[woocommerce/shipping]` gotchas from s117 first** — `add_rate()`
-silently ignores `description`/`delivery_time`; stringifying a numeric cost lets
+silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
 Gotchas: **279**.
@@ -221,19 +213,9 @@ Gotchas: **279**.
 
 ## Phase Status (subsystems)
 
-| Phase | Code | Browser-verified | Notes |
-|-------|------|------------------|-------|
-| Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
-| Payment Gateway | ✅ | ✅ | `class-payment-gateway.php`: **~3,542 lines** (whole tree ~13.8k); trait-extraction candidate |
-| Shipping Method | ✅ | ✅ | PSR-4 namespaced |
-| Licensing | ✅ | ✅ | EDD store integration; React license page on core `woodev/v1` REST |
-| Settings API | ✅ | ✅ | Typed settings framework |
-| Settings React page (SP-1) | ✅ | ✅ | `Woodev > Настройки`: registry + `woodev/v1/settings` REST + React surface on the UI-kit |
-| Setup wizard (UK-3/4) | ✅ | ✅ | React wizard on the shared UI-kit (PR #99) |
-| Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
-| REST API | ✅ | ✅ | Plugin REST routes |
-| PHPStan | ✅ | — | Level 3, **no baseline** (`phpstan-baseline.neon` removed; do not reintroduce) |
-| Documentation | ✅ | — | Two-tier: `docs/` (GH Pages) + `docs-internal/` (AI agents) |
+**The per-subsystem matrix moved to [wiki/architecture.md](wiki/architecture.md) in s119 (#778)** —
+it changes once every several sessions, which makes it reference. Every subsystem is ✅ in code, and
+all but PHPStan and Documentation are browser-verified. The live PROGRAMME stage is the table above.
 
 ## Known Bugs / Open debt
 
@@ -268,80 +250,32 @@ only consumer; they get rewritten once everything is ready.
 
 ## Local rig
 
-- **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK checkout (SP-11 unbuilt), with no `form.checkout` and no trigger, which reads as a broken build rather than the wrong URL. Cart: `?add-to-cart=12`. Gotcha: `rig-checkout-url-is-the-block-checkout`.
-- **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and cost the operator a whole pass. Confirm by measurement: `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha `rig-serves-the-working-tree-branch-switch-reverts-fixes`. **Tree is on `main` (verified 27.08.2026, s100) — the #518 pass is over and it was returned.** `wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and Санкт-Петербург (`r82`), all `last_verified_at = NULL`, so D5's lazy check really runs. Orca worktrees removed.
-- ✅ **Rig at standard, re-verified 02.09.2026 (s112)** — modal, map, tiles and clustered Moscow
-  points confirmed. Popular settlements hold 5 `dadata` rows beside the 6 `test-cdek`.
-- ✅ **TWO CARRIERS SIDE BY SIDE since s112** (#734/#735) — the ordinary production arrangement.
-  Sources separate per PLUGIN, never per method, so a second carrier is a second plugin:
+**How to operate it — the carrier table, the standard option values, the two environments, the
+shell recipes and the timings — is [wiki/local-rig.md](wiki/local-rig.md) → "Operating the rig".**
+Moved there in s119 (#778). What stays here is what changes between sessions, plus the two things
+that must never be missed.
 
-  | method | source | REST route | checkout field |
-  |---|---|---|---|
-  | `woodev_test_shipping` | LIVE Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` | `carrier_pickup_point` |
-  | `woodev_realistic_pickup_shipping` | static fixture — Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` | `realistic_pickup_point` |
-
-  Each button is visible only under its own method. **#150 was CLOSED in s113 — it does not
-  reproduce**; Краснодар is the single-point city and a test pins that count — do not add a second.
-  ✅ **BOTH carriers now run the KEY-addressed path** — #746 (s114) wired the second carrier's
-  `Pickup_Handler` to its plugin. One built WITHOUT it still degrades to DOM-read NAME addressing,
-  but no longer silently: `_doing_it_wrong()` under `WP_DEBUG` while the location layer is active.
-  ⚠ **This inverts how you measure here:** with a plugin wired the server resolves the CUSTOMER'S
-  RECORD and that outranks the `locality` parameter — its **value is inert**, only its **presence**
-  matters (it gates `Point_Query::from_request()`). To change which city's points come back, change
-  the customer's record, never the URL (#747).
-
-  ✅ **The first carrier STAYS on the live Yandex source — operator decision, 03.09.2026 (#734):**
-  the rig shows both shapes at once, which is closer to production than either alone.
-  ⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` WINS over `WOODEV_TEST_PICKUP_STRATEGY` for the FIRST
-  carrier, so a `Woodev_Test_Bulk_Point_Source` change never reaches the rig — reach static data
-  through the second carrier (same gotcha as above).
-  ⚠ Rig state this required, not tracked by git: `npx wp-env start` (new mapping),
-  `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
-  instance **5**.
-
-  **STANDARD values, read off the container, never off a doc** (the s93 handoff had two wrong):
-
-  | Option | Value |
-  |---|---|
-  | `woodev_location_active_provider` | `test-cdek` |
-  | `woodev_location_field_mode_region` | `related-list` |
-  | `woodev_location_field_mode_settlement` | `ajax-select2` |
-  | `woodev_location_default_locality_policy` | `fixed` |
-  | `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, key `test-cdek:44` — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
-  | `woodev_location_allow_custom_settlement` | `no` |
-  | checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
-
-  `mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113 — the third pickup method was REMOVED
-  (#737); why, and how to restore it: [wiki/local-rig.md](wiki/local-rig.md). Switching to `geoip`
-  needs `dadata` + a pinned non-local IP: gotcha `the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
-- **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
-- **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
-- **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
-- ✅ **Rig runs WordPress 7.1 + WooCommerce 11.1.0** since 05.09.2026 (s117, operator's request; was pinned to WP 6.9). Integration re-run green on the new stack; rig state survived byte-identical. ⚠ The MySQL host ports moved, the container prefix `de59f74e…` did NOT. How it was done and what to check if it is ever repeated: [wiki/local-rig.md](wiki/local-rig.md).
-- **tests `:8974` carries NO `WOODEV_TEST_*` constants** — deleted with `wp config delete` so the integration suite is deterministic locally. The authority is `wp config set` **inside the container**, not `.wp-env.override.json`, which is only a mirror (measured).
-- **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
-- Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
-- Rig probes: write them to the scratchpad, **NOT** into the repo (a stray probe file once rode along in a commit). **`docker cp` INTO the container fails here** (a bind mount defeats it, and `wp eval-file` then reports a plain "does not exist") — pipe instead: `docker exec -i "$C" sh -c 'cat > /tmp/probe.php' < probe.php`, and add `--user=N` whenever the probe touches user-scoped data. Gotcha `docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead`.
-- Integration tests run through the container (`npx wp-env run` breaks on command parsing here):
-
-  ```bash
-  MSYS_NO_PATHCONV=1 docker exec -w /var/www/html/woodev-framework -e TEST_SUITE=integration \
-    de59f74e6d3d19d18a7f7b6608fda7e7-tests-cli-1 \
-    sh -c 'rm -f .phpunit.result.cache; vendor/bin/phpunit --testsuite=Integration'
-  ```
-
-### Риг-проход по слою ПВЗ — порядок важен, иначе кнопки ПВЗ просто нет
-
-Пошаговая процедура вынесена в [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md)
-(проверена в s75). Открывать, когда идёшь на риг проверять ПВЗ.
-
-### Docker — DO NOT blindly prune
-
-⛔ **Never run `docker volume prune` / `docker system prune --volumes` on this machine.** The
-operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
-while the stack is `Exited` — a prune wipes it. Full inventory, which container is which, and the
-two exec traps: [wiki/local-rig.md](wiki/local-rig.md).
-
+- ✅ **WordPress 7.1 + WooCommerce 11.1.0** since 05.09.2026 (s117), dev `:8973` / tests `:8974`.
+  Integration re-run green on that stack; rig state survived byte-identical.
+- ✅ **At standard, re-verified 02.09.2026 (s112)** — modal, map, tiles and clustered Moscow points.
+  **Two carriers side by side** since s112 (#734/#735), the first on live Yandex by operator
+  decision (#734).
+- **Tree is on `main`** (verified 27.08.2026, s100); Orca worktrees removed.
+- ⛔ **Never `docker volume prune` / `docker system prune --volumes` on this machine.** The
+  operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
+  while the stack is `Exited` — a prune wipes it. Inventory: [wiki/local-rig.md](wiki/local-rig.md).
+- ⛔ **Issuer `:8090` — KEPT, do NOT touch.** The operator uses it independently.
+- ⚠ **The rig serves the WORKING TREE.** Name the branch out loud, switch the tree BEFORE asking
+  anyone to look, and leave it there until the pass is over — s92 switched back «for tidiness» and
+  cost the operator a whole pass. Confirm by measurement, not by intention:
+  `grep -c "<a symbol the fix introduces>" <the served file>`. Gotcha
+  `rig-serves-the-working-tree-branch-switch-reverts-fixes`.
+- ⚠ **The picker lives on `/classic-checkout/`, NOT `/checkout/`** — the latter is the BLOCK
+  checkout (SP-11 unbuilt), with no `form.checkout` and no trigger, which reads as a broken build
+  rather than the wrong URL. Cart: `?add-to-cart=12`. Gotcha
+  `rig-checkout-url-is-the-block-checkout`.
+- Going to the rig for the pickup layer? The order matters or the button is simply absent:
+  [wiki/rig-pickup-walkthrough.md](wiki/rig-pickup-walkthrough.md).
 ## Infrastructure Reference
 
 - **Version:** `Woodev_Plugin::VERSION` (in `woodev/class-plugin.php`) = 2.0.1 (unreleased). **Raising VERSION on `main` publishes a release** — do it deliberately (#285).

@@ -226,6 +226,116 @@ What actually happened, so the next person knows what is normal:
   `docker exec … -tests-cli-1` integration command still works. Check this before assuming a broken
   command is a broken environment.
 
+## Operating the rig — the reference tables
+
+> Moved out of `CURRENT-STATE.md` in s119 (#778), which had grown to 3 bytes under its 28 KB gate.
+> Everything here is reference an agent opens when it goes to the rig; `CURRENT-STATE.md` keeps only
+> the handful of facts that change between sessions, plus a pointer to this section.
+
+### Two carriers side by side, and how to address them
+
+Since s112 (#734/#735) the rig runs **two carriers at once**, which is the ordinary production
+arrangement rather than a test convenience. Point sources are separate **per PLUGIN**, never per
+method — so a second carrier is a second plugin:
+
+| method | source | REST route | checkout field |
+|---|---|---|---|
+| `woodev_test_shipping` | LIVE Yandex, ~300 Moscow points | `/pickup/woodev-test-shipping-method/points` | `carrier_pickup_point` |
+| `woodev_realistic_pickup_shipping` | static fixture — Москва 3, **Краснодар 1** | `/pickup/woodev-realistic-shipping/points` | `realistic_pickup_point` |
+
+Each pickup button is visible only under its own method. **#150 was closed in s113 — it does not
+reproduce.** Краснодар is the deliberate single-point city and a test pins that count; do not add a
+second point there.
+
+**Both carriers run the KEY-addressed path** since #746 (s114), which wired the second carrier's
+`Pickup_Handler` to its plugin. A carrier built WITHOUT that wiring still degrades to DOM-read NAME
+addressing, but no longer silently: `_doing_it_wrong()` fires under `WP_DEBUG` while the location
+layer is active.
+
+⚠ **This inverts how you measure here.** With the plugin wired, the server resolves the CUSTOMER'S
+RECORD, and that outranks the `locality` request parameter — the parameter's **value is inert**, only
+its **presence** matters, because it gates `Point_Query::from_request()`. To change which city's
+points come back, change the customer's record, never the URL (#747).
+
+**The first carrier stays on the live Yandex source — operator decision, 03.09.2026 (#734):** the rig
+then shows both shapes at once, which is closer to production than either alone.
+⚠ `WOODEV_TEST_PICKUP_LIVE_YANDEX = true` WINS over `WOODEV_TEST_PICKUP_STRATEGY` for that first
+carrier, so a change to `Woodev_Test_Bulk_Point_Source` never reaches the rig. Reach static data
+through the SECOND carrier.
+
+⚠ Rig state this arrangement required, and which git does not track: `npx wp-env start` (new
+mapping), `wp plugin activate woodev-realistic-shipping-plugin`, and the method added to zone 1 as
+instance **5**.
+
+### The standard option values
+
+**Read these off the container, never off a doc** — the s93 handoff carried two that were wrong, and
+that is the whole reason this warning outlives the table it introduces.
+
+| Option | Value |
+|---|---|
+| `woodev_location_active_provider` | `test-cdek` |
+| `woodev_location_field_mode_region` | `related-list` |
+| `woodev_location_field_mode_settlement` | `ajax-select2` |
+| `woodev_location_default_locality_policy` | `fixed` |
+| `woodev_location_default_locality_record` | the WHOLE `Location_Record` as JSON, key `test-cdek:44` — **not the key itself**, gotcha `the-default-locality-option-stores-a-whole-record-not-a-key` |
+| `woodev_location_allow_custom_settlement` | `no` |
+| checkout fields | `address_field` and `postcode_field` = `hide_for_pickup`, `region_field` = `show` |
+
+`wp_woodev_popular_settlements` is SEEDED: 3 `test-cdek` rows each for Москва (`r81`) and
+Санкт-Петербург (`r82`), all with `last_verified_at = NULL` so D5's lazy check really runs, plus 5
+`dadata` rows beside the 6 `test-cdek` (s112).
+
+`mu-plugins/` holds ONLY `zz-rig-yandex-key.php` since s113 — the third pickup method was removed
+(#737); why, and how to restore it, is in the sections above. Switching the default-locality policy
+to `geoip` needs `dadata` plus a pinned non-local IP: gotcha
+`the-geoip-default-locality-cannot-resolve-on-a-local-rig`.
+
+### The two environments, and what each one carries
+
+- **dev `:8973` / tests `:8974`** — the ports live in the gitignored `.wp-env.override.json`.
+- **tests `:8974` carries NO `WOODEV_TEST_*` constants.** They were deleted with `wp config delete`
+  so the integration suite is deterministic locally. The authority is `wp config set` **inside the
+  container**; `.wp-env.override.json` is only a mirror (measured).
+- **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of production (woodev_theme = local
+  woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container
+  `c8ec47a5…-wordpress-1`. Authority pubkey
+  `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
+
+### Driving it from a shell
+
+Drive the rig via `docker exec <cli> wp eval-file …` — Cyrillic and quoting break an inline
+`wp eval`, so always `eval-file`. Do **NOT** run `do_action('admin_init')` in wp-cli: WooCommerce's
+`OrderAttributionController` fatals. All the rig traps sit in gotcha
+`wp-safe-remote-request-local-rig`.
+
+Probes go to the scratchpad, **never into the repo** — a stray probe file once rode along in a
+commit. **`docker cp` INTO the container fails here** (a bind mount defeats it, and `wp eval-file`
+then reports a plain "does not exist"), so pipe instead, and add `--user=N` whenever the probe
+touches user-scoped data:
+
+```bash
+docker exec -i "$C" sh -c 'cat > /tmp/probe.php' < probe.php
+```
+
+Gotcha: `docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead`.
+
+Integration tests run through the container, because `npx wp-env run` breaks on command parsing
+here:
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec -w /var/www/html/woodev-framework -e TEST_SUITE=integration \
+  de59f74e6d3d19d18a7f7b6608fda7e7-tests-cli-1 \
+  sh -c 'rm -f .phpunit.result.cache; vendor/bin/phpunit --testsuite=Integration'
+```
+
+### Timing you will otherwise misread
+
+**`/suggest` on the rig answers in 6–10 seconds** — for an unknown settlement reliably ~10. Measured
+25.08.2026; the previously believed 2.4–4.5 s was wrong. Wait for the row to appear, not for a
+timer. And if you start typing a second query before the first returns, the first is CANCELLED and
+its abandon does not fire — that is by design.
+
 ## Related
 
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — the rig's current values

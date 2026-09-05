@@ -209,10 +209,12 @@ Self-contained shipping box-packing algorithm. Implement `Woodev_Packer_Item_Int
 
 ## Test fixtures
 
-`tests/_fixtures/` ships seven plugins used by both suites: `woodev-test-plugin`,
+`tests/_fixtures/` ships **eight** plugins used by both suites: `woodev-test-plugin`,
 `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`,
 `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`,
-`woodev-yandex-pilot-plugin`.
+`woodev-yandex-pilot-plugin`, `woodev-entry-path-fixture` (the v2 entry path's in-repo consumer,
+added #763). `tests/_fixtures/dadata/` is JSON response data, not a plugin — count the directories
+carrying a `Plugin Name:` header.
 
 Base classes: `tests/unit/TestCase.php` (Brain Monkey) and `tests/integration/TestCase.php` (WP
 test scaffolding).
@@ -225,10 +227,65 @@ Base `Woodev_Plugin` is platform-neutral (**zero** WC/HPOS-named methods; enforc
 `PlatformNeutralBaseHasNoWcMethodTest`, `PlatformNeutralRestApiTest`, `BootstrapRegistrationTest`)
 and not a god-object (`woodev/class-plugin.php` ~1,274 lines / 74 methods).
 
+## Checkout location layer — the contract facts that outlive their cards
+
+> Moved out of `CURRENT-STATE.md` in s119 (#778). Each of these was learned by closing a card, and
+> each keeps biting after that card is history — which is why they belong in a reference rather than
+> in a state file that is supposed to hold only what is true right now.
+
+**`null` from `resolve_key()` means exactly one thing:** "asked, answered, does not know this key".
+D6 deletes the row on it. Every *other* failure THROWS — so a `null` must never be used as a general
+error signal, and a caught throw must never be flattened into one.
+
+**`compose( ...parse( $key ) )` is NOT the identity for a DERIVED key.** A test pins this. Code that
+round-trips a key through parse/compose to "normalise" it will silently rewrite derived keys into
+something else.
+
+**`set_label()` applies only to fields WooCommerce does not define itself.** For a native field,
+`address-i18n.js` rewrites the rendered `<label>` AFTER render, so a server-side label never sticks.
+Gotcha `wc-address-i18n-reshows-fields-with-an-inline-display-block`.
+
+**A §8 adapter of ours can look exactly like a third party misbehaving** (#466/#471). Guard on
+OWNERSHIP, never on a name heuristic. Gotcha
+`the-classic-adapter-reverts-a-select-the-location-cascade-owns`.
+
+**The layer REPORTS a builder conflict, it does not throw** — 17 `_doing_it_wrong()` against a
+single `throw`, and that throw is a failed lookup. A location field's `takeover_condition` is
+dropped and reported (#474, s113).
+
+**The «required» rule is implemented TWICE** — server-side `validate()` and the browser's
+`refreshGate()` — so fixing one leaves the other. Gotcha
+`the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other`.
+
+Related invariants, each surviving its own card: `validate()` enforces a takeover field's `required`
+only when its condition owns the field AND WooCommerce rendered it (#708); ask
+`Location_Record::is_within()`, never `ancestors()` raw, because it is reflexive and a settlement
+that IS its own region publishes no ancestors (#707); `is_pickup_shipping()` is the single source
+for the other three declarations, resolved LAZILY (#709).
+
+## Subsystem phase status
+
+> Moved out of `CURRENT-STATE.md` in s119 (#778) — a matrix that changes once every several
+> sessions is reference, not state. The live programme stage stays in `CURRENT-STATE.md`.
+
+| Phase | Code | Browser-verified | Notes |
+|-------|------|------------------|-------|
+| Framework Core | ✅ | ✅ | Bootstrap, Plugin base, Lifecycle — stable |
+| Payment Gateway | ✅ | ✅ | `class-payment-gateway.php`: ~3,632 lines (whole tree ~13.9k); trait-extraction candidate (#117, held behind #639) |
+| Shipping Method | ✅ | ✅ | PSR-4 namespaced |
+| Licensing | ✅ | ✅ | EDD store integration; React license page on core `woodev/v1` REST |
+| Settings API | ✅ | ✅ | Typed settings framework |
+| Settings React page (SP-1) | ✅ | ✅ | `Woodev > Настройки`: registry + `woodev/v1/settings` REST + React surface on the UI-kit |
+| Setup wizard (UK-3/4) | ✅ | ✅ | React wizard on the shared UI-kit (PR #99) |
+| Box Packer | ✅ | ✅ | Shipping box-packing algorithm |
+| REST API | ✅ | ✅ | Plugin REST routes |
+| PHPStan | ✅ | — | Level 3, **no baseline** (`phpstan-baseline.neon` removed; do not reintroduce) |
+| Documentation | ✅ | — | Two-tier: `docs/` (GH Pages) + `docs-internal/` (AI agents) |
+
 ## Related
 
-- [[v2-extension-point-pattern]] — how a plugin hooks into these seams.
-- [[capability-gated-feature-seam]] — the capability gating pattern.
+- [v2-extension-point-pattern](v2-extension-point-pattern.md) — how a plugin hooks into these seams.
+- [capability-gated-feature-seam](capability-gated-feature-seam.md) — the capability gating pattern.
 - `adr/001-bootstrap-platform-aware-loader.md`, `adr/003-platform-v2-minimal-framework-resolver.md`, `adr/004-platform-v2-plugin-loader-api.md` — the loader decisions.
 - `adr/005-platform-v2-clean-break-policy.md` — what may break and what may never break.
 - `AGENT-RULES.md` → Rule 3 — the registration contract in full.
