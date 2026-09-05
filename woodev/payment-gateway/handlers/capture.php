@@ -146,7 +146,7 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 					$message = sprintf(
 					/* translators: Placeholders: %1$s - the requested capture amount, %2$s - the amount that can still be captured for this order. Definitions: Capture, as in capture funds from a credit card. */
-						__( 'Capture amount of %1$s must be greater than zero and cannot exceed the capturable amount of %2$s', 'woodev-plugin-framework' ),
+						__( 'Сумма списания %1$s должна быть больше нуля и не может превышать доступную к списанию сумму %2$s', 'woodev-plugin-framework' ),
 						wc_price(
 							$order->capture->amount,
 							[
