@@ -31,16 +31,6 @@ function unescapePoString( raw ) {
 	return out;
 }
 
-/** Escapes a string body for writing back into a `.po`/`.mo` literal. */
-export function escapePoString( str ) {
-	return str
-		.replace( /\\/g, '\\\\' )
-		.replace( /"/g, '\\"' )
-		.replace( /\t/g, '\\t' )
-		.replace( /\r/g, '\\r' )
-		.replace( /\n/g, '\\n' );
-}
-
 /**
  * Reads every `"..."` quoted-string line starting at `lines[i]`, concatenating multi-line
  * continuations (`msgid "a"` then `"b"` on the next line means the value is `ab`).
@@ -166,4 +156,38 @@ export function parsePo( path ) {
 /** The gettext key an entry is stored under: `msgctxt + "\x04" + msgid`, or bare `msgid`. */
 export function poKey( entry ) {
 	return entry.msgctxt ? `${ entry.msgctxt }\x04${ entry.msgid }` : entry.msgid;
+}
+
+/**
+ * The `{ key, value }` pairs a `.mo` compiled from this `.po` must contain for its TRANSLATABLE
+ * entries — msgfmt's own convention, which `wp i18n make-mo` follows: an entry with an EMPTY
+ * translation is OMITTED (mapping a msgid to `""` would mean "no translation" to gettext, the
+ * opposite of falling back to the msgid). A plural entry is keyed as `msgid + "\x00" +
+ * msgid_plural`, valued as every `msgstr[n]` joined with `"\x00"`.
+ *
+ * Deliberately excludes the mandatory empty-msgid header entry: `wp i18n make-mo` re-serializes
+ * the header (reordering fields, filling in defaults such as `Report-Msgid-Bugs-To`) rather than
+ * copying the `.po` header block verbatim, so it is not a value this function can predict from the
+ * `.po` alone — callers that care about the header compare it separately (see `lint-mo.mjs`).
+ */
+export function expectedMoEntries( { entries } ) {
+	const pairs = [];
+
+	for ( const entry of entries ) {
+		const ctxPrefix = entry.msgctxt ? entry.msgctxt + '\x04' : '';
+
+		if ( entry.msgidPlural !== null ) {
+			const forms = entry.msgstrPlural || [];
+			if ( forms.every( ( s ) => ! s ) ) continue; // no plural form translated — omit
+			pairs.push( {
+				key: ctxPrefix + entry.msgid + '\x00' + entry.msgidPlural,
+				value: forms.map( ( s ) => s || '' ).join( '\x00' ),
+			} );
+		} else {
+			if ( ! entry.msgstr ) continue; // untranslated — omit, gettext falls back to the msgid
+			pairs.push( { key: ctxPrefix + entry.msgid, value: entry.msgstr } );
+		}
+	}
+
+	return pairs;
 }
