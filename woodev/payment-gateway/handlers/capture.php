@@ -138,8 +138,17 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 
 				// bound against what remains of the authorization, not just its full maximum: capture_total
 				// accumulates across requests, so two sequential captures could each pass a maximum-only
-				// check while together exceeding the authorization
-				$capture_remaining = $this->get_order_capture_maximum( $order ) - (float) $this->get_gateway()->get_order_meta( $order, 'capture_total' );
+				// check while together exceeding the authorization.
+				//
+				// The subtraction is re-formatted through the same Woodev_Helper::number_format() the rest
+				// of this pipeline uses -- get_order_for_capture() formats $order->capture->amount with it
+				// and do_capture_success() stores capture_total with it -- because the raw binary
+				// subtraction is not exact: 10.00 - 9.99 yields 0.00999999999999978, so the final cent of a
+				// partially captured authorization would compare as ABOVE the remainder and be refused.
+				// Rounding to the pipeline's own two decimals rather than to wc_get_price_decimals() is
+				// deliberate: the guard must agree with the value it guards, and that value is already
+				// two-decimal by construction.
+				$capture_remaining = (float) Woodev_Helper::number_format( $this->get_order_capture_maximum( $order ) - (float) $this->get_gateway()->get_order_meta( $order, 'capture_total' ) );
 
 				// don't allow capturing a zero/negative amount, or more than what remains capturable for the order
 				if ( (float) $order->capture->amount <= 0 || (float) $order->capture->amount > $capture_remaining ) {

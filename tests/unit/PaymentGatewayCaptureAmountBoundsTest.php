@@ -524,5 +524,35 @@ namespace Woodev\Tests\Unit {
 			$this->assertSame( 400, $result['code'] );
 			$this->assertSame( 0, $this->api->capture_called_count, 'a bulk capture that would exceed the authorization must never reach the gateway' );
 		}
+
+		/**
+		 * The cent that binary floating point loses. `10.00 - 9.99` evaluates to
+		 * 0.00999999999999978, which is BELOW 0.01 — so a remainder computed by raw
+		 * subtraction refuses the final cent of a partially captured authorization,
+		 * leaving a merchant permanently unable to capture the rest.
+		 *
+		 * Measured before the fix: `0.01 > 0.00999999999999978` is true, and the
+		 * capture was refused with a message telling the merchant that one cent
+		 * exceeded a remainder that prints as one cent.
+		 *
+		 * @return void
+		 */
+		public function test_the_final_cent_of_a_partially_captured_authorization_is_capturable(): void {
+
+			$this->gateway->partial_capture_enabled = true;
+
+			$order = $this->make_capturable_order( 10.0 );
+
+			$first = $this->handler->perform_capture( $order, 9.99 );
+
+			$this->assertTrue( $first['success'] );
+			$this->assertSame( '9.99', $this->gateway->get_order_meta( $order, 'capture_total' ) );
+
+			$second = $this->handler->perform_capture( $order, 0.01 );
+
+			$this->assertTrue( $second['success'], 'the remaining cent must be capturable' );
+			$this->assertSame( 2, $this->api->capture_called_count );
+			$this->assertSame( '10.00', $this->gateway->get_order_meta( $order, 'capture_total' ) );
+		}
 	}
 }
