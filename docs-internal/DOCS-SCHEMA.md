@@ -353,9 +353,21 @@ saying the same thing.
 ```
 
 Required:
-- Title with " — Woodev Framework Wiki" suffix
-- `> Compiled reference. Last compiled: DATE.` line
-- At least one `## Related` section at the bottom
+- An H1 title and at least one `## Related` section at the bottom. **That is the whole mandate**, and
+  the corpus satisfies it 8 of 8.
+
+Not required, decided s119 after measuring the corpus against the older wording:
+
+- **The `" — Woodev Framework Wiki"` title suffix is dropped.** One article in eight carried it. It
+  is ceremony with no reader value — the file's own directory already says it is a wiki article —
+  and a rule that the corpus ignores 7 times out of 8 misleads exactly the author who obeys it: they
+  produce the file that looks unlike every neighbour and believe theirs is the conforming one.
+- **`> Compiled reference. Last compiled: DATE.` is RECOMMENDED, not mandatory** (3 of 8 carry it).
+  Use it when the article is genuinely recompiled in passes and the date says *when that pass
+  measured things* — that is the same exception the "Freshness is git's answer" section at the top
+  of this file grants `sessions/sNN.md` and the handoff. Do NOT add it to an article nobody
+  recompiles: there it degrades into the hand-written stamp s115 deleted everywhere else, and a
+  field that lies is worse than no field.
 
 ---
 

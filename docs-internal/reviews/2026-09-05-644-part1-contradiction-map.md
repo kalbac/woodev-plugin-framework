@@ -244,14 +244,22 @@ relative-link gate, because that gate only parses the standard markdown link for
 with a verifiable artefact — the config file, the tree, `composer.json`, or an operator decision
 already recorded elsewhere. There is no judgement in reconciling them, only work.
 
-**For the operator** — one item, because it is a taste call about how much ceremony the wiki
-carries:
+**§D settled here, not escalated.** On reflection this is a documentation CONVENTION, and conventions
+are decided rather than asked. The schema now mandates only what the corpus satisfies 8 of 8 — an H1
+and a `## Related` — drops the title suffix as ceremony with no reader value, and demotes
+`Last compiled:` to recommended-where-it-is-really-a-measurement-date. That last part is not a
+compromise: it applies the reasoning this same file already uses at the top, where s115 deleted the
+hand-written `Last updated` stamps because a field written by hand drifts and then lies. Adding that
+same stamp to five articles nobody recompiles would have re-created the defect the schema opens by
+condemning.
 
-> **§D — the wiki format.** Either seven articles get a title suffix and a `Last compiled:` line
-> they have never had, or `DOCS-SCHEMA.md` drops the two requirements and keeps only `## Related`,
-> which is the part every file already satisfies and the part that has actual value (it is what
-> makes the corpus navigable). A third option is to keep the suffix rule for new articles only and
-> say so explicitly.
+**For the operator** — one item, and it is his because only he can answer it:
+
+> **#382 carries six forks that were never carded.** The card's own comment (s82) lists six
+> questions marked «за тобой» — `sslverify` default, the OAuth secret in a URL, capture-amount
+> bounds, `WC()->session` without a guard, `License_Store::update()` raising `Error`, richtext
+> seed-once — and none of them has a card, an answer, or a trace anywhere since. They are invisible
+> to the board, which is the exact failure the backlog rule exists to prevent.
 
 **Already answered, recorded here so it is not re-asked:** s115 left an open question — *"should the
 `Last updated` field stay in rule headers?"* `DOCS-SCHEMA.md`'s opening section answers it: the
