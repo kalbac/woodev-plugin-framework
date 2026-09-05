@@ -2070,6 +2070,11 @@
 	 * @returns {void}
 	 */
 	function enqueueSelect( entry, record ) {
+		// Issue #573. Every pick that reaches the cascade advances the sequence, so a renderer
+		// whose identity lookup outlived its own detach() can ask whether anything newer has
+		// happened before it hands a record over. See {@see nextPickSeq}.
+		nextPickSeq( entry );
+
 		entry.pendingRecord = record;
 
 		// Issue #541: the busy state belongs to the customer's ACTION, not to the request. It
@@ -2100,6 +2105,27 @@
 		}
 
 		sendNextSelect( entry );
+	}
+
+	/**
+	 * Advances `entry`'s pick sequence and returns the new value (issue #573).
+	 *
+	 * Counts CUSTOMER PICKS, not requests and not markers. Bumped in exactly two places, which
+	 * together are every way a pick enters this module: {@see enqueueSelect}, where a pick
+	 * arrives already carrying its record, and {@see onResolvingFor}, where a pick arrives
+	 * whose record is still being looked up. A pick that is only being RE-SENT — a queued
+	 * record forwarded by {@see settleSelect} — is the same pick and must not advance it.
+	 *
+	 * Its only reader is `release.isStale()`; see that function for why the busy token could
+	 * not answer the same question.
+	 *
+	 * @param {Object} entry
+	 * @returns {number}
+	 */
+	function nextPickSeq( entry ) {
+		entry.pickSeq = ( entry.pickSeq || 0 ) + 1;
+
+		return entry.pickSeq;
 	}
 
 	/**
@@ -3218,7 +3244,10 @@
 				? markLevelBusy( entry, node.level, false )
 				: null;
 
-			return function release() {
+			// Issue #573: the pick is a fact HERE, whatever happens to the renderer afterwards.
+			var seq = nextPickSeq( entry );
+
+			function release() {
 				// Only when the marker still standing is the one this call raised. A real pick
 				// has since replaced it ({@see enqueueSelect}), a later pick at another level
 				// has superseded it, or a settled `/select` has already cleared it — in every
@@ -3227,7 +3256,36 @@
 				if ( null !== token && entry.selectBusy && entry.selectBusy.token === token ) {
 					clearSelectBusy( entry );
 				}
+			}
+
+			/**
+			 * Issue #573 — has a NEWER pick reached the cascade since this one?
+			 *
+			 * A renderer that must go and ASK for the record ({@see attachRelatedListRegion})
+			 * can still be holding an unresolved `GET /location/list` — measured at 10.5 s for a
+			 * cold region, issue #541 — when its own `detach()` runs. `detach()` cancels
+			 * nothing, so that lookup lands afterwards and calls `options.onSelect()`, which is
+			 * {@see enqueueSelect}, whose FIRST line is `entry.pendingRecord = record`. That
+			 * queue is deliberately last-writer-wins and has no notion of a stale caller: its
+			 * whole guarantee — "the record persisted equals the customer's MOST RECENT
+			 * selection" — rests on every caller being a live one. A ten-second-old region
+			 * arriving after a newer pick therefore overwrites it.
+			 *
+			 * Deliberately NOT keyed on the busy token, which was the obvious candidate and is
+			 * wrong: {@see settleSelect} clears the marker UNCONDITIONALLY when any earlier
+			 * request settles, so "my token is no longer standing" also reads true for a pick
+			 * nothing has superseded — and dropping THAT one loses a live selection, because
+			 * {@see reconcileAfterCheckoutUpdate} re-attaches the renderer without ever
+			 * re-asking for the value it is already showing. The sequence answers the question
+			 * actually being asked, and only that one.
+			 *
+			 * @returns {boolean}
+			 */
+			release.isStale = function isStale() {
+				return entry.pickSeq !== seq;
 			};
+
+			return release;
 		};
 	}
 

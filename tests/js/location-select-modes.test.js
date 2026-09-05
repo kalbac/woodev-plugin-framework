@@ -1552,6 +1552,122 @@ describe( 'related-list region renderer', () => {
 		} );
 	} );
 
+	// Issue #573. `detach()` unbinds the listener and cancels NOTHING, so a `/location/list`
+	// already in the air — 10.5 s for a cold region, #541 — lands after the checkout re-render
+	// that tore this renderer down. Measured in s120: the resolved promise called BOTH
+	// `onSelect()` and `release()` on a detached renderer.
+	//
+	// The fix is not "drop it when detached". Landing late is the NORMAL path and usually the
+	// right one, because `reconcileAfterCheckoutUpdate()` re-attaches without re-asking for the
+	// value already on screen — drop it and the selection is simply lost. What must not happen
+	// is handing the record over once a NEWER pick has reached the cascade, whose `/select`
+	// queue is last-writer-wins by design. `release.isStale()` is the cascade's answer;
+	// location-cascade.test.js pins the other half of this contract, including why it counts
+	// picks instead of reading the busy marker.
+	describe( 'a lookup that outlives detach() (#573)', () => {
+		function buildStaleAwareOptions( stale ) {
+			const release = jest.fn();
+
+			release.isStale = jest.fn( () => stale );
+
+			return {
+				release,
+				options: buildOptions( {
+					node: { level: 'region', fieldId: 'billing_state' },
+					onResolving: jest.fn( () => release ),
+				} ),
+			};
+		}
+
+		it( 'still selects after detach() when nothing newer was picked — the pick is not lost', async () => {
+			const el = installSelect();
+			const { options, release } = buildStaleAwareOptions( false );
+
+			const api = mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			// The checkout re-render lands while the GET is still out.
+			api.detach();
+
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+			expect( release ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'does NOT select once a newer pick has superseded this one — the overwrite the card is about', async () => {
+			const el = installSelect();
+			const { options, release } = buildStaleAwareOptions( true );
+
+			const api = mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			api.detach();
+
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			// toHaveLength(0), never toEqual([]) — gotcha `jest-toequal-empty-array-ignores-undefined`.
+			expect( options.onSelect.mock.calls ).toHaveLength( 0 );
+
+			// Released anyway: the token guard inside release() stands it down in front of the
+			// newer owner's marker, and skipping it would strand this pick's own if it somehow
+			// still stands.
+			expect( release ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		it( 'consults staleness on the ANSWER, not on the pick — a pick that goes stale mid-flight is still caught', async () => {
+			const el = installSelect();
+			const release = jest.fn();
+			let stale = false;
+
+			release.isStale = jest.fn( () => stale );
+
+			const options = buildOptions( {
+				node: { level: 'region', fieldId: 'billing_state' },
+				onResolving: jest.fn( () => release ),
+			} );
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+
+			// Nothing newer at the moment of the pick — the whole window is what matters.
+			expect( release.isStale ).not.toHaveBeenCalled();
+
+			stale = true;
+
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect.mock.calls ).toHaveLength( 0 );
+		} );
+
+		it( 'an onResolving that predates #573 and returns a bare release still selects — the contract stayed additive', async () => {
+			const el = installSelect();
+			const release = jest.fn(); // no isStale on it at all.
+			const options = buildOptions( {
+				node: { level: 'region', fieldId: 'billing_state' },
+				onResolving: jest.fn( () => release ),
+			} );
+
+			mod.attachRelatedListRegion( el, options );
+
+			el.value = 'МОСКВА';
+			el.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			fetchJsonCalls[ 0 ].resolve( { localities: [ { record: { level: 'region', label: 'Москва' } } ] } );
+			await Promise.resolve().then( () => Promise.resolve() );
+
+			expect( options.onSelect ).toHaveBeenCalledTimes( 1 );
+		} );
+	} );
+
 	it( 'detach() unbinds both worlds — a change afterwards never reaches onSelect', () => {
 		const el = installSelect();
 		const options = buildOptions( { node: { level: 'region', fieldId: 'billing_state' } } );

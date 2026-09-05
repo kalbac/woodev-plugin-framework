@@ -1123,6 +1123,77 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 			expect( document.getElementById( 'billing_state' ).parentNode.classList.contains( 'woodev-location-field-busy' ) ).toBe( true );
 			expect( document.getElementById( 'billing_city' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
 		} );
+
+		// -----------------------------------------------------------------
+		// release.isStale() — the #573 staleness seam
+		// -----------------------------------------------------------------
+
+		it( 'isStale() is false while this pick is still the newest one the cascade has seen', () => {
+			boot( { region: true, settlement: true } );
+
+			const release = callFor( 'billing_state' ).onResolving();
+
+			expect( release.isStale() ).toBe( false );
+		} );
+
+		it( 'isStale() turns true once a NEWER pick reaches the cascade — the overwrite #573 is about', async () => {
+			boot( { region: true, settlement: true } );
+
+			// The slow one: a region picked, its identity still being looked up.
+			const release = callFor( 'billing_state' ).onResolving();
+
+			expect( release.isStale() ).toBe( false );
+
+			// The customer picks again while that lookup is still out. Either shape of a newer
+			// pick must count — one that arrives WITH its record...
+			selectViaFake( callFor( 'billing_state' ), {
+				key: 'dadata:r2', label: 'Тверская область', level: 'region',
+				record: { key: 'dadata:r2', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Тверская область', type: 'обл' }, label: 'Тверская область' },
+			} );
+
+			expect( release.isStale() ).toBe( true );
+		} );
+
+		it( 'isStale() turns true for a newer pick whose record is ALSO still unknown', () => {
+			boot( { region: true, settlement: true } );
+
+			const first = callFor( 'billing_state' ).onResolving();
+
+			// ...and one that arrives without it, which is the very shape this renderer produces.
+			callFor( 'billing_state' ).onResolving();
+
+			expect( first.isStale() ).toBe( true );
+		} );
+
+		it( 'isStale() stays FALSE when an EARLIER request settling clears the marker — the false positive the busy token would have produced', async () => {
+			boot( { region: true, settlement: true } );
+
+			// An earlier pick is already in flight to the server.
+			selectViaFake( callFor( 'billing_state' ), {
+				key: 'dadata:r0', label: 'Московская область', level: 'region',
+				record: { key: 'dadata:r0', provider_id: 'dadata', level: 'region', country: 'RU', region: { name: 'Московская область', type: 'обл' }, label: 'Московская область' },
+			} );
+
+			expect( selectRequests().length ).toBe( 1 );
+
+			// Now the customer picks again, and THIS pick's identity is still being looked up.
+			const release = callFor( 'billing_state' ).onResolving();
+
+			// The earlier request answers. settleSelect() calls clearSelectBusy()
+			// UNCONDITIONALLY, so the marker this pick raised is gone — even though nothing
+			// newer has been picked.
+			selectRequests()[ 0 ].resolve( {
+				current: { key: 'dadata:r0', level: 'region' }, persisted: true,
+				chain: { region: { key: 'dadata:r0', level: 'region' } },
+			} );
+			await flushMicrotasks();
+
+			// A staleness test keyed on the busy token would read "superseded" here and the
+			// renderer would drop a live selection — one nothing re-asks for, because
+			// reconcileAfterCheckoutUpdate() re-attaches without looking the value up again.
+			// The pick sequence answers the question actually being asked.
+			expect( release.isStale() ).toBe( false );
+		} );
 	} );
 
 	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request
