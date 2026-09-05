@@ -66,8 +66,41 @@ Not by tests, and not by CI — by the Codex critic reading the diff against the
 critic and the coordinator reached it independently, which is the shape of a defect that a green
 suite structurally cannot see: nothing in the test tree asserts what a Russian shopper reads.
 
+## ⚠ The gate added in #771 does NOT close this (measured s120)
+
+`npm run lint:i18n` landed in s118 (#771) and it is easy to read it as the enforcement this gotcha
+was asking for. **It is not, and the difference is exactly the hole above.**
+
+The linter reads ONE file:
+
+```js
+const PO_PATH = join( ROOT, 'woodev/languages/woodev-plugin-framework-ru_RU.po' );
+const { entries } = parsePo( PO_PATH );
+```
+
+It then walks the entries of the CATALOGUE and fails on an English msgid with an empty `msgstr`. It
+never scans source. So its contract is *"the catalogue holds no untranslated English entry"* — not
+*"the code holds no untranslated English string"*. **A msgid that never reached the catalogue at all
+is invisible to it**, which is precisely the half-done change this gotcha is about.
+
+Measured in s120 on PR #787: a new merchant-facing
+`__( 'Capture amount of %1$s must be greater than zero…' )` was absent from
+`woodev-plugin-framework-ru_RU.po` **and from `woodev-plugin-framework.pot`**, while its four
+sibling guards in the same method are in both — and `npm run lint:i18n` answered
+`OK (752 entries, 36 allowlisted)`.
+
+Same shape as [a-docs-gate-checks-links-not-listings](a-docs-gate-checks-links-not-listings.md): a
+gate is evidence about its own input file, never about the world. Closing it means diffing a freshly
+generated `.pot` against the committed one — filed as card **#791**.
+
+The s120 string itself was fixed a different and better way: it is read by a merchant in the order
+admin, and an ADMIN string takes a Russian msgid directly, so it needs no catalogue entry at all.
+That escape hatch exists only for admin strings — on the storefront path the channel must be filled,
+which is what the rest of this file is about.
+
 ## Related
 
 - [the-mo-is-reproducible-from-the-po](the-mo-is-reproducible-from-the-po.md) — how to ship the catalogue half safely
 - [classify-an-i18n-string-by-its-render-path-not-its-file-path](classify-an-i18n-string-by-its-render-path-not-its-file-path.md) — which rule applies to which string
+- [a-docs-gate-checks-links-not-listings](a-docs-gate-checks-links-not-listings.md) — the same shape in another gate: it checks its input, not the world
 - `AGENTS.md` → Conventions → Translatable strings — the four rules

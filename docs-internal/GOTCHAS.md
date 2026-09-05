@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 280 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 281 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/money] **A remaining-capacity bound computed as a raw float subtraction refuses the FINAL CENT: `10.00 - 9.99` is `0.00999999999999978`, so `0.01` compares as above it. Round numbers hide it — 100/60/40 is exact.** → [a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent](gotchas/a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent.md) (s120)
 - [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION — **11** times here, not the 7 a manual pass counted — while a mocked suite stays green. An OMITTED return type is a fatal; a `private` base method is not. Run `npm run probe:signature`.** → [a-stricter-base-class-fatals-on-signatures](gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115, corrected s117)
 - [php/namespaces] **Moving a class into a sub-namespace rebinds every UNQUALIFIED sibling reference in that file at once — no parse error, no PHPCS complaint, and seven targeted test files still green; the full suite dies at load.** → [moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings](gotchas/moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings.md) (s104)
 - [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](gotchas/a-cast-is-not-a-degradation.md) (s102)
@@ -321,7 +322,7 @@
 - [perf/payload] **A raw JSON byte count is not a wire cost: a repetitive locale table grew +47 KB raw and +503 bytes after gzip (96:1). Measure compressed, and confirm `Content-Encoding` on the real response.** → [a-raw-payload-size-is-not-a-wire-cost-measure-it-after-gzip](gotchas/a-raw-payload-size-is-not-a-wire-cost-measure-it-after-gzip.md) (s118)
 
 ### [i18n/*] — Localization
-- [i18n/catalogue] **Rule 1 has TWO halves: an English msgid WITHOUT a `.po` entry is a storefront regression, not a half-done change — `м`/`км` became `m`/`km` for every ru_RU shopper and every gate stayed green.** → [rule-1-has-two-halves-an-english-msgid-alone-is-a-regression](gotchas/rule-1-has-two-halves-an-english-msgid-alone-is-a-regression.md) (s104)
+- [i18n/catalogue] **Rule 1 has TWO halves: an English msgid WITHOUT a `.po` entry is a storefront regression — and `lint:i18n` CANNOT catch it, because it reads only the `.po`.** → [rule-1-has-two-halves-an-english-msgid-alone-is-a-regression](gotchas/rule-1-has-two-halves-an-english-msgid-alone-is-a-regression.md) (s104, extended s120)
 - [i18n/catalogue] **The committed `.mo` IS `wp i18n make-mo` of the committed `.po` (md5-verified), so adding a catalogue entry is a reviewable diff — compile the unchanged file first as the control.** → [the-mo-is-reproducible-from-the-po](gotchas/the-mo-is-reproducible-from-the-po.md) (s104)
 - [i18n/classification] **A directory says who OWNS a file, not who READS its output — bucketing translatable strings by path put 42 admin settings labels in the frontend bucket and made the estimate 104 where the answer was 65.** → [classify-an-i18n-string-by-its-render-path-not-its-file-path](gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md) (s103)
 - [i18n/scanning] **`__( 'half.' . ' half.', $d )` is ONE msgid to gettext and zero to a scanner that requires a single literal — two measurements missed the same customer-facing string.** → [a-concatenated-msgid-is-invisible-to-a-single-literal-scanner](gotchas/a-concatenated-msgid-is-invisible-to-a-single-literal-scanner.md) (s103)
