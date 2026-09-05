@@ -190,6 +190,15 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 		/**
 		 * Selectively update just one piece of the license data.
 		 *
+		 * Refuses to touch a corrupted option. The stored value is license state — an
+		 * installed-site data contract (AGENT-RULES.md Rule 0) — so if it is not the
+		 * `stdClass` this method expects (e.g. an array, from some other write path or a
+		 * corrupted row), it is left untouched and reported instead of coerced: casting it
+		 * would silently legitimise the foreign shape and overwrite whatever produced it,
+		 * destroying the only evidence of how it got there (#785).
+		 *
+		 * @since 2.0.2 Refuses a non-object `$option` instead of throwing (#785).
+		 *
 		 * @param array $data
 		 *
 		 * @return bool
@@ -198,6 +207,20 @@ if ( ! class_exists( 'Woodev_License' ) ) :
 
 			/** @var stdClass $option */
 			$option = get_option( $this->option_name, new StdClass() );
+
+			if ( ! is_object( $option ) ) {
+				_doing_it_wrong(
+					__METHOD__,
+					sprintf(
+						'The "%s" option is not an object; refusing to update a corrupted license option. Inspect the stored value directly.',
+						$this->option_name
+					),
+					'2.0.2'
+				);
+
+				return false;
+			}
+
 			$update = false;
 
 			foreach ( $data as $key => $value ) {
