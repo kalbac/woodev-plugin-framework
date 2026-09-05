@@ -62,14 +62,28 @@ not — a class-map entry with no matching `require_once`.
   inside the loader-definition array literal built before `Woodev_Loader::register()` even requires
   `bootstrap.php` — and does not overlap `Shipping_Plugin::includes()`, which only runs once a
   concrete plugin's main class is actually constructed.
-- **What the unit suite cannot see**: `tests/bootstrap.php` requires `vendor/autoload.php` for
-  every unit run. Composer's own classmap (`composer.json` → `autoload.classmap`, hand-maintained,
-  covering the whole `woodev/` tree for dev/test only — no Composer ships in production, per
-  project convention) resolves every class in this repository regardless of whether
-  `Shipping_Plugin::includes()` requires it. A green unit suite therefore proves nothing about
-  whether the *runtime* `Woodev_Framework_Autoloader` — the only resolver a real vendored install
-  has — can reach a class; only `TEST_SUITE=integration` (real WordPress, no Composer classmap
-  covering these files) exercises that path, and this worktree cannot run it (no `wp-env`).
+- **Which suite catches which failure — measured by the coordinator on `2fadd19`, not inferred.**
+  The two directions are caught by different gates, and the asymmetry is the whole justification
+  for the pair of tests. Injecting `require_once $path . '/does-not-exist-probe.php';` into
+  `includes()`, then separately deleting one real `require_once` while leaving its file on disk:
+
+  | failure | unit, without the new tests | unit, with them | integration |
+  |---|---|---|---|
+  | dangling `require_once` (file deleted) | **caught** — `Tests: 3523, Errors: 3` via `tests/unit/YandexPilotFixtureTest.php:76` -> `class-framework-resolver.php:170` | caught | **caught** — bootstrap dies: `Failed opening required '.../does-not-exist-probe.php'` |
+  | class-map entry never required | not caught | **caught** — the only gate that does | **not caught**: `OK (143 tests, 530 assertions)` |
+
+  Two consequences worth stating, because the obvious reading of each is wrong.
+  **A dangling `require_once` was never invisible** — `YandexPilotFixtureTest` drives the real
+  `Framework_Resolver`, so the unit suite does reach the runtime resolution path for the fixture
+  plugins, and both suites already fatal on a missing file. `test_every_required_shipping_file_exists()`
+  therefore buys a readable failure message rather than new coverage, which is a real but modest
+  benefit; it is kept on that basis and not because the failure would otherwise escape.
+  **The reverse guard, by contrast, is genuinely alone.** Integration stays fully green with a
+  class missing from `includes()`, because the runtime autoloader resolves it from
+  `class-map.php` regardless — so the eager list can rot to a 31-file gap without any suite
+  objecting. That is exactly how it did rot, and
+  `test_every_shipping_classmap_entry_is_wired_into_includes()` is the only thing now standing
+  against it.
 
 ## Decision
 
@@ -81,16 +95,17 @@ neither substitutes for the other:
 - `test_every_shipping_classmap_entry_is_wired_into_includes()` — a class-map entry under
   `woodev/shipping-method/**` (excluding `class-shipping-plugin.php` itself) with no matching
   `require_once`. This is a class ADDED to the tree and forgotten in `includes()`.
-- `test_every_required_shipping_file_exists()` — a `require_once` in `includes()` whose target no
+- `test_every_required_shipping_file_exists()` -- a `require_once` in `includes()` whose target no
   longer exists on disk. This is a file DELETED from the tree with a stale `require_once` left
-  behind — **the actual failure the card was filed for**: `bin/generate-class-map.php` drops a
-  deleted file from the map on its next run, same as the first test expects, so a class-map-only
-  guard reports zero missing entries and stays green while the dangling `require_once` still
-  fatals a real vendored boot. Round 2 of this card's review caught that the first commit shipped
-  only the first test; both are required to close the loop the card actually asked for.
+  behind -- the incident the card describes as having fired four times. Note precisely what this
+  test does and does not add: per the measurement above, that failure was ALREADY fatal in both
+  suites, so this guard replaces a bootstrap-level fatal buried in a 143-test run with a named
+  assertion and a one-line message. It is kept for the diagnostic, not because the failure would
+  otherwise escape. Round 2 of this card's review established both halves of that.
 
-Either gap now fails a **unit** test immediately, rather than waiting for a real vendored boot to
-discover it.
+Either gap now fails a **unit** test immediately, by name. For the deleted-file direction that is
+a better message for a failure the suites already produced; for the map-only direction it is the
+only signal that exists at all.
 
 This decision is scoped to the shipping module. It does not reopen s27's choice to leave the rest
 of the framework autoload-only — that code has no file-scope side effects tying it to eager
@@ -100,8 +115,8 @@ loading either, and reversing it is out of scope for #138.
 
 Not because a load-order hazard was found — none was, after the checks above. It was rejected
 because the one measurement that would actually **prove** load order never matters for a real
-vendored boot — the integration suite, against real WordPress with no Composer classmap masking
-gaps — could not be run from this worktree (no `wp-env`), and the static checks above, while
+vendored boot could not be run from the worktree (no `wp-env`) at the time the decision was
+taken, and the static checks above, while
 consistent with safety, cover only the failure modes this project has already hit
 (file-scope side effects, `class_exists(..., false)` guards, pre-autoloader windows) — not
 every possible one. Given that the measured gap was 31 files, not the 6 the card described, and
@@ -130,13 +145,12 @@ this one is not a permanent bar to reopening the question, it is what the eviden
   runtime fatal with a fast, local, always-run signal, in both directions.
 - `includes()` is longer (71 requires, up from 39) and will keep growing with the module. That cost
   was accepted explicitly in exchange for the two guards.
-- Integration verification of this change is still owed: the coordinator must run the integration
-  suite (`TEST_SUITE=integration`, real `wp-env`) and load the shipping fixtures
-  (`tests/_fixtures/woodev-realistic-shipping-plugin/`, `tests/_fixtures/woodev-test-shipping-method/`,
-  `tests/_fixtures/woodev-edostavka-pilot-plugin/`, `tests/_fixtures/woodev-yandex-pilot-plugin/`) to
-  confirm nothing in the now-71-file `includes()` list regressed — this ADR documents a
-  measurement-based decision, not an integration-verified one.
-
+- **Integration has since been run and is green** (— coordinator, 05.09.2026, commit `2fadd19`):
+  `OK (143 tests, 530 assertions)`, identical to the `main` baseline, with the shipping fixtures
+  loaded. phpcs clean, phpstan level 3 clean, unit 3524 / 8647 / 1 skipped. So this ADR is
+  integration-verified, not only measurement-based. What integration does NOT do is validate the
+  eager list itself — see the matrix above: it stays green with a class missing from
+  `includes()`, which is why the reverse-guard test exists.
 ## Related
 
 - `docs-internal/gotchas/dispatcher-files-unwired-in-includes.md`
