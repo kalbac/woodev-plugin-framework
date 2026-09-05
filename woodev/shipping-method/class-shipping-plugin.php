@@ -130,8 +130,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// helper
 			require_once $path . '/class-shipping-helper.php';
 
-			// API interfaces
+			// API interfaces + base
 			require_once $path . '/api/interface-shipping-api.php';
+			require_once $path . '/api/class-abstract-shipping-api.php';
 
 			// base shipping method and specializations
 			require_once $path . '/class-shipping-rate.php';
@@ -142,6 +143,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// settings
 			require_once $path . '/settings/class-shipping-integration.php';
+
+			// settings tools (card #598/#600: the settings-tab "tools" tab framework)
+			require_once $path . '/settings/class-tool-result.php';
+			require_once $path . '/settings/class-shipping-tool.php';
+			require_once $path . '/settings/class-shipping-tools-registry.php';
 
 			// «Доставка» tab registrar (Task 4; issue #362): the tab + «Поля»/«Карта»
 			// stub handlers it composes with the location layer's handler. Required
@@ -157,9 +163,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/class-pickup-map-settings.php';
 			require_once $path . '/settings/class-shipping-settings-tab.php';
 
+			// checkout field definitions + presets
+			require_once $path . '/checkout/class-field.php';
+			require_once $path . '/checkout/class-checkout-condition.php';
+			require_once $path . '/checkout/class-checkout-config.php';
+			require_once $path . '/checkout/class-phone-mask-patterns.php';
+			require_once $path . '/checkout/presets/class-dependent-select.php';
+			require_once $path . '/checkout/presets/class-pickup-field.php';
+
 			// pickup-point map provider interface + registry (no default provider ships)
 			require_once $path . '/map/interface-map-provider.php';
 			require_once $path . '/map/class-map-provider-registry.php';
+			require_once $path . '/map/class-embedded-map-provider.php';
+			require_once $path . '/map/class-yandex-map-provider.php';
 
 			// location provider layer (Tasks 1-5): neutral record/key/scope, provider
 			// contract, the registry with its activation gate + store setting, the dual
@@ -172,6 +188,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/class-locality-key.php';
 			require_once $path . '/location/class-location-record.php';
 			require_once $path . '/location/class-location-scope.php';
+			require_once $path . '/location/class-location-provider-exception.php';
 			require_once $path . '/location/interface-location-provider.php';
 			require_once $path . '/location/abstract-location-provider.php';
 			require_once $path . '/location/class-location-settings.php';
@@ -180,6 +197,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/location/interface-location-adapter.php';
 			require_once $path . '/location/class-location-resolution-cache.php';
 			require_once $path . '/location/class-location-service.php';
+
+			// popular settlements (default-locality suggestion + staleness verification)
+			require_once $path . '/location/class-popular-settlement-entry.php';
+			require_once $path . '/location/class-popular-settlement-store.php';
+			require_once $path . '/location/class-popular-settlements-tools.php';
+			require_once $path . '/location/class-popular-settlement-verification.php';
+			require_once $path . '/location/class-popular-settlement-verifier.php';
 
 			// Task 7: the bundled DaData provider — the registry's own
 			// bundled_provider_classes() class_exists()-guards its FQCN, so this
@@ -192,6 +216,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// pickup models
 			require_once $path . '/pickup/class-pickup-point.php';
+
+			// pickup selection engine (SP-5): scope + query + constraint checking, the
+			// handler that composes them, and the address-target value object the
+			// checkout side of pickup selection reads.
+			require_once $path . '/pickup/interface-selection-scope.php';
+			require_once $path . '/pickup/class-provider-selection-scope.php';
+			require_once $path . '/pickup/interface-point-source.php';
+			require_once $path . '/pickup/class-point-query.php';
+			require_once $path . '/pickup/class-constraint-checker.php';
+			require_once $path . '/pickup/class-selection-result.php';
+			require_once $path . '/pickup/class-pickup-selection.php';
+			require_once $path . '/pickup/class-address-target.php';
+			require_once $path . '/pickup/class-pickup-handler.php';
 
 			// checkout fields + handler backbone
 			require_once $path . '/checkout/class-checkout-fields.php';
@@ -206,6 +243,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// admin bootstrap + order admin handler
 			require_once $path . '/admin/class-shipping-admin.php';
 			require_once $path . '/admin/class-shipping-admin-order.php';
+
+			// REST API (§8 checkout classes' server-side counterparts)
+			require_once $path . '/rest-api/class-shipping-rest-api.php';
+			require_once $path . '/rest-api/class-field-source-controller.php';
+			require_once $path . '/rest-api/class-location-controller.php';
+			require_once $path . '/rest-api/class-pickup-controller.php';
 		}
 
 		/**
