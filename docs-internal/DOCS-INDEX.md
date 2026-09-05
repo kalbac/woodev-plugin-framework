@@ -49,20 +49,53 @@
 
 ## Specs / Plans / Research (live dirs — what remains after the s60 sweep)
 
-| File | Purpose |
-|------|---------|
-| `specs/2026-06-25-shipping-module-decisions.md` | **Authoritative map of the active shipping SP-track (SP-1…SP-11)** |
-| `specs/2026-08-06-sp5-pickup-selection-mechanism-design.md` (+ `plans/2026-08-06-...-plan.md`) | SP-5 pickup-selection mechanism (current) |
-| `specs/2026-08-09-sp5-viewport-point-accumulation-design.md` (+ `plans/2026-08-09-...-plan.md`) | SP-5 viewport point accumulation (current) |
+> The table below was three rows for four months while the directories grew to 13 specs and 7 plans
+> (flagged by the s104 audit, completed in s119). A design document stays here after its work ships:
+> it records WHY the shape is what it is, and the `Shipped` column says which ones that applies to.
 
-Shipped-work specs/plans are moved to `archive/specs/` and `archive/plans/`; `research/` and `reviews/` are fully archived (see `archive/README.md`).
+| Spec | Purpose | Shipped |
+|------|---------|---------|
+| `specs/2026-06-25-shipping-module-decisions.md` | **Authoritative map of the active shipping SP-track (SP-1…SP-11)** — program-level decisions locked with the operator | live map |
+| `specs/2026-08-06-sp5-pickup-selection-mechanism-design.md` | SP-5 pickup-point selection mechanism | ✅ |
+| `specs/2026-08-09-238-cart-change-verdict-invalidation.md` | #238 — wire cart-change verdict invalidation to a real cart-change signal; supersedes the issue's own framing on two points | ✅ |
+| `specs/2026-08-09-sp5-viewport-point-accumulation-design.md` | SP-5 viewport point accumulation (#234) | ✅ |
+| `specs/2026-08-10-embedded-map-provider-adapter-seam.md` | #251 — make the embedded carrier-widget seam reachable and prove it with a real carrier | ✅ |
+| `specs/2026-08-11-sp5-pickup-selection-persistence-design.md` | SP-5 — pickup selection persistence across checkout requests (#176) | ✅ |
+| `specs/2026-08-12-location-provider-design.md` | The Location Provider layer — the provider seam itself | ✅ |
+| `specs/2026-08-15-location-chain-design.md` | The location chain (#334 + #330) — both cards share one root | ✅ |
+| `specs/2026-08-18-location-and-field-settings-brainstorm-input.md` | INPUT to a brainstorm, deliberately not a design — read it as the question, not the answer | n/a |
+| `specs/2026-08-18-shipping-settings-v2-design.md` | The «Доставка» tab: Location / Fields / Map | ✅ |
+| `specs/2026-08-21-settlement-search-design.md` | Settlement search replacing the preset list — decision 1 shipped in s109, the rest is NOT part of #437 | partial |
+| `specs/2026-08-24-popular-settlements-design.md` | Popular settlements — where the list lives and how it is scoped | ✅ |
+| `specs/2026-08-25-shipping-tools-section.md` | The «Инструменты» section of the «Доставка» tab | ✅ |
+
+| Plan | Implements |
+|------|------------|
+| `plans/2026-08-06-sp5-pickup-selection-mechanism-plan.md` | the SP-5 selection-mechanism spec |
+| `plans/2026-08-09-sp5-viewport-point-accumulation-plan.md` | the viewport-accumulation spec (#234) |
+| `plans/2026-08-11-sp5-pickup-selection-persistence-plan.md` | the selection-persistence spec (#176) |
+| `plans/2026-08-12-location-provider-plan.md` | the Location Provider design |
+| `plans/2026-08-18-shipping-settings-v2-plan.md` | the «Доставка» tab design |
+| `plans/2026-08-20-shipping-tab-admin-polish.md` | the «Доставка» admin polish batch (#375 #380 #377 #376 #373 #378) |
+| `plans/2026-08-24-popular-settlements-slice-3-plan.md` | popular settlements, slice 3 (#488) |
+
+⚠ **Four of those plans open with "REQUIRED SUB-SKILL: `superpowers:subagent-driven-development`".**
+That instruction is superseded — parallel work runs through Orca orchestration now
+(`AGENT-RULES.md`). The plans are kept as the record of what was built, not as live instructions.
+
+Shipped-work specs/plans are moved to `archive/specs/` and `archive/plans/`.
+
+⚠ **`research/` and `reviews/` are NOT archived** — this line used to say they were, and it was wrong:
+`research/` holds 2 files and `reviews/` holds 10, several of them written in the last two weeks.
+`archive/` holds only the pre-s60 ones. `DOCS-SCHEMA.md` correctly lists both as live directories an
+agent writes to.
 
 ## Architecture Decision Records
 
 | File | Purpose |
 |------|---------|
 | `adr/README.md` | ADR index |
-| `adr/001` … `adr/010` | Bootstrap loader · plugin-type inheritance (002 superseded by 005) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 |
+| `adr/001` … `adr/012` | Bootstrap loader · plugin-type inheritance (002 superseded by 005) · minimal resolver · loader API · **005 clean-break policy** · capability-gated feature seam · React admin stack · conditional-fields operator set · map-provider seam (source, not library) · Yandex Maps JS API 2.1 not 3.0 · vendored IMask + generated phone masks · shipping `includes()` stays authoritative |
 
 ## Migration / Wiki / Autodev
 

@@ -141,6 +141,11 @@ Codex is launched through an Orca terminal (see fact 3 for the four steps), neve
   `powershell-drops-the-roots-flag-from-the-jest-command`).
 - **Rig probes go to the scratchpad, never into the repo** — a stray probe file once rode along in
   a commit.
-- **Codex critic runs must be an inline bundle with a canary first line.** With its shell dead
-  Codex does not report that it could not read a file — it fabricates the contents (gotcha
-  `codex-shell-sandbox-broken-windows`).
+- **Hand a Codex critic a POINTER, and require the canary in its REPORT BODY.** The old rule here —
+  "an inline bundle with a canary first line, because its shell is dead" — was obsolete: Codex's
+  shell works when it is launched from an Orca terminal, and that gotcha's own header has said so
+  since s82 (`codex-shell-sandbox-broken-windows`). What survives is the anti-fabrication check, in
+  a different shape: write the brief to a scratchpad file and send a one-line "read this file and do
+  what it says" (a pasted brief sits unsubmitted — s100), and word the canary so it survives a
+  one-line `--body`, or the critic drops it and its absence reads as the fabrication it exists to
+  catch. Still mandatory when Codex cannot read the worktree at all.

@@ -27,8 +27,8 @@
 | **Release** | Manual tagging + release script | **Fully automatic** via GitHub Actions |
 | **Changelog** | `pnpm changelog add` | **Auto-generated** by git-cliff from Conventional Commits |
 | **Commands** | `pnpm lint:php`, `pnpm test:php` | `composer phpcs`, `composer test:unit`, `composer test:integration` |
-| **Backward Compatibility** | Important | **CRITICAL** (10+ dependent plugins) |
-| **Breaking Changes** | Avoid | **Require deprecation cycle + major version bump** |
+| **Backward Compatibility** | Important | **Two different rules** — internal code is free to break on the v2 line; installed-site data contracts are release-blocking (ADR-005) |
+| **Breaking Changes** | Avoid | **Internal APIs: break them cleanly, no shims.** Data contracts: never |
 
 ---
 
@@ -45,7 +45,7 @@
 - Writing commit messages (Conventional Commits)
 - Checking environment status
 
-**Key commands:** See CLAUDE.md > Commands
+**Key commands:** See [`AGENTS.md`](../AGENTS.md) → "Dev environment"
 
 [`agents/woodev-framework-dev-workflow-agent.md`](agents/woodev-framework-dev-workflow-agent.md)
 
@@ -62,7 +62,7 @@
 - Adding hooks/filters
 - Adding deprecation notices
 
-**Key principles:** See CLAUDE.md > Code Style, Backward Compatibility
+**Key principles:** See [`AGENTS.md`](../AGENTS.md) → "Conventions" and "Coding Principles", plus the clean-break section below
 
 [`agents/woodev-framework-backend-agent.md`](agents/woodev-framework-backend-agent.md)
 
@@ -78,7 +78,7 @@
 - Creating PRs
 - **Releasing** (bump VERSION in `woodev/class-plugin.php`)
 
-**Release workflow:** See CLAUDE.md > Commit & Release
+**Release workflow:** See [`AGENTS.md`](../AGENTS.md) → "Git workflow". ⚠ Raising `VERSION` on `main` PUBLISHES a release — do it deliberately
 
 [`agents/woodev-framework-git-agent.md`](agents/woodev-framework-git-agent.md)
 
@@ -104,7 +104,7 @@
 
 **When to use:**
 
-- Writing README.md, CLAUDE.md
+- Writing README.md and the gateway files (`AGENTS.md`, `CLAUDE.md`, `QWEN.md`)
 - Editing `.md` files
 - Developer docs: **English**, User docs: **Russian**
 - **CHANGELOG.md is auto-generated** (do not edit manually)
@@ -148,7 +148,7 @@ Skills provide detailed guidance for specific tasks. Agents reference skills int
    └─> woodev-framework-dev-workflow-agent (composer check)
 
 6. Documentation
-   └─> woodev-framework-docs-agent (README, CLAUDE.md)
+   └─> woodev-framework-docs-agent (README, gateway files, docs-internal/)
 
 7. Commit & Push
    └─> woodev-framework-dev-workflow-agent (Conventional Commits)
@@ -160,14 +160,29 @@ Skills provide detailed guidance for specific tasks. Agents reference skills int
 
 ---
 
-## Backward Compatibility Rules
+## Backward Compatibility Rules — clean-break policy (ADR-005)
 
-**CRITICAL for framework used by 10+ plugins.** See CLAUDE.md > Backward Compatibility for full rules.
+> ⚠ **This section used to teach the opposite.** Until 2026-09-05 it said "NEVER delete a public
+> method without a deprecation cycle; ALWAYS add `@deprecated` + `_deprecated_function()`". That was
+> the pre-v2 rule and it was **superseded on 2026-06-03** by ADR-005. An agent following the old
+> text would add exactly the shims the current policy tells it to delete.
 
-Summary:
-1. NEVER delete public methods/classes without deprecation cycle
-2. ALWAYS use `@deprecated` annotation + `_deprecated_function()` call
-3. Breaking changes require major version bump (semver)
+Two different rules apply, depending on what you are changing:
+
+1. **Internal code — FREE TO BREAK on the v2 line (`main`):** class names, method signatures, the
+   plugin entry/registration shape, namespacing, file layout. Do **NOT** add `@deprecated` shims,
+   `class_alias` files, or `_deprecated_function()` wrappers for moved or renamed internal APIs —
+   delete the ones you find.
+2. **Installed-site data contracts — RELEASE-BLOCKING, never break:** option keys, license/instance
+   IDs, updater identity, WC gateway and shipping-method IDs + instance setting keys, public
+   action/filter names, cron hooks and payloads, custom tables, REST namespaces, AJAX actions, admin
+   page slugs, log source names, background-job IDs, order/session meta keys. Preserve byte-for-byte.
+
+The remaining legitimate `_deprecated_function()` / `_doing_it_wrong()` calls are misuse markers and
+clone/wakeup guards — **not** internal-API move shims. Those stay.
+
+Full policy: [`docs-internal/adr/005-platform-v2-clean-break-policy.md`](../docs-internal/adr/005-platform-v2-clean-break-policy.md).
+Operational form: [`docs-internal/AGENT-RULES.md`](../docs-internal/AGENT-RULES.md) → Rule 0.
 
 ---
 
@@ -178,13 +193,13 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 ### Code Navigation
 
 - **Always use Serena MCP tools** (`find_symbol`, `get_symbols_overview`, `search_for_pattern`, `find_referencing_symbols`) for reading and navigating PHP source code. Never read `.php` files directly — Serena has the codebase indexed with LSP and provides semantic search, cross-referencing, and symbol lookup.
-- Serena indexes only `woodev/` directory (configured in `.serena/project.yml`).
+- Serena indexes the tree EXCEPT the paths `.serena/project.yml` lists under `ignored_paths`: **`tests/**`, `docs/**`, `.github/**`, `.ai/**`, `.serena/**`, `.claude/**`**. A symbolic call against any of them fails with `… while the path is ignored`, so in those directories the built-in `Read`/`Grep`/`Glob` are the ONLY tools and using them is **not** a rule violation. Say this in any brief that touches test files — omitting it has cost a worker a pointless detour twice (s105, s112).
 
 ### Documentation Code Examples
 
 - All PHP code examples in `docs/*.md` **must be verified** against the actual framework source code before writing or editing. Never write examples from memory or assumptions — use Serena to look up real method signatures, parameter types, return types, and visibility.
 - All PHP code blocks must include the `<?php` opening tag.
-- Markdown linting (`markdownlint-cli2`) проверяет `.md` файлы предназначенные для людей (`docs/`, `CHANGELOG.md`, `.github/`). AI-файлы исключены. Команда: `npx markdownlint-cli2 "**/*.md" "#node_modules" "#vendor" "#.ai" "#CLAUDE.md" "#QWEN.md"`.
+- Markdown linting (`markdownlint-cli2`) covers the `.md` files written for HUMANS — `docs/`, `CHANGELOG.md`, `.github/`. Agent-facing files are excluded, `docs-internal/` included, because formatting is not the point there. The authoritative exclusion list is `.markdownlintignore` plus the inline negations in `.github/workflows/markdown-lint.yml`; read it there rather than copying a command line, which is what went stale here.
 
 ### Documentation Site
 
@@ -202,6 +217,9 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 
 ## Related Documentation
 
-- [CLAUDE.md](../CLAUDE.md) — Single source of truth for project knowledge
+- [AGENTS.md](../AGENTS.md) — **the single source of truth for project knowledge**, read by every agent
+- [CLAUDE.md](../CLAUDE.md) — Claude Code only: Serena/Context7/Orca tooling. It restates nothing from `AGENTS.md`
+- [QWEN.md](../QWEN.md) — the Qwen-facing gateway
+- [docs-internal/DOCS-INDEX.md](../docs-internal/DOCS-INDEX.md) — navigation hub for internal docs
 - [agents/README.md](agents/README.md) — Agent documentation
 - [docs/README.md](../docs/README.md) — Project documentation

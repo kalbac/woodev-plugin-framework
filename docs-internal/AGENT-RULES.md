@@ -386,7 +386,7 @@ migrate it as tidy-up; that would remove the only working demonstration of the m
 | Static analysis | PHPStan (level 3, PHP 7.4+) | Every commit |
 | Code style | PHPCS (WordPress + PHPCompatibility) | Every commit |
 
-Test fixtures live in `tests/_fixtures/` — seven plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`.
+Test fixtures live in `tests/_fixtures/` — **eight** plugins: `woodev-test-plugin`, `woodev-test-payment-gateway`, `woodev-test-shipping-method`, `woodev-edostavka-pilot-plugin`, `woodev-realistic-payment-plugin`, `woodev-realistic-shipping-plugin`, `woodev-yandex-pilot-plugin`, `woodev-entry-path-fixture` (the v2 entry path's in-repo consumer, #763). `tests/_fixtures/dadata/` is JSON response data, not a plugin — count the directories carrying a `Plugin Name:` header, not the directories.
 
 Run a single test:
 ```bash

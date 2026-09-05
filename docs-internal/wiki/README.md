@@ -10,6 +10,9 @@ and provide reference material.
 - [Capability-Gated Feature Seam](capability-gated-feature-seam.md) — the reference pattern for optional behaviour: feature logic at a guaranteed invocation point, gated by `supports( FEATURE_* )`, delegating to a named seam, inert by default. `payment-gateway` is the exemplar; the s3 shipping box-packing seam is the newest instance (ADR-006)
 - [Риг-проход по слою ПВЗ](rig-pickup-walkthrough.md) — the order that actually works on the rig (cart → `/classic-checkout/` → the right shipping method), moved out of `CURRENT-STATE.md` in s87 because it is a procedure, not state
 - [Pickup trigger: where it is drawn, and what it says](pickup-trigger-placement-and-text.md) — the ownership split behind the checkout pickup button: the FRAMEWORK decides placement (`woodev_pickup_slot_placements`, default `['rate']` since #323, with a mandatory `'review'` fallback), the carrier plugin decides the TEXT (`woodev_pickup_map_i18n`, keys `trigger`/`triggerChange`)
+- [Framework architecture — subsystems, base classes, seams](architecture.md) — the map of what lives where: subsystems, base classes and the seams a plugin extends. Extracted from `CLAUDE.md` in s86 when that file became a pure gateway; opened on demand, not at session start
+- [The local rig — how it got this way](local-rig.md) — why the rig's fixtures, options and the two location providers are set the way they are, and which container is which. Moved out of `CURRENT-STATE.md` in s91, which now keeps only the current values
+- [Orchestrating agents with Orca](orchestrating-agents-with-orca.md) — how multi-agent work is actually run here: worker Sonnet / critic Codex, worktree placement, the launch traps, and what of Orca we deliberately did not adopt
 - [eCheck/ACH Audit — Removal Plan](echeck-ach-audit.md) — (historical audit — deprecation-cycle mitigations superseded by ADR-005; several phases since executed)
 
 

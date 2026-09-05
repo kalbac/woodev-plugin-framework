@@ -42,8 +42,16 @@ directory.
 The point the old wording was protecting is still in force: **an agent must never have to translate
 to understand the reasoning.** Explanation in English; the evidence it rests on stays untouched.
 
-**PHP source code strings** (i18n, admin notices) stay in **Russian** — the language rule applies
-only to agent-facing documentation.
+**PHP source strings are NOT covered by this rule at all** — they follow the operator's four i18n
+rules in `AGENTS.md` → Conventions (#567, 29.08.2026), and those do not say "Russian". In short: a
+**storefront** msgid is **ENGLISH** (the Russian arrives from the catalogue, because a shop's
+frontend may run an English locale even when its admin does not); an **admin** msgid in Russian is
+fine and stays; **logs and exception texts** may be either and need not be wrapped in `__()` at all.
+Classify by the RENDER PATH, never by the file's directory.
+
+⚠ This paragraph used to read "PHP source code strings stay in **Russian**" — the pre-#567 rule. It
+is now also enforced against: `lint:i18n` (#771, s118) fails on an English msgid with no
+translation, so an agent obeying the old text was writing against a live gate.
 
 ---
 
@@ -300,10 +308,17 @@ Text alone did not hold for the other formats in this file and will not hold her
 
 ## ADR Format
 
+⚠ This block used to specify a `> Status:` / `> Date:` blockquote header while `adr/README.md`'s own
+template specified bold fields. The corpus split 11 to 1 in favour of the bold form — and the odd
+one out was the NEWEST file, written from this schema. The bold form wins; keep the two documents
+saying the same thing.
+
 ```markdown
 # ADR-NNN: {Title}
-> Status: {Proposed | Accepted | Deprecated | Superseded}
-> Date: {YYYY-MM-DD}
+
+**Status:** proposed | accepted | deprecated | superseded
+
+**Date:** YYYY-MM-DD
 
 ## Context
 [What problem are we solving? What constraints exist?]

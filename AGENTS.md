@@ -135,7 +135,7 @@ woodev_framework/
 ├── tests/
 │   ├── unit/                        # Brain Monkey + Mockery (no WP needed)
 │   ├── integration/                 # WP_UnitTestCase (wp-env)
-│   └── _fixtures/                   # 7 test plugins
+│   └── _fixtures/                   # 8 fixture plugins (+ dadata/ = JSON data)
 ├── .ai/                             # AI agents and skills
 │   ├── agents/                      # 5 sub-agents
 │   ├── skills/                      # 5 skill directories

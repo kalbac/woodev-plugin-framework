@@ -1,7 +1,8 @@
 # ADR-012: `Shipping_Plugin::includes()` Stays Authoritative — Not Replaced By The Class-Map
 
-> Status: accepted
-> Date: 2026-09-05
+**Status:** accepted
+
+**Date:** 2026-09-05
 
 ## Context
 

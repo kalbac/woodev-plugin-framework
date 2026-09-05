@@ -4,11 +4,15 @@
 >
 > **Authority:** direction = `platform-v2-direction-audit-2026-06-03.md` (D-1..D-5). Detailed work = the per-stage plans. Live status = `CURRENT-STATE.md` (`platform-v2-program-tracker.md` = program-history snapshot). Coding conventions = `CLAUDE.md` / `AGENTS.md`.
 
-## 0. Resume protocol (start every session here)
-1. Read `CURRENT-STATE.md` → the live status doc: where we are, known bugs, next action. (`platform-v2-program-tracker.md` is a program-history snapshot, not the live tracker.)
-2. Scan `GOTCHAS.md`.
-3. Read this protocol + the **current stage's detailed plan**.
-4. Continue from CURRENT-STATE's next actions. Do not re-plan finished work.
+## 0. Resume protocol
+
+⚠ **The canonical session-start list is `AGENTS.md` → "Session Start", and it begins with
+`docs-internal/next-session-prompt.md`** — the per-session handoff, which this protocol used to omit
+entirely. Follow that list, not a second copy. What this protocol adds, once you are through it:
+
+1. Read this protocol + the **current stage's detailed plan**.
+2. Continue from `CURRENT-STATE.md`'s next actions. Do not re-plan finished work.
+   (`platform-v2-program-tracker.md` is a program-history snapshot, not the live tracker.)
 
 ## 1. Branch & baseline
 - Program work happens on **feature branches off `main`**, squash-merged via PR after **every CI job passes individually**. (`refactor/platform-v2-clean-break` merged 2026-06-04 and is deleted — never target it.)
@@ -29,14 +33,16 @@
 - Preserve-contract work: the test asserts the exact preserved string (hook/option/method id), so drift fails loudly.
 
 ## 5. Sub-agent strategy
-- **Code task** → fresh sub-agent per task via `superpowers:subagent-driven-development` (two-stage review between tasks). One task = one self-contained green commit.
-- **Read-only mapping / survey** → `Explore` agents, fan out in parallel for independent targets.
-- **Independent research** (e.g. reference-plugin survey, godaddy-fork study) → parallel sub-agents.
-- Docs-only, fully-specified edits → may be done directly (no sub-agent overhead).
+⚠ **Superseded.** This section named in-process sub-agent skills; the standing rule is now **Orca
+orchestration** — the worker holds its own context in its own terminal and the orchestrator reads
+only the `worker_done` report. Caps: **2–3 agents** (a hardware limit on this machine, not a quota)
+and **2–3 rounds per card**. Authority: `AGENT-RULES.md` → "Subagent-Driven Execution for
+Parallelism"; recipe and traps: `wiki/orchestrating-agents-with-orca.md`. Docs-only, fully-specified
+edits are still done directly, with no worker at all.
 
 ## 6. Review — two layers
 - **Internal (Claude):** subagent-driven two-stage review per task; at phase gates run profile reviewers (`code-reviewer`, `silent-failure-hunter`, `type-design-analyzer`) on the gate's diff.
-- **External (GPT-5.5):** at **key gates** (S0: P2, P3, P4, P6; then each module's gate). I generate `docs-internal/reviews/<phase>-audit-packet.md` (diff range + plan section + invariants checklist + 3–5 pointed questions). Operator runs it through GPT-5.5 and returns findings. I process them via `superpowers:receiving-code-review` (verify skeptically; never implement blindly). **Second opinion:** I may request a GPT-5.5 packet for a contested design decision at any time (e.g. PVZ-map abstraction shape).
+- **External (Codex — was GPT-5.5 when this was written):** at **key gates** (S0: P2, P3, P4, P6; then each module's gate). I generate `docs-internal/reviews/<phase>-audit-packet.md` (diff range + plan section + invariants checklist + 3–5 pointed questions). Operator runs it through GPT-5.5 and returns findings. I process them via `superpowers:receiving-code-review` (verify skeptically; never implement blindly). **Second opinion:** I may request a GPT-5.5 packet for a contested design decision at any time (e.g. PVZ-map abstraction shape).
 
 ## 7. Gate model (between phases/stages)
 A gate passes only when: (1) `composer check` green; (2) the plan's exit-gate checklist ticked; (3) internal review clean; (4) at key gates — external audit findings resolved; (5) tracker + CURRENT-STATE updated. Then tag (stage gates) and proceed.
