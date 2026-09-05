@@ -136,6 +136,43 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					throw new Woodev_Payment_Gateway_Exception( __( 'Transaction cannot be captured', 'woodev-plugin-framework' ), 400 );
 				}
 
+				// bound against what remains of the authorization, not just its full maximum: capture_total
+				// accumulates across requests, so two sequential captures could each pass a maximum-only
+				// check while together exceeding the authorization.
+				//
+				// The subtraction is re-formatted through the same Woodev_Helper::number_format() the rest
+				// of this pipeline uses -- get_order_for_capture() formats $order->capture->amount with it
+				// and do_capture_success() stores capture_total with it -- because the raw binary
+				// subtraction is not exact: 10.00 - 9.99 yields 0.00999999999999978, so the final cent of a
+				// partially captured authorization would compare as ABOVE the remainder and be refused.
+				// Rounding to the pipeline's own two decimals rather than to wc_get_price_decimals() is
+				// deliberate: the guard must agree with the value it guards, and that value is already
+				// two-decimal by construction.
+				$capture_remaining = (float) Woodev_Helper::number_format( $this->get_order_capture_maximum( $order ) - (float) $this->get_gateway()->get_order_meta( $order, 'capture_total' ) );
+
+				// don't allow capturing a zero/negative amount, or more than what remains capturable for the order
+				if ( (float) $order->capture->amount <= 0 || (float) $order->capture->amount > $capture_remaining ) {
+
+					$message = sprintf(
+					/* translators: Placeholders: %1$s - the requested capture amount, %2$s - the amount that can still be captured for this order. Definitions: Capture, as in capture funds from a credit card. */
+						__( 'Сумма списания %1$s должна быть больше нуля и не может превышать доступную к списанию сумму %2$s', 'woodev-plugin-framework' ),
+						wc_price(
+							$order->capture->amount,
+							[
+								'currency' => $order->get_currency(),
+							]
+						),
+						wc_price(
+							$capture_remaining,
+							[
+								'currency' => $order->get_currency(),
+							]
+						)
+					);
+
+					throw new Woodev_Payment_Gateway_Exception( $message, 400 );
+				}
+
 				// attempt the capture
 				$response = $this->get_gateway()->get_api()->credit_card_capture( $order );
 
