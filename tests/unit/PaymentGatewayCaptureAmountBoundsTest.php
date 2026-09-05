@@ -170,6 +170,16 @@ namespace {
 		public $api;
 
 		/**
+		 * Switchable partial-capture support; both the "does this gateway support it"
+		 * and "is it turned on" methods key off this single flag, since every test
+		 * case in this suite that needs partial capture at all needs it fully on.
+		 *
+		 * @var bool
+		 * @since 2.0.2
+		 */
+		public $partial_capture_enabled = false;
+
+		/**
 		 * Skips the real constructor (settings/hooks bootstrap); this test only needs
 		 * the capture-related collaborator methods below.
 		 *
@@ -214,7 +224,15 @@ namespace {
 		 * @since 2.0.2
 		 */
 		public function supports_credit_card_partial_capture() {
-			return false;
+			return $this->partial_capture_enabled;
+		}
+
+		/**
+		 * @return bool
+		 * @since 2.0.2
+		 */
+		public function is_partial_capture_enabled() {
+			return $this->partial_capture_enabled;
 		}
 
 		/**
@@ -424,6 +442,87 @@ namespace Woodev\Tests\Unit {
 			$this->assertFalse( $result['success'] );
 			$this->assertSame( 400, $result['code'] );
 			$this->assertSame( 0, $this->api->capture_called_count, 'an amount below the order total but above the authorization amount must still be rejected' );
+		}
+
+		/**
+		 * Regression guard for #781 round 2: `capture_total` accumulates across
+		 * requests, so a bound checked only against the full maximum lets two
+		 * sequential partial captures each pass individually while together
+		 * exceeding the authorization (measured: 60 then 50 against a 100
+		 * authorization reached the gateway both times and left capture_total at
+		 * 110). The bound must be checked against what remains of the
+		 * authorization, so the second call here must be rejected before it ever
+		 * reaches credit_card_capture(), and capture_total must stay at the first
+		 * capture's value.
+		 *
+		 * @return void
+		 */
+		public function test_second_partial_capture_exceeding_remaining_capacity_is_rejected(): void {
+
+			$this->gateway->partial_capture_enabled = true;
+
+			$order = $this->make_capturable_order( 100.0 );
+
+			$first = $this->handler->perform_capture( $order, 60.0 );
+
+			$this->assertTrue( $first['success'] );
+			$this->assertSame( 1, $this->api->capture_called_count );
+			$this->assertSame( '60.00', $this->gateway->get_order_meta( $order, 'capture_total' ) );
+
+			$second = $this->handler->perform_capture( $order, 50.0 );
+
+			$this->assertFalse( $second['success'] );
+			$this->assertSame( 400, $second['code'] );
+			$this->assertSame( 1, $this->api->capture_called_count, 'credit_card_capture() must not be reached a second time' );
+			$this->assertSame( '60.00', $this->gateway->get_order_meta( $order, 'capture_total' ), 'capture_total must stay at the first capture\'s value' );
+		}
+
+		/**
+		 * The companion boundary case: a second partial capture that fits exactly in
+		 * what remains of the authorization must still succeed — without this case,
+		 * a fix that simply refuses every second capture would also pass
+		 * test_second_partial_capture_exceeding_remaining_capacity_is_rejected().
+		 *
+		 * @return void
+		 */
+		public function test_second_partial_capture_within_remaining_capacity_succeeds(): void {
+
+			$this->gateway->partial_capture_enabled = true;
+
+			$order = $this->make_capturable_order( 100.0 );
+
+			$first = $this->handler->perform_capture( $order, 60.0 );
+
+			$this->assertTrue( $first['success'] );
+
+			$second = $this->handler->perform_capture( $order, 40.0 );
+
+			$this->assertTrue( $second['success'] );
+			$this->assertSame( 2, $this->api->capture_called_count );
+			$this->assertSame( '100.00', $this->gateway->get_order_meta( $order, 'capture_total' ) );
+		}
+
+		/**
+		 * Decision recorded for #781 round 2: with a partial `authorization_amount`
+		 * (below the order total), a bulk capture (`$amount = null`) resolves via
+		 * `get_order_for_capture()` to the remaining order balance, which is above
+		 * what remains of the authorization. Before this card that request reached
+		 * the gateway and was refused there; this guard now refuses it locally
+		 * instead, with a message naming the amount actually still capturable —
+		 * capturing more than was authorized cannot succeed anyway, and a local
+		 * refusal carries a clearer message than a round trip to the gateway.
+		 *
+		 * @return void
+		 */
+		public function test_bulk_capture_on_a_partially_authorized_order_is_rejected_locally(): void {
+
+			$order = $this->make_capturable_order( 200.0, '80.00' );
+
+			$result = $this->handler->perform_capture( $order );
+
+			$this->assertFalse( $result['success'] );
+			$this->assertSame( 400, $result['code'] );
+			$this->assertSame( 0, $this->api->capture_called_count, 'a bulk capture that would exceed the authorization must never reach the gateway' );
 		}
 	}
 }
