@@ -25,7 +25,10 @@
     "generate:phone-masks": "node bin/generate-phone-masks.mjs",
     "lint:phone-masks": "node bin/generate-phone-masks.mjs --check",
     "generate:imask": "node bin/generate-imask-vendor.mjs",
-    "lint:imask": "node bin/generate-imask-vendor.mjs --check"
+    "lint:imask": "node bin/generate-imask-vendor.mjs --check",
+    "lint:i18n": "node scripts/lint-i18n.mjs",
+    "generate:mo": "node bin/generate-mo.mjs",
+    "lint:mo": "node bin/generate-mo.mjs --check"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
