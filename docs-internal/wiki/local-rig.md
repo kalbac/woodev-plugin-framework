@@ -184,6 +184,48 @@ simply not rendered, which looks like the feature is broken.
   default user has no write permission there. And `/tmp/...` paths need `MSYS_NO_PATHCONV=1` on this
   Windows shell, or they are rewritten into Windows paths before docker sees them.
 
+## Upgrading the rig's WordPress — done once, 05.09.2026 (s117)
+
+The rig sat on **WordPress 6.9** while WooCommerce came from `latest-stable`, so the admin looked
+pre-redesign while the WC screens looked current. The operator noticed it as "the fonts and fields
+got small" and asked for 7.1. Result: **WP 7.1 + WC 11.1.0**, nothing lost.
+
+The version is pinned by `"core"` in the **gitignored** `.wp-env.override.json` — the tracked
+`.wp-env.json` has `"core": null` (= latest), so the pin is invisible in the repo and is the first
+place to look when the rig's WP version surprises you. WooCommerce is never pinned: it comes from
+`woocommerce.latest-stable.zip` and is re-fetched on `--update`.
+
+The sequence, and it is worth repeating in this order:
+
+```bash
+# 1. BACK UP FIRST — most of the rig's state is not in git
+wp db export /tmp/rig-backup.sql --add-drop-table     # then docker cp it out
+docker cp <dev-wordpress-1>:/var/www/html/wp-content/mu-plugins <somewhere>
+cp .wp-env.override.json <somewhere>
+
+# 2. snapshot what must survive, so "it still works" is a comparison and not an impression:
+#    the location options, the popular-settlement row count, zone 1's method instances,
+#    active plugins, mu-plugins
+
+# 3. edit "core" in .wp-env.override.json, then
+npx wp-env start --update
+wp core update-db          # 7.1 needs it: db 60717 -> 61833
+
+# 4. re-take the snapshot and diff it, then re-run the integration suite
+```
+
+What actually happened, so the next person knows what is normal:
+
+- the snapshot came back **byte-identical** — options, 11 popular-settlement rows, zone 1's three
+  method instances, active plugins, the `zz-rig-yandex-key.php` mu-plugin. `--update` keeps the
+  database volume; it is `destroy` that would not;
+- **integration re-ran green (143/530)** on the new stack, which is the real check — the CI matrix
+  proves the code against WP latest, but only the rig proves THIS rig;
+- ⚠ the **MySQL host ports changed** (to 52723/52724). Harmless, nothing documented depends on them;
+- ✅ the **container-name prefix `de59f74e…` did NOT change**, so the documented
+  `docker exec … -tests-cli-1` integration command still works. Check this before assuming a broken
+  command is a broken environment.
+
 ## Related
 
 - [../CURRENT-STATE.md](../CURRENT-STATE.md) — the rig's current values

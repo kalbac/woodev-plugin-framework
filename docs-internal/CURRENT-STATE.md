@@ -10,14 +10,12 @@
 EMPTY**. s117 closed **#768 #766** (PR #769) and **#767** (PR #770). **61 open cards**, every one
 carrying a «Приоритет».
 
-⛔ **THE PILOT IS STOPPED (operator, 05.09.2026) — s116 went the wrong way.** The task was to WRITE A
-NEW plugin on v2, using the old one as reference and the CDEK docs as the spec. Instead the old
-plugin was refactored with its old screens deliberately preserved, so nothing visibly moved onto the
-framework. **New course: the framework is finished ON FIXTURES**; the shipping plugin is written
-later and from scratch, in its own repo on its own branch, version **2.3.0.0**
-(⚠ `version_compare('2.3.0.0','2.3.2')` is LESS — only valid if 2.3.x never shipped). Post-mortem →
-`sessions/s116.md`. `#762` and `edostavka#3/#4/#5` are FROZEN; the three migration branches are
-parked and `origin/master` (`34d21af`) is intact.
+⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of
+WRITING A NEW one on v2, so nothing visibly moved onto the framework; post-mortem in
+`sessions/s116.md`. **New course: the framework is finished ON FIXTURES**; the shipping plugin is
+written later and from scratch, own repo, own branch, version **2.3.0.0**
+(⚠ `version_compare('2.3.0.0','2.3.2')` is LESS — valid only if 2.3.x never shipped). `#762` and
+`edostavka#3/#4/#5` are FROZEN; the migration branches are parked, `origin/master` (`34d21af`) intact.
 
 ⚠ **Repointing a plugin at a v2 base costs 11 fatals and 8 unimplemented abstracts — run
 `npm run probe:signature` (#767), never a hand count.** s116's 13/8 was corrected in s117; the
@@ -325,6 +323,7 @@ only consumer; they get rewritten once everything is ready.
 - **Fixture and option HISTORY — why the pickup method, the company field, the two providers and the live-Yandex switch are set the way they are: [wiki/local-rig.md](wiki/local-rig.md).** Only the current values live here.
 - **`/suggest` на риге отвечает 6–10 секунд** (для неизвестного НП стабильно ~10) — измерено 25.08.2026, а не 2,4–4,5 с, как считалось. Ждать результат по факту появления строки, а не по таймеру; и если начать набирать второй запрос, не дождавшись первого, первый ОТМЕНЯЕТСЯ и abandon по нему не срабатывает (это by design).
 - **Ports: dev `:8973` / tests `:8974`** (chrome-devtools MCP driver). Ports live in the gitignored `.wp-env.override.json`.
+- ✅ **Rig runs WordPress 7.1 + WooCommerce 11.1.0** since 05.09.2026 (s117, operator's request; was pinned to WP 6.9). Integration re-run green on the new stack; rig state survived byte-identical. ⚠ The MySQL host ports moved, the container prefix `de59f74e…` did NOT. How it was done and what to check if it is ever repeated: [wiki/local-rig.md](wiki/local-rig.md).
 - **tests `:8974` carries NO `WOODEV_TEST_*` constants** — deleted with `wp config delete` so the integration suite is deterministic locally. The authority is `wp config set` **inside the container**, not `.wp-env.override.json`, which is only a mirror (measured).
 - **Issuer `:8090` — KEPT, do NOT touch.** Effectively a copy of prod (woodev_theme = local woodev.ru + EDD SL + deactivator, with test data); the operator uses it independently. Container `c8ec47a5...-wordpress-1`. Authority pubkey `QSisoK0CDOmIOqGHvilMe+4mB/LMRFHf9hi6BxatfMk=`.
 - Drive via `docker exec <cli> wp eval-file ...` (cyrillic/quoting breaks inline `wp eval` — always eval-file). Do NOT run `do_action('admin_init')` in wp-cli (WC OrderAttributionController fatals). All rig traps: gotcha `wp-safe-remote-request-local-rig`.
