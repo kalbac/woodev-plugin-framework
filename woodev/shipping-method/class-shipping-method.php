@@ -157,7 +157,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				'description' => [
 					'title'       => esc_html__( 'Description', 'woodev-plugin-framework' ),
 					'type'        => 'textarea',
-					'desc_tip'    => esc_html__( 'Shipping method description. WooCommerce shows it under the method name in the block-based order form; the classic order form does not display it.', 'woodev-plugin-framework' ),
+					'desc_tip'    => esc_html__( 'This text is shown to the customer under the method name in the order form. Leave empty to hide it.', 'woodev-plugin-framework' ),
 					'default'     => $this->get_default_description(),
 					'css'         => 'max-width:400px;',
 					'placeholder' => esc_attr__( 'Enter description here', 'woodev-plugin-framework' ),
