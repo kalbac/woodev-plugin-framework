@@ -49,10 +49,33 @@ class ShippingMethodTitleAndRateAttributesTest extends TestCase {
 	private const DEFAULT_PICKUP_TITLE = 'Pickup delivery';
 
 	/**
+	 * The zone created on demand for the classic-order-form tests, or null.
+	 *
+	 * @var \WC_Shipping_Zone|null
+	 */
+	private ?\WC_Shipping_Zone $zone = null;
+
+	/**
+	 * Instance id of the test method inside {@see self::$zone}.
+	 *
+	 * @var int
+	 */
+	private int $zone_instance_id = 0;
+
+	/**
 	 * @return void
 	 */
 	protected function tearDown(): void {
+
 		delete_option( 'woocommerce_woodev_test_shipping_' . self::INSTANCE_ID . '_settings' );
+
+		if ( null !== $this->zone ) {
+			delete_option( 'woocommerce_woodev_test_shipping_' . $this->zone_instance_id . '_settings' );
+			$this->zone->delete( true );
+			$this->zone             = null;
+			$this->zone_instance_id = 0;
+		}
+
 		parent::tearDown();
 	}
 
@@ -282,6 +305,170 @@ class ShippingMethodTitleAndRateAttributesTest extends TestCase {
 		// WooCommerce drops a rate whose label is empty, so no rate is the honest
 		// outcome here. What matters is that the request survived at all.
 		$this->assertSame( [], $method->rates );
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * The Description on the CLASSIC order form
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Adds the test method to a real shipping zone and returns its instance id.
+	 *
+	 * ⚠ A REAL zone row is required, not a fabricated instance id like the one the
+	 * constructor tests use: the renderer resolves the method with
+	 * `WC_Shipping_Zones::get_shipping_method( $instance_id )`, which is a database
+	 * lookup and returns `null` for an id no zone carries. On a live store every rate
+	 * comes from a zone method, so this is the faithful setup — and the first draft of
+	 * these tests failed for exactly that reason, in the test rather than the code.
+	 *
+	 * @param array $settings instance settings to store for the method.
+	 *
+	 * @return int
+	 */
+	private function zone_method_instance_id( array $settings ): int {
+
+		if ( null === $this->zone ) {
+			$this->zone = new \WC_Shipping_Zone();
+			$this->zone->set_zone_name( 's117 test zone' );
+			$this->zone->save();
+
+			$this->zone_instance_id = $this->zone->add_shipping_method( 'woodev_test_shipping' );
+		}
+
+		update_option( 'woocommerce_woodev_test_shipping_' . $this->zone_instance_id . '_settings', $settings );
+
+		return $this->zone_instance_id;
+	}
+
+	/**
+	 * Renders `woocommerce_after_shipping_rate` for a rate of the test method and
+	 * returns whatever was echoed.
+	 *
+	 * That action is the classic order form's ONLY seam for this: WooCommerce's
+	 * `cart/cart-shipping.php` prints the rate label and then fires it. Driving the
+	 * action directly is therefore the same code path the template takes.
+	 *
+	 * @param string $description the merchant's Description setting.
+	 *
+	 * @return string
+	 */
+	private function render_after_shipping_rate( string $description ): string {
+
+		$instance_id = $this->zone_method_instance_id(
+			[
+				'title'       => 'Пункт выдачи СДЭК',
+				'description' => $description,
+			]
+		);
+
+		// Populate the plugin's method registry the way WooCommerce does; the
+		// ownership guard reads it.
+		apply_filters( 'woocommerce_shipping_methods', [] );
+
+		$rate = new \WC_Shipping_Rate(
+			'woodev_test_shipping:' . $instance_id,
+			'Пункт выдачи СДЭК',
+			'0',
+			[],
+			'woodev_test_shipping',
+			$instance_id
+		);
+
+		ob_start();
+		do_action( 'woocommerce_after_shipping_rate', $rate, 0 );
+
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * The merchant's Description appears under the rate on the classic order form.
+	 *
+	 * This is the half the block form does NOT cover. Every shipped woodev shipping
+	 * plugin — edostavka, yandex-delivery, russian-post — carries its own
+	 * near-identical `woocommerce_after_shipping_rate` handler for exactly this, which
+	 * is why the framework owns it from 2.0.2 (operator: the field is required for our
+	 * plugins, in the settings AND in the order form, classic included).
+	 *
+	 * @return void
+	 */
+	public function test_the_description_renders_under_the_rate_on_the_classic_form(): void {
+
+		$output = $this->render_after_shipping_rate( 'Отправление со склада в Москве' );
+
+		$this->assertStringContainsString( 'Отправление со склада в Москве', $output );
+		$this->assertStringContainsString( 'woodev-shipping-method-description', $output );
+	}
+
+	/**
+	 * An empty Description renders nothing at all — not an empty wrapper.
+	 *
+	 * @return void
+	 */
+	public function test_an_empty_description_renders_nothing(): void {
+
+		$this->assertSame( '', $this->render_after_shipping_rate( '' ) );
+	}
+
+	/**
+	 * A rate belonging to somebody else's method is left alone. Zone 1 on the rig also
+	 * carries `free_shipping`, and every other shipping plugin in the fleet hooks the
+	 * same action — rendering into another plugin's rate would be a visible defect on a
+	 * real store.
+	 *
+	 * @return void
+	 */
+	public function test_another_plugins_rate_is_left_alone(): void {
+
+		$this->zone_method_instance_id( [ 'description' => 'наш текст' ] );
+
+		apply_filters( 'woocommerce_shipping_methods', [] );
+
+		$foreign = new \WC_Shipping_Rate( 'free_shipping:9', 'Free shipping', '0', [], 'free_shipping', 9 );
+
+		ob_start();
+		do_action( 'woocommerce_after_shipping_rate', $foreign, 0 );
+
+		$this->assertSame( '', (string) ob_get_clean() );
+	}
+
+	/**
+	 * A plugin adds what only it knows — a delivery estimate, a commission line, a
+	 * pickup-point button — through the filter, and keys let it replace a block rather
+	 * than only append.
+	 *
+	 * @return void
+	 */
+	public function test_a_plugin_can_add_and_replace_blocks_through_the_filter(): void {
+
+		add_filter(
+			'woodev_shipping_rate_additional_info',
+			static function ( $blocks ) {
+				$blocks['delivery_time'] = '<p class="dt">2-4 дня</p>';
+				$blocks['description']   = '<p class="replaced">заменено плагином</p>';
+
+				return $blocks;
+			}
+		);
+
+		$output = $this->render_after_shipping_rate( 'исходный текст' );
+
+		$this->assertStringContainsString( '2-4 дня', $output );
+		$this->assertStringContainsString( 'заменено плагином', $output );
+		$this->assertStringNotContainsString( 'исходный текст', $output, 'A keyed block must be replaceable, not merely appendable.' );
+	}
+
+	/**
+	 * A filter that returns garbage does not fatal and does not lose the description —
+	 * the pre-filter blocks are rendered instead. Same rule as everywhere else in this
+	 * codebase: degrade to the pre-filter value, on a path a customer is waiting on.
+	 *
+	 * @return void
+	 */
+	public function test_a_non_array_filter_return_is_discarded(): void {
+
+		add_filter( 'woodev_shipping_rate_additional_info', static fn() => 'not an array' );
+
+		$this->assertStringContainsString( 'Отправление со склада', $this->render_after_shipping_rate( 'Отправление со склада' ) );
 	}
 
 	/* ------------------------------------------------------------------ *

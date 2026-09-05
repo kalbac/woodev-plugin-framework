@@ -218,6 +218,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// register shipping methods with WooCommerce
 			add_filter( 'woocommerce_shipping_methods', [ $this, 'register_shipping_methods' ] );
 
+			// render the method description (and whatever a plugin adds via the filter)
+			// under the rate on the order form. This is the CLASSIC form's only seam for
+			// it — WooCommerce's own template prints the label and nothing else. The
+			// block form reads the same text off the WC_Shipping_Rate instead, which
+			// Shipping_Method::apply_rate_attributes() fills in.
+			add_action( 'woocommerce_after_shipping_rate', [ $this, 'render_rate_additional_info' ], 10, 2 );
+
 			// register WC_Integration if configured
 			if ( $this->get_integration_handler() instanceof Settings\Shipping_Integration ) {
 				add_filter( 'woocommerce_integrations', [ $this, 'register_integration' ] );
@@ -359,6 +366,115 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$filtered_methods = apply_filters( 'woodev_shipping_plugin_registered_methods', $methods, $this );
 
 			return is_array( $filtered_methods ) ? $filtered_methods : $methods;
+		}
+
+		/**
+		 * Renders this plugin's extra information under a shipping rate on the order form.
+		 *
+		 * This is the CLASSIC order form's only seam for it. WooCommerce's own
+		 * `cart/cart-shipping.php` prints the rate label and nothing else, then fires
+		 * `woocommerce_after_shipping_rate` — so a method description, a delivery
+		 * estimate or a pickup-point button all have to be echoed from here. The block
+		 * order form takes a different route entirely: it reads `description` and
+		 * `delivery_time` off the `WC_Shipping_Rate` through the Store API, which
+		 * {@see Shipping_Method::apply_rate_attributes()} fills in.
+		 *
+		 * The base renders the merchant's Description here, because that field is a
+		 * REQUIRED part of every woodev shipping plugin — settings screen AND order
+		 * form, on both form types. Until 2.0.2 the framework only DECLARED the field
+		 * and each plugin echoed it itself: `woocommerce-edostavka`,
+		 * `woocommerce-yandex-delivery` and `woodev-russian-post` each carry a
+		 * near-identical `woocommerce_after_shipping_rate` handler for it. That
+		 * duplication is the mechanism this method absorbs.
+		 *
+		 * Anything carrier-specific stays with the plugin, through the filter below:
+		 * a delivery estimate read off the rate meta, a commission line, a
+		 * pickup-point button. The filter receives an array keyed by block name, so a
+		 * plugin can add, replace or drop a block rather than append blindly.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @internal Hooked on `woocommerce_after_shipping_rate`; not for direct calls.
+		 *
+		 * @param \WC_Shipping_Rate $rate  the rate being rendered
+		 * @param int               $index the package index
+		 */
+		public function render_rate_additional_info( $rate, $index = 0 ): void {
+
+			if ( ! $rate instanceof \WC_Shipping_Rate ) {
+				return;
+			}
+
+			// Only our own methods. Checked against the registry this plugin filled at
+			// `woocommerce_shipping_methods` time — reading `$this->methods` directly
+			// rather than through get_shipping_method_ids(), whose assert() would fire
+			// for a plugin that registered none.
+			if ( ! array_key_exists( $rate->get_method_id(), $this->methods ) ) {
+				return;
+			}
+
+			$method = \WC_Shipping_Zones::get_shipping_method( $rate->get_instance_id() );
+
+			if ( ! $method instanceof Shipping_Method ) {
+				return;
+			}
+
+			$blocks      = [];
+			$description = trim( (string) $method->get_option( 'description', '' ) );
+
+			if ( '' !== $description ) {
+				$blocks['description'] = sprintf(
+					'<p class="woodev-shipping-method-description %s-method-description">%s</p>',
+					esc_attr( $this->get_id_dasherized() ),
+					wp_kses_post( $description )
+				);
+			}
+
+			/**
+			 * Filters the blocks rendered under a shipping rate on the order form.
+			 *
+			 * This is where a plugin adds what only it knows: a delivery estimate from
+			 * the rate meta, a commission line, a pickup-point button. Keys name the
+			 * block so a plugin can replace or remove one instead of only appending.
+			 *
+			 * ⚠ Values are echoed as HTML. Escape your own block — the framework
+			 * escapes only the blocks it builds itself, because a plugin legitimately
+			 * needs markup `wp_kses_post()` would strip (a `<button>`, a hidden input).
+			 *
+			 * A return that is not an array is discarded and the pre-filter blocks are
+			 * rendered instead.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array             $blocks block name => HTML
+			 * @param \WC_Shipping_Rate $rate   the rate being rendered
+			 * @param Shipping_Method   $method the method that produced it
+			 * @param int               $index  the package index
+			 * @param Shipping_Plugin   $plugin plugin instance
+			 */
+			$filtered = apply_filters( 'woodev_shipping_rate_additional_info', $blocks, $rate, $method, $index, $this );
+
+			if ( is_array( $filtered ) ) {
+				$blocks = $filtered;
+			}
+
+			$blocks = array_filter(
+				$blocks,
+				static function ( $block ) {
+					return is_string( $block ) && '' !== trim( $block );
+				}
+			);
+
+			if ( empty( $blocks ) ) {
+				return;
+			}
+
+			printf(
+				'<div class="woodev-shipping-method-additional-info %s-method-additional-info">%s</div>',
+				esc_attr( $this->get_id_dasherized() ),
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each block is escaped by whoever built it; see the filter docblock.
+				implode( '', $blocks )
+			);
 		}
 
 		/**
