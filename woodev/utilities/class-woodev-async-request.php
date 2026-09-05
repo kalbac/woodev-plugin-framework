@@ -60,7 +60,7 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 		public function dispatch() {
 
 			$url  = add_query_arg( $this->get_query_args(), $this->get_query_url() );
-			$args = $this->get_request_args();
+			$args = $this->get_request_args( $url );
 
 			return wp_safe_remote_get( esc_url_raw( $url ), $args );
 		}
@@ -102,9 +102,14 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 		/**
 		 * Get request args
 		 *
+		 * @since 2.0.2 added the `$url` parameter, passed through to the `https_local_ssl_verify`
+		 *              filter as its second argument, matching WordPress core's own signature
+		 *              for that filter (e.g. `wp-includes/cron.php`).
+		 *
+		 * @param string $url the request URL, forwarded to the `https_local_ssl_verify` filter
 		 * @return array
 		 */
-		protected function get_request_args() {
+		protected function get_request_args( string $url ) {
 
 			if ( property_exists( $this, 'request_args' ) ) {
 				return $this->request_args;
@@ -115,7 +120,7 @@ if ( ! class_exists( 'Woodev_Async_Request' ) ) :
 				'blocking'  => false,
 				'body'      => $this->data,
 				'cookies'   => $_COOKIE,
-				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+				'sslverify' => apply_filters( 'https_local_ssl_verify', false, $url ),
 			];
 		}
 

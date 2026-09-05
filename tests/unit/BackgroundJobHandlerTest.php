@@ -171,9 +171,108 @@ class Shutdown_Wiring_Background_Job_Handler extends Testable_Background_Job_Han
 }
 
 /**
+ * Exposes `maybe_handle()`'s nonce guard without WordPress's real process-lock
+ * machinery (`get_transient()`/`wp_rand()`/`usleep()`), so tests can drive it
+ * deterministically.
+ */
+class Nonce_Guard_Testable_Background_Job_Handler extends Testable_Background_Job_Handler {
+
+	/** @return bool */
+	protected function is_process_running(): bool {
+		return false;
+	}
+}
+
+/**
  * Class BackgroundJobHandlerTest.
  */
 class BackgroundJobHandlerTest extends TestCase {
+
+	/**
+	 * Defines `WC()` for the ONE code path that calls it — `maybe_handle()`'s
+	 * `WC()->session` guard (card #782).
+	 *
+	 * Deliberately NOT in `setUp()`. Brain Monkey/Patchwork's `Functions\when( 'WC' )`
+	 * defines the function for the whole PHP process and it cannot be undone, which
+	 * would leak `function_exists( 'WC' )` === true into every other test class run
+	 * afterwards (gotcha `brain-monkey-function-pollution`). Every caller is
+	 * `@runInSeparateProcess`, so the definition lives and dies in a child process.
+	 *
+	 * @param object|null $session the value `WC()->session` resolves to.
+	 * @return void
+	 */
+	private function define_wc( ?object $session ): void {
+		$wc          = new \stdClass();
+		$wc->session = $session;
+
+		Functions\when( 'WC' )->justReturn( $wc );
+	}
+
+	/**
+	 * Card #782: `WC()->session` is only initialized by WooCommerce for frontend
+	 * requests, so in the CRON/background context `maybe_handle()` runs in it can be
+	 * `null`. When it is, the nonce-filter lift-and-restore must be skipped entirely
+	 * (a no-op `remove_filter()`/`add_filter()` pair was the silent defect) while
+	 * `check_ajax_referer()` still runs.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @return void
+	 */
+	public function test_maybe_handle_skips_the_nonce_lift_when_there_is_no_wc_session(): void {
+		$this->define_wc( null );
+
+		Functions\when( 'wp_die' )->justReturn( null );
+
+		Functions\expect( 'remove_filter' )->never();
+		Functions\expect( 'add_filter' )->never();
+		Functions\expect( 'check_ajax_referer' )
+			->once()
+			->with( 'test_job', 'nonce' )
+			->andReturn( true );
+
+		$handler = new Nonce_Guard_Testable_Background_Job_Handler();
+		$handler->set_jobs( [ (object) [ 'id' => 'job1', 'status' => 'queued' ] ] );
+
+		$handler->maybe_handle();
+	}
+
+	/**
+	 * Card #782 regression guard: when a session DOES exist, the original
+	 * lift-and-restore behaviour must be unchanged.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @return void
+	 */
+	public function test_maybe_handle_lifts_and_restores_the_nonce_filter_when_a_wc_session_exists(): void {
+		$session = new \stdClass();
+		$this->define_wc( $session );
+
+		$is_our_callback = static function ( $callback ) use ( $session ): bool {
+			return is_array( $callback )
+				&& $session === $callback[0]
+				&& 'maybe_update_nonce_user_logged_out' === $callback[1];
+		};
+
+		Functions\when( 'wp_die' )->justReturn( null );
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+
+		Functions\expect( 'remove_filter' )
+			->once()
+			->with( 'nonce_user_logged_out', Mockery::on( $is_our_callback ) );
+
+		Functions\expect( 'add_filter' )
+			->once()
+			->with( 'nonce_user_logged_out', Mockery::on( $is_our_callback ), 10, 2 );
+
+		$handler = new Nonce_Guard_Testable_Background_Job_Handler();
+		$handler->set_jobs( [ (object) [ 'id' => 'job1', 'status' => 'queued' ] ] );
+
+		$handler->maybe_handle();
+	}
 
 	/**
 	 * Multiple jobs in one request receive one shutdown callback, which follows
