@@ -112,14 +112,13 @@
 
 # Что доказано замером
 
-1. **До s117 `Shipping_Method::get_title()` возвращал `null`**, а не пустую строку: `public $title`
-   не типизировано и базой не присваивалось, метод в таблице зоны был безымянным при любом
-   заполненном поле. В v1 присваивание было.
-2. **Поле «Описание» показывается на ОБЕИХ формах заказа, и это два РАЗНЫХ механизма** (блочная —
-   Store API, классическая — эхо из `woocommerce_after_shipping_rate`). Вывод «ядро своим шаблоном
-   не рисует, значит на классической нет» НЕВЕРЕН — так делают все три референсных плагина. Детали
-   в готче `wc-add-rate-ignores-the-rate-description-and-delivery-time`; там же правило: вопрос «что
-   делает НАШ продукт» меряется по `plugins-reference/`, а не по ядру.
+1. **До s117 `Shipping_Method::get_title()` возвращал `null`** — база не присваивала `$this->title`,
+   и метод в таблице зоны был безымянным при любом заполненном поле. В v1 присваивание было.
+2. **Поле «Описание» показывается на ОБЕИХ формах заказа двумя РАЗНЫМИ механизмами** (блочная —
+   Store API, классическая — эхо из `woocommerce_after_shipping_rate`). Вывод «ядро не рисует,
+   значит на классической нет» НЕВЕРЕН. Готча
+   `wc-add-rate-ignores-the-rate-description-and-delivery-time`; там же правило: «что делает НАШ
+   продукт» меряется по `plugins-reference/`, а не по ядру.
 3. **`(string)` над числовой стоимостью ЛОМАЕТ значение** — `1.0e20` доезжает как **`1.02`**
    (готча `stringifying-a-float-cost-lets-wc-format-decimal-destroy-it`).
 4. **Пропущенный возвращаемый тип — ФАТАЛ** независимо от рантайм-значения, поэтому зонд даёт
@@ -133,14 +132,17 @@
 2. **`cd` в Bash-инструменте СОХРАНЯЕТСЯ между вызовами** (переменные — нет): позднейший
    `git checkout -b` уходит в посещённый ворктри. Только `git -C` и абсолютные пути. Готча
    `a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree`.
-3. **Инлайн в bash съедает слеши и бэктики — включая ПРОВЕРКУ, которой ты это ловишь.** В s117 так
-   сломались heredoc с PHP и node-патч, а `grep` на CR отрапортовал «чисто» на CRLF-файле. Только
-   файлом; неожиданно чистый результат по известной ловушке — подозревать проверку.
-4. **Serena `replace_symbol_body` переводит ВЕСЬ файл в CRLF** (готча `serena-replace-content-eol-flip`)
-   — после каждой правки нормализовать скриптом и мерить счётчиком байтов, не грепом.
-5. **Codex под Orca:** `worker-start --agent codex` падает с `codex-update-prompt`, лечится четырьмя
+3. **Инлайн в bash съедает слеши и бэктики — включая ПРОВЕРКУ, которой ты это ловишь**, а Serena
+   `replace_symbol_body` переводит ВЕСЬ файл в CRLF. В s117 так сломались heredoc с PHP и
+   node-патч, а `grep` на CR отрапортовал «чисто» на CRLF-файле. Только файлом; нормализовать и
+   мерить счётчиком байтов, не грепом. Готча `serena-replace-content-eol-flip`.
+4. **Codex под Orca:** `worker-start --agent codex` падает с `codex-update-prompt`, лечится четырьмя
    шагами из готчи `starting-codex-under-orca-needs-four-steps-not-one` (ESC слать файлом).
    ⚠ Id модели — **`gpt-5.6-terra`**; `gpt-5.3-codex` даёт HTTP 400.
+5. ⚠ **`worker-release` отвечает `ok: true, state: "retained"` и ОСТАВЛЯЕТ агента жить** — терминал
+   из `dispatch --inject` неподнадзорный, закрывать нечего. Читать `state`, не `ok`, и в конце
+   пройтись `orca terminal list` / `worker-list` / `task-list`. В s117 живой Codex нашёл оператор, а
+   не я. Готча `worker-release-answers-retained-and-leaves-the-terminal-running`.
 6. **`Stop-Process` над фоновой задачей даёт `completed, exit 0`** от раннера — не зелёный гейт.
 
 # Состояние на входе
@@ -159,5 +161,4 @@
 
 - [sessions/s117.md](sessions/s117.md) — детали сессии
 - [wiki/local-rig.md](wiki/local-rig.md) — как поднимали риг до 7.1 и что проверять
-- [migration/signature-probe.md](migration/signature-probe.md) — зонд и почему 11/8
 - [DOCS-SCHEMA.md](DOCS-SCHEMA.md) — формат этого файла и гейт к нему
