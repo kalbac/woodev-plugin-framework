@@ -136,6 +136,29 @@ if ( ! class_exists( 'Woodev_Payment_Gateway_Capture_Handler' ) ) :
 					throw new Woodev_Payment_Gateway_Exception( __( 'Transaction cannot be captured', 'woodev-plugin-framework' ), 400 );
 				}
 
+				// don't allow capturing a zero/negative amount, or more than the order's capturable maximum
+				if ( (float) $order->capture->amount <= 0 || (float) $order->capture->amount > $this->get_order_capture_maximum( $order ) ) {
+
+					$message = sprintf(
+					/* translators: Placeholders: %1$s - the requested capture amount, %2$s - the maximum amount that can be captured for this order. Definitions: Capture, as in capture funds from a credit card. */
+						__( 'Capture amount of %1$s must be greater than zero and cannot exceed the capturable amount of %2$s', 'woodev-plugin-framework' ),
+						wc_price(
+							$order->capture->amount,
+							[
+								'currency' => $order->get_currency(),
+							]
+						),
+						wc_price(
+							$this->get_order_capture_maximum( $order ),
+							[
+								'currency' => $order->get_currency(),
+							]
+						)
+					);
+
+					throw new Woodev_Payment_Gateway_Exception( $message, 400 );
+				}
+
 				// attempt the capture
 				$response = $this->get_gateway()->get_api()->credit_card_capture( $order );
 
