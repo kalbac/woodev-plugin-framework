@@ -74,12 +74,23 @@ not — a class-map entry with no matching `require_once`.
 ## Decision
 
 **Keep `Shipping_Plugin::includes()` authoritative.** All 31 map-only files are now required from
-it (grouped to match the file's existing per-feature comment style). A new test,
-`ClassMapCompletenessTest::test_every_shipping_classmap_entry_is_wired_into_includes()`, asserts
-the reverse direction specifically for `woodev/shipping-method/**`: every class-map entry under
-that prefix (excluding `class-shipping-plugin.php` itself) must appear as a `require_once` target
-inside `includes()`. Adding a class to the shipping tree without wiring it into `includes()` now
-fails a **unit** test immediately, rather than waiting for a real vendored boot to discover it.
+it (grouped to match the file's existing per-feature comment style). Two new tests in
+`ClassMapCompletenessTest` guard both directions, because they catch two *different* incidents and
+neither substitutes for the other:
+
+- `test_every_shipping_classmap_entry_is_wired_into_includes()` — a class-map entry under
+  `woodev/shipping-method/**` (excluding `class-shipping-plugin.php` itself) with no matching
+  `require_once`. This is a class ADDED to the tree and forgotten in `includes()`.
+- `test_every_required_shipping_file_exists()` — a `require_once` in `includes()` whose target no
+  longer exists on disk. This is a file DELETED from the tree with a stale `require_once` left
+  behind — **the actual failure the card was filed for**: `bin/generate-class-map.php` drops a
+  deleted file from the map on its next run, same as the first test expects, so a class-map-only
+  guard reports zero missing entries and stays green while the dangling `require_once` still
+  fatals a real vendored boot. Round 2 of this card's review caught that the first commit shipped
+  only the first test; both are required to close the loop the card actually asked for.
+
+Either gap now fails a **unit** test immediately, rather than waiting for a real vendored boot to
+discover it.
 
 This decision is scoped to the shipping module. It does not reopen s27's choice to leave the rest
 of the framework autoload-only — that code has no file-scope side effects tying it to eager
@@ -114,11 +125,11 @@ this one is not a permanent bar to reopening the question, it is what the eviden
 
 ## Consequences
 
-- Adding a new class under `woodev/shipping-method/**` now requires a matching `require_once` in
-  `includes()` or the new unit test fails immediately — this is the intended friction; it replaces
-  a silent runtime fatal with a fast, local, always-run signal.
+- Adding a new class under `woodev/shipping-method/**`, or deleting a required one, now fails one
+  of the two new unit tests immediately — this is the intended friction; it replaces a silent
+  runtime fatal with a fast, local, always-run signal, in both directions.
 - `includes()` is longer (71 requires, up from 39) and will keep growing with the module. That cost
-  was accepted explicitly in exchange for the reverse guard.
+  was accepted explicitly in exchange for the two guards.
 - Integration verification of this change is still owed: the coordinator must run the integration
   suite (`TEST_SUITE=integration`, real `wp-env`) and load the shipping fixtures
   (`tests/_fixtures/woodev-realistic-shipping-plugin/`, `tests/_fixtures/woodev-test-shipping-method/`,
