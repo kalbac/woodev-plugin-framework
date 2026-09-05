@@ -102,11 +102,11 @@ msgstr ""
 #: admin/class-ui-kit-gallery-page.php:82
 #: admin/class-ui-kit-gallery-page.php:83
 msgid "UI Kit"
-msgstr ""
+msgstr "Компоненты интерфейса"
 
 #: admin/class-ui-kit-gallery-page.php:105
 msgid "Woodev UI Kit"
-msgstr ""
+msgstr "Компоненты интерфейса Woodev"
 
 #: admin/class-ui-kit-gallery-page.php:108
 msgid "Для этой страницы нужен JavaScript."
@@ -154,15 +154,15 @@ msgstr ""
 
 #: box-packer/class-packer-dispatcher.php:95
 msgid "Virtual box (minimal size)"
-msgstr ""
+msgstr "Виртуальная коробка (минимальный размер)"
 
 #: box-packer/class-packer-dispatcher.php:96
 msgid "Each item in a separate box"
-msgstr ""
+msgstr "Каждый товар в отдельной коробке"
 
 #: box-packer/class-packer-dispatcher.php:97
 msgid "Single box (items stacked along one axis)"
-msgstr ""
+msgstr "Одна коробка (товары укладываются в один ряд)"
 
 #: box-packer/class-packer-virtual-box.php:22
 msgid "Нет товаров для упаковки!"
@@ -207,16 +207,16 @@ msgstr[2] " плагины %s."
 
 #: class-framework-resolver.php:307
 msgid "The following plugins are inactive because they require a newer version of PHP:"
-msgstr ""
+msgstr "Следующие плагины отключены, так как требуют более новую версию PHP:"
 
 #: class-framework-resolver.php:307
 msgid "The following plugin is inactive because it requires a newer version of PHP:"
-msgstr ""
+msgstr "Следующий плагин отключён, так как требует более новую версию PHP:"
 
 #: class-framework-resolver.php:310
 #, php-format
 msgid "%1$s requires PHP %2$s or newer"
-msgstr ""
+msgstr "%1$s требует PHP версии %2$s или новее"
 
 #: class-framework-resolver.php:317
 msgid "The following plugins are inactive because they require a newer version of WooCommerce:"
@@ -893,7 +893,7 @@ msgstr "Неизвестная ошибка"
 #: payment-gateway/class-payment-gateway-direct.php:393
 #, php-format
 msgid "Payment method address could not be updated. %s"
-msgstr ""
+msgstr "Не удалось обновить адрес способа оплаты. %s"
 
 #. translators: Placeholders: %1$s - payment method title, %2$s - environment ("Test"), %3$s - transaction type (authorization/charge), %4$s - card type (mastercard, visa, ...), %5$s - last four digits of the card
 #: payment-gateway/class-payment-gateway-direct.php:568
@@ -905,21 +905,21 @@ msgstr "%1$s %2$s %3$s подтверждён: %4$s заканчивается �
 #: payment-gateway/class-payment-gateway.php:2214
 msgctxt "noun, software environment"
 msgid "Test"
-msgstr ""
+msgstr "Тестовый"
 
 #: payment-gateway/class-payment-gateway-direct.php:571
 #: payment-gateway/class-payment-gateway.php:2215
 #: payment-gateway/class-payment-gateway.php:2709
 msgctxt "credit card transaction type"
 msgid "Authorization"
-msgstr ""
+msgstr "Авторизация"
 
 #: payment-gateway/class-payment-gateway-direct.php:571
 #: payment-gateway/class-payment-gateway.php:2215
 #: payment-gateway/class-payment-gateway.php:2708
 msgctxt "noun, credit card transaction type"
 msgid "Charge"
-msgstr ""
+msgstr "Списание"
 
 #. translators: Placeholders: %s - expiry date
 #: payment-gateway/class-payment-gateway-direct.php:581
@@ -944,36 +944,36 @@ msgstr "(ID транзакции %s)"
 #: payment-gateway/class-payment-gateway-direct.php:647
 #, php-format
 msgid "Tokenization Request Failed: %s"
-msgstr ""
+msgstr "Ошибка запроса токенизации: %s"
 
 #. translators: Placeholders: %1$s - payment method title, %2$s - failure message
 #: payment-gateway/class-payment-gateway-direct.php:658
 #, php-format
 msgid "%1$s Tokenization Request Failed: %2$s"
-msgstr ""
+msgstr "%1$s: ошибка запроса токенизации: %2$s"
 
 #. translators: This is a message describing that the transaction in question only performed a credit card authorization and did not capture any funds.
 #: payment-gateway/class-payment-gateway-direct.php:679
 #: payment-gateway/class-payment-gateway.php:1453
 #: payment-gateway/handlers/abstract-payment-handler.php:249
 msgid "Authorization only transaction"
-msgstr ""
+msgstr "Только авторизация транзакции"
 
 #. translators: Placeholders: %s - failure message. Payment method as in a specific credit card, e-check or bank account
 #: payment-gateway/class-payment-gateway-direct.php:709
 #, php-format
 msgid "Oops, adding your new payment method failed: %s"
-msgstr ""
+msgstr "Не удалось добавить новый способ оплаты: %s"
 
 #: payment-gateway/class-payment-gateway-direct.php:752
 #, php-format
 msgid "Nice! New payment method added: %1$s ending in %2$s (expires %3$s)"
-msgstr ""
+msgstr "Готово! Добавлен новый способ оплаты: %1$s, оканчивающийся на %2$s (действует до %3$s)"
 
 #. translators: Payment method as in a specific credit card, e-check or bank account
 #: payment-gateway/class-payment-gateway-direct.php:760
 msgid "Nice! New payment method added."
-msgstr ""
+msgstr "Готово! Новый способ оплаты добавлен."
 
 #. translators: Placeholders: %1$s - site title, %2$s - customer email. Payment method as in a specific credit card, e-check or bank account
 #: payment-gateway/class-payment-gateway-direct.php:891
@@ -1005,63 +1005,63 @@ msgstr "Банковский счёт"
 #: payment-gateway/class-payment-gateway-helper.php:185
 msgctxt "payment method type"
 msgid "Account"
-msgstr ""
+msgstr "Счёт"
 
 #: payment-gateway/class-payment-gateway-helper.php:218
 #: payment-gateway/class-payment-gateway.php:2929
 msgctxt "credit card type"
 msgid "Visa"
-msgstr ""
+msgstr "Visa"
 
 #: payment-gateway/class-payment-gateway-helper.php:222
 #: payment-gateway/class-payment-gateway.php:2930
 msgctxt "credit card type"
 msgid "MasterCard"
-msgstr ""
+msgstr "MasterCard"
 
 #: payment-gateway/class-payment-gateway-helper.php:226
 #: payment-gateway/class-payment-gateway.php:2931
 msgctxt "credit card type"
 msgid "American Express"
-msgstr ""
+msgstr "American Express"
 
 #: payment-gateway/class-payment-gateway-helper.php:230
 msgctxt "credit card type"
 msgid "Diners Club"
-msgstr ""
+msgstr "Diners Club"
 
 #: payment-gateway/class-payment-gateway-helper.php:234
 #: payment-gateway/class-payment-gateway.php:2932
 msgctxt "credit card type"
 msgid "Discover"
-msgstr ""
+msgstr "Discover"
 
 #: payment-gateway/class-payment-gateway-helper.php:238
 #: payment-gateway/class-payment-gateway.php:2934
 msgctxt "credit card type"
 msgid "JCB"
-msgstr ""
+msgstr "JCB"
 
 #: payment-gateway/class-payment-gateway-helper.php:242
 msgctxt "credit card type"
 msgid "CarteBleue"
-msgstr ""
+msgstr "CarteBleue"
 
 #: payment-gateway/class-payment-gateway-helper.php:246
 msgctxt "credit card type"
 msgid "Maestro"
-msgstr ""
+msgstr "Maestro"
 
 #: payment-gateway/class-payment-gateway-helper.php:250
 msgctxt "credit card type"
 msgid "Laser"
-msgstr ""
+msgstr "Laser"
 
 #: payment-gateway/class-payment-gateway-helper.php:254
 #: payment-gateway/class-payment-gateway.php:2935
 msgctxt "credit card type"
 msgid "MIR"
-msgstr ""
+msgstr "МИР"
 
 #: payment-gateway/class-payment-gateway-hosted.php:283
 msgid "Thank you for your order, please click the button below to pay."
@@ -1103,18 +1103,18 @@ msgstr "Заказ %s уже оплачен."
 #: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:809
 #, php-format
 msgid "%1$s Payment Method Saved: %2$s ending in %3$s (expires %4$s)"
-msgstr ""
+msgstr "%1$s: сохранён способ оплаты %2$s, оканчивающийся на %3$s (действует до %4$s)"
 
 #: payment-gateway/class-payment-gateway-hosted.php:598
 #, php-format
 msgid "%s Payment Method Saved"
-msgstr ""
+msgstr "%s: способ оплаты сохранён"
 
 #. translators: Placeholders: %s - a failed tokenization API error
 #: payment-gateway/class-payment-gateway-hosted.php:607
 #, php-format
 msgid "Tokenization failed. %s"
-msgstr ""
+msgstr "Ошибка токенизации. %s"
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:282
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:552
@@ -1142,16 +1142,16 @@ msgstr "К сожалению, при обновлении способа опл
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:555
 msgid "Are you sure you want to delete this payment method?"
-msgstr ""
+msgstr "Удалить этот способ оплаты?"
 
 #. translators: Payment method as in a specific credit card or stored bank transfer account
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:614
 msgid "You do not have any saved payment methods."
-msgstr ""
+msgstr "У вас нет сохранённых способов оплаты."
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:652
 msgid "Nickname"
-msgstr ""
+msgstr "Название"
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:836
 msgid "Oops, you took too long, please try again."
@@ -1163,23 +1163,23 @@ msgstr "В вашем запросе произошла ошибка, попро
 
 #: payment-gateway/class-payment-gateway-payment-form.php:288
 msgid "Card Number"
-msgstr ""
+msgstr "Номер карты"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:309
 msgid "MM / YY"
-msgstr ""
+msgstr "ММ / ГГ"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:328
 msgid "Card Security Code"
-msgstr ""
+msgstr "Код безопасности карты"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:331
 msgid "CSC"
-msgstr ""
+msgstr "CVC"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:380
 msgid "TEST MODE ENABLED"
-msgstr ""
+msgstr "ВКЛЮЧЁН ТЕСТОВЫЙ РЕЖИМ"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:451
 msgid "Manage Payment Methods"
@@ -1187,12 +1187,12 @@ msgstr "Управление методами оплаты"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:585
 msgid "Use a new card"
-msgstr ""
+msgstr "Использовать новую карту"
 
 #. translators: account as in customer's account on the eCommerce site
 #: payment-gateway/class-payment-gateway-payment-form.php:642
 msgid "Securely Save to Account"
-msgstr ""
+msgstr "Сохранить в аккаунте"
 
 #: payment-gateway/class-payment-gateway-payment-form.php:737
 msgid "Payment Info"
@@ -1214,9 +1214,9 @@ msgstr "%s скоро потребуется поддержка TLS 1.2 для �
 #, php-format
 msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this gateway for checkout."
 msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this gateway for checkout."
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1$s принимает оплату только в %2$s. %3$sНастройте%4$s WooCommerce для приёма %2$s, чтобы включить этот способ оплаты при оформлении заказа."
+msgstr[1] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ оплаты при оформлении заказа."
+msgstr[2] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ оплаты при оформлении заказа."
 
 #. translators: Placeholders: %1$s - payment gateway name, %2$s - opening <a> tag, %3$s - closing </a> tag
 #: payment-gateway/class-payment-gateway-plugin.php:527
@@ -1260,11 +1260,11 @@ msgstr "Спасибо за ваш заказ."
 
 #: payment-gateway/class-payment-gateway.php:837
 msgid "Credit Card"
-msgstr ""
+msgstr "Банковская карта"
 
 #: payment-gateway/class-payment-gateway.php:852
 msgid "Pay securely using your credit card."
-msgstr ""
+msgstr "Безопасная оплата банковской картой."
 
 #: payment-gateway/class-payment-gateway.php:870
 msgid "Enable / Disable"
@@ -1320,11 +1320,11 @@ msgstr "Настройки соединения"
 
 #: payment-gateway/class-payment-gateway.php:1049
 msgid "Share connection settings"
-msgstr ""
+msgstr "Общие настройки подключения"
 
 #: payment-gateway/class-payment-gateway.php:1051
 msgid "Use connection/authentication settings from other gateway"
-msgstr ""
+msgstr "Использовать настройки подключения другого способа оплаты"
 
 #: payment-gateway/class-payment-gateway.php:1054
 msgid "Disabled because the other gateway is using these settings"
@@ -1332,19 +1332,19 @@ msgstr "Отключено потому что другой платёжный �
 
 #: payment-gateway/class-payment-gateway.php:1071
 msgid "Card Verification (CSC)"
-msgstr ""
+msgstr "Проверка карты (CVC)"
 
 #: payment-gateway/class-payment-gateway.php:1072
 msgid "Display the Card Security Code (CV2) field on checkout"
-msgstr ""
+msgstr "Показывать поле кода безопасности карты (CVC) при оформлении заказа"
 
 #: payment-gateway/class-payment-gateway.php:1080
 msgid "Saved Card Verification"
-msgstr ""
+msgstr "Проверка сохранённой карты"
 
 #: payment-gateway/class-payment-gateway.php:1081
 msgid "Display the Card Security Code field when paying with a saved card"
-msgstr ""
+msgstr "Показывать поле кода безопасности при оплате сохранённой картой"
 
 #. translators: Placeholders: %1$s - site title, %2$s - order number
 #: payment-gateway/class-payment-gateway.php:1403
@@ -1396,19 +1396,19 @@ msgstr "К сожалению, вы не можете частично анну�
 #: payment-gateway/class-payment-gateway.php:1884
 #, php-format
 msgid "%1$s Void Failed: %2$s - %3$s"
-msgstr ""
+msgstr "%1$s: отмена транзакции не выполнена: %2$s — %3$s"
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - error message. Void as in to void an order.
 #: payment-gateway/class-payment-gateway.php:1892
 #, php-format
 msgid "%1$s Void Failed: %2$s"
-msgstr ""
+msgstr "%1$s: отмена транзакции не выполнена: %2$s"
 
 #. translators: Placeholders: %1$s - payment gateway title, %2$s - a monetary amount. Void as in to void an order.
 #: payment-gateway/class-payment-gateway.php:1913
 #, php-format
 msgid "%1$s Void in the amount of %2$s approved."
-msgstr ""
+msgstr "%1$s: отмена транзакции на сумму %2$s подтверждена."
 
 #: payment-gateway/class-payment-gateway.php:2017
 msgctxt "hash before order number"
@@ -1519,15 +1519,15 @@ msgstr "Выберите способ обработки транзакций. C
 
 #: payment-gateway/class-payment-gateway.php:2716
 msgid "Charge Virtual-Only Orders"
-msgstr ""
+msgstr "Списывать сразу для виртуальных заказов"
 
 #: payment-gateway/class-payment-gateway.php:2718
 msgid "If the order contains exclusively virtual items, enable this to immediately charge, rather than authorize, the transaction."
-msgstr ""
+msgstr "Если заказ содержит только виртуальные товары, включите эту опцию, чтобы сразу списывать средства вместо авторизации."
 
 #: payment-gateway/class-payment-gateway.php:2726
 msgid "Enable Partial Capture"
-msgstr ""
+msgstr "Частичное списание"
 
 #: payment-gateway/class-payment-gateway.php:2728
 msgid "Allow orders to be partially captured multiple times."
@@ -1540,12 +1540,12 @@ msgstr "или"
 
 #: payment-gateway/class-payment-gateway.php:2740
 msgid "Capture Paid Orders"
-msgstr ""
+msgstr "Списывать средства при оплате заказа"
 
 #: payment-gateway/class-payment-gateway.php:2743
 #, php-format
 msgid "Automatically capture orders when they are changed to %s."
-msgstr ""
+msgstr "Автоматически списывать средства, когда заказ переходит в статус %s."
 
 #: payment-gateway/class-payment-gateway.php:2744
 msgid "a paid status"
@@ -1553,7 +1553,7 @@ msgstr "статус оплаты"
 
 #: payment-gateway/class-payment-gateway.php:2897
 msgid "Accepted Card Logos"
-msgstr ""
+msgstr "Логотипы принимаемых карт"
 
 #: payment-gateway/class-payment-gateway.php:2899
 msgid "These are the card logos that are displayed to customers as accepted during checkout."
@@ -1568,12 +1568,12 @@ msgstr "Этот параметр %1$sне%2$s меняет типы карт, �
 #: payment-gateway/class-payment-gateway.php:2933
 msgctxt "credit card type"
 msgid "Diners"
-msgstr ""
+msgstr "Diners"
 
 #. translators: http://www.cybersource.com/products/payment_security/payment_tokenization/ and https://en.wikipedia.org/wiki/Tokenization_(data_security)
 #: payment-gateway/class-payment-gateway.php:2989
 msgid "Tokenization"
-msgstr ""
+msgstr "Токенизация"
 
 #: payment-gateway/class-payment-gateway.php:2990
 msgid "Allow customers to securely save their payment details for future checkout."
@@ -1583,7 +1583,7 @@ msgstr "Позволять клиентам безопасно сохранят�
 #: shipping-method/settings/class-shipping-integration.php:366
 msgctxt "software environment"
 msgid "Production"
-msgstr ""
+msgstr "Боевой"
 
 #. translators: %1$s - gateway name, %2$s - <a> tag, %3$s - </a> tag, %4$s - <a> tag, %5$s - </a> tag
 #: payment-gateway/class-payment-gateway.php:3582
@@ -1598,7 +1598,7 @@ msgstr "При обработке вашего заказа возникла п�
 #: payment-gateway/handlers/abstract-payment-handler.php:218
 #, php-format
 msgid "Payment processing error: %s"
-msgstr ""
+msgstr "Ошибка обработки платежа: %s"
 
 #. translators: Placeholders: %s - payment gateway title
 #: payment-gateway/handlers/abstract-payment-handler.php:325
@@ -1620,31 +1620,31 @@ msgstr "%s платёж отменён"
 
 #: payment-gateway/handlers/capture.php:121
 msgid "Order cannot be captured"
-msgstr ""
+msgstr "Списание средств для заказа невозможно"
 
 #: payment-gateway/handlers/capture.php:126
 msgid "Transaction authorization has expired"
-msgstr ""
+msgstr "Срок действия авторизации транзакции истёк"
 
 #: payment-gateway/handlers/capture.php:131
 msgid "Transaction has already been fully captured"
-msgstr ""
+msgstr "Средства по транзакции уже списаны полностью"
 
 #: payment-gateway/handlers/capture.php:136
 msgid "Transaction cannot be captured"
-msgstr ""
+msgstr "Списание средств по транзакции невозможно"
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Tinkoff, Yandex PAY etc), %2$s - transaction amount. Definitions: Capture, as in capture funds from a credit card.
 #: payment-gateway/handlers/capture.php:152
 #, php-format
 msgid "%1$s Capture of %2$s Approved"
-msgstr ""
+msgstr "%1$s: списание на сумму %2$s подтверждено"
 
 #. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - failure message. Definitions: "capture" as in capturing funds from a credit card.
 #: payment-gateway/handlers/capture.php:203
 #, php-format
 msgid "%1$s Capture Failed: %2$s"
-msgstr ""
+msgstr "%1$s: списание не выполнено: %2$s"
 
 #: payment-gateway/payment-tokens/class-payment-gateway-payment-tokens-handler.php:147
 msgid "Unknown Error"
@@ -1896,32 +1896,32 @@ msgstr ""
 
 #: shipping-method/admin/class-shipping-admin-order.php:149
 msgid "Carrier order ID"
-msgstr ""
+msgstr "Номер заказа у перевозчика"
 
 #: shipping-method/admin/class-shipping-admin-order.php:150
 msgid "Tracking number"
-msgstr ""
+msgstr "Номер отслеживания"
 
 #: shipping-method/admin/class-shipping-admin-order.php:151
 msgid "Chosen pickup point"
-msgstr ""
+msgstr "Выбранный пункт выдачи"
 
 #: shipping-method/admin/class-shipping-admin-order.php:163
 #: shipping-method/admin/class-shipping-admin-order.php:168
 msgid "Shipment"
-msgstr ""
+msgstr "Отправление"
 
 #: shipping-method/admin/class-shipping-admin-order.php:321
 msgid "Export"
-msgstr ""
+msgstr "Экспорт"
 
 #: shipping-method/admin/class-shipping-admin-order.php:326
 msgid "Track"
-msgstr ""
+msgstr "Отследить"
 
 #: shipping-method/admin/class-shipping-admin-order.php:389
 msgid "You do not have permission to manage this shipment."
-msgstr ""
+msgstr "У вас нет прав для управления этим отправлением."
 
 #: shipping-method/admin/class-warehouse-admin.php:104
 msgid "Carrier ID"
@@ -2016,7 +2016,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:44
 msgid "This section contains configuration settings for this shipping method."
-msgstr ""
+msgstr "В этом разделе собраны настройки данного способа доставки."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:65
 msgid "Идентификатор метода"
@@ -2024,7 +2024,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:66
 msgid "The WooCommerce shipping method identifier used in shipping zones."
-msgstr ""
+msgstr "Идентификатор способа доставки WooCommerce, используемый в зонах доставки."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:71
 msgid "Тип доставки"
@@ -2032,7 +2032,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:72
 msgid "How this method delivers orders (courier, pickup or postal)."
-msgstr ""
+msgstr "Как этот способ доставляет заказы (курьером, в пункт выдачи или почтой)."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:77
 msgid "Окружение"
@@ -2040,7 +2040,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:78
 msgid "The WordPress environment type of this site."
-msgstr ""
+msgstr "Тип окружения WordPress этого сайта."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:83
 msgid "Режим отладки"
@@ -2048,13 +2048,13 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:84
 msgid "Whether debug logging is enabled for this shipping method."
-msgstr ""
+msgstr "Включено ли журналирование отладки для этого способа доставки."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:86
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:104
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:114
 msgid "N/A"
-msgstr ""
+msgstr "Н/Д"
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:91
 msgid "Настроен"
@@ -2062,7 +2062,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:92
 msgid "Whether the method has the credentials/settings it needs to operate."
-msgstr ""
+msgstr "Указаны ли учётные данные и настройки, необходимые методу для работы."
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:111
 msgid "API доступен"
@@ -2070,7 +2070,7 @@ msgstr ""
 
 #: shipping-method/admin/views/html-admin-shipping-method-status.php:112
 msgid "Whether the carrier API integration is wired up for this plugin."
-msgstr ""
+msgstr "Подключена ли интеграция с API перевозчика для этого плагина."
 
 #: shipping-method/checkout/class-checkout-config.php:502
 msgid "No results found. Try changing your search."
@@ -2229,95 +2229,95 @@ msgstr "Пункт выдачи"
 #, php-format
 msgid "%d day"
 msgid_plural "%d days"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%d день"
+msgstr[1] "%d дня"
+msgstr[2] "%d дней"
 
 #. translators: %1$d - minimum days, %2$d - maximum days
 #: shipping-method/class-shipping-helper.php:231
 #, php-format
 msgid "%1$d-%2$d days"
-msgstr ""
+msgstr "%1$d–%2$d дн."
 
 #: shipping-method/class-shipping-method-postal.php:43
 msgid "Postal delivery settings"
-msgstr ""
+msgstr "Настройки почтовой доставки"
 
 #: shipping-method/class-shipping-method-postal.php:47
 msgid "Require postal code"
-msgstr ""
+msgstr "Обязательный почтовый индекс"
 
 #: shipping-method/class-shipping-method-postal.php:49
 msgid "Require postal code for rate calculation"
-msgstr ""
+msgstr "Требовать почтовый индекс для расчёта стоимости"
 
 #: shipping-method/class-shipping-method.php:106
 msgid "Shipping method title that the customer will see during checkout."
-msgstr ""
+msgstr "Название способа доставки, которое увидит покупатель при оформлении заказа."
 
 #: shipping-method/class-shipping-method.php:116
 msgid "Shipping method description that the customer will see during checkout."
-msgstr ""
+msgstr "Описание способа доставки, которое увидит покупатель при оформлении заказа."
 
 #: shipping-method/class-shipping-method.php:119
 msgid "Enter description here"
-msgstr ""
+msgstr "Введите описание"
 
 #: shipping-method/class-shipping-method.php:128
 msgid "Shipping class"
-msgstr ""
+msgstr "Класс доставки"
 
 #: shipping-method/class-shipping-method.php:133
 msgid "Select the shipping class that this method applies to."
-msgstr ""
+msgstr "Выберите класс доставки, к которому применяется этот способ."
 
 #: shipping-method/class-shipping-method.php:140
 msgid "Packing algorithm"
-msgstr ""
+msgstr "Алгоритм упаковки"
 
 #: shipping-method/class-shipping-method.php:145
 msgid "How cart items are combined into parcels before rate calculation."
-msgstr ""
+msgstr "Как товары корзины объединяются в посылки перед расчётом стоимости."
 
 #: shipping-method/class-shipping-method.php:192
 msgid "Courier delivery"
-msgstr ""
+msgstr "Курьерская доставка"
 
 #: shipping-method/class-shipping-method.php:194
 msgid "Pickup delivery"
-msgstr ""
+msgstr "Доставка в пункт выдачи"
 
 #: shipping-method/class-shipping-method.php:196
 msgid "Postal delivery"
-msgstr ""
+msgstr "Почтовая доставка"
 
 #: shipping-method/class-shipping-method.php:213
 msgid "Delivery by courier to customer address."
-msgstr ""
+msgstr "Доставка курьером по адресу покупателя."
 
 #: shipping-method/class-shipping-method.php:215
 msgid "Delivery to pickup point."
-msgstr ""
+msgstr "Доставка в пункт выдачи."
 
 #: shipping-method/class-shipping-method.php:217
 msgid "Delivery to postal office."
-msgstr ""
+msgstr "Доставка в почтовое отделение."
 
 #: shipping-method/class-shipping-method.php:621
 msgid "Any shipping class"
-msgstr ""
+msgstr "Любой класс доставки"
 
 #: shipping-method/class-shipping-method.php:622
 msgid "No shipping class"
-msgstr ""
+msgstr "Без класса доставки"
 
 #: shipping-method/class-shipping-plugin.php:535
 #, php-format
 msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout."
 msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout."
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%1$s принимает оплату только в %2$s. %3$sНастройте%4$s WooCommerce для приёма %2$s, чтобы включить этот способ доставки при оформлении заказа."
+msgstr[1] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ доставки при оформлении заказа."
+msgstr[2] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ доставки при оформлении заказа."
 
 #. translators: %1$s - plugin name, %2$s - list of accepted countries, %3$s - opening <a> tag, %4$s - closing </a> tag
 #: shipping-method/class-shipping-plugin.php:567
@@ -2507,7 +2507,7 @@ msgstr ""
 
 #: shipping-method/location/providers/class-dadata-provider.php:215
 msgid "DaData"
-msgstr ""
+msgstr "DaData"
 
 #: shipping-method/location/providers/class-dadata-provider.php:318
 msgid "Токен API DaData"
@@ -2862,7 +2862,7 @@ msgstr ""
 
 #: shipping-method/rest-api/class-field-source-controller.php:181
 msgid "Too many requests. Please slow down."
-msgstr ""
+msgstr "Слишком много запросов. Пожалуйста, не так быстро."
 
 #: shipping-method/rest-api/class-location-controller.php:590
 #: shipping-method/rest-api/class-pickup-controller.php:493
@@ -2940,27 +2940,27 @@ msgstr ""
 
 #: shipping-method/settings/class-shipping-integration.php:98
 msgid "Enable debug mode/logging"
-msgstr ""
+msgstr "Отладка и журналирование"
 
 #: shipping-method/settings/class-shipping-integration.php:100
 #, php-format
 msgid "All requests and responses will be record to %s."
-msgstr ""
+msgstr "Все запросы и ответы будут записаны в %s."
 
 #: shipping-method/settings/class-shipping-integration.php:168
 msgctxt "Shipping plugin production or test environment modes"
 msgid "Environment"
-msgstr ""
+msgstr "Режим работы"
 
 #: shipping-method/settings/class-shipping-integration.php:171
 msgctxt "Shipping plugin production or test environment modes"
 msgid "Select the plugin environment to use."
-msgstr ""
+msgstr "Выберите режим работы плагина."
 
 #: shipping-method/settings/class-shipping-integration.php:459
 #, php-format
 msgid "Heads up! Plugin %1$s is not fully configured and cannot calculate delivery. Please %2$sreview the documentation%3$s and configure the %4$sgeneral plugin settings%5$s."
-msgstr ""
+msgstr "Внимание! Плагин %1$s настроен не полностью и не может рассчитать доставку. %2$sОзнакомьтесь с документацией%3$s и настройте %4$sосновные параметры плагина%5$s."
 
 #: shipping-method/settings/class-shipping-settings-tab.php:267
 msgid "Локация"
@@ -3167,7 +3167,7 @@ msgstr ""
 
 #: assets/build/license-page/index.js:1
 msgid "."
-msgstr ""
+msgstr "."
 
 #: assets/build/plugins-page/index.js:1
 msgid "Установлено"

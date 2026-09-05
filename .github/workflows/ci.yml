@@ -238,6 +238,15 @@ jobs:
       - name: Vendored IMask matches package.json and the enqueue version (#704)
         run: npm run lint:imask
 
+      # Английский msgid без перевода в русском каталоге не должен накапливаться молча —
+      # именно так набралось 147 штук к card #771. Проверка тоже про СГЕНЕРИРОВАННЫЙ
+      # артефакт: .mo — то, что реально грузит WordPress, — должен быть свежим относительно .po.
+      - name: No untranslated English msgid in the Russian catalogue (#771)
+        run: npm run lint:i18n
+
+      - name: Compiled .mo is current relative to the .po (#771)
+        run: npm run lint:mo
+
       - name: Run JS tests
         run: npm run test:js
 

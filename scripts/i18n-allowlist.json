@@ -1,0 +1,185 @@
+{
+	"//": "Untranslated English msgids that lint:i18n is allowed to skip, each with the reason it was classified as never reaching a screen. See docs-internal/gotchas/classify-an-i18n-string-by-its-render-path-not-its-file-path.md for the classification method. Card #771.",
+	"entries": [
+		{
+			"msgid": "Unknown packing algorithm: %s",
+			"msgctxt": null,
+			"reason": "Thrown as an uncaught Woodev_Packer_Exception from Woodev_Packer_Dispatcher::pack() (box-packer/class-packer-dispatcher.php); nothing in the codebase catches it, so it propagates to the PHP/WooCommerce error log, never to a rendered screen."
+		},
+		{
+			"msgid": "#",
+			"msgctxt": "hash before order number",
+			"reason": "Used only as the character-set argument to ltrim() when building an internal transaction reference (payment-gateway/class-payment-gateway.php); never echoed, logged, or returned to any renderer."
+		},
+		{
+			"msgid": "Setup wizard step \"%s\" declares setting ids but none resolved — ensure the plugin returns a settings handler from get_settings_handler().",
+			"msgctxt": null,
+			"reason": "Passed to _doing_it_wrong() (setup/class-setup-wizard.php); a WP_DEBUG-gated developer notice aimed at the plugin author wiring the setup wizard, never shown to a merchant."
+		},
+		{
+			"msgid": "Carrier ID",
+			"msgctxt": null,
+			"reason": "References shipping-method/admin/class-warehouse-admin.php, which does not exist in this tree — stale .po/.pot content from removed warehouse-admin functionality. Unreachable from any current code path."
+		},
+		{
+			"msgid": "Name",
+			"msgctxt": null,
+			"reason": "Same stale reference as \"Carrier ID\" above — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Latitude",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Longitude",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Contact name",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Contact phone",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Contact email",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "You do not have permission to manage warehouses.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Warehouses",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Stored warehouses",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Actions",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "No warehouses stored yet.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Delete",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Edit warehouse",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Add warehouse",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Save warehouse",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Warehouse saved.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Warehouse deleted.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/admin/class-warehouse-admin.php does not exist."
+		},
+		{
+			"msgid": "Storage row id of the warehouse.",
+			"msgctxt": null,
+			"reason": "References shipping-method/rest-api/abstract-warehouses-controller.php, which does not exist in this tree — stale .po/.pot content from a removed REST controller. Unreachable from any current code path."
+		},
+		{
+			"msgid": "Sorry, you are not allowed to do that.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "The warehouse could not be created.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "The warehouse could not be deleted.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Invalid warehouse id.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Carrier-unique warehouse id.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Human-readable name.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Full one-line postal address.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Latitude in decimal degrees.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Longitude in decimal degrees.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Contact person name.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Contact phone.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Contact email.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Working-hours descriptors.",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		},
+		{
+			"msgid": "Original carrier payload (escape hatch).",
+			"msgctxt": null,
+			"reason": "Same stale reference — shipping-method/rest-api/abstract-warehouses-controller.php does not exist."
+		}
+	]
+}
