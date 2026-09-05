@@ -4,14 +4,24 @@ Thank you for considering contributing to the Woodev Plugin Framework! Your help
 
 ## ⚠️ Important: This is a Framework
 
-**CRITICAL:** This is a **base framework** used by 10+ dependent plugins. Backward compatibility is the highest priority.
+**CRITICAL:** This is a **base framework** used by 10+ dependent plugins — but "backward
+compatibility" here means **two different rules**, and confusing them is the mistake to avoid.
+Policy set 2026-06-03 by [ADR-005](../docs-internal/adr/005-platform-v2-clean-break-policy.md); it
+**superseded** the old "deprecation cycle for everything" rule on the v2 line.
 
-**Key implications:**
+**Internal code is FREE TO BREAK on `main`:**
 
-- **Never delete or rename public API** without a deprecation cycle (minimum one version)
-- **Always use `@deprecated` annotation** for deprecated code
-- **Always call `_deprecated_function()`** in deprecated methods
-- **Breaking changes require major version bump** (semver)
+- class names, method signatures, the plugin entry/registration shape, namespacing, file layout;
+- do **NOT** add `@deprecated` shims, `class_alias` files or `_deprecated_function()` wrappers for a
+  moved or renamed internal API — delete the ones you find;
+- dependent plugins are rewritten onto v2, not migrated by shims.
+
+**Installed-site data contracts are RELEASE-BLOCKING and never break:** option keys, license and
+instance IDs, updater identity, WC gateway and shipping-method IDs plus instance setting keys,
+**public action/filter names**, cron hooks and payloads, custom tables, REST namespaces, AJAX
+actions, admin page slugs, log source names, background-job IDs, order and session meta keys.
+Preserve these byte-for-byte.
+
 - **Any change in `woodev/` requires enhanced review**
 
 ## Ways to Contribute
@@ -113,7 +123,7 @@ BREAKING CHANGE: old_method() has been removed. Use new_method() instead.
 - Use **DTOs or contracts** for data transfer between layers
 - Follow **SOLID principles**
 - Add comprehensive **docblocks** with `@since`, `@param`, `@return`
-- **Maintain backward compatibility** (or use proper deprecation cycle)
+- **Respect the two-rule policy above** — internal APIs may break cleanly; data contracts may not
 
 ### JavaScript Code
 
@@ -146,7 +156,7 @@ Before committing:
 - [ ] Linting passes: `composer phpcs`
 - [ ] Tests pass (if applicable): `composer test:unit`, `composer test:integration`
 - [ ] **Commits follow Conventional Commits format**
-- [ ] **Backward compatibility maintained** (or proper deprecation cycle)
+- [ ] **No installed-site data contract broken** (option keys, hook names, IDs, slugs, meta keys)
 - [ ] CLAUDE.md updated (if architecture changed)
 - [ ] README.md updated (if user-facing changes)
 

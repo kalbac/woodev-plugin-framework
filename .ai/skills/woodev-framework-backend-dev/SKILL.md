@@ -1,6 +1,6 @@
 ---
 name: woodev-framework-backend-dev
-description: Add or modify Woodev Framework backend PHP code following project conventions. Use when creating new classes, methods, hooks, or modifying existing backend code. **CRITICAL: Maintain backward compatibility.**
+description: Add or modify Woodev Framework backend PHP code following project conventions. Use when creating new classes, methods, hooks, or modifying existing backend code. **CRITICAL: internal APIs break cleanly on the v2 line (no @deprecated shims); installed-site data contracts — option keys, hook names, IDs, slugs, meta keys — never break (ADR-005).**
 ---
 
 # Woodev Framework Backend Development
@@ -43,7 +43,7 @@ Follow Woodev Framework project conventions when adding or modifying backend PHP
 - Legacy code remains without namespace (`Woodev_Plugin`, `Woodev_Plugin_Bootstrap`)
 - Write comprehensive unit tests for new functionality
 - Run linting and tests before committing changes
-- Maintain backward compatibility (see CLAUDE.md for deprecation rules)
+- Apply the clean-break policy: internal APIs may break cleanly (no shims); installed-site data contracts — option keys, hook names, IDs, slugs, meta keys — never break. `docs-internal/AGENT-RULES.md` → Rule 0
 
 ## Version Information
 

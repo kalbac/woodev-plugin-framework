@@ -65,7 +65,8 @@ $instance = $container->get( \Woodev\Framework\Admin\Admin_Menu::class );
 
 When adding classes to `woodev/` (framework code):
 
-1. **Backward compatibility is critical** - 10+ plugins depend on this
-2. **Public API changes require deprecation cycle**
-3. **Use `@deprecated` and `_deprecated_function()` for deprecated code**
-4. **Breaking changes require major version bump**
+1. **Two rules, not one** — ADR-005 clean-break policy
+2. **Internal classes and methods may be renamed or removed cleanly.** No `@deprecated` shim, no
+   `class_alias`, no `_deprecated_function()` wrapper for a moved internal API — delete existing ones
+3. **Installed-site data contracts never break** — option keys, hook names, IDs, slugs, meta keys
+4. Full policy: `docs-internal/AGENT-RULES.md` → Rule 0

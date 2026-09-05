@@ -242,12 +242,18 @@ class Woodev_Plugin {
 
 ### @since Annotations
 
-For `@since` annotations, use the **current version** from `woodev/class-plugin.php`:
+⚠ **NOT the `VERSION` constant.** This section said to read `VERSION` from
+`woodev/class-plugin.php` until 2026-09-05; operator decision #409 settled the opposite, and the two
+are deliberately separate concepts.
 
-- Read `VERSION` constant
-- Use that version directly
+- `@since` = the **planned release** the change ships in — currently `2.0.2`.
+- `VERSION` = the **released** version (`2.0.1`). It lags on purpose, because raising it on `main`
+  publishes a release.
+- The machine-readable authority is `composer.json` → `extra.woodev.planned-release`, and
+  `tests/unit/SinceTagCeilingTest.php` gates every `@since` in `woodev/**` against it.
+- **Inherited code carries `1.0.0`**, never an upstream number.
 
-Example: If `const VERSION = '2.0.0'`, use `@since 2.0.0`
+Full rule: `docs-internal/AGENT-RULES.md` → Rule 5.
 
 ## Notes
 
@@ -256,4 +262,4 @@ Example: If `const VERSION = '2.0.0'`, use `@since 2.0.0`
 - **Delete feature branches** after merging
 - **Keep `main` always deployable** — never break main branch
 - **Conventional Commits required** — for automatic CHANGELOG generation
-- **Breaking changes require major version bump** — semver
+- **Breaking an installed-site data contract is release-blocking**; an internal API break is allowed on the v2 line (ADR-005)

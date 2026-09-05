@@ -24,7 +24,7 @@ description: Review Woodev Framework code changes for coding standards complianc
 
 ## Review Approach
 
-1. **Check backward compatibility first** (critical for a framework used by 10+ plugins)
+1. **Check the DATA CONTRACTS first** — option keys, hook names, IDs, slugs, meta keys. An internal class or method rename is legitimate under ADR-005 and must not be flagged
 2. **Scan for critical violations** listed below
 3. **Cite specific skill files** when flagging issues
 4. **Provide correct examples** from the skill documentation
@@ -34,14 +34,19 @@ description: Review Woodev Framework code changes for coding standards complianc
 
 ## Critical Violations
 
-### Backward Compatibility
+### Backward Compatibility — data contracts only (ADR-005)
 
-These violations **require mandatory fixes** before merging. See CLAUDE.md for full architecture context.
+These violations **require mandatory fixes** before merging. ⚠ An internal class or method rename is
+NOT one of them: the clean-break policy makes internal APIs free to break on the v2 line, and this
+list said the opposite until 2026-09-05. Architecture context:
+`docs-internal/wiki/architecture.md`.
 
-- Public method/class deleted or renamed without deprecation cycle
-- Missing `@deprecated` annotation on deprecated code
-- Missing `_deprecated_function()` call in deprecated methods
-- Breaking change without major version bump (semver violation)
+- An action/filter **hook** deleted or renamed (route it through `Woodev_Hook_Deprecator` instead)
+- An **option key**, meta key, cron hook or payload, REST namespace, AJAX action, admin page slug,
+  log source, background-job ID, gateway or shipping-method ID changed
+- A custom DB table or schema changed with no migration
+- An `@deprecated` shim, `class_alias` or `_deprecated_function()` wrapper **added** for a moved
+  internal API — the policy forbids these, so their presence is the defect
 
 ### PHP Code
 
@@ -143,4 +148,4 @@ Before approving a PR, ensure:
 - Detailed coding standards are in `woodev-framework-backend-dev` skill
 - Development workflow is in `woodev-framework-dev-cycle` skill
 - **Never approve PRs with critical violations**
-- **Never approve breaking changes without deprecation cycle**
+- **Never approve a change that breaks an installed-site data contract.** An internal rename is fine and must not be blocked

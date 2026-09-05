@@ -70,14 +70,23 @@ See `CLAUDE.md > Architecture` for full subsystem documentation.
 See `skills/woodev-framework-backend-dev/` for detailed patterns and examples.
 See `CLAUDE.md > Code Style` for PHPCS/PHPStan configuration.
 
-## Backward Compatibility
+## Backward Compatibility — clean-break policy (ADR-005), two rules
 
-- Public/protected methods and properties MUST NOT be removed without deprecation
-- Deprecated items: add `@deprecated X.Y.Z` PHPDoc tag and call `_deprecated_function()`
-- Maintain backward compatibility for at least 2 minor versions
-- Hook names (`woodev_{plugin_id}_*`) are part of the public API
+- **Internal code is FREE TO BREAK on the v2 line.** Class names, method signatures, visibility,
+  namespacing, file layout. Do **NOT** add `@deprecated` shims, `class_alias` or
+  `_deprecated_function()` wrappers for a moved or renamed internal API — delete the ones you find.
+  (This section said the opposite until 2026-09-05; ADR-005 superseded that on 2026-06-03.)
+- **Installed-site data contracts NEVER break.** Option keys, license and instance IDs, updater
+  identity, gateway and shipping-method IDs plus instance setting keys, **hook names**
+  (`woodev_{plugin_id}_*`), cron hooks and payloads, DB tables, REST namespaces, AJAX actions,
+  admin slugs, log sources, background-job IDs, order and session meta keys.
+- The surviving `_deprecated_function()` / `_doing_it_wrong()` calls are misuse markers and
+  clone/wakeup guards, not internal-API move shims. `Woodev_Hook_Deprecator` is how a genuinely
+  deprecated HOOK is handled — hooks are data contracts, so they get a deprecator, not a deletion.
 
-See `CLAUDE.md > Architecture` for hook and API contracts.
+Full policy: `docs-internal/adr/005-platform-v2-clean-break-policy.md` and
+`docs-internal/AGENT-RULES.md` → Rule 0. Architecture reference:
+`docs-internal/wiki/architecture.md`.
 
 ## References
 

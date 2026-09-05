@@ -90,7 +90,9 @@ $price = apply_filters( 'woodev_framework_product_price', $price, $product );
 
 When adding or modifying hooks in framework code (`woodev/`):
 
-1. **Hooks are part of the public API** - plugins may depend on them
-2. **Never remove hooks** without a deprecation cycle
+1. **A hook name is an installed-site DATA CONTRACT**, not an internal API — so the clean-break
+   policy that frees internal classes does **not** free hooks. This is the one place where the old
+   "never break it" instinct is still exactly right
+2. **Never remove or rename a hook.** If one must go, route it through `Woodev_Hook_Deprecator`
 3. **Document hook parameters clearly** - plugins use these
-4. **Consider backward compatibility** when changing hook behavior
+4. **Changing a hook's payload shape or firing order breaks consumers** as surely as renaming it

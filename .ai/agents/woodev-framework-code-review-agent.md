@@ -32,14 +32,19 @@
 - [ ] Use of `extract()` (forbidden)
 - [ ] Unvalidated redirect URLs (must use `wp_safe_redirect()`)
 
-### Backward Compatibility
+### Backward Compatibility — flag the data contracts, NOT the internal renames
 
-- [ ] Removed or renamed public/protected method without deprecation
-- [ ] Changed method signature (added required params, changed types)
-- [ ] Removed or renamed action/filter hooks
-- [ ] Changed return type of public method
+Under ADR-005 an internal rename is legitimate on the v2 line, so flagging it is a false positive.
+What is still a defect:
 
-See `CLAUDE.md > Architecture` for public API surface and hook contracts.
+- [ ] Removed or renamed **action/filter hook** (a data contract — use `Woodev_Hook_Deprecator`)
+- [ ] Changed an **option key**, meta key, cron hook name/payload, REST namespace, AJAX action,
+      admin page slug, log source, background-job ID, gateway or shipping-method ID
+- [ ] Changed a custom **DB table** or its schema without a migration
+- [ ] An `@deprecated` shim or `class_alias` ADDED for a moved internal API — the policy forbids it
+
+Full policy: `docs-internal/AGENT-RULES.md` → Rule 0. API surface:
+`docs-internal/wiki/architecture.md`.
 
 ### Code Quality
 

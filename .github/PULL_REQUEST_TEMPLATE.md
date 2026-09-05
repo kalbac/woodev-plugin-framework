@@ -5,7 +5,7 @@
 - I have followed the [Woodev Contributing Guidelines](.github/CONTRIBUTING.md) and the [WordPress Coding Standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/).
 - I have checked to ensure there aren't other open [Pull Requests](../../pulls) for the same update/change.
 - I have reviewed my code for [security best practices](https://developer.wordpress.org/apis/security/).
-- I have followed **backward compatibility rules** (critical for framework used by 10+ plugins).
+- I have applied the **clean-break policy** ([ADR-005](../docs-internal/adr/005-platform-v2-clean-break-policy.md)): internal APIs may break cleanly with no shims; installed-site data contracts — option keys, hook names, IDs, slugs, meta keys — never break.
 - Following the above guidelines will result in quick merges and clear and detailed feedback when appropriate.
 
 ### Changes proposed in this Pull Request
@@ -32,14 +32,27 @@ Bug introduced in PR # . (If applicable)
 
 ### Testing that has already taken place
 
+### Areas for human testing
+
+*What the machine could NOT verify — name it here, so the reviewer knows exactly where to look.*
+*Write "N/A" only if a machine really did prove everything.*
+
+-
+
+### Areas for documentation updates
+
+*User-facing behaviour this PR changes, and which doc it lands in. "N/A" if none.*
+
+-
+
 ### Checklist
 
 - [ ] I have run linting: `composer phpcs`
 - [ ] I have run tests (if applicable): `composer test:unit`, `composer test:integration`
-- [ ] I have updated CLAUDE.md (if architecture or API changed)
+- [ ] I have updated `docs-internal/` where the change belongs (`wiki/architecture.md` for a seam, `adr/` for a decision, a gotcha for a trap)
 - [ ] I have updated README.md (if user-facing changes)
 - [ ] **All commits follow Conventional Commits format** (for automatic CHANGELOG generation)
-- [ ] **No breaking changes without deprecation cycle** (or major version bump)
+- [ ] **No installed-site data contract broken** (option keys, hook names, cron, REST namespaces, AJAX actions, admin slugs, meta keys)
 
 ### Conventional Commits
 
@@ -57,8 +70,9 @@ Bug introduced in PR # . (If applicable)
 
 #### Breaking Changes
 
-- [ ] This PR contains **NO breaking changes**
-- [ ] This PR contains breaking changes (requires major version bump)
+- [ ] This PR breaks **no** installed-site data contract
+- [ ] This PR breaks an internal API only — allowed on the v2 line, no shim added
+- [ ] This PR breaks an installed-site data contract (**release-blocking** — say why here)
 
 **If breaking changes:** Add `!` to commit type (e.g., `feat!:`, `fix!:`) and include `BREAKING CHANGE:` footer in commit message.
 
@@ -70,6 +84,6 @@ Bug introduced in PR # . (If applicable)
 
 **Special attention needed for:**
 
-- [ ] Backward compatibility check (critical for framework)
+- [ ] Installed-site data contracts (the release-blocking list)
 - [ ] Changes in `woodev/` directory (framework code)
-- [ ] Deprecation cycle implementation
+- [ ] A hook whose name, payload shape or firing order changed
