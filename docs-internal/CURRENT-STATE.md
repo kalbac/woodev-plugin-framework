@@ -6,8 +6,9 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-05 (s116).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s116 closed
-**#764** (PR #765) and filed **#766 #767**. **63 open cards**, every one carrying a «Приоритет».
+**As of 2026-09-05 (s117).** `main` = **`be87be1`**, clean, **no open PRs, no worktrees, Инбокс
+EMPTY**. s117 closed **#768 #766** (PR #769) and **#767** (PR #770). **60 open cards**, every one
+carrying a «Приоритет».
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026) — s116 went the wrong way.** The task was to WRITE A
 NEW plugin on v2, using the old one as reference and the CDEK docs as the spec. Instead the old
@@ -18,15 +19,15 @@ later and from scratch, in its own repo on its own branch, version **2.3.0.0**
 `sessions/s116.md`. `#762` and `edostavka#3/#4/#5` are FROZEN; the three migration branches are
 parked and `origin/master` (`34d21af`) is intact.
 
-⚠ **What that detour DID measure, and it stands:** a mechanical signature diff found **13 fatals and
-8 unimplemented abstract methods** where the card listed 7 — three of those seven were not conflicts
-at all. Costliest miss: `Shipping_Method::calculate_shipping()` is **`final`**. Tooling → **#767**.
+⚠ **Repointing a plugin at a v2 base costs 11 fatals and 8 unimplemented abstracts — run
+`npm run probe:signature` (#767), never a hand count.** s116's 13/8 was corrected in s117; the
+probe, the reasoning and the three rules that make a hand count wrong live in
+[migration/signature-probe.md](migration/signature-probe.md) and the gotcha
+`a-stricter-base-class-fatals-on-signatures`. The costliest genuine miss stands:
+`Shipping_Method::calculate_shipping()` is **`final`**.
 ⚠ **`register_shipping_methods()` is `final` and filters classes through
 `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest SILENTLY** — a method left on
 `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
-⚠ **A mocked unit suite cannot see any of it** — 248/248 stayed green while the plugin was dead
-(gotcha `a-stricter-base-class-fatals-on-signatures`); loading the REAL base makes the suite catch
-it, falsified.
 
 ✅ **Три субсистемы теперь имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): подкласс, который
 не построил обработчик уведомлений, лицензию или жизненный цикл, получает `_doing_it_wrong()` под
@@ -42,10 +43,10 @@ the symptom (every job failing in two seconds with no log, which reads as a red 
 and gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`; standing rule in the global
 `CLAUDE.md` → «GitHub Actions budget».
 
-**Baselines — unit re-measured 04.09.2026 (s115) vs `b1fe9bf`: 3490 / 8574 / 1 skipped (framework prod code unchanged in s115).** Rest from
-s114 / `991c988`, sodium enabled: jest **1621** in **24** suites; phpcs clean —
-**with the warning level ON**; phpstan no errors; **integration 129 / 506**; **e2e 7 / 7** against
-the live rig. Every figure here was measured in s114 against the commit named above.
+**Baselines — ALL re-measured 05.09.2026 (s117) against `be87be1`, sodium enabled:** unit
+**3522** / 8645 / **1 skipped**; jest **1628** in **25** suites; **integration 138 / 522**; phpcs
+clean — **with the warning level ON**; phpstan level 3 no errors; `lint:docs` OK. Only **e2e 7 / 7**
+is older (s114, against the live rig) and was not re-run here.
 ⚠ A gate number is only true against a NAMED COMMIT — s109 read three different unit counts on
 `main` in one evening.
 
@@ -192,7 +193,11 @@ FALLBACK critic and its model must be pinned via `--command`. Recipes and the wo
 worktree starts dirty with seven CRLF-only files — **never `git add -A` there**, and remove them
 **through Orca**.
 
-Gotchas: **269**.
+**Building a rate? Read the two `[woocommerce/shipping]` gotchas from s117 first** — `add_rate()`
+silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
+`wc_format_decimal()` turn `1.0e20` into `1.02`.
+
+Gotchas: **275**.
 
 ## Program status (high level)
 
@@ -244,7 +249,7 @@ only consumer; they get rewritten once everything is ready.
 
 ⛔ **ПИЛОТ ОСТАНОВЛЕН** (оператор, 05.09.2026; **#762** ЗАМОРОЖЕНА). Доводим фреймворк **на
 фикстурах**; боевой плагин пишется позже и с нуля. Заморозку карточек карты снимет слой ПВЗ нового
-плагина. Живое сейчас — **#766 #767 #768**, все воспроизводятся на фикстурах.
+плагина. **#766 #767 #768 — ЗАКРЫТЫ в s117**; следующее берётся с доски по полю «Приоритет».
 
 **Списков карточек этот файл больше не держит — они на доске, поле «Приоритет».** Именно
 пересказанные здесь списки устаревали молча; ради этого и заведена #644. `FUTURE-BACKLOG.md`

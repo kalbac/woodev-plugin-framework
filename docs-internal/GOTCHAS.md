@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 271 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 275 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,7 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
-- [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION on every incompatible override — 7 here — while a mocked unit suite stays green, because a double is not a subclass. Diff signatures across the chain first.** → [a-stricter-base-class-fatals-on-signatures](gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115)
+- [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION — **11** times here, not the 7 a manual pass counted — while a mocked suite stays green. An OMITTED return type is a fatal; a `private` base method is not. Run `npm run probe:signature`.** → [a-stricter-base-class-fatals-on-signatures](gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115, corrected s117)
 - [php/namespaces] **Moving a class into a sub-namespace rebinds every UNQUALIFIED sibling reference in that file at once — no parse error, no PHPCS complaint, and seven targeted test files still green; the full suite dies at load.** → [moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings](gotchas/moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings.md) (s104)
 - [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](gotchas/a-cast-is-not-a-degradation.md) (s102)
 - [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
@@ -63,6 +63,8 @@
 
 ### [woocommerce/*] — WooCommerce-specific
 - [woocommerce/shipping-api-broken-contract] **Shipping_API interface references types that don't exist in the framework.** → [shipping-api-broken-contract](gotchas/shipping-api-broken-contract.md)
+- [woocommerce/shipping] **`add_rate()` discards `description`/`delivery_time` silently, though `WC_Shipping_Rate` has had both since WC 9.2.0 — set them on the object AFTERWARDS.** → [wc-add-rate-ignores-the-rate-description-and-delivery-time](gotchas/wc-add-rate-ignores-the-rate-description-and-delivery-time.md) (s117)
+- [woocommerce/shipping] **Never stringify a numeric cost: `(string) 1.0e20` is `'1.0E+20'`, and `wc_format_decimal()`'s string branch strips the `E` and returns **1.02**. Pass the number through.** → [stringifying-a-float-cost-lets-wc-format-decimal-destroy-it](gotchas/stringifying-a-float-cost-lets-wc-format-decimal-destroy-it.md) (s117)
 
 ### [framework/*] — Framework internals
 - [framework/includes-wiring] **New framework class files must be wired into `includes()`, not just the Composer classmap.** → [dispatcher-files-unwired-in-includes](gotchas/dispatcher-files-unwired-in-includes.md)
@@ -123,6 +125,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/ci] **`plugins-reference/` is GITIGNORED, so a test that reads it is green on every local checkout AND every worktree, and red in CI — the one place that gates the merge. Skip on absence; keep the rules on temp fixtures.** → [a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci](gotchas/a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci.md) (s117)
 - [testing/coverage] **Four fixtures agreeing is ONE sample copied four times: every one built `Shipping_Rate` with 4 of 6 args, so an entire output branch never ran while the class looked covered.** → [every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted](gotchas/every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted.md) (s116)
 - [testing/phpunit] **A `--random-order-seed` is NOT a portable repro — it shuffles the test SET this tree has, so the same seed on a tree with one more test is a different order. Carry the defect, not the seed.** → [a-random-order-seed-is-not-a-portable-repro](gotchas/a-random-order-seed-is-not-a-portable-repro.md) (s107)
 - [testing/measurement] **66 of the local 67 SKIPPED are just ext-sodium being off — the baseline the project compares across checkouts moves with `php.ini`. Measure with `-d extension=sodium`: 1 primary, 6 in CI.** → [the-skipped-count-is-dominated-by-whether-sodium-is-enabled](gotchas/the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md) (s102)
@@ -330,6 +333,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/parallel-agents] **A `cd` in the Bash tool PERSISTS across calls (variables do not), so a later `git checkout -b` lands in the worktree you visited.** → [a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree](gotchas/a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree.md) (s117)
 - [tooling/phpstan] **35 m 37 s on the Windows FS vs 1 m 24 s in the container, same config and verdict. A background task killed with `Stop-Process` reports `completed, exit 0` — the runner, not a gate.** → [run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows](gotchas/run-a-migrating-plugin-s-phpstan-in-the-container-not-on-windows.md) (s116)
 - [tooling/git] **`git diff --name-only` splices git's EOL warnings from STDERR into the file list, so it names files nobody touched — it fooled the coordinator AND the Codex critic in the same hour. `git status --short` is the authority.** → [git-diff-name-only-interleaves-eol-warnings](gotchas/git-diff-name-only-interleaves-eol-warnings.md) (s110)
 - [tooling/git] **A PR BODY closes cards behind the commit-msg hook's back — GitHub matches `close #N` inside «why this does not close #N» and ignores the negation. Also: `gh project item-list` silently truncates at `--limit`.** → [a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused](gotchas/a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused.md) (s111)
