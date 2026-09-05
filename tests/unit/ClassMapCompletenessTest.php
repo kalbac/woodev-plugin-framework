@@ -112,6 +112,105 @@ final class ClassMapCompletenessTest extends TestCase {
 	}
 
 	/**
+	 * Guards the REVERSE direction for the shipping module specifically (issue #138):
+	 * every `woodev/shipping-method/**` class-map entry must also be wired into
+	 * `Shipping_Plugin::includes()`. Unlike the rest of the framework — which the s27
+	 * runtime autoloader deliberately made autoload-only, no `includes()` equivalent
+	 * anywhere — the shipping module kept a hand-maintained `includes()` as its single
+	 * source of truth (see `docs-internal/adr/012-shipping-includes-stays-authoritative.md`).
+	 * A class added to the shipping tree without a matching `require_once` is exactly
+	 * the failure class the gotchas `dispatcher-files-unwired-in-includes` and
+	 * `box-packer-interface-unwired-in-includes` describe, just in the direction those
+	 * two incidents did NOT check: this test catches the class the map knows about that
+	 * `includes()` has never heard of, not the other way around.
+	 *
+	 * @return void
+	 */
+	public function test_every_shipping_classmap_entry_is_wired_into_includes(): void {
+		$root = dirname( __DIR__, 2 );
+		$map  = require $root . '/woodev/class-map.php';
+
+		$self = 'woodev/shipping-method/class-shipping-plugin.php';
+
+		$shipping_paths = array_unique(
+			array_filter(
+				$map,
+				static function ( string $path ) use ( $self ): bool {
+					return 0 === strpos( $path, 'woodev/shipping-method/' ) && $self !== $path;
+				}
+			)
+		);
+
+		$required = $this->extract_required_shipping_paths( $root );
+
+		$missing = array_values( array_diff( $shipping_paths, $required ) );
+		sort( $missing );
+
+		$this->assertSame(
+			[],
+			$missing,
+			"Shipping_Plugin::includes() is missing a require_once for a class the classmap already knows about:\n"
+				. implode( "\n", $missing )
+		);
+	}
+
+	/**
+	 * Guards the OTHER half of issue #138 — the half the map-side test above cannot see.
+	 *
+	 * Deleting a required file (four production fatals on `feat/pickup-map`, per the card) leaves
+	 * a `require_once` pointing at nothing. `bin/generate-class-map.php` drops the deleted file
+	 * from the map on its next run, same as the test above expects — so the map-side assertion
+	 * reports zero missing entries, stays green, and the dangling `require_once` still fatals a
+	 * real vendored boot. Asserting the file exists catches that directly, and does not
+	 * false-positive on a legitimately class-less required file (there are none today, but nothing
+	 * stops one — a constants/functions file requires no class-map entry).
+	 *
+	 * @return void
+	 */
+	public function test_every_required_shipping_file_exists(): void {
+		$root = dirname( __DIR__, 2 );
+
+		$missing = [];
+
+		foreach ( $this->extract_required_shipping_paths( $root ) as $relative ) {
+			if ( ! file_exists( $root . '/' . $relative ) ) {
+				$missing[] = $relative;
+			}
+		}
+
+		sort( $missing );
+
+		$this->assertSame(
+			[],
+			$missing,
+			"Shipping_Plugin::includes() has a require_once pointing at a file that no longer exists — "
+				. "this is the exact fatal a real vendored boot hits. Missing:\n" . implode( "\n", $missing )
+		);
+	}
+
+	/**
+	 * Extracts the `require_once $path . '...'` targets from `Shipping_Plugin::includes()`,
+	 * relative to the repo root.
+	 *
+	 * @param string $root Repo root (dirname( __DIR__, 2 )).
+	 * @return string[]
+	 */
+	private function extract_required_shipping_paths( string $root ): array {
+		$self = 'woodev/shipping-method/class-shipping-plugin.php';
+
+		$source = (string) file_get_contents( $root . '/' . $self );
+
+		preg_match_all( "/require_once\s+\\\$path\s*\.\s*'([^']+)'/", $source, $matches );
+
+		return array_map(
+			static function ( string $relative ): string {
+				return 'woodev/shipping-method' . $relative;
+			},
+			$matches[1]
+		);
+	}
+
+	/**
 	 * Extracts fully-qualified class/interface/trait names from PHP source via tokens.
 	 *
 	 * @param string $source PHP source.
