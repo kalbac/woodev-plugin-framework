@@ -267,6 +267,15 @@ export default function App() {
 							error
 						),
 					createElement( StepView, {
+						// Keyed by step so moving between steps is a real unmount +
+						// mount, not a reuse of the previous step's field instances.
+						// Without it, two steps declaring the SAME field id reuse one
+						// instance, and a control that seeds itself once on mount —
+						// `WizardRichText`, which cannot feed `value` back into its
+						// contentEditable on every render without resetting the caret —
+						// would still show the previous step's content (#783). Mirrors
+						// `SectionView`'s `key={ tab.id:section.id }` on the settings page.
+						key: step.id,
 						step,
 						values: values[ step.id ] || {},
 						onChange: ( v ) => {
