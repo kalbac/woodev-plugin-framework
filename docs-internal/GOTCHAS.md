@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 276 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 277 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -315,6 +315,9 @@
 - [shipping/contracts] **Installed-site contract strings are NOT mechanically derivable — the plugin must supply them.** → [contract-string-not-derivable](gotchas/contract-string-not-derivable.md)
 - [shipping/rate-calc] **Do NOT sum per-parcel prices in the framework rate seam.** → [shipping-rate-no-parcel-sum](gotchas/shipping-rate-no-parcel-sum.md) (s3)
 - [shipping/warehouse-identity] **Warehouse identity: storage row id ≠ carrier-unique id.** → [warehouse-storage-id-vs-carrier-id](gotchas/warehouse-storage-id-vs-carrier-id.md)
+
+### [perf/*] — Payload size and wire cost
+- [perf/payload] **A raw JSON byte count is not a wire cost: a repetitive locale table grew +47 KB raw and +503 bytes after gzip (96:1). Measure compressed, and confirm `Content-Encoding` on the real response.** → [a-raw-payload-size-is-not-a-wire-cost-measure-it-after-gzip](gotchas/a-raw-payload-size-is-not-a-wire-cost-measure-it-after-gzip.md) (s118)
 
 ### [i18n/*] — Localization
 - [i18n/catalogue] **Rule 1 has TWO halves: an English msgid WITHOUT a `.po` entry is a storefront regression, not a half-done change — `м`/`км` became `m`/`km` for every ru_RU shopper and every gate stayed green.** → [rule-1-has-two-halves-an-english-msgid-alone-is-a-regression](gotchas/rule-1-has-two-halves-an-english-msgid-alone-is-a-regression.md) (s104)
