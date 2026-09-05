@@ -19,6 +19,7 @@
     "test:e2e": "playwright test --config=playwright.config.js",
     "test:e2e:headed": "playwright test --config=playwright.config.js --headed",
     "lint:docs": "node scripts/lint-docs.mjs",
+    "probe:signature": "node scripts/signature-probe.mjs",
     "lint:ts-baseline": "node scripts/lint-ts-baseline.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "generate:phone-masks": "node bin/generate-phone-masks.mjs",
