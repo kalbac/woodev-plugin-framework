@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-05 (s118).** `main` = **`567218b`**, clean, **no open PRs, no worktrees, Инбокс EMPTY**. s118 closed **#364** (measurement, `not planned`), **#138** (PR #774) and **#771** (PR #776); filed **#773** and **#775**. **60 open cards**, every one carrying a «Приоритет».
+**As of 2026-09-05 (s118).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s118 closed **#364** (measurement), **#138** (PR #774), **#771** (PR #776) and **#777** (his decision → Rule 8); filed **#773 #775 #778**. **61 open cards**, every one carrying a «Приоритет».
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -72,7 +72,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 60, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 61, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
@@ -203,7 +203,7 @@ worktree starts dirty with seven CRLF-only files — **never `git add -A` there*
 silently ignores `description`/`delivery_time`; stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **278**.
+Gotchas: **279**.
 
 ## Program status (high level)
 
