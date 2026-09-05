@@ -83,6 +83,51 @@ gh api graphql -f query='{ user(login:"kalbac"){ projectV2(number:6){
 into a doc or a script before the repair is now dead. Re-read the ids after any such repair — the
 s115 repair invalidated all six ids it had just recorded.
 
+## The read-back can lie too, in the OPPOSITE direction (s119)
+
+The rule above says to read the value back from the server. That is still right — but the read
+itself has a failure mode, and it costs more than the original bug because it makes you "repair"
+data that was never broken.
+
+In s119 five Russian issue comments and one issue title were posted with `gh --body-file`, and a
+verification pass reported all six as mojibake on GitHub:
+
+```text
+#113 last comment starts: Р—Р°РєСЂС‹РІР°СЋ РєР°Рє РІС‹РїРѕР»РЅРµРЅРЅСѓСЋ
+```
+
+**The data was perfect.** The checker was broken:
+
+```bash
+gh issue view 113 --json comments | python -c "
+import sys, io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')   # stdout fixed …
+...json.load(sys.stdin)..."                                          # … stdin NOT
+```
+
+`sys.stdin` still decoded with the Windows ANSI codepage (cp1251), so `gh`'s UTF-8 output was
+decoded as cp1251 into mojibake, and the *fixed* stdout then faithfully printed the mojibake. Fixing
+one stream and not the other produces a confident, specific, wrong answer.
+
+Worse, the naive version can CANCEL the error: `b.decode('cp1251')` printed to a cp1251 stdout
+re-encodes to the original bytes and displays correctly — so the same broken pipeline reports "fine"
+or "broken" depending on how many wrong transforms happen to compose.
+
+**The check that actually holds — never let the console encoding into the loop:**
+
+```bash
+gh issue view 113 --repo OWNER/REPO --json comments > out.json   # bytes to a file
+python -c "
+import json, io
+d = json.load(io.open('out.json', encoding='utf-8'))             # explicit on the way in
+io.open('chk.txt','w',encoding='utf-8').write(d['comments'][-1]['body'][:100])"  # and out
+cat chk.txt
+```
+
+Both ends explicit, and the terminal only ever displays a UTF-8 file. When a check and the data
+disagree, **suspect the check first**: go down to the bytes (`xxd` the file on disk) before touching
+anything.
+
 ## Related
 
 - [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — the same shell mangling arguments, for paths instead of text
