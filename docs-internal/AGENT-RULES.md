@@ -360,6 +360,46 @@ even though they authenticate every CDEK call. It is the rig's live example of t
 whether a real plugin would place the same fields there is exactly the judgement call above. Do not
 migrate it as tidy-up; that would remove the only working demonstration of the mechanism.
 
+### Rule 9 — Reusable framework JS is PHP-driven; the fixed admin React UI is exempt
+
+**Design principle (OB-4, operator's dump s13, card #107).** In the operator's own words:
+
+> Scripts that exist to be REUSED between plugins — the PVZ/pickup-map builder for shipping methods
+> is the live example — are designed as PHP-driven as possible: configuration and markup come from
+> PHP, hand-written JS is kept to a minimum. Exception: the fixed, framework-owned admin UI (the
+> React «Woodev → Лицензии» page) stays React. The principle does NOT extend to it.
+
+**Verified against the live example before being written down (s121).** The pickup-map builder
+(`woodev/shipping-method/assets/js/frontend/pickup-{mount,datasource,geo,panels}.js`) is large —
+`pickup-mount.js` and `pickup-panels.js` alone run to several thousand lines — but that size is DOM
+orchestration and browser-side interaction, not domain logic duplicated from PHP. Every
+customer-facing string, every strategy knob, every domain-specific behaviour is assembled in
+`Pickup_Handler::get_js_config()` and handed across as one `wp_localize_script()` config global
+(`woodev_pickup_config_*`): the i18n map runs through the `woodev_pickup_map_i18n` filter so a
+plugin can override framework wording with carrier-specific language, `search_enabled` and
+`max_accumulated` are filtered knobs, and the map provider's own script config
+(`class-yandex-map-provider.php::get_js_config()`) contributes only what that provider needs. The JS
+reads these by name and never hardcodes a customer-facing string or a domain rule — a missing key
+renders blank rather than falling back to a JS-side default. **So "kept to a minimum" means no
+business/domain logic or copy embedded in JS, not a line-count target** — an interactive map
+inherently needs substantial DOM/event-handling code no matter how PHP-driven its config is.
+
+**The exception held too.** The React admin UI (`Woodev → Лицензии` and its siblings — `license-page`,
+`settings-page`, `setup-wizard`, `plugins-page`) is still built with the WordPress-bundled
+`@wordpress/element` React, matching `docs-internal/archive/PLANS.md` §6's "embedded WordPress/WooCommerce
+React, not a separate ReactJS" note — the only place that archived plan already touched this
+principle, and only its admin-UI half; it never mentioned the PHP-driven-reusable-JS half, which is
+why this rule exists.
+
+**The seam this principle actually asks for:** a script meant to be reused across plugins gets its
+configuration, markup strings and domain wording from PHP — via `wp_localize_script()` plus a
+filterable string map, the way `get_js_config()` above does it — rather than deciding them itself or
+duplicating a PHP-side rule in JS. This is a design principle for NEW reusable JS, not a mandate to
+rewrite `woodev/**/assets/js/frontend/**` — and it is a different axis from `AGENTS.md`'s
+`Frontend (src/)` TypeScript-scope rule (#542): that rule is about which LANGUAGE a file is authored
+in, this one is about where its CONFIGURATION lives. `woodev/**/assets/js/frontend/**` (raw-served,
+out of TypeScript scope) is exactly where this principle applies.
+
 ## PHP/WP Gotchas Summary
 
 | Topic | Description |
