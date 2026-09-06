@@ -305,6 +305,65 @@ test( 'a payload with a missing type.label emits error, not select', () => {
 // every type filter unconditionally (`pointPassesFilter`), and the label is drawn on the
 // card. This is the JS mirror of #798 on `Pickup_Point::from_array()`; the two halves of
 // this boundary must not diverge, which is the #201/#251 lesson.
+// Issue #803: REQUIRED means non-blank ONCE CAST, and the PHP half
+// (`Pickup_Point::required_string()`) applies exactly this rule — the two halves of this
+// boundary must not diverge. `false` is scalar and is not `''`, so it used to pass and then
+// convert to something blank on the PHP side; a whitespace-only value used to pass on both.
+// An empty `type.code` is the worst case: `pointPassesFilter()` reads `if ( ! code … ) return
+// true`, so the point passes EVERY type filter and cannot be filtered out.
+describe.each( [
+	[ 'an empty string', '' ],
+	[ 'spaces only', '   ' ],
+	[ 'a tab and newline', String.fromCharCode( 9, 10 ) ],
+] )( 'a required field blank once cast (%s)', ( label, value ) => {
+	test.each( [ 'id', 'name', 'address' ] )( 'in %s emits error, not select', ( key ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload[ key ] = value;
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test.each( [ 'code', 'label' ] )( 'in type.%s emits error, not select', ( key ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload.type[ key ] = value;
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+// The control for the rule above, and the reason it trims-to-test instead of using a falsy
+// check: `'0'` and `0` are legitimate carrier values and both are falsy in JS.
+test.each( [
+	[ 'a string zero', '0' ],
+	[ 'an integer zero', 0 ],
+] )( '%s in a required field still selects and renders as "0"', ( label, value ) => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.id = value;
+	payload.type.code = value;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+	const point = onSelect.mock.calls[ 0 ][ 0 ];
+
+	expect( point.id ).toBe( '0' );
+	expect( point.type.code ).toBe( '0' );
+} );
+
 describe.each( [
 	[ 'an array', [ 'unexpected' ] ],
 	[ 'an object', { unexpected: true } ],

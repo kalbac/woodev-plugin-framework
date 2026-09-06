@@ -110,6 +110,84 @@ final class PickupPointTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Issue #803: REQUIRED means non-blank ONCE CAST, and the same rule applies to all five
+	 * required strings. Three holes were open at once before this: `false` is scalar and is not
+	 * `''`, so it passed the old raw guard and then cast to `''` anyway; `type.code`/`type.label`
+	 * had no emptiness check at all; and a whitespace-only value survived though no display site
+	 * can tell it from absent. An empty `type.code` is the worst of them — `pickup-panels.js`'s
+	 * `pointPassesFilter()` reads `if ( ! code … ) return true`, so such a point passes EVERY
+	 * type filter and the customer cannot filter it out.
+	 *
+	 * @dataProvider provide_blank_required_values
+	 *
+	 * @param mixed $value The blank-once-cast value to plant.
+	 */
+	public function test_returns_null_for_a_required_field_that_is_blank_once_cast( string $label, $value ): void {
+		foreach ( [ 'id', 'name', 'address' ] as $key ) {
+			$payload         = $this->valid();
+			$payload[ $key ] = $value;
+
+			$this->assertNull(
+				Pickup_Point::from_array( $payload ),
+				"{$label} {$key} must reject the point"
+			);
+		}
+
+		foreach ( [ 'code', 'label' ] as $key ) {
+			$payload                 = $this->valid();
+			$payload['type'][ $key ] = $value;
+
+			$this->assertNull(
+				Pickup_Point::from_array( $payload ),
+				"{$label} type.{$key} must reject the point"
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: mixed}>
+	 */
+	public function provide_blank_required_values(): array {
+		return [
+			'an empty string'   => [ 'an empty string', '' ],
+			'false'             => [ 'false', false ],
+			'spaces only'       => [ 'spaces only', '   ' ],
+			'a tab and newline' => [ 'a tab and newline', "	
+" ],
+		];
+	}
+
+	/**
+	 * The control for the rule above, and the reason it is `'' === trim( … )` and never
+	 * `empty()`: `'0'` is a legitimate value a carrier can send for an id or a type code, and
+	 * `empty( '0' )` is TRUE. Both the string and the integer form must survive and render as
+	 * `'0'`.
+	 */
+	public function test_a_required_field_of_zero_survives(): void {
+		foreach ( [ 'string zero' => '0', 'integer zero' => 0 ] as $label => $value ) {
+			$payload               = $this->valid();
+			$payload['id']         = $value;
+			$payload['type']['code'] = $value;
+
+			$point = Pickup_Point::from_array( $payload );
+
+			$this->assertNotNull( $point, "{$label} must still build a point" );
+			$this->assertSame( '0', $point->to_array()['id'], "{$label} id must render as '0'" );
+			$this->assertSame( '0', $point->to_array()['type']['code'], "{$label} type.code must render as '0'" );
+		}
+	}
+
+	/**
+	 * A non-blank required value is returned UNTRIMMED. Rejecting a blank field is the decision
+	 * this contract makes; silently rewriting a non-blank one is not.
+	 */
+	public function test_a_required_field_keeps_its_surrounding_whitespace(): void {
+		$point = $this->make_point( [ 'name' => '  ПВЗ на Тверской  ' ] );
+
+		$this->assertSame( '  ПВЗ на Тверской  ', $point->to_array()['name'] );
+	}
+
 	public function test_returns_null_for_out_of_range_coordinates(): void {
 		$payload        = $this->valid();
 		$payload['lat'] = 91.0;

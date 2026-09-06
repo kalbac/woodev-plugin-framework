@@ -38,15 +38,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		}
 
 		/**
+		 * Validates one REQUIRED string field and returns it cast, or `null` to reject the point.
+		 *
+		 * The rule this establishes: **a required field must be non-blank ONCE CAST.** Checking
+		 * the raw value instead is what left three holes open at the same time (issue #803):
+		 *
+		 * - `false` is scalar and is not `''`, so it passed a raw `'' !== $value` guard — and then
+		 *   `(string) false` produced `''` anyway. The check has to run on the cast RESULT.
+		 * - `type.code`/`type.label` had no emptiness check at all, and an empty `code` is worse
+		 *   than a missing one: `pickup-panels.js`'s `pointPassesFilter()` reads
+		 *   `if ( ! code … ) return true`, so such a point passes EVERY type filter and cannot be
+		 *   filtered out of the list by the customer.
+		 * - a whitespace-only value survived, though no display site can tell it from absent.
+		 *   Rejecting it matches what {@see self::sanitize_string_list()} already does to
+		 *   whitespace-only list elements, so the class stays internally consistent.
+		 *
+		 * ⚠ `'0'` and `0` must SURVIVE — they are legitimate values a carrier can send for an id,
+		 * and `trim( '0' )` is `'0'`, not `''`. This is why the check is `'' === trim( … )` and
+		 * never `empty()`.
+		 *
+		 * The value is returned UNTRIMMED. Rejecting a blank field is a decision the caller asked
+		 * for; silently rewriting a non-blank one is not.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $value Raw payload value.
+		 *
+		 * @return string|null The cast value, or null when the field cannot be accepted.
+		 */
+		private static function required_string( $value ): ?string {
+			if ( ! is_scalar( $value ) ) {
+				return null;
+			}
+
+			$string = (string) $value;
+
+			return '' === trim( $string ) ? null : $string;
+		}
+
+		/**
 		 * Builds a point from a plugin-supplied payload.
 		 *
-		 * Returns null when a required field is missing, empty, or the wrong shape (a
-		 * non-scalar `id`/`name`/`lat`/`lng`/`address`, a non-numeric `lat`/`lng`, or a
-		 * `type` that is not an array carrying SCALAR `code` and `label`), or when a
-		 * coordinate is out of range — a malformed point must never reach the map,
-		 * and a carrier returning junk for one point must not break the whole list.
-		 * Values are rejected rather than coerced: a non-numeric `lat` must not silently become
-		 * `0.0` and render in the wrong place.
+		 * Returns null when a required field is absent or fails the required-string contract
+		 * ({@see self::required_string()}: non-scalar, or blank once cast), when `lat`/`lng`
+		 * are non-numeric or out of range, or when `type` is not an array — a malformed point
+		 * must never reach the map, and a carrier returning junk for ONE point must not break
+		 * the whole list. Values are rejected rather than coerced: a non-numeric `lat` must not
+		 * silently become `0.0` and render in the wrong place.
+		 *
+		 * The required set is `id`, `name`, `address`, `type.code`, `type.label` (strings) plus
+		 * `lat`/`lng` (numeric). All five strings go through the SAME contract — there is no
+		 * longer a per-field variant to drift.
 		 *
 		 * The seven OPTIONAL string fields (`short_address`, `locality`, `postal_code`,
 		 * `phone`, `instruction`, `work_time`, `point_short_name`) are each guarded with
@@ -68,43 +110,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 *              field it belongs to has no honest `''` default, so unlike #182's
 		 *              optional strings it rejects the point rather than degrading it
 		 *              (issue #798).
+		 * @since 2.0.2 Every required string is validated by {@see self::required_string()}:
+		 *              non-blank ONCE CAST. Closes three holes at once — `false` casting to
+		 *              `''`, `type.code`/`type.label` having no emptiness check, and
+		 *              whitespace-only values (issue #803).
 		 *
 		 * @param array<string, mixed> $payload Raw normalized payload from the plugin.
 		 *
 		 * @return self|null
 		 */
 		public static function from_array( array $payload ): ?self {
-			foreach ( [ 'id', 'name', 'lat', 'lng', 'address', 'type' ] as $required ) {
-				if ( ! isset( $payload[ $required ] ) || '' === $payload[ $required ] ) {
-					return null;
-				}
+			// REQUIRED means non-blank ONCE CAST — see {@see self::required_string()} for why the
+			// cast has to happen before the check rather than after it (issue #803).
+			$id      = self::required_string( $payload['id'] ?? null );
+			$name    = self::required_string( $payload['name'] ?? null );
+			$address = self::required_string( $payload['address'] ?? null );
 
-				if ( 'type' !== $required && ! is_scalar( $payload[ $required ] ) ) {
-					return null;
-				}
+			if ( null === $id || null === $name || null === $address ) {
+				return null;
 			}
 
-			// `isset()` LOOKS like it validates `type`, and that appearance is why the bare
-			// casts below survived both #154 and #182: it is true for an ARRAY value too, so
-			// `[ 'code' => [], 'label' => 'ПВЗ' ]` passed the whole guard and `(string) []`
-			// then yielded the literal `"Array"`. Unlike the seven optional strings, `type`
-			// cannot degrade to `''`: `code` feeds the point-type filter and `label` is drawn
-			// on the card, so a junk value has no honest default and the point is rejected
-			// instead — the same treatment every other REQUIRED field above already gets
-			// (issue #798).
-			//
-			// SCOPE: this rejects a non-scalar, NOT an empty one. `[ 'code' => '' ]` still
-			// builds a point, and `false` casts to `''` here exactly as it does for `id`,
-			// `name` and `address` above — so the "required means non-empty on output"
-			// contract is NOT established by this guard. That is issue #803, deliberately
-			// separate because fixing it coherently means deciding the rule for every
-			// required field at once, not adding two comparisons here.
-			if (
-				! is_array( $payload['type'] )
-				|| ! isset( $payload['type']['code'], $payload['type']['label'] )
-				|| ! is_scalar( $payload['type']['code'] )
-				|| ! is_scalar( $payload['type']['label'] )
-			) {
+			if ( ! isset( $payload['lat'], $payload['lng'], $payload['type'] ) || ! is_array( $payload['type'] ) ) {
+				return null;
+			}
+
+			// `isset()` LOOKS like it validates `type`, and that appearance is why bare casts on
+			// these two survived both #154 and #182: it is true for an ARRAY value too, so
+			// `[ 'code' => [], 'label' => 'ПВЗ' ]` passed the whole guard and `(string) []` then
+			// yielded the literal `"Array"` (issue #798). Unlike the seven optional strings, `type`
+			// cannot degrade to `''`: `code` keys the point-type filter — and `pickup-panels.js`'s
+			// `pointPassesFilter()` lets an EMPTY code past every filter unconditionally — while
+			// `label` is drawn on the card. So both go through the same required-string contract as
+			// `id`/`name`/`address`, and a junk or blank value rejects the point.
+			$type_code  = self::required_string( $payload['type']['code'] ?? null );
+			$type_label = self::required_string( $payload['type']['label'] ?? null );
+
+			if ( null === $type_code || null === $type_label ) {
 				return null;
 			}
 
@@ -133,14 +174,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 
 			return new self(
 				[
-					'id'              => (string) $payload['id'],
-					'name'            => (string) $payload['name'],
+					'id'              => $id,
+					'name'            => $name,
 					'lat'             => $lat,
 					'lng'             => $lng,
-					'address'         => (string) $payload['address'],
+					'address'         => $address,
 					'type'            => [
-						'code'  => (string) $payload['type']['code'],
-						'label' => (string) $payload['type']['label'],
+						'code'  => $type_code,
+						'label' => $type_label,
 					],
 					// DERIVED, not merely optional (issue #263, operator decision 11.08.2026).
 					// `short_address` is a shortened VIEW of the already-required `address`, so
@@ -170,7 +211,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 						&& is_scalar( $payload['short_address'] )
 						&& '' !== $payload['short_address']
 						? (string) $payload['short_address']
-						: (string) $payload['address'],
+						: $address,
 					'locality'        => isset( $payload['locality'] ) && is_scalar( $payload['locality'] )
 						? (string) $payload['locality']
 						: '',

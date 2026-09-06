@@ -321,6 +321,37 @@
 	}
 
 	/**
+	 * Validates one REQUIRED field and returns it cast, or `null` to reject the point.
+	 *
+	 * Mirrors `Pickup_Point::required_string()` on the REST path exactly — the two halves of
+	 * this boundary must not diverge (issue #803, and the #201/#251 lesson about validation
+	 * and conversion drifting apart when they live in different places).
+	 *
+	 * The rule: **non-blank ONCE CAST.** Checking the raw value instead leaves three holes —
+	 * a non-scalar reaching `String()` (`String( [] )` is `''`, `String( {} )` is
+	 * `"[object Object]"`), a value that is blank only AFTER conversion, and a whitespace-only
+	 * value that no display site can tell from absent.
+	 *
+	 * `'0'` and `0` must SURVIVE: they are legitimate carrier values, which is why this
+	 * trims-to-test rather than using a falsy check.
+	 *
+	 * The value is returned UNTRIMMED — rejecting a blank field is the decision; rewriting a
+	 * non-blank one is not.
+	 *
+	 * @param {*} value
+	 * @returns {string|null}
+	 */
+	function requiredString( value ) {
+		if ( ! isScalar( value ) ) {
+			return null;
+		}
+
+		var string = String( value );
+
+		return '' === string.trim() ? null : string;
+	}
+
+	/**
 	 * A plain decimal numeric-string literal: an optional sign, digits (with an
 	 * optional fractional part, either side of the `.` allowed to be empty as
 	 * long as at least one digit exists somewhere), and an optional exponent.
@@ -515,32 +546,29 @@
 			return null;
 		}
 
-		var required = [ 'id', 'name', 'address' ];
-		var i, key, value;
+		// Every required field goes through the SAME contract as the PHP half, so there is no
+		// per-field variant left to drift (issues #798, #803, #804).
+		var requiredId      = requiredString( payload.id );
+		var requiredName    = requiredString( payload.name );
+		var requiredAddress = requiredString( payload.address );
 
-		for ( i = 0; i < required.length; i++ ) {
-			key = required[ i ];
-			value = payload[ key ];
-
-			if ( undefined === value || null === value || '' === value || ! isScalar( value ) ) {
-				return null;
-			}
+		if ( null === requiredId || null === requiredName || null === requiredAddress ) {
+			return null;
 		}
 
 		var type = payload.type;
 
-		// `isScalar` on both sub-fields, exactly as the required loop above already applies it
-		// to `id`/`name`/`address`. Presence alone is not enough: `String( [] )` is `''` and
-		// `String( {} )` is the literal `"[object Object]"`, so an array or object in either
-		// sub-field survived into the select payload and reached the point-type filter and the
-		// card. This is the JS half of the boundary `Pickup_Point::from_array()` guards on the
-		// REST path, and the two MUST NOT diverge (issues #798, #804; the #201/#251 lesson
-		// about validation and conversion drifting apart when they live in different places).
-		if ( ! type || 'object' !== typeof type
-			|| undefined === type.code || null === type.code
-			|| undefined === type.label || null === type.label
-			|| ! isScalar( type.code ) || ! isScalar( type.label )
-		) {
+		if ( ! type || 'object' !== typeof type ) {
+			return null;
+		}
+
+		// An EMPTY `type.code` is worse than a missing one: `pickup-panels.js`'s
+		// `pointPassesFilter()` reads `if ( ! code … ) return true`, so the point passes every
+		// type filter and the customer cannot filter it out. `label` is drawn on the card.
+		var typeCode  = requiredString( type.code );
+		var typeLabel = requiredString( type.label );
+
+		if ( null === typeCode || null === typeLabel ) {
 			return null;
 		}
 
@@ -573,12 +601,12 @@
 		}
 
 		var point = {
-			id: String( payload.id ),
-			name: String( payload.name ),
-			address: String( payload.address ),
+			id: requiredId,
+			name: requiredName,
+			address: requiredAddress,
 			type: {
-				code: String( type.code ),
-				label: String( type.label ),
+				code: typeCode,
+				label: typeLabel,
 			},
 			// DERIVED, not merely optional (issue #263) — the JS half of the same
 			// boundary rule `Pickup_Point::from_array()` applies on the REST path,
@@ -587,7 +615,7 @@
 			// information and the display sites must never have to ask twice; a
 			// carrier with a real short form still overrides by sending one. See
 			// that PHP method's own comment for the defect this closed.
-			short_address: optionalString( payload, 'short_address' ) || String( payload.address ),
+			short_address: optionalString( payload, 'short_address' ) || requiredAddress,
 			locality: optionalString( payload, 'locality' ),
 			postal_code: optionalString( payload, 'postal_code' ),
 			phone: optionalString( payload, 'phone' ),
