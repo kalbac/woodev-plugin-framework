@@ -318,6 +318,12 @@ describe.each( [
 	[ 'a no-break space', '\u00A0' ],
 	[ 'an em space', '\u2003' ],
 	[ 'a byte-order mark', '\uFEFF' ],
+	[ 'a next-line character', '\u0085' ],
+	[ 'a Mongolian vowel separator', '\u180E' ],
+	[ 'an ogham space mark', '\u1680' ],
+	[ 'a line separator', '\u2028' ],
+	[ 'an unsafe integer', 9007199254740992 ],
+	[ 'a negative unsafe integer', -9007199254740992 ],
 	[ 'NaN', NaN ],
 	[ 'Infinity', Infinity ],
 	[ 'a fractional number', 1.5 ],
@@ -346,6 +352,21 @@ describe.each( [
 		expect( onSelect ).not.toHaveBeenCalled();
 		expect( onError ).toHaveBeenCalledTimes( 1 );
 	} );
+} );
+
+// The largest integer both halves render identically must still pass — the bound has to
+// reject values ABOVE it without also refusing it.
+test( 'the largest safely rendered integer is accepted', () => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.id = 9007199254740991;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( '9007199254740991' );
 } );
 
 // The one non-string case that actually occurs: a carrier whose JSON gives a numeric id.

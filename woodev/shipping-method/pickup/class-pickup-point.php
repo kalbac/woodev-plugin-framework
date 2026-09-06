@@ -48,6 +48,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		private const MAX_SAFE_INTEGER = 9007199254740991;
 
 		/**
+		 * Every code point this boundary treats as blank, written out one by one so it cannot
+		 * drift from the JS half.
+		 *
+		 * The set is ECMAScript's WhiteSpace + LineTerminator + U+FEFF, PLUS U+0085 (NEL) and
+		 * U+180E (Mongolian vowel separator). Those two are a deliberate addition to both
+		 * halves rather than a shorthand's accident: they are invisible, so a required value
+		 * made only of them is exactly the "blank to every reader" case this rule exists for.
+		 *
+		 * Neither `\s` nor `\p{Z}` can be used here. Measured on this runtime (PCRE2 10.44):
+		 * `\s` under `/u` matches U+0085 and U+180E while ECMAScript's `\s` does not, and
+		 * `\p{Z}` matches neither. Every shorthand disagrees across the two languages, which is
+		 * how the halves silently diverged twice during review of PR #808.
+		 *
+		 * @since 2.0.2
+		 * @var string
+		 */
+		private const BLANK_CHARACTERS = '/[\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}\x{0020}\x{0085}\x{00A0}\x{180E}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+/u';
+
+		/**
 		 * Validates one REQUIRED string field and returns it cast, or `null` to reject the point.
 		 *
 		 * The rule this establishes: **a required field must be non-blank ONCE CAST.** Checking
@@ -90,9 +109,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 			// vs `'NaN'`, `'1.0E+20'` vs `'100000000000000000000'`), so they are out too. What
 			// survives is the case that actually occurs: a carrier whose JSON gives a NUMERIC
 			// id. `5` and `5.0` both normalise to `'5'` on both halves.
+			//
+			// The safe-integer bound applies to the `is_int()` branch too, and that is not
+			// theoretical: `PHP_INT_MAX` is 9223372036854775807 on 64-bit, so a decoded carrier
+			// row can hand us a NATIVE int above the range JS can represent exactly. Bounding
+			// only the float branch let PHP accept 9007199254740992 while the iframe half
+			// rejected it (second review round of PR #808).
 			if ( is_string( $value ) ) {
 				$string = $value;
-			} elseif ( is_int( $value ) ) {
+			} elseif ( is_int( $value ) && abs( $value ) <= self::MAX_SAFE_INTEGER ) {
 				$string = (string) $value;
 			} elseif (
 				is_float( $value )
@@ -105,12 +130,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 				return null;
 			}
 
-			// UNICODE-aware blank test, and it has to be spelled out: PHP's `trim()` strips only
-			// ASCII whitespace, while JS's `String.prototype.trim()` strips every Unicode space.
-			// A U+00A0-only value therefore passed HERE and was refused by the JS half — blank
-			// to every reader, accepted by one side only (found by review of PR #808). `\p{Z}`
-			// covers Zs/Zl/Zp, which together with `\s` and U+FEFF is exactly JS's `\s` set.
-			$stripped = preg_replace( '/[\s\p{Z}\x{FEFF}]+/u', '', $string );
+			// The blank test is spelled out CODE POINT BY CODE POINT, and deliberately uses
+			// neither `trim()` nor `\s`/`\p{Z}`, because every shorthand disagrees across the
+			// two languages:
+			//
+			// - PHP's `trim()` strips ASCII whitespace only; JS's `String.prototype.trim()`
+			// strips every Unicode space, so a U+00A0-only value passed here and was refused
+			// by the JS half (first review round of PR #808).
+			// - PCRE2 10.44's `\s` under `/u` matches U+0085 and U+180E; ECMAScript's `\s`
+			// does not, so `[\s\p{Z}]` was still not the same set (second round). Measured on
+			// this runtime, not assumed.
+			//
+			// The exact set, and why U+0085/U+180E are in it deliberately, lives on
+			// {@see self::BLANK_CHARACTERS}; `map-provider-embedded.js` spells out the same one.
+			$stripped = preg_replace( self::BLANK_CHARACTERS, '', $string );
 
 			// `preg_replace()` returns null on malformed UTF-8 — junk in a required field.
 			if ( null === $stripped || '' === $stripped ) {

@@ -349,15 +349,30 @@
 	 * @param {*} value
 	 * @returns {string|null}
 	 */
+	/**
+	 * Every code point this boundary treats as blank, written out one by one so it cannot
+	 * drift from `Pickup_Point::BLANK_CHARACTERS` on the PHP half.
+	 *
+	 * ECMAScript's WhiteSpace + LineTerminator + U+FEFF, PLUS U+0085 and U+180E — those two
+	 * are a deliberate addition on BOTH halves, because they are invisible and a required
+	 * value made only of them is exactly the "blank to every reader" case this rule is for.
+	 *
+	 * `\s` would be shorter and is NOT usable: PCRE2's `\s` under `/u` covers U+0085 and
+	 * U+180E while this one does not, so the halves silently disagreed (second review round
+	 * of PR #808).
+	 *
+	 * @type {RegExp}
+	 */
+	var BLANK_CHARACTERS = /[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u00A0\u1680\u180E\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g;
+
 	function requiredString( value ) {
 		var string;
 
-		// ACCEPT ONLY a string or an integer-valued finite number — see
-		// `Pickup_Point::required_string()` for the full argument. A plain `isScalar()` here
-		// disagreed with the PHP half on real inputs (review of PR #808): `String( false )` is
-		// `'false'` and was accepted, while PHP cast the same `false` to `''` and rejected it.
-		// Exotic numbers render differently in the two languages, so only the case that
-		// actually occurs survives: a carrier whose JSON gives a NUMERIC id.
+		// ACCEPT ONLY a string or an integer-valued finite number within the range PHP and JS
+		// render identically — see `Pickup_Point::required_string()` for the full argument. A
+		// plain `isScalar()` here disagreed with the PHP half on real inputs (review of
+		// PR #808): `String( false )` is `'false'` and was accepted, while PHP cast the same
+		// `false` to `''` and rejected it.
 		if ( 'string' === typeof value ) {
 			string = value;
 		} else if ( 'number' === typeof value
@@ -370,10 +385,7 @@
 			return null;
 		}
 
-		// Blank test kept EXPLICIT rather than `.trim()`, so it states the same character set
-		// the PHP half spells out — `\s` here already covers Unicode spaces, U+00A0 and U+FEFF
-		// included, which is precisely what PHP's ASCII-only `trim()` did NOT.
-		return '' === string.replace( /[\s\uFEFF\u00A0]/g, '' ) ? null : string;
+		return '' === string.replace( BLANK_CHARACTERS, '' ) ? null : string;
 	}
 
 	/**

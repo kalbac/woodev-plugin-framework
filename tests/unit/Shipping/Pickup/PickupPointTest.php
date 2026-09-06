@@ -158,6 +158,12 @@ final class PickupPointTest extends TestCase {
 			'a no-break space'   => [ 'a no-break space', "\u{00A0}" ],
 			'an em space'        => [ 'an em space', "\u{2003}" ],
 			'a byte-order mark'  => [ 'a byte-order mark', "\u{FEFF}" ],
+			'a next-line character' => [ 'a next-line character', "\u{0085}" ],
+			'a Mongolian vowel separator' => [ 'a Mongolian vowel separator', "\u{180E}" ],
+			'an ogham space mark' => [ 'an ogham space mark', "\u{1680}" ],
+			'a line separator'   => [ 'a line separator', "\u{2028}" ],
+			'an unsafe integer'  => [ 'an unsafe integer', 9007199254740992 ],
+			'a negative unsafe integer' => [ 'a negative unsafe integer', -9007199254740992 ],
 			'NAN'                => [ 'NAN', NAN ],
 			'INF'                => [ 'INF', INF ],
 			'a fractional float' => [ 'a fractional float', 1.5 ],
@@ -219,6 +225,23 @@ final class PickupPointTest extends TestCase {
 			$point->to_array()['id'],
 			"negative zero must render as '0', exactly as String( -0 ) does in JS"
 		);
+	}
+
+	/**
+	 * The safe-integer bound applies to a NATIVE PHP int too, not only to a float. `PHP_INT_MAX`
+	 * is 9223372036854775807 on 64-bit, so a decoded carrier row can hand us an int JS cannot
+	 * represent exactly; bounding only the float branch let PHP accept 9007199254740992 while
+	 * the iframe half rejected the same value (second review round of PR #808). The largest
+	 * value both sides render identically must still pass.
+	 */
+	public function test_the_largest_safely_rendered_integer_is_accepted(): void {
+		$payload       = $this->valid();
+		$payload['id'] = 9007199254740991;
+
+		$point = Pickup_Point::from_array( $payload );
+
+		$this->assertNotNull( $point, 'the max safe integer must build a point' );
+		$this->assertSame( '9007199254740991', $point->to_array()['id'] );
 	}
 
 	public function test_a_required_field_keeps_its_surrounding_whitespace(): void {
