@@ -1,5 +1,5 @@
-# Gotcha: [tooling/worktrees] — "A fresh worktree needs no install step" stops being true the moment another branch renames a class
-> Tags: orca, worktrees, composer, autoload, testing | Session: s104
+# Gotcha: [tooling/worktrees] — a worktree's COPIED classmap does not know any class that did not exist when it was made
+> Tags: orca, worktrees, composer, autoload, testing | Session: s104, second trigger s121
 
 ## What happens
 
@@ -17,6 +17,19 @@ PHP Fatal error: Uncaught Error: Class "Woodev\Framework\Shipping\Settings\Shipp
 The rebase is clean, the source is correct, and nothing in the diff is wrong. The autoloader is
 simply describing the tree as it was when the worktree was created.
 
+**And it does not take another branch. s121: a worker ADDING a class hits the same wall.** The
+#144 worker created `Abstract_Bulk_Point_Source` in its own branch — no rebase, no merge, nobody
+else's rename — and its critic's suite died the same way, because the copied classmap was written
+before that file existed. This is the far more common trigger of the two: every worker that adds a
+framework class meets it, and the symptom still reads as "the diff is broken".
+
+⚠ Note this is a DIFFERENT failure from the one `php bin/generate-class-map.php` fixes. That
+generator writes `woodev/class-map.php`, the framework's own RUNTIME autoloader for a vendored boot
+(ADR-012, gotcha `framework-classmap-autoload-vendored-boot`). Composer's `autoload_classmap.php` is
+what the TEST suite loads through. A worker adding a class needs BOTH — and doing only the framework
+one, which the card-facing rules talk about, leaves the suite red with a message that mentions
+neither.
+
 ## Root cause
 
 `composer dump-autoload` writes a static classmap. Copying `vendor` copies that file. Git does not
@@ -24,8 +37,8 @@ regenerate it, because Composer is not a build step git knows about.
 
 ## Fix
 
-**After any rebase or merge that brings in a class rename or move, run `composer dump-autoload` in
-the worktree** before believing a red suite:
+**Run `composer dump-autoload` in the worktree before believing a red suite** — after any rebase or
+merge that brings in a class rename or move, AND after adding a class of your own:
 
 ```bash
 composer dump-autoload -q
