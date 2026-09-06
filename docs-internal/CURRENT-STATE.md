@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-05 (s119).** `main` clean, **no open PRs, no worktrees, Инбокс EMPTY**. s119 closed **#644** whole (both remaining parts — the docs contradiction map and all 60 open cards verified against the code), plus **#113 #148 #381**; filed **#779 #780**. **58 open cards**, every one carrying a «Приоритет»; «Сейчас» is empty.
+**As of 2026-09-06 (s120).** `main` clean, **no open PRs, no worktrees**. s120 merged PRs #787 #788 #789 #790 #792 and closed **#781 #782 #783 #784 #785 #773 #573**; filed **#791**. **56 open cards**, every one carrying a «Приоритет»; «Сейчас» is empty and **#786 is the only card in Инбокс** — his to move.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -35,11 +35,11 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — ALL re-measured 05.09.2026 (s118) against `567218b`, sodium enabled:** unit
-**3524** / 8647 / **1 skipped**; jest **1628** in **25** suites; **integration 143 / 530**; phpcs
-clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:mo` and
-`lint:docs` OK; **e2e 7 / 7** re-run on the WP 7.1 + WC 11.1.0 rig, no longer stale.
-⚠ The s117 figure «integration 138 / 522» in this file was WRONG — the handoff's 143 / 530 was right.
+**Baselines — re-measured 06.09.2026 (s120) against `86b9358`:** unit **3534** / 8409 (the run
+was WITHOUT sodium, so its 67 skipped means nothing — see below); jest **1639** in **26** suites;
+phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:mo` and
+`lint:docs` OK; **e2e 7 / 7** against the live rig. **Integration was NOT re-run in s120** — the
+last measurement stands: **143 / 530** (s118, `567218b`), and it is the coordinator's job.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
 `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
@@ -72,7 +72,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 56, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
@@ -87,10 +87,13 @@ caller's concrete order class or a `WC_Subscription` becomes a plain order (`ses
 **i18n — four rules, and they live in `AGENTS.md` → Conventions, not here.** The one that is not
 obvious from them: classify by the RENDER PATH, never by the file's directory (gotcha
 `classify-an-i18n-string-by-its-render-path-not-its-file-path`).
-**И теперь это ПРИНУЖДАЕТСЯ** (#771, s118): `lint:i18n` падает на английском msgid без перевода вне
+**Принуждается ЧАСТИЧНО** (#771, s118): `lint:i18n` падает на английском msgid без перевода вне
 `scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
 собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
 ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
+⚠ **`lint:i18n` читает ТОЛЬКО `.po` и не сканирует исходники**, поэтому НОВАЯ английская строка, не
+доехавшая до каталога, проходит гейт зелёной — замерено в s120 на живом примере (**#791**). Его
+зелёный отвечает про каталог, а не про код.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -126,6 +129,12 @@ browser half, deliberately and with a comment saying so.
 **The «Place order» block is OPTIONAL** (#725, s112): checkbox «Блокировать оформление заказа»,
 default ON; off makes `refreshGate()` **leave the button alone**, not force-enable it. ⚠ WooCommerce
 NEVER disables that button itself. Settings section «Форма заказа», slug `checkout`.
+
+**A checkout renderer's `detach()` unbinds and cancels NOTHING** (#573, s120): an in-flight
+`/location/list` still writes afterwards, and `enqueueSelect()` is last-writer-wins, so the cascade
+counts PICKS (`nextPickSeq`) and a renderer asks `release.isStale()` before handing a record over.
+⚠ The busy token is the WRONG key for that question — `settleSelect()` clears it unconditionally.
+Gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -200,7 +209,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **279**.
+Gotchas: **282**.
 
 ## Program status (high level)
 
