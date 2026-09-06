@@ -2182,6 +2182,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			return is_scalar( $value ) ? wc_clean( (string) wp_unslash( $value ) ) : '';
 		}
 
+		/**
+		 * Returns the payment method id the customer is checking out with — the fourth
+		 * callable {@see Pickup_Controller} is constructed with, feeding
+		 * {@see Constraint_Checker}'s COD gate on the points/detail/select REST routes.
+		 *
+		 * `$_POST['payment_method']` wins when present — the checkout form's own posted
+		 * value, current for a checkout-page request. It falls back to WooCommerce's own
+		 * record of the live choice, `WC()->session->get( 'chosen_payment_method' )`, for
+		 * the points/detail/select routes: those are GET/standalone-POST requests the
+		 * checkout form's fields are never part of (mirrors
+		 * {@see self::rest_shipping_method()}'s own reasoning).
+		 *
+		 * Bridges the WC context itself (issue #174) before the session fallback: a plain
+		 * REST route never gets `WC()->session` for free — see
+		 * {@see self::bridge_wc_context()}'s own docblock. This method used to resolve the
+		 * session fallback correctly ONLY because {@see Pickup_Controller} happens to call
+		 * `cart_weight` (which bridges via {@see self::current_cart_weight_grams()}) before
+		 * `payment_method` at every one of its call sites — the same implicit ordering
+		 * {@see self::rest_shipping_method()} depended on. `bridge_wc_context()` is
+		 * idempotent, so bridging here too costs nothing on the real path, and it is placed
+		 * AFTER the `$_POST` check so a posted value never pays for a needless
+		 * `wc_load_cart()`.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Bridges the WC context itself before the session fallback, instead of
+		 *              depending on a caller having already done so (issue #174).
+		 *
+		 * @return string sanitized payment method id, or empty string when neither source
+		 *                has one.
+		 */
 		public function rest_payment_method(): string {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WC verifies the nonce before hooks fire.
 			$posted = $_POST['payment_method'] ?? '';
@@ -2190,6 +2220,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			if ( '' !== $posted ) {
 				return $posted;
 			}
+
+			$this->bridge_wc_context();
 
 			$chosen = $this->wc_session_chosen_payment_method();
 
@@ -2220,11 +2252,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * `carrier_pickup:3` would fail every comparison the rest of the framework makes
 		 * against `carrier_pickup`.
 		 *
+		 * Bridges the WC context itself (issue #174): a plain REST route (this method's own
+		 * caller, {@see Pickup_Controller}) never gets `WC()->session` for free the way a
+		 * front-end request does — see {@see self::bridge_wc_context()}'s own docblock. This
+		 * method used to resolve correctly ONLY because {@see Pickup_Controller} happens to
+		 * call `cart_weight` (which bridges via {@see self::current_cart_weight_grams()})
+		 * before `shipping_method` at every one of its call sites — an implicit ordering
+		 * nothing enforced or tested. `bridge_wc_context()` is idempotent (a no-op once the
+		 * cart is already present), so calling it here too costs nothing on the real path.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Bridges the WC context itself instead of depending on a caller
+		 *              having already done so (issue #174).
 		 *
 		 * @return string bare method id, or empty string when WooCommerce cannot tell us.
 		 */
 		public function rest_shipping_method(): string {
+			$this->bridge_wc_context();
+
 			$chosen = $this->wc_session_chosen_shipping_methods();
 
 			if ( ! is_array( $chosen ) || ! isset( $chosen[0] ) || ! is_scalar( $chosen[0] ) ) {

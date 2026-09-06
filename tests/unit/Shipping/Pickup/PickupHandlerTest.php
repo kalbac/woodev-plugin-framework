@@ -801,6 +801,82 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 	}
 
+	/**
+	 * Issue #174: reproduces the points/detail/select REST routes' own starting state —
+	 * no WooCommerce cart/session raised yet, the same starting point
+	 * {@see Pickup_Handler_Cart_Probe} exists for — to prove whether
+	 * {@see Pickup_Handler::rest_shipping_method()} and
+	 * {@see Pickup_Handler::rest_payment_method()} raise the bridge THEMSELVES rather
+	 * than relying on {@see Pickup_Handler::current_cart_weight_grams()} having already
+	 * run first, which is merely what
+	 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller::handle_select_request()}
+	 * (and its two sibling call sites) happen to do today — `cart_weight` is invoked
+	 * before `payment_method`/`shipping_method` at all three, an ORDER nothing enforces.
+	 * Both session accessors answer `null` — "no session yet" — until `load_wc_cart()`
+	 * runs, exactly {@see Pickup_Handler_Cart_Probe}'s own un-raised state. Never via
+	 * `Functions\when( 'WC' )` — see that probe's own docblock for why mocking `WC()`
+	 * itself is unsafe in this file.
+	 */
+	final class Pickup_Handler_Unbridged_Rest_Session_Probe extends Pickup_Handler {
+
+		/** @var int number of times load_wc_cart() was called. */
+		public int $load_wc_cart_calls = 0;
+
+		/** @var object|null */
+		private $cart = null;
+
+		/** @var bool */
+		private bool $raised = false;
+
+		/** @var mixed */
+		private $shipping_methods;
+
+		/** @var mixed */
+		private $payment_method;
+
+		/**
+		 * @param mixed $shipping_methods what `WC()->session->get( 'chosen_shipping_methods' )`
+		 *                                answers once the session has been raised.
+		 * @param mixed $payment_method   what `WC()->session->get( 'chosen_payment_method' )`
+		 *                                answers once the session has been raised.
+		 */
+		public function __construct(
+			string $plugin_id,
+			string $field_id,
+			Point_Source $source,
+			Map_Provider $map_provider,
+			array $default_location,
+			$shipping_methods,
+			$payment_method
+		) {
+			parent::__construct( $plugin_id, $field_id, $source, $map_provider, $default_location );
+			$this->shipping_methods = $shipping_methods;
+			$this->payment_method   = $payment_method;
+		}
+
+		protected function wc_cart() {
+			return $this->cart;
+		}
+
+		protected function wc_load_cart_available(): bool {
+			return true;
+		}
+
+		protected function load_wc_cart(): void {
+			++$this->load_wc_cart_calls;
+			$this->cart   = new \stdClass();
+			$this->raised = true;
+		}
+
+		protected function wc_session_chosen_shipping_methods() {
+			return $this->raised ? $this->shipping_methods : null;
+		}
+
+		protected function wc_session_chosen_payment_method() {
+			return $this->raised ? $this->payment_method : null;
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// Issue #176 — pickup-selection persistence test doubles
 	// -------------------------------------------------------------------------
@@ -4819,6 +4895,72 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertSame( 0, $handler->current_cart_weight_grams() );
 			$this->assertSame( 1, $handler->load_wc_cart_calls );
+		}
+
+		// -------------------------------------------------------------------------
+		// Issue #174: rest_shipping_method() / rest_payment_method() must bridge the
+		// WooCommerce session THEMSELVES, not rely on current_cart_weight_grams() having
+		// already raised it first. Pickup_Controller happens to invoke the cart-weight
+		// callable before either of these at all three of its call sites today, but
+		// nothing enforces that order — a plugin constructing Pickup_Controller with its
+		// own cart-weight callable (or any future reordering) would silently get '' back
+		// from both. Exercised via Pickup_Handler_Unbridged_Rest_Session_Probe, which
+		// starts with no cart/session at all, the real starting state of a plain REST
+		// request — never via `Functions\when( 'WC' )`, for the same reason
+		// Pickup_Handler_Cart_Probe's own docblock documents.
+		// -------------------------------------------------------------------------
+
+		/**
+		 * The BLOCKING fix itself: called with NOTHING having raised the session first
+		 * (the reversed order relative to every real call site today), the method must
+		 * still resolve the shipping method by raising the bridge itself. Before the fix,
+		 * `wc_session_chosen_shipping_methods()` answers `null` here (the session was
+		 * never raised) and the method returns `''`, silently.
+		 */
+		public function test_rest_shipping_method_bridges_the_session_itself_without_a_prior_cart_weight_call(): void {
+			$handler = new Pickup_Handler_Unbridged_Rest_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				[ 'carrier_pickup:3' ],
+				null
+			);
+
+			$this->assertSame( 'carrier_pickup', $handler->rest_shipping_method() );
+			$this->assertSame(
+				1,
+				$handler->load_wc_cart_calls,
+				'rest_shipping_method() must raise the session itself, not rely on a prior caller'
+			);
+		}
+
+		/**
+		 * Same defect, the `payment_method` seam: a GET/POST request reaching this method
+		 * with an empty `$_POST['payment_method']` (the points/detail/select routes' own
+		 * shape) must still resolve the session's live choice by raising the bridge
+		 * itself, independent of whichever other callable a caller invoked first.
+		 */
+		public function test_rest_payment_method_bridges_the_session_itself_without_a_prior_cart_weight_call(): void {
+			$_POST = [];
+
+			$handler = new Pickup_Handler_Unbridged_Rest_Session_Probe(
+				'p',
+				'f',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location(),
+				null,
+				'cod'
+			);
+
+			$this->assertSame( 'cod', $handler->rest_payment_method() );
+			$this->assertSame(
+				1,
+				$handler->load_wc_cart_calls,
+				'rest_payment_method() must raise the session itself, not rely on a prior caller'
+			);
 		}
 
 		// -------------------------------------------------------------------------
