@@ -1194,6 +1194,26 @@ describe( 'the /select busy state (operator rig pass, s90)', () => {
 			// The pick sequence answers the question actually being asked.
 			expect( release.isStale() ).toBe( false );
 		} );
+
+		it( 'isStale() survives the trip through attachOne() — the seam a renderer actually receives', () => {
+			// The critic pass on PR #792 asked for this: both halves of #573 were pinned, the
+			// SEAM between them was not. `attachOne()` hands `onResolving: onResolvingFor(...)`
+			// straight through, unwrapped, so what a renderer holds is the very closure the
+			// cascade built — asserted here on the options object the renderer was handed,
+			// rather than on the function under test directly. Wrap `onResolving` in
+			// `attachOne()` some day and this fails, which is the point.
+			boot( { region: true, settlement: true } );
+
+			const handed = callFor( 'billing_state' );
+
+			expect( typeof handed.onResolving ).toBe( 'function' );
+
+			const release = handed.onResolving();
+
+			expect( typeof release ).toBe( 'function' );
+			expect( typeof release.isStale ).toBe( 'function' );
+			expect( release.isStale() ).toBe( false );
+		} );
 	} );
 
 	// Operator's own constraint, s90, and the reason the lock is keyed on an IN-FLIGHT request
