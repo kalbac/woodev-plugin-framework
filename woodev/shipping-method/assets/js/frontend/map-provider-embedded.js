@@ -529,9 +529,17 @@
 
 		var type = payload.type;
 
+		// `isScalar` on both sub-fields, exactly as the required loop above already applies it
+		// to `id`/`name`/`address`. Presence alone is not enough: `String( [] )` is `''` and
+		// `String( {} )` is the literal `"[object Object]"`, so an array or object in either
+		// sub-field survived into the select payload and reached the point-type filter and the
+		// card. This is the JS half of the boundary `Pickup_Point::from_array()` guards on the
+		// REST path, and the two MUST NOT diverge (issues #798, #804; the #201/#251 lesson
+		// about validation and conversion drifting apart when they live in different places).
 		if ( ! type || 'object' !== typeof type
 			|| undefined === type.code || null === type.code
 			|| undefined === type.label || null === type.label
+			|| ! isScalar( type.code ) || ! isScalar( type.label )
 		) {
 			return null;
 		}

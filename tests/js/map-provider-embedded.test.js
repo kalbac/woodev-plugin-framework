@@ -299,6 +299,29 @@ test( 'a payload with a missing type.label emits error, not select', () => {
 	expect( onError ).toHaveBeenCalledTimes( 1 );
 } );
 
+// Issue #804: presence is not enough, because the conversion step below the guard is a bare
+// `String()`. `String( [] )` is `''` and `String( {} )` is the literal `"[object Object]"`,
+// so a non-scalar sub-field used to survive into the select payload — an empty code passes
+// every type filter unconditionally (`pointPassesFilter`), and the label is drawn on the
+// card. This is the JS mirror of #798 on `Pickup_Point::from_array()`; the two halves of
+// this boundary must not diverge, which is the #201/#251 lesson.
+describe.each( [
+	[ 'an array', [ 'unexpected' ] ],
+	[ 'an object', { unexpected: true } ],
+] )( 'a non-scalar type sub-field (%s)', ( label, value ) => {
+	test.each( [ 'code', 'label' ] )( 'in type.%s emits error, not select', ( key ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload.type[ key ] = value;
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
 // Every one of the four bounds is tested individually, each against an OTHERWISE
 // valid payload — isolating each guard so a single loosened comparison (e.g. `180`
 // drifting to `181`) cannot hide behind another bound rejecting the same payload.
