@@ -48,6 +48,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point
 	/**
 	 * Base class for a `STRATEGY_BULK` {@see Point_Source}.
 	 *
+	 * `get_strategy()` and `fetch_details()` are `final` on purpose, and the escape hatch is
+	 * to NOT extend this class: a carrier whose API has a real point-by-id endpoint (CDEK's
+	 * `/deliverypoints` takes an arbitrary parameter set, so a by-code lookup is one HTTP
+	 * call rather than a scan) implements {@see Point_Source} directly. It gives up nothing
+	 * by doing so — overriding `fetch_details()` would already make
+	 * {@see self::bulk_point_id()} and {@see self::normalize_bulk_point()} dead, since they
+	 * exist only to serve the scan, leaving a one-line `get_strategy()` as the entire
+	 * inheritance. `final` therefore costs a subclass nothing and buys the reader a class
+	 * that means exactly one thing: THIS is the scan.
+	 *
 	 * A subclass supplies {@see self::raw_bulk_points()} — the raw entries
 	 * `fetch_points()` itself would filter down to a locality — and this class
 	 * answers `get_strategy()` and `fetch_details()` on top of it. `fetch_points()`
