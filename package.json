@@ -27,6 +27,7 @@
     "generate:imask": "node bin/generate-imask-vendor.mjs",
     "lint:imask": "node bin/generate-imask-vendor.mjs --check",
     "lint:i18n": "node scripts/lint-i18n.mjs",
+    "lint:i18n-sources": "node scripts/lint-i18n-sources.mjs",
     "lint:mo": "node scripts/lint-mo.mjs"
   },
   "devDependencies": {
