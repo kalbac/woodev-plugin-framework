@@ -60,5 +60,6 @@ reason to loosen a gate that is doing its job.
 ## Related
 
 - [the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist](the-fixture-docblock-asserted-an-api-parameter-that-does-not-exist.md) — the same family: a confident-looking artefact that nothing checks, believed for months
+- [lint-i18n-answers-about-the-catalogue-not-the-code](lint-i18n-answers-about-the-catalogue-not-the-code.md) — the identical asymmetry in a different gate: `lint:i18n` walks the catalogue it is handed and never the source tree outside it (s121)
 - [../DOCS-SCHEMA.md](../DOCS-SCHEMA.md) — "Relative links must resolve", the gate this one bounds
 - [../reviews/2026-09-05-644-part1-contradiction-map.md](../reviews/2026-09-05-644-part1-contradiction-map.md) — the audit that measured all three gaps

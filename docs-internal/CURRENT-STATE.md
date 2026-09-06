@@ -6,12 +6,14 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-06 (s120).** `main` clean, **no open PRs, no worktrees**. s120 merged PRs #787 #788 #789 #790 #792 and closed **#781 #782 #783 #784 #785 #773 #573**; filed **#791**. **56 open cards**, every one carrying a «Приоритет»; «Сейчас» is empty and **#786 is the only card in Инбокс** — his to move.
+**As of 2026-09-06 (s121).** s121 merged PRs **#793 #794 #795** and closed **#779 #107 #791**. **The ten-card freeze behind #786 was audited and is largely WRONG** (operator asked, measurement answered): #151 #152 #174 #181 #182 #144 unfrozen to «Потом»; #165 #173 → «Ждёт оператора» (they want his EYES on the rig, not a plugin); #371 and #714 stay frozen but on their REAL conditions — his own YAGNI decision of 16.08.2026 and the unimplemented §13. Report: [reviews/2026-09-06-pickup-freeze-audit.md](reviews/2026-09-06-pickup-freeze-audit.md). **#786 is in Бэклог** — he moved it and answered on the card.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
-FIXTURES**; the shipping plugin is written later, from scratch, own repo, version **2.3.0.0**
-(⚠ `version_compare('2.3.0.0','2.3.2')` is LESS — valid only if 2.3.x never shipped). `#762` and
+FIXTURES**; the shipping plugin is written later, from scratch, own repo, version **2.3.0.0** —
+✅ **SETTLED 06.09.2026:** nothing above **`2.2.5.5`** is installed anywhere and `2.3.2` was his own
+abandoned rewrite that never shipped, so the comparison that actually happens is
+`version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
 ⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs
@@ -35,11 +37,17 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — re-measured 06.09.2026 (s120) against `86b9358`:** unit **3534** / 8409 (the run
-was WITHOUT sodium, so its 67 skipped means nothing — see below); jest **1639** in **26** suites;
-phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:mo` and
-`lint:docs` OK; **e2e 7 / 7** against the live rig. **Integration was NOT re-run in s120** — the
-last measurement stands: **143 / 530** (s118, `567218b`), and it is the coordinator's job.
+**Baselines — re-measured 06.09.2026 (s121) against `main`:** unit **3540** / **8427**; jest
+**1644** in **27** suites; **integration 143 / 530**, re-run on `main` this session and no longer a
+carried-over number; phpcs clean — **with the warning level ON**; phpstan level 3 no errors;
+`lint:i18n`, `lint:i18n-sources` (NEW, #791), `lint:mo` and `lint:docs` OK; **e2e 7 / 7** against
+the live rig (s120, not re-run since).
+
+⚠ **s120's handoff said unit 3534 / 8409 and that was WRONG AT THE COMMIT IT NAMED** — `86b9358`
+re-measured in s121 gives **3540 / 8427 / 67 skipped**, byte-identical to `main`. Nothing between
+those commits touched a test. So the number was mistyped, not drifted: a handoff figure can be wrong
+about its own commit, which is exactly why the standing rule is to re-measure rather than carry
+forward.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
 `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
@@ -72,7 +80,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 56, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 53, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
@@ -91,9 +99,14 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 `scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
 собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
 ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
-⚠ **`lint:i18n` читает ТОЛЬКО `.po` и не сканирует исходники**, поэтому НОВАЯ английская строка, не
-доехавшая до каталога, проходит гейт зелёной — замерено в s120 на живом примере (**#791**). Его
-зелёный отвечает про каталог, а не про код.
+✅ **Дыра «гейт отвечает про каталог, а не про код» ЗАКРЫТА** (#791, s121). `lint:i18n` по-прежнему
+читает только `.po`, но рядом встал **`lint:i18n-sources`**: гоняет `wp i18n make-pot` по `woodev/`
+и требует, чтобы каждый извлечённый msgid был И в `.pot`, И в `.po`. Живёт шагом в существующей
+джобе `lint` (там уже PHP 8.1 — ни docker, ни wp-env не нужны), wp-cli **приколот на 2.12.0** = версия
+контейнера рига. Гейт **ОДНОСТОРОННИЙ**: запись каталога без источника — это #775, и она НЕ ошибка.
+Доказан враждебно: краснеет и на обычном литерале, и на склеенном msgid, а без wp-cli падает, а не
+пропускает. Каталог догнан на 28 строк, 39 протухших не тронуты. Готча
+`lint-i18n-answers-about-the-catalogue-not-the-code`.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -209,7 +222,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **282**.
+Gotchas: **284**.
 
 ## Program status (high level)
 
