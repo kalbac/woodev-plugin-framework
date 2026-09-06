@@ -208,7 +208,9 @@ Two checked-in files make a new worktree runnable the moment it exists, with **n
   never copied. Entries must exist in the primary checkout **and** be gitignored, or Orca skips them
   silently.
 - **`.worktreeinclude`** → `vendor`, `.mcp.json`, `.wp-env.override.json`,
-  `.claude/settings.local.json` — **copied**, so each worktree owns them.
+  `.claude/settings.local.json`, `plugins-reference` — **copied**, so each worktree owns them.
+  `plugins-reference` is the donor plugin copies the contract tests read; without it those tests
+  silently skip.
 
 `vendor` must be copied and never shared: Composer bakes `$baseDir = dirname(dirname(__DIR__))` into
 its autoloader and PHP resolves a symlink to its real path, so a shared `vendor` makes the classmap
