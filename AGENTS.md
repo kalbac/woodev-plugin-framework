@@ -190,6 +190,7 @@ npm run test:js                                   # jest — CI gate (test-js jo
 npm run test:e2e                                  # Playwright vs the LIVE RIG (:8973), not CI — #723
 npm run build                                     # build the 5 React bundles (CI: assets-parity job)
 npm run lint:ts-baseline                          # TypeScript-by-default gate for src/ — CI (test-js)
+npm run lint:i18n-sources                         # every source msgid must be in the catalogue — CI (lint job, #791)
 npm run typecheck                                 # tsc --noEmit over src/ — CI gate (test-js job)
 
 # Docs
