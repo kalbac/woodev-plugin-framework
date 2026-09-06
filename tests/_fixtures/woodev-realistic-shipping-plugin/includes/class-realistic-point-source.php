@@ -36,7 +36,7 @@ if ( ! class_exists( 'Woodev_Realistic_Point_Source' ) ) {
 	/**
 	 * Static bulk pickup-point source for the realistic shipping fixture.
 	 */
-	final class Woodev_Realistic_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
+	final class Woodev_Realistic_Point_Source extends \Woodev\Framework\Shipping\Pickup\Abstract_Bulk_Point_Source {
 
 		/**
 		 * Canonical locality name => accepted spellings.
@@ -56,13 +56,6 @@ if ( ! class_exists( 'Woodev_Realistic_Point_Source' ) ) {
 			'Москва'    => [ 'Москва', 'Moscow' ],
 			'Краснодар' => [ 'Краснодар', 'Krasnodar' ],
 		];
-
-		/**
-		 * @inheritDoc
-		 */
-		public function get_strategy(): string {
-			return self::STRATEGY_BULK;
-		}
 
 		/**
 		 * @inheritDoc
@@ -94,17 +87,12 @@ if ( ! class_exists( 'Woodev_Realistic_Point_Source' ) ) {
 
 		/**
 		 * @inheritDoc
+		 *
+		 * The fixture's full raw universe spans both localities it serves, not
+		 * just the one last requested — see {@see self::all_points()}.
 		 */
-		public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
-
-			foreach ( $this->all_points() as $payload ) {
-
-				if ( ( $payload['id'] ?? null ) === $point_id ) {
-					return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array( $payload );
-				}
-			}
-
-			return null;
+		protected function raw_bulk_points(): array {
+			return $this->all_points();
 		}
 
 		/**

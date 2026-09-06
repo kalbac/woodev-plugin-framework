@@ -160,7 +160,7 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 	 * Live Yandex.Delivery sandbox Point_Source — see the file-level docblock for the full
 	 * rationale (activation gate, verified payload shape, caching, fail-soft behaviour).
 	 */
-	class Woodev_Test_Live_Yandex_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
+	class Woodev_Test_Live_Yandex_Point_Source extends \Woodev\Framework\Shipping\Pickup\Abstract_Bulk_Point_Source {
 
 		/**
 		 * Name of the constant supplying the sandbox bearer token — see the file docblock's
@@ -258,13 +258,6 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		];
 
 		/**
-		 * @inheritDoc
-		 */
-		public function get_strategy(): string {
-			return self::STRATEGY_BULK;
-		}
-
-		/**
 		 * Returns every live Moscow point when the requested locality is this fixture's own
 		 * city, or an empty list otherwise — mirrors
 		 * `Woodev_Test_Bulk_Point_Source::fetch_points()` (issue #162).
@@ -313,19 +306,24 @@ if ( ! class_exists( 'Woodev_Test_Live_Yandex_Point_Source' ) ) {
 		}
 
 		/**
-		 * @inheritDoc
+		 * {@inheritDoc}
 		 *
 		 * @throws \Woodev_API_Exception On a sandbox transport, HTTP, or payload-shape
 		 *                                 failure — see the file docblock's FAIL SOFT section.
 		 */
-		public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
-			foreach ( $this->fetch_all_points_cached() as $raw_point ) {
-				if ( is_array( $raw_point ) && isset( $raw_point['id'] ) && $point_id === (string) $raw_point['id'] ) {
-					return $this->map_point( $raw_point );
-				}
-			}
+		protected function raw_bulk_points(): array {
+			return $this->fetch_all_points_cached();
+		}
 
-			return null;
+		/**
+		 * {@inheritDoc}
+		 *
+		 * The raw entry is the carrier's own record shape (see the file docblock's
+		 * PAYLOAD section), not yet the framework's normalized array — mapping it
+		 * is {@see self::map_point()}'s job, not the base class's default.
+		 */
+		protected function normalize_bulk_point( $raw_point ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
+			return $this->map_point( $raw_point );
 		}
 
 		/**

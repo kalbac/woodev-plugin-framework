@@ -71,6 +71,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Handler' => 'woodev/shipping-method/order/abstract-tracking-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Handler' => 'woodev/shipping-method/order/abstract-webhook-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Shipping_Order_Handler' => 'woodev/shipping-method/order/class-shipping-order-handler.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point_Source' => 'woodev/shipping-method/pickup/abstract-bulk-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Address_Target' => 'woodev/shipping-method/pickup/class-address-target.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker' => 'woodev/shipping-method/pickup/class-constraint-checker.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' => 'woodev/shipping-method/pickup/class-pickup-handler.php',

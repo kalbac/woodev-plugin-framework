@@ -223,6 +223,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/pickup/interface-selection-scope.php';
 			require_once $path . '/pickup/class-provider-selection-scope.php';
 			require_once $path . '/pickup/interface-point-source.php';
+			require_once $path . '/pickup/abstract-bulk-point-source.php';
 			require_once $path . '/pickup/class-point-query.php';
 			require_once $path . '/pickup/class-constraint-checker.php';
 			require_once $path . '/pickup/class-selection-result.php';

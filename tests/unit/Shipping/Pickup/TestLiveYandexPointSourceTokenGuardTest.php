@@ -33,6 +33,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-exception.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/abstract-bulk-point-source.php';
 require_once dirname( __DIR__, 4 ) . '/tests/_fixtures/woodev-test-shipping-method/class-test-live-yandex-point-source.php';
 
 /**
