@@ -123,6 +123,12 @@ msgstr ""
 msgid "Следующие плагины собраны для устаревшей версии фреймворка Woodev и поэтому были отключены: %s. Пожалуйста, обновите их."
 msgstr ""
 
+#. translators: %s — list of plugin names.
+#: bootstrap.php:167
+#, php-format
+msgid "Следующие плагины устарели и поэтому не были запущены: %s. Обновите их до последней версии."
+msgstr ""
+
 #: bootstrap.php:328
 #, php-format
 msgid "Deactivated %d plugin"
@@ -132,6 +138,30 @@ msgstr[1] ""
 
 #: bootstrap.php:329
 msgid "Deactivated one plugin"
+msgstr ""
+
+#. translators: 1: list of dormant plugin names, 2: the conflicting plugin name.
+#: loader.php:159
+#, php-format
+msgid "Плагины %1$s не запущены: на сайте активен плагин %2$s с устаревшей версией, который блокирует их запуск. Обновите %2$s до последней версии."
+msgstr ""
+
+#. translators: 1: dormant plugin name, 2: the conflicting plugin name.
+#: loader.php:165
+#, php-format
+msgid "Плагин %1$s не запущен: на сайте активен плагин %2$s с устаревшей версией, который блокирует его запуск. Обновите %2$s до последней версии."
+msgstr ""
+
+#. translators: %s — list of dormant plugin names.
+#: loader.php:173
+#, php-format
+msgid "Плагины %s не запущены: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
+msgstr ""
+
+#. translators: %s — the dormant plugin name.
+#: loader.php:178
+#, php-format
+msgid "Плагин %s не запущен: на сайте активен другой плагин Woodev с устаревшей версией. Обновите все плагины Woodev до последней версии."
 msgstr ""
 
 #: box-packer/class-packer-boxes.php:17
@@ -1626,6 +1656,12 @@ msgstr ""
 msgid "%1$s Capture of %2$s Approved"
 msgstr ""
 
+#. translators: Placeholders: %1$s - the requested capture amount, %2$s - the amount that can still be captured for this order. Definitions: Capture, as in capture funds from a credit card.
+#: payment-gateway/handlers/capture.php:158
+#, php-format
+msgid "Сумма списания %1$s должна быть больше нуля и не может превышать доступную к списанию сумму %2$s"
+msgstr ""
+
 #. translators: Placeholders: %1$s - payment gateway title (such as Authorize.net, Braintree, etc), %2$s - failure message. Definitions: "capture" as in capturing funds from a credit card.
 #: payment-gateway/handlers/capture.php:203
 #, php-format
@@ -2087,6 +2123,10 @@ msgstr ""
 msgid "The selected locality is not in the list — pick it from the suggestions."
 msgstr ""
 
+#: shipping-method/checkout/class-checkout-config.php:669
+msgid "Showing results for a broader area — not limited to your selection."
+msgstr ""
+
 #: shipping-method/checkout/class-checkout-field-settings.php:124
 msgid "Поле «Город» было изменено сторонним кодом (снята обязательность / удалено); плагин восстановил его — оформление заказа зависит от этого поля."
 msgstr ""
@@ -2172,6 +2212,14 @@ msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:296
 msgid "Маска ввода телефона в форме оформления заказа — не проверка формата (за неё отвечает перевозчик), а только удобство: лишний символ ввести нельзя, недобранный номер отправить можно. «Автоматически» — маска следует за страной, которую выбрал покупатель. Конкретная страна жёстко закрепляет маску за собой, независимо от выбора покупателя. Работает только в классической форме оформления заказа."
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:346
+msgid "Блокировать оформление заказа"
+msgstr ""
+
+#: shipping-method/checkout/class-checkout-field-settings.php:354
+msgid "Пока не заполнены обязательные поля, нужные для доставки, кнопка «Оформить заказ» остаётся недоступной. Остальные обязательные поля формы WooCommerce проверяет при отправке."
 msgstr ""
 
 #: shipping-method/checkout/class-checkout-field-settings.php:376
@@ -2264,6 +2312,10 @@ msgstr ""
 msgid "How cart items are combined into parcels before rate calculation."
 msgstr ""
 
+#: shipping-method/class-shipping-method.php:160
+msgid "This text is shown to the customer under the method name in the order form. Leave empty to hide it."
+msgstr ""
+
 #: shipping-method/class-shipping-method.php:192
 msgid "Courier delivery"
 msgstr ""
@@ -2329,6 +2381,55 @@ msgstr ""
 msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
 msgstr ""
 
+#: shipping-method/location/class-customer-location-store.php:666
+msgid "Ключ локации"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:670
+msgid "Уровень"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:678
+msgid "Название"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:682
+msgid "Сохранено"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:686
+msgid "Определено автоматически (не выбор покупателя)"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:687
+msgid "Да"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:687
+msgid "Нет"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:696
+msgid "Необработанный ответ провайдера"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:703
+msgid "Локация покупателя"
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:704
+msgid "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
+msgstr ""
+
+#: shipping-method/location/class-customer-location-store.php:790
+msgid "Не удалось удалить сохранённую локацию покупателя — запись осталась в базе данных."
+msgstr ""
+
+#: shipping-method/location/class-location-provider-registry.php:763
+#: shipping-method/location/class-location-provider-registry.php:785
+msgid "Локация покупателя (Woodev)"
+msgstr ""
+
 #: shipping-method/location/class-location-provider-registry.php:1352
 msgid "Text with suggestions"
 msgstr ""
@@ -2359,6 +2460,12 @@ msgstr ""
 
 #: shipping-method/location/class-location-provider-registry.php:2529
 msgid "The fixed location was chosen through a different provider and may not suit the current one — choosing it again is recommended."
+msgstr ""
+
+#. translators: %1$s - opening <a> tag, %2$s - closing </a> tag
+#: shipping-method/location/class-location-provider-registry.php:2715
+#, php-format
+msgid "Зафиксированная локация по умолчанию была выбрана через другого провайдера и может не подходить активному сейчас. %1$sВыберите её заново%2$s."
 msgstr ""
 
 #: shipping-method/location/class-location-provider-registry.php:2568
@@ -2730,6 +2837,24 @@ msgstr ""
 msgid "This page is out of date. Refresh it and choose a pickup point again."
 msgstr ""
 
+#. translators: abbreviation for metres, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1349
+msgctxt "distance unit abbreviation: metres"
+msgid "m"
+msgstr ""
+
+#. translators: abbreviation for kilometres, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1351
+msgctxt "distance unit abbreviation: kilometres"
+msgid "km"
+msgstr ""
+
+#. translators: abbreviation for miles, shown after a distance number.
+#: shipping-method/pickup/class-pickup-handler.php:1353
+msgctxt "distance unit abbreviation: miles"
+msgid "mi"
+msgstr ""
+
 #: shipping-method/pickup/class-pickup-handler.php:1524
 msgid "Акцентный цвет карты"
 msgstr ""
@@ -2961,8 +3086,16 @@ msgstr ""
 msgid "Поля"
 msgstr ""
 
+#: shipping-method/settings/class-shipping-settings-tab.php:317
+msgid "Определяет, какие поля адреса показываются в форме оформления заказа, в каком порядке и как вводится регион с населённым пунктом, а также — блокируется ли кнопка «Оформить заказ», пока не заполнены обязательные поля доставки: это не конструктор полей, а набор правил присутствия и поведения для уже существующих элементов формы."
+msgstr ""
+
 #: shipping-method/settings/class-shipping-settings-tab.php:322
 msgid "Карта"
+msgstr ""
+
+#: shipping-method/settings/class-shipping-settings-tab.php:323
+msgid "Форма заказа"
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:324

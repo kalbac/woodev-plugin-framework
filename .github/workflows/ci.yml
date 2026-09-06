@@ -92,6 +92,26 @@ jobs:
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --memory-limit=4G
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # No `npm ci` here: scripts/lint-i18n-sources.mjs uses only Node builtins plus
+      # scripts/lib/po-file.mjs, so there is nothing to install for it.
+      - name: Download WP-CLI 2.12.0
+        # Pinned, not the rolling `wp-cli.phar` build: this job asks "does the source agree with
+        # the catalogue?", and an unpinned wp-cli would let that answer drift with upstream
+        # instead of with this repo. 2.12.0 is the same version the rig container runs.
+        run: |
+          curl -sSfL -o /tmp/wp-cli.phar https://github.com/wp-cli/wp-cli/releases/download/v2.12.0/wp-cli-2.12.0.phar
+          php /tmp/wp-cli.phar --info
+          echo "WP_CLI_PHAR=/tmp/wp-cli.phar" >> "$GITHUB_ENV"
+
+      - name: No source string missing from the translation catalogue (#791)
+        run: npm run lint:i18n-sources
+
   # ===========================================================================
   # PHP Compatibility check (7.4 → 8.2)
   # ===========================================================================
