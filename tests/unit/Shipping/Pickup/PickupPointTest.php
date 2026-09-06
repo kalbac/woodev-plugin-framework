@@ -82,6 +82,34 @@ final class PickupPointTest extends TestCase {
 		$this->assertNull( Pickup_Point::from_array( $payload ) );
 	}
 
+	/**
+	 * Issue #798: the three guards above LOOK like they validate `type`, and that
+	 * appearance is why the bare `(string)` casts on `type.code`/`type.label` outlived
+	 * both #154 and #182 — `isset()` is true for an ARRAY value too, so
+	 * `[ 'code' => [], 'label' => 'ПВЗ' ]` passed the guard whole and `(string) []` then
+	 * yielded the literal `"Array"`, which reached the point-type filter and the card.
+	 * Unlike #182's seven optional strings this REJECTS the point instead of degrading
+	 * it: `code` keys the type filter and `label` is drawn on the card, so a junk value
+	 * has no honest `''` default — the same treatment every other REQUIRED field gets.
+	 * `null` and a missing key need no case here for the same reason — `isset()` is
+	 * false for both, so neither can reach the cast. Note that
+	 * {@see self::test_returns_null_when_type_is_missing_code()} pins the ABSENT-key
+	 * half of that, not an explicit `null`.
+	 */
+	public function test_returns_null_for_a_non_scalar_type_code_or_label(): void {
+		foreach ( [ 'an array' => [ 'unexpected' => 'array' ], 'an object' => new \stdClass() ] as $label => $value ) {
+			foreach ( [ 'code', 'label' ] as $key ) {
+				$payload                 = $this->valid();
+				$payload['type'][ $key ] = $value;
+
+				$this->assertNull(
+					Pickup_Point::from_array( $payload ),
+					"{$label} type.{$key} must reject the point, never cast to the literal 'Array'"
+				);
+			}
+		}
+	}
+
 	public function test_returns_null_for_out_of_range_coordinates(): void {
 		$payload        = $this->valid();
 		$payload['lat'] = 91.0;

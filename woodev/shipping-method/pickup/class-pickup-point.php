@@ -42,10 +42,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 *
 		 * Returns null when a required field is missing, empty, or the wrong shape (a
 		 * non-scalar `id`/`name`/`lat`/`lng`/`address`, a non-numeric `lat`/`lng`, or a
-		 * `type` that is not an array with `code` and `label`), or when a coordinate is
-		 * out of range — a malformed point must never reach the map, and a carrier
-		 * returning junk for one point must not break the whole list. Values are
-		 * rejected rather than coerced: a non-numeric `lat` must not silently become
+		 * `type` that is not an array carrying SCALAR `code` and `label`), or when a
+		 * coordinate is out of range — a malformed point must never reach the map,
+		 * and a carrier returning junk for one point must not break the whole list.
+		 * Values are rejected rather than coerced: a non-numeric `lat` must not silently become
 		 * `0.0` and render in the wrong place.
 		 *
 		 * The seven OPTIONAL string fields (`short_address`, `locality`, `postal_code`,
@@ -64,6 +64,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * @since 2.0.2 Guards the seven optional string fields with `is_scalar()` before
 		 *              casting, so a non-scalar value degrades to `''` instead of the
 		 *              literal string `"Array"` (issue #182).
+		 * @since 2.0.2 Rejects a `type` whose `code` or `label` is non-scalar. The required
+		 *              field it belongs to has no honest `''` default, so unlike #182's
+		 *              optional strings it rejects the point rather than degrading it
+		 *              (issue #798).
 		 *
 		 * @param array<string, mixed> $payload Raw normalized payload from the plugin.
 		 *
@@ -80,7 +84,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 				}
 			}
 
-			if ( ! is_array( $payload['type'] ) || ! isset( $payload['type']['code'], $payload['type']['label'] ) ) {
+			// `isset()` LOOKS like it validates `type`, and that appearance is why the bare
+			// casts below survived both #154 and #182: it is true for an ARRAY value too, so
+			// `[ 'code' => [], 'label' => 'ПВЗ' ]` passed the whole guard and `(string) []`
+			// then yielded the literal `"Array"`. Unlike the seven optional strings, `type`
+			// cannot degrade to `''`: `code` feeds the point-type filter and `label` is drawn
+			// on the card, so a junk value has no honest default and the point is rejected
+			// instead — the same treatment every other REQUIRED field above already gets
+			// (issue #798).
+			//
+			// SCOPE: this rejects a non-scalar, NOT an empty one. `[ 'code' => '' ]` still
+			// builds a point, and `false` casts to `''` here exactly as it does for `id`,
+			// `name` and `address` above — so the "required means non-empty on output"
+			// contract is NOT established by this guard. That is issue #803, deliberately
+			// separate because fixing it coherently means deciding the rule for every
+			// required field at once, not adding two comparisons here.
+			if (
+				! is_array( $payload['type'] )
+				|| ! isset( $payload['type']['code'], $payload['type']['label'] )
+				|| ! is_scalar( $payload['type']['code'] )
+				|| ! is_scalar( $payload['type']['label'] )
+			) {
 				return null;
 			}
 
