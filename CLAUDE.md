@@ -74,8 +74,40 @@ agents.* A paid resource left idle is a loss, not a saving.
 | a genuinely hard problem that wants the best head | **Fable 5** — propose it yourself; do not default to Opus for everything hard (operator, 29.08.2026) |
 | coordination, gates, git, synthesis | **Opus 5** (this session) |
 
-Inside Codex: **`Terra` for the harder tasks, `Luna` for the simpler ones, and never `Sol` — it is
-too expensive** (operator, 29.08.2026). Default to `Terra` unless the task is plainly small.
+Inside Codex the model is a third choice, and the default is deliberately not the best one
+(operator, 06.09.2026). **`gpt-5.6-terra` is the default, set in `~/.codex/config.toml`** — best
+value for money, so a launch naming no model is already right. Reach past it with `--model`, and
+only for a reason: **`gpt-5.6-luna`** for plainly small work (a routine diff read, a mechanical
+sweep); **`gpt-6-astra`** when a STRONG opinion is wanted — adversarial review of an architectural
+fork, a third round on one card, a defect where two runs already disagreed. `gpt-6-astra` is the
+priority-1 model and priced like it; `Sol` stays out (operator, 29.08.2026).
+
+**Effort: `high` is the ceiling for routine use; `max` and `ultra` need their own reason** — they
+burn the limit without paying for themselves (operator, 06.09.2026). **This binds THIS session too:
+no Ultracode, no `max` on a Fable run unless he asks.** One Ultracode run cost him a five-hour
+window in five minutes.
+
+**The price of one astra round is MEASURED, s122 (06.09.2026)** — same brief, same diff, same
+`high` effort, one after the other:
+
+| | luna | astra |
+|---|---|---|
+| Δ session (5 h window) | **+4 pp** | **+36 pp** |
+| Δ weekly | ~0 | **+6 pp** |
+| tokens (both threads) | 7.28 M | 3.68 M |
+| wall clock | ~25 min | ~10 min |
+
+So astra cost **~9× the budget of luna for the same task while using HALF the tokens and a third
+of the time** — roughly **15–20× per token**. One astra review ≈ **6 % of the week**. It also
+found materially more (the `false`-casts-to-`""` hole, the JS half of the boundary), so the
+premium buys real depth — it is simply not something to spend by reflex.
+
+⚠ **`orca account list` serves a CACHED number — check `updatedAt` before believing it.** Read
+straight after the astra round it still said 4 %/73 %; the true figure was 40 %/79 %, and Orca
+caught up minutes later. Codex's own rollout carries the authoritative value in its
+`token_count` event's `rate_limits` (under Orca's HOME:
+`%APPDATA%/orca/codex-runtime-home/home/sessions/`). Gotcha
+`orca-account-list-serves-a-cached-rate-limit`.
 
 **Two caps from that same decision STAY, because they were never about the budget:**
 

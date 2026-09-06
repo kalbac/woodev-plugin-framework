@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 284 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 285 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -341,6 +341,7 @@
 
 ### [tooling/*] — Dev tooling, codex critic
 - [tooling/docs-gate] **A docs gate checks what is LINKED, never what is LISTED — three indexes were missing entries for files that exist (ADR-011, three wiki articles, ten specs) in a green tree, and prose cross-references are invisible to it too.** → [a-docs-gate-checks-links-not-listings](gotchas/a-docs-gate-checks-links-not-listings.md) (s119)
+- [tooling/orca] **`orca account list` serves a CACHED rate limit — read straight after a run it reports the state BEFORE it, and made astra look 9x CHEAPER than it is. Check `updatedAt`; the authoritative figure is in Codex's own rollout.** → [orca-account-list-serves-a-cached-rate-limit](gotchas/orca-account-list-serves-a-cached-rate-limit.md) (s122)
 - [tooling/orca] **`orchestration send` is MAIL, not prompt injection: it returns `ok: true` and the worker never reads it unless it calls `orchestration check` — two workers called it zero times in 28 minutes.** → [orchestration-mail-is-not-read-unless-the-worker-calls-check](gotchas/orchestration-mail-is-not-read-unless-the-worker-calls-check.md) (s118)
 - [tooling/parallel-agents] **A `cd` in the Bash tool PERSISTS across calls (variables do not), so a later `git checkout -b` lands in the worktree you visited.** → [a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree](gotchas/a-cd-in-the-bash-tool-persists-and-sends-the-next-git-command-into-a-worktree.md) (s117)
 - [tooling/parallel-agents] **`worker-release` answers `ok: true, state: "retained"` and leaves the agent RUNNING — an injected terminal is unsupervised, so Orca owns nothing to close. Read `state`, not `ok`.** → [worker-release-answers-retained-and-leaves-the-terminal-running](gotchas/worker-release-answers-retained-and-leaves-the-terminal-running.md) (s117)
