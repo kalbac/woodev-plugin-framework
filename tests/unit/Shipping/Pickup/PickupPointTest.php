@@ -239,6 +239,71 @@ final class PickupPointTest extends TestCase {
 		$this->assertSame( '125009', $point->get_postal_code() );
 	}
 
+	/**
+	 * Issue #182: an array- or object-valued optional field must not survive a bare
+	 * `(string)` cast — PHP 8 does not fatal on `(string) []`, it emits a warning and
+	 * yields the literal string `"Array"`, which would then flow onward into the
+	 * browser payload as if it were real data. `is_scalar()` rejects it before the
+	 * cast runs, the same guard the six REQUIRED fields already use in
+	 * {@see self::test_returns_null_for_non_scalar_required_fields()}; degrading to
+	 * `''` — not rejecting the whole point — is deliberate: a malformed optional
+	 * field carries no more information than an absent one, and `''` is exactly what
+	 * every display site already treats as "this carrier does not publish it" (see
+	 * {@see self::test_optional_string_fields_default_to_empty()}). `null` is
+	 * included for completeness even though `isset()` already excludes it before
+	 * `is_scalar()` is ever reached.
+	 *
+	 * @dataProvider provide_optional_string_fields
+	 */
+	public function test_optional_string_fields_degrade_to_empty_for_a_non_scalar_value( string $field ): void {
+		foreach ( [ 'an array' => [ 'unexpected' => 'array' ], 'an object' => new \stdClass(), 'null' => null ] as $label => $value ) {
+			$payload            = $this->valid();
+			$payload[ $field ]  = $value;
+			$point              = Pickup_Point::from_array( $payload );
+
+			$this->assertNotNull( $point, "{$label} {$field} must still build a point" );
+			$this->assertSame(
+				'',
+				$point->to_array()[ $field ],
+				"{$label} {$field} must degrade to '', never the literal 'Array'"
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{0: string}>
+	 */
+	public function provide_optional_string_fields(): array {
+		return [
+			'locality'         => [ 'locality' ],
+			'postal_code'      => [ 'postal_code' ],
+			'phone'            => [ 'phone' ],
+			'instruction'      => [ 'instruction' ],
+			'work_time'        => [ 'work_time' ],
+			'point_short_name' => [ 'point_short_name' ],
+		];
+	}
+
+	/**
+	 * `short_address` isn't guarded by the plain `isset() ? … : ''` cascade its six
+	 * siblings use above — it falls back to `address` instead of `''` — but carried
+	 * the SAME unguarded-cast hole: `'' !== $payload['short_address']` is TRUE for an
+	 * array or object (a loose `!==` never fails on mismatched types), so a non-scalar
+	 * value reached the `(string)` cast unchecked. Must degrade to the SAME `address`
+	 * fallback a genuinely absent value already gets (issue #182).
+	 */
+	public function test_short_address_degrades_to_the_address_fallback_for_a_non_scalar_value(): void {
+		foreach ( [ 'an array' => [ 'unexpected' => 'array' ], 'an object' => new \stdClass() ] as $label => $value ) {
+			$point = $this->make_point( [ 'short_address' => $value ] );
+
+			$this->assertSame(
+				'Москва, ул. Тверская, 1',
+				$point->to_array()['short_address'],
+				"{$label} short_address must fall back to address, never the literal 'Array'"
+			);
+		}
+	}
+
 	public function test_to_array_does_not_escape(): void {
 		$payload         = $this->valid();
 		$payload['name'] = '<script>alert(1)</script>';

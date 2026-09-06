@@ -48,7 +48,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * rejected rather than coerced: a non-numeric `lat` must not silently become
 		 * `0.0` and render in the wrong place.
 		 *
+		 * The seven OPTIONAL string fields (`short_address`, `locality`, `postal_code`,
+		 * `phone`, `instruction`, `work_time`, `point_short_name`) are each guarded with
+		 * `is_scalar()` before the `(string)` cast, same as the required fields above —
+		 * a bare cast on a non-scalar (e.g. a malformed carrier payload sending an array)
+		 * does not fatal in PHP 8, it emits a warning and silently yields the literal
+		 * string `"Array"`, which would then flow onward as if it were real data (issue
+		 * #182). Unlike a required field, a non-scalar optional field does not reject the
+		 * whole point — it degrades to the SAME `''` a genuinely absent field already
+		 * gets, which is honest: a malformed value carries no more information than a
+		 * missing one, and `''` is what every display site already treats as "this
+		 * carrier does not publish it".
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Guards the seven optional string fields with `is_scalar()` before
+		 *              casting, so a non-scalar value degrades to `''` instead of the
+		 *              literal string `"Array"` (issue #182).
 		 *
 		 * @param array<string, mixed> $payload Raw normalized payload from the plugin.
 		 *
@@ -123,19 +138,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 					// `map-provider-embedded.js`) derives it identically; the two must not
 					// diverge, per the #201/#251 lesson about validation and conversion drifting
 					// apart when they live in different places.
-					'short_address'   => isset( $payload['short_address'] ) && '' !== $payload['short_address']
+					//
+					// is_scalar() guarded (issue #182): a non-scalar `short_address` must not cast
+					// to the literal "Array" — it degrades to the SAME `address` fallback a
+					// genuinely absent value already gets.
+					'short_address'   => isset( $payload['short_address'] )
+						&& is_scalar( $payload['short_address'] )
+						&& '' !== $payload['short_address']
 						? (string) $payload['short_address']
 						: (string) $payload['address'],
-					'locality'        => isset( $payload['locality'] ) ? (string) $payload['locality'] : '',
-					'postal_code'     => isset( $payload['postal_code'] ) ? (string) $payload['postal_code'] : '',
-					'phone'           => isset( $payload['phone'] ) ? (string) $payload['phone'] : '',
-					'instruction'     => isset( $payload['instruction'] ) ? (string) $payload['instruction'] : '',
-					'work_time'       => isset( $payload['work_time'] ) ? (string) $payload['work_time'] : '',
+					'locality'        => isset( $payload['locality'] ) && is_scalar( $payload['locality'] )
+						? (string) $payload['locality']
+						: '',
+					'postal_code'     => isset( $payload['postal_code'] ) && is_scalar( $payload['postal_code'] )
+						? (string) $payload['postal_code']
+						: '',
+					'phone'           => isset( $payload['phone'] ) && is_scalar( $payload['phone'] )
+						? (string) $payload['phone']
+						: '',
+					'instruction'     => isset( $payload['instruction'] ) && is_scalar( $payload['instruction'] )
+						? (string) $payload['instruction']
+						: '',
+					'work_time'       => isset( $payload['work_time'] ) && is_scalar( $payload['work_time'] )
+						? (string) $payload['work_time']
+						: '',
 					// Card tab label override (issue #199) — the framework numbers co-located
 					// tabs, the domain names them; an absent value falls back to `type.label`
 					// (`pickup-panels.js`'s `buildTabs()`), same `isset() ? … : ''` cascade every
 					// other optional display string on this list already uses.
-					'point_short_name' => isset( $payload['point_short_name'] ) ? (string) $payload['point_short_name'] : '',
+					'point_short_name' => isset( $payload['point_short_name'] ) && is_scalar( $payload['point_short_name'] )
+						? (string) $payload['point_short_name']
+						: '',
 					'payment_methods'  => $payment_methods,
 					'photos'           => $photos,
 					'services'         => $services,
