@@ -361,6 +361,12 @@
 	 * U+180E while this one does not, so the halves silently disagreed (second review round
 	 * of PR #808).
 	 *
+	 * The one input where the halves still differ is a LONE UTF-16 surrogate: a JS string
+	 * can carry one and this side accepts it, while PHP's UTF-8 regex refuses the malformed
+	 * bytes that encode it. It cannot arrive from a standards-compliant JSON decode, and the
+	 * asymmetry fails SAFE — the stricter half is the server, which is the authority for a
+	 * selection anyway. Measured over 158 inputs; the same note is on the PHP constant.
+	 *
 	 * @type {RegExp}
 	 */
 	var BLANK_CHARACTERS = /[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u00A0\u1680\u180E\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g;

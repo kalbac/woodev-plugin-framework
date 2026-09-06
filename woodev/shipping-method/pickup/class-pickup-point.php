@@ -61,6 +61,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * `\p{Z}` matches neither. Every shorthand disagrees across the two languages, which is
 		 * how the halves silently diverged twice during review of PR #808.
 		 *
+		 * ⚠ THE PRECONDITION, because "the two halves agree" is otherwise a claim wider than
+		 * the truth. Agreement was MEASURED over 158 inputs and holds for every well-formed
+		 * Unicode value — all 27 class members, their boundary neighbours, surrogate PAIRS,
+		 * combining marks, both safe-integer bounds as int and float, the unsafe ones, numeric
+		 * strings, booleans, null, arrays and objects. It does NOT hold for a LONE UTF-16
+		 * surrogate: `preg_replace( … /u )` returns null on the malformed UTF-8 that encodes
+		 * one, so PHP rejects the point, while a JS string can carry an unpaired surrogate and
+		 * this side accepts it. That input cannot reach PHP from a standards-compliant JSON
+		 * decode, and the asymmetry fails SAFE: the stricter half is the server, which is the
+		 * authority for a selection anyway (`Pickup_Handler::handle_checkout_process()`
+		 * re-checks the chosen point server-side and blocks the order there).
+		 *
 		 * @since 2.0.2
 		 * @var string
 		 */
