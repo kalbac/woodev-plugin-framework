@@ -33,7 +33,7 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 	 * find them on the live map: one refuses cash on delivery (COD gating), one
 	 * caps the accepted parcel weight at 1 kg (weight-limit gating).
 	 */
-	class Woodev_Test_Bulk_Point_Source implements \Woodev\Framework\Shipping\Pickup\Point_Source {
+	class Woodev_Test_Bulk_Point_Source extends \Woodev\Framework\Shipping\Pickup\Abstract_Bulk_Point_Source {
 
 		/** Point id that refuses cash on delivery — exercises COD gating on the rig. */
 		public const COD_REFUSING_POINT_ID = 'FIX-BULK-2';
@@ -66,13 +66,6 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 			'Санкт-Петербург' => [ 'Санкт-Петербург', 'Saint Petersburg', 'St. Petersburg', 'St Petersburg' ],
 			'Краснодар'       => [ 'Краснодар', 'Krasnodar' ],
 		];
-
-		/**
-		 * @inheritDoc
-		 */
-		public function get_strategy(): string {
-			return self::STRATEGY_BULK;
-		}
 
 		/**
 		 * Returns the fixture points BELONGING TO the requested locality (matched via
@@ -185,15 +178,12 @@ if ( ! class_exists( 'Woodev_Test_Bulk_Point_Source' ) ) {
 
 		/**
 		 * @inheritDoc
+		 *
+		 * The fixture's full raw universe spans every locality it serves, not just
+		 * the one last requested — see {@see self::all_points()}.
 		 */
-		public function fetch_details( string $point_id ): ?\Woodev\Framework\Shipping\Pickup\Pickup_Point {
-			foreach ( $this->all_points() as $payload ) {
-				if ( $point_id === $payload['id'] ) {
-					return \Woodev\Framework\Shipping\Pickup\Pickup_Point::from_array( $payload );
-				}
-			}
-
-			return null;
+		protected function raw_bulk_points(): array {
+			return $this->all_points();
 		}
 
 		/**

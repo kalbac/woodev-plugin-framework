@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 use Woodev\Framework\Shipping\Shipping_Method_Pickup;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 use Woodev\Framework\Shipping\Shipping_Rate;
+use Woodev\Framework\Shipping\Pickup\Abstract_Bulk_Point_Source;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
@@ -29,16 +30,7 @@ use Woodev\Framework\Shipping\Pickup\Point_Source;
  * value objects. Yandex loads a whole locality in one call, so this source declares
  * the bulk strategy.
  */
-final class Woodev_Yandex_Pilot_Point_Source implements Point_Source {
-
-	/**
-	 * Gets the loading strategy this source supports.
-	 *
-	 * @return string
-	 */
-	public function get_strategy(): string {
-		return self::STRATEGY_BULK;
-	}
+final class Woodev_Yandex_Pilot_Point_Source extends Abstract_Bulk_Point_Source {
 
 	/**
 	 * Fetches yandex pickup points matching the given query.
@@ -59,24 +51,13 @@ final class Woodev_Yandex_Pilot_Point_Source implements Point_Source {
 	}
 
 	/**
-	 * Fetches one yandex pickup point's full detail.
+	 * {@inheritDoc}
 	 *
-	 * The fixture's bulk source already knows everything about its one point, so this
-	 * simply looks it up among the same raw payloads {@see fetch_points()} normalizes.
-	 *
-	 * @param string $point_id Carrier point id.
-	 * @return Pickup_Point|null
+	 * The fixture's bulk source already knows everything about its one point, so
+	 * this simply hands back the same raw payloads {@see fetch_points()} normalizes.
 	 */
-	public function fetch_details( string $point_id ): ?Pickup_Point {
-		foreach ( self::get_fixture_payloads() as $payload ) {
-			$point = Pickup_Point::from_array( $payload );
-
-			if ( null !== $point && $point_id === $point->get_id() ) {
-				return $point;
-			}
-		}
-
-		return null;
+	protected function raw_bulk_points(): array {
+		return self::get_fixture_payloads();
 	}
 
 	/**
