@@ -314,6 +314,14 @@
 	 * @param {*} value
 	 * @returns {boolean}
 	 */
+	/**
+	 * The largest integer PHP and JavaScript render identically. Beyond it the two
+	 * halves of this boundary would print different strings for the same payload.
+	 *
+	 * @type {number}
+	 */
+	var MAX_SAFE_INTEGER = 9007199254740991;
+
 	function isScalar( value ) {
 		var t = typeof value;
 
@@ -342,13 +350,30 @@
 	 * @returns {string|null}
 	 */
 	function requiredString( value ) {
-		if ( ! isScalar( value ) ) {
+		var string;
+
+		// ACCEPT ONLY a string or an integer-valued finite number — see
+		// `Pickup_Point::required_string()` for the full argument. A plain `isScalar()` here
+		// disagreed with the PHP half on real inputs (review of PR #808): `String( false )` is
+		// `'false'` and was accepted, while PHP cast the same `false` to `''` and rejected it.
+		// Exotic numbers render differently in the two languages, so only the case that
+		// actually occurs survives: a carrier whose JSON gives a NUMERIC id.
+		if ( 'string' === typeof value ) {
+			string = value;
+		} else if ( 'number' === typeof value
+			&& isFinite( value )
+			&& Math.floor( value ) === value
+			&& Math.abs( value ) <= MAX_SAFE_INTEGER
+		) {
+			string = String( value );
+		} else {
 			return null;
 		}
 
-		var string = String( value );
-
-		return '' === string.trim() ? null : string;
+		// Blank test kept EXPLICIT rather than `.trim()`, so it states the same character set
+		// the PHP half spells out — `\s` here already covers Unicode spaces, U+00A0 and U+FEFF
+		// included, which is precisely what PHP's ASCII-only `trim()` did NOT.
+		return '' === string.replace( /[\s\uFEFF\u00A0]/g, '' ) ? null : string;
 	}
 
 	/**

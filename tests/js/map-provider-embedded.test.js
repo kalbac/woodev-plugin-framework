@@ -305,6 +305,69 @@ test( 'a payload with a missing type.label emits error, not select', () => {
 // every type filter unconditionally (`pointPassesFilter`), and the label is drawn on the
 // card. This is the JS mirror of #798 on `Pickup_Point::from_array()`; the two halves of
 // this boundary must not diverge, which is the #201/#251 lesson.
+// Issue #803, hardened after review of PR #808. The PHP half
+// (`Pickup_Point::required_string()`) and this one must agree on EVERY input, and the first
+// attempt did not: `String( false )` is `'false'` and was accepted here while PHP cast the
+// same `false` to `''` and rejected it, and PHP's ASCII-only `trim()` accepted a U+00A0-only
+// value that this side refused. Both halves now take a string or an integer-valued finite
+// number and nothing else, and both strip the same Unicode whitespace set. These cases are
+// the ones that diverged; each is pinned on the PHP side too.
+describe.each( [
+	[ 'false', false ],
+	[ 'true', true ],
+	[ 'a no-break space', '\u00A0' ],
+	[ 'an em space', '\u2003' ],
+	[ 'a byte-order mark', '\uFEFF' ],
+	[ 'NaN', NaN ],
+	[ 'Infinity', Infinity ],
+	[ 'a fractional number', 1.5 ],
+	[ 'a number past the safe integer range', 1.0e20 ],
+] )( 'a required field that both halves must refuse (%s)', ( label, value ) => {
+	test.each( [ 'id', 'name', 'address' ] )( 'in %s emits error, not select', ( key ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload[ key ] = value;
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test.each( [ 'code', 'label' ] )( 'in type.%s emits error, not select', ( key ) => {
+		const { iframe, onSelect, onError } = initProvider();
+
+		const payload = validPointPayload();
+		payload.type[ key ] = value;
+
+		dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+		expect( onSelect ).not.toHaveBeenCalled();
+		expect( onError ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+// The one non-string case that actually occurs: a carrier whose JSON gives a numeric id.
+// `5` and `5.0` are the same value in JS and must render as `'5'` on both halves; `-0` must
+// render as `'0'`, which is what PHP's `(string) (int) -0.0` also produces.
+test.each( [
+	[ 'an integer', 5, '5' ],
+	[ 'an integer-valued float', 5.0, '5' ],
+	[ 'negative zero', -0, '0' ],
+] )( '%s in a required field selects and renders as the PHP half renders it', ( label, value, expected ) => {
+	const { iframe, onSelect, onError } = initProvider();
+
+	const payload = validPointPayload();
+	payload.id = value;
+
+	dispatchMessage( EXPECTED_ORIGIN, iframe.contentWindow, envelope( payload ) );
+
+	expect( onError ).not.toHaveBeenCalled();
+	expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( expected );
+} );
+
 // Issue #803: REQUIRED means non-blank ONCE CAST, and the PHP half
 // (`Pickup_Point::required_string()`) applies exactly this rule — the two halves of this
 // boundary must not diverge. `false` is scalar and is not `''`, so it used to pass and then

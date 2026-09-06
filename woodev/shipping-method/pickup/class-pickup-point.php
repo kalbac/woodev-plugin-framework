@@ -38,6 +38,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		}
 
 		/**
+		 * The largest integer PHP and JavaScript render identically — JS numbers are
+		 * doubles, so beyond this the two halves of this boundary would print different
+		 * strings for the same payload.
+		 *
+		 * @since 2.0.2
+		 * @var int
+		 */
+		private const MAX_SAFE_INTEGER = 9007199254740991;
+
+		/**
 		 * Validates one REQUIRED string field and returns it cast, or `null` to reject the point.
 		 *
 		 * The rule this establishes: **a required field must be non-blank ONCE CAST.** Checking
@@ -67,13 +77,47 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' ) ) :
 		 * @return string|null The cast value, or null when the field cannot be accepted.
 		 */
 		private static function required_string( $value ): ?string {
-			if ( ! is_scalar( $value ) ) {
+			// ACCEPT ONLY a string or an integer-valued finite number, and normalise both the
+			// same way the JS half does. `is_scalar()` was the obvious choice and it is WRONG
+			// here, because the two halves then disagree on real inputs (found by review of
+			// PR #808).
+			//
+			// `false` is scalar: PHP casts it to `''` and rejects, while JS `String( false )`
+			// is `'false'` and is ACCEPTED — opposite verdicts on the same payload. A boolean
+			// is never a legitimate id, name, address or type code, so both halves refuse it.
+			//
+			// `NAN`/`INF` and exotic floats render differently in the two languages (`'NAN'`
+			// vs `'NaN'`, `'1.0E+20'` vs `'100000000000000000000'`), so they are out too. What
+			// survives is the case that actually occurs: a carrier whose JSON gives a NUMERIC
+			// id. `5` and `5.0` both normalise to `'5'` on both halves.
+			if ( is_string( $value ) ) {
+				$string = $value;
+			} elseif ( is_int( $value ) ) {
+				$string = (string) $value;
+			} elseif (
+				is_float( $value )
+				&& is_finite( $value )
+				&& floor( $value ) === $value
+				&& abs( $value ) <= self::MAX_SAFE_INTEGER
+			) {
+				$string = (string) (int) $value;
+			} else {
 				return null;
 			}
 
-			$string = (string) $value;
+			// UNICODE-aware blank test, and it has to be spelled out: PHP's `trim()` strips only
+			// ASCII whitespace, while JS's `String.prototype.trim()` strips every Unicode space.
+			// A U+00A0-only value therefore passed HERE and was refused by the JS half — blank
+			// to every reader, accepted by one side only (found by review of PR #808). `\p{Z}`
+			// covers Zs/Zl/Zp, which together with `\s` and U+FEFF is exactly JS's `\s` set.
+			$stripped = preg_replace( '/[\s\p{Z}\x{FEFF}]+/u', '', $string );
 
-			return '' === trim( $string ) ? null : $string;
+			// `preg_replace()` returns null on malformed UTF-8 — junk in a required field.
+			if ( null === $stripped || '' === $stripped ) {
+				return null;
+			}
+
+			return $string;
 		}
 
 		/**

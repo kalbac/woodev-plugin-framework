@@ -150,11 +150,18 @@ final class PickupPointTest extends TestCase {
 	 */
 	public function provide_blank_required_values(): array {
 		return [
-			'an empty string'   => [ 'an empty string', '' ],
-			'false'             => [ 'false', false ],
-			'spaces only'       => [ 'spaces only', '   ' ],
-			'a tab and newline' => [ 'a tab and newline', "	
-" ],
+			'an empty string'    => [ 'an empty string', '' ],
+			'false'              => [ 'false', false ],
+			'true'               => [ 'true', true ],
+			'spaces only'        => [ 'spaces only', '   ' ],
+			'a tab and newline'  => [ 'a tab and newline', "\t\n" ],
+			'a no-break space'   => [ 'a no-break space', "\u{00A0}" ],
+			'an em space'        => [ 'an em space', "\u{2003}" ],
+			'a byte-order mark'  => [ 'a byte-order mark', "\u{FEFF}" ],
+			'NAN'                => [ 'NAN', NAN ],
+			'INF'                => [ 'INF', INF ],
+			'a fractional float' => [ 'a fractional float', 1.5 ],
+			'a float past the safe integer range' => [ 'a float past the safe integer range', 1.0e20 ],
 		];
 	}
 
@@ -182,6 +189,38 @@ final class PickupPointTest extends TestCase {
 	 * A non-blank required value is returned UNTRIMMED. Rejecting a blank field is the decision
 	 * this contract makes; silently rewriting a non-blank one is not.
 	 */
+	/**
+	 * The JS half of this boundary (`requiredString()` in `map-provider-embedded.js`) accepts
+	 * and renders EXACTLY these. A carrier whose JSON carries a numeric id is the one
+	 * non-string case that actually occurs, so `5` and `5.0` must normalise identically on
+	 * both sides. Review of PR #808 caught the earlier `is_scalar()` version disagreeing across
+	 * the boundary on `false`, on Unicode whitespace and on exotic floats — which is why the
+	 * accepted set is now this narrow.
+	 */
+	public function test_an_integer_valued_number_is_accepted_and_rendered_without_a_fraction(): void {
+		foreach ( [ 'an int' => 5, 'an integer-valued float' => 5.0 ] as $label => $value ) {
+			$payload       = $this->valid();
+			$payload['id'] = $value;
+
+			$point = Pickup_Point::from_array( $payload );
+
+			$this->assertNotNull( $point, "{$label} must build a point" );
+			$this->assertSame( '5', $point->to_array()['id'], "{$label} must render as '5'" );
+		}
+
+		$payload       = $this->valid();
+		$payload['id'] = -0.0;
+
+		$point = Pickup_Point::from_array( $payload );
+
+		$this->assertNotNull( $point, 'negative zero must build a point' );
+		$this->assertSame(
+			'0',
+			$point->to_array()['id'],
+			"negative zero must render as '0', exactly as String( -0 ) does in JS"
+		);
+	}
+
 	public function test_a_required_field_keeps_its_surrounding_whitespace(): void {
 		$point = $this->make_point( [ 'name' => '  ПВЗ на Тверской  ' ] );
 
