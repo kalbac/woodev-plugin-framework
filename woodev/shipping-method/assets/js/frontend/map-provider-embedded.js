@@ -314,10 +314,84 @@
 	 * @param {*} value
 	 * @returns {boolean}
 	 */
+	/**
+	 * The largest integer PHP and JavaScript render identically. Beyond it the two
+	 * halves of this boundary would print different strings for the same payload.
+	 *
+	 * @type {number}
+	 */
+	var MAX_SAFE_INTEGER = 9007199254740991;
+
 	function isScalar( value ) {
 		var t = typeof value;
 
 		return 'string' === t || 'number' === t || 'boolean' === t;
+	}
+
+	/**
+	 * Validates one REQUIRED field and returns it cast, or `null` to reject the point.
+	 *
+	 * Mirrors `Pickup_Point::required_string()` on the REST path exactly — the two halves of
+	 * this boundary must not diverge (issue #803, and the #201/#251 lesson about validation
+	 * and conversion drifting apart when they live in different places).
+	 *
+	 * The rule: **non-blank ONCE CAST.** Checking the raw value instead leaves three holes —
+	 * a non-scalar reaching `String()` (`String( [] )` is `''`, `String( {} )` is
+	 * `"[object Object]"`), a value that is blank only AFTER conversion, and a whitespace-only
+	 * value that no display site can tell from absent.
+	 *
+	 * `'0'` and `0` must SURVIVE: they are legitimate carrier values, which is why this
+	 * trims-to-test rather than using a falsy check.
+	 *
+	 * The value is returned UNTRIMMED — rejecting a blank field is the decision; rewriting a
+	 * non-blank one is not.
+	 *
+	 * @param {*} value
+	 * @returns {string|null}
+	 */
+	/**
+	 * Every code point this boundary treats as blank, written out one by one so it cannot
+	 * drift from `Pickup_Point::BLANK_CHARACTERS` on the PHP half.
+	 *
+	 * ECMAScript's WhiteSpace + LineTerminator + U+FEFF, PLUS U+0085 and U+180E — those two
+	 * are a deliberate addition on BOTH halves, because they are invisible and a required
+	 * value made only of them is exactly the "blank to every reader" case this rule is for.
+	 *
+	 * `\s` would be shorter and is NOT usable: PCRE2's `\s` under `/u` covers U+0085 and
+	 * U+180E while this one does not, so the halves silently disagreed (second review round
+	 * of PR #808).
+	 *
+	 * The one input where the halves still differ is a LONE UTF-16 surrogate: a JS string
+	 * can carry one and this side accepts it, while PHP's UTF-8 regex refuses the malformed
+	 * bytes that encode it. It cannot arrive from a standards-compliant JSON decode, and the
+	 * asymmetry fails SAFE — the stricter half is the server, which is the authority for a
+	 * selection anyway. Measured over 158 inputs; the same note is on the PHP constant.
+	 *
+	 * @type {RegExp}
+	 */
+	var BLANK_CHARACTERS = /[\u0009\u000A\u000B\u000C\u000D\u0020\u0085\u00A0\u1680\u180E\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g;
+
+	function requiredString( value ) {
+		var string;
+
+		// ACCEPT ONLY a string or an integer-valued finite number within the range PHP and JS
+		// render identically — see `Pickup_Point::required_string()` for the full argument. A
+		// plain `isScalar()` here disagreed with the PHP half on real inputs (review of
+		// PR #808): `String( false )` is `'false'` and was accepted, while PHP cast the same
+		// `false` to `''` and rejected it.
+		if ( 'string' === typeof value ) {
+			string = value;
+		} else if ( 'number' === typeof value
+			&& isFinite( value )
+			&& Math.floor( value ) === value
+			&& Math.abs( value ) <= MAX_SAFE_INTEGER
+		) {
+			string = String( value );
+		} else {
+			return null;
+		}
+
+		return '' === string.replace( BLANK_CHARACTERS, '' ) ? null : string;
 	}
 
 	/**
@@ -515,32 +589,29 @@
 			return null;
 		}
 
-		var required = [ 'id', 'name', 'address' ];
-		var i, key, value;
+		// Every required field goes through the SAME contract as the PHP half, so there is no
+		// per-field variant left to drift (issues #798, #803, #804).
+		var requiredId      = requiredString( payload.id );
+		var requiredName    = requiredString( payload.name );
+		var requiredAddress = requiredString( payload.address );
 
-		for ( i = 0; i < required.length; i++ ) {
-			key = required[ i ];
-			value = payload[ key ];
-
-			if ( undefined === value || null === value || '' === value || ! isScalar( value ) ) {
-				return null;
-			}
+		if ( null === requiredId || null === requiredName || null === requiredAddress ) {
+			return null;
 		}
 
 		var type = payload.type;
 
-		// `isScalar` on both sub-fields, exactly as the required loop above already applies it
-		// to `id`/`name`/`address`. Presence alone is not enough: `String( [] )` is `''` and
-		// `String( {} )` is the literal `"[object Object]"`, so an array or object in either
-		// sub-field survived into the select payload and reached the point-type filter and the
-		// card. This is the JS half of the boundary `Pickup_Point::from_array()` guards on the
-		// REST path, and the two MUST NOT diverge (issues #798, #804; the #201/#251 lesson
-		// about validation and conversion drifting apart when they live in different places).
-		if ( ! type || 'object' !== typeof type
-			|| undefined === type.code || null === type.code
-			|| undefined === type.label || null === type.label
-			|| ! isScalar( type.code ) || ! isScalar( type.label )
-		) {
+		if ( ! type || 'object' !== typeof type ) {
+			return null;
+		}
+
+		// An EMPTY `type.code` is worse than a missing one: `pickup-panels.js`'s
+		// `pointPassesFilter()` reads `if ( ! code … ) return true`, so the point passes every
+		// type filter and the customer cannot filter it out. `label` is drawn on the card.
+		var typeCode  = requiredString( type.code );
+		var typeLabel = requiredString( type.label );
+
+		if ( null === typeCode || null === typeLabel ) {
 			return null;
 		}
 
@@ -573,12 +644,12 @@
 		}
 
 		var point = {
-			id: String( payload.id ),
-			name: String( payload.name ),
-			address: String( payload.address ),
+			id: requiredId,
+			name: requiredName,
+			address: requiredAddress,
 			type: {
-				code: String( type.code ),
-				label: String( type.label ),
+				code: typeCode,
+				label: typeLabel,
 			},
 			// DERIVED, not merely optional (issue #263) — the JS half of the same
 			// boundary rule `Pickup_Point::from_array()` applies on the REST path,
@@ -587,7 +658,7 @@
 			// information and the display sites must never have to ask twice; a
 			// carrier with a real short form still overrides by sending one. See
 			// that PHP method's own comment for the defect this closed.
-			short_address: optionalString( payload, 'short_address' ) || String( payload.address ),
+			short_address: optionalString( payload, 'short_address' ) || requiredAddress,
 			locality: optionalString( payload, 'locality' ),
 			postal_code: optionalString( payload, 'postal_code' ),
 			phone: optionalString( payload, 'phone' ),

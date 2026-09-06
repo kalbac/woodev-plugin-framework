@@ -110,6 +110,146 @@ final class PickupPointTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Issue #803: REQUIRED means non-blank ONCE CAST, and the same rule applies to all five
+	 * required strings. Three holes were open at once before this: `false` is scalar and is not
+	 * `''`, so it passed the old raw guard and then cast to `''` anyway; `type.code`/`type.label`
+	 * had no emptiness check at all; and a whitespace-only value survived though no display site
+	 * can tell it from absent. An empty `type.code` is the worst of them — `pickup-panels.js`'s
+	 * `pointPassesFilter()` reads `if ( ! code … ) return true`, so such a point passes EVERY
+	 * type filter and the customer cannot filter it out.
+	 *
+	 * @dataProvider provide_blank_required_values
+	 *
+	 * @param mixed $value The blank-once-cast value to plant.
+	 */
+	public function test_returns_null_for_a_required_field_that_is_blank_once_cast( string $label, $value ): void {
+		foreach ( [ 'id', 'name', 'address' ] as $key ) {
+			$payload         = $this->valid();
+			$payload[ $key ] = $value;
+
+			$this->assertNull(
+				Pickup_Point::from_array( $payload ),
+				"{$label} {$key} must reject the point"
+			);
+		}
+
+		foreach ( [ 'code', 'label' ] as $key ) {
+			$payload                 = $this->valid();
+			$payload['type'][ $key ] = $value;
+
+			$this->assertNull(
+				Pickup_Point::from_array( $payload ),
+				"{$label} type.{$key} must reject the point"
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: mixed}>
+	 */
+	public function provide_blank_required_values(): array {
+		return [
+			'an empty string'    => [ 'an empty string', '' ],
+			'false'              => [ 'false', false ],
+			'true'               => [ 'true', true ],
+			'spaces only'        => [ 'spaces only', '   ' ],
+			'a tab and newline'  => [ 'a tab and newline', "\t\n" ],
+			'a no-break space'   => [ 'a no-break space', "\u{00A0}" ],
+			'an em space'        => [ 'an em space', "\u{2003}" ],
+			'a byte-order mark'  => [ 'a byte-order mark', "\u{FEFF}" ],
+			'a next-line character' => [ 'a next-line character', "\u{0085}" ],
+			'a Mongolian vowel separator' => [ 'a Mongolian vowel separator', "\u{180E}" ],
+			'an ogham space mark' => [ 'an ogham space mark', "\u{1680}" ],
+			'a line separator'   => [ 'a line separator', "\u{2028}" ],
+			'an unsafe integer'  => [ 'an unsafe integer', 9007199254740992 ],
+			'a negative unsafe integer' => [ 'a negative unsafe integer', -9007199254740992 ],
+			'NAN'                => [ 'NAN', NAN ],
+			'INF'                => [ 'INF', INF ],
+			'a fractional float' => [ 'a fractional float', 1.5 ],
+			'a float past the safe integer range' => [ 'a float past the safe integer range', 1.0e20 ],
+		];
+	}
+
+	/**
+	 * The control for the rule above, and the reason it is `'' === trim( … )` and never
+	 * `empty()`: `'0'` is a legitimate value a carrier can send for an id or a type code, and
+	 * `empty( '0' )` is TRUE. Both the string and the integer form must survive and render as
+	 * `'0'`.
+	 */
+	public function test_a_required_field_of_zero_survives(): void {
+		foreach ( [ 'string zero' => '0', 'integer zero' => 0 ] as $label => $value ) {
+			$payload               = $this->valid();
+			$payload['id']         = $value;
+			$payload['type']['code'] = $value;
+
+			$point = Pickup_Point::from_array( $payload );
+
+			$this->assertNotNull( $point, "{$label} must still build a point" );
+			$this->assertSame( '0', $point->to_array()['id'], "{$label} id must render as '0'" );
+			$this->assertSame( '0', $point->to_array()['type']['code'], "{$label} type.code must render as '0'" );
+		}
+	}
+
+	/**
+	 * A non-blank required value is returned UNTRIMMED. Rejecting a blank field is the decision
+	 * this contract makes; silently rewriting a non-blank one is not.
+	 */
+	/**
+	 * The JS half of this boundary (`requiredString()` in `map-provider-embedded.js`) accepts
+	 * and renders EXACTLY these. A carrier whose JSON carries a numeric id is the one
+	 * non-string case that actually occurs, so `5` and `5.0` must normalise identically on
+	 * both sides. Review of PR #808 caught the earlier `is_scalar()` version disagreeing across
+	 * the boundary on `false`, on Unicode whitespace and on exotic floats — which is why the
+	 * accepted set is now this narrow.
+	 */
+	public function test_an_integer_valued_number_is_accepted_and_rendered_without_a_fraction(): void {
+		foreach ( [ 'an int' => 5, 'an integer-valued float' => 5.0 ] as $label => $value ) {
+			$payload       = $this->valid();
+			$payload['id'] = $value;
+
+			$point = Pickup_Point::from_array( $payload );
+
+			$this->assertNotNull( $point, "{$label} must build a point" );
+			$this->assertSame( '5', $point->to_array()['id'], "{$label} must render as '5'" );
+		}
+
+		$payload       = $this->valid();
+		$payload['id'] = -0.0;
+
+		$point = Pickup_Point::from_array( $payload );
+
+		$this->assertNotNull( $point, 'negative zero must build a point' );
+		$this->assertSame(
+			'0',
+			$point->to_array()['id'],
+			"negative zero must render as '0', exactly as String( -0 ) does in JS"
+		);
+	}
+
+	/**
+	 * The safe-integer bound applies to a NATIVE PHP int too, not only to a float. `PHP_INT_MAX`
+	 * is 9223372036854775807 on 64-bit, so a decoded carrier row can hand us an int JS cannot
+	 * represent exactly; bounding only the float branch let PHP accept 9007199254740992 while
+	 * the iframe half rejected the same value (second review round of PR #808). The largest
+	 * value both sides render identically must still pass.
+	 */
+	public function test_the_largest_safely_rendered_integer_is_accepted(): void {
+		$payload       = $this->valid();
+		$payload['id'] = 9007199254740991;
+
+		$point = Pickup_Point::from_array( $payload );
+
+		$this->assertNotNull( $point, 'the max safe integer must build a point' );
+		$this->assertSame( '9007199254740991', $point->to_array()['id'] );
+	}
+
+	public function test_a_required_field_keeps_its_surrounding_whitespace(): void {
+		$point = $this->make_point( [ 'name' => '  ПВЗ на Тверской  ' ] );
+
+		$this->assertSame( '  ПВЗ на Тверской  ', $point->to_array()['name'] );
+	}
+
 	public function test_returns_null_for_out_of_range_coordinates(): void {
 		$payload        = $this->valid();
 		$payload['lat'] = 91.0;
