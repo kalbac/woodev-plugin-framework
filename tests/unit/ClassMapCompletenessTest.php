@@ -105,10 +105,96 @@ final class ClassMapCompletenessTest extends TestCase {
 		$this->assertSame(
 			[],
 			$unreachable,
-			"Composer cannot autoload these framework classes. Add their directory to composer.json → "
-				. "autoload.classmap and run `composer dump-autoload`. Unreachable:\n"
-				. implode( "\n", $unreachable )
+			self::explain_unreachable( $root, $map, $unreachable )
 		);
+	}
+
+	/**
+	 * Names the LIKELY cause first, because the two causes need opposite responses and this
+	 * message used to lead with the rarer one.
+	 *
+	 * A class can be unreachable for two reasons. Either its directory is missing from
+	 * `composer.json` -> `autoload.classmap`, which is a real wiring defect; or the directory
+	 * IS listed and Composer's `vendor/composer/autoload_classmap.php` is merely a STALE
+	 * snapshot, which is not a defect in the tree at all. `vendor/` is gitignored, so git never
+	 * refreshes that snapshot: pull or check out a branch that added a class and the file on
+	 * disk still predates it. CI never sees this, because it installs from scratch every run.
+	 *
+	 * The old message gave the wiring advice for BOTH cases, which sends the reader hunting a
+	 * bug that is usually not there. In s121 that misdirection cost two people time - a critic
+	 * in its worktree and the coordinator in the main checkout - and then became the first line
+	 * of the next session's handoff. The `post-merge`/`post-checkout` hooks in `.githooks/`
+	 * remove the cause; this message is the safety net for a clone that never ran
+	 * `git config core.hooksPath .githooks` (issue #802).
+	 *
+	 * @param string                $root        Repository root.
+	 * @param array<string, string> $map         Generated class map, FQCN => relative path.
+	 * @param string[]              $unreachable Rendered "FQCN (path)" entries, already sorted.
+	 *
+	 * @return string
+	 */
+	private static function explain_unreachable( string $root, array $map, array $unreachable ): string {
+		$composer = json_decode( (string) file_get_contents( $root . '/composer.json' ), true );
+		$listed   = (array) ( $composer['autoload']['classmap'] ?? [] );
+
+		$stale   = [];
+		$unwired = [];
+
+		foreach ( $unreachable as $entry ) {
+			$fqcn      = (string) strtok( $entry, ' ' );
+			$path      = ltrim( $map[ $fqcn ] ?? '', './' );
+			$is_listed = false;
+
+			foreach ( $listed as $dir ) {
+				if ( '' !== $path && 0 === strpos( $path, ltrim( (string) $dir, './' ) ) ) {
+					$is_listed = true;
+					break;
+				}
+			}
+
+			if ( $is_listed ) {
+				$stale[] = $entry;
+			} else {
+				$unwired[] = $entry;
+			}
+		}
+
+		if ( [] === $unwired ) {
+			return "STALE COMPOSER SNAPSHOT - this is NOT a defect in the tree.
+"
+				. "Run `composer dump-autoload` and re-run. Every class below sits in a directory that
+"
+				. "composer.json -> autoload.classmap ALREADY lists, so only the generated snapshot under
+"
+				. "vendor/ is behind - git does not refresh it, because for git it is not a build step.
+"
+				. "Enable the hooks that do it for you: `git config core.hooksPath .githooks`.
+
+"
+				. implode( "
+", $stale );
+		}
+
+		$message = "Composer cannot autoload these framework classes. Their directory is missing from
+"
+			. "composer.json -> autoload.classmap - add it there, then run `composer dump-autoload`:
+
+"
+			. implode( "
+", $unwired );
+
+		if ( [] !== $stale ) {
+			$message .= "
+
+Separately, these are only a STALE snapshot (their directory is already
+"
+				. "listed) - `composer dump-autoload` alone fixes them:
+
+" . implode( "
+", $stale );
+		}
+
+		return $message;
 	}
 
 	/**

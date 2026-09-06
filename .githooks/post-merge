@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+#
+# After a merge (including the fast-forward one `git pull --ff-only` performs — measured,
+# it DOES fire), refresh Composer's classmap if framework sources moved. See
+# `refresh-composer-autoload.sh` for why this is needed at all. Issue #802.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+
+hooks_dir=$(dirname "$0")
+
+# ORIG_HEAD is what the merge moved us off. `HEAD@{1}` is the fallback for the rare
+# case where it is unset.
+old=$(git rev-parse --verify --quiet ORIG_HEAD || git rev-parse --verify --quiet 'HEAD@{1}' || true)
+
+"$hooks_dir/refresh-composer-autoload.sh" "$old" "$(git rev-parse HEAD)"
+
+exit 0

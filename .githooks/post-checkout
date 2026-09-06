@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+#
+# After a BRANCH checkout, refresh Composer's classmap if framework sources differ between
+# the two branches. See `refresh-composer-autoload.sh` for why. Issue #802.
+#
+# `$3` is 1 for a branch checkout and 0 for a file checkout (`git checkout -- path`). Only
+# the branch case can move a class, and firing on every file checkout would put two
+# seconds onto an operation people use to undo a single edit.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+
+[ "$3" = "1" ] || exit 0
+
+hooks_dir=$(dirname "$0")
+
+"$hooks_dir/refresh-composer-autoload.sh" "$1" "$2"
+
+exit 0
