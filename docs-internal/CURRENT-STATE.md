@@ -41,7 +41,7 @@ in two seconds with no log, which reads as a red build): **#583** + gotcha
 **1644** in **27** suites; **integration 143 / 530**, re-run on `main` this session and no longer a
 carried-over number; phpcs clean — **with the warning level ON**; phpstan level 3 no errors;
 `lint:i18n`, `lint:i18n-sources` (NEW, #791), `lint:mo` and `lint:docs` OK; **e2e 7 / 7** against
-the live rig (s120, not re-run since).
+the live rig, re-run in s121 on the merged `main` (2.2 min).
 
 ⚠ **s120's handoff said unit 3534 / 8409 and that was WRONG AT THE COMMIT IT NAMED** — `86b9358`
 re-measured in s121 gives **3540 / 8427 / 67 skipped**, byte-identical to `main`. Nothing between
