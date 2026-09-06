@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-06 (s121).** s121 merged PRs **#793 #794 #795** and closed **#779 #107 #791**. **The ten-card freeze behind #786 was audited and is largely WRONG** (operator asked, measurement answered): #151 #152 #174 #181 #182 #144 unfrozen to «Потом»; **#165 and #173 went to the rig the same day and are now CLOSED** — #165 does not reproduce after PR #177's `_cameraFit` gate (0 of 8–10 against the 1-of-8 that opened it), #173 as `not planned` because its window cannot be hit by hand: inside the first ~400 ms a click lands on a CLUSTER, never a single marker. **#371 answered — variant (в), no consumer expected**, so it stays frozen on a correctly named condition; #714 likewise, behind the unimplemented §13. Report: [reviews/2026-09-06-pickup-freeze-audit.md](reviews/2026-09-06-pickup-freeze-audit.md). **#786 is in Бэклог** — he moved it and answered on the card.
+**As of 2026-09-07 (s122).** s122 merged PRs **#805 #806 #807 #808** and closed **#798 #799 #802 #803 #804**. **The pickup boundary now has ONE contract on both halves** — a required field is non-blank ONCE CAST, spelled out identically in `Pickup_Point::required_string()` and `map-provider-embedded.js`'s `requiredString()`; three critic rounds went into the single claim that the two agree, and each found it false. **The Codex model tiering was rewritten around `gpt-6-astra`** and its price measured: ~9× a luna round, 6 % of the weekly limit per review — details in `CLAUDE.md` → Orca.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -37,13 +37,13 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — re-measured 06.09.2026 (s122) against `main`:** unit **3555** / **8755** with sodium
-ON (s121's line said 3540 / 8427 here, which is the figure for commit `86b9358`, not for `main` —
-re-measured on a clean tree this session); jest
-**1644** in **27** suites; **integration 143 / 530**, re-run on `main` this session and no longer a
-carried-over number; phpcs clean — **with the warning level ON**; phpstan level 3 no errors;
-`lint:i18n`, `lint:i18n-sources` (NEW, #791), `lint:mo` and `lint:docs` OK; **e2e 7 / 7** against
-the live rig, re-run in s121 on the merged `main` (2.2 min).
+**Baselines — measured 07.09.2026 (s122) against `main`:** unit **3578** / **8865**, 1 skipped, with
+sodium ON; jest **1744** in **27** suites; phpcs clean — **with the warning level ON**; phpstan
+level 3 no errors; `lint:i18n`, `lint:i18n-sources` (#791), `lint:mo` and `lint:docs` OK.
+⚠ **Integration (143 / 530) and e2e (7 / 7) are s121 numbers, NOT re-run in s122** — carry them as
+inferences, re-measure before quoting. ⚠ s121's line here said unit 3540 / 8427: that is the figure
+for commit `86b9358`, copied one line too far up. A clean `main` before this session's own changes
+gave **3555 / 8755**.
 
 ⚠ **s120's handoff said unit 3534 / 8409 and that was WRONG AT THE COMMIT IT NAMED** — `86b9358`
 re-measured in s121 gives **3540 / 8427 / 67 skipped**, byte-identical to `main`. Nothing between
@@ -82,7 +82,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 51, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 49, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
