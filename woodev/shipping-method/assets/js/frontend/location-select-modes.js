@@ -234,18 +234,44 @@
 			}
 
 			fetchRegionList().then( function( entries ) {
+				// Issue #573. This lookup outlives `detach()` — that function unbinds the
+				// listener and cancels nothing — so it can land after the checkout re-render
+				// that tore the renderer down. Landing late is NORMAL and usually right: the
+				// cascade survives the re-render, the pick is still the customer's latest, and
+				// `reconcileAfterCheckoutUpdate()` re-attaches the renderer WITHOUT re-asking
+				// for the value already on screen, so dropping the record here would simply
+				// lose the selection.
+				//
+				// What must not happen is handing the record over once a NEWER pick has
+				// reached the cascade: `options.onSelect()` is `enqueueSelect()`, whose first
+				// line is `entry.pendingRecord = record`, and that queue is last-writer-wins by
+				// design — a ten-second-old region would overwrite the newer choice and be the
+				// one persisted. `release.isStale()` is the cascade's own answer to "has
+				// anything newer happened since this pick"; see `onResolvingFor()` for why it
+				// counts picks rather than reading the busy marker.
+				//
+				// Absent `onResolving` (the contract makes it optional) there is no staleness
+				// to consult and the pre-#573 behaviour stands.
+				var superseded = release && 'function' === typeof release.isStale && release.isStale();
+
 				for ( var i = 0; i < entries.length; i++ ) {
 					var candidate = entries[ i ];
 
 					if ( candidate && candidate.record && candidate.record.label === text ) {
-						options.onSelect( { record: candidate.record } );
+						if ( ! superseded ) {
+							options.onSelect( { record: candidate.record } );
+						}
 
-						// A no-op by construction: `onSelect()` has raised a marker of its own
-						// for the record it just accepted, so the token this one holds is no
-						// longer the standing marker's. Called anyway, unconditionally, so the
-						// release path is one path rather than two — a `mayEnterChain()` refusal
-						// inside `onSelect()` reaches this line with NOTHING having replaced the
-						// marker, and skipping it there would leave the field spinning forever.
+						// Usually a no-op by construction: `onSelect()` has raised a marker of
+						// its own for the record it just accepted, so the token this one holds
+						// is no longer the standing marker's. Called anyway, unconditionally,
+						// so the release path is one path rather than two — a `mayEnterChain()`
+						// refusal inside `onSelect()` reaches this line with NOTHING having
+						// replaced the marker, and skipping it there would leave the field
+						// spinning forever. The same holds on the #573 superseded path, where
+						// `onSelect()` did not run at all: `release()` is token-guarded, so it
+						// clears this pick's own stale marker if it is somehow still standing
+						// and stands down in front of the newer owner's.
 						releaseIfHeld();
 
 						return;
