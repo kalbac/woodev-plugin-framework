@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+#
+# Covers the hole `post-merge` leaves: git does NOT run `post-merge` when a merge stops on a
+# conflict and the user finishes it with `git commit`. That path imports someone else's
+# framework classes just like a clean merge does, so it can leave exactly the stale Composer
+# snapshot this repo's hooks exist to prevent (issue #802, found by review of PR #806).
+#
+# Ordinary commits must stay free: this fires ONLY when the commit just created is a MERGE
+# commit, which is the two-or-more-parents test below. Your own commit needs no refresh —
+# the stale case is IMPORTING a change, not authoring one.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+
+hooks_dir=$(dirname "$0")
+
+# `--parents` prints "<commit> <parent>..." — a merge commit has two or more parents, so the
+# field count is 3 or more.
+parents=$(git rev-list --parents -n 1 HEAD 2>/dev/null | wc -w | tr -d ' ')
+
+[ "$parents" -ge 3 ] || exit 0
+
+"$hooks_dir/refresh-composer-autoload.sh" "$(git rev-parse HEAD^1)" "$(git rev-parse HEAD)"
+
+exit 0

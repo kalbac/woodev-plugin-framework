@@ -13,13 +13,14 @@
 *.md text eol=lf
 *.txt text eol=lf
 
-# Git hooks — enforce LF, because a CRLF hook is broken in WSL and only LOOKS fine on
-# Windows. Measured s122: git-bash tolerates `#!/usr/bin/env sh` + CRLF and runs the hook,
-# while the same file under WSL dies with `set: Illegal option -` — the  joins the option.
-# This box has `core.autocrlf=true`, so without this rule any FRESH checkout of a hook lands
-# as CRLF; `commit-msg` reads LF today only because it has not been re-checked-out since it
-# was written. Issue #802.
+# Git hooks — enforce LF. A CRLF hook is broken under WSL and only LOOKS fine on Windows:
+# measured s122, git-bash tolerates a CRLF `#!/usr/bin/env sh` and runs the hook, while the
+# same file under WSL dies with `set: Illegal option -` because the carriage return joins
+# the option. This box has `core.autocrlf=true`, so without this rule a FRESH checkout of a
+# hook lands as CRLF; `commit-msg` reads LF today only because it has not been re-checked-out
+# since it was written. `.gitattributes` pins itself for the same reason. Issue #802.
 .githooks/** text eol=lf
+.gitattributes text eol=lf
 
 # Built front-end assets — enforce LF so a Windows rebuild matches the
 # Linux CI build-parity check byte-for-byte.

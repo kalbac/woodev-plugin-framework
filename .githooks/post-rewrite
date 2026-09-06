@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+#
+# Covers `git rebase` (and `git commit --amend`), neither of which runs `post-merge`. A rebase
+# onto a branch that added framework classes lands the same stale Composer snapshot as a merge
+# would (issue #802, found by review of PR #806).
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+
+hooks_dir=$(dirname "$0")
+
+# The rewritten commits arrive on stdin as "<old> <new>" pairs. Drain them, because a hook that
+# leaves stdin unread can make the caller see a broken pipe.
+cat >/dev/null 2>&1 || true
+
+old=$(git rev-parse --verify --quiet ORIG_HEAD || true)
+
+"$hooks_dir/refresh-composer-autoload.sh" "$old" "$(git rev-parse HEAD)"
+
+exit 0

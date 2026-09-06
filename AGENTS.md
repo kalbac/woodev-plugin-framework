@@ -206,8 +206,10 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   refuses a GitHub closing keyword (`closes`/`fixes`/`resolves #N`) anywhere except alone on its
   own line — GitHub executes those literally even inside a quote, and s81 closed three cards that
   way while merely describing plans; a deliberate `Closes #123` on its own line still works.
-  `post-merge`/`post-checkout` run `composer dump-autoload` when framework sources moved (#802),
-  because `vendor/` is gitignored and git never refreshes that snapshot.
+  `post-merge`/`post-checkout`/`post-commit`/`post-rewrite` run `composer dump-autoload` when a
+  git operation moved framework sources (#802) — `vendor/` is gitignored, so git never refreshes
+  that snapshot itself. All hooks are committed `100755`: POSIX git silently IGNORES a
+  non-executable hook, and on Windows `core.fileMode=false` hides that from you.
 - **Point github.com at `gh` once per machine: `gh auth setup-git`** (#560, operator 27.08.2026).
   Without it `git push` hangs forever with no output, no error and no prompt. Verify BEFORE the
   first push: `git config --global --get-regexp credential`. Do not hand-roll the helper — why,
