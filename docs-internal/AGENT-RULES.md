@@ -400,6 +400,27 @@ rewrite `woodev/**/assets/js/frontend/**` — and it is a different axis from `A
 in, this one is about where its CONFIGURATION lives. `woodev/**/assets/js/frontend/**` (raw-served,
 out of TypeScript scope) is exactly where this principle applies.
 
+### Rule 10 — Merchant-facing copy: the label, the two help slots, and the vocabulary
+
+**Moved here from `AGENTS.md` → Conventions in s122 (#799), verbatim.** These three rules are the
+operator's, they are long, and they are needed only when you are actually writing settings copy —
+which is not every session. `AGENTS.md` keeps a one-line pointer to each; the reading-budget gate on
+that file is what forced the split, and it is working as intended.
+
+#### Rule 10a — Settings label
+
+**Short essence, not a full sentence — three layers do the work together** (operator rule, 31.08.2026). (1) The LABEL carries the essence and fits one line — usually 2 words, 3 if short; it is allowed to be not fully self-explanatory on its own. (2) The CONTROL TYPE carries part of the meaning: a checkbox already tells the merchant something is switched on or off, so a leading «Разрешить…»/«Включить…» in the label is wasted. (3) The `desc_tip` carries the full explanation **when one is needed** — see the row below; an option that explains itself gets no tooltip, and a `description` may sit alongside the tooltip rather than instead of it. Worked example: «Разрешить использовать города не из списка» → label «Города вне списка» + tooltip «Включите эту опцию, если хотите разрешить покупателям использовать города, которых нет в списке». ⚠ Do NOT generalise this into one formula such as «every label names an action» — that was tried and rejected the same day; naming the action suits a mode `select`, not a checkbox.
+
+#### Rule 10b — Settings help text
+
+**Two slots that COEXIST — `description` is not an alternative to the tooltip** (operator, 25.08.2026, corrected 31.08.2026). **`tooltip`/`desc_tip`** is the default home for an explanation — `tooltip` on `register_control()` here, `desc_tip` in a WooCommerce `form_fields` array. Used *almost* always, but it is NOT mandatory: an option that genuinely needs no explanation gets none (rare). **`description`** is the inline slot WooCommerce renders on the page rather than behind a hover, and it earns its place when the text must be **reachable or unmissable**: (1) the reader must follow a link; (2) the reader must COPY a value — the live case is an option displaying the webhook URL to paste into the provider's account; (3) the text must be SEEN, because a tooltip is not always read — e.g. «Не включайте эту опцию без необходимости. При её включении в лог записывается большее количество данных». One option may carry both slots at once.
+
+#### Rule 10c — Merchant-facing vocabulary
+
+**No jargon in anything a merchant reads** — labels, tooltips, `description`s, admin notices (operator rule, 31.08.2026). Two words specifically, because both were in shipped copy: **«чекаут» → «форма оформления заказа»** (and «на классическом/блочном чекауте» → «в классической/блочной форме оформления заказа»), and **«фреймворк» must not appear at all** — *«Люди вообще не знают что такое фреймворк»*; name the actor «плагин», or drop it. This is about the READER, so it does not touch code comments, docblocks, log lines or exception texts, where the words are precise and the audience is us. Swept clean once in s109 (15 strings across 5 files); a new one is a review defect, not a nit.
+
+---
+
 ## PHP/WP Gotchas Summary
 
 | Topic | Description |
