@@ -1,7 +1,8 @@
 # Orchestrating agents with Orca — Woodev Framework Wiki
-> Compiled reference. Last compiled: 2026-08-27 (s100: four measured recipe fixes — pointer-not-paste,
-> the canary/one-line-body conflict, `worker-release` leaving a terminal spent, and briefing a fresh
-> worker into an existing worktree). Earlier passes: s83 (first capability pass), s97, s99.
+> Compiled reference. Last compiled: 2026-09-06 (s121: closed #779, the last two Orca candidates left
+> over from #381's capability sweep — `worktree set --comment`/`--workspace-status`, live-verified and
+> adopted; `orca-per-workspace-env`, measured against `orca.yaml` and this project's actual pains, and
+> rejected). Earlier passes: s83 (first capability pass), s97, s99, s100.
 
 This project runs inside the Orca app, so Orca's runtime — not raw `git worktree` or an ad-hoc
 PTY — is the source of truth for worktrees, agent terminals and multi-agent coordination. This
@@ -82,6 +83,38 @@ orca orchestration worker-read --dispatch <dispatch_id> --limit 50 --json
 `worker-read` returns the worker's actual transcript, not a terminal scrape, when Orca can prove
 the session. It is the cheap answer to "did that background agent really return a result" — a
 question this project has been burned by before.
+
+## Worktree comment / workspace-status — adopted, verified live (#779, s121)
+
+Two flags on `orca worktree set` sat untried since #381 closed: `--comment` and `--workspace-status`.
+Verified on this session's own worktree rather than from help text alone:
+
+```bash
+orca worktree set --worktree active --comment "docs(#779,#107): triaging Orca …" --json
+orca worktree set --worktree active --workspace-status in-review --json
+orca worktree list --json   # both fields showed up here too, not only in `worktree show`
+```
+
+Both landed in the worktree's Orca metadata (`comment`, `workspaceStatus`) and are readable from
+`worktree list`/`worktree show` from ANY terminal, not only from inside the workspace that set
+them — real cross-process visibility, which is exactly the value the card named: today, learning
+whether a worker is alive and what it is on costs a `dispatch-show` plus a transcript read; this
+costs the operator nothing more than glancing at the workspace list in the Orca UI.
+
+**Bucket: take it.** The wiring:
+
+- **Every brief's worker sets `--comment` at meaningful checkpoints** — start, diagnosis done, fix
+  implemented, a gate run, right before `worker_done` — with
+  `orca worktree set --worktree active --comment "<short status>" --json`. This is additive to the
+  orchestration `heartbeat` message, not a replacement for it: `heartbeat` is the machine-readable
+  signal the coordinator's `check --wait` blocks on; `--comment` is the human-readable one the
+  operator reads with his own eyes, unprompted, per the card's stated value.
+- **`--workspace-status` is the coordinator's to set, not the worker's.** It maps onto the board
+  columns (`todo`/`in-progress`/`in-review`/`completed` by default), and a worker updating its own
+  card status races the coordinator's own bookkeeping of the same dispatch. This wiki does not
+  extend the Orca-worktree card state to replace the GitHub Issues board (§ "What we deliberately
+  did not adopt" — `orca linear` was rejected for the identical reason: two trackers is worse than
+  one) — `--workspace-status` is local UI polish on top of the existing board, not a second board.
 
 ## Two things s114 paid for
 
@@ -193,6 +226,7 @@ installs** — against **411 seconds** for a `composer install` there.
 | `orca automations` (scheduled prompts) | Nothing here is recurring. Sessions are operator-initiated. |
 | `orca linear` | The backlog is GitHub Issues + board №6. Two trackers is worse than one. |
 | `orca emulator` (iOS/Android) | No mobile surface in this project. |
+| `orca-per-workspace-env` (`environmentRecipes` in `orca.yaml`) | Solves a different problem than the one it was checked against — see below. |
 
 The built-in browser (`orca goto` / `snapshot` / `console` / `network`) was **tried once against
 the rig and not adopted.** The argument for it is real — it returns an accessibility tree rather
@@ -204,6 +238,32 @@ verdict on the feature — it was not investigated further, because debugging th
 same runtime carries running workers is the wrong trade. **Rig verification stays on
 chrome-devtools MCP against `:8973`.** Anyone who wants to revisit this should do it with no
 workers in flight.
+
+**`orca-per-workspace-env` was checked against the three concrete pains named on #779, not against
+the feature's own pitch.** The bundled `orca-per-workspace-env` skill guide describes standing up a
+disposable REMOTE runtime — a cloud sandbox, VM, or SSH host — per workspace: its own
+`environmentRecipes` entry in `orca.yaml`, its own base-image build, a second agent-auth snapshot
+layer, cloud billing, and a `create`/`suspend`/`resume`/`destroy` lifecycle (`orca vm recipe doctor`
+validates the wiring; this repo's `orca.yaml` has no `environmentRecipes` key today — confirmed by
+reading it). None of that overlaps with the pains the card named:
+
+- The 76 MB `vendor` copy per worktree is a LOCAL git-worktree sharing question — Composer bakes an
+  absolute `$baseDir` that breaks under a shared/symlinked copy (§ "A fresh worktree is gate-capable
+  immediately," above). A per-workspace recipe clones the repo fresh into its OWN remote checkout and
+  runs its own `composer install` there; it never touches this machine's worktree at all.
+- `.worktreeinclude` is Orca's LOCAL worktree bootstrap mechanism, with no equivalent role in a
+  recipe's remote checkout, which starts from a clean clone and its own base-image build.
+- `plugins-reference/` being gitignored is a LOCAL rig-fixture gap (five `Contract/Yandex*` tests
+  skip without it — fixed by adding the path to `.worktreeinclude`, not by moving compute off-machine).
+
+There is also no adoption case independent of the card: this project runs on one desktop with no
+cloud account or billing set up for sandboxes, and every worktree decision recorded above went the
+OPPOSITE direction on purpose — same-volume placement, a shared `node_modules`, a copied `vendor` —
+to keep everything local and cheap. Standing up `orca-per-workspace-env` would mean taking on a cloud
+account plus the four-phase image/auth pipeline the skill guide walks through, for a problem this
+project does not have.
+
+**Bucket: not for us.**
 
 ## What s84 added — three agents, four launch steps, two lying gates
 
