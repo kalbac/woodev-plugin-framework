@@ -290,6 +290,13 @@ Each carry-over line must name:
   #530. В силе.
 ```
 
+⚠ **Не начинай перенесённую строку пункта с даты.** Гейт склеивает продолжения в один
+логический пункт, но строку вида `16.08.2026, …` ловит регулярка `/^\d+\./` и считает новым
+элементом списка — у которого, разумеется, нет ни `#N`, ни `sNN`. Сообщение при этом говорит
+«carry-over line does not say WHERE it was decided» и уводит от настоящей причины: дело в
+переносе строки, а не в содержании. Достаточно переверстать (`(16.08.2026)` внутри фразы).
+Наступлено в s121.
+
 ### Enforced by `npm run lint:docs`
 
 Text alone did not hold for the other formats in this file and will not hold here. The gate checks:
