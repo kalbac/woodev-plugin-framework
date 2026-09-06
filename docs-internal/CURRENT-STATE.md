@@ -37,7 +37,9 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — re-measured 06.09.2026 (s121) against `main`:** unit **3540** / **8427**; jest
+**Baselines — re-measured 06.09.2026 (s122) against `main`:** unit **3555** / **8755** with sodium
+ON (s121's line said 3540 / 8427 here, which is the figure for commit `86b9358`, not for `main` —
+re-measured on a clean tree this session); jest
 **1644** in **27** suites; **integration 143 / 530**, re-run on `main` this session and no longer a
 carried-over number; phpcs clean — **with the warning level ON**; phpstan level 3 no errors;
 `lint:i18n`, `lint:i18n-sources` (NEW, #791), `lint:mo` and `lint:docs` OK; **e2e 7 / 7** against
@@ -80,7 +82,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 52, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 51, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
 empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
