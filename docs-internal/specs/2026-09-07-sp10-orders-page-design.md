@@ -356,17 +356,72 @@ that are easy to get wrong:
 The frame is `aria-hidden`; the overlay carries the message. If a WooCommerce without those two
 components is ever running, the panel renders nothing rather than half of itself.
 
-## D9. «Data status» is NOT ours — measured, not judged
+## D9. «Data status» IS ours — the delivery status is the stale thing, not the list
 
-Analytics carries a third filter-row panel, «Data status» («Last updated … / Next update …»). It
-reports the freshness of WooCommerce Analytics' **imported lookup tables** (`wc_order_stats` and
-friends, `src/Admin/API/Reports/*/DataStore.php`): those reports do not read orders, they read an
-aggregate a scheduler refreshes, so the merchant needs to be told how stale it is.
+⚠ **This section replaces an earlier answer that was wrong.** It first read: the list is a live
+`wc_get_orders()`, nothing can be stale, the panel is inapplicable. The operator corrected it on
+08.09.2026, and he is right — the mistake was scoping «stale» to the QUERY instead of to the DATA
+the page exists to show.
 
-**`Orders_Query::get_results()` is one live `wc_get_orders()` call.** There is no lookup table, no
-import and no scheduler, so nothing can be stale and the panel would have nothing to report. It is
-not skipped for effort — it is inapplicable. Should this page ever grow an aggregate cache, this
-decision comes back with it.
+What Analytics uses the panel for is the freshness of its imported `wc_order_stats` lookup tables
+(`src/Admin/API/Reports/*/DataStore.php`). Our list is indeed live. **But the delivery status inside
+each row is not**: it is a stored carrier value, refreshed asynchronously — *«перевозчики обновляют
+статусы доставки либо по крону либо по вебхуку»*. So the page shows exactly one thing that goes
+stale, and it is the column the page exists for.
+
+**Both refresh paths are real, and measured:**
+
+| path | where it already lives |
+|---|---|
+| cron | the carrier plugin's own scheduled event — edostavka: `wc_edostavka_orders_update`, a configurable interval in minutes behind an on/off toggle, its own `wc_edostavka_orders` schedule (`includes/class-wc-edostavka-cron.php`) |
+| webhook | the FRAMEWORK already owns the seam — `Abstract_Webhook_Handler` (`order/abstract-webhook-handler.php`): route registration, signature verification, payload parsing |
+
+So the two fields map cleanly, and this is the operator's own reading: **«Last updated» reflects
+EITHER path** — whichever last changed a status — while **«Next update» exists only when a cron is
+what refreshes them**, and is absent for a webhook-only carrier.
+
+**What is missing, and it is one half not two:** «Next update» already has a source —
+`wp_next_scheduled()` on the carrier's hook, which edostavka **already renders in its own settings**
+(`generate_cron_update_html()` → `views/html-cron-update.php`). **«Last updated» has none.** A grep
+across every shipped plugin finds no stored last-sync timestamp anywhere: nothing records when a
+status was last refreshed, by either path. That timestamp has to be written, and the natural writers
+are the two seams above.
+
+⚠ **The framework does not know the carrier's cron hook name**, and must not guess it. That belongs
+on the provider descriptor next to `status_map` / `tracking_meta_key` — the same seam every other
+carrier-specific fact on this page already uses (D2).
+
+## D10. Which filters are POSSIBLE — measured against the code, not chosen by taste
+
+The operator asked for «Date range» and «Advanced filters» (#826, #827) on 08.09.2026 and decided
+the section gets finished properly rather than deferred. The filter list is not a matter of taste:
+a filter has to reach `wc_get_orders()`, and **part of the row is computed at build time**, not
+stored. Measured against `Order_Row_Builder`:
+
+| row field | where it comes from | filterable on the server? |
+|---|---|---|
+| date | native `date_created` | ✅ |
+| carrier | marker meta | ✅ — already is; it is the scope query |
+| WC order status | native | ✅ |
+| tracking present | `get_tracking_meta_key()` | ✅ meta `EXISTS` / `NOT EXISTS` |
+| **delivery status** | `get_status_meta_key()` — the carrier's RAW value in order meta | ✅ **but not directly** — see below |
+| **delivery type** (курьер/ПВЗ/постамат) | order item → `instance_id` → `WC_Shipping_Zones::get_shipping_method()` → `is_courier_shipping()` | ⛔ **NO** — three hops ending in the shipping zones; nothing to query |
+| `needs_payment` | computed from status + gateway | ⛔ no (reachable indirectly through order status) |
+
+**The delivery-status filter needs an inversion, and it is the one real complication.** The meta
+holds the carrier's RAW status; the filter is on the CANONICAL one. So `Orders_Query` has to invert
+`status_map` — canonical → the list of raw values that map to it — and query `IN`. Each provider
+has its OWN map, so on the aggregate that inversion is per-provider and the meta query becomes an
+OR across carriers, exactly like the scope query already is.
+
+⛔ **Do not promise a delivery-type filter.** Making it work means denormalising the type into meta
+when the order is placed, which is a data change, not a filter — a separate decision, and it would
+only ever cover orders placed after it shipped.
+
+⚠ Every one of these must be measured on BOTH datastores. The rig is HPOS, the integration
+environment is the legacy CPT, and `wc_get_orders()` has already once dropped a `meta_query` there
+and returned an unfiltered result with no error (gotcha
+`wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`).
 
 ## What this does NOT do
 
