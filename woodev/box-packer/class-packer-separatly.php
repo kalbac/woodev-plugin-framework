@@ -38,7 +38,7 @@ if ( ! class_exists( 'Woodev_Packer_Separately' ) ) :
 		 */
 		public function pack() {
 			if ( ! $this->items || 0 === count( $this->items ) ) {
-				throw new Woodev_Packer_Exception( __( 'No items to pack!', 'woodev-plugin-framework' ) );
+				throw new Woodev_Packer_Exception( 'No items to pack!' );
 			}
 
 			$this->packages = [];

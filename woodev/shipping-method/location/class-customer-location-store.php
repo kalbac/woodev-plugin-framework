@@ -624,6 +624,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		 * later page honestly reports `done => true` with no data, the same
 		 * shape WordPress core's own exporters use once they run out of rows.
 		 *
+		 * Every label below is an ENGLISH msgid with its Russian in the catalogue —
+		 * i18n rule 1 (`AGENTS.md` → Conventions), because the reader is the
+		 * CUSTOMER, not the merchant: `group_label`, `group_description` and each
+		 * field `name` are written verbatim into the export HTML by
+		 * `wp_privacy_generate_personal_data_export_file()` (core:
+		 * `wp-admin/includes/privacy-tools.php`), and that file is what
+		 * `wp_privacy_send_personal_data_export_email()` mails to the data subject.
+		 * Contrast {@see self::eraser_result()} just below, whose `messages` never
+		 * leave the admin — a difference measured against core, not assumed (#567).
+		 * `exporter_friendly_name` (see {@see \Woodev\Framework\Shipping\Location\Location_Provider_Registry::register_data_exporters()})
+		 * is the other way round: core only ever prints it in admin-side error text.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $email_address The requester's email address.
@@ -663,28 +675,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 			foreach ( $chain['records'] as $level => $record ) {
 				$fields = [
 					[
-						'name' => __( 'Ключ локации', 'woodev-plugin-framework' ),
+						'name' => __( 'Location key', 'woodev-plugin-framework' ),
 						'value' => $record->key(),
 					],
 					[
-						'name' => __( 'Уровень', 'woodev-plugin-framework' ),
+						'name' => __( 'Level', 'woodev-plugin-framework' ),
 						'value' => $level,
 					],
 					[
-						'name' => __( 'Страна', 'woodev-plugin-framework' ),
+						'name' => __( 'Country', 'woodev-plugin-framework' ),
 						'value' => $record->country(),
 					],
 					[
-						'name' => __( 'Название', 'woodev-plugin-framework' ),
+						'name' => __( 'Location name', 'woodev-plugin-framework' ),
 						'value' => $record->label(),
 					],
 					[
-						'name' => __( 'Сохранено', 'woodev-plugin-framework' ),
+						'name' => __( 'Saved at', 'woodev-plugin-framework' ),
 						'value' => gmdate( 'Y-m-d H:i:s', $chain['saved_at'] ),
 					],
 					[
-						'name'  => __( 'Определено автоматически (не выбор покупателя)', 'woodev-plugin-framework' ),
-						'value' => $chain['implicit'] ? __( 'Да', 'woodev-plugin-framework' ) : __( 'Нет', 'woodev-plugin-framework' ),
+						'name'  => __( 'Detected automatically (not the customer\'s choice)', 'woodev-plugin-framework' ),
+						'value' => $chain['implicit'] ? __( 'Yes', 'woodev-plugin-framework' ) : __( 'No', 'woodev-plugin-framework' ),
 					],
 				];
 
@@ -693,15 +705,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 
 				if ( null !== $raw ) {
 					$fields[] = [
-						'name'  => __( 'Необработанный ответ провайдера', 'woodev-plugin-framework' ),
+						'name'  => __( 'Raw provider response', 'woodev-plugin-framework' ),
 						'value' => wp_json_encode( $raw ),
 					];
 				}
 
 				$items[] = [
 					'group_id'          => 'woodev-customer-location',
-					'group_label'       => __( 'Локация покупателя', 'woodev-plugin-framework' ),
-					'group_description' => __( 'Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа.', 'woodev-plugin-framework' ),
+					'group_label'       => __( 'Customer location', 'woodev-plugin-framework' ),
+					'group_description' => __( 'The delivery location the customer selected, or that was detected automatically during checkout.', 'woodev-plugin-framework' ),
 					'item_id'           => "woodev-customer-location-{$level}",
 					'data'              => $fields,
 				];
@@ -771,8 +783,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Customer_Location
 		/**
 		 * Builds {@see self::erase_personal_data()}'s WP Privacy return shape —
 		 * `messages` carries a human-readable explanation whenever
-		 * `$items_retained` is `true`, since a bare `true` gives the customer no
-		 * indication of WHY their data is still there.
+		 * `$items_retained` is `true`, since a bare `true` gives no indication of
+		 * WHY the data is still there.
+		 *
+		 * The reader is the MERCHANT, not the customer: core collects these in
+		 * `wp_ajax_wp_privacy_erase_personal_data()` and `wp-admin/js/privacy-tools.js`
+		 * renders them under the row on Tools → Erase Personal Data. Nothing mails
+		 * them anywhere. That is why this msgid stays Russian (i18n rule 2) while
+		 * {@see self::export_personal_data()}'s are English (rule 1) — an earlier
+		 * version of this docblock said "the customer" and was wrong (#567).
 		 *
 		 * @since 2.0.2
 		 *
