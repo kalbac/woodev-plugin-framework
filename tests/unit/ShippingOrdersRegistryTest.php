@@ -32,7 +32,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	private function provider( string $id, string $label = 'Label', string $marker = '_marker' ): Orders_Provider {
-		return Orders_Provider::create( $id, $label, $marker );
+		return Orders_Provider::create( $id, $label, $marker, $id );
 	}
 
 	public function test_has_providers_is_false_initially(): void {
