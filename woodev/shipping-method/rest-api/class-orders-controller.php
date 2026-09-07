@@ -2,11 +2,11 @@
 /**
  * Woodev Shipping Orders REST Controller
  *
- * Serves the row contract for the framework-owned «Заказы доставки» page (SP-10 spec,
- * increment 1). This is deliberately the MINIMAL row shape — id, order number, edit
- * URL, date created, WC status, and the carrier that matched — the full per-carrier
- * column payload lands in increment 2. Registered through
- * {@see \Woodev_REST_V1_Registrar} by {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::register_rest()},
+ * Serves the row contract for the framework-owned «Заказы доставки» page (SP-10 spec).
+ * The row shape and its `Order_Row_Builder` come from increment 2 (M1, D3, D4); this
+ * controller only dispatches the request and resolves which carrier matched each
+ * aggregate row. Registered through {@see \Woodev_REST_V1_Registrar} by
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::register_rest()},
  * mirroring {@see \Woodev\Framework\Settings\Settings_Page_Registry::register_rest()}.
  *
  * @since 2.0.2
@@ -14,6 +14,7 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
@@ -50,16 +51,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private $query;
 
 		/**
+		 * Row builder.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Row_Builder
+		 */
+		private $row_builder;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Registry   $registry orders registry.
-		 * @param Orders_Query|null $query    scope-query builder; defaults to one built from $registry.
+		 * @param Orders_Registry        $registry    orders registry.
+		 * @param Orders_Query|null      $query       scope-query builder; defaults to one built from $registry.
+		 * @param Order_Row_Builder|null $row_builder row builder; defaults to a new instance.
 		 */
-		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null ) {
-			$this->registry = $registry;
-			$this->query    = $query ?? new Orders_Query( $registry );
+		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null, ?Order_Row_Builder $row_builder = null ) {
+			$this->registry    = $registry;
+			$this->query       = $query ?? new Orders_Query( $registry );
+			$this->row_builder = $row_builder ?? new Order_Row_Builder();
 		}
 
 		/**
@@ -176,7 +188,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		}
 
 		/**
-		 * Builds one increment-1 row.
+		 * Builds one row via {@see Order_Row_Builder}.
 		 *
 		 * @since 2.0.2
 		 *
@@ -187,25 +199,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		private function build_row( \WC_Order $order, ?Orders_Provider $matched_provider ): array {
 			$provider = $matched_provider ?? $this->resolve_matched_provider( $order );
-			$status   = $order->get_status();
-			$created  = $order->get_date_created();
 
-			return [
-				'id'           => $order->get_id(),
-				'order_number' => $order->get_order_number(),
-				'edit_url'     => $order->get_edit_order_url(),
-				'date_created' => $created ? $created->date( \DATE_ATOM ) : null,
-				'status'       => [
-					'slug'  => $status,
-					'label' => wc_get_order_status_name( $status ),
-				],
-				'carrier'      => null !== $provider
-					? [
-						'id'    => $provider->get_id(),
-						'label' => $provider->get_label(),
-					]
-					: null,
-			];
+			return $this->row_builder->build( $order, $provider );
 		}
 
 		/**
