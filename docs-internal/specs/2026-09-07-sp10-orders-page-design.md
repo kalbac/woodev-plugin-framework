@@ -423,6 +423,47 @@ environment is the legacy CPT, and `wc_get_orders()` has already once dropped a 
 and returned an unfiltered result with no error (gotcha
 `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`).
 
+## D11. The filter row, and the default period
+
+**The operator decided on 08.09.2026 to finish this section properly rather than defer it** — «раз
+мы уже до этого раздела добрались, то доделываем его основательно». So #826 (Date range) and #827
+(Advanced filters) are in scope, and «Advanced filters» means WooCommerce's `AdvancedFilters`
+component — he asked for it by name, so that is not an open choice.
+
+**Default period: «Год с начала года» (`period=year`) — settled by the operator, 08.09.2026.**
+
+⚠ **The consequence he was choosing against: WooCommerce's picker has NO «all time».** Its presets
+run Today · Yesterday · Week to date · Last week · Month to date · Last month · Quarter to date ·
+Last quarter · Year to date · Last year, plus Custom — measured by opening it on the rig, not
+recalled. Adopting it therefore makes this list **permanently period-bounded**, which it is not
+today. The widest preset was chosen because a delivery-orders list is a work queue: an order stuck
+two months ago is exactly the one the merchant opens the page for, and Analytics' own «Month to
+date» default would hide it.
+
+**No period COMPARISON.** `DateRangeFilterPicker` carries Analytics' «vs. Previous year», which
+answers a question about dynamics. This is a list of orders, not a trend, so the compare control is
+not wired and `compare` is not sent to the server.
+
+**Everything in the row is URL-driven**, like the carrier picker already is (D7): filters live in
+the query, the view stays linkable, and the back button works across all of them.
+
+**Contract note for the date args:** `@woocommerce/date` is reached the Route-B way like everything
+else — `window.wc.date` behind the `wc-date` handle — and supplies `getDateParamsFromQuery()`,
+`getCurrentDates()` and `isoDateFormat` (`YYYY-MM-DD`), which is what
+`DateRangeFilterPicker`'s required `dateQuery` prop is built from.
+
+## Increments, continued
+
+6. **The filter row, server half** (#826, #827 — D10, D11). `Orders_Controller` accepts the new
+   args; `Orders_Query::build_args()` turns them into `wc_get_orders()` args: `date_created` for the
+   range, the inverted `status_map` for the delivery status, native `status`, and a meta
+   `EXISTS`/`NOT EXISTS` for tracking presence. **No UI.** ⚠ Proven on BOTH datastores or not proven
+   — the legacy-CPT path already needs `translate_marker_keys_query_var` for the marker key, and
+   every new meta condition has to survive the same translation.
+7. **The filter row, client half.** `DateRangeFilterPicker` + `AdvancedFilters` beside the carrier
+   `FilterPicker`, all reading and writing the URL.
+8. **«Data status»** (#828, D9) — needs the last-sync timestamp built first; it is not a UI task.
+
 ## What this does NOT do
 
 - Does not build shipment export, documents, tracking sync or webhooks (SP-7, SP-8).
