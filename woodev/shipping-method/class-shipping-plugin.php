@@ -245,11 +245,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/class-shipping-admin.php';
 			require_once $path . '/admin/class-shipping-admin-order.php';
 
+			// shipping orders registry (SP-10 increment 1): carrier descriptor, the
+			// registry aggregator, and the HPOS-safe scope query. Required unconditionally,
+			// same reasoning as the location-provider block above — the registry stays
+			// inert until a carrier plugin calls register_provider().
+			require_once $path . '/admin/orders/class-orders-provider.php';
+			require_once $path . '/admin/orders/class-orders-registry.php';
+			require_once $path . '/admin/orders/class-orders-query.php';
+
 			// REST API (§8 checkout classes' server-side counterparts)
 			require_once $path . '/rest-api/class-shipping-rest-api.php';
 			require_once $path . '/rest-api/class-field-source-controller.php';
 			require_once $path . '/rest-api/class-location-controller.php';
 			require_once $path . '/rest-api/class-pickup-controller.php';
+			require_once $path . '/rest-api/class-orders-controller.php';
 		}
 
 		/**
