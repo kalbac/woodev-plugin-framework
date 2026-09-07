@@ -15,8 +15,7 @@ msgstr ""
 "X-Poedit-KeywordsList: __;_e;_x:1,2c;_ex:1,2c;_n:1,2;_nx:1,2,4c;_n_noop:1,2;_nx_noop:1,2,3c;esc_attr__;esc_attr_e;esc_html__;esc_html_e\n"
 "X-Poedit-Basepath: ..\n"
 "X-Generator: Poedit 1.6.10\n"
-"X-Poedit-SearchPath-0: .\n"
-": no longer referenced anywhere under woodev/)\n"
+"X-Poedit-SearchPath-0: .: no longer referenced anywhere under woodev/)\n"
 
 #: account/class-account-connection.php:319
 msgid "Аккаунт не подключён."
@@ -1126,7 +1125,7 @@ msgstr "Редактировать"
 
 #: payment-gateway/class-payment-gateway-my-payment-methods.php:321
 #: payment-gateway/class-payment-gateway.php:880
-#: shipping-method/class-shipping-method.php:148
+#: shipping-method/class-shipping-method.php:218
 msgid "Title"
 msgstr "Заголовок"
 
@@ -1281,7 +1280,7 @@ msgid "Payment method title that the customer will see during checkout."
 msgstr "Название способа оплаты, которое покупатель увидит при оформлении заказа."
 
 #: payment-gateway/class-payment-gateway.php:887
-#: shipping-method/class-shipping-method.php:158
+#: shipping-method/class-shipping-method.php:228
 msgid "Description"
 msgstr "Описание"
 
@@ -2188,67 +2187,67 @@ msgstr "Обязательный почтовый индекс"
 msgid "Require postal code for rate calculation"
 msgstr "Требовать почтовый индекс для расчёта стоимости"
 
-#: shipping-method/class-shipping-method.php:150
+#: shipping-method/class-shipping-method.php:220
 msgid "Shipping method title that the customer will see during checkout."
 msgstr "Название способа доставки, которое увидит покупатель при оформлении заказа."
 
-#: shipping-method/class-shipping-method.php:163
+#: shipping-method/class-shipping-method.php:233
 msgid "Enter description here"
 msgstr "Введите описание"
 
-#: shipping-method/class-shipping-method.php:172
+#: shipping-method/class-shipping-method.php:242
 msgid "Shipping class"
 msgstr "Класс доставки"
 
-#: shipping-method/class-shipping-method.php:177
+#: shipping-method/class-shipping-method.php:247
 msgid "Select the shipping class that this method applies to."
 msgstr "Выберите класс доставки, к которому применяется этот способ."
 
-#: shipping-method/class-shipping-method.php:184
+#: shipping-method/class-shipping-method.php:254
 msgid "Packing algorithm"
 msgstr "Алгоритм упаковки"
 
-#: shipping-method/class-shipping-method.php:189
+#: shipping-method/class-shipping-method.php:259
 msgid "How cart items are combined into parcels before rate calculation."
 msgstr "Как товары корзины объединяются в посылки перед расчётом стоимости."
 
-#: shipping-method/class-shipping-method.php:160
+#: shipping-method/class-shipping-method.php:230
 msgid "This text is shown to the customer under the method name in the order form. Leave empty to hide it."
 msgstr "Этот текст показывается покупателю под названием способа доставки в форме оформления заказа. Чтобы скрыть его, оставьте поле пустым."
 
-#: shipping-method/class-shipping-method.php:236
+#: shipping-method/class-shipping-method.php:336
 msgid "Courier delivery"
 msgstr "Курьерская доставка"
 
-#: shipping-method/class-shipping-method.php:238
+#: shipping-method/class-shipping-method.php:338
 msgid "Pickup delivery"
 msgstr "Доставка в пункт выдачи"
 
-#: shipping-method/class-shipping-method.php:240
+#: shipping-method/class-shipping-method.php:340
 msgid "Postal delivery"
 msgstr "Почтовая доставка"
 
-#: shipping-method/class-shipping-method.php:257
+#: shipping-method/class-shipping-method.php:357
 msgid "Delivery by courier to customer address."
 msgstr "Доставка курьером по адресу покупателя."
 
-#: shipping-method/class-shipping-method.php:259
+#: shipping-method/class-shipping-method.php:359
 msgid "Delivery to pickup point."
 msgstr "Доставка в пункт выдачи."
 
-#: shipping-method/class-shipping-method.php:261
+#: shipping-method/class-shipping-method.php:361
 msgid "Delivery to postal office."
 msgstr "Доставка в почтовое отделение."
 
-#: shipping-method/class-shipping-method.php:752
+#: shipping-method/class-shipping-method.php:852
 msgid "Any shipping class"
 msgstr "Любой класс доставки"
 
-#: shipping-method/class-shipping-method.php:753
+#: shipping-method/class-shipping-method.php:853
 msgid "No shipping class"
 msgstr "Без класса доставки"
 
-#: shipping-method/class-shipping-plugin.php:692
+#: shipping-method/class-shipping-plugin.php:701
 #, php-format
 msgid "%1$s accepts payment in %2$s only. %3$sConfigure%4$s WooCommerce to accept %2$s to enable this shipping method for checkout."
 msgid_plural "%1$s accepts payment in one of %2$s only. %3$sConfigure%4$s WooCommerce to accept one of %2$s to enable this shipping method for checkout."
@@ -2257,7 +2256,7 @@ msgstr[1] "%1$s принимает оплату только в одной из 
 msgstr[2] "%1$s принимает оплату только в одной из валют %2$s. %3$sНастройте%4$s WooCommerce для приёма одной из валют %2$s, чтобы включить этот способ доставки при оформлении заказа."
 
 #. translators: %1$s - plugin name, %2$s - list of accepted countries, %3$s - opening <a> tag, %4$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:724
+#: shipping-method/class-shipping-plugin.php:733
 #, php-format
 msgid "%1$s поддерживает доставку только в %2$s. %3$sНастройте%4$s WooCommerce для использования поддерживаемой страны."
 msgid_plural "%1$s поддерживает доставку в одну из следующих стран: %2$s. %3$sНастройте%4$s WooCommerce для использования одной из поддерживаемых стран."
@@ -2266,19 +2265,19 @@ msgstr[1] ""
 msgstr[2] ""
 
 #. translators: %1$s - plugin name, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:760
+#: shipping-method/class-shipping-plugin.php:769
 #, php-format
 msgid "Внимание! %1$s работает в режиме отладки и записывает данные в лог. Если у вас нет проблем с доставкой, рекомендуем %2$sотключить режим отладки%3$s."
 msgstr ""
 
 #. translators: %1$s - shipping method title, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:797
+#: shipping-method/class-shipping-plugin.php:806
 #, php-format
 msgid "%1$s не настроен. Пожалуйста, %2$sзавершите настройку%3$s для начала работы."
 msgstr ""
 
 #. translators: %1$s - location provider name, %2$s - opening <a> tag, %3$s - closing </a> tag
-#: shipping-method/class-shipping-plugin.php:870
+#: shipping-method/class-shipping-plugin.php:879
 #, php-format
 msgid "Провайдер локаций «%1$s» не настроен. Пожалуйста, %2$sукажите ключи%3$s — иначе подсказки по адресам и населённым пунктам работать не будут."
 msgstr ""
@@ -3406,3 +3405,12 @@ msgstr "Локация покупателя"
 #: shipping-method/location/class-customer-location-store.php:716
 msgid "The delivery location the customer selected, or that was detected automatically during checkout."
 msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
+
+#: shipping-method/admin/orders/class-orders-registry.php:178
+#: shipping-method/admin/orders/class-orders-registry.php:179
+msgid "Заказы доставки"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:142
+msgid "Неизвестный перевозчик."
+msgstr ""
