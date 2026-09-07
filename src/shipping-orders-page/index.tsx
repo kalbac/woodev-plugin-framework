@@ -27,6 +27,11 @@ addFilter(
 			container: OrdersPage,
 			path: '/woodev-shipping-orders',
 			breadcrumbs: [ __( 'Заказы доставки', 'woodev-plugin-framework' ) ],
+			// The page sits under the WooCommerce menu, so it opens the same item
+			// WooCommerce's own «Клиенты» does. Without this the WP menu collapses
+			// while our page is on screen — WordPress renders the menu server-side
+			// and never sees `path`, so only the app can highlight it.
+			wpOpenMenu: 'toplevel_page_woocommerce',
 		} );
 
 		return pages;

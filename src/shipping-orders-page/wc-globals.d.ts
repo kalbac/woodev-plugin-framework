@@ -60,6 +60,16 @@ export interface WcAdminPage {
 	container: ComponentType;
 	path: string;
 	breadcrumbs: string[];
+	/**
+	 * DOM id of the WP admin menu item to open and highlight while this page is
+	 * shown. WordPress renders the menu server-side and cannot see the `path`
+	 * query arg, so a `wc-admin` page's parent menu is highlighted by the
+	 * WooCommerce app CLIENT-side, from this property — read off WC's own
+	 * `assets/client/admin/app/index.js`, where `/customers` declares
+	 * `wpOpenMenu: 'toplevel_page_woocommerce'` and the app does
+	 * `document.querySelector( '#' + page.wpOpenMenu )`.
+	 */
+	wpOpenMenu?: string;
 }
 
 declare global {
