@@ -33,8 +33,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parsePo, poKey } from './lib/po-file.mjs';
@@ -46,11 +46,114 @@ const PO_PATH = process.argv[ 4 ] ? resolve( process.argv[ 4 ] ) : join( ROOT, '
 const DOMAIN = 'woodev-plugin-framework';
 
 /**
+ * The wp-cli version this gate is pinned to. It is CI's pin AND the version the rig container
+ * runs, which is not a coincidence: `make-pot`'s extraction is the gate's whole answer, so
+ * letting it drift with whatever wp-cli happens to be installed would let the answer drift too.
+ */
+const WP_CLI_VERSION = '2.12.0';
+
+/**
+ * Where an auto-provisioned phar is kept. Deliberately OUTSIDE the repo: card #800's whole
+ * complaint is that every agent worktree lacks wp-cli, and a per-worktree copy would be ~7 MB
+ * each and would need someone to remember to update the pin. One cache under the user's home is
+ * shared by the primary checkout and every worktree at once.
+ */
+const WP_CLI_CACHE = join( homedir(), '.cache', 'woodev-plugin-framework', `wp-cli-${ WP_CLI_VERSION }.phar` );
+
+/** `php <phar>` with PHP's own error output silenced — see the long note in `resolveWpCli()`. */
+const pharInvocation = ( pharPath ) => ( {
+	command: 'php',
+	baseArgs: [ '-d', 'error_reporting=0', '-d', 'display_errors=0', pharPath ],
+} );
+
+/**
+ * Returns the version string a phar reports, or `null` if it cannot be run at all.
+ */
+function pharVersion( pharPath ) {
+	try {
+		const { command, baseArgs } = pharInvocation( pharPath );
+		return execFileSync( command, [ ...baseArgs, '--version' ], {
+			stdio: [ 'ignore', 'pipe', 'ignore' ],
+			timeout: 60_000,
+		} )
+			.toString()
+			.trim();
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Last-resort source for wp-cli: copy it out of the running rig container.
+ *
+ * Card #800 listed three options and this is a fourth, which the card did not have because the
+ * fact underneath it was only measured in s123: **the wp-env container already ships wp-cli
+ * 2.12.0 — the exact version CI pins.** So this needs no network call (the card's objection to
+ * on-demand downloading), adds nothing to the repo or to `.worktreeinclude` (its objection to
+ * vendoring the phar), and cannot drift from the rig, which is also the only thing allowed to
+ * compile the `.mo`.
+ *
+ * The version is VERIFIED before the copy is cached. Choosing a tool silently obliges this to
+ * prove it chose the right one; a container running some other wp-cli must fail loudly rather
+ * than quietly change what the gate measures.
+ *
+ * Returns the cached path, or `null` when docker is absent, no container is up, or the version
+ * does not match — every one of which leaves the caller to fail hard, per this file's contract.
+ */
+function provisionFromRigContainer() {
+	let containers;
+	try {
+		containers = execFileSync( 'docker', [ 'ps', '--format', '{{.Names}}' ], {
+			stdio: [ 'ignore', 'pipe', 'ignore' ],
+			timeout: 30_000,
+		} )
+			.toString()
+			.split( /\r?\n/ )
+			.filter( ( name ) => /-cli-1$/.test( name ) );
+	} catch {
+		return null;
+	}
+
+	for ( const container of containers ) {
+		mkdirSync( dirname( WP_CLI_CACHE ), { recursive: true } );
+
+		try {
+			// An argument ARRAY, never a shell string: Git-Bash rewrites `/usr/local/bin/wp` into
+			// `C:/Program Files/Git/usr/local/bin/wp` when it passes through a shell (gotcha
+			// `wpenv-windows-gitbash-path-mangling`), and `execFileSync` without `shell` never
+			// gives MSYS the chance.
+			execFileSync( 'docker', [ 'cp', `${ container }:/usr/local/bin/wp`, WP_CLI_CACHE ], {
+				stdio: 'ignore',
+				timeout: 120_000,
+			} );
+		} catch {
+			continue;
+		}
+
+		if ( pharVersion( WP_CLI_CACHE )?.includes( WP_CLI_VERSION ) ) {
+			return WP_CLI_CACHE;
+		}
+
+		rmSync( WP_CLI_CACHE, { force: true } );
+	}
+
+	return null;
+}
+
+/**
  * Resolves how to invoke wp-cli, in order: `$WP_CLI_PHAR` (a path to the phar, invoked as
- * `php <phar>`), then a `wp` executable on `PATH`. Returns `null` if neither is available —
- * callers MUST treat that as a hard failure, never as "nothing to check". A gate that quietly
- * skips its own check when the tool it depends on is missing is worse than no gate at all,
- * because CI would report green while answering nothing.
+ * `php <phar>`), a `wp` executable on `PATH`, an already-cached pinned phar, and finally one
+ * copied out of the running rig container. Returns `null` if none is available — callers MUST
+ * treat that as a hard failure, never as "nothing to check". A gate that quietly skips its own
+ * check when the tool it depends on is missing is worse than no gate at all, because CI would
+ * report green while answering nothing.
+ *
+ * The last two sources exist for card #800: in s121 two workers in a row could not run this gate
+ * from their worktree and each honestly reported "could not run it". The reasoning was sound both
+ * times, and that is precisely the shape in which a gate stops being one.
+ *
+ * Also returns a `source` label. A gate that silently picks its own tool has to say which one it
+ * picked, or a version drift becomes invisible in exactly the log where it would be caught.
  */
 function resolveWpCli() {
 	const pharPath = process.env.WP_CLI_PHAR;
@@ -63,16 +166,27 @@ function resolveWpCli() {
 		// catalogue. Silencing PHP's own error output (wp-cli prints its OWN warnings, e.g.
 		// missing `translators:` comments, through its own channel regardless of this flag) avoids
 		// the failure at the source instead of just raising the buffer size.
-		return { command: 'php', baseArgs: [ '-d', 'error_reporting=0', '-d', 'display_errors=0', pharPath ] };
+		return { ...pharInvocation( pharPath ), source: `$WP_CLI_PHAR (${ pharPath })` };
 	}
 
 	const useShell = process.platform === 'win32';
 	try {
 		execFileSync( 'wp', [ '--version' ], { stdio: 'ignore', shell: useShell } );
-		return { command: 'wp', baseArgs: [], shell: useShell };
+		return { command: 'wp', baseArgs: [], shell: useShell, source: '`wp` on PATH' };
 	} catch {
-		return null;
+		// Not on PATH — fall through to the cached/provisioned phar below.
 	}
+
+	if ( existsSync( WP_CLI_CACHE ) && pharVersion( WP_CLI_CACHE )?.includes( WP_CLI_VERSION ) ) {
+		return { ...pharInvocation( WP_CLI_CACHE ), source: `cached phar (${ WP_CLI_CACHE })` };
+	}
+
+	const provisioned = provisionFromRigContainer();
+	if ( provisioned ) {
+		return { ...pharInvocation( provisioned ), source: `copied from the rig container to ${ provisioned }` };
+	}
+
+	return null;
 }
 
 /**
@@ -111,8 +225,15 @@ function die( message ) {
 const wpCli = resolveWpCli();
 if ( ! wpCli ) {
 	die(
-		'i18n source gate: could not find wp-cli.\n' +
-			'  Set WP_CLI_PHAR to a wp-cli.phar path, or put a `wp` executable on PATH.\n' +
+		`i18n source gate: could not find wp-cli ${ WP_CLI_VERSION }.\n` +
+			'  Tried, in order: $WP_CLI_PHAR, `wp` on PATH, the cached phar at\n' +
+			`  ${ WP_CLI_CACHE }, and a copy out of a running wp-env container.\n` +
+			'\n' +
+			'  Easiest fix: start the rig (`npx wp-env start`) and re-run — this gate copies\n' +
+			'  wp-cli out of the container itself and caches it for every worktree.\n' +
+			`  Otherwise: curl -sSfL -o "${ WP_CLI_CACHE }" \\\n` +
+			`    https://github.com/wp-cli/wp-cli/releases/download/v${ WP_CLI_VERSION }/wp-cli-${ WP_CLI_VERSION }.phar\n` +
+			'\n' +
 			'  This gate refuses to pass silently without it — see the header of this script.'
 	);
 }
@@ -166,3 +287,4 @@ if ( problems.length ) {
 console.log(
 	`i18n sources: OK (${ sourceEntries.length } msgid(s) extracted from ${ SOURCE_DIR }/, all present in both catalogue files)`
 );
+console.log( `  wp-cli: ${ wpCli.source }` );
