@@ -46,8 +46,8 @@ class OrdersRestTest extends TestCase {
 
 		$registry = Orders_Registry::instance();
 		$registry->reset_for_tests();
-		$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', self::CDEK_MARKER, 'cdek' ) );
-		$registry->register_provider( Orders_Provider::create( 'yandex', 'Яндекс Доставка', self::YANDEX_MARKER, 'yandex' ) );
+		$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', self::CDEK_MARKER, [ 'cdek' ] ) );
+		$registry->register_provider( Orders_Provider::create( 'yandex', 'Яндекс Доставка', self::YANDEX_MARKER, [ 'yandex' ] ) );
 
 		// Force a fresh REST server so rest_api_init fires with the re-added hook.
 		$GLOBALS['wp_rest_server'] = null;
@@ -215,7 +215,7 @@ class OrdersRestTest extends TestCase {
 				'full_row_carrier',
 				'Full Row Carrier',
 				$marker,
-				'woodev_test_shipping',
+				[ 'woodev_test_shipping' ],
 				[
 					'status_meta_key'        => $status_meta_key,
 					'status_map'             => [ 'ACCEPTED' => Delivery_Status::IN_TRANSIT ],
@@ -314,7 +314,7 @@ class OrdersRestTest extends TestCase {
 				'unmapped_status_carrier',
 				'Unmapped Status Carrier',
 				$marker,
-				'unmapped_status_carrier',
+				[ 'unmapped_status_carrier' ],
 				[
 					'status_meta_key' => $status_meta_key,
 					'status_map'      => [ 'ACCEPTED' => Delivery_Status::IN_TRANSIT ],

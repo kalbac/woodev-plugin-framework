@@ -94,8 +94,8 @@ class OrderRowBuilderTest extends TestCase {
 		return $order;
 	}
 
-	private function provider( array $args = [] ): Orders_Provider {
-		return Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', 'cdek', $args );
+	private function provider( array $args = [], array $method_ids = [ 'cdek' ] ): Orders_Provider {
+		return Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', $method_ids, $args );
 	}
 
 	/**
@@ -349,6 +349,54 @@ class OrderRowBuilderTest extends TestCase {
 		$row = ( new Order_Row_Builder() )->build( $order, $this->provider() );
 
 		$this->assertSame( 'unknown', $row['type'] );
+	}
+
+	/**
+	 * Round 2, defect 1: every real carrier ships at least two methods (courier and
+	 * pickup), and a single `method_id` reported `unknown` `type` for whichever one
+	 * it did not name. Both the courier line and the pickup line on the SAME
+	 * multi-method provider must resolve.
+	 */
+	public function test_type_resolves_for_the_first_declared_method_id(): void {
+		require_once __DIR__ . '/OrderRowBuilderFakeShippingMethodFixture.php';
+
+		$item = Mockery::mock( '\WC_Order_Item_Shipping' );
+		$item->shouldReceive( 'get_method_id' )->andReturn( 'cdek_courier' );
+		$item->shouldReceive( 'get_instance_id' )->andReturn( 5 );
+
+		$order    = $this->make_order( [ 'get_shipping_methods' => [ $item ] ] );
+		$provider = $this->provider( [], [ 'cdek_courier', 'cdek_pickup' ] );
+
+		$method  = new Order_Row_Builder_Fake_Shipping_Method( \Woodev\Framework\Shipping\Shipping_Method::TYPE_COURIER );
+		$builder = $this->row_builder_resolving_method_to( $method );
+
+		$row = $builder->build( $order, $provider );
+
+		$this->assertSame( 'courier', $row['type'] );
+	}
+
+	/**
+	 * The same provider's SECOND method id also resolves — the order's shipping
+	 * line simply does not match the first id at all (a different order, a
+	 * different chosen method), so the loop must try the next one rather than
+	 * stopping at the first miss.
+	 */
+	public function test_type_resolves_for_a_later_method_id_when_the_first_does_not_match(): void {
+		require_once __DIR__ . '/OrderRowBuilderFakeShippingMethodFixture.php';
+
+		$item = Mockery::mock( '\WC_Order_Item_Shipping' );
+		$item->shouldReceive( 'get_method_id' )->andReturn( 'cdek_pickup' );
+		$item->shouldReceive( 'get_instance_id' )->andReturn( 5 );
+
+		$order    = $this->make_order( [ 'get_shipping_methods' => [ $item ] ] );
+		$provider = $this->provider( [], [ 'cdek_courier', 'cdek_pickup' ] );
+
+		$method  = new Order_Row_Builder_Fake_Shipping_Method( \Woodev\Framework\Shipping\Shipping_Method::TYPE_PICKUP );
+		$builder = $this->row_builder_resolving_method_to( $method );
+
+		$row = $builder->build( $order, $provider );
+
+		$this->assertSame( 'pickup', $row['type'] );
 	}
 
 	/**

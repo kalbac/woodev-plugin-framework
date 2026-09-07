@@ -258,6 +258,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 * `instanceof` chain against the three subclasses would silently misclassify any
 		 * method that skips them, which the framework does not forbid.
 		 *
+		 * Tries every declared {@see Orders_Provider::get_method_ids()} in order and
+		 * uses the FIRST match (round 2: every real carrier ships at least two methods
+		 * — courier and pickup — and a single `method_id` reported `unknown` for
+		 * whichever one it did not name).
+		 *
 		 * A missing shipping line, a method the current zone no longer has, or a
 		 * resolved object that is not a `Shipping_Method` at all (WC's own `false`
 		 * "not found" included) all resolve to `unknown`, never a fatal.
@@ -273,7 +278,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				return 'unknown';
 			}
 
-			$item = Shipping_Helper::get_order_shipping_item( $order, $provider->get_method_id() );
+			$item = null;
+			foreach ( $provider->get_method_ids() as $method_id ) {
+				$item = Shipping_Helper::get_order_shipping_item( $order, $method_id );
+
+				if ( null !== $item ) {
+					break;
+				}
+			}
 
 			if ( null === $item ) {
 				return 'unknown';

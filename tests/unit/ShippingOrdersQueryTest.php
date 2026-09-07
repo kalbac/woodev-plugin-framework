@@ -54,7 +54,7 @@ class ShippingOrdersQueryTest extends TestCase {
 	}
 
 	private function provider( string $id, string $marker ): Orders_Provider {
-		return Orders_Provider::create( $id, ucfirst( $id ), $marker, $id );
+		return Orders_Provider::create( $id, ucfirst( $id ), $marker, [ $id ] );
 	}
 
 	/**
