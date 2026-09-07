@@ -142,7 +142,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Adds the shared menu / REST hooks exactly once.
+		 * Adds the shared menu / REST / CPT-query-translation hooks exactly once.
 		 *
 		 * @since 2.0.2
 		 *
@@ -156,6 +156,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 		}
 
 		/**
@@ -214,6 +215,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Translates {@see Orders_Query::QUERY_VAR_MARKER_KEYS} into a real `meta_query`
+		 * on the legacy CPT order datastore.
+		 *
+		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly — measured
+		 * correct against a real HPOS install (SP-10 spec M2). On the legacy CPT datastore
+		 * WooCommerce's `WC_Order_Data_Store_CPT` does not support a `meta_query` arg at
+		 * all: passing one fires `_doing_it_wrong` (WC ≥9.2) and silently returns
+		 * UNFILTERED results — every carrier's orders leaking into every tab, the worst
+		 * version of this bug because it fails open, not closed. All three shipped carrier
+		 * plugins solve exactly this the same way — a custom query var, translated into
+		 * `meta_query` through this exact filter — so this mirrors them instead of
+		 * inventing a second mechanism.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $query      WP_Query-shaped args the CPT datastore is building.
+		 * @param array<string,mixed> $query_vars the original wc_get_orders() args.
+		 * @return array<string,mixed>
+		 */
+		public function translate_marker_keys_query_var( array $query, array $query_vars ): array {
+			if ( ! array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
+				return $query;
+			}
+
+			$query['meta_query'] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query var; the only CPT-safe way to scope this query (SP-10 round 2).
+
+			/**
+			 * Filters the CPT-datastore query after the marker-keys var is translated.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string,mixed> $query      translated query.
+			 * @param array<string,mixed> $query_vars the original wc_get_orders() args.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_orders_cpt_query_args', $query, $query_vars );
+
+			return is_array( $filtered ) ? $filtered : $query;
+		}
+
+		/**
 		 * Resets registration state. Test-only.
 		 *
 		 * @internal
@@ -225,6 +268,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		public function reset_for_tests(): void {
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
 			$this->providers = [];
 			$this->hooked    = false;

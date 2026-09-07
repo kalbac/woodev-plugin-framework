@@ -12,6 +12,7 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 
 class ShippingOrdersRegistryTest extends TestCase {
@@ -19,7 +20,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		Functions\stubs( [ 'add_action', 'remove_action', 'apply_filters' ] );
+		Functions\stubs( [ 'add_action', 'remove_action', 'add_filter', 'remove_filter', 'apply_filters' ] );
 
 		Orders_Registry::instance()->reset_for_tests();
 	}
@@ -111,5 +112,74 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertFalse( Orders_Registry::instance()->has_providers() );
 		$this->assertNull( Orders_Registry::instance()->get_provider( 'cdek' ) );
+	}
+
+	// -----------------------------------------------------------------------
+	// translate_marker_keys_query_var() — round 2: the legacy CPT datastore does not
+	// support `meta_query` at all (fires `_doing_it_wrong` and silently returns
+	// UNFILTERED results), so this filter is what turns the framework's own
+	// Orders_Query::QUERY_VAR_MARKER_KEYS var into a real `meta_query` there.
+	// -----------------------------------------------------------------------
+
+	public function test_translate_marker_keys_leaves_the_query_untouched_when_the_var_is_absent(): void {
+		$query = [ 'post_type' => 'shop_order' ];
+
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var( $query, [ 'status' => 'wc-processing' ] );
+
+		$this->assertSame( $query, $result );
+	}
+
+	public function test_translate_marker_keys_single_key_produces_one_exists_clause(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[ 'post_type' => 'shop_order' ],
+			[ Orders_Query::QUERY_VAR_MARKER_KEYS => [ '_cdek_marker' ] ]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	public function test_translate_marker_keys_several_keys_produce_relation_or(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[ Orders_Query::QUERY_VAR_MARKER_KEYS => [ '_cdek_marker', '_yandex_marker' ] ]
+		);
+
+		$this->assertSame(
+			[
+				'relation' => 'OR',
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+				[
+					'key'     => '_yandex_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	/**
+	 * The worst version of the round-2 bug: on the legacy datastore, a marker-keys var
+	 * present but EMPTY (zero providers, or an unknown carrier) must still translate
+	 * into a "matches nothing" meta_query — never be left untouched, which would let
+	 * WooCommerce return every order unfiltered.
+	 */
+	public function test_translate_marker_keys_empty_array_produces_the_no_match_sentinel(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[ Orders_Query::QUERY_VAR_MARKER_KEYS => [] ]
+		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $result['meta_query'] );
 	}
 }
