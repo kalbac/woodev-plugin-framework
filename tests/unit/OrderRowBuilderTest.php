@@ -38,6 +38,19 @@ class OrderRowBuilderTest extends TestCase {
 		Functions\when( 'wc_price' )->alias( static function ( $amount ): string {
 			return (string) $amount;
 		} );
+		// Mirrors wp-includes/formatting.php: drop script/style wholesale, then tags.
+		Functions\when( 'wp_strip_all_tags' )->alias(
+			static function ( string $text, bool $remove_breaks = false ): string {
+				$text = (string) preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', $text );
+				$text = strip_tags( $text );
+
+				if ( $remove_breaks ) {
+					$text = (string) preg_replace( '/[\r\n\t ]+/', ' ', $text );
+				}
+
+				return trim( $text );
+			}
+		);
 		Functions\when( 'wc_get_order_status_name' )->alias( static function ( string $status ): string {
 			return ucfirst( $status );
 		} );
@@ -186,6 +199,37 @@ class OrderRowBuilderTest extends TestCase {
 
 		$this->assertSame( 'СДЭК', $row['shipping']['method_title'] );
 		$this->assertSame( '300', $row['shipping']['formatted_total'] );
+	}
+
+	/**
+	 * The row is JSON consumed by React, which escapes what it is given — so money
+	 * has to reach it as display TEXT. `wc_price()` and `get_formatted_order_total()`
+	 * both return MARKUP, and until s126 that markup was printed verbatim in the
+	 * «Доставка» and «Оплата» columns.
+	 *
+	 * The other tests here mock `wc_price()` down to a bare amount, so every one of
+	 * them stayed green through that defect. This one feeds the real shape.
+	 */
+	public function test_money_reaches_the_row_as_plain_text_never_markup(): void {
+		Functions\when( 'wc_price' )->alias(
+			static function ( $amount ): string {
+				return '<span class="woocommerce-Price-amount amount"><bdi>' . $amount
+					. ',00&nbsp;<span class="woocommerce-Price-currencySymbol" translate="no">&#8381;</span></bdi></span>';
+			}
+		);
+
+		$order = $this->make_order(
+			[
+				'get_formatted_order_total' => '<span class="woocommerce-Price-amount amount"><bdi>2 400,00&nbsp;'
+					. '<span class="woocommerce-Price-currencySymbol" translate="no">&#8381;</span></bdi></span>',
+			]
+		);
+
+		$row = ( new Order_Row_Builder() )->build( $order, null );
+
+		// U+00A0 before the symbol is WooCommerce's own separator and is preserved.
+		$this->assertSame( "300,00\u{00A0}\u{20BD}", $row['shipping']['formatted_total'] );
+		$this->assertSame( "2 400,00\u{00A0}\u{20BD}", $row['payment']['formatted_total'] );
 	}
 
 	public function test_destination_falls_back_to_shipping_address_when_no_pickup_point(): void {
