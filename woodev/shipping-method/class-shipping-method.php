@@ -89,10 +89,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 
 			$this->get_plugin()->set_shipping_method( $this->get_method_id(), $this );
 
-			$this->supports = [
-				self::FEATURE_SHIPPING_ZONES,
-				self::FEATURE_INSTANCE_SETTINGS,
-			];
+			/*
+			 * MERGE, never overwrite — the subclass has already run at this point.
+			 *
+			 * A shipping method declares its features the way WooCommerce's own methods do:
+			 * `$this->supports = [ … ]` in its constructor, BEFORE calling this one. An
+			 * unconditional assignment here threw that away silently, and the loss was
+			 * invisible because every fixture happened to declare exactly the two features
+			 * this line re-added.
+			 *
+			 * Measured on the rig, #567, all three ways a plugin could try:
+			 *
+			 *   pre-set `$this->supports` with FEATURE_BOX_PACKING  -> supports_box_packing() FALSE
+			 *   add_support() after construction                    -> TRUE, but NO control
+			 *   add_support() + a manual init_form_fields() re-run   -> control appears
+			 *
+			 * So neither documented path produced the setting, and the `supports_box_packing()`
+			 * and `supports_shipping_classes()` branches in `init_form_fields()` below were
+			 * dead code for every plugin — which is why no fixture could reach «Алгоритм
+			 * упаковки» on the rig at all.
+			 *
+			 * `WC_Shipping_Method::$supports` defaults to `[ 'settings' ]`, so a subclass that
+			 * declares NOTHING arrives here carrying that. It is dropped, deliberately: keeping
+			 * it would flip `WC_Shipping_Method::has_settings()` to true for a method with no
+			 * instance id, which is a different change from this fix and one nothing asked for.
+			 * A subclass that declares `'settings'` alongside anything else keeps it.
+			 */
+			$declared = is_array( $this->supports ) && [ 'settings' ] !== $this->supports ? $this->supports : [];
+
+			$this->supports = array_values(
+				array_unique(
+					array_merge(
+						[
+							self::FEATURE_SHIPPING_ZONES,
+							self::FEATURE_INSTANCE_SETTINGS,
+						],
+						$declared
+					)
+				)
+			);
 
 			// Load form fields
 			$this->init_form_fields();
