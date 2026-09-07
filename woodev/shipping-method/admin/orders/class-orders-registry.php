@@ -24,10 +24,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 	 * The exact structural mirror of {@see Settings_Page_Registry}: collects
 	 * {@see Orders_Provider} descriptors registered by carrier plugins, registers the
 	 * `woodev-shipping-orders` submenu under the existing `woodev` top-level menu only
-	 * when at least one provider is present, and registers the aggregated REST
-	 * controller through {@see \Woodev_REST_V1_Registrar}. Increment 1 only: no assets
-	 * are enqueued and {@see self::render_page()} prints an empty mount point — the
-	 * React shell is increment 2 (SP-10 spec D7).
+	 * when at least one provider is present, registers the aggregated REST controller
+	 * through {@see \Woodev_REST_V1_Registrar}, and enqueues the React shell on its own
+	 * page hook (increment 2b, SP-10 spec D7).
 	 *
 	 * @since 2.0.2
 	 */
@@ -44,6 +43,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 		/** @var bool whether the shared hooks were added. */
 		private $hooked = false;
+
+		/**
+		 * Any one registered plugin, to source the shared framework asset path and
+		 * version from (increment 2b). @see self::register_provider().
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var \Woodev_Plugin|null
+		 */
+		private $plugin;
 
 		/**
 		 * Returns the singleton.
@@ -69,11 +78,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Provider $provider carrier descriptor.
+		 * @param Orders_Provider     $provider carrier descriptor.
+		 * @param \Woodev_Plugin|null $plugin  owning plugin, to source the shared framework
+		 *                                     asset path/version from (increment 2b). Any one
+		 *                                     registered plugin works — the framework copy is
+		 *                                     identical across every plugin that vendors it,
+		 *                                     the same assumption {@see Settings_Page_Registry::get_asset_plugin()}
+		 *                                     already makes. The first plugin passed wins;
+		 *                                     later calls (with or without one) do not replace it.
 		 * @return void
 		 */
-		public function register_provider( Orders_Provider $provider ): void {
+		public function register_provider( Orders_Provider $provider, $plugin = null ): void {
 			$this->providers[ $provider->get_id() ] = $provider;
+
+			if ( null === $this->plugin && $plugin instanceof \Woodev_Plugin ) {
+				$this->plugin = $plugin;
+			}
+
 			$this->add_hooks();
 		}
 
@@ -173,7 +194,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			add_submenu_page(
+			$hook = add_submenu_page(
 				'woodev',
 				__( 'Заказы доставки', 'woodev-plugin-framework' ),
 				__( 'Заказы доставки', 'woodev-plugin-framework' ),
@@ -181,13 +202,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				self::PAGE_SLUG,
 				[ $this, 'render_page' ]
 			);
+
+			if ( $hook ) {
+				add_action( "admin_print_scripts-{$hook}", [ $this, 'enqueue_assets' ] );
+			}
 		}
 
 		/**
-		 * Renders the wrapper + an empty mount point.
-		 *
-		 * No assets are enqueued in this increment — the React shell lands in increment 2
-		 * (SP-10 spec D7).
+		 * Renders the wrapper + the React mount point.
 		 *
 		 * @internal
 		 *
@@ -197,8 +219,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function render_page(): void {
 			echo '<div class="wrap woodev-shipping-orders-wrap">';
+			echo '<h1 class="wp-heading-inline">' . esc_html__( 'Заказы доставки', 'woodev-plugin-framework' ) . '</h1>';
+			echo '<hr class="wp-header-end">';
 			echo '<div id="woodev-shipping-orders-app"></div>';
+			echo '<noscript><p>' . esc_html__( 'Для страницы заказов нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>';
 			echo '</div>';
+		}
+
+		/**
+		 * Enqueues the shipping-orders-page React bundle + inline bootstrap.
+		 *
+		 * Mirrors {@see Settings_Page_Registry::enqueue_assets()}. Rows are NOT
+		 * inlined — the app fetches them from `GET woodev/v1/shipping/orders`
+		 * (cap-filtered server-side, increment 1); what IS inlined is what the shell
+		 * needs before its first fetch: the REST root, a nonce, and the provider list
+		 * (id, label, and a count each tab can show immediately without first
+		 * switching to it).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function enqueue_assets(): void {
+			$plugin = $this->get_asset_plugin();
+
+			if ( ! $plugin ) {
+				return;
+			}
+
+			$asset_file = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/index.asset.php';
+
+			if ( file_exists( $asset_file ) ) {
+				$asset = include $asset_file;
+			} else {
+				error_log( sprintf( '[woodev] Shipping orders page asset manifest missing: %s', $asset_file ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a missing build artifact.
+				$asset = [
+					'dependencies' => [],
+					'version'      => $plugin->get_version(),
+				];
+			}
+
+			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
+			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
+			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
+
+			wp_enqueue_style( 'wp-components' );
+			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
+			wp_enqueue_script( 'woodev-shipping-orders-page', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+
+			wp_add_inline_script(
+				'woodev-shipping-orders-page',
+				'window.woodevShippingOrders = ' . wp_json_encode(
+					[
+						'restRoot'  => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders' ) ),
+						'nonce'     => wp_create_nonce( 'wp_rest' ),
+						'adminUrl'  => esc_url_raw( admin_url() ),
+						'providers' => $this->build_bootstrap_providers(),
+					]
+				) . ';',
+				'before'
+			);
+		}
+
+		/**
+		 * Builds the inlined provider list: the aggregate entry first, then one per
+		 * registered provider, each carrying a cheap `wc_get_orders()` count
+		 * (`per_page => 1`, only `total` is read) so every tab can show a count
+		 * before it is ever the active one — the aggregate tab's own count is this
+		 * same mechanism, not a separate one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int,array{id:string,label:string,count:int}>
+		 */
+		private function build_bootstrap_providers(): array {
+			$query = new Orders_Query( $this );
+
+			$entries   = [];
+			$entries[] = [
+				'id'    => 'all',
+				'label' => __( 'Все перевозчики', 'woodev-plugin-framework' ),
+				'count' => (int) $query->get_results(
+					[
+						'carrier' => 'all',
+						'per_page' => 1,
+					]
+				)->total,
+			];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$entries[] = [
+					'id'    => $provider->get_id(),
+					'label' => $provider->get_label(),
+					'count' => (int) $query->get_results(
+						[
+							'carrier' => $provider->get_id(),
+							'per_page' => 1,
+						]
+					)->total,
+				];
+			}
+
+			return $entries;
+		}
+
+		/**
+		 * Returns any registered plugin to source framework asset paths/version from.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev_Plugin|null
+		 */
+		private function get_asset_plugin(): ?\Woodev_Plugin {
+			return $this->plugin;
 		}
 
 		/**
@@ -272,6 +407,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			$this->providers = [];
 			$this->hooked    = false;
+			$this->plugin    = null;
 		}
 	}
 

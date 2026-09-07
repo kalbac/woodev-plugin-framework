@@ -1,0 +1,135 @@
+/**
+ * Shipping orders page styles — built on the UI-kit. Folder provider tabs
+ * (shared recolor), a native WP list-table for the row grid so the page reads
+ * as core admin rather than a fourth hand-rolled style.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use '../components/tokens' as wd;
+@use '../components/wp-recolor';
+
+.woodev-orders {
+	&__toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: wd.$gap-lg;
+		margin: wd.$gap-lg 0;
+
+		.components-search-control {
+			max-width: 360px;
+			flex: 1 1 auto;
+		}
+	}
+
+	&__count {
+		color: wd.$muted;
+		font-size: 13px;
+		white-space: nowrap;
+	}
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-lg 0;
+	}
+}
+
+.woodev-orders-table {
+	th {
+		cursor: default;
+	}
+
+	th:nth-child(2),
+	th:nth-child(3) {
+		cursor: pointer;
+
+		&:hover {
+			color: wd.$accent-strong;
+		}
+	}
+
+	td {
+		vertical-align: top;
+	}
+
+	&__cb {
+		width: 2.2em;
+	}
+}
+
+.woodev-orders-cell__meta {
+	display: block;
+	margin-top: 2px;
+	color: wd.$muted;
+	font-size: 12px;
+}
+
+.woodev-orders-status {
+	display: inline-flex;
+	align-items: center;
+	gap: wd.$gap-xs;
+	font-weight: 500;
+
+	&__dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	&--ok { color: wd.$ok-text; }
+	&--warn { color: wd.$warn; }
+	&--error { color: wd.$error-text; }
+	&--info { color: wd.$accent-strong; }
+	&--muted { color: wd.$muted; }
+}
+
+.woodev-orders-badge {
+	display: inline-block;
+	margin-top: 4px;
+	padding: 2px 8px;
+	border-radius: wd.$radius-sm;
+	font-size: 11px;
+	line-height: 1.6;
+
+	&--warn {
+		color: #8a6100;
+		background: rgba( 219, 166, 23, 0.15 );
+	}
+}
+
+.woodev-orders-pagination {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: wd.$gap-xs;
+	margin: wd.$gap-lg 0;
+
+	button {
+		appearance: none;
+		border: 1px solid wd.$border;
+		background: #fff;
+		border-radius: wd.$radius-sm;
+		min-width: 2em;
+		padding: 4px 8px;
+		cursor: pointer;
+
+		&:disabled {
+			opacity: 0.4;
+			cursor: default;
+		}
+
+		&:hover:not( :disabled ) {
+			border-color: wd.$accent;
+		}
+	}
+
+	&__page.is-active {
+		background: wd.$accent;
+		border-color: wd.$accent;
+		color: #fff;
+	}
+}

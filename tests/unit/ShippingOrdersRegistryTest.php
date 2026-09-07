@@ -182,4 +182,117 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $result['meta_query'] );
 	}
+
+	// -----------------------------------------------------------------------
+	// enqueue_assets() — increment 2b: the bundle is registered on the page hook
+	// and the inlined payload carries the provider list.
+	// -----------------------------------------------------------------------
+
+	public function test_register_page_hooks_enqueue_assets_on_the_submenu_page_hook(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+		Functions\when( 'add_submenu_page' )->justReturn( 'woodev_page_woodev-shipping-orders' );
+
+		Orders_Registry::instance()->register_page();
+
+		$this->assertContains(
+			[ 'admin_print_scripts-woodev_page_woodev-shipping-orders', [ Orders_Registry::instance(), 'enqueue_assets' ] ],
+			$calls,
+			'register_page() must hook enqueue_assets() onto the submenu page hook'
+		);
+	}
+
+	public function test_enqueue_assets_does_nothing_without_a_registered_plugin(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+		Functions\expect( 'wp_enqueue_style' )->never();
+		Functions\expect( 'wp_add_inline_script' )->never();
+
+		Orders_Registry::instance()->enqueue_assets();
+	}
+
+	/**
+	 * A non-`Woodev_Plugin` second argument (a caller mistake) must be ignored
+	 * rather than accepted and blown up on later — `enqueue_assets()` still finds
+	 * no usable plugin and no-ops, exactly like passing none at all.
+	 */
+	public function test_register_provider_ignores_a_non_plugin_second_argument(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ), 'not-a-plugin' );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+
+		Orders_Registry::instance()->enqueue_assets();
+	}
+
+	public function test_enqueue_assets_enqueues_the_bundle_and_inlines_the_provider_list(): void {
+		$plugin = \Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
+		$registry->register_provider( $this->provider( 'yandex', 'Яндекс' ) ); // no plugin — cdek's already won.
+
+		// file_exists()/filemtime() are left UNSTUBBED — Patchwork cannot redefine
+		// them without a patchwork.json entry this project does not carry, and
+		// the real function already returns false for this fabricated path, which
+		// is exactly the "manifest missing" branch this test wants to exercise.
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'rest_url' )->returnArg( 1 );
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
+		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/' );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'wc_get_orders' )->justReturn( (object) [
+			'orders'        => [],
+			'total'         => 5,
+			'max_num_pages' => 1,
+		] );
+
+		Functions\expect( 'wp_enqueue_style' )->with( 'wp-components' )->once();
+		Functions\expect( 'wp_enqueue_style' )
+			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wp-components' ], '1.2.3' )
+			->once();
+		Functions\expect( 'wp_enqueue_script' )
+			->once()
+			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [], '1.2.3', true );
+
+		$captured = null;
+		Functions\expect( 'wp_add_inline_script' )
+			->once()
+			->with(
+				'woodev-shipping-orders-page',
+				\Mockery::on(
+					static function ( $script ) use ( &$captured ) {
+						$captured = $script;
+						return is_string( $script );
+					}
+				),
+				'before'
+			);
+
+		$registry->enqueue_assets();
+
+		$this->assertNotNull( $captured, 'wp_add_inline_script must have been called' );
+		$this->assertStringStartsWith( 'window.woodevShippingOrders = ', $captured );
+
+		$json = rtrim( substr( $captured, strlen( 'window.woodevShippingOrders = ' ) ), ';' );
+		$data = json_decode( $json, true );
+
+		$this->assertSame( 'nonce-value', $data['nonce'] );
+		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
+		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
+		foreach ( $data['providers'] as $entry ) {
+			$this->assertSame( 5, $entry['count'] );
+		}
+	}
 }
