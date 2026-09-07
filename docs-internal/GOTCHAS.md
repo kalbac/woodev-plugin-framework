@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 289 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 291 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -128,6 +128,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/environment-split] **`wc_get_orders()` DROPS `meta_query` on the legacy CPT datastore and still returns a successful, UNFILTERED result — and the dev rig is HPOS while the test environment is CPT, so a probe on one proves nothing about the other.** → [wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore](gotchas/wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore.md) (s125)
 - [testing/ci] **`plugins-reference/` is GITIGNORED, so a test that reads it is green on every local checkout AND every worktree, and red in CI — the one place that gates the merge. Skip on absence; keep the rules on temp fixtures.** → [a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci](gotchas/a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci.md) (s117)
 - [testing/coverage] **Four fixtures agreeing is ONE sample copied four times: every one built `Shipping_Rate` with 4 of 6 args, so an entire output branch never ran while the class looked covered.** → [every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted](gotchas/every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted.md) (s116)
 - [testing/phpunit] **A `--random-order-seed` is NOT a portable repro — it shuffles the test SET this tree has, so the same seed on a tree with one more test is a different order. Carry the defect, not the seed.** → [a-random-order-seed-is-not-a-portable-repro](gotchas/a-random-order-seed-is-not-a-portable-repro.md) (s107)
@@ -342,6 +343,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/git] **A fresh worktree of this repo is born DIRTY on four JS files (CRLF blobs vs a new `.gitattributes`), `git checkout --` will not clear it, and it frames whatever formatter ran last. A throwaway `worktree add --detach HEAD` settles it in seconds.** → [a-fresh-worktree-is-born-dirty-on-four-js-files](gotchas/a-fresh-worktree-is-born-dirty-on-four-js-files.md) (s125)
 - [tooling/docs-gate] **A docs gate checks what is LINKED, never what is LISTED — three indexes were missing entries for files that exist (ADR-011, three wiki articles, ten specs) in a green tree, and prose cross-references are invisible to it too.** → [a-docs-gate-checks-links-not-listings](gotchas/a-docs-gate-checks-links-not-listings.md) (s119)
 - [tooling/git] **A hook committed `100644` is silently IGNORED by POSIX git, and Windows `core.fileMode=false` hides it — `chmod +x` never reaches the index. `commit-msg` had been inert on Linux since s81.** → [a-git-hook-committed-non-executable-is-silently-ignored-on-posix](gotchas/a-git-hook-committed-non-executable-is-silently-ignored-on-posix.md) (s122)
 - [tooling/orca] **`orca account list` serves a CACHED rate limit — read straight after a run it reports the state BEFORE it, and made astra look 9x CHEAPER than it is. Check `updatedAt`; the authoritative figure is in Codex's own rollout.** → [orca-account-list-serves-a-cached-rate-limit](gotchas/orca-account-list-serves-a-cached-rate-limit.md) (s122)

@@ -72,6 +72,39 @@ Exact ids, correct `total` for pagination, and it survives `orderby`. **The aggr
 and #694's condition is discharged.** The probe was a throwaway run from the rig container and was
 deleted; it is reproduced above so nobody has to re-run it to trust it.
 
+⛔ **That measurement is true and was NOT sufficient — corrected the same day, and this is the part
+worth reading.** It measured the dev rig, which runs **HPOS**. The integration environment runs the
+**legacy CPT datastore**, and there `wc_get_orders()` does not support `meta_query` at all:
+WooCommerce emits `_doing_it_wrong` (since 9.2.0) and **returns unfiltered results**. Every carrier's
+orders come back under every tab, silently. The integration suite caught it as
+`Failed asserting that an array does not contain 14`.
+
+```text
+wp option get woocommerce_custom_orders_table_enabled
+  dev rig  :8973  -> yes   (HPOS)
+  tests environment -> no    (legacy CPT)
+```
+
+An earlier draft of this section asserted that the legacy path "is supported by the legacy posts path
+for certain". **That was false.** The three shipped plugins already knew the answer and this spec's
+own M1 read past it: all three pass a **custom query var** to `wc_get_orders()` and translate it into
+a `meta_query` through WooCommerce's `woocommerce_order_data_store_cpt_get_orders_query` filter.
+
+**So the row scope has two paths, not one:**
+
+| datastore | mechanism |
+|---|---|
+| HPOS (`Woodev_Plugin_Compatibility::is_hpos_enabled()`) | `meta_query` directly, as measured above |
+| legacy CPT | a framework custom query var carrying the marker keys + a `woocommerce_order_data_store_cpt_get_orders_query` filter translating it, and **no `meta_query` key at all** — its mere presence is what trips `_doing_it_wrong` |
+
+⚠ **The "matches nothing" case is the dangerous one.** Expressed as a `meta_query` sentinel it is
+ignored on the CPT path, so "no providers" would return EVERY order rather than none. It must be
+asserted on both paths.
+
+**The transferable lesson, and the reason this is written out rather than quietly patched:** a probe
+on the rig proves nothing about the integration environment, because the two disagree about the
+orders datastore. Anything touching order queries has to be measured on both.
+
 ## D1. One page, registered by a registry that mirrors the settings one
 
 **Decision:** a `Shipping_Orders_Registry` singleton, built as the exact structural mirror of
