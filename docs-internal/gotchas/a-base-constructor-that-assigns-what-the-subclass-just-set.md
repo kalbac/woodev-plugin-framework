@@ -54,6 +54,17 @@ The middle row is the one the PUBLIC docs recommend (`docs/shipping-method.md` �
 the setting**, and the `supports_box_packing()` / `supports_shipping_classes()` branches of
 `init_form_fields()` were dead code for every plugin that has ever existed.
 
+⚠ **Both rows above are HISTORY as of s124 (#813) — do not read them as current behaviour.** Row 1
+was fixed by the merge below; the middle row was fixed separately, and the table now reads:
+
+| how the feature is declared | flag | control |
+|---|---|---|
+| `$this->supports = [ … ]` before `parent::__construct()` | true | **yes** (s123, #811) |
+| `add_support()` after construction | true | **yes** (s124, #813) |
+| `add_support()` before `parent::__construct()` | true | yes — but the feature action fires under an **empty method id**, and WooCommerce's `'settings'` default survives into `supports`. Card **#815** |
+
+Re-measured on the rig for all four orderings, WooCommerce 11.1.0, before and after each fix.
+
 ## Fix
 
 ❌ Wrong — assignment, which cannot distinguish "declared nothing" from "declared something":
@@ -82,8 +93,27 @@ identically whether the base merges or overwrites. Ask of any such fixture: *wou
 pass if the line under test were deleted?* Here the answer was yes, four times over.
 
 The counterpart trap, on the same seam: a feature flag that only affects behaviour built during
-the constructor cannot be added afterwards. If a flag has to be settable later, whatever it gates
-must be resolved lazily, not once.
+the constructor cannot be added afterwards.
+
+**s124 (#813) settled that counterpart, and NOT by making the gated thing lazy** — which is what
+the paragraph above originally proposed, and which would have moved the filter's firing point for
+every plugin. The mutator re-derives instead: `add_support()` re-runs `init_form_fields()` when the
+feature it just added is one of the two that shape the form, and only when the form has been built
+once already. Deriving state in a constructor is fine as long as **every** mutator of its inputs
+re-derives it.
+
+Two things that only showed up once it was written:
+
+- **A setter that re-derives must not do so while the derivation is in flight.** A
+  `woodev_shipping_method_{id}_form_fields` callback calling `add_support()` re-entered
+  `init_form_fields()`; the inner pass built the control, and then the outer pass assigned its own
+  pre-feature array over the top. The feature came out declared with no control — this very
+  defect, reached from the other side. The fix is a re-entrancy flag: the setter marks the rebuild
+  pending, and the pass in charge redoes itself once after it has assigned.
+- **The guard has to be "has this been derived yet", not "is the feature new".** Keying on the
+  emptiness of `instance_form_fields` is what lets a declaration made *before*
+  `parent::__construct()` skip the rebuild harmlessly: the constructor is about to build the form
+  anyway, with the feature already in hand.
 
 ## Related
 
