@@ -117,15 +117,39 @@ orders datastore. Anything touching order queries has to be measured on both.
 
 ## D1. One page, registered by a registry that mirrors the settings one
 
-**Decision:** a `Shipping_Orders_Registry` singleton, built as the exact structural mirror of
-`Settings_Page_Registry` — one `add_submenu_page()` under the existing `woodev` top-level menu, slug
-`woodev-shipping-orders`, registered only when at least one provider is present, capability resolved
-the same way, React assets enqueued on its own hook.
+**Decision:** an `Orders_Registry` singleton — one page, registered only when at least one provider
+is present, providers registering into it. **It lives in the WooCommerce menu and inside
+WooCommerce's own admin React app**, registered with `wc_admin_register_page()`:
 
-**Why a mirror and not something new:** §16's original decision claimed to mirror §15 and did the
-opposite, because §15's mirror did not exist yet. It exists now
-(`class-settings-page-registry.php:430`). Building the second aggregator to the same shape is what
-makes that claim true for the first time, and it means one pattern to learn, not two.
+```php
+wc_admin_register_page( [
+    'id'     => 'woodev-shipping-orders',
+    'title'  => __( 'Заказы доставки', 'woodev-plugin-framework' ),
+    'parent' => 'woocommerce',
+    'path'   => '/woodev-shipping-orders',
+] );
+```
+
+⛔ **An earlier version of this decision put the page under the framework's own `woodev` top-level
+menu with `add_submenu_page()`. That was wrong on both halves** — operator, 07.09.2026, after seeing
+it on the rig:
+
+1. **Wrong menu.** Every shipped v1 plugin registers its orders page under **WooCommerce**, and that
+   is where a merchant looks for orders. The only thing v1 got wrong there was registering N pages
+   instead of one; the parent menu was right all along. The framework's `woodev` menu is for the
+   framework's own surfaces (licences, plugins, settings), not for order management.
+2. **Wrong frame.** `add_submenu_page()` gives a bare WP admin screen. `wc_admin_register_page()`
+   puts the page *inside the WooCommerce admin React app* — its header, breadcrumbs, navigation and
+   styling — which is the frame the merchant already knows from Analytics and Customers.
+
+**Measured on the rig, WC 11.1.0 (07.09.2026), so none of this rests on recall:** `wc_admin_register_page`
+exists, and `wc-components`, `wc-navigation`, `wc-store-data`, `wc-experimental`, `wc-currency`,
+`wc-date`, `wc-number` are all registered script handles (39 `wc-*` handles in total).
+
+**The registry shape still mirrors `Settings_Page_Registry`** — one aggregator, providers register
+into it, capability resolved once, page absent without providers. Only the MOUNTING mechanism
+differs, and it has to: a `wc-admin` page has no render callback, because WooCommerce renders the
+app and our component is attached from JS (D7).
 
 **`Shipping_Admin::register_pages()` is NOT the seam for this page.** That class mounts
 plugin-supplied page slugs and exists because admin page slugs are installed-site URLs the framework
@@ -200,27 +224,64 @@ the tooltip breaks it down («Всего заказов: 5; СДЭК — 3, Ян
 own number. All three shipped plugins already write a per-carrier count into their own menu item, so
 nothing is lost by aggregating — the breakdown survives in the tooltip and on the tabs.
 
-## D7. React, and why increment 1 does not depend on it
+## D7. WooCommerce's React, not our own
 
-**Decision: React**, mirroring `src/settings-page/` — its own entry under `src/`, built into
-`woodev/assets/build/`, fed by a REST controller, using the shared `src/components/` kit. §16's
-narrative says React; every other framework admin surface (settings, licenses, plugins, setup
-wizard) is already React; a fourth hand-rolled `WP_List_Table` would be the odd one out.
+**Decision: the page is a WooCommerce admin React page built on `@woocommerce/components`.** The
+reference is WooCommerce's own **Customers** report
+(`admin.php?page=wc-admin&path=%2Fcustomers`) — operator, 07.09.2026: *«наша таблица должна быть
+построена на таких же компонентах примерно с таким же функционалом»*.
 
-**But the registry, the descriptor, the scope query, the status enum and the REST row contract are
-UI-agnostic.** They are increment 1 and are identical whichever way the shell is drawn. The visual
-shell is where the operator's eye matters, and it is worth showing him something rather than asking
-him to imagine it — so that question is deferred until there is a page to look at, not asked up
-front.
+⛔ **The first attempt satisfied the letter and missed the point.** It was React — a spinner, state,
+`wp-components` — wrapping a hand-written `<table>` in WP core's admin-table markup. Operator, on
+the rig: *«Где там React? Спиннер загрузки, да, React. Но таблица то обычная `<table>`.»* A React
+component that renders a static table is not the same product as the Customers report, and the gap
+is exactly the functionality that comes with the real component.
+
+**What that buys, and what therefore has to be there:** `TableCard` from `@woocommerce/components`
+carries sorting, pagination, the summary row, column visibility, CSV download and `isLoading` with a
+real `TablePlaceholder` **skeleton** rather than a spinner; `ReportFilters` / `Search` carry live
+search and filters. Those are the functional requirements, not decoration.
+
+**The JS attaches through WooCommerce's own filter**, which is how a third party adds a page to
+their app:
+
+```js
+addFilter( 'woocommerce_admin_pages_list', 'woodev/shipping-orders', ( pages ) => {
+    pages.push( { container: OrdersPage, path: '/woodev-shipping-orders', breadcrumbs: [ … ] } );
+    return pages;
+} );
+```
+
+**⚠ The build seam is the one thing to settle by measurement before writing the page.**
+`@wordpress/dependency-extraction-webpack-plugin` — what `wp-scripts` ships — does **not** know
+`@woocommerce/*` (checked in `node_modules`, 07.09.2026). WooCommerce documents two supported
+routes, and both end at the same runtime (`window.wc.components` behind the `wc-components` handle):
+
+| | |
+|---|---|
+| **A — idiomatic** | add `@woocommerce/dependency-extraction-webpack-plugin` and import `@woocommerce/components` normally |
+| **B — documented alternative** | read `window.wc.*` and declare the `wc-*` handles as script dependencies by hand |
+
+A is better to author against; B adds nothing to the build chain. **Which one is taken is decided by
+measuring whether A disturbs the other five bundles** — this repo's `Assets build parity` CI job
+compares the whole chain, and the repo currently has no root webpack config at all. Measure, then
+choose; do not assume either way.
+
+**The data layer is untouched by all of this.** The registry, the descriptor, the dual-datastore
+scope query, the canonical status and the REST row contract are UI-agnostic and survived this
+correction unchanged — which is the argument for having built them first.
 
 ## Increments
 
-1. **Registry + descriptor + scope query + REST rows.** No UI. Answers M2's open HPOS question by
-   measurement.
-2. **The page shell + the framework columns** (D3) with the canonical status (D4).
+1. ✅ **Registry + descriptor + scope query + REST rows.** No UI. Merged (PR #821).
+2a. ✅ **The row payload and the canonical status** (D3, D4). Merged (PR #822).
+2b. ⛔ **The page shell — REJECTED on the rig and being rewritten.** The first attempt mounted it in
+   the wrong menu with the wrong frame and hand-wrote the table (see D1 and D7). The rewrite:
+   `wc_admin_register_page` under WooCommerce + `@woocommerce/components`, with the build seam
+   settled by measurement first.
 3. **Bulk actions** (D5).
 4. **Menu counter and tab counts** (D6).
-5. **Legacy slug redirect** (D1).
+5. **Legacy slug redirect** (D1) — now targeting `page=wc-admin&path=/woodev-shipping-orders`.
 
 #710 (the «Создать заказ» modal) and #711 (ROI/charts) stay outside this spec — the first needs the
 operator's brainstorm by his own instruction, the second is not a v1 goal.
