@@ -108,6 +108,14 @@ declare global {
 			components?: {
 				TableCard: ComponentType< WcTableCardProps >;
 				FilterPicker?: ComponentType< WcFilterPickerProps >;
+				/**
+				 * WooCommerce's own loading skeletons, reused as the ROI panel's frame.
+				 * Prop names read off WC's app bundle (`SummaryListPlaceholder,{numberOfItems:…}`)
+				 * and `ChartPlaceholder`'s `defaultProps` (`{height:0}` — so a height
+				 * must be passed or it collapses), not recalled.
+				 */
+				SummaryListPlaceholder?: ComponentType< { numberOfItems: number } >;
+				ChartPlaceholder?: ComponentType< { height: number } >;
 			};
 			/**
 			 * `@woocommerce/navigation`, behind the `wc-navigation` script handle

@@ -214,6 +214,50 @@ function buildRow( row: OrderRow ): WcTableRowCell[] {
 	];
 }
 
+/**
+ * The delivery-analytics panel, announced rather than built (#711).
+ *
+ * Operator, 08.09.2026: put it BELOW the table, not above it the way Analytics
+ * does, and ship the frame today behind a «Скоро» overlay — *«даже если ROI не
+ * войдёт в V2, пользователи уже будут видеть, что такая возможность будет»*.
+ * WHICH metric it plots is still open on #711; the shape is not — `SummaryList`
+ * tiles over a `Chart`, which is why the frame is built from WooCommerce's own
+ * `SummaryListPlaceholder`/`ChartPlaceholder` rather than a drawing of one.
+ *
+ * ⚠ Those two are LOADING skeletons, and a permanently shimmering block reads
+ * as "stuck loading" rather than "not built yet". Two things make the
+ * difference: the overlay, and `style.scss` stopping their animation. The frame
+ * is `aria-hidden` — it is decoration, and the overlay carries the real message.
+ */
+function RoiPanel() {
+	const SummaryListPlaceholder = window.wc?.components?.SummaryListPlaceholder;
+	const ChartPlaceholder = window.wc?.components?.ChartPlaceholder;
+
+	if ( ! SummaryListPlaceholder || ! ChartPlaceholder ) {
+		return null;
+	}
+
+	return (
+		<section className="woodev-orders-roi">
+			<div className="woodev-orders-roi__frame" aria-hidden="true">
+				<SummaryListPlaceholder numberOfItems={ 4 } />
+				<ChartPlaceholder height={ 260 } />
+			</div>
+			<div className="woodev-orders-roi__overlay">
+				<p className="woodev-orders-roi__badge">
+					{ __( 'Скоро', 'woodev-plugin-framework' ) }
+				</p>
+				<p className="woodev-orders-roi__note">
+					{ __(
+						'Здесь появится аналитика по доставке — показатели и график за период.',
+						'woodev-plugin-framework'
+					) }
+				</p>
+			</div>
+		</section>
+	);
+}
+
 export default function OrdersPage() {
 	const providers = getProviders();
 	const hasCarrierFilter = providers.length > 1;
@@ -399,6 +443,7 @@ export default function OrdersPage() {
 						: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
 				}
 			/>
+			<RoiPanel />
 		</>
 	);
 }

@@ -333,8 +333,40 @@ correction unchanged — which is the argument for having built them first.
 4. **Menu counter and tab counts** (D6).
 5. **Legacy slug redirect** (D1) — now targeting `page=wc-admin&path=/woodev-shipping-orders`.
 
-#710 (the «Создать заказ» modal) and #711 (ROI/charts) stay outside this spec — the first needs the
-operator's brainstorm by his own instruction, the second is not a v1 goal.
+#710 (the «Создать заказ» modal) stays outside this spec — it needs the operator's brainstorm by his
+own instruction.
+
+## D8. The delivery-analytics panel is ANNOUNCED in v1, not built (#711)
+
+**Operator, 08.09.2026, on the rig:** ship the frame today, **below** the table — not above it the
+way Analytics does — behind a «Скоро» overlay. In his words: *«даже если ROI не войдёт в V2, но
+пользователи уже будут видеть что такая возможность будет»*. So #711's placement and presence are
+now decided; **what it counts is still open on that card** and nothing here narrows it.
+
+**The frame is WooCommerce's own `SummaryListPlaceholder` + `ChartPlaceholder`**, not a drawing of a
+chart — four tiles over a plot area, the shape s125 already found in Analytics. Two consequences
+that are easy to get wrong:
+
+- they are LOADING skeletons, so their shimmer must be stopped and `ChartPlaceholder`'s real
+  `Spinner` hidden outright — a frozen spinner glyph still reads as a stuck load, which is the one
+  impression this panel must not give;
+- `ChartPlaceholder`'s own `defaultProps` is `{ height: 0 }`, so a height must be passed or the
+  block collapses to nothing.
+
+The frame is `aria-hidden`; the overlay carries the message. If a WooCommerce without those two
+components is ever running, the panel renders nothing rather than half of itself.
+
+## D9. «Data status» is NOT ours — measured, not judged
+
+Analytics carries a third filter-row panel, «Data status» («Last updated … / Next update …»). It
+reports the freshness of WooCommerce Analytics' **imported lookup tables** (`wc_order_stats` and
+friends, `src/Admin/API/Reports/*/DataStore.php`): those reports do not read orders, they read an
+aggregate a scheduler refreshes, so the merchant needs to be told how stale it is.
+
+**`Orders_Query::get_results()` is one live `wc_get_orders()` call.** There is no lookup table, no
+import and no scheduler, so nothing can be stale and the panel would have nothing to report. It is
+not skipped for effort — it is inapplicable. Should this page ever grow an aggregate cache, this
+decision comes back with it.
 
 ## What this does NOT do
 

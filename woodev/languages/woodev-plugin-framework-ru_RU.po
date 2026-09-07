@@ -3528,3 +3528,11 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Показать"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Скоро"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Здесь появится аналитика по доставке — показатели и график за период."
+msgstr ""

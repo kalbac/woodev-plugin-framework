@@ -111,7 +111,17 @@ function navigate( query ) {
 
 beforeAll( () => {
 	window.wc = {
-		components: { TableCard: FakeTableCard, FilterPicker: FakeFilterPicker },
+		components: {
+			TableCard: FakeTableCard,
+			FilterPicker: FakeFilterPicker,
+			// WooCommerce's loading skeletons, which the ROI panel reuses as its frame.
+			SummaryListPlaceholder: ( { numberOfItems } ) => (
+				<div data-testid="summary-placeholder" data-items={ numberOfItems } />
+			),
+			ChartPlaceholder: ( { height } ) => (
+				<div data-testid="chart-placeholder" data-height={ height } />
+			),
+		},
 		navigation: {
 			getQuery: () => fakeQuery,
 			getPath: () => '/woodev-shipping-orders',
@@ -410,5 +420,66 @@ describe( 'empty and error states', () => {
 		await waitFor( () =>
 			expect( screen.getAllByText( 'Не удалось загрузить заказы.' ).length ).toBeGreaterThan( 0 )
 		);
+	} );
+} );
+
+describe( 'the delivery-analytics panel (#711)', () => {
+	/**
+	 * Operator, 08.09.2026: ship the frame now behind a «Скоро» overlay, BELOW
+	 * the table — Analytics puts its chart above, and this one deliberately does
+	 * not. Which metric it plots is still open; that it is announced is not.
+	 */
+	test( 'the panel renders below the table with a «Скоро» overlay', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		const panel = container.querySelector( '.woodev-orders-roi' );
+		const table = container.querySelector( 'table' );
+
+		expect( panel ).toBeInTheDocument();
+		expect( screen.getByText( 'Скоро' ) ).toBeInTheDocument();
+		expect(
+			table.compareDocumentPosition( panel ) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+	} );
+
+	/** The frame is WooCommerce's own skeletons, not a drawn fake chart. */
+	test( 'the frame is built from the WooCommerce placeholders, and is decorative', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		expect( screen.getByTestId( 'summary-placeholder' ) ).toHaveAttribute( 'data-items', '4' );
+		// ChartPlaceholder's own default height is 0, so a height must be passed.
+		expect( screen.getByTestId( 'chart-placeholder' ) ).toHaveAttribute( 'data-height', '260' );
+		expect( container.querySelector( '.woodev-orders-roi__frame' ) ).toHaveAttribute(
+			'aria-hidden',
+			'true'
+		);
+	} );
+
+	/** An older WooCommerce without the placeholders must not crash the page. */
+	test( 'the panel is skipped when the placeholders are absent', async () => {
+		const components = window.wc.components;
+		window.wc.components = { TableCard: FakeTableCard, FilterPicker: FakeFilterPicker };
+
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		expect( container.querySelector( '.woodev-orders-roi' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( 'table' ) ).toBeInTheDocument();
+
+		window.wc.components = components;
 	} );
 } );

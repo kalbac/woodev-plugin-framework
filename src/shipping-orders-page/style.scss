@@ -139,3 +139,73 @@
 		color: #fff;
 	}
 }
+
+/**
+ * The delivery-analytics panel (#711): announced today, built later.
+ *
+ * The frame is WooCommerce's own loading skeletons, so it matches «Аналитика»
+ * exactly — but a permanently shimmering skeleton reads as "stuck loading", so
+ * the animation is stopped and the whole frame is dimmed behind the overlay.
+ * That is the one place this page reaches into WC's own markup, and it is
+ * deliberate: the alternative is drawing a fake chart.
+ */
+.woodev-orders-roi {
+	position: relative;
+	margin-top: wd.$gap-lg;
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius;
+	background: wd.$surface;
+	padding: wd.$gap-lg;
+	overflow: hidden;
+
+	&__frame {
+		opacity: 0.35;
+		pointer-events: none;
+
+		// Stop the skeleton shimmer — see the block comment above.
+		*,
+		*::before,
+		*::after {
+			animation: none !important;
+		}
+
+		// `ChartPlaceholder` also renders a real `Spinner`. Freezing its animation
+		// is not enough: a motionless spinner glyph still reads as a stuck load,
+		// which is the exact impression this panel must not give.
+		.components-spinner {
+			display: none;
+		}
+	}
+
+	&__overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: wd.$gap-sm;
+		text-align: center;
+		padding: wd.$gap;
+	}
+
+	&__badge {
+		margin: 0;
+		display: inline-block;
+		padding: wd.$gap-xs wd.$gap;
+		border-radius: wd.$radius-sm;
+		background: wd.$ink;
+		color: wd.$surface;
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	&__note {
+		margin: 0;
+		max-width: 40ch;
+		color: wd.$muted;
+		font-size: 13px;
+	}
+}
