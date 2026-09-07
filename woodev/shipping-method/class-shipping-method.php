@@ -54,6 +54,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		const FEATURE_DECLARED_VALUE = 'declared-value';
 
 		/**
+		 * The features whose declaration changes what {@see self::init_form_fields()} builds.
+		 *
+		 * Exactly these two gate a control there. The rest — the two framework features and the
+		 * three capability flags read by the host plugin — declare intent and shape no form, so
+		 * {@see self::add_support()} must not pay for a rebuild on their account.
+		 *
+		 * @since 2.0.2
+		 */
+		private const FORM_SHAPING_FEATURES = [
+			self::FEATURE_SHIPPING_CLASSES,
+			self::FEATURE_BOX_PACKING,
+		];
+
+		/**
+		 * Whether {@see self::init_form_fields()} is running right now.
+		 *
+		 * Read by {@see self::add_support()}, which must not rebuild the form underneath a pass
+		 * that is about to assign over its result.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var bool
+		 */
+		private bool $building_form_fields = false;
+
+		/**
+		 * Whether a form-shaping feature was declared while the form was being built.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var bool
+		 */
+		private bool $pending_form_rebuild = false;
+
+		/**
 		 * Gets the unique method identifier.
 		 *
 		 * Used for WC registration. Must be unique across all methods.
@@ -243,10 +278,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * @param array $instance_form_fields the instance form fields built above
 			 * @param Shipping_Method $method Method instance
 			 */
-			$filtered_form_fields = apply_filters( 'woodev_shipping_method_' . $this->get_id() . '_form_fields', $this->instance_form_fields, $this );
+			$this->building_form_fields = true;
+
+			try {
+				$filtered_form_fields = apply_filters( 'woodev_shipping_method_' . $this->get_id() . '_form_fields', $this->instance_form_fields, $this );
+			} finally {
+				$this->building_form_fields = false;
+			}
 
 			if ( is_array( $filtered_form_fields ) ) {
 				$this->instance_form_fields = $filtered_form_fields;
+			}
+
+			/*
+			 * A filter callback is allowed to declare a feature, and that has to survive the
+			 * assignment above.
+			 *
+			 * `add_support()` rebuilds the form when the feature shapes it. Called from INSIDE
+			 * this filter it would re-enter here, build the control correctly — and then the
+			 * outer pass would return from `apply_filters()` holding the array as it looked
+			 * BEFORE the feature existed and assign that straight over the top. The feature
+			 * would end up declared with no control: the #813 defect reached from the other
+			 * side. So `add_support()` defers to this flag instead of rebuilding under us, and
+			 * the pass that is actually in charge redoes itself once, here, after assigning.
+			 *
+			 * This terminates. The second pass runs with the feature already in `supports`, so
+			 * a callback that declares it again is a no-op in `add_support()` and sets nothing
+			 * pending; and only two features shape the form at all, which bounds even a
+			 * pathological callback that declares a different one each time.
+			 */
+			if ( $this->pending_form_rebuild ) {
+
+				$this->pending_form_rebuild = false;
+
+				$this->init_form_fields();
 			}
 		}
 
@@ -911,6 +976,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * Adds support for the named feature or features.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Rebuilds the settings form when the feature is one that shapes it, so a
+		 *              declaration made after construction reaches the merchant's screen (#813).
 		 *
 		 * @param string|string[] $feature the feature name or names supported by this shipping method
 		 */
@@ -920,12 +987,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				$feature = [ $feature ];
 			}
 
+			$reshapes_form = false;
+
 			foreach ( $feature as $name ) {
 
 				// add support for feature if it's not already declared
 				if ( ! in_array( $name, $this->supports ) ) {
 
 					$this->supports[] = $name;
+
+					if ( in_array( $name, self::FORM_SHAPING_FEATURES, true ) ) {
+						$reshapes_form = true;
+					}
 
 					/**
 					 * Shipping Method Add Support Action.
@@ -943,6 +1016,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			}
 
 			$this->supports = array_values( $this->supports );
+
+			/*
+			 * Rebuild the settings form when the declaration just made changes what it contains.
+			 *
+			 * `init_form_fields()` runs INSIDE the constructor, so a feature declared after
+			 * construction — which is the path `docs/shipping-method.md` recommends, in those
+			 * words, for FEATURE_SHIPPING_CLASSES — arrived too late to be seen by it. Measured
+			 * on the rig (#813), with a subclass declaring the feature ONLY this way:
+			 *
+			 *   supports_box_packing()      -> TRUE    `packing_algorithm` control -> ABSENT
+			 *   supports_shipping_classes() -> TRUE    `shipping_class_id` control -> ABSENT
+			 *
+			 * so the flag read back true while the merchant had no control to set, and the only
+			 * thing standing between the two was this rebuild: a manual `init_form_fields()` on
+			 * the same object produced the control immediately.
+			 *
+			 * The guard is `instance_form_fields` being non-empty, which means "the constructor
+			 * has already built the form once". A subclass calling `add_support()` BEFORE
+			 * `parent::__construct()` therefore skips the rebuild and is unaffected — the
+			 * constructor is about to build the form with the feature already declared. (That
+			 * ordering has its own wart: `get_id()` is still empty up there, so the action above
+			 * fires under a nameless hook. It is not the documented path and is not fixed here.)
+			 *
+			 * `init_form_fields()` builds from scratch, so re-running it is idempotent; it
+			 * re-applies the `woodev_shipping_method_{id}_form_fields` filter, which is fine for
+			 * a filter that is a function of its input and is the only reason this is gated on
+			 * the two features that actually shape the form rather than run on every call.
+			 *
+			 * Reading settings stays correct without touching `instance_settings`:
+			 * `WC_Shipping_Method::get_instance_option()` falls back to the field's own default
+			 * for a key that is not in the saved array (verified against WooCommerce 11.1.0).
+			 */
+			if ( $reshapes_form && ! empty( $this->instance_form_fields ) ) {
+
+				if ( $this->building_form_fields ) {
+					// Declared from inside the form-fields filter: the pass in flight is about
+					// to assign its own array over anything built here, so let it redo itself
+					// once it has. See the comment at the end of init_form_fields().
+					$this->pending_form_rebuild = true;
+				} else {
+					$this->init_form_fields();
+				}
+			}
 		}
 	}
 
