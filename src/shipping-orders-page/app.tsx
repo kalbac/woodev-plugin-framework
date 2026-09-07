@@ -13,16 +13,23 @@ import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Notice, SearchControl, Spinner, TabPanel } from '@wordpress/components';
 import { fetchOrders, getProviders } from './rest';
+import type {
+	OrderRow,
+	OrderRowCustomer,
+	OrderRowDeliveryStatus,
+	OrderRowPayment,
+	OrderRowTracking,
+} from './rest';
 import { formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
 
-/** @type {number} rows per page — increment 1's REST default. */
+/** Rows per page — increment 1's REST default. */
 const PER_PAGE = 20;
 
-/** @type {number} debounce for the search box, ms. */
+/** Debounce for the search box, ms. */
 const SEARCH_DEBOUNCE_MS = 400;
 
-/** @type {Object<string,string>} `type` => short Russian label. `unknown` omits the prefix. */
-const TYPE_LABELS = {
+/** `type` => short Russian label. `unknown` omits the prefix. */
+const TYPE_LABELS: Record<string, string> = {
 	courier: __( 'Курьер', 'woodev-plugin-framework' ),
 	pickup: __( 'Пункт выдачи', 'woodev-plugin-framework' ),
 	postal: __( 'Почта', 'woodev-plugin-framework' ),
@@ -33,11 +40,8 @@ const TYPE_LABELS = {
  * label as the muted secondary line — `unknown` renders visibly as
  * "Неизвестно", never dressed up as a real state (it already carries its own
  * canonical_label from the server, so no special-casing is needed here).
- *
- * @param {Object} deliveryStatus row.delivery_status.
- * @return {JSX.Element} the cell content.
  */
-function StatusCell( { deliveryStatus } ) {
+function StatusCell( { deliveryStatus }: { deliveryStatus: OrderRowDeliveryStatus } ) {
 	const tone = getStatusTone( deliveryStatus.canonical );
 
 	return (
@@ -57,11 +61,8 @@ function StatusCell( { deliveryStatus } ) {
  * Renders the «Доставка» cell: an optional short type prefix, the resolved
  * destination (M1: pickup point first, else the formatted address), and the
  * method+total as the muted secondary line.
- *
- * @param {Object} row one REST row.
- * @return {JSX.Element} the cell content.
  */
-function ShippingCell( { row } ) {
+function ShippingCell( { row }: { row: OrderRow } ) {
 	const typeLabel = TYPE_LABELS[ row.type ];
 	const destination = typeLabel
 		? `${ typeLabel } · ${ row.shipping.destination_text }`
@@ -80,11 +81,8 @@ function ShippingCell( { row } ) {
 /**
  * Renders the «Покупатель» cell: name (linked when there is a user account),
  * email, and phone when present.
- *
- * @param {Object} customer row.customer.
- * @return {JSX.Element} the cell content.
  */
-function CustomerCell( { customer } ) {
+function CustomerCell( { customer }: { customer: OrderRowCustomer } ) {
 	return (
 		<>
 			<span>
@@ -105,11 +103,8 @@ function CustomerCell( { customer } ) {
 /**
  * Renders the «Оплата» cell: method + formatted total, with a soft warning
  * badge when the order still needs payment.
- *
- * @param {Object} payment row.payment.
- * @return {JSX.Element} the cell content.
  */
-function PaymentCell( { payment } ) {
+function PaymentCell( { payment }: { payment: OrderRowPayment } ) {
 	return (
 		<>
 			<span>{ payment.method_title }</span>
@@ -127,11 +122,8 @@ function PaymentCell( { payment } ) {
  * Renders the «Трек» cell: a link when the row carries a tracking number,
  * an em dash otherwise — the dash is this component's own display choice,
  * never something the row payload carries.
- *
- * @param {Object} tracking row.tracking.
- * @return {JSX.Element} the cell content.
  */
-function TrackingCell( { tracking } ) {
+function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
 	if ( ! hasTrackingNumber( tracking ) ) {
 		return <span className="woodev-orders-cell__meta">—</span>;
 	}
@@ -145,13 +137,8 @@ function TrackingCell( { tracking } ) {
 	);
 }
 
-/**
- * One table row.
- *
- * @param {Object} row REST row.
- * @return {JSX.Element} the rendered `<tr>`.
- */
-function OrderRow( { row } ) {
+/** One table row. */
+function OrderTableRow( { row }: { row: OrderRow } ) {
 	const date = formatOrderDate( row.date_created );
 
 	return (
@@ -182,21 +169,19 @@ function OrderRow( { row } ) {
 	);
 }
 
-/**
- * Pagination — plain numbered links, matching the layout sketch («‹ 1 2 3 ›»).
- *
- * @param {Object}   props               component props.
- * @param {number}   props.page          current 1-based page.
- * @param {number}   props.totalPages    total page count.
- * @param {Function} props.onPageChange  (page) => void.
- * @return {?JSX.Element} the pagination bar, or null when there is one page or fewer.
- */
-function Pagination( { page, totalPages, onPageChange } ) {
+interface PaginationProps {
+	page: number;
+	totalPages: number;
+	onPageChange: ( page: number ) => void;
+}
+
+/** Pagination — plain numbered links, matching the layout sketch («‹ 1 2 3 ›»). */
+function Pagination( { page, totalPages, onPageChange }: PaginationProps ) {
 	if ( totalPages <= 1 ) {
 		return null;
 	}
 
-	const pages = [];
+	const pages: number[] = [];
 	for ( let i = 1; i <= totalPages; i++ ) {
 		pages.push( i );
 	}
@@ -242,15 +227,15 @@ export default function App() {
 	const [ carrier, setCarrier ] = useState( 'all' );
 	const [ page, setPage ] = useState( 1 );
 	const [ orderby, setOrderby ] = useState( 'date' );
-	const [ order, setOrder ] = useState( 'DESC' );
+	const [ order, setOrder ] = useState<'ASC' | 'DESC'>( 'DESC' );
 	const [ searchInput, setSearchInput ] = useState( '' );
 	const [ search, setSearch ] = useState( '' );
-	const [ rows, setRows ] = useState( null );
+	const [ rows, setRows ] = useState<OrderRow[] | null>( null );
 	const [ total, setTotal ] = useState( 0 );
 	const [ totalPages, setTotalPages ] = useState( 0 );
 	const [ error, setError ] = useState( '' );
 
-	const searchDebounce = useRef( null );
+	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 
 	// Debounce the search box into `search`, which is what actually drives the fetch.
 	useEffect( () => {
@@ -262,7 +247,8 @@ export default function App() {
 			setSearch( searchInput );
 		}, SEARCH_DEBOUNCE_MS );
 
-		return () => clearTimeout( searchDebounce.current );
+		return () => clearTimeout( searchDebounce.current as ReturnType<typeof setTimeout> );
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ searchInput ] );
 
 	useEffect( () => {
@@ -280,7 +266,7 @@ export default function App() {
 				setTotal( ( res && res.total ) || 0 );
 				setTotalPages( ( res && res.total_pages ) || 0 );
 			} )
-			.catch( ( err ) => {
+			.catch( ( err: { message?: string } ) => {
 				if ( cancelled ) {
 					return;
 				}
@@ -295,7 +281,7 @@ export default function App() {
 		};
 	}, [ carrier, page, orderby, order, search ] );
 
-	const onSort = ( column ) => {
+	const onSort = ( column: string ) => {
 		if ( orderby === column ) {
 			setOrder( 'ASC' === order ? 'DESC' : 'ASC' );
 		} else {
@@ -305,7 +291,7 @@ export default function App() {
 		setPage( 1 );
 	};
 
-	const sortIndicator = ( column ) =>
+	const sortIndicator = ( column: string ) =>
 		orderby === column ? ( 'ASC' === order ? ' ▲' : ' ▼' ) : '';
 
 	const renderBody = () => {
@@ -357,7 +343,7 @@ export default function App() {
 					</thead>
 					<tbody>
 						{ rows.map( ( row ) => (
-							<OrderRow key={ row.id } row={ row } />
+							<OrderTableRow key={ row.id } row={ row } />
 						) ) }
 					</tbody>
 				</table>
@@ -397,7 +383,7 @@ export default function App() {
 					name: p.id,
 					title: `${ p.label } (${ p.count })`,
 				} ) ) }
-				onSelect={ ( name ) => {
+				onSelect={ ( name: string ) => {
 					setCarrier( name );
 					setPage( 1 );
 				} }

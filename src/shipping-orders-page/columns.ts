@@ -8,19 +8,22 @@
  */
 
 import { dateI18n, humanTimeDiff } from '@wordpress/date';
+import type { DeliveryStatusCanonical, OrderRowTracking } from './rest';
 
-/** @type {number} one day, in milliseconds. */
+/** One day, in milliseconds. */
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface FormattedOrderDate {
+	text: string;
+	title: string;
+}
 
 /**
  * Formats a row's `date_created` (ISO 8601) the way the shipped plugins did:
  * relative under 24h, absolute otherwise, with the full timestamp always
  * available as a title.
- *
- * @param {?string} isoString ISO 8601 date, or falsy.
- * @return {{text: string, title: string}} display text + full-date title.
  */
-export function formatOrderDate( isoString ) {
+export function formatOrderDate( isoString?: string | null ): FormattedOrderDate {
 	if ( ! isoString ) {
 		return { text: '', title: '' };
 	}
@@ -41,8 +44,10 @@ export function formatOrderDate( isoString ) {
 	return { text, title };
 }
 
-/** @type {Object<string,string>} canonical delivery status => badge tone. */
-const STATUS_TONE = {
+export type StatusTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
+
+/** Canonical delivery status => badge tone. */
+const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
 	pending: 'warn',
 	created: 'warn',
 	in_transit: 'info',
@@ -59,23 +64,19 @@ const STATUS_TONE = {
  * Returns the badge tone for a canonical delivery status. An unrecognized
  * value (should not happen — the server never emits anything outside the
  * enum) falls back to `muted`, the same tone `unknown` itself uses, rather
- * than a false `ok`/`error` guess.
- *
- * @param {string} canonical canonical delivery-status slug.
- * @return {string} one of 'ok' | 'warn' | 'error' | 'info' | 'muted'.
+ * than a false `ok`/`error` guess. Accepts plain `string` rather than
+ * {@link DeliveryStatusCanonical} on purpose — that defensive fallback is the
+ * whole point of this function, so its signature must not rule the case out.
  */
-export function getStatusTone( canonical ) {
-	return STATUS_TONE[ canonical ] || 'muted';
+export function getStatusTone( canonical: string ): StatusTone {
+	return STATUS_TONE[ canonical as DeliveryStatusCanonical ] || 'muted';
 }
 
 /**
  * Whether a row's tracking number is present. A missing number renders
  * NOTHING, never a dash glyph — the dash is a display choice for the
  * component to make, not this helper.
- *
- * @param {?{number: ?string, url: ?string}} tracking row.tracking.
- * @return {boolean} whether there is a number to show.
  */
-export function hasTrackingNumber( tracking ) {
+export function hasTrackingNumber( tracking?: OrderRowTracking | null ): boolean {
 	return Boolean( tracking && tracking.number );
 }
