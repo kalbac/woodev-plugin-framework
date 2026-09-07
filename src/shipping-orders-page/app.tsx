@@ -1,8 +1,21 @@
 /**
- * Shipping orders page root — tabs (aggregate + one per carrier, only when
- * there is more than one), a search box, the framework columns table, and
- * pagination. Rebuilt on the UI-kit (`woodev-tabs`), same shape as the
- * settings page.
+ * Shipping orders page — mounted into WooCommerce's own admin app (`wc-admin`)
+ * through `addFilter( 'woocommerce_admin_pages_list', ... )`, see `./index`.
+ *
+ * The table is `@woocommerce/components`' `TableCard` (Route B, `./wc-globals`),
+ * not a hand-written `<table>` — sorting, pagination and the loading skeleton
+ * are all `TableCard`'s own (`onSort`, `onPageChange`/`onQueryChange`,
+ * `isLoading`). The carrier "tab" dimension #694 asked for is a `SelectControl`
+ * in `TableCard`'s own `actions` slot rather than a literal tab strip:
+ * `TableCard` has no tab concept (WooCommerce's own reports don't have tabs in
+ * that sense either), and `actions` is its documented extension point for
+ * exactly this kind of control (verified against
+ * `packages/js/components/src/table/index.tsx` in the `woocommerce/woocommerce`
+ * monorepo). There is deliberately no delivery-status filter: the REST route
+ * (`Orders_Controller::register_routes()`) has no status query arg, and
+ * filtering rows client-side after the server already paginated them would
+ * silently report a wrong total — inventing that capability was out of scope
+ * for this rewrite (SP-10 #820, increment 2b rewrite report).
  *
  * Authored in JSX (automatic runtime — WP 6.6+).
  *
@@ -11,7 +24,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl, Spinner, TabPanel } from '@wordpress/components';
+import { Notice, SearchControl, SelectControl } from '@wordpress/components';
 import { fetchOrders, getProviders } from './rest';
 import type {
 	OrderRow,
@@ -21,9 +34,10 @@ import type {
 	OrderRowTracking,
 } from './rest';
 import { formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
+import type { WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
-const PER_PAGE = 20;
+const DEFAULT_PER_PAGE = 20;
 
 /** Debounce for the search box, ms. */
 const SEARCH_DEBOUNCE_MS = 400;
@@ -137,102 +151,61 @@ function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
 	);
 }
 
-/** One table row. */
-function OrderTableRow( { row }: { row: OrderRow } ) {
+/**
+ * `TableCard`'s column headers. Only `ID` and `date` carry `isSortable` —
+ * increment 1's REST route (`Orders_Controller::register_routes()`) passes
+ * `orderby` straight through to `wc_get_orders()`, and those are the two
+ * keys it was ever exercised against; the rest have no server-side ordering
+ * behind them, so they stay non-sortable rather than sending an `orderby`
+ * the query layer would silently ignore. `Покупатель`/`Доставка`/`Оплата`/`Трек`
+ * are left non-`required` so `TableCard`'s own column-visibility menu
+ * (`showMenu`) has something real to toggle.
+ */
+const HEADERS: WcTableHeader[] = [
+	{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true },
+	{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true },
+	{ key: 'status', label: __( 'Статус', 'woodev-plugin-framework' ), required: true },
+	{ key: 'customer', label: __( 'Покупатель', 'woodev-plugin-framework' ) },
+	{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ) },
+	{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ) },
+	{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ) },
+];
+
+/** Builds one `TableCard` row from a REST row — display cell + raw sort value each. */
+function buildRow( row: OrderRow ): WcTableRowCell[] {
 	const date = formatOrderDate( row.date_created );
 
-	return (
-		<tr>
-			<td className="woodev-orders-table__cb" />
-			<td>
+	return [
+		{
+			display: (
 				<a href={ row.edit_url }>
 					{ sprintf( __( 'Заказ %s', 'woodev-plugin-framework' ), row.order_number ) }
 				</a>
-			</td>
-			<td title={ date.title }>{ date.text }</td>
-			<td>
-				<StatusCell deliveryStatus={ row.delivery_status } />
-			</td>
-			<td>
-				<CustomerCell customer={ row.customer } />
-			</td>
-			<td>
-				<ShippingCell row={ row } />
-			</td>
-			<td>
-				<PaymentCell payment={ row.payment } />
-			</td>
-			<td>
-				<TrackingCell tracking={ row.tracking } />
-			</td>
-		</tr>
-	);
+			),
+			value: row.id,
+		},
+		{ display: <span title={ date.title }>{ date.text }</span>, value: row.date_created || '' },
+		{ display: <StatusCell deliveryStatus={ row.delivery_status } />, value: row.delivery_status.canonical },
+		{ display: <CustomerCell customer={ row.customer } />, value: row.customer.name },
+		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
+		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
+		{ display: <TrackingCell tracking={ row.tracking } />, value: row.tracking.number || '' },
+	];
 }
 
-interface PaginationProps {
-	page: number;
-	totalPages: number;
-	onPageChange: ( page: number ) => void;
-}
-
-/** Pagination — plain numbered links, matching the layout sketch («‹ 1 2 3 ›»). */
-function Pagination( { page, totalPages, onPageChange }: PaginationProps ) {
-	if ( totalPages <= 1 ) {
-		return null;
-	}
-
-	const pages: number[] = [];
-	for ( let i = 1; i <= totalPages; i++ ) {
-		pages.push( i );
-	}
-
-	return (
-		<nav className="woodev-orders-pagination">
-			<button
-				type="button"
-				className="woodev-orders-pagination__nav"
-				disabled={ page <= 1 }
-				onClick={ () => onPageChange( page - 1 ) }
-			>
-				‹
-			</button>
-			{ pages.map( ( p ) => (
-				<button
-					key={ p }
-					type="button"
-					className={
-						'woodev-orders-pagination__page' +
-						( p === page ? ' is-active' : '' )
-					}
-					onClick={ () => onPageChange( p ) }
-				>
-					{ p }
-				</button>
-			) ) }
-			<button
-				type="button"
-				className="woodev-orders-pagination__nav"
-				disabled={ page >= totalPages }
-				onClick={ () => onPageChange( page + 1 ) }
-			>
-				›
-			</button>
-		</nav>
-	);
-}
-
-export default function App() {
+export default function OrdersPage() {
 	const providers = getProviders();
+	const hasCarrierFilter = providers.length > 1;
 
 	const [ carrier, setCarrier ] = useState( 'all' );
 	const [ page, setPage ] = useState( 1 );
+	const [ perPage, setPerPage ] = useState( DEFAULT_PER_PAGE );
 	const [ orderby, setOrderby ] = useState( 'date' );
 	const [ order, setOrder ] = useState<'ASC' | 'DESC'>( 'DESC' );
 	const [ searchInput, setSearchInput ] = useState( '' );
 	const [ search, setSearch ] = useState( '' );
 	const [ rows, setRows ] = useState<OrderRow[] | null>( null );
 	const [ total, setTotal ] = useState( 0 );
-	const [ totalPages, setTotalPages ] = useState( 0 );
 	const [ error, setError ] = useState( '' );
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -257,14 +230,13 @@ export default function App() {
 		setError( '' );
 		setRows( null );
 
-		fetchOrders( { carrier, page, perPage: PER_PAGE, orderby, order, search } )
+		fetchOrders( { carrier, page, perPage, orderby, order, search } )
 			.then( ( res ) => {
 				if ( cancelled ) {
 					return;
 				}
 				setRows( ( res && res.rows ) || [] );
 				setTotal( ( res && res.total ) || 0 );
-				setTotalPages( ( res && res.total_pages ) || 0 );
 			} )
 			.catch( ( err: { message?: string } ) => {
 				if ( cancelled ) {
@@ -279,117 +251,102 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [ carrier, page, orderby, order, search ] );
+	}, [ carrier, page, perPage, orderby, order, search ] );
 
-	const onSort = ( column: string ) => {
-		if ( orderby === column ) {
-			setOrder( 'ASC' === order ? 'DESC' : 'ASC' );
-		} else {
-			setOrderby( column );
-			setOrder( 'DESC' );
-		}
+	/**
+	 * `Table` (inside `TableCard`) computes the NEXT sort direction itself from
+	 * the `query.orderby`/`query.order` we hand it, and calls this with that
+	 * already-toggled direction — verified in `table.tsx`'s `sortBy()`. This
+	 * only needs to store what it is given, never invert it again.
+	 */
+	const onSort = ( key: string, direction: string ) => {
+		setOrderby( key );
+		setOrder( 'asc' === direction ? 'ASC' : 'DESC' );
 		setPage( 1 );
 	};
 
-	const sortIndicator = ( column: string ) =>
-		orderby === column ? ( 'ASC' === order ? ' ▲' : ' ▼' ) : '';
-
-	const renderBody = () => {
-		if ( error ) {
-			return (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			);
+	/** `TableCard`'s per-page-size control routes through `onQueryChange('per_page')`, not `onPageChange`. */
+	const onQueryChange = ( param: string ) => ( value: string ) => {
+		if ( 'per_page' === param ) {
+			setPerPage( Number( value ) || DEFAULT_PER_PAGE );
+			setPage( 1 );
+		} else if ( 'paged' === param ) {
+			setPage( Number( value ) || 1 );
 		}
-
-		if ( null === rows ) {
-			return (
-				<div className="woodev-orders__loading">
-					<Spinner />
-					<span>{ __( 'Загрузка…', 'woodev-plugin-framework' ) }</span>
-				</div>
-			);
-		}
-
-		if ( 0 === rows.length ) {
-			return (
-				<Notice status="info" isDismissible={ false }>
-					{ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
-				</Notice>
-			);
-		}
-
-		return (
-			<>
-				<table className="wp-list-table widefat fixed striped woodev-orders-table">
-					<thead>
-						<tr>
-							<td className="woodev-orders-table__cb" />
-							<th onClick={ () => onSort( 'ID' ) }>
-								{ __( 'Заказ', 'woodev-plugin-framework' ) }
-								{ sortIndicator( 'ID' ) }
-							</th>
-							<th onClick={ () => onSort( 'date' ) }>
-								{ __( 'Дата', 'woodev-plugin-framework' ) }
-								{ sortIndicator( 'date' ) }
-							</th>
-							<th>{ __( 'Статус', 'woodev-plugin-framework' ) }</th>
-							<th>{ __( 'Покупатель', 'woodev-plugin-framework' ) }</th>
-							<th>{ __( 'Доставка', 'woodev-plugin-framework' ) }</th>
-							<th>{ __( 'Оплата', 'woodev-plugin-framework' ) }</th>
-							<th>{ __( 'Трек', 'woodev-plugin-framework' ) }</th>
-						</tr>
-					</thead>
-					<tbody>
-						{ rows.map( ( row ) => (
-							<OrderTableRow key={ row.id } row={ row } />
-						) ) }
-					</tbody>
-				</table>
-				<Pagination page={ page } totalPages={ totalPages } onPageChange={ setPage } />
-			</>
-		);
 	};
 
-	const renderContent = () => (
-		<>
-			<div className="woodev-orders__toolbar">
-				<SearchControl
-					value={ searchInput }
-					placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
-					onChange={ setSearchInput }
-				/>
-				{ null !== rows && ! error && (
-					<span className="woodev-orders__count">
-						{ sprintf( __( 'Заказов: %d', 'woodev-plugin-framework' ), total ) }
-					</span>
-				) }
-			</div>
-			{ renderBody() }
-		</>
-	);
+	const actions = [
+		<SearchControl
+			key="search"
+			value={ searchInput }
+			placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
+			onChange={ setSearchInput }
+		/>,
+	];
 
-	if ( providers.length <= 1 ) {
-		return <div className="woodev-orders">{ renderContent() }</div>;
+	if ( hasCarrierFilter ) {
+		actions.unshift(
+			<SelectControl
+				key="carrier"
+				__next40pxDefaultSize
+				label={ __( 'Перевозчик', 'woodev-plugin-framework' ) }
+				hideLabelFromVision
+				value={ carrier }
+				options={ providers.map( ( p ) => ( {
+					label: `${ p.label } (${ p.count })`,
+					value: p.id,
+				} ) ) }
+				onChange={ ( value: string ) => {
+					setCarrier( value );
+					setPage( 1 );
+				} }
+			/>
+		);
+	}
+
+	if ( error ) {
+		return (
+			<Notice status="error" isDismissible={ false }>
+				{ error }
+			</Notice>
+		);
+	}
+
+	const TableCard = window.wc?.components?.TableCard;
+
+	if ( ! TableCard ) {
+		return (
+			<Notice status="error" isDismissible={ false }>
+				{ __(
+					'Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce.',
+					'woodev-plugin-framework'
+				) }
+			</Notice>
+		);
 	}
 
 	return (
-		<div className="woodev-orders">
-			<TabPanel
-				className="woodev-tabs"
-				initialTabName={ carrier }
-				tabs={ providers.map( ( p ) => ( {
-					name: p.id,
-					title: `${ p.label } (${ p.count })`,
-				} ) ) }
-				onSelect={ ( name: string ) => {
-					setCarrier( name );
-					setPage( 1 );
-				} }
-			>
-				{ () => renderContent() }
-			</TabPanel>
-		</div>
+		<TableCard
+			className="woodev-orders"
+			title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
+			headers={ HEADERS }
+			rows={ null === rows ? [] : rows.map( buildRow ) }
+			rowsPerPage={ perPage }
+			totalRows={ total }
+			isLoading={ null === rows }
+			query={ { orderby, order: order.toLowerCase(), paged: String( page ) } }
+			onSort={ onSort }
+			onPageChange={ setPage }
+			onQueryChange={ onQueryChange }
+			actions={ actions }
+			hasSearch
+			showMenu
+			emptyMessage={ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
+			summary={
+				null === rows
+					? undefined
+					: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
+			}
+		/>
 	);
 }

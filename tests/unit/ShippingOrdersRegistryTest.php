@@ -83,27 +83,32 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( 'manage_woocommerce', Orders_Registry::instance()->get_page_capability() );
 	}
 
-	public function test_register_page_does_not_register_a_submenu_without_providers(): void {
-		Functions\expect( 'add_submenu_page' )->never();
-
+	/**
+	 * `register_page()` is never reachable past `has_providers()` here, so this holds
+	 * regardless of whether `wc_admin_register_page()` exists in the running process.
+	 */
+	public function test_register_page_does_nothing_without_providers(): void {
 		Orders_Registry::instance()->register_page();
+
+		$this->assertFalse( Orders_Registry::instance()->has_providers() );
 	}
 
-	public function test_register_page_registers_a_submenu_when_a_provider_is_present(): void {
+	/**
+	 * `wc_admin_register_page()` is never stubbed through Brain Monkey/Patchwork here —
+	 * touching it once would leak `function_exists( 'wc_admin_register_page' )` as
+	 * permanently `true` for the rest of this PHPUnit process, the exact constraint
+	 * `LocationControllerTest` documents against `WC()`. In this real Brain Monkey
+	 * environment WooCommerce's `wc-admin` bootstrap is never loaded, so
+	 * `function_exists()` genuinely returns `false` here — this proves increment 2b's
+	 * ADR-005 fail-soft guard: a provider is registered, yet `register_page()` neither
+	 * throws nor calls a function that is not there.
+	 */
+	public function test_register_page_does_nothing_when_wc_admin_register_page_is_unavailable(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
-		Functions\expect( 'add_submenu_page' )
-			->once()
-			->with(
-				'woodev',
-				\Mockery::any(),
-				\Mockery::any(),
-				'manage_woocommerce',
-				Orders_Registry::PAGE_SLUG,
-				[ Orders_Registry::instance(), 'render_page' ]
-			);
-
 		Orders_Registry::instance()->register_page();
+
+		$this->assertTrue( Orders_Registry::instance()->has_providers() );
 	}
 
 	public function test_reset_for_tests_clears_registered_providers(): void {
@@ -184,38 +189,64 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	// -----------------------------------------------------------------------
-	// enqueue_assets() — increment 2b: the bundle is registered on the page hook
-	// and the inlined payload carries the provider list.
+	// enqueue_assets() — increment 2b rewrite: gated on is_wc_admin_screen(), a
+	// protected seam overridden here rather than stubbing wc_admin_is_registered_page()
+	// through Brain Monkey — the same function_exists()-leak reason register_page()'s
+	// tests above give.
 	// -----------------------------------------------------------------------
 
-	public function test_register_page_hooks_enqueue_assets_on_the_submenu_page_hook(): void {
-		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+	/** Builds a fresh (non-singleton) registry with the wc-admin screen check forced true. */
+	private function registryOnWcAdminScreen(): Orders_Registry {
+		return new class() extends Orders_Registry {
+			protected function is_wc_admin_screen(): bool {
+				return true;
+			}
+		};
+	}
 
+	public function test_add_hooks_hooks_enqueue_assets_onto_admin_enqueue_scripts(): void {
 		$calls = [];
 		Functions\when( 'add_action' )->alias(
 			static function ( ...$args ) use ( &$calls ): void {
 				$calls[] = $args;
 			}
 		);
-		Functions\when( 'add_submenu_page' )->justReturn( 'woodev_page_woodev-shipping-orders' );
 
-		Orders_Registry::instance()->register_page();
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
 
-		$this->assertContains(
-			[ 'admin_print_scripts-woodev_page_woodev-shipping-orders', [ Orders_Registry::instance(), 'enqueue_assets' ] ],
-			$calls,
-			'register_page() must hook enqueue_assets() onto the submenu page hook'
-		);
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_enqueue_scripts' === $call[0] && [ $registry, 'enqueue_assets' ] === $call[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook enqueue_assets() onto admin_enqueue_scripts' );
 	}
 
-	public function test_enqueue_assets_does_nothing_without_a_registered_plugin(): void {
+	public function test_enqueue_assets_does_nothing_off_the_wc_admin_screen(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
 		Functions\expect( 'wp_enqueue_script' )->never();
 		Functions\expect( 'wp_enqueue_style' )->never();
 		Functions\expect( 'wp_add_inline_script' )->never();
 
+		// The real (singleton) instance's is_wc_admin_screen() is the unoverridden,
+		// real implementation — false in this environment, same fail-soft guard
+		// register_page()'s tests above already establish.
 		Orders_Registry::instance()->enqueue_assets();
+	}
+
+	public function test_enqueue_assets_does_nothing_without_a_registered_plugin(): void {
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+		Functions\expect( 'wp_enqueue_style' )->never();
+		Functions\expect( 'wp_add_inline_script' )->never();
+
+		$registry->enqueue_assets();
 	}
 
 	/**
@@ -224,11 +255,12 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 * no usable plugin and no-ops, exactly like passing none at all.
 	 */
 	public function test_register_provider_ignores_a_non_plugin_second_argument(): void {
-		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ), 'not-a-plugin' );
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ), 'not-a-plugin' );
 
 		Functions\expect( 'wp_enqueue_script' )->never();
 
-		Orders_Registry::instance()->enqueue_assets();
+		$registry->enqueue_assets();
 	}
 
 	public function test_enqueue_assets_enqueues_the_bundle_and_inlines_the_provider_list(): void {
@@ -237,7 +269,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
 		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
 
-		$registry = Orders_Registry::instance();
+		$registry = $this->registryOnWcAdminScreen();
 		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
 		$registry->register_provider( $this->provider( 'yandex', 'Яндекс' ) ); // no plugin — cdek's already won.
 
@@ -248,7 +280,6 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\when( 'esc_url_raw' )->returnArg( 1 );
 		Functions\when( 'rest_url' )->returnArg( 1 );
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
-		Functions\when( 'admin_url' )->justReturn( 'https://example.test/wp-admin/' );
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
 		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
@@ -258,13 +289,12 @@ class ShippingOrdersRegistryTest extends TestCase {
 			'max_num_pages' => 1,
 		] );
 
-		Functions\expect( 'wp_enqueue_style' )->with( 'wp-components' )->once();
 		Functions\expect( 'wp_enqueue_style' )
-			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wp-components' ], '1.2.3' )
+			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components' ], '1.2.3' )
 			->once();
 		Functions\expect( 'wp_enqueue_script' )
 			->once()
-			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [], '1.2.3', true );
+			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components', 'wc-admin-app' ], '1.2.3', true );
 
 		$captured = null;
 		Functions\expect( 'wp_add_inline_script' )
@@ -289,6 +319,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$data = json_decode( $json, true );
 
 		$this->assertSame( 'nonce-value', $data['nonce'] );
+		$this->assertArrayNotHasKey( 'adminUrl', $data );
 		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
 		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
 		foreach ( $data['providers'] as $entry ) {

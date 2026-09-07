@@ -112,7 +112,6 @@ export interface OrdersProvider {
 export interface ShippingOrdersBootstrap {
 	restRoot: string;
 	nonce: string;
-	adminUrl: string;
 	providers: OrdersProvider[];
 }
 

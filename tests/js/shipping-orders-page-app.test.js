@@ -1,11 +1,19 @@
 /**
- * Component tests for the shipping orders page App (SP-10 increment 2b).
+ * Component tests for the shipping orders page App (SP-10 increment 2b rewrite).
  *
  * `./rest` is mocked wholesale — `getProviders`/`fetchOrders` are the only
  * seam between App and the server, so every scenario below drives them
  * directly rather than reaching for a real REST layer.
  *
- * @see src/shipping-orders-page/app.js
+ * `window.wc.components.TableCard` is a real `@woocommerce/components` global
+ * at runtime (Route B, see `../../src/shipping-orders-page/wc-globals.d.ts`),
+ * which is not installed in this repo — so it is faked here with the same
+ * observable contract (headers/rows/actions/isLoading/emptyMessage) the real
+ * component has (verified against `packages/js/components/src/table/index.tsx`
+ * in the `woocommerce/woocommerce` monorepo). This tests OUR wiring into that
+ * contract, not TableCard's own internals.
+ *
+ * @see src/shipping-orders-page/app.tsx
  */
 
 import '@testing-library/jest-dom';
@@ -17,6 +25,46 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	getProviders: jest.fn(),
 	fetchOrders: jest.fn(),
 } ) );
+
+function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary } ) {
+	return (
+		<div>
+			<h2>{ title }</h2>
+			<div>{ actions }</div>
+			{ isLoading ? (
+				<p>Загрузка…</p>
+			) : 0 === rows.length ? (
+				<p>{ emptyMessage }</p>
+			) : (
+				<table>
+					<thead>
+						<tr>
+							{ headers.map( ( header ) => (
+								<th key={ header.key }>{ header.label }</th>
+							) ) }
+						</tr>
+					</thead>
+					<tbody>
+						{ rows.map( ( row, rowIndex ) => (
+							<tr key={ rowIndex }>
+								{ row.map( ( cell, cellIndex ) => (
+									<td key={ cellIndex }>{ cell.display }</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
+			) }
+			{ summary && (
+				<div>{ summary.map( ( entry ) => `${ entry.label }: ${ entry.value }` ).join( ', ' ) }</div>
+			) }
+		</div>
+	);
+}
+
+beforeAll( () => {
+	window.wc = { components: { TableCard: FakeTableCard } };
+} );
 
 /**
  * Builds one full REST row, overridable per test.
@@ -77,8 +125,8 @@ beforeEach( () => {
 	jest.clearAllMocks();
 } );
 
-describe( 'tabs', () => {
-	test( 'no tab strip when there is one provider (the aggregate only)', async () => {
+describe( 'carrier filter', () => {
+	test( 'no carrier control when there is one provider (the aggregate only)', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -86,21 +134,19 @@ describe( 'tabs', () => {
 
 		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
 
-		expect( screen.queryByText( 'Все перевозчики (3)' ) ).not.toBeInTheDocument();
-		expect( screen.queryByRole( 'tab' ) ).not.toBeInTheDocument();
+		expect( screen.queryByLabelText( 'Перевозчик' ) ).not.toBeInTheDocument();
 	} );
 
-	test( 'a tab strip renders once there is more than one provider', async () => {
+	test( 'a carrier select renders its options once there is more than one provider', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () =>
-			expect( screen.getByRole( 'tab', { name: 'Все перевозчики (5)' } ) ).toBeInTheDocument()
-		);
-		expect( screen.getByRole( 'tab', { name: 'СДЭК (3)' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'tab', { name: 'Яндекс Доставка (2)' } ) ).toBeInTheDocument();
+		await waitFor( () => expect( screen.getByLabelText( 'Перевозчик' ) ).toBeInTheDocument() );
+		expect( screen.getByRole( 'option', { name: 'Все перевозчики (5)' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'option', { name: 'СДЭК (3)' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'option', { name: 'Яндекс Доставка (2)' } ) ).toBeInTheDocument();
 	} );
 } );
 
@@ -118,7 +164,7 @@ describe( 'the aggregate is the default view', () => {
 		);
 	} );
 
-	test( 'still requests carrier=all with a single provider (no tabs to choose from)', async () => {
+	test( 'still requests carrier=all with a single provider (no filter to choose from)', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [] ) );
 
@@ -194,7 +240,6 @@ describe( 'empty and error states', () => {
 
 		render( <App /> );
 
-		// See the a11y-speak note below: assert via getAllByText for the same reason.
 		await waitFor( () =>
 			expect( screen.getAllByText( 'Заказов доставки пока нет.' ).length ).toBeGreaterThan( 0 )
 		);

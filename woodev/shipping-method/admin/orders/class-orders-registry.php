@@ -21,16 +21,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 	/**
 	 * Singleton aggregator for the framework-owned «Заказы доставки» page (SP-10 spec D1).
 	 *
-	 * The exact structural mirror of {@see Settings_Page_Registry}: collects
-	 * {@see Orders_Provider} descriptors registered by carrier plugins, registers the
-	 * `woodev-shipping-orders` submenu under the existing `woodev` top-level menu only
-	 * when at least one provider is present, registers the aggregated REST controller
-	 * through {@see \Woodev_REST_V1_Registrar}, and enqueues the React shell on its own
-	 * page hook (increment 2b, SP-10 spec D7).
+	 * Collects {@see Orders_Provider} descriptors registered by carrier plugins,
+	 * registers the page inside WooCommerce's own admin app via `wc_admin_register_page()`
+	 * under the `woocommerce` menu — like every shipped v1 plugin, not a page of our own
+	 * (increment 2b rewrite; the previous `add_submenu_page()`-under-`woodev` design was
+	 * rejected on the rig) — only when at least one provider is present, registers the
+	 * aggregated REST controller through {@see \Woodev_REST_V1_Registrar}, and enqueues the
+	 * React bundle that attaches to the WooCommerce app through
+	 * `addFilter( 'woocommerce_admin_pages_list', ... )` (SP-10 spec D7).
 	 *
 	 * @since 2.0.2
 	 */
-	final class Orders_Registry {
+	class Orders_Registry {
 
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
@@ -163,7 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Adds the shared menu / REST / CPT-query-translation hooks exactly once.
+		 * Adds the shared menu / enqueue / REST / CPT-query-translation hooks exactly once.
 		 *
 		 * @since 2.0.2
 		 *
@@ -176,12 +178,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 		}
 
 		/**
-		 * Registers the «Заказы доставки» submenu when ≥1 provider is present.
+		 * Registers the «Заказы доставки» page inside WooCommerce's own admin app when
+		 * ≥1 provider is present.
+		 *
+		 * Uses `wc_admin_register_page()` under the `woocommerce` parent menu — the page
+		 * lives where every shipped v1 plugin's page already lives (increment 2b rewrite;
+		 * rejected on the rig when it lived under our own `woodev` menu). A `wc-admin` page
+		 * has no render callback of its own — WooCommerce's app renders whatever component
+		 * `./index.tsx` pushes onto `woocommerce_admin_pages_list` for this `path` — so
+		 * there is no `render_page()` counterpart any more.
 		 *
 		 * @internal
 		 *
@@ -194,47 +205,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			$hook = add_submenu_page(
-				'woodev',
-				__( 'Заказы доставки', 'woodev-plugin-framework' ),
-				__( 'Заказы доставки', 'woodev-plugin-framework' ),
-				$this->get_page_capability(),
-				self::PAGE_SLUG,
-				[ $this, 'render_page' ]
-			);
-
-			if ( $hook ) {
-				add_action( "admin_print_scripts-{$hook}", [ $this, 'enqueue_assets' ] );
+			if ( ! function_exists( 'wc_admin_register_page' ) ) {
+				return;
 			}
+
+			wc_admin_register_page(
+				[
+					'id'         => self::PAGE_SLUG,
+					'title'      => __( 'Заказы доставки', 'woodev-plugin-framework' ),
+					'parent'     => 'woocommerce',
+					'path'       => '/' . self::PAGE_SLUG,
+					'capability' => $this->get_page_capability(),
+				]
+			);
 		}
 
 		/**
-		 * Renders the wrapper + the React mount point.
+		 * Enqueues the shipping-orders-page bundle + inline bootstrap on the `wc-admin`
+		 * screen (increment 2b rewrite — no more per-hook `admin_print_scripts-{$hook}`,
+		 * `wc_admin_register_page()` returns no hook suffix to hang that off of).
 		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
-		public function render_page(): void {
-			echo '<div class="wrap woodev-shipping-orders-wrap">';
-			echo '<h1 class="wp-heading-inline">' . esc_html__( 'Заказы доставки', 'woodev-plugin-framework' ) . '</h1>';
-			echo '<hr class="wp-header-end">';
-			echo '<div id="woodev-shipping-orders-app"></div>';
-			echo '<noscript><p>' . esc_html__( 'Для страницы заказов нужен JavaScript. Включите его и обновите страницу.', 'woodev-plugin-framework' ) . '</p></noscript>';
-			echo '</div>';
-		}
-
-		/**
-		 * Enqueues the shipping-orders-page React bundle + inline bootstrap.
-		 *
-		 * Mirrors {@see Settings_Page_Registry::enqueue_assets()}. Rows are NOT
-		 * inlined — the app fetches them from `GET woodev/v1/shipping/orders`
-		 * (cap-filtered server-side, increment 1); what IS inlined is what the shell
-		 * needs before its first fetch: the REST root, a nonce, and the provider list
-		 * (id, label, and a count each tab can show immediately without first
-		 * switching to it).
+		 * Gated on {@see wc_admin_is_registered_page()} rather than a hardcoded screen id —
+		 * the documented WooCommerce passthrough for "is the current admin page a wc-admin
+		 * page" — so the bundle loads only where it is actually usable, not on every admin
+		 * screen. Rows are NOT inlined — the app fetches them from
+		 * `GET woodev/v1/shipping/orders` (cap-filtered server-side, increment 1); what IS
+		 * inlined is what the page needs before its first fetch: the REST root, a nonce, and
+		 * the provider list (id, label, and a count each carrier can show immediately,
+		 * increment 2b's `SelectControl` filter — see `./app.tsx`).
 		 *
 		 * @internal
 		 *
@@ -243,6 +241,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return void
 		 */
 		public function enqueue_assets(): void {
+			if ( ! $this->has_providers() ) {
+				return;
+			}
+
+			if ( ! $this->is_wc_admin_screen() ) {
+				return;
+			}
+
 			$plugin = $this->get_asset_plugin();
 
 			if ( ! $plugin ) {
@@ -261,13 +267,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				];
 			}
 
+			// `@wordpress/dependency-extraction-webpack-plugin` (what `wp-scripts` ships) has no
+			// idea `@woocommerce/*` exists, so the auto-generated dependency list never carries
+			// `wc-components` — it is added by hand here, the documented Route-B pattern (SP-10
+			// spec D7 build-seam decision; the same technique a real production plugin uses,
+			// e.g. Dokan's `includes/Analytics/Assets.php`). `wc-admin-app` orders our script
+			// after the `wc-admin` app shell so `woocommerce_admin_pages_list` is read with our
+			// page already pushed onto it.
+			$dependencies = array_merge( (array) $asset['dependencies'], [ 'wc-components', 'wc-admin-app' ] );
+
 			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
 			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
 			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
 
-			wp_enqueue_style( 'wp-components' );
-			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wp-components' ], $style_version );
-			wp_enqueue_script( 'woodev-shipping-orders-page', $build_url . '/index.js', $asset['dependencies'], $asset['version'], true );
+			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wc-components' ], $style_version );
+			wp_enqueue_script( 'woodev-shipping-orders-page', $build_url . '/index.js', $dependencies, $asset['version'], true );
 
 			wp_add_inline_script(
 				'woodev-shipping-orders-page',
@@ -275,12 +289,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 					[
 						'restRoot'  => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders' ) ),
 						'nonce'     => wp_create_nonce( 'wp_rest' ),
-						'adminUrl'  => esc_url_raw( admin_url() ),
 						'providers' => $this->build_bootstrap_providers(),
 					]
 				) . ';',
 				'before'
 			);
+		}
+
+		/**
+		 * Whether the current admin screen is a WooCommerce Admin (`wc-admin`) page.
+		 *
+		 * A protected, overridable seam, not a Brain-Monkey-stubbed function call:
+		 * `wc_admin_is_registered_page()` does not exist at all under Brain Monkey (WC's
+		 * `wc-admin` bootstrap is never loaded there), and Brain Monkey/Patchwork's
+		 * function redefinition leaks `function_exists()` as permanently `true` for the
+		 * rest of that PHPUnit process once a symbol is touched once — the same
+		 * constraint `LocationControllerTest` documents against `WC()`. Removing `final`
+		 * from this class (increment 2b rewrite) exists so a test can override this one
+		 * method instead, the same seam shape {@see Orders_Query::is_hpos_enabled()}
+		 * already uses.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function is_wc_admin_screen(): bool {
+			return function_exists( 'wc_admin_is_registered_page' ) && wc_admin_is_registered_page();
 		}
 
 		/**
@@ -402,6 +436,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function reset_for_tests(): void {
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
