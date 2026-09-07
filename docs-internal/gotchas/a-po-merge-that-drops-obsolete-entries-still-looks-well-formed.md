@@ -1,12 +1,44 @@
 # Gotcha: [i18n/catalogue-audit] — A `.po` merge that drops the `#~` obsolete entries still looks well-formed
-> Tags: i18n, tooling, measurement | Session: s103
+> Tags: i18n, tooling, measurement | Session: s103, corrected + extended s123
+
+## ⚠ Two corrections from s123, before you read the rest
+
+**1. `wp i18n update-po` EXISTS, so the hand-rolled merge below was never necessary.** The premise
+in the next paragraph — "the container's wp-cli has `make-pot` and `make-mo` but no merge" — is
+false for wp-cli 2.12.0, the version the rig ships. `wp i18n i18n` lists four subcommands, and the
+fourth is a real msgmerge:
+
+```bash
+wp i18n update-po <source.pot> <destination.po>
+```
+
+Use it. It matches by `msgctxt \x04 msgid`, preserves every translation on a surviving entry
+(measured: **0** lost across 734 entries), and needs no parser of your own.
+
+**2. It drops the obsolete tail TOO — the failure below is not exclusive to hand-rolled code.**
+Measured on a copy before installing anything:
+
+```text
+BEFORE active=777 obsolete=92
+AFTER  active=736 obsolete=0
+```
+
+The 41 entries the new `.pot` no longer carried were **deleted**, not demoted to `#~`, and the 92
+that were already `#~` went with them. So `update-po` is not GNU `msgmerge`: it rebuilds the file
+from the `.pot` and keeps only what the `.pot` names. In s123 that was the wanted behaviour (card
+#775 asked for exactly that cleanup and explicitly allowed either outcome), and git history keeps
+the old translations — but it must be a decision, not a surprise.
+
+**What survives unchanged is the rule at the bottom of this file: count in and out, per category,
+BEFORE installing.** The cause moved from "my parser treats `#` as a comment" to "the official tool
+does not preserve them", and the check that catches both is the same one.
 
 ## What happens
 
 You rebuild `woodev-plugin-framework-ru_RU.po` from a freshly generated `.pot` — a msgmerge done by
-hand, because this machine has no gettext utilities and the container's wp-cli has `make-pot` and
-`make-mo` but no merge. The script parses the source `.po`, matches every entry the new `.pot`
-carries, and writes the result.
+hand, because this machine has no gettext utilities and (so s103 believed) the container's wp-cli
+has `make-pot` and `make-mo` but no merge. The script parses the source `.po`, matches every entry
+the new `.pot` carries, and writes the result.
 
 The output is valid. The counts are plausible. `wp i18n make-mo` builds it without complaint. And
 **92 preserved translations are gone**:

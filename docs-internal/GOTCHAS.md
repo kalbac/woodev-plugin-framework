@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 286 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 287 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -382,6 +382,7 @@
 - [tooling/parallel-agents] **`git worktree remove --force` follows the shared `node_modules` symlink and empties the PRIMARY checkout — remove Orca worktrees through Orca.** → [git-worktree-remove-empties-the-primary-checkout-s-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkout-s-node-modules.md) (s85)
 - [tooling/codex-shell-sandbox-broken-windows] **Codex's shell WORKS — launch it in an Orca terminal; only `codex exec -s read-only` hits the broken windows sandbox. Same binary, trusted project, no sandbox.** → [codex-shell-sandbox-broken-windows](gotchas/codex-shell-sandbox-broken-windows.md) (s10, extended s61, root-caused s72, **solved s82**)
 - [tooling/windows] **Git Bash mangles Cyrillic in arguments: `curl` answers 400/500 and it reads as the API's fault, while `gh` returns 200 and PERSISTS the mojibake into a GitHub board. Read the value back from the server; repairing it renews every option id.** → [git-bash-mangles-cyrillic-in-curl-arguments](gotchas/git-bash-mangles-cyrillic-in-curl-arguments.md) (s76, extended s115)
+- [tooling/windows] **A QUOTED heredoc through the Bash tool still eats backslashes: `'\\'` lands as `'\'`, and the parse error surfaces thirteen lines below the damage, on innocent code. Write script files with the Write tool.** → [the-bash-tools-quoted-heredoc-still-eats-backslashes](gotchas/the-bash-tools-quoted-heredoc-still-eats-backslashes.md) (s123)
 - [tooling/serena-eol-flip] **Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows.** → [serena-replace-content-eol-flip](gotchas/serena-replace-content-eol-flip.md) (s25)
 - [tooling/phpstan-windows-segfault] **PHPStan crashes with exit `-1073741819` on Windows — environmental, not a code error.** → [phpstan-windows-parallel-worker-segfault](gotchas/phpstan-windows-parallel-worker-segfault.md) (s28)
 - [tooling/phpcs] **`composer phpcs` reports NO warning-level sniff at all — 1786 violations from 19 sniffs are invisible, one of them a security sniff; and it never sees `tests/`.** → [phpcs-does-not-enforce-line-length](gotchas/phpcs-does-not-enforce-line-length.md) (s45, measured s109; fix tracked as #139)

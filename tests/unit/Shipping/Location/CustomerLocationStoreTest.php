@@ -1673,6 +1673,86 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 			}
 		}
 
+		/**
+		 * The export payload's WORDING, not its shape — card #567, i18n rule 1.
+		 *
+		 * These eleven strings are the only customer-facing text this class
+		 * emits: core writes `group_label`, `group_description` and every field
+		 * `name` verbatim into the export HTML, and mails that file to the data
+		 * subject. Rule 1 therefore requires the msgid to be ENGLISH, with the
+		 * Russian arriving from the catalogue.
+		 *
+		 * Nothing else pins that. `lint:i18n` only asks whether an English
+		 * catalogue entry has a translation, and `lint:i18n-sources` only asks
+		 * whether an extracted msgid reached the catalogue — so flipping one of
+		 * these back to Russian and regenerating the catalogue passes BOTH
+		 * gates while an English-locale shop's export silently turns Russian
+		 * again. A Codex review of PR #810 caught that the shape test above is
+		 * green under exactly that revert; this is its counterpart.
+		 *
+		 * Brain Monkey's `stubTranslationFunctions()` returns `__()`'s first
+		 * argument unchanged, so the assertions below read the msgids literally.
+		 */
+		public function test_export_personal_data_labels_are_the_english_msgids_rule_1_requires(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $this->record()->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => false,
+				'saved_at' => 12345,
+			];
+
+			$item = ( new Customer_Location_Store() )->export_personal_data( 'customer@example.com' )['data'][0];
+
+			$this->assertSame( 'Customer location', $item['group_label'] );
+			$this->assertSame(
+				'The delivery location the customer selected, or that was detected automatically during checkout.',
+				$item['group_description']
+			);
+
+			$this->assertSame(
+				[
+					'Location key',
+					'Level',
+					'Country',
+					'Location name',
+					'Saved at',
+					"Detected automatically (not the customer's choice)",
+				],
+				array_column( $item['data'], 'name' ),
+				'the exported field names, in order — a record with no `raw` payload exports exactly these six'
+			);
+
+			$this->assertSame( 'No', $item['data'][5]['value'], 'an explicit customer pick reports "No"' );
+		}
+
+		/**
+		 * The other half of the pair above: `implicit` decides between two
+		 * msgids, so a test that only ever exercises `false` leaves `Yes`
+		 * unpinned.
+		 */
+		public function test_export_personal_data_reports_yes_for_an_implicitly_detected_chain(): void {
+			$meta_store = $this->fake_user_meta_store();
+			$this->stub_user_meta( $meta_store );
+
+			Functions\when( 'get_user_by' )->justReturn( (object) [ 'ID' => 7 ] );
+
+			$meta_store[7][ self::META_KEY ] = [
+				'records'  => [ Location_Record::LEVEL_SETTLEMENT => $this->record()->to_array() ],
+				'current'  => Location_Record::LEVEL_SETTLEMENT,
+				'implicit' => true,
+				'saved_at' => 12345,
+			];
+
+			$item = ( new Customer_Location_Store() )->export_personal_data( 'customer@example.com' )['data'][0];
+
+			$this->assertSame( 'Yes', $item['data'][5]['value'] );
+		}
+
 		public function test_export_personal_data_includes_the_raw_provider_payload_when_present(): void {
 			$meta_store = $this->fake_user_meta_store();
 			$this->stub_user_meta( $meta_store );

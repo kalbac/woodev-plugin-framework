@@ -55,12 +55,20 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 		 * @return Woodev_Packer_Result
 		 *
 		 * @throws Woodev_Packer_Exception If $items is empty or $algorithm_id is not registered.
+		 *                                 Its message is a PLAIN English string, deliberately not
+		 *                                 wrapped in `__()` — i18n rule 3 (`AGENTS.md` →
+		 *                                 Conventions): a string that never reaches a screen needs
+		 *                                 no catalogue entry. Measured on the only real consumer
+		 *                                 (`plugins-reference/woocommerce-edostavka/includes/class-wc-edostavka-box-packer.php:49`),
+		 *                                 which catches this and passes `getMessage()` straight to
+		 *                                 `->log()`. The four `Woodev_Packer::pack()`
+		 *                                 implementations follow the same rule and now say the
+		 *                                 SAME thing — `class-packer-virtual-box.php` used to say
+		 *                                 it in Russian alone (#567).
 		 */
 		public static function pack( string $algorithm_id, array $items ): Woodev_Packer_Result {
 			if ( empty( $items ) ) {
-				throw new Woodev_Packer_Exception(
-					__( 'No items to pack!', 'woodev-plugin-framework' )
-				);
+				throw new Woodev_Packer_Exception( 'No items to pack!' );
 			}
 
 			switch ( $algorithm_id ) {
@@ -75,11 +83,7 @@ if ( ! class_exists( 'Woodev_Packer_Dispatcher' ) ) :
 
 				default:
 					throw new Woodev_Packer_Exception(
-						sprintf(
-							/* translators: %s: algorithm ID */
-							__( 'Unknown packing algorithm: %s', 'woodev-plugin-framework' ),
-							$algorithm_id
-						)
+						sprintf( 'Unknown packing algorithm: %s', $algorithm_id )
 					);
 			}
 		}
