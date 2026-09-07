@@ -82,10 +82,11 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 49, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 47, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
-`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, none is
-empty. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
+`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026
+with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
+#567 was moved AHEAD of the plugin by the same decision. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
 card list retyped here** — a retyped list is exactly what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
@@ -250,7 +251,7 @@ all but PHPStan and Documentation are browser-verified. The live PROGRAMME stage
 
 - [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (→ board №6).
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
-- [ℹ️ OB-7] «Плагины» still shows discontinued/coming-soon items — `edd-api/v2` exposes no `_coming_soon`/`_product_icon`/rating; needs a woodev.ru API extension.
+- [ℹ️] OB-7 moved to the board as **#809** (07.09.2026) — debt lives there, not here.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
 
 ### Public-docs API staleness — DEFERRED (operator decision)
