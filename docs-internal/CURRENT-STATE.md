@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-07 (s122).** s122 merged PRs **#805 #806 #807 #808** and closed **#798 #799 #802 #803 #804**. **The pickup boundary now has ONE contract on both halves** — a required field is non-blank ONCE CAST, spelled out identically in `Pickup_Point::required_string()` and `map-provider-embedded.js`'s `requiredString()`; three critic rounds went into the single claim that the two agree, and each found it false. **The Codex model tiering was rewritten around `gpt-6-astra`** and its price measured: ~9× a luna round, 6 % of the weekly limit per review — details in `CLAUDE.md` → Orca.
+**As of 2026-09-07 (s123).** s123 merged PRs **#810 #812** and closed **#775 #800 #811**. **#567's code half is DONE and only its visual pass is left** — of 261 Cyrillic gettext literals, classifying by render path left TWELVE that are not admin text, and both groups are fixed. **The catalogue was rebuilt with `wp i18n update-po`**, which exists in wp-cli 2.12.0 despite a gotcha that said otherwise, and which drops the whole `#~` tail: 776 → **735** entries, allowlist 36 → **2**, 0 translations lost. **`Shipping_Method::__construct()` had been discarding a subclass's own `$this->supports`** (#811), so `FEATURE_BOX_PACKING` and `FEATURE_SHIPPING_CLASSES` could not be declared by any documented route — the exact class of defect only a real plugin finds, which is the operator's own argument for the #786 gate.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -37,19 +37,22 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — measured 07.09.2026 (s122) against `main`:** unit **3578** / **8865**, 1 skipped, with
-sodium ON; jest **1744** in **27** suites; phpcs clean — **with the warning level ON**; phpstan
-level 3 no errors; `lint:i18n`, `lint:i18n-sources` (#791), `lint:mo` and `lint:docs` OK.
-⚠ **Integration (143 / 530) and e2e (7 / 7) are s121 numbers, NOT re-run in s122** — carry them as
-inferences, re-measure before quoting. ⚠ s121's line here said unit 3540 / 8427: that is the figure
-for commit `86b9358`, copied one line too far up. A clean `main` before this session's own changes
-gave **3555 / 8755**.
+**Baselines — EVERY ONE re-measured 07.09.2026 (s123) against `main` at `b065c11`:** unit **3580** /
+**8870**, 1 skipped, with sodium ON; jest **1744** in **27** suites; **integration 146 / 542**;
+**e2e 7 / 7** against the live rig; phpcs clean — **with the warning level ON**; phpstan level 3 no
+errors; `lint:i18n`, `lint:i18n-sources` (#791), `lint:mo` and `lint:docs` OK. Nothing on this line
+is carried forward from a previous handoff.
 
-⚠ **s120's handoff said unit 3534 / 8409 and that was WRONG AT THE COMMIT IT NAMED** — `86b9358`
-re-measured in s121 gives **3540 / 8427 / 67 skipped**, byte-identical to `main`. Nothing between
-those commits touched a test. So the number was mistyped, not drifted: a handoff figure can be wrong
-about its own commit, which is exactly why the standing rule is to re-measure rather than carry
-forward.
+⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
+work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
+wall of stack frames, which reads like a bootstrap regression and is not one. The coordinator's
+command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows, are in gotcha
+`wpenv-windows-gitbash-path-mangling`.
+
+⚠ **A handoff figure can be wrong about its own commit** — s120's said unit 3534 / 8409 for
+`86b9358`, which re-measured gives **3540 / 8427 / 67 skipped**, and nothing between those commits
+touched a test. Mistyped, not drifted. That is exactly why the standing rule is to re-measure rather
+than carry forward.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
 `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
@@ -68,8 +71,8 @@ Detail: `wiki/rig-pickup-walkthrough.md`.
 ✅ **Integration is the COORDINATOR's job and is not optional.** A worktree cannot run it — and the
 reason is NOT «no wp-env»: the rig containers DO see worktrees (`.wp-env.json` maps the repo root and
 `.orca/` sits inside it), phpunit starts there and then dies resolving the fixtures, because
-`WOODEV_FRAMEWORK_DIR` points at the main checkout (measured s118). Run it from a **detached checkout
-of the branch in the main tree**. `wp i18n make-mo` on a worktree's `.po`, by contrast, works fine.
+`WOODEV_FRAMEWORK_DIR` points at the main checkout (measured s118). Run it on the branch **checked
+out in the main tree, inside the `tests-cli` container** — exact command in the gotcha named above. `wp i18n make-mo` on a worktree's `.po`, by contrast, works fine.
 jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
 `npm run test:js` is correct on its own (#188).
 
@@ -82,7 +85,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 47, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 46, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
@@ -106,10 +109,25 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 читает только `.po`, но рядом встал **`lint:i18n-sources`**: гоняет `wp i18n make-pot` по `woodev/`
 и требует, чтобы каждый извлечённый msgid был И в `.pot`, И в `.po`. Живёт шагом в существующей
 джобе `lint` (там уже PHP 8.1 — ни docker, ни wp-env не нужны), wp-cli **приколот на 2.12.0** = версия
-контейнера рига. Гейт **ОДНОСТОРОННИЙ**: запись каталога без источника — это #775, и она НЕ ошибка.
-Доказан враждебно: краснеет и на обычном литерале, и на склеенном msgid, а без wp-cli падает, а не
-пропускает. Каталог догнан на 28 строк, 39 протухших не тронуты. Готча
+контейнера рига. Гейт **ОДНОСТОРОННИЙ**: запись каталога без источника не ошибка. Доказан враждебно:
+краснеет и на обычном литерале, и на склеенном msgid, а без wp-cli падает, а не пропускает. Готча
 `lint-i18n-answers-about-the-catalogue-not-the-code`.
+✅ **И он больше не требует, чтобы wp-cli кто-то положил** (#800, s123): `$WP_CLI_PHAR` → `wp` в
+`PATH` → кэш в `~/.cache` → **копия из работающего контейнера рига** (там уже ровно 2.12.0,
+`docker cp` за секунду, сети не надо) → жёсткое падение. Версия провиженного phar проверяется до
+кэширования, строка успеха называет использованный wp-cli. **CI не затронута** — там выигрывает
+`$WP_CLI_PHAR`.
+✅ **Каталог ПЕРЕСОБРАН из кода** (#567/#775, s123): `wp i18n make-pot` + **`wp i18n update-po`** —
+настоящий msgmerge, который в 2.12.0 ЕСТЬ, вопреки готче, утверждавшей обратное. Записей 776 →
+**735**, переведённых 418 → **427**, allowlist 36 → **2**, потеряно переводов на выживших msgid —
+**0**. ⚠ `update-po` **сносит весь хвост `#~`** (92 записи); для #775 это и требовалось, но знать
+надо — обе поправки внесены в готчу
+`a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`. `.mo` по-прежнему собирается
+ТОЛЬКО в контейнере.
+⚠ **Остаток #567 — ТОЛЬКО визуальная приёмка** (114 админских строк под локалью `ru_RU`, риг стоит
+в `en_US`). Код и каталог закрыты. «Алгоритм упаковки» на риге теперь достижим (#811).
+
+**Фичи метода доставки объявляются `$this->supports = [ … ]` ДО `parent::__construct()`, и теперь это работает** (#811, s123): базовый конструктор СЛИВАЕТ, а не присваивает. До этого `FEATURE_BOX_PACKING` и `FEATURE_SHIPPING_CLASSES` было НЕЧЕМ объявить: `add_support()` после конструктора опоздал к `init_form_fields()`. Почему год никто не замечал и как такой тест писать — готча `a-base-constructor-that-assigns-what-the-subclass-just-set`.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -225,7 +243,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **284**.
+Gotchas: **288**.
 
 ## Program status (high level)
 
