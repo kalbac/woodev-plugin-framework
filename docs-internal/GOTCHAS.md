@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 291 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 293 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -185,6 +185,7 @@
 - [testing/result-cache] **`executionOrder="depends,defects"` + a stale `.phpunit.result.cache` makes the same tree report 45 errors on one run and 2 failures on the next.** → [phpunit-result-cache-makes-a-run-unreproducible](gotchas/phpunit-result-cache-makes-a-run-unreproducible.md) (s84)
 
 ### [testing/js] — JavaScript testing pitfalls
+- [testing/js] **`npm run test:js` is ONE of the FIVE commands CI's `JS Tests` job runs — the other four gate generated artefacts and the TypeScript-by-default rule, so a brand-new `.js` page is green locally and red in CI. `ts-baseline.txt` is for migrations, not an escape hatch.** → [npm-run-test-js-is-not-the-whole-js-gate](gotchas/npm-run-test-js-is-not-the-whole-js-gate.md) (s125)
 - [testing/js] **A CLOSED custom select holds none of its options — a `queryByText(...).toBeNull()` against it passes whatever the option set is.** → [a-closed-custom-select-renders-no-options](gotchas/a-closed-custom-select-renders-no-options.md) (s88)
 - [testing/js] **PowerShell drops `--roots` from the documented jest command.** → [powershell-drops-the-roots-flag-from-the-jest-command](gotchas/powershell-drops-the-roots-flag-from-the-jest-command.md) (s73)
 - [testing/js] **`npx jest` is not how this project runs JS tests — it silently loses jsdom.** → [npx-jest-bypasses-wp-scripts-jsdom](gotchas/npx-jest-bypasses-wp-scripts-jsdom.md)
@@ -209,6 +210,7 @@
 - [licensing/option-keys] **License-key option double-prefix for plugin ids starting with `woodev`.** → [license-key-option-double-prefix](gotchas/license-key-option-double-prefix.md) (s11)
 
 ### [build/*] — Build/CI/release
+- [build/wp-scripts] **A `.tsx` build entry silently emits `index.tsx.js` — wp-scripts names the chunk with `basename(path, '.js')` and strips nothing else, so the enqueue asks for a file that does not exist, with no build error. Use its `name=path` entry syntax.** → [wp-scripts-names-a-chunk-from-basename-minus-js](gotchas/wp-scripts-names-a-chunk-from-basename-minus-js.md) (s125)
 - [build/ci] **A PR's check rollup keeps SUPERSEDED failures under the same job name — `CLEAN` and "eight failures" can both be true; filter to the current run ids before counting.** → [a-check-rollup-keeps-superseded-failures-under-the-same-job-name](gotchas/a-check-rollup-keeps-superseded-failures-under-the-same-job-name.md) (s98)
 - [build/ci] **Every job failing in TWO SECONDS — including `Label PR` — is an Actions billing block, not a red build; the annotation is only in `gh run view`.** → [every-ci-job-failing-in-two-seconds-is-a-billing-block](gotchas/every-ci-job-failing-in-two-seconds-is-a-billing-block.md) (s98)
 - [build/ci] **A `pull_request` workflow can simply not fire on a CLEAN PR — only `PR Triage` shows up. Close and reopen; and COUNT the jobs (19 code-only, 20 with `.md`), never read the colour.** → [a-pull-request-workflow-can-simply-not-fire](gotchas/a-pull-request-workflow-can-simply-not-fire.md) (s97)
