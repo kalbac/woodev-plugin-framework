@@ -227,9 +227,28 @@ nothing is lost by aggregating — the breakdown survives in the tooltip and on 
 ## D7. WooCommerce's React, not our own
 
 **Decision: the page is a WooCommerce admin React page built on `@woocommerce/components`.** The
-reference is WooCommerce's own **Customers** report
-(`admin.php?page=wc-admin&path=%2Fcustomers`) — operator, 07.09.2026: *«наша таблица должна быть
-построена на таких же компонентах примерно с таким же функционалом»*.
+operator named the **Customers** report (`…&path=%2Fcustomers`) — 07.09.2026: *«наша таблица должна
+быть построена на таких же компонентах примерно с таким же функционалом»* — and then pointed at the
+whole **Analytics** section as further reference.
+
+**Both were opened and read on the rig (WC 11.1.0), not imagined.** The closer sibling is
+**Analytics → Orders** (`…&path=%2Fanalytics%2Forders`), because it is literally an orders report:
+
+| region | what is there |
+|---|---|
+| filters row, above everything | «Date range» with **period comparison** (`Month to date vs Previous year`) · «Show» `FilterPicker` · a Data-status panel (Analytics-only) |
+| KPI strip | four `SummaryList` tiles with a delta-% badge each, the active one underlined |
+| chart | `Chart` — legend checkboxes per series with its total, interval selector («By day»), line/bar toggle |
+| table | `TableCard`: title, `⋮` menu, sortable headers with a caret, horizontal scroll, centred empty state, `TableSummary` row |
+
+**What this settles for us:** the per-carrier dimension is the «Show» `FilterPicker` **above the
+card**, not tabs. #694 decided *one page, aggregate by default, per-carrier scoping available*; it
+did not decide the control, and WooCommerce's own answer for exactly this is a labelled filter. The
+delivery-status filter goes on the same row.
+
+**And it settles #711 (ROI/charts) without reopening it:** the chart machinery already exists in
+these same packages — series legends, interval, period comparison, line/bar. That card's open
+question was always *what to count*, and it stays open; *what to draw it with* is now answered.
 
 ⛔ **The first attempt satisfied the letter and missed the point.** It was React — a spinner, state,
 `wp-components` — wrapping a hand-written `<table>` in WP core's admin-table markup. Operator, on
@@ -266,6 +285,20 @@ A is better to author against; B adds nothing to the build chain. **Which one is
 measuring whether A disturbs the other five bundles** — this repo's `Assets build parity` CI job
 compares the whole chain, and the repo currently has no root webpack config at all. Measure, then
 choose; do not assume either way.
+
+**Route B was taken, and it was forced rather than preferred (measured 07.09.2026).**
+`@woocommerce/components` and the WooCommerce dependency-extraction plugin are absent from **both**
+`node_modules` and `package-lock.json`, and installing them would mean `npm install` against the
+`node_modules` an Orca worktree *shares* with the primary checkout. A real before/after build then
+showed the other five bundles' dependency arrays byte-for-byte identical. So: consume
+`window.wc.components`, declare `wc-components` / `wc-admin-app` as script dependencies by hand —
+which is what Dokan does in production.
+
+⚠ **One placement question is still open, and both answers are real.** The implementation put the
+carrier selector **inside** `TableCard`'s actions slot, because `TableCard` has no tabs. Reading
+Analytics → Orders on the rig shows WooCommerce switching report scope with a labelled
+`FilterPicker` **above** the card («Show → All orders»). Decide it with both pages open side by
+side; do not settle it from either description alone.
 
 **The data layer is untouched by all of this.** The registry, the descriptor, the dual-datastore
 scope query, the canonical status and the REST row contract are UI-agnostic and survived this

@@ -6,13 +6,27 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-07 (s124).** s124 merged PRs **#816 #817** and closed **#813 #814** — the last two
-cards takeable without the operator; **#815**, **#818** and **#819** were filed by measurement. Both halves of "declare a
-shipping-method feature" now work: the constructor merges what a subclass set (#811, s123), and
-`add_support()` after construction rebuilds the form (#813). **s123** before it merged **#810 #812**,
-closed **#775 #800 #811**, and left **#567's code half DONE with only its visual pass outstanding**
-(catalogue rebuilt with `wp i18n update-po`: 776 → **735** entries, allowlist 36 → **2**, 0
-translations lost). Detail: `sessions/s124.md`, `sessions/s123.md`.
+**As of 2026-09-07 (s125).** s125 built **SP-10 «Заказы доставки»** — the framework-owned admin
+orders page (card **#820**). **Merged: PR #821 and #822** — the page registry, the carrier
+descriptor, the row scope on BOTH order datastores, the REST row contract, and the canonical
+delivery status (§13's nine states plus an honest `unknown`). **PR #823 is OPEN and NOT finished**:
+the first shell was **rejected by the operator on the rig** and rewritten as a native WooCommerce
+admin page; three visible defects are listed on the card and in the PR. Detail: `sessions/s125.md`.
+
+⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
+`wc_admin_register_page()` + `TableCard` from `@woocommerce/components`, at
+`admin.php?page=wc-admin&path=/woodev-shipping-orders`. The first attempt mounted it under our own
+`woodev` menu with `add_submenu_page()` and hand-wrote a `<table>` inside a React component; both
+halves were wrong. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
+
+⚠ **`@woocommerce/components` is consumed as a runtime global, deliberately.** It and the WooCommerce
+dependency-extraction webpack plugin are absent from `node_modules` AND `package-lock.json`, so the
+page reads `window.wc.components` and declares `wc-components` / `wc-admin-app` as script
+dependencies by hand — measured, not preferred.
+
+✅ **The rig is looked at through Orca's own browser** (`orca tab create` / `goto` / `screenshot`),
+not the Chrome extension, which never attaches to `localhost:8973`. The session needs the operator to
+log into wp-admin once; ask for it at the START of any task with a visual half.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -43,13 +57,7 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — EVERY ONE re-measured 07.09.2026 (s124) against `main` at `9aa827c`:** unit **3580** /
-**8870**, 1 skipped, with sodium ON; jest **1744** in **27** suites; **integration 163 / 596**;
-**e2e 7 / 7** against the live rig; phpcs clean — **with the warning level ON**; phpstan level 3 no
-errors; `lint:i18n`, `lint:i18n-sources` (#791), `lint:mo` and `lint:docs` OK. Nothing on this line
-is carried forward from a previous handoff. ⚠ Integration jumped 146 → 163 because s124 mounted the
-realistic shipping fixture (#814) and added two test files; **a checkout without `npx wp-env start`
-after that mapping change still reads the old number, or dies in the bootstrap.**
+**Baselines — re-measured 07.09.2026 (s125) in the primary checkout on `kalbac/sp10-page-shell` (`be70c9b`):** unit **3665** / **9045**, 1 skipped, with sodium ON; jest **1765** in **29** suites; **integration 172 / 637**; phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK; catalogue **765** entries. ⚠ `main` itself is at **#822** (unit 3657 / 9019, integration 172); the numbers above include the unmerged page shell. Nothing on this line is carried forward from a previous handoff.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -120,13 +128,7 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 `docker cp` за секунду, сети не надо) → жёсткое падение. Версия провиженного phar проверяется до
 кэширования, строка успеха называет использованный wp-cli. **CI не затронута** — там выигрывает
 `$WP_CLI_PHAR`.
-✅ **Каталог ПЕРЕСОБРАН из кода** (#567/#775, s123): `wp i18n make-pot` + **`wp i18n update-po`** —
-настоящий msgmerge, который в 2.12.0 ЕСТЬ, вопреки готче, утверждавшей обратное. Записей 776 →
-**735**, переведённых 418 → **427**, allowlist 36 → **2**, потеряно переводов на выживших msgid —
-**0**. ⚠ `update-po` **сносит весь хвост `#~`** (92 записи); для #775 это и требовалось, но знать
-надо — обе поправки внесены в готчу
-`a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`. `.mo` по-прежнему собирается
-ТОЛЬКО в контейнере.
+✅ **Каталог пересобирается ИЗ КОДА**: `wp i18n make-pot` + `wp i18n update-po` (настоящий msgmerge, в 2.12.0 ЕСТЬ) + `wp i18n make-mo` — ⚠ `.mo` собирается ТОЛЬКО в контейнере рига, и `update-po` сносит весь хвост `#~`. Обе поправки в готче `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`; числа пересборок — в `sessions/s123.md` и `sessions/s125.md`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
 (решение 05.09.2026, повторено 07.09). Перед релизом уже запланировано обновление каталога и проход
 по нему целиком, а строки до того момента ещё много раз изменятся — проверять их сейчас значит
