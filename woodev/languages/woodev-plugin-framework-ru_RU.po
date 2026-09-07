@@ -3174,7 +3174,6 @@ msgstr ""
 
 #: assets/build/plugins-page/index.js:4
 #: assets/build/settings-page/index.js:1
-#: assets/build/shipping-orders-page/index.js:1
 msgid "Загрузка…"
 msgstr ""
 
@@ -3408,9 +3407,8 @@ msgstr "Локация покупателя"
 msgid "The delivery location the customer selected, or that was detected automatically during checkout."
 msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
 
-#: shipping-method/admin/orders/class-orders-registry.php:199
-#: shipping-method/admin/orders/class-orders-registry.php:200
-#: shipping-method/admin/orders/class-orders-registry.php:222
+#: shipping-method/admin/orders/class-orders-registry.php:215
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказы доставки"
 msgstr ""
 
@@ -3458,11 +3456,7 @@ msgstr ""
 msgid "Неизвестно"
 msgstr ""
 
-#: shipping-method/admin/orders/class-orders-registry.php:225
-msgid "Для страницы заказов нужен JavaScript. Включите его и обновите страницу."
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:303
+#: shipping-method/admin/orders/class-orders-registry.php:337
 msgid "Все перевозчики"
 msgstr ""
 
@@ -3496,11 +3490,6 @@ msgid "Поиск по заказам…"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
-#, js-format
-msgid "Заказов: %d"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказов доставки пока нет."
 msgstr ""
 
@@ -3526,4 +3515,16 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Трек"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Перевозчик"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
 msgstr ""

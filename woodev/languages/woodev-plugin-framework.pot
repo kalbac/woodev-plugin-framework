@@ -7,7 +7,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-07T14:14:02+00:00\n"
+"POT-Creation-Date: 2026-09-07T20:28:39+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woodev-plugin-framework\n"
@@ -1915,17 +1915,12 @@ msgstr ""
 msgid "You do not have permission to manage this shipment."
 msgstr ""
 
-#: shipping-method/admin/orders/class-orders-registry.php:199
-#: shipping-method/admin/orders/class-orders-registry.php:200
-#: shipping-method/admin/orders/class-orders-registry.php:222
+#: shipping-method/admin/orders/class-orders-registry.php:215
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказы доставки"
 msgstr ""
 
-#: shipping-method/admin/orders/class-orders-registry.php:225
-msgid "Для страницы заказов нужен JavaScript. Включите его и обновите страницу."
-msgstr ""
-
-#: shipping-method/admin/orders/class-orders-registry.php:303
+#: shipping-method/admin/orders/class-orders-registry.php:337
 msgid "Все перевозчики"
 msgstr ""
 
@@ -3279,7 +3274,6 @@ msgstr ""
 
 #: assets/build/plugins-page/index.js:4
 #: assets/build/settings-page/index.js:1
-#: assets/build/shipping-orders-page/index.js:1
 msgid "Загрузка…"
 msgstr ""
 
@@ -3464,28 +3458,6 @@ msgid "Ожидает оплаты"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
-#, js-format
-msgid "Заказ %s"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Не удалось загрузить заказы."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Поиск по заказам…"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-#, js-format
-msgid "Заказов: %d"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
-msgid "Заказов доставки пока нет."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказ"
 msgstr ""
 
@@ -3507,4 +3479,33 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Трек"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+#, js-format
+msgid "Заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не удалось загрузить заказы."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Поиск по заказам…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Перевозчик"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов доставки пока нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
 msgstr ""
