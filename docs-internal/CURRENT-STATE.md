@@ -6,7 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-07 (s123).** s123 merged PRs **#810 #812** and closed **#775 #800 #811**. **#567's code half is DONE and only its visual pass is left** — of 261 Cyrillic gettext literals, classifying by render path left TWELVE that are not admin text, and both groups are fixed. **The catalogue was rebuilt with `wp i18n update-po`**, which exists in wp-cli 2.12.0 despite a gotcha that said otherwise, and which drops the whole `#~` tail: 776 → **735** entries, allowlist 36 → **2**, 0 translations lost. **`Shipping_Method::__construct()` had been discarding a subclass's own `$this->supports`** (#811), so `FEATURE_BOX_PACKING` and `FEATURE_SHIPPING_CLASSES` could not be declared by any documented route — the exact class of defect only a real plugin finds, which is the operator's own argument for the #786 gate.
+**As of 2026-09-07 (s124).** s124 merged PRs **#816 #817** and closed **#813 #814** — the last two
+cards takeable without the operator; **#815** was filed by measurement. Both halves of "declare a
+shipping-method feature" now work: the constructor merges what a subclass set (#811, s123), and
+`add_support()` after construction rebuilds the form (#813). **s123** before it merged **#810 #812**,
+closed **#775 #800 #811**, and left **#567's code half DONE with only its visual pass outstanding**
+(catalogue rebuilt with `wp i18n update-po`: 776 → **735** entries, allowlist 36 → **2**, 0
+translations lost). Detail: `sessions/s124.md`, `sessions/s123.md`.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -37,22 +43,19 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — EVERY ONE re-measured 07.09.2026 (s123) against `main` at `b065c11`:** unit **3580** /
-**8870**, 1 skipped, with sodium ON; jest **1744** in **27** suites; **integration 146 / 542**;
+**Baselines — EVERY ONE re-measured 07.09.2026 (s124) against `main` at `9aa827c`:** unit **3580** /
+**8870**, 1 skipped, with sodium ON; jest **1744** in **27** suites; **integration 163 / 596**;
 **e2e 7 / 7** against the live rig; phpcs clean — **with the warning level ON**; phpstan level 3 no
 errors; `lint:i18n`, `lint:i18n-sources` (#791), `lint:mo` and `lint:docs` OK. Nothing on this line
-is carried forward from a previous handoff.
+is carried forward from a previous handoff. ⚠ Integration jumped 146 → 163 because s124 mounted the
+realistic shipping fixture (#814) and added two test files; **a checkout without `npx wp-env start`
+after that mapping change still reads the old number, or dies in the bootstrap.**
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
 wall of stack frames, which reads like a bootstrap regression and is not one. The coordinator's
 command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows, are in gotcha
 `wpenv-windows-gitbash-path-mangling`.
-
-⚠ **A handoff figure can be wrong about its own commit** — s120's said unit 3534 / 8409 for
-`86b9358`, which re-measured gives **3540 / 8427 / 67 skipped**, and nothing between those commits
-touched a test. Mistyped, not drifted. That is exactly why the standing rule is to re-measure rather
-than carry forward.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
 `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
@@ -76,18 +79,18 @@ out in the main tree, inside the `tests-cli` container** — exact command in th
 jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
 `npm run test:js` is correct on its own (#188).
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100); and a
-green unit suite is not sufficient where our code meets someone else's contract (gotcha
-`a-mocked-provider-proves-the-mock-not-the-contract`).
+⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100, and
+s120 mistyped one about its own commit); and a green unit suite is not sufficient where our code
+meets someone else's contract (gotcha `a-mocked-provider-proves-the-mock-not-the-contract`).
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 48, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 47, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
-`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026
+`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
 #567 was moved AHEAD of the plugin by the same decision. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
 card list retyped here** — a retyped list is exactly what went stale and got #644 filed.
@@ -130,7 +133,15 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 делать работу, которую придётся переделать. Код и каталог закрыты; карточка «Заморожено»
 с этим условием. «Алгоритм упаковки» к тому проходу уже достижим (#811). Не переоткрывать.
 
-**Фичи метода доставки объявляются `$this->supports = [ … ]` ДО `parent::__construct()`, и теперь это работает** (#811, s123): базовый конструктор СЛИВАЕТ, а не присваивает. До этого `FEATURE_BOX_PACKING` и `FEATURE_SHIPPING_CLASSES` было НЕЧЕМ объявить: `add_support()` после конструктора опоздал к `init_form_fields()`. Почему год никто не замечал и как такой тест писать — готча `a-base-constructor-that-assigns-what-the-subclass-just-set`.
+**Фичу метода доставки теперь можно объявить ОБОИМИ способами.** `$this->supports = [ … ]` до
+`parent::__construct()` — база СЛИВАЕТ, а не присваивает (#811, s123); `add_support()` после
+конструктора — сеттер перестраивает форму, когда фича формирующая (#813, s124). До этого не работал
+ни один из двух, а второй — ровно тот, что рекомендуют доки (`docs/shipping-method.md:1040`), так
+что **починка кода сделала опубликованное предложение истинным** и переписывать его не придётся.
+⚠ Сеттер не перестраивает форму, пока она строится: колбэк фильтра `..._form_fields`, зовущий
+`add_support()`, иначе получал контрол, который внешний проход затирал. Готча
+`a-base-constructor-that-assigns-what-the-subclass-just-set`. Остаток — **#815**: объявление ДО
+конструктора шлёт экшен с пустым id метода.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
