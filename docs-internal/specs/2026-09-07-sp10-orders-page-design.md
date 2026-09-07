@@ -38,10 +38,20 @@ Two more facts fell out of the same read:
 
 - **The tracking column is one column under two names.** `cdek_number` and `barcode` hold the same
   thing — the carrier tracking number, linked to that carrier's public tracking URL.
-- **The `type` column is derivable by the framework.** Yandex renders «До ПВЗ / До двери» from
-  `is_pickup()`; russian-post renders «Курьер / Постамат / Отделение». The framework already ships
-  `Shipping_Method_Courier`, `Shipping_Method_Pickup` and `Shipping_Method_Postal`, so this is a
-  framework column computed from the order's shipping method, not a carrier column.
+- **The `type` column is DECLARED to the framework, not inferred by it.** Yandex renders «До ПВЗ /
+  До двери» from `is_pickup()`; russian-post renders «Курьер / Постамат / Отделение». The framework's
+  authority for the same thing is **`Shipping_Method::get_delivery_type()`, which is `abstract`**
+  (`class-shipping-method.php:108`) — every shipping method must answer it, and
+  `Shipping_Method_Courier` / `_Pickup` / `_Postal` merely `final`-ise it. So this is a framework
+  column, and a strong one: a declared contract rather than a guess.
+
+  ⚠ **An earlier draft of this line said to compute it by an `instanceof` chain against those three
+  subclasses. That is wrong** and was caught during increment 2a. They are optional convenience
+  bases, not the authority: a carrier extending `Shipping_Method` directly declares a perfectly good
+  type and would have been classified `unknown` — including `Woodev_Test_Shipping_Method`, which the
+  entire integration suite is built on. Resolve the order's shipping line with
+  `Shipping_Helper::get_order_shipping_item()`, take the instance through
+  `\WC_Shipping_Zones::get_shipping_method()`, and **ask it `get_delivery_type()`**.
 
 **Consequence.** Six of the seven, plus tracking and type, are framework property. `status` is the
 only one that cannot be aggregated as it stands — see D4.
