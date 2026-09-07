@@ -7,7 +7,7 @@
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
 **As of 2026-09-07 (s124).** s124 merged PRs **#816 #817** and closed **#813 #814** — the last two
-cards takeable without the operator; **#815** and **#818** were filed by measurement. Both halves of "declare a
+cards takeable without the operator; **#815**, **#818** and **#819** were filed by measurement. Both halves of "declare a
 shipping-method feature" now work: the constructor merges what a subclass set (#811, s123), and
 `add_support()` after construction rebuilds the form (#813). **s123** before it merged **#810 #812**,
 closed **#775 #800 #811**, and left **#567's code half DONE with only its visual pass outstanding**
@@ -88,7 +88,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 48, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 49, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
@@ -133,15 +133,7 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 делать работу, которую придётся переделать. Код и каталог закрыты; карточка «Заморожено»
 с этим условием. «Алгоритм упаковки» к тому проходу уже достижим (#811). Не переоткрывать.
 
-**Фичу метода доставки теперь можно объявить ОБОИМИ способами.** `$this->supports = [ … ]` до
-`parent::__construct()` — база СЛИВАЕТ, а не присваивает (#811, s123); `add_support()` после
-конструктора — сеттер перестраивает форму, когда фича формирующая (#813, s124). До этого не работал
-ни один из двух, а второй — ровно тот, что рекомендуют доки (`docs/shipping-method.md:1040`), так
-что **починка кода сделала опубликованное предложение истинным** и переписывать его не придётся.
-⚠ Сеттер не перестраивает форму, пока она строится: колбэк фильтра `..._form_fields`, зовущий
-`add_support()`, иначе получал контрол, который внешний проход затирал. Готча
-`a-base-constructor-that-assigns-what-the-subclass-just-set`. Остаток — **#815**: объявление ДО
-конструктора шлёт экшен с пустым id метода.
+**Фичу метода доставки можно объявить ОБОИМИ способами:** `$this->supports` до `parent::__construct()` (#811) и `add_support()` после него (#813) — сеттер перестраивает форму. До s124 не работал ни один, а второй — тот, что рекомендуют доки. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set` (там же про реэнтерабельность). Остаток — **#815**.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -183,6 +175,8 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 counts PICKS (`nextPickSeq`) and a renderer asks `release.isStale()` before handing a record over.
 ⚠ The busy token is the WRONG key for that question — `settleSelect()` clears it unconditionally.
 Gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
+
+**Брейншторм по #114 НАЧАТ, НЕ ЗАКОНЧЕН** (s124): 6 корзин, разобран 1 пункт → #819. Состояние — КОММЕНТАРИЕМ на #114. Режим оператора: собирать ВШИРЬ, карточка = замер + гипотезы **без выбора**, гейт на #786.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -257,7 +251,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **288**.
+Gotchas: **289**.
 
 ## Program status (high level)
 
