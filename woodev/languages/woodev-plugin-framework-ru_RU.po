@@ -2887,6 +2887,7 @@ msgid "Действия над данными раздела «Доставка�
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:413
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Доставка"
 msgstr ""
 
@@ -3173,6 +3174,7 @@ msgstr ""
 
 #: assets/build/plugins-page/index.js:4
 #: assets/build/settings-page/index.js:1
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Загрузка…"
 msgstr ""
 
@@ -3406,8 +3408,9 @@ msgstr "Локация покупателя"
 msgid "The delivery location the customer selected, or that was detected automatically during checkout."
 msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
 
-#: shipping-method/admin/orders/class-orders-registry.php:178
-#: shipping-method/admin/orders/class-orders-registry.php:179
+#: shipping-method/admin/orders/class-orders-registry.php:199
+#: shipping-method/admin/orders/class-orders-registry.php:200
+#: shipping-method/admin/orders/class-orders-registry.php:222
 msgid "Заказы доставки"
 msgstr ""
 
@@ -3453,4 +3456,74 @@ msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:97
 msgid "Неизвестно"
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:225
+msgid "Для страницы заказов нужен JavaScript. Включите его и обновите страницу."
+msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:303
+msgid "Все перевозчики"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Курьер"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Пункт выдачи"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Почта"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Ожидает оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+#, js-format
+msgid "Заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не удалось загрузить заказы."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Поиск по заказам…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+#, js-format
+msgid "Заказов: %d"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов доставки пока нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Дата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Покупатель"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Оплата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Трек"
 msgstr ""
