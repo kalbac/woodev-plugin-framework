@@ -217,6 +217,12 @@ function bootstrap_integration_tests(): void {
 
 		// 3. Тестовый метод доставки.
 		require_once $fixtures_dir . '/woodev-test-shipping-method/woodev-test-shipping-method.php';
+
+		// 4. Реалистичная shipping-фикстура: абстрактная база + два наследника (курьер и ПВЗ) —
+		// та форма, которую примет боевой плагин (#786). До #814 она грузилась только файловым
+		// require_once из юнит-теста, поэтому о ПОВЕДЕНИИ её методов нельзя было утверждать
+		// ничего: юнит-сьюта не исполняет настоящий WC_Shipping_Method.
+		require_once $fixtures_dir . '/woodev-realistic-shipping-plugin/woodev-realistic-shipping-plugin.php';
 	} );
 
 	require_once $wp_tests_dir . '/includes/bootstrap.php';

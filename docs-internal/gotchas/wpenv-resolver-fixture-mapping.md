@@ -62,6 +62,36 @@ Only the real integration load path requires each fixture to bundle `woodev/`.
 - `composer check` (unit) will NOT catch a broken integration fixture mapping; only the
   wp-env integration job will.
 
+## s124 (#814): the mapping is only HALF of "mount a fixture", and the other half comes first
+
+Mounting `woodev-realistic-shipping-plugin` into the integration environment needed **two**
+changes, and the card that asked for it named neither correctly:
+
+1. **A `require_once` in `tests/bootstrap.php`.** Nothing loads a fixture implicitly. The suite
+   requires each one by path out of the `woodev-framework: .` mount, so the
+   `wp-content/plugins/<fixture>` mappings — which is what the card proposed — are what the DEV
+   RIG needs and have no bearing on integration at all.
+2. **Then** the `woodev/` mirror this gotcha is about.
+
+⚠ **Do them in that order and the second failure is spectacular out of proportion to its cause.**
+The resolver's require is guarded by `class_exists( '\Woodev_Plugin', false )`, so it fires for
+whichever registered plugin it reaches FIRST. Add one unmapped fixture and it can be that one —
+at which point the bootstrap dies before a single test runs, and every test in the suite is red
+with a message naming `class-plugin.php`, which reads as a broken `vendor` or a broken framework.
+Three correctly mapped fixtures next to it do not save you.
+
+**A mapping change needs `npx wp-env start`** — mappings are bind mounts, so editing the JSON
+alone changes nothing and the same fatal persists, which is easy to misread as the fix not
+working. Measured s124: the restart left rig state byte-identical (options, 11 popular-settlement
+rows, five zone-method instances, active plugins, the `zz-rig-yandex-key` mu-plugin) and the
+container-name prefix unchanged, so the documented `docker exec … -tests-cli-1` command still
+worked afterwards. Snapshot before and diff after anyway — that is what makes "it still works" a
+comparison instead of an impression.
+
+Measured cost of actually mounting it: the full suite went 156 → 163 tests with **no existing
+test disturbed**. The card's stated worry — that tests counting registered shipping methods would
+break — did not materialise, but it was the right thing to check first.
+
 ## Related
 
 - [[ci-failing-gate-skips-dependent-jobs]] — other PR #20 CI root causes
