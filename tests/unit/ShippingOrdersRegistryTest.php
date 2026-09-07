@@ -292,9 +292,20 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\expect( 'wp_enqueue_style' )
 			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components' ], '1.2.3' )
 			->once();
+		// The three hand-declared WooCommerce handles are the whole of Route B, so
+		// the list is pinned exactly rather than loosely: `wc-components` for
+		// `TableCard`/`FilterPicker`, `wc-navigation` because the carrier filter is
+		// URL-driven, and `wc-admin-app` last so our script runs after the app shell
+		// and `woocommerce_admin_pages_list` is read with our page already on it.
 		Functions\expect( 'wp_enqueue_script' )
 			->once()
-			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components', 'wc-admin-app' ], '1.2.3', true );
+			->with(
+				'woodev-shipping-orders-page',
+				\Mockery::type( 'string' ),
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app' ],
+				'1.2.3',
+				true
+			);
 
 		$captured = null;
 		Functions\expect( 'wp_add_inline_script' )

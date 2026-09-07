@@ -3456,7 +3456,7 @@ msgstr ""
 msgid "Неизвестно"
 msgstr ""
 
-#: shipping-method/admin/orders/class-orders-registry.php:337
+#: shipping-method/admin/orders/class-orders-registry.php:340
 msgid "Все перевозчики"
 msgstr ""
 
@@ -3518,13 +3518,13 @@ msgid "Трек"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
-msgid "Перевозчик"
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказов"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Показать"
 msgstr ""

@@ -29,6 +29,12 @@
 		white-space: nowrap;
 	}
 
+	// The carrier `FilterPicker` sits ABOVE the card, the way «Аналитика → Заказы»
+	// puts its «Показать» filter above the report table (operator, 08.09.2026).
+	&__filters {
+		margin-bottom: wd.$gap-lg;
+	}
+
 	&__loading {
 		display: flex;
 		align-items: center;

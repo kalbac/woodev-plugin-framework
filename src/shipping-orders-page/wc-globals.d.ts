@@ -72,11 +72,53 @@ export interface WcAdminPage {
 	wpOpenMenu?: string;
 }
 
+/** One selectable option of a {@link WcFilterPickerConfig}. */
+export interface WcFilterPickerFilter {
+	label: string;
+	value: string;
+}
+
+/**
+ * `FilterPicker`'s `config`, per `packages/js/components/src/filter-picker/README.md`.
+ *
+ * ⚠ `FilterPicker` is URL-driven, not state-driven: picking an option rewrites
+ * the query parameter named by `param` and navigates, rather than calling back
+ * with a value. `staticParams` lists the query parameters to carry across that
+ * navigation — ours is empty on purpose, so a carrier change drops `paged` and
+ * returns to page 1.
+ */
+export interface WcFilterPickerConfig {
+	label: string;
+	param: string;
+	staticParams: string[];
+	showFilters: () => boolean;
+	filters: WcFilterPickerFilter[];
+	defaultValue?: string;
+}
+
+export interface WcFilterPickerProps {
+	config: WcFilterPickerConfig;
+	path: string;
+	query: Record< string, string | undefined >;
+}
+
 declare global {
 	interface Window {
 		wc?: {
 			components?: {
 				TableCard: ComponentType< WcTableCardProps >;
+				FilterPicker?: ComponentType< WcFilterPickerProps >;
+			};
+			/**
+			 * `@woocommerce/navigation`, behind the `wc-navigation` script handle
+			 * (declared by hand in `Orders_Registry::enqueue_assets()` — Route B).
+			 * `addHistoryListener` returns its own unlisten function; verified
+			 * against the live runtime, not recalled.
+			 */
+			navigation?: {
+				getQuery: () => Record< string, string | undefined >;
+				getPath: () => string;
+				addHistoryListener: ( listener: () => void ) => () => void;
 			};
 		};
 	}

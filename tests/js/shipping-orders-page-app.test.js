@@ -17,7 +17,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
 import { fetchOrders, getProviders } from '../../src/shipping-orders-page/rest';
 
@@ -62,8 +62,68 @@ function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage
 	);
 }
 
+/**
+ * Stands in for `@woocommerce/components`' `FilterPicker`, mirroring the part of
+ * its real contract this page depends on: it is URL-DRIVEN. It receives `path`
+ * and `query` and owns the query parameter named by `config.param`; it does not
+ * call back with a value, it navigates. Asserting against this fake therefore
+ * asserts the config we hand WooCommerce, which is the actual seam.
+ */
+function FakeFilterPicker( { config, path, query } ) {
+	return (
+		<div
+			data-testid="carrier-filter"
+			data-param={ config.param }
+			data-path={ path }
+			data-static-params={ config.staticParams.join( ',' ) }
+			data-active={ query[ config.param ] || '' }
+		>
+			<span>{ config.label }</span>
+			<ul>
+				{ config.filters.map( ( filter ) => (
+					<li key={ filter.value }>{ filter.label }</li>
+				) ) }
+			</ul>
+		</div>
+	);
+}
+
+/** The URL query the fake `wc.navigation` reports; reset per test. */
+let fakeQuery = {};
+
+/** Listeners registered through the fake `addHistoryListener`. */
+let historyListeners = [];
+
+/**
+ * Simulates what `FilterPicker` really does on a pick — and what the browser's
+ * back button does: change the query, then fire the history listeners.
+ *
+ * @param {Object} query the new URL query.
+ */
+function navigate( query ) {
+	// Wrapped in `act()` because the listeners set React state, exactly as the
+	// real history events do in the browser.
+	act( () => {
+		fakeQuery = query;
+		historyListeners.forEach( ( listener ) => listener() );
+	} );
+}
+
 beforeAll( () => {
-	window.wc = { components: { TableCard: FakeTableCard } };
+	window.wc = {
+		components: { TableCard: FakeTableCard, FilterPicker: FakeFilterPicker },
+		navigation: {
+			getQuery: () => fakeQuery,
+			getPath: () => '/woodev-shipping-orders',
+			addHistoryListener: ( listener ) => {
+				historyListeners.push( listener );
+
+				return () => {
+					historyListeners = historyListeners.filter( ( entry ) => entry !== listener );
+				};
+			},
+		},
+	};
 } );
 
 /**
@@ -123,6 +183,8 @@ const twoProviders = () => [
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	fakeQuery = {};
+	historyListeners = [];
 } );
 
 describe( 'carrier filter', () => {
@@ -134,19 +196,99 @@ describe( 'carrier filter', () => {
 
 		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
 
-		expect( screen.queryByLabelText( 'Перевозчик' ) ).not.toBeInTheDocument();
+		expect( screen.queryByTestId( 'carrier-filter' ) ).not.toBeInTheDocument();
 	} );
 
-	test( 'a carrier select renders its options once there is more than one provider', async () => {
+	test( 'the carrier filter renders its options once there is more than one provider', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByLabelText( 'Перевозчик' ) ).toBeInTheDocument() );
-		expect( screen.getByRole( 'option', { name: 'Все перевозчики (5)' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'option', { name: 'СДЭК (3)' } ) ).toBeInTheDocument();
-		expect( screen.getByRole( 'option', { name: 'Яндекс Доставка (2)' } ) ).toBeInTheDocument();
+		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+
+		expect( screen.getByText( 'Показать' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Все перевозчики (5)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'СДЭК (3)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Яндекс Доставка (2)' ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * The control sits ABOVE `TableCard`, not in its `actions` slot (operator on
+	 * the rig, 08.09.2026, against «Аналитика → Заказы»). `actions` is where the
+	 * previous implementation put it, so this pins the placement rather than
+	 * merely the presence.
+	 */
+	test( 'the carrier filter is outside the table card, not among its actions', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+
+		const filter = screen.getByTestId( 'carrier-filter' );
+		const card = container.querySelector( '.woodev-orders__filters' );
+
+		expect( card ).toContainElement( filter );
+		expect( filter.closest( 'table' ) ).toBeNull();
+	} );
+
+	/** `staticParams` is empty on purpose: `paged` must not survive a carrier change. */
+	test( 'the filter owns the carrier query param and carries nothing across a change', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+
+		const filter = screen.getByTestId( 'carrier-filter' );
+
+		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
+		expect( filter ).toHaveAttribute( 'data-static-params', '' );
+		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
+	} );
+} );
+
+describe( 'the carrier lives in the URL, not in component state', () => {
+	test( 'a carrier already in the query scopes the very first fetch', async () => {
+		fakeQuery = { carrier: 'cdek' };
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'cdek' } ) )
+		);
+	} );
+
+	/**
+	 * `FilterPicker` navigates instead of calling back, so a pick — and the
+	 * browser's back button — reach this page only through the history listener.
+	 */
+	test( 'a history change re-scopes the fetch', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'all' } ) )
+		);
+
+		navigate( { carrier: 'cdek' } );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'cdek' } ) )
+		);
+
+		navigate( {} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { carrier: 'all' } ) )
+		);
 	} );
 } );
 

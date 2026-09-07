@@ -274,7 +274,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// e.g. Dokan's `includes/Analytics/Assets.php`). `wc-admin-app` orders our script
 			// after the `wc-admin` app shell so `woocommerce_admin_pages_list` is read with our
 			// page already pushed onto it.
-			$dependencies = array_merge( (array) $asset['dependencies'], [ 'wc-components', 'wc-admin-app' ] );
+			// `wc-navigation` carries `@woocommerce/navigation`: the carrier `FilterPicker`
+			// above the table changes scope by NAVIGATING, so the page reads the active
+			// carrier out of the URL query and listens for history changes.
+			$dependencies = array_merge( (array) $asset['dependencies'], [ 'wc-components', 'wc-navigation', 'wc-admin-app' ] );
 
 			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
 			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';

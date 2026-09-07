@@ -5,13 +5,19 @@
  * The table is `@woocommerce/components`' `TableCard` (Route B, `./wc-globals`),
  * not a hand-written `<table>` — sorting, pagination and the loading skeleton
  * are all `TableCard`'s own (`onSort`, `onPageChange`/`onQueryChange`,
- * `isLoading`). The carrier "tab" dimension #694 asked for is a `SelectControl`
- * in `TableCard`'s own `actions` slot rather than a literal tab strip:
- * `TableCard` has no tab concept (WooCommerce's own reports don't have tabs in
- * that sense either), and `actions` is its documented extension point for
- * exactly this kind of control (verified against
- * `packages/js/components/src/table/index.tsx` in the `woocommerce/woocommerce`
- * monorepo). There is deliberately no delivery-status filter: the REST route
+ * `isLoading`). The carrier dimension #694 asked for is a `FilterPicker` ABOVE
+ * the card — the control WooCommerce's own «Аналитика → Заказы» uses to switch
+ * report scope («Показать: Все заказы»). Settled by the operator on the rig,
+ * 08.09.2026, with both pages open side by side; the first implementation put a
+ * `SelectControl` inside `TableCard`'s `actions` slot and that is now wrong.
+ *
+ * ⚠ Consequence worth knowing: `FilterPicker` is URL-driven. The chosen carrier
+ * lives in the `carrier` query parameter, so the view is linkable and the
+ * browser's back button works on it — the component navigates rather than
+ * calling back with a value, so this page reads the carrier out of the query
+ * and re-reads it on every history change.
+ *
+ * There is deliberately no delivery-status filter: the REST route
  * (`Orders_Controller::register_routes()`) has no status query arg, and
  * filtering rows client-side after the server already paginated them would
  * silently report a wrong total — inventing that capability was out of scope
@@ -24,7 +30,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl, SelectControl } from '@wordpress/components';
+import { Notice, SearchControl } from '@wordpress/components';
 import { fetchOrders, getProviders } from './rest';
 import type {
 	OrderRow,
@@ -34,10 +40,25 @@ import type {
 	OrderRowTracking,
 } from './rest';
 import { formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
-import type { WcTableHeader, WcTableRowCell } from './wc-globals';
+import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
 const DEFAULT_PER_PAGE = 20;
+
+/** Query parameter the carrier `FilterPicker` owns. */
+const CARRIER_PARAM = 'carrier';
+
+/** Carrier value meaning "every provider" — the aggregate #694 made the default. */
+const ALL_CARRIERS = 'all';
+
+/**
+ * Reads the active carrier out of the URL. `FilterPicker` navigates instead of
+ * calling back, so the query — not React state — is the source of truth; an
+ * absent parameter is the aggregate.
+ */
+function getCarrierFromQuery(): string {
+	return window.wc?.navigation?.getQuery()?.[ CARRIER_PARAM ] || ALL_CARRIERS;
+}
 
 /** Debounce for the search box, ms. */
 const SEARCH_DEBOUNCE_MS = 400;
@@ -197,7 +218,7 @@ export default function OrdersPage() {
 	const providers = getProviders();
 	const hasCarrierFilter = providers.length > 1;
 
-	const [ carrier, setCarrier ] = useState( 'all' );
+	const [ carrier, setCarrier ] = useState( getCarrierFromQuery );
 	const [ page, setPage ] = useState( 1 );
 	const [ perPage, setPerPage ] = useState( DEFAULT_PER_PAGE );
 	const [ orderby, setOrderby ] = useState( 'date' );
@@ -209,6 +230,30 @@ export default function OrdersPage() {
 	const [ error, setError ] = useState( '' );
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
+
+	// `FilterPicker` changes the carrier by NAVIGATING, so the only way to learn
+	// about a pick — or about the browser's back button — is the history. The
+	// listener returns its own unlisten function (verified against the live
+	// runtime). Paging is per-carrier, so a change starts at page 1.
+	useEffect( () => {
+		const navigation = window.wc?.navigation;
+
+		if ( ! navigation ) {
+			return;
+		}
+
+		return navigation.addHistoryListener( () => {
+			setCarrier( ( current ) => {
+				const next = getCarrierFromQuery();
+
+				if ( next !== current ) {
+					setPage( 1 );
+				}
+
+				return next;
+			} );
+		} );
+	}, [] );
 
 	// Debounce the search box into `search`, which is what actually drives the fetch.
 	useEffect( () => {
@@ -284,25 +329,19 @@ export default function OrdersPage() {
 		/>,
 	];
 
-	if ( hasCarrierFilter ) {
-		actions.unshift(
-			<SelectControl
-				key="carrier"
-				__next40pxDefaultSize
-				label={ __( 'Перевозчик', 'woodev-plugin-framework' ) }
-				hideLabelFromVision
-				value={ carrier }
-				options={ providers.map( ( p ) => ( {
-					label: `${ p.label } (${ p.count })`,
-					value: p.id,
-				} ) ) }
-				onChange={ ( value: string ) => {
-					setCarrier( value );
-					setPage( 1 );
-				} }
-			/>
-		);
-	}
+	const carrierConfig: WcFilterPickerConfig = {
+		label: __( 'Показать', 'woodev-plugin-framework' ),
+		param: CARRIER_PARAM,
+		// Nothing is carried across a carrier change on purpose: `paged` must not
+		// survive it, or switching carrier can land on a page that no longer exists.
+		staticParams: [],
+		showFilters: () => true,
+		defaultValue: ALL_CARRIERS,
+		filters: providers.map( ( p ) => ( {
+			label: `${ p.label } (${ p.count })`,
+			value: p.id,
+		} ) ),
+	};
 
 	if ( error ) {
 		return (
@@ -313,6 +352,8 @@ export default function OrdersPage() {
 	}
 
 	const TableCard = window.wc?.components?.TableCard;
+	const FilterPicker = window.wc?.components?.FilterPicker;
+	const navigation = window.wc?.navigation;
 
 	if ( ! TableCard ) {
 		return (
@@ -326,27 +367,38 @@ export default function OrdersPage() {
 	}
 
 	return (
-		<TableCard
-			className="woodev-orders"
-			title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
-			headers={ HEADERS }
-			rows={ null === rows ? [] : rows.map( buildRow ) }
-			rowsPerPage={ perPage }
-			totalRows={ total }
-			isLoading={ null === rows }
-			query={ { orderby, order: order.toLowerCase(), paged: String( page ) } }
-			onSort={ onSort }
-			onPageChange={ setPage }
-			onQueryChange={ onQueryChange }
-			actions={ actions }
-			hasSearch
-			showMenu
-			emptyMessage={ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
-			summary={
-				null === rows
-					? undefined
-					: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
-			}
-		/>
+		<>
+			{ hasCarrierFilter && FilterPicker && navigation && (
+				<div className="woodev-orders__filters">
+					<FilterPicker
+						config={ carrierConfig }
+						path={ navigation.getPath() }
+						query={ navigation.getQuery() }
+					/>
+				</div>
+			) }
+			<TableCard
+				className="woodev-orders"
+				title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
+				headers={ HEADERS }
+				rows={ null === rows ? [] : rows.map( buildRow ) }
+				rowsPerPage={ perPage }
+				totalRows={ total }
+				isLoading={ null === rows }
+				query={ { orderby, order: order.toLowerCase(), paged: String( page ) } }
+				onSort={ onSort }
+				onPageChange={ setPage }
+				onQueryChange={ onQueryChange }
+				actions={ actions }
+				hasSearch
+				showMenu
+				emptyMessage={ __( 'Заказов доставки пока нет.', 'woodev-plugin-framework' ) }
+				summary={
+					null === rows
+						? undefined
+						: [ { label: __( 'Заказов', 'woodev-plugin-framework' ), value: total } ]
+				}
+			/>
+		</>
 	);
 }

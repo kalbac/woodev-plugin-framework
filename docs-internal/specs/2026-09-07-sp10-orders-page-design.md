@@ -294,11 +294,28 @@ showed the other five bundles' dependency arrays byte-for-byte identical. So: co
 `window.wc.components`, declare `wc-components` / `wc-admin-app` as script dependencies by hand —
 which is what Dokan does in production.
 
-⚠ **One placement question is still open, and both answers are real.** The implementation put the
-carrier selector **inside** `TableCard`'s actions slot, because `TableCard` has no tabs. Reading
-Analytics → Orders on the rig shows WooCommerce switching report scope with a labelled
-`FilterPicker` **above** the card («Show → All orders»). Decide it with both pages open side by
-side; do not settle it from either description alone.
+✅ **Placement SETTLED by the operator on the rig, 08.09.2026: `FilterPicker` ABOVE the card.** The
+first implementation put the carrier selector inside `TableCard`'s `actions` slot because
+`TableCard` has no tabs; Analytics → Orders switches report scope with a labelled `FilterPicker`
+above the card («Показать → Все заказы»), and both pages were opened side by side before he chose.
+Do not reopen it.
+
+⚠ **That choice carries a consequence the `SelectControl` did not have: `FilterPicker` is
+URL-driven.** It does not call back with a value — it rewrites the query parameter named by
+`config.param` and NAVIGATES (`packages/js/components/src/filter-picker/README.md`; the runtime
+contract was also read off the live page, since the shipped bundle is minified and carries no
+`propTypes`). Three things follow, all of them implemented:
+
+- the active carrier lives in the `carrier` query parameter, so the view is linkable and the
+  browser's back button works on it — the page reads it from the URL, never from its own state;
+- the page therefore subscribes to `wc.navigation.addHistoryListener()`, which returns its own
+  unlisten function (verified against the live runtime, not recalled), and re-reads the carrier on
+  every history change;
+- `wc-navigation` joins `wc-components` / `wc-admin-app` in the hand-declared script dependencies —
+  Route B applies to `@woocommerce/navigation` exactly as it does to the components.
+
+`config.staticParams` is deliberately **empty**: nothing is carried across a carrier change, so
+`paged` cannot survive it and strand the merchant on a page that no longer exists.
 
 **The data layer is untouched by all of this.** The registry, the descriptor, the dual-datastore
 scope query, the canonical status and the REST row contract are UI-agnostic and survived this
