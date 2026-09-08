@@ -6,11 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-08 (s126).** **PR #823 is MERGED** (`c8a6be8`) — the SP-10 orders page reached the
-operator's acceptance and carries the server half of its filter row with it. s126 fixed the three
-rejected-shell defects, moved the carrier selector to a `FilterPicker` ABOVE the card, announced the
-delivery-analytics panel under the table, and merged increment 6. Cards **#824 #826 #827 #828 #829**
-were filed by measurement. Detail: `sessions/s126.md`.
+**As of 2026-09-08 (s127).** ⛔ **Three finished SP-10 branches are open and UNMERGED, all three
+green and verified** — **#831** (#828 foundation, the delivery-status freshness seam), **#832**
+(increment 7, the filter row's client half) and **#833** (#830, a second `Orders_Provider` on the
+fixture). The merge was blocked by a Claude Code permission classifier, **not by CI**; each needs
+one button. Until they land, `main` has increments 1–2b and 6 only. Detail: `sessions/s127.md`.
+
+Open work on the page: **#824 #829** (not started), **#820** (umbrella), **#830** (built, in #833).
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -18,16 +20,20 @@ A `wc-admin` page highlights its parent menu item **client-side**, from the `wpO
 its `woocommerce_admin_pages_list` entry declares — WordPress renders the menu server-side and never
 sees `path`. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
 
-⚠ **Route B covers `@woocommerce/navigation` and `@woocommerce/date` too.** `@woocommerce/*` is
-absent from `node_modules` AND `package-lock.json`, so the page reads `window.wc.*` and declares
-`wc-components` / `wc-navigation` / `wc-admin-app` by hand. The carrier filter is **URL-driven**:
-`FilterPicker` navigates rather than calling back, so the active carrier lives in the `carrier`
-query arg and the page re-reads it through `wc.navigation.addHistoryListener()`.
+⚠ **Route B covers `@woocommerce/{navigation,date,currency}` too.** `@woocommerce/*` is absent from
+`node_modules` AND `package-lock.json`, so the page reads `window.wc.*` and declares
+`wc-components` / `wc-navigation` / `wc-admin-app` / `wc-date` / `wc-currency` by hand — **never
+`wc-settings`**, which is only conditionally registered and would make WordPress drop the bundle
+silently (gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`). Every
+filter is **URL-driven**: `FilterPicker` navigates rather than calling back, so the page re-reads the
+query through `wc.navigation.addHistoryListener()`.
 
-✅ **The rig is looked at through Orca's own browser** (`orca tab create` / `goto` / `screenshot`),
-not the Chrome extension. The session needs the operator to log into wp-admin once; ask at the START
-of any task with a visual half. ⚠ The rig runs **`WPLANG=en_US`** — English dates and English WC
-chrome there are the LOCALE, not a defect; our own Russian msgids show through it by design.
+⚠ **Orca's own browser is FLAKY for wp-admin** — `orca snapshot` returned `runtime_unavailable` in
+s125 and again in s127; the runtime recovered on its own both times and live workers were unaffected.
+It still needs the operator to log in once. **Cheaper and proven in s127: drive the REST route the
+page actually calls, via `wp eval` inside the rig container** — no login, exact numbers, and it is
+what discharged #830. ⚠ The rig runs **`WPLANG=en_US`** — English dates and English WC chrome there
+are the LOCALE, not a defect; our Russian msgids show through it by design.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -37,32 +43,26 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs
-**11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand
-count; argument and rules in [migration/signature-probe.md](migration/signature-probe.md) + gotcha
-`a-stricter-base-class-fatals-on-signatures`. (2) `Shipping_Method::calculate_shipping()` is
-**`final`**. (3) `register_shipping_methods()` is `final` and filters through
-`is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on
-`WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
+⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count ([migration/signature-probe.md](migration/signature-probe.md), gotcha `a-stricter-base-class-fatals-on-signatures`). (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
 фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null. Субсистемы с
 **0** незащищённых вызовов остаются опциональными.
 
-⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over
-its file says nothing about which cities it knows (`sessions/s113.md`).
+⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
-✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — public repos on standard runners consume
-no quota, so the s98 billing block lifted the moment it was switched. The symptom (every job failing
-in two seconds with no log, which reads as a red build): **#583** + gotcha
-`every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
+✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 08.09.2026 (s126) on `main` at `c8a6be8`:** unit **3699** / **9088**, 1
-skipped, with sodium ON; jest **1772** in **29** suites; **integration 180 / 658**; phpcs clean —
-**with the warning level ON**; phpstan level 3 no errors; `lint:ts-baseline`, `typecheck`,
-`lint:phone-masks`, `lint:imask`, `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK;
-catalogue **769** entries, **429** translated. Nothing on this line is carried forward.
+**Baselines — re-measured 08.09.2026 (s127) on `main` at `93fd2e5`:** unit **3699** / **9088**, 1
+skipped, with sodium ON; jest **1772** in **29** suites; **integration 180 / 658**; `npm run build` produces **zero git diff**, so
+the primary checkout reproduces the committed bundles exactly; phpcs clean — **with the warning
+level ON**; phpstan level 3 no errors; `lint:ts-baseline`, `typecheck`, `lint:phone-masks`,
+`lint:imask`, `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK; catalogue **769**
+entries, **429** translated. Nothing on this line is carried forward.
+
+**On the three unmerged branches, same day:** integration **184 / 671** on `sp10-second-carrier`,
+**180 / 658** on the other two; jest **1817** and catalogue **782** on `sp10-filters-client`.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -70,9 +70,7 @@ wall of stack frames, which reads like a bootstrap regression and is not one. Th
 command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows, are in gotcha
 `wpenv-windows-gitbash-path-mangling`.
 
-⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies and prints
-`Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G.
-Gotcha `phpstan-windows-parallel-worker-segfault`.
+⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies printing `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
 ⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — off it reads 67, on it
 reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
@@ -101,7 +99,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 49, and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 56 (measured 08.09.2026, s127; every one carries a priority, Инбокс empty), and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
@@ -129,7 +127,7 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 делать работу, которую придётся переделать. Код и каталог закрыты; карточка «Заморожено»
 с этим условием. «Алгоритм упаковки» к тому проходу уже достижим (#811). Не переоткрывать.
 
-**Фичу метода доставки можно объявить ОБОИМИ способами:** `$this->supports` до `parent::__construct()` (#811) и `add_support()` после него (#813) — сеттер перестраивает форму. До s124 не работал ни один, а второй — тот, что рекомендуют доки. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set` (там же про реэнтерабельность). Остаток — **#815**.
+**Фичу метода доставки можно объявить ОБОИМИ способами** — `$this->supports` до `parent::__construct()` (#811) и `add_support()` после (#813); до s124 не работал ни один. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set`. Остаток — **#815**.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -166,22 +164,21 @@ browser half, deliberately and with a comment saying so.
 default ON; off makes `refreshGate()` **leave the button alone**, not force-enable it. ⚠ WooCommerce
 NEVER disables that button itself. Settings section «Форма заказа», slug `checkout`.
 
-**A checkout renderer's `detach()` unbinds and cancels NOTHING** (#573, s120): an in-flight
-`/location/list` still writes afterwards, and `enqueueSelect()` is last-writer-wins, so the cascade
-counts PICKS (`nextPickSeq`) and a renderer asks `release.isStale()` before handing a record over.
-⚠ The busy token is the WRONG key for that question — `settleSelect()` clears it unconditionally.
-Gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
+**A checkout renderer's `detach()` unbinds and cancels NOTHING** (#573, s120) — the cascade counts
+PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
+gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10 — инкременты 1, 2a, 2b и 6 СМЕРЖЕНЫ** (#820 открыта). Дальше по спеке: 7 (клиентская половина фильтров), 3 (массовые действия), 4 (счётчик в меню), 5 (редирект со старых слагов), плюс #824 #826 #827 #828 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: разобран 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: в `main` инкременты 1, 2a, 2b, 6; инкремент 7 и фундамент #828 ГОТОВЫ, но лежат в PR #832 и #831.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель «Data status» — UI поверх готового шва), плюс #824 #829. **Волна 2 написана в брифах, но НЕ запущена** — конфликт по `app.tsx` и реестру, нужен #832 в `main`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+
+✅ **На риге теперь ДВА перевозчика** (#830, PR #833 + `WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`): `providers=2`, агрегат `total=8` (5 + 3), в строках виден незамапленный статус ВТОРОГО словаря. До этого провайдер был один, и селектор перевозчика, разбивка счётчика §D6 и OR-агрегат M2 в браузере не воспроизводились вовсе.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
 
-- *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382, 05.09.2026). В адресную
-  строку едет РАЗОВЫЙ секрет — 15 минут, привязан к `state` + `user_id`, гасится после обмена
-  (`class-account-connection.php:469-478`); долгоживущий `access_token_secret` приходит POST'ом и в URL
-  не попадает никогда. PKCE рассмотрен и отклонён: цена — правка протокола на двух сторонах.
+- *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382, 05.09.2026) — он РАЗОВЫЙ
+  (15 минут, привязан к `state` + `user_id`); долгоживущий `access_token_secret` идёт POST'ом. PKCE
+  рассмотрен и отклонён. Разбор — на карточке.
 
 - *Настройки плагина по умолчанию — на `Woodev → Настройки`; вкладка WooCommerce «Интеграции»
   НЕ отменена и используется при необходимости* (#777, 05.09.2026). Швы, контракт хранилища и
@@ -247,7 +244,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **295**.
+Gotchas: **298**.
 
 ## Program status (high level)
 

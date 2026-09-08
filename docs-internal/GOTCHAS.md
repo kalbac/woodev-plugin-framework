@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 296 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 298 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -84,7 +84,7 @@
 - [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
-- [woocommerce/script-handles] **Declaring `wc-settings` as a script dependency makes WordPress drop your whole bundle SILENTLY — it is only conditionally registered, WooCommerce guards it with `wp_script_is()`, and it is injected into `wc-currency`/`wc-navigation` for you anyway.** → [declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle](gotchas/declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle.md) (s127)
+- [woocommerce/script-handles] **Declaring `wc-settings` as a script dependency makes WordPress drop your whole bundle SILENTLY — it is only conditionally registered.** → [declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle](gotchas/declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle.md) (s127)
 - [woocommerce/address-save] **WooCommerce saves no address until every required TEXT field in the block is filled — the gate is in the JS.** → [wc-does-not-save-the-address-until-every-required-text-field-is-filled](gotchas/wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) (s65)
 - [woocommerce/session] **A guest's `WC()->session->set()` can silently not persist — a logged-in developer never sees it.** → [guest-session-write-needs-the-cart-cookie](gotchas/guest-session-write-needs-the-cart-cookie.md) (s65)
 
@@ -347,6 +347,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/orca] **`git worktree remove` on an Orca worktree deletes the PRIMARY checkout's `node_modules` — the share is a symlink and git walks into it. Remove them through Orca.** → [git-worktree-remove-empties-the-primary-checkouts-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkouts-node-modules.md) (s127)
+- [tooling/orca] **A Run holds ONE active `check --wait`; a second returns `ok:false` with no `result`, which reads as "no worker finished".** → [one-check-wait-per-run-and-a-second-one-fails-invisibly](gotchas/one-check-wait-per-run-and-a-second-one-fails-invisibly.md) (s127)
 - [tooling/grep] **`grep --include` through `wp-env run` silently finds nothing, and WooCommerce is in `plugins/woocommerce.latest-stable`.** → [grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce](gotchas/grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce.md) (s126)
 - [tooling/git] **A fresh worktree of this repo is born DIRTY on four JS files (CRLF blobs vs a new `.gitattributes`), `git checkout --` will not clear it, and it frames whatever formatter ran last. A throwaway `worktree add --detach HEAD` settles it in seconds.** → [a-fresh-worktree-is-born-dirty-on-four-js-files](gotchas/a-fresh-worktree-is-born-dirty-on-four-js-files.md) (s125)
 - [tooling/docs-gate] **A docs gate checks what is LINKED, never what is LISTED — three indexes were missing entries for files that exist (ADR-011, three wiki articles, ten specs) in a green tree, and prose cross-references are invisible to it too.** → [a-docs-gate-checks-links-not-listings](gotchas/a-docs-gate-checks-links-not-listings.md) (s119)
