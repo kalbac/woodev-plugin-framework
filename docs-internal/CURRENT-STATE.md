@@ -12,7 +12,10 @@ fixture) and **#832** (increment 7, the filter row's client half). `main` now ca
 increments 1, 2a, 2b, 6 and 7 plus the #828 data layer. Cards **#826 #827 #830** closed; **#828**
 stays open for its panel (increment 8). Detail: `sessions/s127.md`.
 
-Open work on the page: **#824 #829** (not started), **#828** (panel only), **#820** (umbrella).
+Open work on the page: **#824 #828 #829**, plus the operator's 08.09.2026 rig pass — **#834 #835
+#836 #837 #838**. ⚠ **Recon is done and recorded ON THOSE CARDS; no fix was started.** #837
+(filtering does not work — five distinct defects, three silent) is the blocker; #836 waits on his
+product decision.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -72,9 +75,7 @@ command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies printing `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
-⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — off it reads 67, on it
-reads **1 in the primary, 6 without `plugins-reference/`** (CI reports 6). Gotcha
-`the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
+⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — 1 in the primary, 6 without `plugins-reference/`. Gotcha `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
 ✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606), target PHP.
 
