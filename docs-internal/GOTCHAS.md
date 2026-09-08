@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 293 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 295 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -15,6 +15,7 @@
 - [naming/woodev-spelling] **woodev (single 'd'), NEVER wooddev.** → [woodev-spelling](gotchas/woodev-spelling.md) (s2)
 
 ### [php/*] — PHP / WordPress patterns
+- [php/meta-query] **A `NOT IN` meta clause silently EXCLUDES every row that has no such meta at all - only `NOT EXISTS` makes WP_Meta_Query LEFT JOIN. The dropped rows are usually the majority case, and the query still succeeds.** → [a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all](gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md) (s126)
 - [php/money] **A remaining-capacity bound computed as a raw float subtraction refuses the FINAL CENT: `10.00 - 9.99` is `0.00999999999999978`, so `0.01` compares as above it. Round numbers hide it — 100/60/40 is exact.** → [a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent](gotchas/a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent.md) (s120)
 - [php/inheritance] **A base constructor ASSIGNING a property its subclasses also set discards their answer silently — hidden because all four fixtures declared exactly what the overwrite restored. Neither documented way to declare a feature worked.** → [a-base-constructor-that-assigns-what-the-subclass-just-set](gotchas/a-base-constructor-that-assigns-what-the-subclass-just-set.md) (s123, s124)
 - [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION — **11** times here, not the 7 a manual pass counted — while a mocked suite stays green. An OMITTED return type is a fatal; a `private` base method is not. Run `npm run probe:signature`.** → [a-stricter-base-class-fatals-on-signatures](gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115, corrected s117)
@@ -345,6 +346,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/grep] **`grep --include` through `wp-env run` silently finds nothing, and WooCommerce is in `plugins/woocommerce.latest-stable`.** → [grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce](gotchas/grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce.md) (s126)
 - [tooling/git] **A fresh worktree of this repo is born DIRTY on four JS files (CRLF blobs vs a new `.gitattributes`), `git checkout --` will not clear it, and it frames whatever formatter ran last. A throwaway `worktree add --detach HEAD` settles it in seconds.** → [a-fresh-worktree-is-born-dirty-on-four-js-files](gotchas/a-fresh-worktree-is-born-dirty-on-four-js-files.md) (s125)
 - [tooling/docs-gate] **A docs gate checks what is LINKED, never what is LISTED — three indexes were missing entries for files that exist (ADR-011, three wiki articles, ten specs) in a green tree, and prose cross-references are invisible to it too.** → [a-docs-gate-checks-links-not-listings](gotchas/a-docs-gate-checks-links-not-listings.md) (s119)
 - [tooling/git] **A hook committed `100644` is silently IGNORED by POSIX git, and Windows `core.fileMode=false` hides it — `chmod +x` never reaches the index. `commit-msg` had been inert on Linux since s81.** → [a-git-hook-committed-non-executable-is-silently-ignored-on-posix](gotchas/a-git-hook-committed-non-executable-is-silently-ignored-on-posix.md) (s122)

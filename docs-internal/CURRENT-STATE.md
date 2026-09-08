@@ -6,27 +6,28 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-07 (s125).** s125 built **SP-10 «Заказы доставки»** — the framework-owned admin
-orders page (card **#820**). **Merged: PR #821 and #822** — the page registry, the carrier
-descriptor, the row scope on BOTH order datastores, the REST row contract, and the canonical
-delivery status (§13's nine states plus an honest `unknown`). **PR #823 is OPEN and NOT finished**:
-the first shell was **rejected by the operator on the rig** and rewritten as a native WooCommerce
-admin page; three visible defects are listed on the card and in the PR. Detail: `sessions/s125.md`.
+**As of 2026-09-08 (s126).** **PR #823 is MERGED** (`c8a6be8`) — the SP-10 orders page reached the
+operator's acceptance and carries the server half of its filter row with it. s126 fixed the three
+rejected-shell defects, moved the carrier selector to a `FilterPicker` ABOVE the card, announced the
+delivery-analytics panel under the table, and merged increment 6. Cards **#824 #826 #827 #828 #829**
+were filed by measurement. Detail: `sessions/s126.md`.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
-`wc_admin_register_page()` + `TableCard` from `@woocommerce/components`, at
-`admin.php?page=wc-admin&path=/woodev-shipping-orders`. The first attempt mounted it under our own
-`woodev` menu with `add_submenu_page()` and hand-wrote a `<table>` inside a React component; both
-halves were wrong. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
+`wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
+A `wc-admin` page highlights its parent menu item **client-side**, from the `wpOpenMenu` property
+its `woocommerce_admin_pages_list` entry declares — WordPress renders the menu server-side and never
+sees `path`. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
 
-⚠ **`@woocommerce/components` is consumed as a runtime global, deliberately.** It and the WooCommerce
-dependency-extraction webpack plugin are absent from `node_modules` AND `package-lock.json`, so the
-page reads `window.wc.components` and declares `wc-components` / `wc-admin-app` as script
-dependencies by hand — measured, not preferred.
+⚠ **Route B covers `@woocommerce/navigation` and `@woocommerce/date` too.** `@woocommerce/*` is
+absent from `node_modules` AND `package-lock.json`, so the page reads `window.wc.*` and declares
+`wc-components` / `wc-navigation` / `wc-admin-app` by hand. The carrier filter is **URL-driven**:
+`FilterPicker` navigates rather than calling back, so the active carrier lives in the `carrier`
+query arg and the page re-reads it through `wc.navigation.addHistoryListener()`.
 
 ✅ **The rig is looked at through Orca's own browser** (`orca tab create` / `goto` / `screenshot`),
-not the Chrome extension, which never attaches to `localhost:8973`. The session needs the operator to
-log into wp-admin once; ask for it at the START of any task with a visual half.
+not the Chrome extension. The session needs the operator to log into wp-admin once; ask at the START
+of any task with a visual half. ⚠ The rig runs **`WPLANG=en_US`** — English dates and English WC
+chrome there are the LOCALE, not a defect; our own Russian msgids show through it by design.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -57,7 +58,11 @@ no quota, so the s98 billing block lifted the moment it was switched. The sympto
 in two seconds with no log, which reads as a red build): **#583** + gotcha
 `every-ci-job-failing-in-two-seconds-is-a-billing-block`; rule in the global `CLAUDE.md`.
 
-**Baselines — re-measured 07.09.2026 (s125) in the primary checkout on `kalbac/sp10-page-shell` (`be70c9b`):** unit **3665** / **9045**, 1 skipped, with sodium ON; jest **1765** in **29** suites; **integration 172 / 637**; phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK; catalogue **765** entries. ⚠ `main` itself is at **#822** (unit 3657 / 9019, integration 172); the numbers above include the unmerged page shell. Nothing on this line is carried forward from a previous handoff.
+**Baselines — re-measured 08.09.2026 (s126) on `main` at `c8a6be8`:** unit **3699** / **9088**, 1
+skipped, with sodium ON; jest **1772** in **29** suites; **integration 180 / 658**; phpcs clean —
+**with the warning level ON**; phpstan level 3 no errors; `lint:ts-baseline`, `typecheck`,
+`lint:phone-masks`, `lint:imask`, `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK;
+catalogue **769** entries, **429** translated. Nothing on this line is carried forward.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -116,18 +121,7 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 `scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
 собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
 ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
-✅ **Дыра «гейт отвечает про каталог, а не про код» ЗАКРЫТА** (#791, s121). `lint:i18n` по-прежнему
-читает только `.po`, но рядом встал **`lint:i18n-sources`**: гоняет `wp i18n make-pot` по `woodev/`
-и требует, чтобы каждый извлечённый msgid был И в `.pot`, И в `.po`. Живёт шагом в существующей
-джобе `lint` (там уже PHP 8.1 — ни docker, ни wp-env не нужны), wp-cli **приколот на 2.12.0** = версия
-контейнера рига. Гейт **ОДНОСТОРОННИЙ**: запись каталога без источника не ошибка. Доказан враждебно:
-краснеет и на обычном литерале, и на склеенном msgid, а без wp-cli падает, а не пропускает. Готча
-`lint-i18n-answers-about-the-catalogue-not-the-code`.
-✅ **И он больше не требует, чтобы wp-cli кто-то положил** (#800, s123): `$WP_CLI_PHAR` → `wp` в
-`PATH` → кэш в `~/.cache` → **копия из работающего контейнера рига** (там уже ровно 2.12.0,
-`docker cp` за секунду, сети не надо) → жёсткое падение. Версия провиженного phar проверяется до
-кэширования, строка успеха называет использованный wp-cli. **CI не затронута** — там выигрывает
-`$WP_CLI_PHAR`.
+✅ **Гейт отвечает и про КОД, не только про каталог** (#791, #800). `lint:i18n` читает `.po`; рядом **`lint:i18n-sources`** гоняет `wp i18n make-pot` по `woodev/` и требует каждый извлечённый msgid И в `.pot`, И в `.po`. Гейт ОДНОСТОРОННИЙ; wp-cli приколочен на 2.12.0 и разыскивается сам (вплоть до `docker cp` из контейнера рига). Готча `lint-i18n-answers-about-the-catalogue-not-the-code`; подробности — `sessions/s121.md`, `sessions/s123.md`.
 ✅ **Каталог пересобирается ИЗ КОДА**: `wp i18n make-pot` + `wp i18n update-po` (настоящий msgmerge, в 2.12.0 ЕСТЬ) + `wp i18n make-mo` — ⚠ `.mo` собирается ТОЛЬКО в контейнере рига, и `update-po` сносит весь хвост `#~`. Обе поправки в готче `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`; числа пересборок — в `sessions/s123.md` и `sessions/s125.md`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
 (решение 05.09.2026, повторено 07.09). Перед релизом уже запланировано обновление каталога и проход
@@ -178,7 +172,7 @@ counts PICKS (`nextPickSeq`) and a renderer asks `release.isStale()` before hand
 ⚠ The busy token is the WRONG key for that question — `settleSelect()` clears it unconditionally.
 Gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**Брейншторм по #114 НАЧАТ, НЕ ЗАКОНЧЕН** (s124): 6 корзин, разобран 1 пункт → #819. Состояние — КОММЕНТАРИЕМ на #114. Режим оператора: собирать ВШИРЬ, карточка = замер + гипотезы **без выбора**, гейт на #786.
+**SP-10 — инкременты 1, 2a, 2b и 6 СМЕРЖЕНЫ** (#820 открыта). Дальше по спеке: 7 (клиентская половина фильтров), 3 (массовые действия), 4 (счётчик в меню), 5 (редирект со старых слагов), плюс #824 #826 #827 #828 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: разобран 1 пункт из ~25, состояние комментарием на карточке.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -253,7 +247,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **289**.
+Gotchas: **295**.
 
 ## Program status (high level)
 
