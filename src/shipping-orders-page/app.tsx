@@ -49,17 +49,23 @@ import {
 	ADVANCED_FILTERS_VALUE,
 	ALL_CARRIERS,
 	CARRIER_PARAM,
+	DELIVERY_STATUS_NOT_PARAM,
 	DELIVERY_STATUS_PARAM,
 	FILTER_PARAM,
+	HAS_PICKUP_POINT_PARAM,
 	HAS_TRACKING_PARAM,
+	ORDER_STATUS_NOT_PARAM,
 	ORDER_STATUS_PARAM,
 	advancedFiltersToggleQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
 	getDeliveryStatusFromQuery,
+	getDeliveryStatusNotFromQuery,
+	getHasPickupPointFromQuery,
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
+	getOrderStatusNotFromQuery,
 	isAdvancedFiltersOpen,
 	readDateFilters,
 } from './filters';
@@ -89,8 +95,11 @@ const DATE_AND_ADVANCED_PARAMS = [
 	'before',
 	'after',
 	DELIVERY_STATUS_PARAM,
+	DELIVERY_STATUS_NOT_PARAM,
 	ORDER_STATUS_PARAM,
+	ORDER_STATUS_NOT_PARAM,
 	HAS_TRACKING_PARAM,
+	HAS_PICKUP_POINT_PARAM,
 ];
 
 /** Reads the URL query WooCommerce's navigation module currently reports, or `{}` when the module itself is unavailable. */
@@ -110,8 +119,11 @@ function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters
 		after,
 		before,
 		deliveryStatus: getDeliveryStatusFromQuery( query ),
+		deliveryStatusNot: getDeliveryStatusNotFromQuery( query ),
 		status: getOrderStatusFromQuery( query ),
+		statusNot: getOrderStatusNotFromQuery( query ),
 		hasTracking: getHasTrackingFromQuery( query ),
+		hasPickupPoint: getHasPickupPointFromQuery( query ),
 	};
 }
 
@@ -426,8 +438,11 @@ export default function OrdersPage() {
 			after: urlFilters.after,
 			before: urlFilters.before,
 			status: urlFilters.status,
+			statusNot: urlFilters.statusNot,
 			deliveryStatus: urlFilters.deliveryStatus,
+			deliveryStatusNot: urlFilters.deliveryStatusNot,
 			hasTracking: urlFilters.hasTracking,
+			hasPickupPoint: urlFilters.hasPickupPoint,
 		} )
 			.then( ( res ) => {
 				if ( cancelled ) {
