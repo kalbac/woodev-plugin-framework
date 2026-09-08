@@ -36,9 +36,6 @@ export const FILTER_PARAM = 'filter';
 /** Carrier value meaning "every provider" — the aggregate #694 made the default. */
 export const ALL_CARRIERS = 'all';
 
-/** `filter` value meaning "no advanced filters — just the plain order list". */
-export const FILTER_ALL_VALUE = 'all';
-
 /**
  * The `filter` value that reveals `AdvancedFilters`. Modelled on WooCommerce's
  * own «Аналитика → Заказы» `Show` picker (rig measurement, 08.09.2026: exactly
@@ -56,6 +53,39 @@ export const ADVANCED_FILTERS_VALUE = 'advanced';
 /** Whether the advanced-filter block should be shown for this query. */
 export function isAdvancedFiltersOpen( query: WcQuery ): boolean {
 	return ADVANCED_FILTERS_VALUE === query[ FILTER_PARAM ];
+}
+
+/**
+ * The query update that turns the advanced-filter block on or off.
+ *
+ * ⚠ Turning it OFF must also drop every advanced filter, and that is OUR job now.
+ * It used to be WooCommerce's: `FilterPicker.update()` special-cases
+ * `config.param === 'filter'` and, on any value other than `advanced`, clears the
+ * active filters through `getQueryFromActiveFilters( [], … )`
+ * (`packages/js/components/src/filter-picker/index.js:174`). The operator replaced
+ * that picker with a toggle — a two-state control has no business being a list —
+ * so the branch no longer runs and the `*_is` keys would otherwise stay in the URL,
+ * invisible, still filtering a table whose filter block is hidden.
+ *
+ * `undefined` is how `@wordpress/url`'s `addQueryArgs()` removes a key, which is
+ * what `updateQueryString()` ends up calling.
+ *
+ * @param open whether the advanced block should be open.
+ * @return the query patch to hand to `wc.navigation.updateQueryString()`.
+ */
+export function advancedFiltersToggleQuery( open: boolean ): Record<string, string | undefined> {
+	if ( open ) {
+		return { [ FILTER_PARAM ]: ADVANCED_FILTERS_VALUE };
+	}
+
+	return {
+		[ FILTER_PARAM ]: undefined,
+		[ DELIVERY_STATUS_PARAM ]: undefined,
+		[ ORDER_STATUS_PARAM ]: undefined,
+		[ HAS_TRACKING_PARAM ]: undefined,
+		// `AdvancedFilters` writes this itself when its All/Any select is used.
+		match: undefined,
+	};
 }
 
 /**

@@ -10,6 +10,7 @@ import {
 	ALL_CARRIERS,
 	DEFAULT_DATE_RANGE,
 	FILTER_PARAM,
+	advancedFiltersToggleQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
@@ -306,6 +307,44 @@ describe( 'buildAdvancedFiltersConfig', () => {
 			expect( typeof option.value ).toBe( 'string' );
 			expect( option.value.length ).toBeGreaterThan( 0 );
 			expect( option ).not.toHaveProperty( 'key' );
+		} );
+	} );
+} );
+
+describe( 'advancedFiltersToggleQuery — the reset WooCommerce used to do for us', () => {
+	/**
+	 * Turning the block ON is the easy half: it must say only what it means.
+	 */
+	test( 'switching on writes only the mode', () => {
+		expect( advancedFiltersToggleQuery( true ) ).toEqual( { filter: 'advanced' } );
+	} );
+
+	/**
+	 * ⚠ The half that used to come free. While the mode was a `FilterPicker`, its
+	 * `update()` special-cased `config.param === 'filter'` and cleared the active filters
+	 * on the way out (`packages/js/components/src/filter-picker/index.js:174`). The
+	 * operator replaced it with a toggle — a two-state control has no business being a
+	 * list — so that branch never runs, and a stranded `*_is` key would keep filtering a
+	 * table whose filter block is no longer on screen.
+	 *
+	 * `undefined` is the removal signal: it is how `@wordpress/url`'s `addQueryArgs()`
+	 * drops a key, which is what `updateQueryString()` ends up calling.
+	 */
+	test( 'switching off drops every advanced key, not just the mode', () => {
+		const patch = advancedFiltersToggleQuery( false );
+
+		[ 'filter', 'delivery_status_is', 'status_is', 'has_tracking_is', 'match' ].forEach( ( key ) => {
+			expect( patch ).toHaveProperty( key );
+			expect( patch[ key ] ).toBeUndefined();
+		} );
+	} );
+
+	/** It must not touch the carrier scope or the date range — those are other controls. */
+	test( 'switching off leaves the carrier and date keys alone', () => {
+		const patch = advancedFiltersToggleQuery( false );
+
+		[ 'carrier', 'period', 'compare', 'before', 'after', 'paged' ].forEach( ( key ) => {
+			expect( patch ).not.toHaveProperty( key );
 		} );
 	} );
 } );

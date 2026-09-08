@@ -35,7 +35,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl } from '@wordpress/components';
+import { Notice, SearchControl, ToggleControl } from '@wordpress/components';
 import { fetchOrders, getProviders } from './rest';
 import type {
 	OrderRow,
@@ -50,10 +50,10 @@ import {
 	ALL_CARRIERS,
 	CARRIER_PARAM,
 	DELIVERY_STATUS_PARAM,
-	FILTER_ALL_VALUE,
 	FILTER_PARAM,
 	HAS_TRACKING_PARAM,
 	ORDER_STATUS_PARAM,
+	advancedFiltersToggleQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
@@ -509,22 +509,6 @@ export default function OrdersPage() {
 		} ) ),
 	};
 
-	const filterModeConfig: WcFilterPickerConfig = {
-		label: __( 'Фильтры', 'woodev-plugin-framework' ),
-		param: FILTER_PARAM,
-		staticParams: [ CARRIER_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
-		showFilters: () => true,
-		defaultValue: FILTER_ALL_VALUE,
-		filters: [
-			{ label: __( 'Все заказы', 'woodev-plugin-framework' ), value: FILTER_ALL_VALUE },
-			// LAST on purpose. WooCommerce's own «Аналитика → Заказы» «Show» picker
-			// carries exactly `All orders` + `Advanced filters`, advanced last —
-			// measured on the rig, 08.09.2026 — and the advanced block is revealed
-			// by that option rather than standing open. Operator asked for the same.
-			{ label: __( 'Расширенные фильтры', 'woodev-plugin-framework' ), value: ADVANCED_FILTERS_VALUE },
-		],
-	};
-
 	const dateApi = window.wc?.date;
 	// ⚠ `window.wc.currency` is the MODULE, not the factory — measured on the rig:
 	// `typeof wc.currency === 'object'` and it is NOT callable, while
@@ -607,33 +591,33 @@ export default function OrdersPage() {
 						/>
 					) }
 					{ /*
-					 * #835: display MODE is its own `FilterPicker`, independent of
-					 * carrier scope — always offered, unlike the carrier picker
-					 * above which only exists once there is more than one provider.
+					 * The display MODE is a TOGGLE, not a picker — operator, 09.09.2026, on the
+					 * rig. While «Показать» held one axis (a specific carrier OR a pointwise
+					 * filter across all of them) a list was the honest control. Splitting the
+					 * carrier out onto its own picker (#835) left this one with exactly two
+					 * states, and a two-state list is a wasted click plus a false promise of a
+					 * third option. The control type carries part of the meaning (Rule 10a).
 					 *
-					 * ⚠ `advancedFilters` is REQUIRED here and only here, because
-					 * WooCommerce hard-codes our param name. `FilterPicker.update()`
-					 * (`packages/js/components/src/filter-picker/index.js:174`) does:
-					 *
-					 *     if ( config.param === 'filter' && value !== 'advanced' ) {
-					 *         … getQueryFromActiveFilters( [], query, advancedFilters.filters || {} );
-					 *
-					 * and `advancedFilters` has NO defaultProp — `FilterPicker.defaultProps`
-					 * sets only `query` and `onFilterSelect`. So leaving it off makes
-					 * picking «Все заказы» out of advanced mode throw a TypeError, the
-					 * URL never changes and the merchant is stuck in advanced mode with
-									 * no way back. Passing it also does the right thing: that branch is
-					 * what CLEARS the `*_is` params on the way out, so leaving advanced
-					 * mode drops the advanced filters instead of stranding them in the
-					 * URL. Upstream `ReportFilters` passes it for exactly this reason.
+					 * ⚠ Turning it OFF must also clear the advanced filters, and that is now OUR
+					 * job: the clearing used to come free from `FilterPicker.update()`'s
+					 * hard-coded `param === 'filter'` branch, which no longer runs. See
+					 * `advancedFiltersToggleQuery()`.
 					 */ }
-					{ FilterPicker && navigation && (
-						<FilterPicker
-							config={ filterModeConfig }
-							advancedFilters={ advancedFiltersConfig }
-							path={ navigation.getPath() }
-							query={ navigation.getQuery() }
-						/>
+					{ navigation && (
+						<div className="woodev-orders__mode-toggle">
+							<ToggleControl
+								__nextHasNoMarginBottom
+								label={ __( 'Расширенные фильтры', 'woodev-plugin-framework' ) }
+								checked={ advancedOpen }
+								onChange={ ( next: boolean ) => {
+									navigation.updateQueryString?.(
+										advancedFiltersToggleQuery( next ),
+										navigation.getPath(),
+										navigation.getQuery()
+									);
+								} }
+							/>
+						</div>
 					) }
 					{ /*
 					 * Degrades — renders nothing for this one control — when `wc-date`

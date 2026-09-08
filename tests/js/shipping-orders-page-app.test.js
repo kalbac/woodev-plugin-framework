@@ -226,7 +226,20 @@ beforeAll( () => {
 			// history listeners, exactly like `navigate()` below.
 			updateQueryString: ( query, path, currentQuery ) => {
 				updateQueryStringCalls.push( { query, path, currentQuery } );
-				navigate( { ...currentQuery, ...query } );
+
+				// ⚠ `undefined` REMOVES a key — that is how `@wordpress/url`'s
+				// `addQueryArgs()` behaves, and it is the mechanism the advanced-filter
+				// reset depends on. A plain spread would keep the key with an undefined
+				// value, so a test asserting "the filters were cleared" would pass for
+				// the wrong reason. Same class of fiction as the event ordering above.
+				const merged = { ...currentQuery, ...query };
+				Object.keys( merged ).forEach( ( key ) => {
+					if ( undefined === merged[ key ] ) {
+						delete merged[ key ];
+					}
+				} );
+
+				navigate( merged );
 			},
 		},
 		date: {
@@ -399,7 +412,7 @@ describe( 'carrier filter', () => {
 
 	/**
 	 * `staticParams` carries every OTHER filter-row query key (increment 7),
-	 * including the display-mode picker's own `filter` param (#835) — the date
+	 * including the display-mode toggle's own `filter` param (#835) — the date
 	 * range, the advanced filters and the display mode all describe "what work
 	 * queue view am I in", independent of carrier, so a carrier switch must not
 	 * silently drop them. `paged` is still not one of these keys: it is
@@ -425,67 +438,109 @@ describe( 'carrier filter', () => {
 	} );
 } );
 
-describe( 'the display-mode filter (#835 — split from carrier scope)', () => {
-	/** Unlike the carrier picker, this one is offered even with a single provider. */
-	test( 'renders regardless of how many providers there are, with its own label and options', async () => {
+describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026)', () => {
+	/**
+	 * The operator's reasoning, on the rig: while «Показать» held ONE axis — a specific
+	 * carrier or a pointwise filter across all of them — a list was the honest control.
+	 * Splitting the carrier onto its own picker left this one with exactly two states,
+	 * and a two-state list is a wasted click plus a false promise of a third option.
+	 */
+	test( 'renders as a toggle regardless of provider count, and no mode picker survives', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
 
-		expect( screen.getByText( 'Фильтры' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Все заказы' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Расширенные фильтры' ) ).toBeInTheDocument();
+		expect( screen.queryByTestId( 'filter-picker-filter' ) ).toBeNull();
+		expect( screen.queryByText( 'Фильтры' ) ).toBeNull();
+		expect( screen.queryByText( 'Все заказы' ) ).toBeNull();
 	} );
 
-	/** …and «Расширенные фильтры» is its LAST option, as in WooCommerce's own Analytics. */
-	test( 'offers «Расширенные фильтры» as its last option', async () => {
+	test( 'reflects the URL rather than its own state', async () => {
+		fakeQuery = { filter: 'advanced' };
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		const picker = await screen.findByTestId( 'filter-picker-filter' );
-		const options = picker.textContent;
-
-		expect( options ).toContain( 'Расширенные фильтры' );
-		expect( options.trim().endsWith( 'Расширенные фильтры' ) ).toBe( true );
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeChecked()
+		);
 	} );
 
-	/** `staticParams` must carry `carrier` (#835) or a mode switch would drop the carrier scope. */
-	test( 'owns the filter query param and carries the carrier param and the rest of the row across a change', async () => {
+	test( 'switching it on writes filter=advanced and touches nothing else', async () => {
+		fakeQuery = { carrier: 'cdek' };
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Расширенные фильтры' } );
 
-		const filter = screen.getByTestId( 'filter-picker-filter' );
+		act( () => {
+			toggle.click();
+		} );
 
-		expect( filter ).toHaveAttribute( 'data-param', 'filter' );
-		expect( filter ).toHaveAttribute(
-			'data-static-params',
-			'carrier,period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+		expect( updateQueryStringCalls.at( -1 ).query ).toEqual( { filter: 'advanced' } );
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+	} );
+
+	/**
+	 * ⚠ The half that used to come free and no longer does. `FilterPicker.update()`
+	 * special-cases `param === 'filter'` and clears the active filters on the way out
+	 * (`filter-picker/index.js:174`). With the picker gone that branch never runs, so
+	 * leaving advanced mode would strand `*_is` in the URL — invisible, still filtering
+	 * a table whose filter block is hidden.
+	 */
+	test( 'switching it off clears the advanced filters, not just the mode', async () => {
+		fakeQuery = {
+			carrier: 'cdek',
+			filter: 'advanced',
+			delivery_status_is: 'in_transit',
+			status_is: 'wc-processing',
+			has_tracking_is: 'yes',
+		};
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Расширенные фильтры' } );
+
+		act( () => {
+			toggle.click();
+		} );
+
+		const sent = updateQueryStringCalls.at( -1 ).query;
+
+		expect( sent.filter ).toBeUndefined();
+		expect( sent.delivery_status_is ).toBeUndefined();
+		expect( sent.status_is ).toBeUndefined();
+		expect( sent.has_tracking_is ).toBeUndefined();
+
+		// And it must reach the FETCH, not merely the URL — the carrier scope survives.
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { carrier: 'cdek', deliveryStatus: '', status: [] } )
+			)
 		);
 	} );
 
-	/** Both pickers render at once, each owning its own param and carrying its own label — the actual seam #835 depends on. */
-	test( 'both the carrier and display-mode pickers render together, each with its own param and label', async () => {
+	test( 'the carrier picker still renders beside it, owning its own param', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
 		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
-		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
 
 		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toHaveAttribute( 'data-param', 'carrier' );
-		expect( screen.getByTestId( 'filter-picker-filter' ) ).toHaveAttribute( 'data-param', 'filter' );
 		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Фильтры' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument();
 	} );
 
 	/**
@@ -750,7 +805,7 @@ describe( 'empty and error states', () => {
 		);
 
 		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument();
-		expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.woodev-orders__filters' ) ).toBeInTheDocument();
 	} );
@@ -936,7 +991,7 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 	 * block must NOT be a permanently visible region. WooCommerce's own
 	 * «Аналитика → Заказы» reveals it from the last option of the same «Show»
 	 * picker — measured there before this was built. Here it is revealed by
-	 * the display-mode picker's own `filter` param (#835), split from carrier.
+	 * the display-mode toggle's own `filter` param (#835), split from carrier.
 	 */
 	test( 'stays hidden until the display-mode picker\'s advanced option is chosen', async () => {
 		getProviders.mockReturnValue( twoProviders() );
@@ -944,7 +999,9 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
 		expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument();
 
 		navigate( { filter: 'advanced' } );
@@ -957,7 +1014,7 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
-		// The block is revealed by the display-mode picker's own last option
+		// The block is revealed by the display-mode TOGGLE (operator, 09.09.2026)
 		// (#835 — its own `filter` param, split from `carrier`), so the query
 		// has to say so before it renders at all.
 		navigate( { filter: 'advanced' } );
