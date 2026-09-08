@@ -26,6 +26,25 @@ export const CARRIER_PARAM = 'carrier';
 export const ALL_CARRIERS = 'all';
 
 /**
+ * The `carrier` value that reveals `AdvancedFilters` instead of scoping to a
+ * carrier. Measured against WooCommerce's own «Аналитика → Заказы» on the rig
+ * (08.09.2026): its «Show» picker carries exactly two options, `All orders` and
+ * **`Advanced filters` last** — the advanced block is not a permanently visible
+ * region there, it is revealed by the last item of that same picker. Operator
+ * asked for the same shape, 08.09.2026.
+ *
+ * It shares the `carrier` parameter because `FilterPicker` owns exactly one, and
+ * the two are mutually exclusive in the reference too: choosing the advanced view
+ * scopes to every carrier.
+ */
+export const ADVANCED_FILTERS_VALUE = 'advanced';
+
+/** Whether the advanced-filter block should be shown for this query. */
+export function isAdvancedFiltersOpen( query: WcQuery ): boolean {
+	return ADVANCED_FILTERS_VALUE === query[ CARRIER_PARAM ];
+}
+
+/**
  * `AdvancedFilters` query keys. Every filter below uses a single `is` rule and
  * `allowMultiple: false`, so each produces exactly one key in WooCommerce's own
  * `{filterKey}_{rule}=value` convention (confirmed against
@@ -57,7 +76,15 @@ export const HAS_TRACKING_NO = 'no';
 export const DEFAULT_DATE_RANGE = 'period=year&compare=previous_year';
 
 export function getCarrierFromQuery( query: WcQuery ): string {
-	return query[ CARRIER_PARAM ] || ALL_CARRIERS;
+	const value = query[ CARRIER_PARAM ];
+
+	// `advanced` selects a VIEW, not a carrier — the rows stay unscoped, exactly
+	// as Analytics' own `Advanced filters` option leaves the report scope alone.
+	if ( ! value || ADVANCED_FILTERS_VALUE === value ) {
+		return ALL_CARRIERS;
+	}
+
+	return value;
 }
 
 /** '' means "no delivery-status filter" — a value the REST route's own `validate_delivery_status` also treats as valid. */

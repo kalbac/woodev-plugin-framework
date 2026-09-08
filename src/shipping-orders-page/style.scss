@@ -230,3 +230,45 @@
 		}
 	}
 }
+
+/**
+ * The two basic pickers on one row, the way WooCommerce's own Analytics lays
+ * them out (`.woocommerce-filters__basic-filters`, `display: flex` — measured on
+ * the rig 08.09.2026). `align-items: flex-end` keeps the two buttons aligned
+ * even though only one of them carries a label above it.
+ */
+.woodev-orders__basic-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 16px;
+}
+
+/**
+ * `AdvancedFilters`' own row: the rule `<select>` and the value `<select>`.
+ *
+ * ⚠ Two deliberate corrections to what the component renders by default, both
+ * from the operator's rig pass (08.09.2026):
+ *
+ * 1. The VALUE select stretched to the full width of the card (measured: 968px
+ *    against a 117px rule select), because it is a flex child with nothing
+ *    bounding it. Analytics never shows this, since its own value controls are
+ *    autocompletes rather than plain selects. Bounded here instead.
+ * 2. The RULE select is hidden. Every filter on this page has exactly ONE rule —
+ *    «равен» — because the server cannot honestly offer its negation: a `NOT IN`
+ *    meta clause silently drops every row that has no such meta at all (gotcha
+ *    `a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all`). A
+ *    select whose only choice is already made is noise, and the operator called
+ *    it out as one. The component still submits `is`; only the control is gone.
+ */
+.woocommerce-filters-advanced__line-item {
+	.woocommerce-filters-advanced__rule {
+		display: none;
+	}
+
+	.woocommerce-filters-advanced__input {
+		flex: 0 1 auto;
+		max-width: 320px;
+		min-width: 220px;
+	}
+}

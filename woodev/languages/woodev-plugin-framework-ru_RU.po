@@ -3600,3 +3600,7 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Заказы соответствуют условиям"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Расширенные фильтры"
+msgstr ""

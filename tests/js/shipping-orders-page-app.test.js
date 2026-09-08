@@ -701,11 +701,48 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 } );
 
 describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
+	/**
+	 * The operator caught this on his own rig pass, 08.09.2026: the advanced
+	 * block must NOT be a permanently visible region. WooCommerce's own
+	 * «Аналитика → Заказы» reveals it from the last option of the same «Show»
+	 * picker — measured there before this was built.
+	 */
+	test( 'stays hidden until the carrier picker\'s advanced option is chosen', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument();
+
+		navigate( { carrier: 'advanced' } );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+	} );
+
+	/** …and the option that reveals it is the LAST one in that picker, as in Analytics. */
+	test( 'the carrier picker offers «Расширенные фильтры» as its last option', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const picker = await screen.findByTestId( 'carrier-filter' );
+		const options = picker.textContent;
+
+		expect( options ).toContain( 'Расширенные фильтры' );
+		expect( options.trim().endsWith( 'Расширенные фильтры' ) ).toBe( true );
+	} );
+
 	test( 'offers delivery status, WC order status and tracking presence — never delivery type', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
+		// The block is revealed by the carrier picker's own last option, so the
+		// query has to say so before it renders at all.
+		navigate( { carrier: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 
@@ -725,6 +762,7 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
+		navigate( { carrier: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 

@@ -46,6 +46,7 @@ import type {
 } from './rest';
 import { DELIVERY_STATUS_LABELS, formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
 import {
+	ADVANCED_FILTERS_VALUE,
 	ALL_CARRIERS,
 	CARRIER_PARAM,
 	DELIVERY_STATUS_PARAM,
@@ -57,6 +58,7 @@ import {
 	getDeliveryStatusFromQuery,
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
+	isAdvancedFiltersOpen,
 	readDateFilters,
 } from './filters';
 import type { DateFilterState, UrlFilters } from './filters';
@@ -452,10 +454,20 @@ export default function OrdersPage() {
 		staticParams: FILTER_QUERY_PARAMS,
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
-		filters: providers.map( ( p ) => ( {
-			label: `${ p.label } (${ p.count })`,
-			value: p.id,
-		} ) ),
+		filters: [
+			...providers.map( ( p ) => ( {
+				label: `${ p.label } (${ p.count })`,
+				value: p.id,
+			} ) ),
+			// LAST on purpose. WooCommerce's own «Аналитика → Заказы» «Show» picker
+			// carries exactly `All orders` + `Advanced filters`, advanced last —
+			// measured on the rig, 08.09.2026 — and the advanced block is revealed
+			// by that option rather than standing open. Operator asked for the same.
+			{
+				label: __( 'Расширенные фильтры', 'woodev-plugin-framework' ),
+				value: ADVANCED_FILTERS_VALUE,
+			},
+		],
 	};
 
 	const dateApi = window.wc?.date;
@@ -500,16 +512,30 @@ export default function OrdersPage() {
 	// only narrows `DateRangeFilterPicker`/`dateFilterState`/`dateApi` etc. from
 	// the actual condition guarding that JSX, not from a boolean copy of it — so
 	// this is only for the wrapper `<div>`'s own visibility.
+	/**
+	 * The advanced block is revealed by the carrier picker's LAST option, never
+	 * standing open. Read from the URL like every other filter here —
+	 * `FilterPicker` navigates instead of calling back.
+	 */
+	const advancedOpen = isAdvancedFiltersOpen( getQuery() );
+
 	const hasAnyFilterControl = Boolean(
 		( hasCarrierFilter && FilterPicker && navigation ) ||
 			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
-			( AdvancedFilters && navigation && currency )
+			( advancedOpen && AdvancedFilters && navigation && currency )
 	);
 
 	return (
 		<>
 			{ hasAnyFilterControl && (
 				<div className="woodev-orders__filters">
+					{ /*
+					 * The two basic pickers sit on ONE row. WooCommerce's own
+					 * «Аналитика → Заказы» puts both inside a single flex
+					 * `.woocommerce-filters__basic-filters` — measured on the rig,
+					 * 08.09.2026. Stacking them was a defect the operator caught.
+					 */ }
+					<div className="woodev-orders__basic-filters">
 					{ hasCarrierFilter && FilterPicker && navigation && (
 						<FilterPicker
 							config={ carrierConfig }
@@ -536,13 +562,17 @@ export default function OrdersPage() {
 							} }
 						/>
 					) }
+					</div>
 					{ /*
+					 * NOT a permanently visible region: revealed by the carrier
+					 * picker's «Расширенные фильтры» option, the way Analytics does it.
+					 *
 					 * `currency` is required by `AdvancedFilters`' own contract (its
 					 * README: an instance of `@woocommerce/currency`'s `CurrencyFactory`).
 					 * No instance means the runtime is missing `wc-currency`, and this
 					 * control degrades the same way as the other two.
 					 */ }
-					{ AdvancedFilters && navigation && currency && (
+					{ advancedOpen && AdvancedFilters && navigation && currency && (
 						<AdvancedFilters
 							config={ advancedFiltersConfig }
 							path={ navigation.getPath() }
