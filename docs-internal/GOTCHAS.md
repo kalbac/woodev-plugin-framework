@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 295 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 296 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -84,6 +84,7 @@
 - [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
+- [woocommerce/script-handles] **Declaring `wc-settings` as a script dependency makes WordPress drop your whole bundle SILENTLY — it is only conditionally registered, WooCommerce guards it with `wp_script_is()`, and it is injected into `wc-currency`/`wc-navigation` for you anyway.** → [declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle](gotchas/declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle.md) (s127)
 - [woocommerce/address-save] **WooCommerce saves no address until every required TEXT field in the block is filled — the gate is in the JS.** → [wc-does-not-save-the-address-until-every-required-text-field-is-filled](gotchas/wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) (s65)
 - [woocommerce/session] **A guest's `WC()->session->set()` can silently not persist — a logged-in developer never sees it.** → [guest-session-write-needs-the-cart-cookie](gotchas/guest-session-write-needs-the-cart-cookie.md) (s65)
 
