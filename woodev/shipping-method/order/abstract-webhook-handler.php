@@ -127,11 +127,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 		}
 
 		/**
-		 * Route callback: parses the verified payload and broadcasts it.
+		 * Route callback: parses the verified payload, records the delivery-status sync
+		 * freshness, and broadcasts the payload.
 		 *
 		 * Only reached for requests that already passed {@see self::verify_request()}.
 		 * Subscribers act on the typed payload (e.g. sync the order status); the
 		 * framework changes no order itself.
+		 *
+		 * Records a {@see Delivery_Sync_Status} "last updated" timestamp for this handler's
+		 * `$hook_prefix` (SP-10 spec D9, #828): this base class exists specifically to relay
+		 * carrier delivery-status webhooks, so a payload it successfully processed counts as
+		 * a sync unless {@see self::hook()}'s `webhook_touches_delivery_status` filter says
+		 * otherwise. A blank `$hook_prefix` records nothing — there is no carrier id to key
+		 * the timestamp under. **A plugin that wants this to join the orders page's
+		 * per-carrier freshness breakdown must pass the same id here as it passes to
+		 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider::create()}'s `$id`
+		 * argument** — the framework does not otherwise know the two are the same carrier.
 		 *
 		 * @internal
 		 *
@@ -153,6 +164,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Han
 			 * @param \WP_REST_Request $request the verified inbound request
 			 */
 			do_action( $this->hook( 'webhook_received' ), $payload, $request );
+
+			/**
+			 * Filters whether this webhook payload counts as a delivery-status sync
+			 * (SP-10 spec D9, #828). Defaults to true: this handler's whole purpose is
+			 * relaying carrier delivery-status changes, so a processed payload is presumed
+			 * to touch one unless a concrete handler or its plugin says otherwise (e.g. a
+			 * carrier that also pushes unrelated event types through the same route).
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param bool  $touches_status whether to record a delivery-status sync.
+			 * @param array $payload        the carrier-neutral payload parsed from the request body.
+			 */
+			$touches_status = (bool) apply_filters( $this->hook( 'webhook_touches_delivery_status' ), true, $payload );
+
+			if ( $touches_status ) {
+				Delivery_Sync_Status::record_last_updated( $this->hook_prefix );
+			}
 
 			return new \WP_REST_Response( [ 'received' => true ], 200 );
 		}

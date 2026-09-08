@@ -19,6 +19,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -142,6 +143,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
 					],
+				]
+			);
+
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/sync-status',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_sync_status' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 				]
 			);
 		}
@@ -275,6 +286,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'rows'        => $rows,
 					'total'       => (int) $result->total,
 					'total_pages' => (int) $result->max_num_pages,
+				]
+			);
+		}
+
+		/**
+		 * Returns the delivery-status sync freshness (SP-10 spec D9, #828): every registered
+		 * carrier's `last_updated`/`next_update`, plus an aggregate `last_updated` for the
+		 * (later) "Data status" panel.
+		 *
+		 * **The aggregate is `null` the moment ANY registered carrier has never synced —
+		 * not the oldest of only the carriers that HAVE.** The aggregate exists to make one
+		 * honest statement about the whole table: if СДЭК synced ten minutes ago and Яндекс
+		 * has never synced at all, "обновлено 10 минут назад" is FALSE for every Яндекс row
+		 * on screen. Overstating freshness is exactly the failure this panel exists to
+		 * prevent (§D9's premise is that the delivery status is the one thing on this page
+		 * that CAN be stale); understating it merely sends the merchant to look, and it
+		 * self-corrects the moment that carrier syncs once. A carrier that has never synced
+		 * is not "missing from the calculation" — it is infinitely stale, and the oldest
+		 * (here, effectively infinite) wins. When every carrier HAS synced at least once,
+		 * the aggregate is the oldest of their timestamps, same as before.
+		 *
+		 * The per-carrier breakdown this response carries alongside still reports `null`
+		 * for a never-synced carrier exactly as before — that is what tells the merchant
+		 * WHICH carrier is the reason the aggregate reads `null`.
+		 *
+		 * ⚠ Known gap, accepted for now (#828, flagged for the operator): a carrier that is
+		 * registered but has placed no orders at all yet is indistinguishable here from one
+		 * that has orders and simply never synced — both read `null` and both hold the
+		 * aggregate at `null`. That is honest (this store cannot tell the two apart) if
+		 * unhelpful. Deliberately NOT fixed by coupling this panel to the row/order query —
+		 * that is different scope.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response
+		 */
+		public function get_sync_status( $request ) {
+			$carriers         = [];
+			$oldest           = null;
+			$any_never_synced = false;
+
+			foreach ( $this->registry->get_providers() as $provider ) {
+				$last_updated = Delivery_Sync_Status::get_last_updated( $provider->get_id() );
+				$next_update  = Delivery_Sync_Status::get_next_update( $provider->get_cron_hook() );
+
+				if ( null === $last_updated ) {
+					$any_never_synced = true;
+				} elseif ( null === $oldest || $last_updated < $oldest ) {
+					$oldest = $last_updated;
+				}
+
+				$carriers[] = [
+					'id'           => $provider->get_id(),
+					'label'        => $provider->get_label(),
+					'last_updated' => $last_updated,
+					'next_update'  => $next_update,
+				];
+			}
+
+			return rest_ensure_response(
+				[
+					'last_updated' => $any_never_synced ? null : $oldest,
+					'carriers'     => $carriers,
 				]
 			);
 		}

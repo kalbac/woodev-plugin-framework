@@ -151,6 +151,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $legacy_page_slug;
 
 		/**
+		 * The carrier's own cron hook that refreshes delivery statuses, or null when this
+		 * carrier has no cron concept — e.g. a webhook-only carrier (SP-10 spec D9, #828).
+		 * The framework does not know this hook name and must not guess it: it schedules
+		 * nothing and never fires it, it only reads its next run via
+		 * {@see \Woodev\Framework\Shipping\Order\Delivery_Sync_Status::get_next_update()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string|null
+		 */
+		private $cron_hook;
+
+		/**
 		 * Use {@see self::create()} instead.
 		 *
 		 * @since 2.0.2
@@ -166,6 +179,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string|null          $tracking_meta_key      tracking-number order-meta key.
 		 * @param string|null          $pickup_point_meta_key  pickup-point order-meta key.
 		 * @param string|null          $legacy_page_slug       legacy v1 orders-page slug.
+		 * @param string|null          $cron_hook              carrier cron hook that refreshes delivery statuses.
 		 */
 		private function __construct(
 			string $id,
@@ -178,7 +192,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $tracking_url_template,
 			?string $tracking_meta_key,
 			?string $pickup_point_meta_key,
-			?string $legacy_page_slug
+			?string $legacy_page_slug,
+			?string $cron_hook
 		) {
 			$this->id                     = $id;
 			$this->label                  = $label;
@@ -191,6 +206,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->tracking_meta_key      = $tracking_meta_key;
 			$this->pickup_point_meta_key  = $pickup_point_meta_key;
 			$this->legacy_page_slug       = $legacy_page_slug;
+			$this->cron_hook              = $cron_hook;
 		}
 
 		/**
@@ -214,6 +230,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *     @type string               $tracking_meta_key     tracking-number order-meta key.
 		 *     @type string               $pickup_point_meta_key pickup-point order-meta key.
 		 *     @type string               $legacy_page_slug      legacy v1 orders-page slug.
+		 *     @type string               $cron_hook             carrier cron hook that refreshes delivery statuses.
 		 * }
 		 * @return self
 		 *
@@ -259,7 +276,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'tracking_url_template' ),
 				$nullable_string( $args, 'tracking_meta_key' ),
 				$nullable_string( $args, 'pickup_point_meta_key' ),
-				$nullable_string( $args, 'legacy_page_slug' )
+				$nullable_string( $args, 'legacy_page_slug' ),
+				$nullable_string( $args, 'cron_hook' )
 			);
 		}
 
@@ -387,6 +405,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function get_legacy_page_slug(): ?string {
 			return $this->legacy_page_slug;
+		}
+
+		/**
+		 * Returns the carrier's cron hook that refreshes delivery statuses, or null when
+		 * this carrier has no cron concept of its own (SP-10 spec D9, #828).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null
+		 */
+		public function get_cron_hook(): ?string {
+			return $this->cron_hook;
 		}
 	}
 
