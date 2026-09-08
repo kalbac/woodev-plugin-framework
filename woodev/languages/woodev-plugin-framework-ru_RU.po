@@ -2887,6 +2887,7 @@ msgid "Действия над данными раздела «Доставка�
 msgstr ""
 
 #: shipping-method/settings/class-shipping-settings-tab.php:413
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Доставка"
 msgstr ""
 
@@ -3406,12 +3407,12 @@ msgstr "Локация покупателя"
 msgid "The delivery location the customer selected, or that was detected automatically during checkout."
 msgstr "Локация доставки, которую покупатель выбрал или которая была определена автоматически при оформлении заказа."
 
-#: shipping-method/admin/orders/class-orders-registry.php:178
-#: shipping-method/admin/orders/class-orders-registry.php:179
+#: shipping-method/admin/orders/class-orders-registry.php:215
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Заказы доставки"
 msgstr ""
 
-#: shipping-method/rest-api/class-orders-controller.php:154
+#: shipping-method/rest-api/class-orders-controller.php:235
 msgid "Неизвестный перевозчик."
 msgstr ""
 
@@ -3454,3 +3455,96 @@ msgstr ""
 #: shipping-method/order/class-delivery-status.php:97
 msgid "Неизвестно"
 msgstr ""
+
+#: shipping-method/admin/orders/class-orders-registry.php:340
+msgid "Все перевозчики"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Курьер"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Пункт выдачи"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Почта"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Ожидает оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+#, js-format
+msgid "Заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не удалось загрузить заказы."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Поиск по заказам…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов доставки пока нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Дата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Покупатель"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Оплата"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Трек"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказов"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Компонент WooCommerce «TableCard» недоступен — обновите WooCommerce."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Показать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Скоро"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Здесь появится аналитика по доставке — показатели и график за период."
+msgstr ""
+
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:188
+#, php-format
+msgid "%s must be an ISO 8601 date (YYYY-MM-DD)."
+msgstr "%s должен быть датой в формате ISO 8601 (ГГГГ-ММ-ДД)."
+
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:213
+#, php-format
+msgid "%s is not a recognized delivery status."
+msgstr "%s — неизвестный статус доставки."

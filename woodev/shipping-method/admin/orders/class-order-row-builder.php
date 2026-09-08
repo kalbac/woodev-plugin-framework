@@ -134,7 +134,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		private function build_payment( \WC_Order $order ): array {
 			return [
 				'method_title'    => $order->get_payment_method_title(),
-				'formatted_total' => $order->get_formatted_order_total(),
+				'formatted_total' => self::to_plain_text( $order->get_formatted_order_total() ),
 				'needs_payment'   => $order->needs_payment(),
 			];
 		}
@@ -154,7 +154,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 
 			return [
 				'method_title'      => $order->get_shipping_method(),
-				'formatted_total'   => wc_price( $order->get_shipping_total() ),
+				'formatted_total'   => self::to_plain_text( wc_price( $order->get_shipping_total() ) ),
 				'destination_kind'  => $destination['kind'],
 				'destination_text'  => $destination['text'],
 			];
@@ -241,6 +241,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		}
 
 		/**
+		 * Reduces a WooCommerce money string to plain display text.
+		 *
+		 * `wc_price()` and `WC_Order::get_formatted_order_total()` return MARKUP —
+		 * `<span class="woocommerce-Price-amount"><bdi>2 400,00&nbsp;<span …>&#8381;</span></bdi></span>` —
+		 * which is correct for a PHP-rendered admin column and wrong for a REST row.
+		 * The row is JSON consumed by React, which escapes it and prints the tags as
+		 * text, so the boundary is where the markup has to go: a component cannot
+		 * un-print it without `dangerouslySetInnerHTML`, and injecting server HTML
+		 * into the table is a worse answer than not sending it.
+		 *
+		 * Tags are stripped BEFORE entities are decoded, so a decoded `&lt;` can
+		 * never turn into a tag that the strip already ran past. The result keeps
+		 * WooCommerce's own separators verbatim — a NO-BREAK SPACE (U+00A0) before
+		 * the currency symbol — because the shop's currency settings, not this
+		 * builder, decide how money reads.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $markup money string, possibly carrying markup.
+		 * @return string
+		 */
+		private static function to_plain_text( string $markup ): string {
+			return trim( html_entity_decode( wp_strip_all_tags( $markup ), ENT_QUOTES, 'UTF-8' ) );
+		}
+
+		/**
 		 * Resolves `type`: `courier` | `pickup` | `postal` | `unknown` (M1) — computed by
 		 * the framework from the order's own shipping method, never declared by a
 		 * carrier.
@@ -258,6 +284,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 * `instanceof` chain against the three subclasses would silently misclassify any
 		 * method that skips them, which the framework does not forbid.
 		 *
+		 * Tries every declared {@see Orders_Provider::get_method_ids()} in order and
+		 * uses the FIRST match (round 2: every real carrier ships at least two methods
+		 * — courier and pickup — and a single `method_id` reported `unknown` for
+		 * whichever one it did not name).
+		 *
 		 * A missing shipping line, a method the current zone no longer has, or a
 		 * resolved object that is not a `Shipping_Method` at all (WC's own `false`
 		 * "not found" included) all resolve to `unknown`, never a fatal.
@@ -273,7 +304,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				return 'unknown';
 			}
 
-			$item = Shipping_Helper::get_order_shipping_item( $order, $provider->get_method_id() );
+			$item = null;
+			foreach ( $provider->get_method_ids() as $method_id ) {
+				$item = Shipping_Helper::get_order_shipping_item( $order, $method_id );
+
+				if ( null !== $item ) {
+					break;
+				}
+			}
 
 			if ( null === $item ) {
 				return 'unknown';

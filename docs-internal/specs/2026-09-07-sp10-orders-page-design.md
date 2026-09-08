@@ -294,11 +294,28 @@ showed the other five bundles' dependency arrays byte-for-byte identical. So: co
 `window.wc.components`, declare `wc-components` / `wc-admin-app` as script dependencies by hand —
 which is what Dokan does in production.
 
-⚠ **One placement question is still open, and both answers are real.** The implementation put the
-carrier selector **inside** `TableCard`'s actions slot, because `TableCard` has no tabs. Reading
-Analytics → Orders on the rig shows WooCommerce switching report scope with a labelled
-`FilterPicker` **above** the card («Show → All orders»). Decide it with both pages open side by
-side; do not settle it from either description alone.
+✅ **Placement SETTLED by the operator on the rig, 08.09.2026: `FilterPicker` ABOVE the card.** The
+first implementation put the carrier selector inside `TableCard`'s `actions` slot because
+`TableCard` has no tabs; Analytics → Orders switches report scope with a labelled `FilterPicker`
+above the card («Показать → Все заказы»), and both pages were opened side by side before he chose.
+Do not reopen it.
+
+⚠ **That choice carries a consequence the `SelectControl` did not have: `FilterPicker` is
+URL-driven.** It does not call back with a value — it rewrites the query parameter named by
+`config.param` and NAVIGATES (`packages/js/components/src/filter-picker/README.md`; the runtime
+contract was also read off the live page, since the shipped bundle is minified and carries no
+`propTypes`). Three things follow, all of them implemented:
+
+- the active carrier lives in the `carrier` query parameter, so the view is linkable and the
+  browser's back button works on it — the page reads it from the URL, never from its own state;
+- the page therefore subscribes to `wc.navigation.addHistoryListener()`, which returns its own
+  unlisten function (verified against the live runtime, not recalled), and re-reads the carrier on
+  every history change;
+- `wc-navigation` joins `wc-components` / `wc-admin-app` in the hand-declared script dependencies —
+  Route B applies to `@woocommerce/navigation` exactly as it does to the components.
+
+`config.staticParams` is deliberately **empty**: nothing is carried across a carrier change, so
+`paged` cannot survive it and strand the merchant on a page that no longer exists.
 
 **The data layer is untouched by all of this.** The registry, the descriptor, the dual-datastore
 scope query, the canonical status and the REST row contract are UI-agnostic and survived this
@@ -316,8 +333,136 @@ correction unchanged — which is the argument for having built them first.
 4. **Menu counter and tab counts** (D6).
 5. **Legacy slug redirect** (D1) — now targeting `page=wc-admin&path=/woodev-shipping-orders`.
 
-#710 (the «Создать заказ» modal) and #711 (ROI/charts) stay outside this spec — the first needs the
-operator's brainstorm by his own instruction, the second is not a v1 goal.
+#710 (the «Создать заказ» modal) stays outside this spec — it needs the operator's brainstorm by his
+own instruction.
+
+## D8. The delivery-analytics panel is ANNOUNCED in v1, not built (#711)
+
+**Operator, 08.09.2026, on the rig:** ship the frame today, **below** the table — not above it the
+way Analytics does — behind a «Скоро» overlay. In his words: *«даже если ROI не войдёт в V2, но
+пользователи уже будут видеть что такая возможность будет»*. So #711's placement and presence are
+now decided; **what it counts is still open on that card** and nothing here narrows it.
+
+**The frame is WooCommerce's own `SummaryListPlaceholder` + `ChartPlaceholder`**, not a drawing of a
+chart — four tiles over a plot area, the shape s125 already found in Analytics. Two consequences
+that are easy to get wrong:
+
+- they are LOADING skeletons, so their shimmer must be stopped and `ChartPlaceholder`'s real
+  `Spinner` hidden outright — a frozen spinner glyph still reads as a stuck load, which is the one
+  impression this panel must not give;
+- `ChartPlaceholder`'s own `defaultProps` is `{ height: 0 }`, so a height must be passed or the
+  block collapses to nothing.
+
+The frame is `aria-hidden`; the overlay carries the message. If a WooCommerce without those two
+components is ever running, the panel renders nothing rather than half of itself.
+
+## D9. «Data status» IS ours — the delivery status is the stale thing, not the list
+
+⚠ **This section replaces an earlier answer that was wrong.** It first read: the list is a live
+`wc_get_orders()`, nothing can be stale, the panel is inapplicable. The operator corrected it on
+08.09.2026, and he is right — the mistake was scoping «stale» to the QUERY instead of to the DATA
+the page exists to show.
+
+What Analytics uses the panel for is the freshness of its imported `wc_order_stats` lookup tables
+(`src/Admin/API/Reports/*/DataStore.php`). Our list is indeed live. **But the delivery status inside
+each row is not**: it is a stored carrier value, refreshed asynchronously — *«перевозчики обновляют
+статусы доставки либо по крону либо по вебхуку»*. So the page shows exactly one thing that goes
+stale, and it is the column the page exists for.
+
+**Both refresh paths are real, and measured:**
+
+| path | where it already lives |
+|---|---|
+| cron | the carrier plugin's own scheduled event — edostavka: `wc_edostavka_orders_update`, a configurable interval in minutes behind an on/off toggle, its own `wc_edostavka_orders` schedule (`includes/class-wc-edostavka-cron.php`) |
+| webhook | the FRAMEWORK already owns the seam — `Abstract_Webhook_Handler` (`order/abstract-webhook-handler.php`): route registration, signature verification, payload parsing |
+
+So the two fields map cleanly, and this is the operator's own reading: **«Last updated» reflects
+EITHER path** — whichever last changed a status — while **«Next update» exists only when a cron is
+what refreshes them**, and is absent for a webhook-only carrier.
+
+**What is missing, and it is one half not two:** «Next update» already has a source —
+`wp_next_scheduled()` on the carrier's hook, which edostavka **already renders in its own settings**
+(`generate_cron_update_html()` → `views/html-cron-update.php`). **«Last updated» has none.** A grep
+across every shipped plugin finds no stored last-sync timestamp anywhere: nothing records when a
+status was last refreshed, by either path. That timestamp has to be written, and the natural writers
+are the two seams above.
+
+⚠ **The framework does not know the carrier's cron hook name**, and must not guess it. That belongs
+on the provider descriptor next to `status_map` / `tracking_meta_key` — the same seam every other
+carrier-specific fact on this page already uses (D2).
+
+## D10. Which filters are POSSIBLE — measured against the code, not chosen by taste
+
+The operator asked for «Date range» and «Advanced filters» (#826, #827) on 08.09.2026 and decided
+the section gets finished properly rather than deferred. The filter list is not a matter of taste:
+a filter has to reach `wc_get_orders()`, and **part of the row is computed at build time**, not
+stored. Measured against `Order_Row_Builder`:
+
+| row field | where it comes from | filterable on the server? |
+|---|---|---|
+| date | native `date_created` | ✅ |
+| carrier | marker meta | ✅ — already is; it is the scope query |
+| WC order status | native | ✅ |
+| tracking present | `get_tracking_meta_key()` | ✅ meta `EXISTS` / `NOT EXISTS` |
+| **delivery status** | `get_status_meta_key()` — the carrier's RAW value in order meta | ✅ **but not directly** — see below |
+| **delivery type** (курьер/ПВЗ/постамат) | order item → `instance_id` → `WC_Shipping_Zones::get_shipping_method()` → `is_courier_shipping()` | ⛔ **NO** — three hops ending in the shipping zones; nothing to query |
+| `needs_payment` | computed from status + gateway | ⛔ no (reachable indirectly through order status) |
+
+**The delivery-status filter needs an inversion, and it is the one real complication.** The meta
+holds the carrier's RAW status; the filter is on the CANONICAL one. So `Orders_Query` has to invert
+`status_map` — canonical → the list of raw values that map to it — and query `IN`. Each provider
+has its OWN map, so on the aggregate that inversion is per-provider and the meta query becomes an
+OR across carriers, exactly like the scope query already is.
+
+⛔ **Do not promise a delivery-type filter.** Making it work means denormalising the type into meta
+when the order is placed, which is a data change, not a filter — a separate decision, and it would
+only ever cover orders placed after it shipped.
+
+⚠ Every one of these must be measured on BOTH datastores. The rig is HPOS, the integration
+environment is the legacy CPT, and `wc_get_orders()` has already once dropped a `meta_query` there
+and returned an unfiltered result with no error (gotcha
+`wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`).
+
+## D11. The filter row, and the default period
+
+**The operator decided on 08.09.2026 to finish this section properly rather than defer it** — «раз
+мы уже до этого раздела добрались, то доделываем его основательно». So #826 (Date range) and #827
+(Advanced filters) are in scope, and «Advanced filters» means WooCommerce's `AdvancedFilters`
+component — he asked for it by name, so that is not an open choice.
+
+**Default period: «Год с начала года» (`period=year`) — settled by the operator, 08.09.2026.**
+
+⚠ **The consequence he was choosing against: WooCommerce's picker has NO «all time».** Its presets
+run Today · Yesterday · Week to date · Last week · Month to date · Last month · Quarter to date ·
+Last quarter · Year to date · Last year, plus Custom — measured by opening it on the rig, not
+recalled. Adopting it therefore makes this list **permanently period-bounded**, which it is not
+today. The widest preset was chosen because a delivery-orders list is a work queue: an order stuck
+two months ago is exactly the one the merchant opens the page for, and Analytics' own «Month to
+date» default would hide it.
+
+**No period COMPARISON.** `DateRangeFilterPicker` carries Analytics' «vs. Previous year», which
+answers a question about dynamics. This is a list of orders, not a trend, so the compare control is
+not wired and `compare` is not sent to the server.
+
+**Everything in the row is URL-driven**, like the carrier picker already is (D7): filters live in
+the query, the view stays linkable, and the back button works across all of them.
+
+**Contract note for the date args:** `@woocommerce/date` is reached the Route-B way like everything
+else — `window.wc.date` behind the `wc-date` handle — and supplies `getDateParamsFromQuery()`,
+`getCurrentDates()` and `isoDateFormat` (`YYYY-MM-DD`), which is what
+`DateRangeFilterPicker`'s required `dateQuery` prop is built from.
+
+## Increments, continued
+
+6. **The filter row, server half** (#826, #827 — D10, D11). `Orders_Controller` accepts the new
+   args; `Orders_Query::build_args()` turns them into `wc_get_orders()` args: `date_created` for the
+   range, the inverted `status_map` for the delivery status, native `status`, and a meta
+   `EXISTS`/`NOT EXISTS` for tracking presence. **No UI.** ⚠ Proven on BOTH datastores or not proven
+   — the legacy-CPT path already needs `translate_marker_keys_query_var` for the marker key, and
+   every new meta condition has to survive the same translation.
+7. **The filter row, client half.** `DateRangeFilterPicker` + `AdvancedFilters` beside the carrier
+   `FilterPicker`, all reading and writing the URL.
+8. **«Data status»** (#828, D9) — needs the last-sync timestamp built first; it is not a UI task.
 
 ## What this does NOT do
 

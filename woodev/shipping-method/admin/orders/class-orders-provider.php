@@ -22,10 +22,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 	 * framework-owned «Заказы доставки» page (SP-10 spec D2).
 	 *
 	 * The framework derives none of these strings — the plugin supplies its own id,
-	 * label, order-meta keys and shipping method id, the same rule already enforced by
+	 * label, order-meta keys and shipping method ids, the same rule already enforced by
 	 * {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler::resolve()} and
 	 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin::get_page_slug()}. `id`,
-	 * `label`, `marker_meta_key` and `method_id` are required; every other field is
+	 * `label`, `marker_meta_key` and `method_ids` are required; every other field is
 	 * optional and carries a documented meaning for its absence. `legacy_page_slug` is
 	 * accepted and stored now but not consumed until increment 5.
 	 *
@@ -63,16 +63,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $marker_meta_key;
 
 		/**
-		 * The WC shipping method id this carrier ships under — what
+		 * The WC shipping method ids this carrier ships under — a carrier commonly
+		 * ships more than one (courier AND pickup being the usual pair; round 2 of
+		 * this increment fixed exactly that miss). The row builder tries each id in
+		 * order through
 		 * {@see \Woodev\Framework\Shipping\Shipping_Helper::get_order_shipping_item()}
-		 * matches against to find the order's shipping line item, which in turn is how
-		 * the row's `type` field is resolved.
+		 * and uses the first match to resolve the row's `type` field.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @var string
+		 * @var string[]
 		 */
-		private $method_id;
+		private $method_ids;
 
 		/**
 		 * Order-meta key the carrier's own raw delivery status lives under, or null when
@@ -156,7 +158,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string               $id                     carrier/tab id.
 		 * @param string               $label                  tab label.
 		 * @param string               $marker_meta_key        order-meta marker key.
-		 * @param string               $method_id              WC shipping method id.
+		 * @param string[]             $method_ids             WC shipping method ids.
 		 * @param string|null          $status_meta_key        carrier status order-meta key.
 		 * @param array<string,string> $status_map             raw status => canonical state.
 		 * @param array<string,string> $status_labels          raw status => human label.
@@ -169,7 +171,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			string $id,
 			string $label,
 			string $marker_meta_key,
-			string $method_id,
+			array $method_ids,
 			?string $status_meta_key,
 			array $status_map,
 			array $status_labels,
@@ -181,7 +183,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->id                     = $id;
 			$this->label                  = $label;
 			$this->marker_meta_key        = $marker_meta_key;
-			$this->method_id              = $method_id;
+			$this->method_ids             = $method_ids;
 			$this->status_meta_key        = $status_meta_key;
 			$this->status_map             = $status_map;
 			$this->status_labels          = $status_labels;
@@ -199,7 +201,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string              $id              carrier/tab id. Required, non-empty.
 		 * @param string              $label           tab label. Required, non-empty.
 		 * @param string              $marker_meta_key order-meta marker key (SP-10 M2). Required, non-empty.
-		 * @param string              $method_id       WC shipping method id. Required, non-empty.
+		 * @param string[]            $method_ids      WC shipping method ids. Required, non-empty —
+		 *                                              a carrier commonly ships more than one (courier
+		 *                                              AND pickup being the usual pair).
 		 * @param array<string,mixed> $args            {
 		 *     Optional fields.
 		 *
@@ -215,12 +219,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *
 		 * @throws Shipping_Exception when a required field is empty.
 		 */
-		public static function create( string $id, string $label, string $marker_meta_key, string $method_id, array $args = [] ): self {
+		public static function create( string $id, string $label, string $marker_meta_key, array $method_ids, array $args = [] ): self {
 			foreach ( [
 				'id'              => $id,
 				'label'           => $label,
 				'marker_meta_key' => $marker_meta_key,
-				'method_id'       => $method_id,
 			] as $field => $value ) {
 				if ( '' === $value ) {
 					throw new Shipping_Exception(
@@ -228,6 +231,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 					);
 				}
 			}
+
+			if ( [] === $method_ids ) {
+				throw new Shipping_Exception(
+					'Orders_Provider requires a non-empty "method_ids": the plugin must supply it.'
+				);
+			}
+
+			$method_ids = array_values( array_map( 'strval', $method_ids ) );
 
 			$nullable_string = static function ( array $args, string $key ): ?string {
 				return isset( $args[ $key ] ) && '' !== $args[ $key ] ? (string) $args[ $key ] : null;
@@ -241,7 +252,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$id,
 				$label,
 				$marker_meta_key,
-				$method_id,
+				$method_ids,
 				$nullable_string( $args, 'status_meta_key' ),
 				$string_map( $args, 'status_map' ),
 				$string_map( $args, 'status_labels' ),
@@ -286,14 +297,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		}
 
 		/**
-		 * Returns the WC shipping method id.
+		 * Returns the WC shipping method ids, in declaration order.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return string
+		 * @return string[]
 		 */
-		public function get_method_id(): string {
-			return $this->method_id;
+		public function get_method_ids(): array {
+			return $this->method_ids;
 		}
 
 		/**

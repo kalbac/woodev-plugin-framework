@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit: Orders_Provider descriptor validation (SP-10 increments 1 + 2a).
+ * Unit: Orders_Provider descriptor validation (SP-10 increments 1, 2a, 2b round 2).
  *
  * @package Woodev\Tests\Unit
  */
@@ -13,12 +13,27 @@ use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
 class ShippingOrdersProviderTest extends TestCase {
 
 	public function test_create_stores_required_fields(): void {
-		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', 'cdek' );
+		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', [ 'cdek' ] );
 
 		$this->assertSame( 'cdek', $provider->get_id() );
 		$this->assertSame( 'СДЭК', $provider->get_label() );
 		$this->assertSame( '_wc_edostavka_shipping', $provider->get_marker_meta_key() );
-		$this->assertSame( 'cdek', $provider->get_method_id() );
+		$this->assertSame( [ 'cdek' ], $provider->get_method_ids() );
+	}
+
+	/**
+	 * Round 2, defect 1: every real carrier ships at least two shipping methods
+	 * (courier and pickup) — `method_ids` must carry all of them, in order.
+	 */
+	public function test_create_stores_several_method_ids_in_order(): void {
+		$provider = Orders_Provider::create(
+			'cdek',
+			'СДЭК',
+			'_wc_edostavka_shipping',
+			[ 'cdek_courier', 'cdek_pickup' ]
+		);
+
+		$this->assertSame( [ 'cdek_courier', 'cdek_pickup' ], $provider->get_method_ids() );
 	}
 
 	public function test_create_stores_but_does_not_yet_consume_legacy_page_slug(): void {
@@ -26,7 +41,7 @@ class ShippingOrdersProviderTest extends TestCase {
 			'cdek',
 			'СДЭК',
 			'_wc_edostavka_shipping',
-			'cdek',
+			[ 'cdek' ],
 			[
 				'legacy_page_slug' => 'wc_edostavka_orders',
 			]
@@ -36,7 +51,7 @@ class ShippingOrdersProviderTest extends TestCase {
 	}
 
 	public function test_optional_fields_default_sanely(): void {
-		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', 'cdek' );
+		$provider = Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', [ 'cdek' ] );
 
 		$this->assertNull( $provider->get_tracking_url_template() );
 		$this->assertNull( $provider->get_legacy_page_slug() );
@@ -51,28 +66,32 @@ class ShippingOrdersProviderTest extends TestCase {
 		$this->expectException( Shipping_Exception::class );
 		$this->expectExceptionMessage( 'id' );
 
-		Orders_Provider::create( '', 'СДЭК', '_wc_edostavka_shipping', 'cdek' );
+		Orders_Provider::create( '', 'СДЭК', '_wc_edostavka_shipping', [ 'cdek' ] );
 	}
 
 	public function test_empty_label_throws(): void {
 		$this->expectException( Shipping_Exception::class );
 		$this->expectExceptionMessage( 'label' );
 
-		Orders_Provider::create( 'cdek', '', '_wc_edostavka_shipping', 'cdek' );
+		Orders_Provider::create( 'cdek', '', '_wc_edostavka_shipping', [ 'cdek' ] );
 	}
 
 	public function test_empty_marker_meta_key_throws(): void {
 		$this->expectException( Shipping_Exception::class );
 		$this->expectExceptionMessage( 'marker_meta_key' );
 
-		Orders_Provider::create( 'cdek', 'СДЭК', '', 'cdek' );
+		Orders_Provider::create( 'cdek', 'СДЭК', '', [ 'cdek' ] );
 	}
 
-	public function test_empty_method_id_throws(): void {
+	/**
+	 * Round 2, defect 1: `method_ids` is a required, non-empty LIST — same
+	 * validation style as the other required fields.
+	 */
+	public function test_empty_method_ids_list_throws(): void {
 		$this->expectException( Shipping_Exception::class );
-		$this->expectExceptionMessage( 'method_id' );
+		$this->expectExceptionMessage( 'method_ids' );
 
-		Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', '' );
+		Orders_Provider::create( 'cdek', 'СДЭК', '_wc_edostavka_shipping', [] );
 	}
 
 	/**
@@ -87,7 +106,7 @@ class ShippingOrdersProviderTest extends TestCase {
 			'cdek',
 			'СДЭК',
 			'_wc_edostavka_shipping',
-			'cdek',
+			[ 'cdek' ],
 			[
 				'status_meta_key'        => '_wc_edostavka_status',
 				'status_map'             => $status_map,
@@ -115,7 +134,7 @@ class ShippingOrdersProviderTest extends TestCase {
 			'cdek',
 			'СДЭК',
 			'_wc_edostavka_shipping',
-			'cdek',
+			[ 'cdek' ],
 			[
 				'status_map'    => 'not-an-array',
 				'status_labels' => 'not-an-array',

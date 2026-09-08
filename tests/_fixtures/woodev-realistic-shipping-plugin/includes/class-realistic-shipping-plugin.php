@@ -33,6 +33,72 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				],
 			]
 		);
+
+		$this->init_realistic_orders_page();
+	}
+
+	/**
+	 * Registers this fixture's `Orders_Provider` with the framework-owned «Заказы
+	 * доставки» page (SP-10 #820, round 2 defect 2: nothing registered a provider,
+	 * so the page did not exist on the rig at all — the submenu is correctly
+	 * absent without one, which reads as "the page was never built").
+	 *
+	 * Guarded exactly like {@see self::init_realistic_pickup()}: this fixture is
+	 * also loaded by the unit suite, where the orders classes may not be included,
+	 * and it must stay loadable there.
+	 *
+	 * `status_map` deliberately leaves `CUSTOMS_HOLD` unmapped — an order seeded
+	 * with that raw status resolves to `Delivery_Status::UNKNOWN`, which is the
+	 * point: the unmapped path must be visible on the live rig, not only in a
+	 * test. Seeding an order with it is the operator's job, not this fixture's.
+	 *
+	 * Both fixture method ids are declared (round 2 defect 1: a carrier commonly
+	 * ships more than one method — courier AND pickup — and a single `method_id`
+	 * reported `unknown` `type` for whichever one it did not name).
+	 *
+	 * @return void
+	 */
+	private function init_realistic_orders_page(): void {
+
+		if ( ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Provider' )
+			|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' ) ) {
+			return;
+		}
+
+		$provider = \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider::create(
+			'realistic',
+			'Реалистичная доставка',
+			'_woodev_realistic_shipping_marker',
+			[ 'woodev_realistic_shipping', 'woodev_realistic_pickup_shipping' ],
+			[
+				'status_meta_key'       => '_woodev_realistic_status',
+				'status_map'            => [
+					'NEW'        => 'created',
+					'ACCEPTED'   => 'in_transit',
+					'IN_TRANSIT' => 'in_transit',
+					'READY'      => 'ready_for_pickup',
+					'DELIVERED'  => 'delivered',
+					'RETURNED'   => 'returned',
+					'CANCELLED'  => 'cancelled',
+					// 'CUSTOMS_HOLD' is INTENTIONALLY absent — see this method's docblock.
+				],
+				'status_labels'         => [
+					'NEW'          => 'Создан',
+					'ACCEPTED'     => 'Принят перевозчиком',
+					'IN_TRANSIT'   => 'В пути',
+					'READY'        => 'Готов к выдаче',
+					'DELIVERED'    => 'Доставлен',
+					'RETURNED'     => 'Возвращён',
+					'CANCELLED'    => 'Отменён',
+					'CUSTOMS_HOLD' => 'Задержан на таможне',
+				],
+				'tracking_meta_key'     => '_woodev_realistic_tracking_number',
+				'tracking_url_template' => 'https://realistic.example.test/track/{tracking}',
+				'pickup_point_meta_key' => '_woodev_realistic_pickup_point',
+			]
+		);
+
+		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
 	}
 
 	/**

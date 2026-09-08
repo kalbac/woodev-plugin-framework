@@ -21,17 +21,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 	/**
 	 * Singleton aggregator for the framework-owned «Заказы доставки» page (SP-10 spec D1).
 	 *
-	 * The exact structural mirror of {@see Settings_Page_Registry}: collects
-	 * {@see Orders_Provider} descriptors registered by carrier plugins, registers the
-	 * `woodev-shipping-orders` submenu under the existing `woodev` top-level menu only
-	 * when at least one provider is present, and registers the aggregated REST
-	 * controller through {@see \Woodev_REST_V1_Registrar}. Increment 1 only: no assets
-	 * are enqueued and {@see self::render_page()} prints an empty mount point — the
-	 * React shell is increment 2 (SP-10 spec D7).
+	 * Collects {@see Orders_Provider} descriptors registered by carrier plugins,
+	 * registers the page inside WooCommerce's own admin app via `wc_admin_register_page()`
+	 * under the `woocommerce` menu — like every shipped v1 plugin, not a page of our own
+	 * (increment 2b rewrite; the previous `add_submenu_page()`-under-`woodev` design was
+	 * rejected on the rig) — only when at least one provider is present, registers the
+	 * aggregated REST controller through {@see \Woodev_REST_V1_Registrar}, and enqueues the
+	 * React bundle that attaches to the WooCommerce app through
+	 * `addFilter( 'woocommerce_admin_pages_list', ... )` (SP-10 spec D7).
 	 *
 	 * @since 2.0.2
 	 */
-	final class Orders_Registry {
+	class Orders_Registry {
 
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
@@ -44,6 +45,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 		/** @var bool whether the shared hooks were added. */
 		private $hooked = false;
+
+		/**
+		 * Any one registered plugin, to source the shared framework asset path and
+		 * version from (increment 2b). @see self::register_provider().
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var \Woodev_Plugin|null
+		 */
+		private $plugin;
 
 		/**
 		 * Returns the singleton.
@@ -69,11 +80,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Provider $provider carrier descriptor.
+		 * @param Orders_Provider     $provider carrier descriptor.
+		 * @param \Woodev_Plugin|null $plugin  owning plugin, to source the shared framework
+		 *                                     asset path/version from (increment 2b). Any one
+		 *                                     registered plugin works — the framework copy is
+		 *                                     identical across every plugin that vendors it,
+		 *                                     the same assumption {@see Settings_Page_Registry::get_asset_plugin()}
+		 *                                     already makes. The first plugin passed wins;
+		 *                                     later calls (with or without one) do not replace it.
 		 * @return void
 		 */
-		public function register_provider( Orders_Provider $provider ): void {
+		public function register_provider( Orders_Provider $provider, $plugin = null ): void {
 			$this->providers[ $provider->get_id() ] = $provider;
+
+			if ( null === $this->plugin && $plugin instanceof \Woodev_Plugin ) {
+				$this->plugin = $plugin;
+			}
+
 			$this->add_hooks();
 		}
 
@@ -142,7 +165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Adds the shared menu / REST / CPT-query-translation hooks exactly once.
+		 * Adds the shared menu / enqueue / REST / CPT-query-translation hooks exactly once.
 		 *
 		 * @since 2.0.2
 		 *
@@ -155,12 +178,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 		}
 
 		/**
-		 * Registers the «Заказы доставки» submenu when ≥1 provider is present.
+		 * Registers the «Заказы доставки» page inside WooCommerce's own admin app when
+		 * ≥1 provider is present.
+		 *
+		 * Uses `wc_admin_register_page()` under the `woocommerce` parent menu — the page
+		 * lives where every shipped v1 plugin's page already lives (increment 2b rewrite;
+		 * rejected on the rig when it lived under our own `woodev` menu). A `wc-admin` page
+		 * has no render callback of its own — WooCommerce's app renders whatever component
+		 * `./index.tsx` pushes onto `woocommerce_admin_pages_list` for this `path` — so
+		 * there is no `render_page()` counterpart any more.
 		 *
 		 * @internal
 		 *
@@ -173,21 +205,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			add_submenu_page(
-				'woodev',
-				__( 'Заказы доставки', 'woodev-plugin-framework' ),
-				__( 'Заказы доставки', 'woodev-plugin-framework' ),
-				$this->get_page_capability(),
-				self::PAGE_SLUG,
-				[ $this, 'render_page' ]
+			if ( ! function_exists( 'wc_admin_register_page' ) ) {
+				return;
+			}
+
+			wc_admin_register_page(
+				[
+					'id'         => self::PAGE_SLUG,
+					'title'      => __( 'Заказы доставки', 'woodev-plugin-framework' ),
+					'parent'     => 'woocommerce',
+					'path'       => '/' . self::PAGE_SLUG,
+					'capability' => $this->get_page_capability(),
+				]
 			);
 		}
 
 		/**
-		 * Renders the wrapper + an empty mount point.
+		 * Enqueues the shipping-orders-page bundle + inline bootstrap on the `wc-admin`
+		 * screen (increment 2b rewrite — no more per-hook `admin_print_scripts-{$hook}`,
+		 * `wc_admin_register_page()` returns no hook suffix to hang that off of).
 		 *
-		 * No assets are enqueued in this increment — the React shell lands in increment 2
-		 * (SP-10 spec D7).
+		 * Gated on {@see wc_admin_is_registered_page()} rather than a hardcoded screen id —
+		 * the documented WooCommerce passthrough for "is the current admin page a wc-admin
+		 * page" — so the bundle loads only where it is actually usable, not on every admin
+		 * screen. Rows are NOT inlined — the app fetches them from
+		 * `GET woodev/v1/shipping/orders` (cap-filtered server-side, increment 1); what IS
+		 * inlined is what the page needs before its first fetch: the REST root, a nonce, and
+		 * the provider list (id, label, and a count each carrier can show immediately,
+		 * increment 2b's `SelectControl` filter — see `./app.tsx`).
 		 *
 		 * @internal
 		 *
@@ -195,10 +240,137 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @return void
 		 */
-		public function render_page(): void {
-			echo '<div class="wrap woodev-shipping-orders-wrap">';
-			echo '<div id="woodev-shipping-orders-app"></div>';
-			echo '</div>';
+		public function enqueue_assets(): void {
+			if ( ! $this->has_providers() ) {
+				return;
+			}
+
+			if ( ! $this->is_wc_admin_screen() ) {
+				return;
+			}
+
+			$plugin = $this->get_asset_plugin();
+
+			if ( ! $plugin ) {
+				return;
+			}
+
+			$asset_file = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/index.asset.php';
+
+			if ( file_exists( $asset_file ) ) {
+				$asset = include $asset_file;
+			} else {
+				error_log( sprintf( '[woodev] Shipping orders page asset manifest missing: %s', $asset_file ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a missing build artifact.
+				$asset = [
+					'dependencies' => [],
+					'version'      => $plugin->get_version(),
+				];
+			}
+
+			// `@wordpress/dependency-extraction-webpack-plugin` (what `wp-scripts` ships) has no
+			// idea `@woocommerce/*` exists, so the auto-generated dependency list never carries
+			// `wc-components` — it is added by hand here, the documented Route-B pattern (SP-10
+			// spec D7 build-seam decision; the same technique a real production plugin uses,
+			// e.g. Dokan's `includes/Analytics/Assets.php`). `wc-admin-app` orders our script
+			// after the `wc-admin` app shell so `woocommerce_admin_pages_list` is read with our
+			// page already pushed onto it.
+			// `wc-navigation` carries `@woocommerce/navigation`: the carrier `FilterPicker`
+			// above the table changes scope by NAVIGATING, so the page reads the active
+			// carrier out of the URL query and listens for history changes.
+			$dependencies = array_merge( (array) $asset['dependencies'], [ 'wc-components', 'wc-navigation', 'wc-admin-app' ] );
+
+			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
+			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
+			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
+
+			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wc-components' ], $style_version );
+			wp_enqueue_script( 'woodev-shipping-orders-page', $build_url . '/index.js', $dependencies, $asset['version'], true );
+
+			wp_add_inline_script(
+				'woodev-shipping-orders-page',
+				'window.woodevShippingOrders = ' . wp_json_encode(
+					[
+						'restRoot'  => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders' ) ),
+						'nonce'     => wp_create_nonce( 'wp_rest' ),
+						'providers' => $this->build_bootstrap_providers(),
+					]
+				) . ';',
+				'before'
+			);
+		}
+
+		/**
+		 * Whether the current admin screen is a WooCommerce Admin (`wc-admin`) page.
+		 *
+		 * A protected, overridable seam, not a Brain-Monkey-stubbed function call:
+		 * `wc_admin_is_registered_page()` does not exist at all under Brain Monkey (WC's
+		 * `wc-admin` bootstrap is never loaded there), and Brain Monkey/Patchwork's
+		 * function redefinition leaks `function_exists()` as permanently `true` for the
+		 * rest of that PHPUnit process once a symbol is touched once — the same
+		 * constraint `LocationControllerTest` documents against `WC()`. Removing `final`
+		 * from this class (increment 2b rewrite) exists so a test can override this one
+		 * method instead, the same seam shape {@see Orders_Query::is_hpos_enabled()}
+		 * already uses.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function is_wc_admin_screen(): bool {
+			return function_exists( 'wc_admin_is_registered_page' ) && wc_admin_is_registered_page();
+		}
+
+		/**
+		 * Builds the inlined provider list: the aggregate entry first, then one per
+		 * registered provider, each carrying a cheap `wc_get_orders()` count
+		 * (`per_page => 1`, only `total` is read) so every tab can show a count
+		 * before it is ever the active one — the aggregate tab's own count is this
+		 * same mechanism, not a separate one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int,array{id:string,label:string,count:int}>
+		 */
+		private function build_bootstrap_providers(): array {
+			$query = new Orders_Query( $this );
+
+			$entries   = [];
+			$entries[] = [
+				'id'    => 'all',
+				'label' => __( 'Все перевозчики', 'woodev-plugin-framework' ),
+				'count' => (int) $query->get_results(
+					[
+						'carrier' => 'all',
+						'per_page' => 1,
+					]
+				)->total,
+			];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$entries[] = [
+					'id'    => $provider->get_id(),
+					'label' => $provider->get_label(),
+					'count' => (int) $query->get_results(
+						[
+							'carrier' => $provider->get_id(),
+							'per_page' => 1,
+						]
+					)->total,
+				];
+			}
+
+			return $entries;
+		}
+
+		/**
+		 * Returns any registered plugin to source framework asset paths/version from.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \Woodev_Plugin|null
+		 */
+		private function get_asset_plugin(): ?\Woodev_Plugin {
+			return $this->plugin;
 		}
 
 		/**
@@ -215,18 +387,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Translates {@see Orders_Query::QUERY_VAR_MARKER_KEYS} into a real `meta_query`
-		 * on the legacy CPT order datastore.
+		 * Translates {@see Orders_Query}'s custom query vars — marker keys, plus the
+		 * optional delivery-status and tracking-presence filter clauses (SP-10 spec D10)
+		 * — into one real `meta_query` on the legacy CPT order datastore.
 		 *
-		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly — measured
-		 * correct against a real HPOS install (SP-10 spec M2). On the legacy CPT datastore
-		 * WooCommerce's `WC_Order_Data_Store_CPT` does not support a `meta_query` arg at
-		 * all: passing one fires `_doing_it_wrong` (WC ≥9.2) and silently returns
-		 * UNFILTERED results — every carrier's orders leaking into every tab, the worst
-		 * version of this bug because it fails open, not closed. All three shipped carrier
-		 * plugins solve exactly this the same way — a custom query var, translated into
-		 * `meta_query` through this exact filter — so this mirrors them instead of
-		 * inventing a second mechanism.
+		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly —
+		 * measured correct against a real HPOS install (SP-10 spec M2). On the legacy CPT
+		 * datastore WooCommerce's `WC_Order_Data_Store_CPT` does not support a
+		 * `meta_query` arg at all: passing one fires `_doing_it_wrong` (WC ≥9.2) and
+		 * silently returns UNFILTERED results — every carrier's orders leaking into every
+		 * tab, the worst version of this bug because it fails open, not closed. All three
+		 * shipped carrier plugins solve exactly this the same way — a custom query var,
+		 * translated into `meta_query` through this exact filter — so this mirrors them
+		 * instead of inventing a second mechanism, and now does the same for every new
+		 * meta-based filter D10 added, not only the marker-key scope: each of
+		 * {@see Orders_Query::QUERY_VAR_MARKER_KEYS},
+		 * {@see Orders_Query::QUERY_VAR_STATUS_CLAUSES} and
+		 * {@see Orders_Query::QUERY_VAR_TRACKING_CLAUSES}, when present, becomes one
+		 * `meta_query` part, and the parts are ANDed together through
+		 * {@see Orders_Query::combine_meta_queries()} — the SAME combination rule
+		 * {@see Orders_Query::build_args()} uses on HPOS, so the two datastore paths
+		 * cannot silently diverge on what any of these filters mean.
 		 *
 		 * @internal
 		 *
@@ -237,11 +418,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return array<string,mixed>
 		 */
 		public function translate_marker_keys_query_var( array $query, array $query_vars ): array {
-			if ( ! array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
+			$parts = [];
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+			}
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_STATUS_CLAUSES, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] );
+			}
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_TRACKING_CLAUSES, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_TRACKING_CLAUSES ] );
+			}
+
+			if ( [] === $parts ) {
 				return $query;
 			}
 
-			$query['meta_query'] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query var; the only CPT-safe way to scope this query (SP-10 round 2).
+			$query['meta_query'] = Orders_Query::combine_meta_queries( $parts ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query vars; the only CPT-safe way to scope/filter this query (SP-10 spec D10).
 
 			/**
 			 * Filters the CPT-datastore query after the marker-keys var is translated.
@@ -267,11 +462,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function reset_for_tests(): void {
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
 			$this->providers = [];
 			$this->hooked    = false;
+			$this->plugin    = null;
 		}
 	}
 

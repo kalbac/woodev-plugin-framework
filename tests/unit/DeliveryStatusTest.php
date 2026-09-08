@@ -139,4 +139,52 @@ class DeliveryStatusTest extends TestCase {
 
 		$this->assertSame( [ 'canonical', 'canonical_label', 'raw', 'raw_label' ], array_keys( $result ) );
 	}
+
+	// ----- invert_status_map() (SP-10 spec D10 — the delivery-status filter) -----
+
+	public function test_invert_status_map_groups_raw_values_by_canonical_state(): void {
+		$inverted = Delivery_Status::invert_status_map(
+			[
+				'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT,
+				'CDEK_ENROUTE'  => Delivery_Status::IN_TRANSIT,
+				'CDEK_DONE'     => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertSame(
+			[ 'CDEK_ACCEPTED', 'CDEK_ENROUTE' ],
+			$inverted[ Delivery_Status::IN_TRANSIT ]
+		);
+		$this->assertSame( [ 'CDEK_DONE' ], $inverted[ Delivery_Status::DELIVERED ] );
+	}
+
+	/**
+	 * The same rule {@see Delivery_Status::resolve()} already enforces: a status_map
+	 * entry naming something that is not one of the nine canonical states must not
+	 * appear under any key of the inversion — never even under `unknown`, which is
+	 * not a key {@see Delivery_Status::invert_status_map()} ever produces (a
+	 * `status_map` is only ever allowed to name a canonical state, per its own
+	 * docblock — `unknown` is what a MISSING/invalid entry resolves to, not something
+	 * the map itself declares).
+	 */
+	public function test_invert_status_map_drops_a_raw_value_mapped_to_an_invalid_state(): void {
+		$inverted = Delivery_Status::invert_status_map( [ 'CDEK_WEIRD' => 'not_a_real_canonical_state' ] );
+
+		$this->assertSame( [], $inverted );
+	}
+
+	public function test_invert_status_map_of_an_empty_map_is_empty(): void {
+		$this->assertSame( [], Delivery_Status::invert_status_map( [] ) );
+	}
+
+	/**
+	 * A canonical state with no raw value mapping to it is simply ABSENT from the
+	 * result, never present as an empty array — callers rely on `??` against a
+	 * missing key.
+	 */
+	public function test_invert_status_map_omits_canonical_states_with_no_raw_value(): void {
+		$inverted = Delivery_Status::invert_status_map( [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] );
+
+		$this->assertArrayNotHasKey( Delivery_Status::DELIVERED, $inverted );
+	}
 }

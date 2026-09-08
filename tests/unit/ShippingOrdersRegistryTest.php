@@ -32,7 +32,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	private function provider( string $id, string $label = 'Label', string $marker = '_marker' ): Orders_Provider {
-		return Orders_Provider::create( $id, $label, $marker, $id );
+		return Orders_Provider::create( $id, $label, $marker, [ $id ] );
 	}
 
 	public function test_has_providers_is_false_initially(): void {
@@ -83,27 +83,32 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( 'manage_woocommerce', Orders_Registry::instance()->get_page_capability() );
 	}
 
-	public function test_register_page_does_not_register_a_submenu_without_providers(): void {
-		Functions\expect( 'add_submenu_page' )->never();
-
+	/**
+	 * `register_page()` is never reachable past `has_providers()` here, so this holds
+	 * regardless of whether `wc_admin_register_page()` exists in the running process.
+	 */
+	public function test_register_page_does_nothing_without_providers(): void {
 		Orders_Registry::instance()->register_page();
+
+		$this->assertFalse( Orders_Registry::instance()->has_providers() );
 	}
 
-	public function test_register_page_registers_a_submenu_when_a_provider_is_present(): void {
+	/**
+	 * `wc_admin_register_page()` is never stubbed through Brain Monkey/Patchwork here —
+	 * touching it once would leak `function_exists( 'wc_admin_register_page' )` as
+	 * permanently `true` for the rest of this PHPUnit process, the exact constraint
+	 * `LocationControllerTest` documents against `WC()`. In this real Brain Monkey
+	 * environment WooCommerce's `wc-admin` bootstrap is never loaded, so
+	 * `function_exists()` genuinely returns `false` here — this proves increment 2b's
+	 * ADR-005 fail-soft guard: a provider is registered, yet `register_page()` neither
+	 * throws nor calls a function that is not there.
+	 */
+	public function test_register_page_does_nothing_when_wc_admin_register_page_is_unavailable(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
-		Functions\expect( 'add_submenu_page' )
-			->once()
-			->with(
-				'woodev',
-				\Mockery::any(),
-				\Mockery::any(),
-				'manage_woocommerce',
-				Orders_Registry::PAGE_SLUG,
-				[ Orders_Registry::instance(), 'render_page' ]
-			);
-
 		Orders_Registry::instance()->register_page();
+
+		$this->assertTrue( Orders_Registry::instance()->has_providers() );
 	}
 
 	public function test_reset_for_tests_clears_registered_providers(): void {
@@ -181,5 +186,240 @@ class ShippingOrdersRegistryTest extends TestCase {
 		);
 
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $result['meta_query'] );
+	}
+
+	/**
+	 * SP-10 spec D10: the delivery-status and tracking-presence filters get the SAME
+	 * legacy-CPT translation as the marker-key scope, through the two new query vars
+	 * — never left to reach the CPT datastore as `meta_query` directly.
+	 */
+	public function test_translate_status_clauses_var_alone_produces_its_meta_query_shape(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_STATUS_CLAUSES => [
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_DONE' ],
+						'compare' => 'IN',
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_DONE' ],
+					'compare' => 'IN',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	public function test_translate_tracking_clauses_var_alone_produces_its_meta_query_shape(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
+					[
+						'key'     => '_cdek_tracking',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'NOT EXISTS',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	/**
+	 * All three vars present at once — marker keys, delivery status, tracking — must
+	 * be ANDed together, never left to silently combine as one flat OR (which would
+	 * scope-leak every carrier's orders back in).
+	 */
+	public function test_translate_all_three_vars_together_ands_them(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_MARKER_KEYS      => [ '_cdek_marker' ],
+				Orders_Query::QUERY_VAR_STATUS_CLAUSES   => [
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_DONE' ],
+						'compare' => 'IN',
+					],
+				],
+				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
+					[
+						'key'     => '_cdek_tracking',
+						'compare' => 'EXISTS',
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 'AND', $result['meta_query']['relation'] );
+		$this->assertCount( 4, $result['meta_query'] ); // relation + one part per var.
+	}
+
+	// -----------------------------------------------------------------------
+	// enqueue_assets() — increment 2b rewrite: gated on is_wc_admin_screen(), a
+	// protected seam overridden here rather than stubbing wc_admin_is_registered_page()
+	// through Brain Monkey — the same function_exists()-leak reason register_page()'s
+	// tests above give.
+	// -----------------------------------------------------------------------
+
+	/** Builds a fresh (non-singleton) registry with the wc-admin screen check forced true. */
+	private function registryOnWcAdminScreen(): Orders_Registry {
+		return new class() extends Orders_Registry {
+			protected function is_wc_admin_screen(): bool {
+				return true;
+			}
+		};
+	}
+
+	public function test_add_hooks_hooks_enqueue_assets_onto_admin_enqueue_scripts(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_enqueue_scripts' === $call[0] && [ $registry, 'enqueue_assets' ] === $call[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook enqueue_assets() onto admin_enqueue_scripts' );
+	}
+
+	public function test_enqueue_assets_does_nothing_off_the_wc_admin_screen(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+		Functions\expect( 'wp_enqueue_style' )->never();
+		Functions\expect( 'wp_add_inline_script' )->never();
+
+		// The real (singleton) instance's is_wc_admin_screen() is the unoverridden,
+		// real implementation — false in this environment, same fail-soft guard
+		// register_page()'s tests above already establish.
+		Orders_Registry::instance()->enqueue_assets();
+	}
+
+	public function test_enqueue_assets_does_nothing_without_a_registered_plugin(): void {
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+		Functions\expect( 'wp_enqueue_style' )->never();
+		Functions\expect( 'wp_add_inline_script' )->never();
+
+		$registry->enqueue_assets();
+	}
+
+	/**
+	 * A non-`Woodev_Plugin` second argument (a caller mistake) must be ignored
+	 * rather than accepted and blown up on later — `enqueue_assets()` still finds
+	 * no usable plugin and no-ops, exactly like passing none at all.
+	 */
+	public function test_register_provider_ignores_a_non_plugin_second_argument(): void {
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ), 'not-a-plugin' );
+
+		Functions\expect( 'wp_enqueue_script' )->never();
+
+		$registry->enqueue_assets();
+	}
+
+	public function test_enqueue_assets_enqueues_the_bundle_and_inlines_the_provider_list(): void {
+		$plugin = \Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
+		$registry->register_provider( $this->provider( 'yandex', 'Яндекс' ) ); // no plugin — cdek's already won.
+
+		// file_exists()/filemtime() are left UNSTUBBED — Patchwork cannot redefine
+		// them without a patchwork.json entry this project does not carry, and
+		// the real function already returns false for this fabricated path, which
+		// is exactly the "manifest missing" branch this test wants to exercise.
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'rest_url' )->returnArg( 1 );
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'wc_get_orders' )->justReturn( (object) [
+			'orders'        => [],
+			'total'         => 5,
+			'max_num_pages' => 1,
+		] );
+
+		Functions\expect( 'wp_enqueue_style' )
+			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components' ], '1.2.3' )
+			->once();
+		// The three hand-declared WooCommerce handles are the whole of Route B, so
+		// the list is pinned exactly rather than loosely: `wc-components` for
+		// `TableCard`/`FilterPicker`, `wc-navigation` because the carrier filter is
+		// URL-driven, and `wc-admin-app` last so our script runs after the app shell
+		// and `woocommerce_admin_pages_list` is read with our page already on it.
+		Functions\expect( 'wp_enqueue_script' )
+			->once()
+			->with(
+				'woodev-shipping-orders-page',
+				\Mockery::type( 'string' ),
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app' ],
+				'1.2.3',
+				true
+			);
+
+		$captured = null;
+		Functions\expect( 'wp_add_inline_script' )
+			->once()
+			->with(
+				'woodev-shipping-orders-page',
+				\Mockery::on(
+					static function ( $script ) use ( &$captured ) {
+						$captured = $script;
+						return is_string( $script );
+					}
+				),
+				'before'
+			);
+
+		$registry->enqueue_assets();
+
+		$this->assertNotNull( $captured, 'wp_add_inline_script must have been called' );
+		$this->assertStringStartsWith( 'window.woodevShippingOrders = ', $captured );
+
+		$json = rtrim( substr( $captured, strlen( 'window.woodevShippingOrders = ' ) ), ';' );
+		$data = json_decode( $json, true );
+
+		$this->assertSame( 'nonce-value', $data['nonce'] );
+		$this->assertArrayNotHasKey( 'adminUrl', $data );
+		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
+		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
+		foreach ( $data['providers'] as $entry ) {
+			$this->assertSame( 5, $entry['count'] );
+		}
 	}
 }
