@@ -245,7 +245,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **298**.
+Gotchas: **300**.
 
 ## Program status (high level)
 

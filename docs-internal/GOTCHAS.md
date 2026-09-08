@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 298 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 300 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -176,6 +176,7 @@
 - [testing/unit] **Tests that assert on framework source AS TEXT break on any mechanical reformat (633 `array()`->`[]` cost 47 failures), and swapping a plain function for a WP wrapper inside a PRIVATE method breaks suites that `grep` cannot find.** → [a-source-asserting-test-breaks-on-mechanical-reformatting](gotchas/a-source-asserting-test-breaks-on-mechanical-reformatting.md) (s110)
 
 ### [js/*] — JavaScript language traps
+- [js/wc-globals] **A hand-written `.d.ts` for `window.wc.*` is a claim about someone else's bundle, not a check of it: `typecheck` stays green while the page dies and takes all of wc-admin with it. Measure the shape in a browser first.** → [a-hand-written-d-ts-for-a-runtime-global-is-an-assertion-not-a-check](gotchas/a-hand-written-d-ts-for-a-runtime-global-is-an-assertion-not-a-check.md) (s127)
 - [js/select-value-space] **A select2 `language` callback returning `undefined` renders a BLANK message: the merge is `$.extend({}, EN, ours)`, so defining the key shadows English forever. OMIT it instead.** → [a-select2-language-callback-that-returns-undefined-renders-blank](gotchas/a-select2-language-callback-that-returns-undefined-renders-blank.md) (s93)
 - [js/select-value-space] **Painting early in a select2 ajax transport costs both honest states: an empty list reads as «не найдено» (`noResults` only asks "is it empty?"), and ANY `success()` strips the loading row (`append()` starts with `hideLoading()`).** → [an-empty-list-while-the-search-runs-is-not-a-zero-result](gotchas/an-empty-list-while-the-search-runs-is-not-a-zero-result.md) (s94)
 - [js/select-value-space] **`select2:close` fires BEFORE `select2:select` — a guard that expects the pick to cancel the close cannot work, and a fake dispatching the other order pins a fiction.** → [select2-close-fires-before-select2-select](gotchas/select2-close-fires-before-select2-select.md) (s92)
@@ -321,6 +322,7 @@
 - [shipping/pickup] **A per-viewport cache is unbounded by construction.** → [per-viewport-cache-is-unbounded-by-construction](gotchas/per-viewport-cache-is-unbounded-by-construction.md) (s58)
 
 ### [shipping/*] — Shipping module (S1)
+- [shipping/orders] **A NEGATIVE meta clause OR-ed across providers matches EVERY order — «carrier B has no tracking» is true of every carrier A row. Bind it to the provider's own marker. Invisible with one provider registered.** → [a-negative-meta-clause-or-ed-across-providers-matches-every-order](gotchas/a-negative-meta-clause-or-ed-across-providers-matches-every-order.md) (s127)
 - [shipping/contracts] **Session key ≠ order-meta prefix — two distinct installed-site contracts.** → [session-key-vs-order-meta-prefix](gotchas/session-key-vs-order-meta-prefix.md)
 - [shipping/contracts] **Installed-site contract strings are NOT mechanically derivable — the plugin must supply them.** → [contract-string-not-derivable](gotchas/contract-string-not-derivable.md)
 - [shipping/rate-calc] **Do NOT sum per-parcel prices in the framework rate seam.** → [shipping-rate-no-parcel-sum](gotchas/shipping-rate-no-parcel-sum.md) (s3)
