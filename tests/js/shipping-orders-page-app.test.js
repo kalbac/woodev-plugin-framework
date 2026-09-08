@@ -70,11 +70,15 @@ function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage
  * and `query` and owns the query parameter named by `config.param`; it does not
  * call back with a value, it navigates. Asserting against this fake therefore
  * asserts the config we hand WooCommerce, which is the actual seam.
+ *
+ * The page now renders TWO of these side by side (#835 — carrier scope and
+ * display mode are independent pickers), so the fake's test id is keyed by
+ * `config.param` rather than a fixed string, letting a test address either one.
  */
 function FakeFilterPicker( { config, path, query } ) {
 	return (
 		<div
-			data-testid="carrier-filter"
+			data-testid={ `filter-picker-${ config.param }` }
 			data-param={ config.param }
 			data-path={ path }
 			data-static-params={ config.staticParams.join( ',' ) }
@@ -320,7 +324,7 @@ describe( 'carrier filter', () => {
 
 		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
 
-		expect( screen.queryByTestId( 'carrier-filter' ) ).not.toBeInTheDocument();
+		expect( screen.queryByTestId( 'filter-picker-carrier' ) ).not.toBeInTheDocument();
 	} );
 
 	test( 'the carrier filter renders its options once there is more than one provider', async () => {
@@ -329,9 +333,9 @@ describe( 'carrier filter', () => {
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		expect( screen.getByText( 'Показать' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Все перевозчики (5)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'СДЭК (3)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Яндекс Доставка (2)' ) ).toBeInTheDocument();
@@ -349,9 +353,9 @@ describe( 'carrier filter', () => {
 
 		const { container } = render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		const filter = screen.getByTestId( 'carrier-filter' );
+		const filter = screen.getByTestId( 'filter-picker-carrier' );
 		const card = container.querySelector( '.woodev-orders__filters' );
 
 		expect( card ).toContainElement( filter );
@@ -359,11 +363,13 @@ describe( 'carrier filter', () => {
 	} );
 
 	/**
-	 * `staticParams` carries every OTHER filter-row query key (increment 7) —
-	 * the date range and the advanced filters describe "what work queue view am
-	 * I in", independent of carrier, so a carrier switch must not silently drop
-	 * them. `paged` is still not one of these keys: it is component state, not
-	 * a URL param, so it still cannot survive a carrier change.
+	 * `staticParams` carries every OTHER filter-row query key (increment 7),
+	 * including the display-mode picker's own `filter` param (#835) — the date
+	 * range, the advanced filters and the display mode all describe "what work
+	 * queue view am I in", independent of carrier, so a carrier switch must not
+	 * silently drop them. `paged` is still not one of these keys: it is
+	 * component state, not a URL param, so it still cannot survive a carrier
+	 * change.
 	 */
 	test( 'the filter owns the carrier query param and carries the rest of the filter row across a change', async () => {
 		getProviders.mockReturnValue( twoProviders() );
@@ -371,16 +377,129 @@ describe( 'carrier filter', () => {
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		const filter = screen.getByTestId( 'carrier-filter' );
+		const filter = screen.getByTestId( 'filter-picker-carrier' );
 
 		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
 		expect( filter ).toHaveAttribute(
 			'data-static-params',
-			'period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+			'filter,period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
 		);
 		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
+	} );
+} );
+
+describe( 'the display-mode filter (#835 — split from carrier scope)', () => {
+	/** Unlike the carrier picker, this one is offered even with a single provider. */
+	test( 'renders regardless of how many providers there are, with its own label and options', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+
+		expect( screen.getByText( 'Фильтры' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Все заказы' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Расширенные фильтры' ) ).toBeInTheDocument();
+	} );
+
+	/** …and «Расширенные фильтры» is its LAST option, as in WooCommerce's own Analytics. */
+	test( 'offers «Расширенные фильтры» as its last option', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const picker = await screen.findByTestId( 'filter-picker-filter' );
+		const options = picker.textContent;
+
+		expect( options ).toContain( 'Расширенные фильтры' );
+		expect( options.trim().endsWith( 'Расширенные фильтры' ) ).toBe( true );
+	} );
+
+	/** `staticParams` must carry `carrier` (#835) or a mode switch would drop the carrier scope. */
+	test( 'owns the filter query param and carries the carrier param and the rest of the row across a change', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+
+		const filter = screen.getByTestId( 'filter-picker-filter' );
+
+		expect( filter ).toHaveAttribute( 'data-param', 'filter' );
+		expect( filter ).toHaveAttribute(
+			'data-static-params',
+			'carrier,period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+		);
+	} );
+
+	/** Both pickers render at once, each owning its own param and carrying its own label — the actual seam #835 depends on. */
+	test( 'both the carrier and display-mode pickers render together, each with its own param and label', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
+
+		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toHaveAttribute( 'data-param', 'carrier' );
+		expect( screen.getByTestId( 'filter-picker-filter' ) ).toHaveAttribute( 'data-param', 'filter' );
+		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Фильтры' ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * #835 point 3: an unrecognized carrier must reach the server unchanged —
+	 * no client-side coercion to the aggregate, and no confusion with the
+	 * (now-separate) `filter=advanced` display mode.
+	 */
+	test( 'an unrecognized carrier in the URL is sent to the server verbatim, not coerced to the aggregate', async () => {
+		fakeQuery = { carrier: 'unknown-carrier' };
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'unknown-carrier' } ) )
+		);
+	} );
+
+	/**
+	 * #835's own warning: `filter` (display mode) must NOT enter the
+	 * `UrlFilters`/`filtersEqual` snapshot `readUrlFilters()` builds, or
+	 * switching modes would reset pagination the same way a real filter
+	 * change does — a change of VIEW is not a change of selection. Confirmed
+	 * here rather than assumed, exactly as the brief for this asked.
+	 */
+	test( 'switching display mode does not reset the page — it is a view change, not a filter change', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
+		);
+
+		act( () => {
+			screen.getByText( 'Следующая страница' ).click();
+		} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
+		);
+
+		navigate( { filter: 'advanced' } );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) );
 	} );
 } );
 
@@ -544,6 +663,49 @@ describe( 'empty and error states', () => {
 			expect( screen.getAllByText( 'Не удалось загрузить заказы.' ).length ).toBeGreaterThan( 0 )
 		);
 	} );
+
+	/**
+	 * #837 defect 5a's regression guard: a rejected query parameter used to
+	 * return the error `Notice` INSTEAD OF the whole page — bare text on an
+	 * otherwise empty screen, with no filter controls left to fix the thing
+	 * that broke. The notice must render ABOVE the filter row and table, both
+	 * of which stay mounted, rather than replacing them.
+	 */
+	test( 'a rejected fetch keeps the filter row and the table mounted alongside the error notice', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockRejectedValue( new Error( 'Неверный параметр фильтра.' ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Неверный параметр фильтра.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument();
+		expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.woodev-orders__filters' ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * Follow-up to the fix above: `rows` was reset to `null` at the top of the
+	 * fetch effect and the `.catch()` branch never touched it again, so
+	 * `TableCard` kept rendering `isLoading={ true }` forever — a permanent
+	 * loading skeleton sitting under the error notice, "pretending to load".
+	 * Asserted on the RENDERED loading text, not the internal `rows` state.
+	 */
+	test( 'a rejected fetch settles the table out of its loading state, not a permanent spinner', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockRejectedValue( new Error( 'Сервер недоступен.' ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Сервер недоступен.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.queryByText( 'Загрузка…' ) ).not.toBeInTheDocument();
+	} );
 } );
 
 describe( 'the delivery-analytics panel (#711)', () => {
@@ -705,34 +867,21 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 	 * The operator caught this on his own rig pass, 08.09.2026: the advanced
 	 * block must NOT be a permanently visible region. WooCommerce's own
 	 * «Аналитика → Заказы» reveals it from the last option of the same «Show»
-	 * picker — measured there before this was built.
+	 * picker — measured there before this was built. Here it is revealed by
+	 * the display-mode picker's own `filter` param (#835), split from carrier.
 	 */
-	test( 'stays hidden until the carrier picker\'s advanced option is chosen', async () => {
+	test( 'stays hidden until the display-mode picker\'s advanced option is chosen', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-filter' ) ).toBeInTheDocument() );
 		expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument();
 
-		navigate( { carrier: 'advanced' } );
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
-	} );
-
-	/** …and the option that reveals it is the LAST one in that picker, as in Analytics. */
-	test( 'the carrier picker offers «Расширенные фильтры» as its last option', async () => {
-		getProviders.mockReturnValue( twoProviders() );
-		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
-
-		render( <App /> );
-
-		const picker = await screen.findByTestId( 'carrier-filter' );
-		const options = picker.textContent;
-
-		expect( options ).toContain( 'Расширенные фильтры' );
-		expect( options.trim().endsWith( 'Расширенные фильтры' ) ).toBe( true );
 	} );
 
 	test( 'offers delivery status, WC order status and tracking presence — never delivery type', async () => {
@@ -740,9 +889,10 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
-		// The block is revealed by the carrier picker's own last option, so the
-		// query has to say so before it renders at all.
-		navigate( { carrier: 'advanced' } );
+		// The block is revealed by the display-mode picker's own last option
+		// (#835 — its own `filter` param, split from `carrier`), so the query
+		// has to say so before it renders at all.
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 
@@ -762,7 +912,7 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
-		navigate( { carrier: 'advanced' } );
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 

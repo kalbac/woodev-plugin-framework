@@ -107,10 +107,18 @@ export interface WcDateRangeFilterPickerProps {
 
 /**
  * One selectable value of an {@link WcAdvancedFiltersFilterDef}'s `SelectControl`
- * input (`packages/js/components/src/advanced-filters/README.md`).
+ * input. Upstream's own option type
+ * (`packages/js/components/src/advanced-filters/types.ts`): `{ value, label }` —
+ * NOT `{ key, label }`. The `SelectControl` this renders into does
+ * `<option value={ option.value }>`; a `key` field is invisible to it, so
+ * `getDefaultOptionValue()` (`packages/js/components/src/navigation/src/filters.js`)
+ * reads `undefined` off it, and everything downstream degrades silently:
+ * `addFilter()` sets `newFilter.value = undefined`, the URL-writing guard
+ * `if ( filter.value )` never fires, and the «Filter» button renders disabled
+ * instead of navigating (measured on the rig, 08.09.2026 — SP-10 #837 defect 1).
  */
 export interface WcAdvancedFiltersSelectOption {
-	key: string;
+	value: string;
 	label: string;
 }
 
