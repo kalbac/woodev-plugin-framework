@@ -371,12 +371,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *
 		 * `unknown` is deliberately BOTH things {@see Delivery_Status::resolve()} already
 		 * treats as unknown: a raw value absent from the map, and a raw value present but
-		 * mapped to something that is not one of the nine canonical states. WordPress's
-		 * `meta_query` `NOT IN` compare already matches an order with no such meta key at
-		 * all — it LEFT JOINs and includes the null-meta rows for every negative compare
-		 * (`NOT IN`, `NOT EXISTS`, `!=`, …) — so one `NOT IN` clause against the
-		 * provider's own known-good raw values covers both cases in a single condition,
-		 * never two clauses that could disagree with each other.
+		 * mapped to something that is not one of the nine canonical states. ⚠ Those two
+		 * need TWO clauses OR'd together, not one: only `NOT EXISTS` makes WP_Meta_Query
+		 * LEFT JOIN, so a lone `NOT IN` silently drops every order that has no status
+		 * meta at all — which is the commonest unknown there is. See the clause itself.
 		 *
 		 * A provider with no status concept of its own (`get_status_meta_key()` is null,
 		 * or its `status_map` maps nothing to a valid canonical state) is either ALWAYS
@@ -426,10 +424,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 						continue;
 					}
 
+					// TWO clauses, not one, and this is the whole point: `NOT IN` alone
+					// does NOT match an order with no status meta at all. Only `NOT
+					// EXISTS` makes WP_Meta_Query use a LEFT JOIN — WordPress says so
+					// itself in `class-wp-meta-query.php`: «If any JOINs are LEFT JOINs
+					// (as in the case of NOT EXISTS), then all JOINs should be LEFT.
+					// Otherwise posts with no metadata will be excluded from results.»
+					// An order that never received a carrier status is the COMMONEST
+					// unknown, so a lone `NOT IN` silently hides most of what the filter
+					// exists to find. Measured, not reasoned: the integration test
+					// covering the no-status order failed with exactly that shape.
 					$clauses[] = [
-						'key'     => $status_key,
-						'value'   => $known,
-						'compare' => 'NOT IN',
+						'relation' => 'OR',
+						[
+							'key'     => $status_key,
+							'compare' => 'NOT EXISTS',
+						],
+						[
+							'key'     => $status_key,
+							'value'   => $known,
+							'compare' => 'NOT IN',
+						],
 					];
 
 					continue;

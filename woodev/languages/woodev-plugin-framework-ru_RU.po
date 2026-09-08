@@ -3412,7 +3412,7 @@ msgstr "Локация доставки, которую покупатель в�
 msgid "Заказы доставки"
 msgstr ""
 
-#: shipping-method/rest-api/class-orders-controller.php:154
+#: shipping-method/rest-api/class-orders-controller.php:235
 msgid "Неизвестный перевозчик."
 msgstr ""
 
@@ -3536,3 +3536,15 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Здесь появится аналитика по доставке — показатели и график за период."
 msgstr ""
+
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:188
+#, php-format
+msgid "%s must be an ISO 8601 date (YYYY-MM-DD)."
+msgstr "%s должен быть датой в формате ISO 8601 (ГГГГ-ММ-ДД)."
+
+#. translators: %s: parameter name.
+#: shipping-method/rest-api/class-orders-controller.php:213
+#, php-format
+msgid "%s is not a recognized delivery status."
+msgstr "%s — неизвестный статус доставки."

@@ -507,12 +507,19 @@ class ShippingOrdersQueryTest extends TestCase {
 	}
 
 	/**
-	 * `unknown` against a provider WITH a status concept: a `NOT IN` of its own
-	 * known-good raw values — covers both "no meta at all" and "an unmapped raw
-	 * value" in one clause (WordPress's `meta_query` LEFT JOINs for negative
-	 * compares).
+	 * `unknown` against a provider WITH a status concept needs BOTH halves OR'd:
+	 * an order with no status meta at all, and one carrying a raw value absent
+	 * from the map.
+	 *
+	 * ⚠ It cannot be one `NOT IN` clause, which is what this test asserted until
+	 * the integration suite disproved it on real rows. Only `NOT EXISTS` makes
+	 * `WP_Meta_Query` LEFT JOIN — WordPress says so in `class-wp-meta-query.php`:
+	 * "If any JOINs are LEFT JOINs (as in the case of NOT EXISTS), then all JOINs
+	 * should be LEFT. Otherwise posts with no metadata will be excluded from
+	 * results." A lone `NOT IN` therefore hides the commonest unknown of all: the
+	 * order the carrier has never reported on.
 	 */
-	public function test_delivery_status_unknown_against_a_real_status_map_builds_not_in_known_values(): void {
+	public function test_delivery_status_unknown_against_a_real_status_map_covers_missing_and_unmapped(): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider(
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
@@ -527,9 +534,16 @@ class ShippingOrdersQueryTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'key'     => '_cdek_status',
-				'value'   => [ 'CDEK_ACCEPTED' ],
-				'compare' => 'NOT IN',
+				'relation' => 'OR',
+				[
+					'key'     => '_cdek_status',
+					'compare' => 'NOT EXISTS',
+				],
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_ACCEPTED' ],
+					'compare' => 'NOT IN',
+				],
 			],
 			$args['meta_query'][1][0]
 		);
