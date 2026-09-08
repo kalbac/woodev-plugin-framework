@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 303 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 304 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -239,6 +239,8 @@
 - [admin-ui/license-page] **the v2 license page only enqueues the React bundle CSS — server-rendered sections need their styles in style.scss.** → [license-page-css-bundle-only](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] **Use `esc_url_raw` (not `esc_url`) for URLs handed to JS / REST.** → [esc-url-raw-for-js-consumed-urls](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
 - [admin-ui/wp-nonce-url-esc-html] **`wp_nonce_url()` HTML-encodes `&` → breaks a URL consumed by JS/JSON.** → [wp-nonce-url-esc-html-breaks-js-urls](gotchas/wp-nonce-url-esc-html-breaks-js-urls.md) (s24)
+
+- [admin-ui/filters] **WooCommerce gives `FilterPicker` a FIXED 430px, so two of them eat an 860px row exactly and a third control wraps. Our stylesheet sets no width — the cause is invisible from it. Bound it inside your own container.** → [woocommerce-gives-its-filter-picker-a-fixed-430px](gotchas/woocommerce-gives-its-filter-picker-a-fixed-430px.md) (s128)
 
 ### [admin-ui/modal] — Framework modal shell
 - [admin-ui/css] **Flat `:where()` isolation loses to an ordinary longer theme selector — no `!important` required.** → [flat-where-isolation-loses-to-a-longer-theme-selector](gotchas/flat-where-isolation-loses-to-a-longer-theme-selector.md) (s69)

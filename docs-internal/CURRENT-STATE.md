@@ -18,7 +18,8 @@ table on HPOS and does nothing on the legacy CPT datastore, where `WP_Query` wal
 statuses and drops the condition. Use `Orders_Query::NO_MATCH_META_QUERY` — the only one both
 datastore paths share. Measured s128; the integration suite caught the second, a unit test could not.
 
-Open work on the page: **#824 #828 #829 #834 #836 #838**, plus **#839** (join growth, debt).
+Open work on the page: **#824 #828 #829 #834 #836 #838**, plus **#839** (join growth) and
+**#841** («только новые» + what «new» even means) — both debt, neither a blocker.
 **#836 waits on his product decision**; #837 keeps only defect 4, which is part of that decision.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
@@ -27,13 +28,12 @@ A `wc-admin` page highlights its parent menu item **client-side**, from the `wpO
 its `woocommerce_admin_pages_list` entry declares — WordPress renders the menu server-side and never
 sees `path`. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
 
-⚠ **Route B covers `@woocommerce/{navigation,date,currency}` too.** `@woocommerce/*` is absent from
-`node_modules` AND `package-lock.json`, so the page reads `window.wc.*` and declares
-`wc-components` / `wc-navigation` / `wc-admin-app` / `wc-date` / `wc-currency` by hand — **never
-`wc-settings`**, which is only conditionally registered and would make WordPress drop the bundle
-silently (gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`). Every
-filter is **URL-driven**: `FilterPicker` navigates rather than calling back, so the page re-reads the
-query through `wc.navigation.addHistoryListener()`.
+⚠ **Route B covers `@woocommerce/{navigation,date,currency}` too** — absent from `node_modules`
+AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-components` /
+`wc-navigation` / `wc-admin-app` / `wc-date` / `wc-currency` by hand — **never `wc-settings`**
+(gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`). Every filter is
+**URL-driven**, and the query is read in a LATER effect, never inside the history listener (gotcha
+`addhistorylistener-fires-before-the-url-changes`).
 
 ⚠ **Do NOT ask the operator to log into the rig — a Playwright probe logs in itself**
 (`admin`/`password`, wp-env default; s127, s128). For numbers without a browser, drive the code via
@@ -60,8 +60,8 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — 09.09.2026 (s128) on PR #840, `23adaf5`:**
-unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1832** in **31** suites;
+**Baselines — 09.09.2026 (s128) on PR #840, `70282b1`:**
+unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1836** in **31** suites;
 **integration 186 / 679**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
 level 3 no errors; every `lint:*` OK; catalogue **786** entries, **429** translated. Nothing on
@@ -248,7 +248,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **303**.
+Gotchas: **304**.
 
 ## Program status (high level)
 
