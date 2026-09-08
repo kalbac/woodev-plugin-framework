@@ -105,33 +105,74 @@ describe( 'filtersEqual', () => {
 } );
 
 describe( 'readDateFilters', () => {
+	/** The compare values `@woocommerce/date` actually accepts — measured off the shipped bundle. */
+	const ALLOWED_COMPARE = [ 'previous_period', 'previous_year' ];
+
+	/**
+	 * Mirrors `@woocommerce/date`'s real contract, including the part that bit us:
+	 * `getCurrentDates()` resolves `compare` against a fixed list and THROWS
+	 * `Cannot find compare:` when it is absent. The previous fake silently
+	 * defaulted it, so a default range carrying no `compare` passed every test
+	 * and crashed the whole wc-admin app on the rig.
+	 */
 	function fakeDateApi( { period, before, after } = {} ) {
+		const fromDefault = ( defaultDateRange ) =>
+			Object.fromEntries( new URLSearchParams( defaultDateRange ).entries() );
+
 		return {
-			getDateParamsFromQuery: ( query, defaultDateRange ) => ( {
-				period: query.period || defaultDateRange.split( '=' )[ 1 ],
-				compare: query.compare || 'previous_period',
-				before: query.before ? fakeMoment( query.before ) : null,
-				after: query.after ? fakeMoment( query.after ) : null,
-			} ),
-			getCurrentDates: ( query ) => ( {
-				primary: {
-					label: 'range',
-					range: '',
-					before: fakeMoment( query.before || before || '2026-09-08' ),
-					after: fakeMoment( query.after || after || '2026-01-01' ),
-				},
-				secondary: { label: 'previous range', range: '', before: null, after: null },
-			} ),
+			getDateParamsFromQuery: ( query, defaultDateRange ) => {
+				const defaults = fromDefault( defaultDateRange );
+
+				return {
+					period: query.period || defaults.period,
+					compare: query.compare || defaults.compare,
+					before: query.before ? fakeMoment( query.before ) : null,
+					after: query.after ? fakeMoment( query.after ) : null,
+				};
+			},
+			getCurrentDates: ( query, defaultDateRange ) => {
+				const defaults = fromDefault( defaultDateRange );
+				const compare = query.compare || defaults.compare;
+
+				if ( ! ALLOWED_COMPARE.includes( compare ) ) {
+					throw new Error( `Cannot find compare: ${ compare || '' }` );
+				}
+
+				return {
+					primary: {
+						label: 'range',
+						range: '',
+						before: fakeMoment( query.before || before || '2026-09-08' ),
+						after: fakeMoment( query.after || after || '2026-01-01' ),
+					},
+					secondary: { label: 'previous range', range: '', before: null, after: null },
+				};
+			},
 			isoDateFormat: 'YYYY-MM-DD',
 		};
 	}
+
+	/**
+	 * The regression guard for the rig crash: `DEFAULT_DATE_RANGE` must carry a
+	 * `compare` even though this page renders no comparison control and never
+	 * sends `compare` to our REST route. Without it `getCurrentDates()` throws
+	 * and takes the entire WooCommerce admin app down with it, not just the
+	 * filter.
+	 */
+	test( 'DEFAULT_DATE_RANGE carries both a period and an accepted compare', () => {
+		const parsed = Object.fromEntries( new URLSearchParams( DEFAULT_DATE_RANGE ).entries() );
+
+		expect( parsed.period ).toBe( 'year' );
+		expect( ALLOWED_COMPARE ).toContain( parsed.compare );
+	} );
 
 	test( 'an empty query resolves the default period into after/before', () => {
 		const result = readDateFilters( fakeDateApi(), {} );
 
 		expect( result.after ).toBe( '2026-01-01' );
 		expect( result.before ).toBe( '2026-09-08' );
-		expect( result.dateQuery.period ).toBe( DEFAULT_DATE_RANGE.split( '=' )[ 1 ] );
+		expect( result.dateQuery.period ).toBe( 'year' );
+		expect( result.dateQuery.compare ).toBe( 'previous_year' );
 	} );
 
 	test( 'a custom range in the query resolves to its own after/before', () => {

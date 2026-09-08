@@ -191,25 +191,48 @@ beforeAll( () => {
 			},
 		},
 		date: {
-			getDateParamsFromQuery: ( query, defaultDateRange ) => ( {
-				period: query.period || defaultDateRange.split( '=' )[ 1 ],
-				compare: query.compare || 'previous_period',
-				before: query.before ? fakeMoment( query.before ) : null,
-				after: query.after ? fakeMoment( query.after ) : null,
-			} ),
+			// The default range is a real query STRING, so parse it as one. Splitting
+			// on '=' silently produced 'year&compare' the moment a second parameter
+			// was added, and the assertion that caught it only did so because it
+			// compared against a literal rather than against the same split.
+			getDateParamsFromQuery: ( query, defaultDateRange ) => {
+				const defaults = Object.fromEntries(
+					new URLSearchParams( defaultDateRange ).entries()
+				);
+
+				return {
+					period: query.period || defaults.period,
+					compare: query.compare || defaults.compare,
+					before: query.before ? fakeMoment( query.before ) : null,
+					after: query.after ? fakeMoment( query.after ) : null,
+				};
+			},
 			// Deterministic for tests — a real `@woocommerce/date` resolves
 			// `period=year` into "since Jan 1st"; this fake just hardcodes that one
 			// resolution and otherwise trusts an explicit `after`/`before` already
 			// in the query (the "custom" period), rather than doing real date math.
-			getCurrentDates: ( query ) => ( {
-				primary: {
-					label: 'Test range',
-					range: '',
-					before: fakeMoment( query.before || '2026-09-08' ),
-					after: fakeMoment( query.after || '2026-01-01' ),
-				},
-				secondary: { label: 'Test previous range', range: '', before: null, after: null },
-			} ),
+			// It DOES reproduce one piece of real behaviour on purpose: an absent or
+			// unknown `compare` throws, exactly as the shipped bundle does.
+			getCurrentDates: ( query, defaultDateRange ) => {
+				const defaults = Object.fromEntries(
+					new URLSearchParams( defaultDateRange ).entries()
+				);
+				const compare = query.compare || defaults.compare;
+
+				if ( ! [ 'previous_period', 'previous_year' ].includes( compare ) ) {
+					throw new Error( `Cannot find compare: ${ compare || '' }` );
+				}
+
+				return {
+					primary: {
+						label: 'Test range',
+						range: '',
+						before: fakeMoment( query.before || '2026-09-08' ),
+						after: fakeMoment( query.after || '2026-01-01' ),
+					},
+					secondary: { label: 'Test previous range', range: '', before: null, after: null },
+				};
+			},
 			isoDateFormat: 'YYYY-MM-DD',
 		},
 		currency: () => ( { getCurrencyConfig: () => ( {} ) } ),

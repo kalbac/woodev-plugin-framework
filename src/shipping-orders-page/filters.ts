@@ -44,8 +44,17 @@ export const HAS_TRACKING_NO = 'no';
  * WooCommerce's date picker has no "all time" preset (D11) — the operator chose
  * the widest one instead: a delivery-orders list is a work queue, and an order
  * stuck two months ago is exactly the one a merchant opens the page for.
+ *
+ * ⚠ `compare` MUST be present here even though this page shows no period
+ * comparison and never sends `compare` to our REST route. `getCurrentDates()`
+ * resolves the compare value against a fixed list and throws
+ * `Cannot find compare:` when it is absent — which crashes the whole wc-admin
+ * app, not just this control. D11's "no period comparison" is about the UI and
+ * the server args; it is not licence to break `@woocommerce/date`'s own input
+ * contract. WooCommerce's own default is `period=month&compare=previous_year`;
+ * only the period differs here.
  */
-export const DEFAULT_DATE_RANGE = 'period=year';
+export const DEFAULT_DATE_RANGE = 'period=year&compare=previous_year';
 
 export function getCarrierFromQuery( query: WcQuery ): string {
 	return query[ CARRIER_PARAM ] || ALL_CARRIERS;
