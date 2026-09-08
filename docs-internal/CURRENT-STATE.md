@@ -6,13 +6,13 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-08 (s127).** ⛔ **Three finished SP-10 branches are open and UNMERGED, all three
-green and verified** — **#831** (#828 foundation, the delivery-status freshness seam), **#832**
-(increment 7, the filter row's client half) and **#833** (#830, a second `Orders_Provider` on the
-fixture). The merge was blocked by a Claude Code permission classifier, **not by CI**; each needs
-one button. Until they land, `main` has increments 1–2b and 6 only. Detail: `sessions/s127.md`.
+**As of 2026-09-08 (s127).** ✅ **Three SP-10 branches MERGED** (`e901b27`) — **#831** (#828
+foundation, the delivery-status freshness seam), **#833** (#830, a second `Orders_Provider` on the
+fixture) and **#832** (increment 7, the filter row's client half). `main` now carries SP-10
+increments 1, 2a, 2b, 6 and 7 plus the #828 data layer. Cards **#826 #827 #830** closed; **#828**
+stays open for its panel (increment 8). Detail: `sessions/s127.md`.
 
-Open work on the page: **#824 #829** (not started), **#820** (umbrella), **#830** (built, in #833).
+Open work on the page: **#824 #829** (not started), **#828** (panel only), **#820** (umbrella).
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -54,15 +54,15 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 08.09.2026 (s127) on `main` at `93fd2e5`:** unit **3699** / **9088**, 1
-skipped, with sodium ON; jest **1772** in **29** suites; **integration 180 / 658**; `npm run build` produces **zero git diff**, so
-the primary checkout reproduces the committed bundles exactly; phpcs clean — **with the warning
-level ON**; phpstan level 3 no errors; `lint:ts-baseline`, `typecheck`, `lint:phone-masks`,
-`lint:imask`, `lint:i18n`, `lint:i18n-sources`, `lint:mo` and `lint:docs` OK; catalogue **769**
-entries, **429** translated. Nothing on this line is carried forward.
+**Baselines — re-measured 08.09.2026 (s127) on the MERGED `main` at `e901b27`:** unit **3732** /
+**9162**, 1 skipped, with sodium ON; jest **1817** in **31** suites; **integration 184 / 671**;
+`npm run build` produces **zero git diff**, so the primary checkout reproduces the committed bundles
+exactly; phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`,
+`lint:mo` and `lint:docs` OK; catalogue **782** entries, **429** translated. Nothing on this line is
+carried forward.
 
-**On the three unmerged branches, same day:** integration **184 / 671** on `sp10-second-carrier`,
-**180 / 658** on the other two; jest **1817** and catalogue **782** on `sp10-filters-client`.
+**Before the merge, same day:** `main` at `93fd2e5` read unit **3699 / 9088**, jest **1772** in 29
+suites, integration **180 / 658**, catalogue **769** — that is what the three branches moved.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -168,9 +168,9 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: в `main` инкременты 1, 2a, 2b, 6; инкремент 7 и фундамент #828 ГОТОВЫ, но лежат в PR #832 и #831.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель «Data status» — UI поверх готового шва), плюс #824 #829. **Волна 2 написана в брифах, но НЕ запущена** — конфликт по `app.tsx` и реестру, нужен #832 в `main`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7 и слой данных #828.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель «Data status» — UI поверх готового шва), плюс #824 #829. **Волна 2 написана в брифах, но НЕ запущена** — брифы лежат готовыми, конфликт по `app.tsx` и реестру снят мержем. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
-✅ **На риге теперь ДВА перевозчика** (#830, PR #833 + `WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`): `providers=2`, агрегат `total=8` (5 + 3), в строках виден незамапленный статус ВТОРОГО словаря. До этого провайдер был один, и селектор перевозчика, разбивка счётчика §D6 и OR-агрегат M2 в браузере не воспроизводились вовсе.
+✅ **На риге теперь ДВА перевозчика** (#830 смержена + `WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`): `providers=2`, агрегат `total=8` (5 + 3), в строках виден незамапленный статус ВТОРОГО словаря. До этого провайдер был один, и селектор перевозчика, разбивка счётчика §D6 и OR-агрегат M2 в браузере не воспроизводились вовсе.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
