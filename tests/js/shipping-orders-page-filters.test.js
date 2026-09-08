@@ -6,14 +6,17 @@
  */
 
 import {
+	ADVANCED_FILTERS_VALUE,
 	ALL_CARRIERS,
 	DEFAULT_DATE_RANGE,
+	FILTER_PARAM,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
 	getDeliveryStatusFromQuery,
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
+	isAdvancedFiltersOpen,
 	readDateFilters,
 } from '../../src/shipping-orders-page/filters';
 
@@ -28,6 +31,30 @@ describe( 'getCarrierFromQuery', () => {
 
 	test( 'a present carrier param is returned verbatim', () => {
 		expect( getCarrierFromQuery( { carrier: 'cdek' } ) ).toBe( 'cdek' );
+	} );
+
+	/**
+	 * #835: `carrier` and `filter` are independent params now — an unrecognised
+	 * (or `advanced`) carrier must reach the server UNCHANGED, no client-side
+	 * coercion to the aggregate. `Orders_Query::resolve_providers()` already
+	 * answers an unknown carrier with an empty result set.
+	 */
+	test( 'an unrecognized carrier value — including "advanced" — is returned verbatim, never coerced', () => {
+		expect( getCarrierFromQuery( { carrier: 'advanced' } ) ).toBe( 'advanced' );
+		expect( getCarrierFromQuery( { carrier: 'nonexistent-carrier' } ) ).toBe( 'nonexistent-carrier' );
+	} );
+} );
+
+describe( 'isAdvancedFiltersOpen', () => {
+	/** #835: the advanced block is revealed by `FILTER_PARAM`, not `CARRIER_PARAM`. */
+	test( 'reads the filter param, not the carrier param', () => {
+		expect( isAdvancedFiltersOpen( { [ FILTER_PARAM ]: ADVANCED_FILTERS_VALUE } ) ).toBe( true );
+		expect( isAdvancedFiltersOpen( { carrier: ADVANCED_FILTERS_VALUE } ) ).toBe( false );
+	} );
+
+	test( 'any other filter value, or no filter param at all, is closed', () => {
+		expect( isAdvancedFiltersOpen( {} ) ).toBe( false );
+		expect( isAdvancedFiltersOpen( { [ FILTER_PARAM ]: 'all' } ) ).toBe( false );
 	} );
 } );
 
@@ -233,8 +260,8 @@ describe( 'buildAdvancedFiltersConfig', () => {
 		} );
 
 		expect( config.filters.status.input.options ).toEqual( [
-			{ key: 'pending', label: 'В ожидании' },
-			{ key: 'completed', label: 'Выполнен' },
+			{ value: 'pending', label: 'В ожидании' },
+			{ value: 'completed', label: 'Выполнен' },
 		] );
 	} );
 
@@ -242,8 +269,8 @@ describe( 'buildAdvancedFiltersConfig', () => {
 		const config = buildAdvancedFiltersConfig( deliveryStatusLabels );
 
 		expect( config.filters.delivery_status.input.options ).toEqual( [
-			{ key: 'pending', label: 'Ожидает отправки' },
-			{ key: 'delivered', label: 'Доставлено' },
+			{ value: 'pending', label: 'Ожидает отправки' },
+			{ value: 'delivered', label: 'Доставлено' },
 		] );
 	} );
 
@@ -252,6 +279,33 @@ describe( 'buildAdvancedFiltersConfig', () => {
 
 		Object.values( config.filters ).forEach( ( filter ) => {
 			expect( filter.allowMultiple ).toBe( false );
+		} );
+	} );
+
+	/**
+	 * #837 defect 1's regression guard. Upstream's own `FilterOption` type
+	 * (`packages/js/components/src/advanced-filters/types.ts`) is
+	 * `{ value, label }`. The `SelectControl` this feeds renders
+	 * `<option value={ option.value }>`; an option carrying `key` instead of
+	 * `value` renders an option with NO value attribute at all, so React
+	 * submits the option's TEXT (the Russian label) instead — which is exactly
+	 * what silently broke both the «Filter» button (`updateDisabled` stayed
+	 * `true`, per `getDefaultOptionValue()` reading `undefined`) and an
+	 * explicit pick (submitted `delivery_status_is=Ожидает отправки` and the
+	 * REST route answered `Invalid parameter(s)`). Worded so it fails for the
+	 * old `{ key, label }` shape: `option.value` must be a non-empty string.
+	 */
+	test( 'every option in the built config carries a non-empty string "value" — never "key"', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { pending: 'В обработке' } );
+
+		const allOptions = Object.values( config.filters ).flatMap( ( filter ) => filter.input.options );
+
+		expect( allOptions.length ).toBeGreaterThan( 0 );
+
+		allOptions.forEach( ( option ) => {
+			expect( typeof option.value ).toBe( 'string' );
+			expect( option.value.length ).toBeGreaterThan( 0 );
+			expect( option ).not.toHaveProperty( 'key' );
 		} );
 	} );
 } );

@@ -50,6 +50,8 @@ import {
 	ALL_CARRIERS,
 	CARRIER_PARAM,
 	DELIVERY_STATUS_PARAM,
+	FILTER_ALL_VALUE,
+	FILTER_PARAM,
 	HAS_TRACKING_PARAM,
 	ORDER_STATUS_PARAM,
 	buildAdvancedFiltersConfig,
@@ -67,8 +69,15 @@ import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-g
 /** Rows per page — increment 1's REST default. */
 const DEFAULT_PER_PAGE = 20;
 
-/** Every URL query key any control in the filter row can write. Used only as `carrierConfig.staticParams` — see its own comment. */
-const FILTER_QUERY_PARAMS = [
+/**
+ * The date-range and `AdvancedFilters` query keys — every filter-row key
+ * that belongs to neither `CARRIER_PARAM` nor `FILTER_PARAM`. Each of the two
+ * `FilterPicker`s below (#835) must carry this list PLUS the other picker's
+ * own param in its `staticParams`, or `FilterPicker`'s navigation drops
+ * whatever it does not list (its own contract — an unlisted param does not
+ * survive its navigation).
+ */
+const DATE_AND_ADVANCED_PARAMS = [
 	'period',
 	'compare',
 	'before',
@@ -440,33 +449,39 @@ export default function OrdersPage() {
 		/>,
 	];
 
+	// #835: carrier SCOPE and display MODE are two independent `FilterPicker`s
+	// now, each on its own param — see `filters.ts`'s `CARRIER_PARAM`/
+	// `FILTER_PARAM` doc comments for why. Each one's `staticParams` carries
+	// the OTHER picker's param plus the date-range/advanced keys, or a pick on
+	// one silently drops the other (`FilterPicker`'s own contract). `paged` is
+	// deliberately in neither list — it is component state, not a URL param at
+	// all here — so it still cannot survive a change and strand the merchant on
+	// a page that no longer exists.
 	const carrierConfig: WcFilterPickerConfig = {
-		label: __( 'Показать', 'woodev-plugin-framework' ),
+		label: __( 'Перевозчик', 'woodev-plugin-framework' ),
 		param: CARRIER_PARAM,
-		// Every OTHER filter-row query key IS carried across a carrier change —
-		// the date range and the advanced filters describe "what work queue view
-		// am I in", independent of which carrier is scoped, so switching tabs must
-		// not silently drop them (`FilterPicker`'s own contract: an unlisted param
-		// does not survive its navigation). `paged` is deliberately not one of
-		// these keys — it is component state, not a URL param at all here — so it
-		// still cannot survive a carrier change and strand the merchant on a page
-		// that no longer exists.
-		staticParams: FILTER_QUERY_PARAMS,
+		staticParams: [ FILTER_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
+		filters: providers.map( ( p ) => ( {
+			label: `${ p.label } (${ p.count })`,
+			value: p.id,
+		} ) ),
+	};
+
+	const filterModeConfig: WcFilterPickerConfig = {
+		label: __( 'Фильтры', 'woodev-plugin-framework' ),
+		param: FILTER_PARAM,
+		staticParams: [ CARRIER_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
+		showFilters: () => true,
+		defaultValue: FILTER_ALL_VALUE,
 		filters: [
-			...providers.map( ( p ) => ( {
-				label: `${ p.label } (${ p.count })`,
-				value: p.id,
-			} ) ),
+			{ label: __( 'Все заказы', 'woodev-plugin-framework' ), value: FILTER_ALL_VALUE },
 			// LAST on purpose. WooCommerce's own «Аналитика → Заказы» «Show» picker
 			// carries exactly `All orders` + `Advanced filters`, advanced last —
 			// measured on the rig, 08.09.2026 — and the advanced block is revealed
 			// by that option rather than standing open. Operator asked for the same.
-			{
-				label: __( 'Расширенные фильтры', 'woodev-plugin-framework' ),
-				value: ADVANCED_FILTERS_VALUE,
-			},
+			{ label: __( 'Расширенные фильтры', 'woodev-plugin-framework' ), value: ADVANCED_FILTERS_VALUE },
 		],
 	};
 
@@ -482,14 +497,6 @@ export default function OrdersPage() {
 		{}
 	);
 	const advancedFiltersConfig = buildAdvancedFiltersConfig( DELIVERY_STATUS_LABELS, orderStatusOptions );
-
-	if ( error ) {
-		return (
-			<Notice status="error" isDismissible={ false }>
-				{ error }
-			</Notice>
-		);
-	}
 
 	const TableCard = window.wc?.components?.TableCard;
 	const FilterPicker = window.wc?.components?.FilterPicker;
@@ -513,7 +520,8 @@ export default function OrdersPage() {
 	// the actual condition guarding that JSX, not from a boolean copy of it — so
 	// this is only for the wrapper `<div>`'s own visibility.
 	/**
-	 * The advanced block is revealed by the carrier picker's LAST option, never
+	 * The advanced block is revealed by the display-mode picker's LAST option
+	 * (#835 — its own `FILTER_PARAM`, split from the carrier picker), never
 	 * standing open. Read from the URL like every other filter here —
 	 * `FilterPicker` navigates instead of calling back.
 	 */
@@ -521,16 +529,29 @@ export default function OrdersPage() {
 
 	const hasAnyFilterControl = Boolean(
 		( hasCarrierFilter && FilterPicker && navigation ) ||
+			( FilterPicker && navigation ) || // the display-mode picker (#835) is always offered
 			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
 			( advancedOpen && AdvancedFilters && navigation && currency )
 	);
 
 	return (
 		<>
+			{ /*
+			 * #837 defect 5: a rejected query parameter used to return this
+			 * `Notice` INSTEAD OF the whole page, leaving bare text on an
+			 * otherwise empty screen with no way back. It now renders ABOVE the
+			 * filter row and table, which stay mounted, so the merchant can use
+			 * the very controls that caused the error to fix it.
+			 */ }
+			{ error && (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
+				</Notice>
+			) }
 			{ hasAnyFilterControl && (
 				<div className="woodev-orders__filters">
 					{ /*
-					 * The two basic pickers sit on ONE row. WooCommerce's own
+					 * The basic pickers sit on ONE row. WooCommerce's own
 					 * «Аналитика → Заказы» puts both inside a single flex
 					 * `.woocommerce-filters__basic-filters` — measured on the rig,
 					 * 08.09.2026. Stacking them was a defect the operator caught.
@@ -539,6 +560,18 @@ export default function OrdersPage() {
 					{ hasCarrierFilter && FilterPicker && navigation && (
 						<FilterPicker
 							config={ carrierConfig }
+							path={ navigation.getPath() }
+							query={ navigation.getQuery() }
+						/>
+					) }
+					{ /*
+					 * #835: display MODE is its own `FilterPicker`, independent of
+					 * carrier scope — always offered, unlike the carrier picker
+					 * above which only exists once there is more than one provider.
+					 */ }
+					{ FilterPicker && navigation && (
+						<FilterPicker
+							config={ filterModeConfig }
 							path={ navigation.getPath() }
 							query={ navigation.getQuery() }
 						/>
@@ -564,8 +597,8 @@ export default function OrdersPage() {
 					) }
 					</div>
 					{ /*
-					 * NOT a permanently visible region: revealed by the carrier
-					 * picker's «Расширенные фильтры» option, the way Analytics does it.
+					 * NOT a permanently visible region: revealed by the display-mode
+					 * picker's «Расширенные фильтры» option (#835), the way Analytics does it.
 					 *
 					 * `currency` is required by `AdvancedFilters`' own contract (its
 					 * README: an instance of `@woocommerce/currency`'s `CurrencyFactory`).
