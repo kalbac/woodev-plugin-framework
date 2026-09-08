@@ -5,6 +5,7 @@
  */
 
 import {
+	DELIVERY_STATUS_LABELS,
 	formatOrderDate,
 	getStatusTone,
 	hasTrackingNumber,
@@ -65,6 +66,26 @@ describe( 'getStatusTone', () => {
 
 	test( 'a value outside the enum falls back to muted, never a false ok/error', () => {
 		expect( getStatusTone( 'something_the_server_never_sends' ) ).toBe( 'muted' );
+	} );
+} );
+
+describe( 'DELIVERY_STATUS_LABELS', () => {
+	test( 'carries a Russian label for every canonical state, including unknown', () => {
+		[
+			'pending',
+			'created',
+			'in_transit',
+			'ready_for_pickup',
+			'delivered',
+			'returning',
+			'returned',
+			'failed',
+			'cancelled',
+			'unknown',
+		].forEach( ( state ) => {
+			expect( DELIVERY_STATUS_LABELS[ state ] ).toEqual( expect.any( String ) );
+			expect( DELIVERY_STATUS_LABELS[ state ] ).not.toBe( '' );
+		} );
 	} );
 } );
 

@@ -17,11 +17,16 @@
  * calling back with a value, so this page reads the carrier out of the query
  * and re-reads it on every history change.
  *
- * There is deliberately no delivery-status filter: the REST route
- * (`Orders_Controller::register_routes()`) has no status query arg, and
- * filtering rows client-side after the server already paginated them would
- * silently report a wrong total — inventing that capability was out of scope
- * for this rewrite (SP-10 #820, increment 2b rewrite report).
+ * SP-10 increment 7 (D10/D11) adds the rest of the filter row beside it, all
+ * URL-driven the same way: `DateRangeFilterPicker` (default `period=year` —
+ * this is a work queue, not a trend, so `compare` is read only because the
+ * component requires it and is never sent to the server) and `AdvancedFilters`
+ * for delivery status / WC order status / tracking presence — the three D10
+ * measured as actually reachable through `Orders_Controller`'s `after`,
+ * `before`, `delivery_status`, `status` and `has_tracking` args (increment 6's
+ * server half, already merged). No delivery-type filter: three hops ending in
+ * the shipping zones, nothing to query. `filters.ts` carries the pure
+ * URL <-> filter-state translation; this file only wires it to the components.
  *
  * Authored in JSX (automatic runtime — WP 6.6+).
  *
@@ -39,25 +44,64 @@ import type {
 	OrderRowPayment,
 	OrderRowTracking,
 } from './rest';
-import { formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
+import { DELIVERY_STATUS_LABELS, formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
+import {
+	ALL_CARRIERS,
+	CARRIER_PARAM,
+	DELIVERY_STATUS_PARAM,
+	HAS_TRACKING_PARAM,
+	ORDER_STATUS_PARAM,
+	buildAdvancedFiltersConfig,
+	filtersEqual,
+	getCarrierFromQuery,
+	getDeliveryStatusFromQuery,
+	getHasTrackingFromQuery,
+	getOrderStatusFromQuery,
+	readDateFilters,
+} from './filters';
+import type { DateFilterState, UrlFilters } from './filters';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
 const DEFAULT_PER_PAGE = 20;
 
-/** Query parameter the carrier `FilterPicker` owns. */
-const CARRIER_PARAM = 'carrier';
+/** Every URL query key any control in the filter row can write. Used only as `carrierConfig.staticParams` — see its own comment. */
+const FILTER_QUERY_PARAMS = [
+	'period',
+	'compare',
+	'before',
+	'after',
+	DELIVERY_STATUS_PARAM,
+	ORDER_STATUS_PARAM,
+	HAS_TRACKING_PARAM,
+];
 
-/** Carrier value meaning "every provider" — the aggregate #694 made the default. */
-const ALL_CARRIERS = 'all';
+/** Reads the URL query WooCommerce's navigation module currently reports, or `{}` when the module itself is unavailable. */
+function getQuery(): Record<string, string | undefined> {
+	return window.wc?.navigation?.getQuery() || {};
+}
 
-/**
- * Reads the active carrier out of the URL. `FilterPicker` navigates instead of
- * calling back, so the query — not React state — is the source of truth; an
- * absent parameter is the aggregate.
- */
-function getCarrierFromQuery(): string {
-	return window.wc?.navigation?.getQuery()?.[ CARRIER_PARAM ] || ALL_CARRIERS;
+/** Builds one comparable snapshot of every URL-driven filter (`filters.ts`) from the current query. */
+function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters {
+	const dateApi = window.wc?.date;
+	const { after, before } = dateApi
+		? readDateFilters( dateApi, query )
+		: { after: '', before: '' };
+
+	return {
+		carrier: getCarrierFromQuery( query ),
+		after,
+		before,
+		deliveryStatus: getDeliveryStatusFromQuery( query ),
+		status: getOrderStatusFromQuery( query ),
+		hasTracking: getHasTrackingFromQuery( query ),
+	};
+}
+
+/** Resolves `DateRangeFilterPicker`'s own `dateQuery` prop, or `null` when `wc-date` is unavailable — the page degrades rather than crash. */
+function readDateFilterState( query: Record<string, string | undefined> ): DateFilterState | null {
+	const dateApi = window.wc?.date;
+	return dateApi ? readDateFilters( dateApi, query ) : null;
 }
 
 /** Debounce for the search box, ms. */
@@ -262,7 +306,10 @@ export default function OrdersPage() {
 	const providers = getProviders();
 	const hasCarrierFilter = providers.length > 1;
 
-	const [ carrier, setCarrier ] = useState( getCarrierFromQuery );
+	const [ urlFilters, setUrlFilters ] = useState<UrlFilters>( () => readUrlFilters( getQuery() ) );
+	const [ dateFilterState, setDateFilterState ] = useState<DateFilterState | null>( () =>
+		readDateFilterState( getQuery() )
+	);
 	const [ page, setPage ] = useState( 1 );
 	const [ perPage, setPerPage ] = useState( DEFAULT_PER_PAGE );
 	const [ orderby, setOrderby ] = useState( 'date' );
@@ -275,10 +322,12 @@ export default function OrdersPage() {
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 
-	// `FilterPicker` changes the carrier by NAVIGATING, so the only way to learn
-	// about a pick — or about the browser's back button — is the history. The
-	// listener returns its own unlisten function (verified against the live
-	// runtime). Paging is per-carrier, so a change starts at page 1.
+	// Every control in the filter row — carrier `FilterPicker`, `DateRangeFilterPicker`,
+	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back
+	// with a value, so the only way to learn about a pick, or about the browser's
+	// back button, is the history. The listener returns its own unlisten function
+	// (verified against the live runtime). A change to any of them starts at page 1
+	// (requirement #4) — `filtersEqual` is what decides "any of them".
 	useEffect( () => {
 		const navigation = window.wc?.navigation;
 
@@ -287,10 +336,14 @@ export default function OrdersPage() {
 		}
 
 		return navigation.addHistoryListener( () => {
-			setCarrier( ( current ) => {
-				const next = getCarrierFromQuery();
+			const query = navigation.getQuery();
 
-				if ( next !== current ) {
+			setDateFilterState( readDateFilterState( query ) );
+
+			setUrlFilters( ( current ) => {
+				const next = readUrlFilters( query );
+
+				if ( ! filtersEqual( current, next ) ) {
 					setPage( 1 );
 				}
 
@@ -319,7 +372,19 @@ export default function OrdersPage() {
 		setError( '' );
 		setRows( null );
 
-		fetchOrders( { carrier, page, perPage, orderby, order, search } )
+		fetchOrders( {
+			carrier: urlFilters.carrier,
+			page,
+			perPage,
+			orderby,
+			order,
+			search,
+			after: urlFilters.after,
+			before: urlFilters.before,
+			status: urlFilters.status,
+			deliveryStatus: urlFilters.deliveryStatus,
+			hasTracking: urlFilters.hasTracking,
+		} )
 			.then( ( res ) => {
 				if ( cancelled ) {
 					return;
@@ -340,7 +405,7 @@ export default function OrdersPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [ carrier, page, perPage, orderby, order, search ] );
+	}, [ urlFilters, page, perPage, orderby, order, search ] );
 
 	/**
 	 * `Table` (inside `TableCard`) computes the NEXT sort direction itself from
@@ -376,9 +441,15 @@ export default function OrdersPage() {
 	const carrierConfig: WcFilterPickerConfig = {
 		label: __( 'Показать', 'woodev-plugin-framework' ),
 		param: CARRIER_PARAM,
-		// Nothing is carried across a carrier change on purpose: `paged` must not
-		// survive it, or switching carrier can land on a page that no longer exists.
-		staticParams: [],
+		// Every OTHER filter-row query key IS carried across a carrier change —
+		// the date range and the advanced filters describe "what work queue view
+		// am I in", independent of which carrier is scoped, so switching tabs must
+		// not silently drop them (`FilterPicker`'s own contract: an unlisted param
+		// does not survive its navigation). `paged` is deliberately not one of
+		// these keys — it is component state, not a URL param at all here — so it
+		// still cannot survive a carrier change and strand the merchant on a page
+		// that no longer exists.
+		staticParams: FILTER_QUERY_PARAMS,
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
 		filters: providers.map( ( p ) => ( {
@@ -386,6 +457,15 @@ export default function OrdersPage() {
 			value: p.id,
 		} ) ),
 	};
+
+	const dateApi = window.wc?.date;
+	const currencyFactory = window.wc?.currency;
+	const currency = currencyFactory ? currencyFactory() : undefined;
+	const orderStatusOptions = window.wc?.wcSettings?.getSetting<Record<string, string>>(
+		'orderStatuses',
+		{}
+	);
+	const advancedFiltersConfig = buildAdvancedFiltersConfig( DELIVERY_STATUS_LABELS, orderStatusOptions );
 
 	if ( error ) {
 		return (
@@ -397,6 +477,8 @@ export default function OrdersPage() {
 
 	const TableCard = window.wc?.components?.TableCard;
 	const FilterPicker = window.wc?.components?.FilterPicker;
+	const DateRangeFilterPicker = window.wc?.components?.DateRangeFilterPicker;
+	const AdvancedFilters = window.wc?.components?.AdvancedFilters;
 	const navigation = window.wc?.navigation;
 
 	if ( ! TableCard ) {
@@ -410,15 +492,61 @@ export default function OrdersPage() {
 		);
 	}
 
+	// Each control below is checked again, inline, right where it renders — TS
+	// only narrows `DateRangeFilterPicker`/`dateFilterState`/`dateApi` etc. from
+	// the actual condition guarding that JSX, not from a boolean copy of it — so
+	// this is only for the wrapper `<div>`'s own visibility.
+	const hasAnyFilterControl = Boolean(
+		( hasCarrierFilter && FilterPicker && navigation ) ||
+			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
+			( AdvancedFilters && navigation && currency )
+	);
+
 	return (
 		<>
-			{ hasCarrierFilter && FilterPicker && navigation && (
+			{ hasAnyFilterControl && (
 				<div className="woodev-orders__filters">
-					<FilterPicker
-						config={ carrierConfig }
-						path={ navigation.getPath() }
-						query={ navigation.getQuery() }
-					/>
+					{ hasCarrierFilter && FilterPicker && navigation && (
+						<FilterPicker
+							config={ carrierConfig }
+							path={ navigation.getPath() }
+							query={ navigation.getQuery() }
+						/>
+					) }
+					{ /*
+					 * Degrades — renders nothing for this one control — when `wc-date`
+					 * or the component itself is unavailable (an older WooCommerce),
+					 * the same rule `RoiPanel` already follows, rather than crashing
+					 * the whole page over one missing filter.
+					 */ }
+					{ DateRangeFilterPicker && dateFilterState && navigation && dateApi && (
+						<DateRangeFilterPicker
+							dateQuery={ dateFilterState.dateQuery }
+							isoDateFormat={ dateApi.isoDateFormat }
+							onRangeSelect={ ( update ) => {
+								navigation.updateQueryString?.(
+									update,
+									navigation.getPath(),
+									navigation.getQuery()
+								);
+							} }
+						/>
+					) }
+					{ /*
+					 * `currency` is required by `AdvancedFilters`' own contract (its
+					 * README: an instance of `@woocommerce/currency`'s `CurrencyFactory`).
+					 * No instance means the runtime is missing `wc-currency`, and this
+					 * control degrades the same way as the other two.
+					 */ }
+					{ AdvancedFilters && navigation && currency && (
+						<AdvancedFilters
+							config={ advancedFiltersConfig }
+							path={ navigation.getPath() }
+							query={ navigation.getQuery() }
+							siteLocale="ru_RU"
+							currency={ currency }
+						/>
+					) }
 				</div>
 			) }
 			<TableCard

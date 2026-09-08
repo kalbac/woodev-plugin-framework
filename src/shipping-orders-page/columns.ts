@@ -7,6 +7,7 @@
  * @package woodev-plugin-framework
  */
 
+import { __ } from '@wordpress/i18n';
 import { dateI18n, humanTimeDiff } from '@wordpress/date';
 import type { DeliveryStatusCanonical, OrderRowTracking } from './rest';
 
@@ -71,6 +72,29 @@ const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
 export function getStatusTone( canonical: string ): StatusTone {
 	return STATUS_TONE[ canonical as DeliveryStatusCanonical ] || 'muted';
 }
+
+/**
+ * Every canonical delivery status's Russian label, `unknown` included — the
+ * options the delivery-status `AdvancedFilters` entry offers (SP-10 spec D10,
+ * increment 7). Mirrors `Delivery_Status::labels()`
+ * (`woodev/shipping-method/order/class-delivery-status.php`) byte-for-byte, the
+ * same PHP class every row's own `canonical_label` already comes from — read
+ * with Serena, not retyped from memory. Duplicated rather than fetched because
+ * it is a small, closed, framework-owned enum, the same precedent `app.tsx`'s
+ * own `TYPE_LABELS` already sets for the three delivery types.
+ */
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatusCanonical, string> = {
+	pending: __( 'Ожидает отправки', 'woodev-plugin-framework' ),
+	created: __( 'Создано у перевозчика', 'woodev-plugin-framework' ),
+	in_transit: __( 'В пути', 'woodev-plugin-framework' ),
+	ready_for_pickup: __( 'Готово к выдаче', 'woodev-plugin-framework' ),
+	delivered: __( 'Доставлено', 'woodev-plugin-framework' ),
+	returning: __( 'Возврат в пути', 'woodev-plugin-framework' ),
+	returned: __( 'Возвращено отправителю', 'woodev-plugin-framework' ),
+	failed: __( 'Не удалось доставить', 'woodev-plugin-framework' ),
+	cancelled: __( 'Отменено', 'woodev-plugin-framework' ),
+	unknown: __( 'Неизвестно', 'woodev-plugin-framework' ),
+};
 
 /**
  * Whether a row's tracking number is present. A missing number renders
