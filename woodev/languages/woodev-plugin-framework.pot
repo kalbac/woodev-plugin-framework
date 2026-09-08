@@ -3585,3 +3585,15 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Расширенные фильтры"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Перевозчик"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Фильтры"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Все заказы"
+msgstr ""

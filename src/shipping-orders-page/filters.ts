@@ -93,9 +93,14 @@ export function getCarrierFromQuery( query: WcQuery ): string {
 	const value = query[ CARRIER_PARAM ];
 
 	// #835: `carrier` and `filter` are independent params now, so nothing here
-	// singles out `advanced` any more. An unrecognised carrier reaches the
-	// server unchanged — `Orders_Query::resolve_providers()` already answers
-	// it with an empty result set rather than needing a client-side guess.
+	// singles out `advanced` any more. An unrecognised carrier reaches the server
+	// unchanged, and the server answers it — `Orders_Controller` returns a 400
+	// «Неизвестный перевозчик» (`class-orders-controller.php`, pinned by
+	// `OrdersRestTest::test_unknown_carrier_is_a_400_not_a_silent_fallback_to_the_aggregate`),
+	// which the page now shows above a settled empty table rather than instead of
+	// the whole page. Operator decision, 08.09.2026: a hand-edited carrier should
+	// say WHY the table is empty, and what matters is only that it no longer
+	// widens the selection to every order.
 	return value ? value : ALL_CARRIERS;
 }
 

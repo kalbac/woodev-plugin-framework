@@ -534,9 +534,11 @@ export default function OrdersPage() {
 	 */
 	const advancedOpen = isAdvancedFiltersOpen( getQuery() );
 
+	// The display-mode picker (#835) is offered whenever `FilterPicker` exists, so it
+	// subsumes the carrier picker's own condition — `hasCarrierFilter` only decides
+	// whether the CARRIER picker renders, further down, not whether the row does.
 	const hasAnyFilterControl = Boolean(
-		( hasCarrierFilter && FilterPicker && navigation ) ||
-			( FilterPicker && navigation ) || // the display-mode picker (#835) is always offered
+		( FilterPicker && navigation ) ||
 			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
 			( advancedOpen && AdvancedFilters && navigation && currency )
 	);
