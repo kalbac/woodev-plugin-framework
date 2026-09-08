@@ -411,6 +411,13 @@ export default function OrdersPage() {
 					( err && err.message ) ||
 						__( 'Не удалось загрузить заказы.', 'woodev-plugin-framework' )
 				);
+				// `rows` was reset to `null` at the top of this effect and this
+				// branch never touched it, so `TableCard`'s `isLoading={ null ===
+				// rows }` stayed `true` forever — a permanent loading skeleton
+				// under the error notice above it. Settling to an empty table
+				// here is what `isLoading` becoming `false` actually looks like.
+				setRows( [] );
+				setTotal( 0 );
 			} );
 
 		return () => {

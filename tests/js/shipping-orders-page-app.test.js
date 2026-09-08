@@ -686,6 +686,26 @@ describe( 'empty and error states', () => {
 		expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.woodev-orders__filters' ) ).toBeInTheDocument();
 	} );
+
+	/**
+	 * Follow-up to the fix above: `rows` was reset to `null` at the top of the
+	 * fetch effect and the `.catch()` branch never touched it again, so
+	 * `TableCard` kept rendering `isLoading={ true }` forever — a permanent
+	 * loading skeleton sitting under the error notice, "pretending to load".
+	 * Asserted on the RENDERED loading text, not the internal `rows` state.
+	 */
+	test( 'a rejected fetch settles the table out of its loading state, not a permanent spinner', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockRejectedValue( new Error( 'Сервер недоступен.' ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Сервер недоступен.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.queryByText( 'Загрузка…' ) ).not.toBeInTheDocument();
+	} );
 } );
 
 describe( 'the delivery-analytics panel (#711)', () => {
