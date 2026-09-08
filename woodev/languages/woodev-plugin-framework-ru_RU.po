@@ -3548,3 +3548,55 @@ msgstr "%s должен быть датой в формате ISO 8601 (ГГГГ
 #, php-format
 msgid "%s is not a recognized delivery status."
 msgstr "%s — неизвестный статус доставки."
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "равен"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус доставки"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Убрать фильтр по статусу доставки"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус доставки {{rule /}} {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Трек-номер"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Убрать фильтр по трек-номеру"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Трек-номер {{rule /}} {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Есть"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Отсутствует"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус заказа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Убрать фильтр по статусу заказа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Статус заказа {{rule /}} {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Заказы соответствуют условиям"
+msgstr ""
