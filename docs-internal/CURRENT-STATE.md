@@ -12,21 +12,23 @@ filters: #837 defects 1, 2, 3, 5a plus **#835**, and the display mode is a TOGGL
 where WooCommerce's `FilterOption` is `{ value, label }`, which rendered «Filter» as a DISABLED
 button — and the tests asserted the broken shape, so 1820 green jest tests never saw it.
 
-⚠ **«Matches nothing» has exactly ONE correct mechanism here, and two plausible ones are wrong.**
-An empty status array is expanded by HPOS into EVERY valid status; a bogus status slug empties the
-table on HPOS and does nothing on the legacy CPT datastore, where `WP_Query` walks only REGISTERED
-statuses and drops the condition. Use `Orders_Query::NO_MATCH_META_QUERY` — the only one both
-datastore paths share. Measured s128; the integration suite caught the second, a unit test could not.
+⚠ **«Matches nothing» has exactly ONE correct mechanism, and two plausible ones are wrong.** An
+empty status array is expanded by HPOS into EVERY valid status; a bogus slug empties the table on
+HPOS and does nothing on legacy CPT, where `WP_Query` walks only REGISTERED statuses. Use
+`Orders_Query::NO_MATCH_META_QUERY`. The integration suite caught the second; a unit test could not.
 
-Open on the page: **#824 #828 #829 #834 #836 #838 #839 #841**. ⚠ **#836 no longer waits on him** —
+⚠ **#836 is STARTED, on TWO unmerged branches** — `feat/sp10-filter-rules-client` (`39a48d2`,
+green) and `kalbac/sp10-filter-rules-server` (`e3477b3`, WIP: gates never run, no integration
+tests). **Neither merges alone.** Next step: the handoff's «С чего начать» item 0.
+
+Open on the page: **#824 #828 #829 #834 #836 #838 #839 #841 #842 #843**. ⚠ **#836 no longer waits on him** —
 he moved it to Бэклог 09.09.2026 («там не на что отвечать»), so the card IS the brief; #837 keeps
 only defect 4, which belongs to that work.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
-A `wc-admin` page highlights its parent menu item **client-side**, from the `wpOpenMenu` property
-its `woocommerce_admin_pages_list` entry declares — WordPress renders the menu server-side and never
-sees `path`. Design: `specs/2026-09-07-sp10-orders-page-design.md` §D1, §D7.
+It highlights its parent menu item **client-side**, from the `wpOpenMenu` property its
+`woocommerce_admin_pages_list` entry declares — WordPress never sees `path`. Design: §D1, §D7.
 
 ⚠ **Route B covers `@woocommerce/{navigation,date,currency}` too** — absent from `node_modules`
 AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-components` /
@@ -48,7 +50,7 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count (gotcha `a-stricter-base-class-fatals-on-signatures`). (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
+⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count. (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
@@ -57,7 +59,7 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
-✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
+✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
 **Baselines — re-measured 09.09.2026 (s128) on MERGED `main` at `af08aef`:**
 unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1837** in **31** suites;
@@ -66,8 +68,8 @@ reproduces the committed bundles exactly; phpcs clean — **with the warning lev
 level 3 no errors; every `lint:*` OK; catalogue **786** entries, **429** translated. Nothing on
 this line is carried forward.
 
-**`main` at `e901b27` (s127), for comparison:** unit **3732 / 9162**, jest **1817**, integration
-**184 / 671**, catalogue **782** — that is what PR #840 moved.
+**`main` at `e901b27` (s127):** unit **3732 / 9162**, jest **1817**, integration **184 / 671**,
+catalogue **782** — what PR #840 moved.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -79,7 +81,7 @@ command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows
 
 ⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — 1 in the primary, 6 without `plugins-reference/`. Gotcha `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
 
-✅ **`--order-by=reverse` is GREEN and GATED IN CI** (#606), target PHP.
+✅ **`--order-by=reverse` GREEN and GATED IN CI** (#606).
 
 ✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
 ~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
