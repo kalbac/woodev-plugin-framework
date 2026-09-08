@@ -377,17 +377,26 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\expect( 'wp_enqueue_style' )
 			->with( 'woodev-shipping-orders-page', \Mockery::type( 'string' ), [ 'wc-components' ], '1.2.3' )
 			->once();
-		// The three hand-declared WooCommerce handles are the whole of Route B, so
-		// the list is pinned exactly rather than loosely: `wc-components` for
+		// The hand-declared WooCommerce handles are the whole of Route B, so the
+		// list is pinned exactly rather than loosely: `wc-components` for
 		// `TableCard`/`FilterPicker`, `wc-navigation` because the carrier filter is
-		// URL-driven, and `wc-admin-app` last so our script runs after the app shell
-		// and `woocommerce_admin_pages_list` is read with our page already on it.
+		// URL-driven, `wc-admin-app` so our script runs after the app shell and
+		// `woocommerce_admin_pages_list` is read with our page already on it, then
+		// `wc-date` for `DateRangeFilterPicker`'s period resolution and
+		// `wc-currency` because `AdvancedFilters` consumes a `CurrencyFactory`.
+		//
+		// `wc-settings` is deliberately NOT in this list and must not be added: it
+		// is only conditionally registered, and naming an unregistered handle makes
+		// WordPress drop this whole bundle silently (gotcha
+		// `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`).
+		// Pinning the list exactly is what would catch that regression, which is
+		// why this assertion stays strict.
 		Functions\expect( 'wp_enqueue_script' )
 			->once()
 			->with(
 				'woodev-shipping-orders-page',
 				\Mockery::type( 'string' ),
-				[ 'wc-components', 'wc-navigation', 'wc-admin-app' ],
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ],
 				'1.2.3',
 				true
 			);
