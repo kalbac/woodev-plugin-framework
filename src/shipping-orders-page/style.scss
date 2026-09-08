@@ -268,15 +268,18 @@
 
 /**
  * The display-mode TOGGLE (operator, 09.09.2026 — a two-state control has no business
- * being a list). It sits in the same flex row as the pickers, which align on their
- * BOTTOM edge because each carries a label above its control. The toggle has no label
- * above it, so without this it would hang off the row's baseline.
+ * being a list).
+ *
+ * ⚠ It lives on its OWN row BENEATH the pickers, not inside their flex row — operator,
+ * same pass, after seeing it wedged between the two selects. Every picker carries a label
+ * above its control, so they align on their bottom edge; a toggle has none, and in among
+ * them it reads as something that fell out of alignment rather than as its own control.
+ * Keep it out of `.woodev-orders__basic-filters`.
  */
 .woodev-orders__mode-toggle {
 	display: flex;
 	align-items: center;
-	// Matches the pickers' own control height, so the row reads as one line.
-	min-height: 40px;
+	margin-top: 12px;
 
 	.components-toggle-control .components-base-control__field {
 		margin-bottom: 0;

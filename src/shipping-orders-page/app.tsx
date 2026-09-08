@@ -591,12 +591,37 @@ export default function OrdersPage() {
 						/>
 					) }
 					{ /*
+					 * Degrades — renders nothing for this one control — when `wc-date`
+					 * or the component itself is unavailable (an older WooCommerce),
+					 * the same rule `RoiPanel` already follows, rather than crashing
+					 * the whole page over one missing filter.
+					 */ }
+					{ DateRangeFilterPicker && dateFilterState && navigation && dateApi && (
+						<DateRangeFilterPicker
+							dateQuery={ dateFilterState.dateQuery }
+							isoDateFormat={ dateApi.isoDateFormat }
+							onRangeSelect={ ( update ) => {
+								navigation.updateQueryString?.(
+									update,
+									navigation.getPath(),
+									navigation.getQuery()
+								);
+							} }
+						/>
+					) }
+					</div>
+					{ /*
 					 * The display MODE is a TOGGLE, not a picker — operator, 09.09.2026, on the
 					 * rig. While «Показать» held one axis (a specific carrier OR a pointwise
 					 * filter across all of them) a list was the honest control. Splitting the
 					 * carrier out onto its own picker (#835) left this one with exactly two
 					 * states, and a two-state list is a wasted click plus a false promise of a
 					 * third option. The control type carries part of the meaning (Rule 10a).
+					 *
+					 * It sits on its OWN row BENEATH the two pickers, not between them — operator,
+					 * 09.09.2026, after seeing it wedged in the middle. A toggle has no label above
+					 * it, so in a row of labelled selects it reads as something that fell out of
+					 * alignment rather than as a control of its own.
 					 *
 					 * ⚠ Turning it OFF must also clear the advanced filters, and that is now OUR
 					 * job: the clearing used to come free from `FilterPicker.update()`'s
@@ -620,28 +645,8 @@ export default function OrdersPage() {
 						</div>
 					) }
 					{ /*
-					 * Degrades — renders nothing for this one control — when `wc-date`
-					 * or the component itself is unavailable (an older WooCommerce),
-					 * the same rule `RoiPanel` already follows, rather than crashing
-					 * the whole page over one missing filter.
-					 */ }
-					{ DateRangeFilterPicker && dateFilterState && navigation && dateApi && (
-						<DateRangeFilterPicker
-							dateQuery={ dateFilterState.dateQuery }
-							isoDateFormat={ dateApi.isoDateFormat }
-							onRangeSelect={ ( update ) => {
-								navigation.updateQueryString?.(
-									update,
-									navigation.getPath(),
-									navigation.getQuery()
-								);
-							} }
-						/>
-					) }
-					</div>
-					{ /*
-					 * NOT a permanently visible region: revealed by the display-mode
-					 * picker's «Расширенные фильтры» option (#835), the way Analytics does it.
+					 * NOT a permanently visible region: revealed by the display-mode TOGGLE
+					 * above (#835, operator 09.09.2026), the way Analytics reveals its own.
 					 *
 					 * `currency` is required by `AdvancedFilters`' own contract (its
 					 * README: an instance of `@woocommerce/currency`'s `CurrencyFactory`).

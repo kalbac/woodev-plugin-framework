@@ -530,6 +530,34 @@ describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026
 		);
 	} );
 
+	/**
+	 * ⚠ Placement, not presence. The operator moved this toggle out from BETWEEN the two
+	 * pickers onto its own row beneath them (09.09.2026): every picker carries a label above
+	 * its control and they align on their bottom edge, so a label-less toggle among them
+	 * reads as something that fell out of alignment. Nothing else in this file can see where
+	 * the control sits, so folding it back into the row would go unnoticed.
+	 */
+	test( 'the toggle sits on its own row, NOT inside the pickers row', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
+
+		const row = container.querySelector( '.woodev-orders__basic-filters' );
+		const toggle = container.querySelector( '.woodev-orders__mode-toggle' );
+
+		expect( row ).not.toBeNull();
+		expect( toggle ).not.toBeNull();
+		expect( row.contains( toggle ) ).toBe( false );
+
+		// …and it comes AFTER the row, not before it.
+		expect( row.compareDocumentPosition( toggle ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
 	test( 'the carrier picker still renders beside it, owning its own param', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
