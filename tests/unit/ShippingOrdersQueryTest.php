@@ -25,6 +25,7 @@ use Brain\Monkey\Functions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 class ShippingOrdersQueryTest extends TestCase {
 
@@ -42,6 +43,11 @@ class ShippingOrdersQueryTest extends TestCase {
 				'wc-cancelled'  => 'Cancelled',
 				'wc-failed'     => 'Failed',
 			]
+		);
+		Functions\when( 'wc_string_to_bool' )->alias(
+			static function ( $value ): bool {
+				return is_bool( $value ) ? $value : ( 'yes' === $value || 1 === $value || 'true' === $value || '1' === $value );
+			}
 		);
 
 		Orders_Registry::instance()->reset_for_tests();
@@ -293,5 +299,499 @@ class ShippingOrdersQueryTest extends TestCase {
 
 	public function test_meta_query_for_keys_empty_is_the_no_match_sentinel(): void {
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, Orders_Query::meta_query_for_keys( [] ) );
+	}
+
+	// ----- date range: after/before (SP-10 spec D10/D11) -----
+
+	public function test_after_only_builds_a_gte_bound(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'after' => '2026-01-15' ] );
+
+		$this->assertSame( '>=2026-01-15', $args['date_created'] );
+	}
+
+	public function test_before_only_builds_a_lte_bound(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'before' => '2026-01-31' ] );
+
+		$this->assertSame( '<=2026-01-31', $args['date_created'] );
+	}
+
+	public function test_after_and_before_build_the_ellipsis_range(): void {
+		$args = $this->query_with_hpos( true )->build_args(
+			[
+				'after'  => '2026-01-01',
+				'before' => '2026-01-31',
+			]
+		);
+
+		$this->assertSame( '2026-01-01...2026-01-31', $args['date_created'] );
+	}
+
+	public function test_neither_bound_omits_date_created(): void {
+		$args = $this->query_with_hpos( true )->build_args( [] );
+
+		$this->assertArrayNotHasKey( 'date_created', $args );
+	}
+
+	public function test_a_malformed_date_is_ignored(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'after' => '15-01-2026' ] );
+
+		$this->assertArrayNotHasKey( 'date_created', $args );
+	}
+
+	/**
+	 * Format-valid but calendar-invalid (30 February does not exist) — checkdate()
+	 * must reject it, not just the regex.
+	 */
+	public function test_a_calendar_invalid_date_is_ignored(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'before' => '2026-02-30' ] );
+
+		$this->assertArrayNotHasKey( 'date_created', $args );
+	}
+
+	// ----- native WC order status override (SP-10 spec D10) -----
+
+	public function test_an_explicit_valid_status_overrides_the_default_list(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'wc-processing' ] ] );
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+	}
+
+	/**
+	 * A status without its `wc-` prefix is tolerated — `wc_get_order_statuses()`
+	 * keys always carry it, but a status is commonly referred to without it.
+	 */
+	public function test_a_status_without_the_wc_prefix_is_normalized(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'processing' ] ] );
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+	}
+
+	/**
+	 * An explicit status filter is NATIVE pass-through — it deliberately overrides
+	 * the default cancelled/failed exclusion when the merchant asks for exactly that
+	 * status.
+	 */
+	public function test_an_explicit_status_filter_can_include_cancelled(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'wc-cancelled' ] ] );
+
+		$this->assertSame( [ 'wc-cancelled' ], $args['status'] );
+	}
+
+	public function test_an_unrecognized_status_is_dropped_and_the_default_survives_if_nothing_else_valid(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'not-a-real-status' ] ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	public function test_a_mixed_valid_and_invalid_status_list_keeps_only_the_valid_entries(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'wc-processing', 'ghost-status' ] ] );
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+	}
+
+	// ----- delivery-status filter (SP-10 spec D10 — the inversion) -----
+
+	private function provider_with_status(
+		string $id,
+		string $marker,
+		?string $status_meta_key = null,
+		array $status_map = []
+	): Orders_Provider {
+		return Orders_Provider::create(
+			$id,
+			ucfirst( $id ),
+			$marker,
+			[ $id ],
+			[
+				'status_meta_key' => $status_meta_key,
+				'status_map'      => $status_map,
+			]
+		);
+	}
+
+	public function test_delivery_status_hpos_single_carrier_builds_an_in_clause_of_its_own_raw_values(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status(
+				'cdek',
+				'_cdek_marker',
+				'_cdek_status',
+				[
+					'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT,
+					'CDEK_ENROUTE'  => Delivery_Status::IN_TRANSIT,
+				]
+			)
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => Delivery_Status::IN_TRANSIT,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'relation' => 'AND',
+				[
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+				],
+				[
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_ACCEPTED', 'CDEK_ENROUTE' ],
+						'compare' => 'IN',
+					],
+				],
+			],
+			$args['meta_query']
+		);
+	}
+
+	public function test_delivery_status_hpos_aggregate_ors_across_participating_providers(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] ) );
+		$registry->register_provider( $this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YAN_DONE' => Delivery_Status::DELIVERED ] ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'all',
+				'delivery_status' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_cdek_status',
+				'value'   => [ 'CDEK_DONE' ],
+				'compare' => 'IN',
+			],
+			$args['meta_query'][1][0]
+		);
+		$this->assertSame(
+			[
+				'key'     => '_yandex_status',
+				'value'   => [ 'YAN_DONE' ],
+				'compare' => 'IN',
+			],
+			$args['meta_query'][1][1]
+		);
+		$this->assertSame( 'OR', $args['meta_query'][1]['relation'] );
+	}
+
+	/**
+	 * A provider with no status concept at all is ALWAYS unknown — its marker key
+	 * (guaranteed present within scope) stands in for "always true".
+	 */
+	public function test_delivery_status_unknown_matches_a_provider_with_no_status_concept_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_status( 'novendor', '_novendor_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'novendor',
+				'delivery_status' => Delivery_Status::UNKNOWN,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_novendor_marker',
+				'compare' => 'EXISTS',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	/**
+	 * `unknown` against a provider WITH a status concept: a `NOT IN` of its own
+	 * known-good raw values — covers both "no meta at all" and "an unmapped raw
+	 * value" in one clause (WordPress's `meta_query` LEFT JOINs for negative
+	 * compares).
+	 */
+	public function test_delivery_status_unknown_against_a_real_status_map_builds_not_in_known_values(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => Delivery_Status::UNKNOWN,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_cdek_status',
+				'value'   => [ 'CDEK_ACCEPTED' ],
+				'compare' => 'NOT IN',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	/**
+	 * A carrier that CANNOT ever report a given canonical state (its status_map
+	 * never maps to it) contributes no clause — the filter must match nothing, not
+	 * silently fall back to the unfiltered scope.
+	 */
+	public function test_delivery_status_no_participating_provider_builds_the_no_match_sentinel(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+	}
+
+	public function test_delivery_status_unrecognized_value_is_ignored_entirely(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => 'not-a-real-canonical-state',
+			]
+		);
+
+		// Scope-only shape survives byte for byte — no extra AND part was added.
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query']
+		);
+	}
+
+	public function test_delivery_status_legacy_cpt_carries_the_status_clauses_query_var_not_meta_query(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] )
+		);
+
+		$args = $this->query_with_hpos( false, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_DONE' ],
+					'compare' => 'IN',
+				],
+			],
+			$args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ]
+		);
+	}
+
+	// ----- tracking-presence filter (SP-10 spec D10) -----
+
+	public function test_has_tracking_true_builds_an_exists_clause(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	public function test_has_tracking_false_builds_a_not_exists_clause(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'NOT EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	/**
+	 * A carrier without a tracking concept at all can never report `true`.
+	 */
+	public function test_has_tracking_true_for_a_carrier_without_tracking_builds_the_no_match_sentinel(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => true,
+			]
+		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+	}
+
+	/**
+	 * The same carrier ALWAYS counts as "no tracking" — never having any tracking
+	 * concept means it never has a tracking number either.
+	 */
+	public function test_has_tracking_false_for_a_carrier_without_tracking_matches_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	public function test_has_tracking_absent_never_adds_a_meta_query_part(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query']
+		);
+	}
+
+	/**
+	 * `has_param()`-style tri-state: an EXPLICIT `false` must still filter, not be
+	 * mistaken for "absent" — read via `array_key_exists()`, not `isset()`.
+	 */
+	public function test_has_tracking_explicit_false_is_not_mistaken_for_absent(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => false,
+			]
+		);
+
+		$this->assertArrayHasKey( 'meta_query', $args );
+		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + tracking part.
+	}
+
+	public function test_has_tracking_legacy_cpt_carries_the_tracking_clauses_query_var_not_meta_query(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
+		);
+
+		$args = $this->query_with_hpos( false, $registry )->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => true,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args[ Orders_Query::QUERY_VAR_TRACKING_CLAUSES ]
+		);
+	}
+
+	// ----- combining more than one filter -----
+
+	/**
+	 * Delivery-status AND tracking-presence together must both be ANDed with the
+	 * scope — three independent parts, none of them merging another's `relation`.
+	 */
+	public function test_delivery_status_and_has_tracking_together_and_with_the_scope(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'cdek',
+				'СДЭК',
+				'_cdek_marker',
+				[ 'cdek' ],
+				[
+					'status_meta_key'   => '_cdek_status',
+					'status_map'        => [ 'CDEK_DONE' => Delivery_Status::DELIVERED ],
+					'tracking_meta_key' => '_cdek_tracking',
+				]
+			)
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'         => 'cdek',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'has_tracking'    => true,
+			]
+		);
+
+		$this->assertSame( 'AND', $args['meta_query']['relation'] );
+		$this->assertCount( 4, $args['meta_query'] ); // relation + scope part + status part + tracking part.
 	}
 }

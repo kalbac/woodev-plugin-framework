@@ -341,6 +341,296 @@ class OrdersRestTest extends TestCase {
 		$this->assertSame( 'SOME_STATUS_NOT_IN_THE_MAP', $row['delivery_status']['raw'] );
 	}
 
+	// -------------------------------------------------------------------------------
+	// SP-10 increment 6 (#826, #827, spec D10/D11) — the filter row's server half.
+	//
+	// NOT RUN BY THE WORKER THAT AUTHORED THESE TESTS, same as the rest of this file
+	// (see the class docblock) — but here it matters MORE than usual: this
+	// integration environment runs the LEGACY CPT order datastore, which is exactly
+	// the path `meta_query` cannot reach directly (gotcha
+	// `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`). A unit test can
+	// only pin the ARGS Orders_Query::build_args() builds; only a real dispatch here,
+	// against a real `WC_Order_Data_Store_CPT`, proves the
+	// `woocommerce_order_data_store_cpt_get_orders_query` translation in
+	// Orders_Registry::translate_marker_keys_query_var() actually filters the rows —
+	// for the delivery-status and tracking-presence filters exactly as it already did
+	// for the marker-key scope.
+	// -------------------------------------------------------------------------------
+
+	public function test_date_range_after_and_before_scope_to_the_range(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$too_early = $this->create_marked_order( self::CDEK_MARKER );
+		$too_early->set_date_created( '2010-01-01T00:00:00' );
+		$too_early->save();
+
+		$in_range = $this->create_marked_order( self::CDEK_MARKER );
+		$in_range->set_date_created( '2050-06-15T00:00:00' );
+		$in_range->save();
+
+		$too_late = $this->create_marked_order( self::CDEK_MARKER );
+		$too_late->set_date_created( '2090-01-01T00:00:00' );
+		$too_late->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'after', '2050-01-01' );
+		$request->set_param( 'before', '2050-12-31' );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $in_range->get_id(), $ids );
+		$this->assertNotContains( $too_early->get_id(), $ids );
+		$this->assertNotContains( $too_late->get_id(), $ids );
+	}
+
+	public function test_an_invalid_date_is_a_400(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'after', '2026-02-30' ); // 30 February does not exist.
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	public function test_native_status_filter_scopes_to_the_requested_status(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$on_hold = $this->create_marked_order( self::CDEK_MARKER );
+		$on_hold->set_status( 'on-hold' );
+		$on_hold->save();
+
+		$processing = $this->create_marked_order( self::CDEK_MARKER );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'status', [ 'on-hold' ] );
+
+		$response = rest_get_server()->dispatch( $request );
+		$ids      = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $on_hold->get_id(), $ids );
+		$this->assertNotContains( $processing->get_id(), $ids );
+	}
+
+	public function test_an_invalid_delivery_status_is_a_400(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'delivery_status', 'not-a-real-canonical-state' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * The real subject of D10's delivery-status filter: the inverted `status_map`
+	 * scopes to exactly the orders whose RAW meta maps to the requested canonical
+	 * state — proven against the legacy CPT datastore's real `meta_query`
+	 * translation, not just the args Orders_Query builds.
+	 */
+	public function test_delivery_status_filter_scopes_to_orders_mapping_to_that_canonical_state(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker          = '_woodev_test_delivery_status_filter_marker';
+		$status_meta_key = '_woodev_test_delivery_status_filter_status';
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'status_filter_carrier',
+				'Status Filter Carrier',
+				$marker,
+				[ 'status_filter_carrier' ],
+				[
+					'status_meta_key' => $status_meta_key,
+					'status_map'      => [
+						'ACCEPTED' => Delivery_Status::IN_TRANSIT,
+						'HANDED'   => Delivery_Status::DELIVERED,
+					],
+				]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$in_transit_order = wc_create_order();
+		$in_transit_order->set_status( 'processing' );
+		$in_transit_order->update_meta_data( $marker, '1' );
+		$in_transit_order->update_meta_data( $status_meta_key, 'ACCEPTED' );
+		$in_transit_order->save();
+
+		$delivered_order = wc_create_order();
+		$delivered_order->set_status( 'processing' );
+		$delivered_order->update_meta_data( $marker, '1' );
+		$delivered_order->update_meta_data( $status_meta_key, 'HANDED' );
+		$delivered_order->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'status_filter_carrier' );
+		$request->set_param( 'delivery_status', Delivery_Status::IN_TRANSIT );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $in_transit_order->get_id(), $ids );
+		$this->assertNotContains( $delivered_order->get_id(), $ids );
+	}
+
+	/**
+	 * `unknown` must match an order with no status meta at all AND one whose raw
+	 * value the `status_map` does not recognize — both meanings D10 asked to decide,
+	 * against a real CPT `NOT IN` translation.
+	 */
+	public function test_delivery_status_unknown_filter_matches_missing_and_unmapped_raw_status(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker          = '_woodev_test_delivery_status_unknown_marker';
+		$status_meta_key = '_woodev_test_delivery_status_unknown_status';
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'unknown_filter_carrier',
+				'Unknown Filter Carrier',
+				$marker,
+				[ 'unknown_filter_carrier' ],
+				[
+					'status_meta_key' => $status_meta_key,
+					'status_map'      => [ 'ACCEPTED' => Delivery_Status::IN_TRANSIT ],
+				]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$mapped_order = wc_create_order();
+		$mapped_order->set_status( 'processing' );
+		$mapped_order->update_meta_data( $marker, '1' );
+		$mapped_order->update_meta_data( $status_meta_key, 'ACCEPTED' );
+		$mapped_order->save();
+
+		$no_status_order = wc_create_order();
+		$no_status_order->set_status( 'processing' );
+		$no_status_order->update_meta_data( $marker, '1' );
+		$no_status_order->save();
+
+		$unmapped_order = wc_create_order();
+		$unmapped_order->set_status( 'processing' );
+		$unmapped_order->update_meta_data( $marker, '1' );
+		$unmapped_order->update_meta_data( $status_meta_key, 'SOME_RAW_VALUE_NOT_IN_THE_MAP' );
+		$unmapped_order->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'unknown_filter_carrier' );
+		$request->set_param( 'delivery_status', Delivery_Status::UNKNOWN );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertNotContains( $mapped_order->get_id(), $ids );
+		$this->assertContains( $no_status_order->get_id(), $ids );
+		$this->assertContains( $unmapped_order->get_id(), $ids );
+	}
+
+	public function test_has_tracking_true_scopes_to_orders_with_the_tracking_meta(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker            = '_woodev_test_has_tracking_marker';
+		$tracking_meta_key = '_woodev_test_has_tracking_number';
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'tracking_filter_carrier',
+				'Tracking Filter Carrier',
+				$marker,
+				[ 'tracking_filter_carrier' ],
+				[ 'tracking_meta_key' => $tracking_meta_key ]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$with_tracking = wc_create_order();
+		$with_tracking->set_status( 'processing' );
+		$with_tracking->update_meta_data( $marker, '1' );
+		$with_tracking->update_meta_data( $tracking_meta_key, 'TRACK123' );
+		$with_tracking->save();
+
+		$without_tracking = wc_create_order();
+		$without_tracking->set_status( 'processing' );
+		$without_tracking->update_meta_data( $marker, '1' );
+		$without_tracking->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'tracking_filter_carrier' );
+		$request->set_param( 'has_tracking', true );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $with_tracking->get_id(), $ids );
+		$this->assertNotContains( $without_tracking->get_id(), $ids );
+	}
+
+	public function test_has_tracking_false_scopes_to_orders_without_the_tracking_meta(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker            = '_woodev_test_has_tracking_false_marker';
+		$tracking_meta_key = '_woodev_test_has_tracking_false_number';
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'tracking_false_filter_carrier',
+				'Tracking False Filter Carrier',
+				$marker,
+				[ 'tracking_false_filter_carrier' ],
+				[ 'tracking_meta_key' => $tracking_meta_key ]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$with_tracking = wc_create_order();
+		$with_tracking->set_status( 'processing' );
+		$with_tracking->update_meta_data( $marker, '1' );
+		$with_tracking->update_meta_data( $tracking_meta_key, 'TRACK456' );
+		$with_tracking->save();
+
+		$without_tracking = wc_create_order();
+		$without_tracking->set_status( 'processing' );
+		$without_tracking->update_meta_data( $marker, '1' );
+		$without_tracking->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'tracking_false_filter_carrier' );
+		$request->set_param( 'has_tracking', false );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $without_tracking->get_id(), $ids );
+		$this->assertNotContains( $with_tracking->get_id(), $ids );
+	}
+
 	/**
 	 * Adds the ambient `woodev_test_shipping` fixture method to a real shipping zone
 	 * and returns its instance id.

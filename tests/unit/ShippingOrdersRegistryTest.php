@@ -188,6 +188,91 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $result['meta_query'] );
 	}
 
+	/**
+	 * SP-10 spec D10: the delivery-status and tracking-presence filters get the SAME
+	 * legacy-CPT translation as the marker-key scope, through the two new query vars
+	 * — never left to reach the CPT datastore as `meta_query` directly.
+	 */
+	public function test_translate_status_clauses_var_alone_produces_its_meta_query_shape(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_STATUS_CLAUSES => [
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_DONE' ],
+						'compare' => 'IN',
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_DONE' ],
+					'compare' => 'IN',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	public function test_translate_tracking_clauses_var_alone_produces_its_meta_query_shape(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
+					[
+						'key'     => '_cdek_tracking',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'NOT EXISTS',
+				],
+			],
+			$result['meta_query']
+		);
+	}
+
+	/**
+	 * All three vars present at once — marker keys, delivery status, tracking — must
+	 * be ANDed together, never left to silently combine as one flat OR (which would
+	 * scope-leak every carrier's orders back in).
+	 */
+	public function test_translate_all_three_vars_together_ands_them(): void {
+		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
+			[],
+			[
+				Orders_Query::QUERY_VAR_MARKER_KEYS      => [ '_cdek_marker' ],
+				Orders_Query::QUERY_VAR_STATUS_CLAUSES   => [
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_DONE' ],
+						'compare' => 'IN',
+					],
+				],
+				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
+					[
+						'key'     => '_cdek_tracking',
+						'compare' => 'EXISTS',
+					],
+				],
+			]
+		);
+
+		$this->assertSame( 'AND', $result['meta_query']['relation'] );
+		$this->assertCount( 4, $result['meta_query'] ); // relation + one part per var.
+	}
+
 	// -----------------------------------------------------------------------
 	// enqueue_assets() — increment 2b rewrite: gated on is_wc_admin_screen(), a
 	// protected seam overridden here rather than stubbing wc_admin_is_registered_page()

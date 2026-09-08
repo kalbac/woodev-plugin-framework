@@ -18,6 +18,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -92,29 +93,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'callback'            => [ $this, 'get_items' ],
 					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 					'args'                => [
-						'carrier'  => [
+						'carrier'         => [
 							'type'    => 'string',
 							'default' => 'all',
 						],
-						'page'     => [
+						'page'            => [
 							'type'    => 'integer',
 							'default' => 1,
 						],
-						'per_page' => [
+						'per_page'        => [
 							'type'    => 'integer',
 							'default' => Orders_Query::DEFAULT_PER_PAGE,
 						],
-						'orderby'  => [
+						'orderby'         => [
 							'type'    => 'string',
 							'default' => 'date',
 						],
-						'order'    => [
+						'order'           => [
 							'type'    => 'string',
 							'default' => 'DESC',
 						],
-						'search'   => [
+						'search'          => [
 							'type'    => 'string',
 							'default' => '',
+						],
+						'after'           => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => [ __CLASS__, 'validate_iso_date' ],
+						],
+						'before'          => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => [ __CLASS__, 'validate_iso_date' ],
+						],
+						'status'          => [
+							'type'    => 'array',
+							'items'   => [ 'type' => 'string' ],
+							'default' => [],
+						],
+						'delivery_status' => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => [ __CLASS__, 'validate_delivery_status' ],
+						],
+						'has_tracking'    => [
+							'type'              => 'boolean',
+							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
 					],
 				]
@@ -132,6 +157,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		public function get_items_permissions_check( $request ): bool {
 			return current_user_can( $this->registry->get_page_capability() );
+		}
+
+
+		/**
+		 * REST `validate_callback` for `after`/`before` (SP-10 spec D10/D11): an ISO 8601
+		 * `YYYY-MM-DD` date, including calendar validity (rejects e.g. `2026-02-30`). An
+		 * empty string is valid — it means "this bound is not set", not "empty date".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed            $value   the request value.
+		 * @param \WP_REST_Request $request request.
+		 * @param string           $param   parameter name.
+		 * @return bool|\WP_Error
+		 */
+		public static function validate_iso_date( $value, $request, string $param ) {
+			if ( '' === $value ) {
+				return true;
+			}
+
+			if ( is_string( $value ) && 1 === preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $value, $matches )
+				&& checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] ) ) {
+				return true;
+			}
+
+			return new \WP_Error(
+				'rest_invalid_param',
+				/* translators: %s: parameter name. */
+				sprintf( __( '%s must be an ISO 8601 date (YYYY-MM-DD).', 'woodev-plugin-framework' ), $param ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		/**
+		 * REST `validate_callback` for `delivery_status` (SP-10 spec D10): one of
+		 * {@see Delivery_Status::canonical_states()} or {@see Delivery_Status::UNKNOWN}.
+		 * An empty string is valid — it means "no delivery-status filter".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed            $value   the request value.
+		 * @param \WP_REST_Request $request request.
+		 * @param string           $param   parameter name.
+		 * @return bool|\WP_Error
+		 */
+		public static function validate_delivery_status( $value, $request, string $param ) {
+			if ( '' === $value || in_array( $value, array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] ), true ) ) {
+				return true;
+			}
+
+			return new \WP_Error(
+				'rest_invalid_param',
+				/* translators: %s: parameter name. */
+				sprintf( __( '%s is not a recognized delivery status.', 'woodev-plugin-framework' ), $param ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		/**
@@ -156,16 +237,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				);
 			}
 
-			$result = $this->query->get_results(
-				[
-					'carrier'  => $carrier,
-					'page'     => $request->get_param( 'page' ),
-					'per_page' => $request->get_param( 'per_page' ),
-					'orderby'  => $request->get_param( 'orderby' ),
-					'order'    => $request->get_param( 'order' ),
-					'search'   => $request->get_param( 'search' ),
-				]
-			);
+			$params = [
+				'carrier'         => $carrier,
+				'page'            => $request->get_param( 'page' ),
+				'per_page'        => $request->get_param( 'per_page' ),
+				'orderby'         => $request->get_param( 'orderby' ),
+				'order'           => $request->get_param( 'order' ),
+				'search'          => $request->get_param( 'search' ),
+				'after'           => $request->get_param( 'after' ),
+				'before'          => $request->get_param( 'before' ),
+				'status'          => $request->get_param( 'status' ),
+				'delivery_status' => $request->get_param( 'delivery_status' ),
+			];
+
+			// `has_tracking` carries no default (SP-10 spec D10): an explicit `false` must
+			// still filter, so its PRESENCE — not its truthiness — decides whether
+			// Orders_Query::build_args() applies the filter at all.
+			if ( $request->has_param( 'has_tracking' ) && null !== $request->get_param( 'has_tracking' ) ) {
+				$params['has_tracking'] = $request->get_param( 'has_tracking' );
+			}
+
+			$result = $this->query->get_results( $params );
 
 			$matched_provider = 'all' !== $carrier ? $this->registry->get_provider( $carrier ) : null;
 

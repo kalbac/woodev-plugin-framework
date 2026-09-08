@@ -387,18 +387,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Translates {@see Orders_Query::QUERY_VAR_MARKER_KEYS} into a real `meta_query`
-		 * on the legacy CPT order datastore.
+		 * Translates {@see Orders_Query}'s custom query vars — marker keys, plus the
+		 * optional delivery-status and tracking-presence filter clauses (SP-10 spec D10)
+		 * — into one real `meta_query` on the legacy CPT order datastore.
 		 *
-		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly — measured
-		 * correct against a real HPOS install (SP-10 spec M2). On the legacy CPT datastore
-		 * WooCommerce's `WC_Order_Data_Store_CPT` does not support a `meta_query` arg at
-		 * all: passing one fires `_doing_it_wrong` (WC ≥9.2) and silently returns
-		 * UNFILTERED results — every carrier's orders leaking into every tab, the worst
-		 * version of this bug because it fails open, not closed. All three shipped carrier
-		 * plugins solve exactly this the same way — a custom query var, translated into
-		 * `meta_query` through this exact filter — so this mirrors them instead of
-		 * inventing a second mechanism.
+		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly —
+		 * measured correct against a real HPOS install (SP-10 spec M2). On the legacy CPT
+		 * datastore WooCommerce's `WC_Order_Data_Store_CPT` does not support a
+		 * `meta_query` arg at all: passing one fires `_doing_it_wrong` (WC ≥9.2) and
+		 * silently returns UNFILTERED results — every carrier's orders leaking into every
+		 * tab, the worst version of this bug because it fails open, not closed. All three
+		 * shipped carrier plugins solve exactly this the same way — a custom query var,
+		 * translated into `meta_query` through this exact filter — so this mirrors them
+		 * instead of inventing a second mechanism, and now does the same for every new
+		 * meta-based filter D10 added, not only the marker-key scope: each of
+		 * {@see Orders_Query::QUERY_VAR_MARKER_KEYS},
+		 * {@see Orders_Query::QUERY_VAR_STATUS_CLAUSES} and
+		 * {@see Orders_Query::QUERY_VAR_TRACKING_CLAUSES}, when present, becomes one
+		 * `meta_query` part, and the parts are ANDed together through
+		 * {@see Orders_Query::combine_meta_queries()} — the SAME combination rule
+		 * {@see Orders_Query::build_args()} uses on HPOS, so the two datastore paths
+		 * cannot silently diverge on what any of these filters mean.
 		 *
 		 * @internal
 		 *
@@ -409,11 +418,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return array<string,mixed>
 		 */
 		public function translate_marker_keys_query_var( array $query, array $query_vars ): array {
-			if ( ! array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
+			$parts = [];
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+			}
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_STATUS_CLAUSES, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] );
+			}
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_TRACKING_CLAUSES, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_TRACKING_CLAUSES ] );
+			}
+
+			if ( [] === $parts ) {
 				return $query;
 			}
 
-			$query['meta_query'] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query var; the only CPT-safe way to scope this query (SP-10 round 2).
+			$query['meta_query'] = Orders_Query::combine_meta_queries( $parts ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query vars; the only CPT-safe way to scope/filter this query (SP-10 spec D10).
 
 			/**
 			 * Filters the CPT-datastore query after the marker-keys var is translated.

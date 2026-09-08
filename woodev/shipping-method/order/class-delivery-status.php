@@ -113,6 +113,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 		}
 
 		/**
+		 * Inverts a provider's raw-status => canonical map into canonical => raw[]
+		 * (SP-10 spec D10 — the delivery-status filter's server half). A raw value whose
+		 * mapped entry does not name one of {@see self::canonical_states()} is treated
+		 * exactly as {@see self::resolve()} treats it — as if it were absent — so a query
+		 * built from this inversion can never disagree with what the row itself would
+		 * render for that raw value.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,string> $status_map raw status => one of self::canonical_states().
+		 * @return array<string,string[]> canonical state => raw values mapping to it. A
+		 *                                canonical state with no raw value is simply
+		 *                                absent, never an empty array.
+		 */
+		public static function invert_status_map( array $status_map ): array {
+			$inverted = [];
+
+			foreach ( $status_map as $raw => $canonical ) {
+				$canonical = (string) $canonical;
+
+				if ( ! in_array( $canonical, self::canonical_states(), true ) ) {
+					continue;
+				}
+
+				$inverted[ $canonical ][] = (string) $raw;
+			}
+
+			return $inverted;
+		}
+
+		/**
 		 * Returns one state's Russian label. An unrecognized `$state` (never emitted by
 		 * {@see self::resolve()}, but this accessor is public) falls back to
 		 * {@see self::UNKNOWN}'s label rather than an empty string.
