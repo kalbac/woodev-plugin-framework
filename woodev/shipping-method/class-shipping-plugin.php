@@ -244,6 +244,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// canonical delivery-status enum (SP-10 increment 2, spec D4)
 			require_once $path . '/order/class-delivery-status.php';
 
+			// delivery-status sync freshness — the last-updated/next-update seam (SP-10
+			// spec D9, #828)
+			require_once $path . '/order/class-delivery-sync-status.php';
+
 			// admin bootstrap + order admin handler
 			require_once $path . '/admin/class-shipping-admin.php';
 			require_once $path . '/admin/class-shipping-admin-order.php';

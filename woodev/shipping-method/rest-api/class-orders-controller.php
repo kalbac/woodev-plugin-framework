@@ -19,6 +19,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -142,6 +143,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
 					],
+				]
+			);
+
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/sync-status',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_sync_status' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 				]
 			);
 		}
@@ -275,6 +286,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'rows'        => $rows,
 					'total'       => (int) $result->total,
 					'total_pages' => (int) $result->max_num_pages,
+				]
+			);
+		}
+
+		/**
+		 * Returns the delivery-status sync freshness (SP-10 spec D9, #828): every registered
+		 * carrier's `last_updated`/`next_update`, plus an aggregate `last_updated` for the
+		 * (later) "Data status" panel.
+		 *
+		 * The aggregate is the OLDEST `last_updated` among carriers that have EVER synced —
+		 * reporting the freshest carrier would hide the stale one, which is the whole point
+		 * of the panel. A carrier that has never synced does not pull the aggregate down to
+		 * null by itself: its own `never synced` state already travels honestly in the
+		 * per-carrier breakdown this response carries alongside, which is what the tooltip
+		 * reads. The aggregate is null only when NO carrier has ever synced (an empty
+		 * registry counts as this too).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return \WP_REST_Response
+		 */
+		public function get_sync_status( $request ) {
+			$carriers = [];
+			$oldest   = null;
+
+			foreach ( $this->registry->get_providers() as $provider ) {
+				$last_updated = Delivery_Sync_Status::get_last_updated( $provider->get_id() );
+				$next_update  = Delivery_Sync_Status::get_next_update( $provider->get_cron_hook() );
+
+				if ( null !== $last_updated && ( null === $oldest || $last_updated < $oldest ) ) {
+					$oldest = $last_updated;
+				}
+
+				$carriers[] = [
+					'id'           => $provider->get_id(),
+					'label'        => $provider->get_label(),
+					'last_updated' => $last_updated,
+					'next_update'  => $next_update,
+				];
+			}
+
+			return rest_ensure_response(
+				[
+					'last_updated' => $oldest,
+					'carriers'     => $carriers,
 				]
 			);
 		}

@@ -58,8 +58,27 @@ class ShippingOrdersProviderTest extends TestCase {
 		$this->assertNull( $provider->get_status_meta_key() );
 		$this->assertNull( $provider->get_tracking_meta_key() );
 		$this->assertNull( $provider->get_pickup_point_meta_key() );
+		$this->assertNull( $provider->get_cron_hook() );
 		$this->assertSame( [], $provider->get_status_map() );
 		$this->assertSame( [], $provider->get_status_labels() );
+	}
+
+	/**
+	 * SP-10 spec D9 (#828): the carrier cron hook «Next update» is read off of — accepted
+	 * and retrievable, optional because a webhook-only carrier has none.
+	 */
+	public function test_create_stores_the_cron_hook(): void {
+		$provider = Orders_Provider::create(
+			'cdek',
+			'СДЭК',
+			'_wc_edostavka_shipping',
+			[ 'cdek' ],
+			[
+				'cron_hook' => 'wc_edostavka_orders_update',
+			]
+		);
+
+		$this->assertSame( 'wc_edostavka_orders_update', $provider->get_cron_hook() );
 	}
 
 	public function test_empty_id_throws(): void {
