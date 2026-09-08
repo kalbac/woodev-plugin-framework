@@ -469,6 +469,38 @@ describe( 'the display-mode filter (#835 — split from carrier scope)', () => {
 			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'unknown-carrier' } ) )
 		);
 	} );
+
+	/**
+	 * #835's own warning: `filter` (display mode) must NOT enter the
+	 * `UrlFilters`/`filtersEqual` snapshot `readUrlFilters()` builds, or
+	 * switching modes would reset pagination the same way a real filter
+	 * change does — a change of VIEW is not a change of selection. Confirmed
+	 * here rather than assumed, exactly as the brief for this asked.
+	 */
+	test( 'switching display mode does not reset the page — it is a view change, not a filter change', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
+		);
+
+		act( () => {
+			screen.getByText( 'Следующая страница' ).click();
+		} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
+		);
+
+		navigate( { filter: 'advanced' } );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) );
+	} );
 } );
 
 describe( 'the carrier lives in the URL, not in component state', () => {
