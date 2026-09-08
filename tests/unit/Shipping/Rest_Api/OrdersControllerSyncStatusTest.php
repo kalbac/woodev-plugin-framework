@@ -1,9 +1,10 @@
 <?php
 /**
  * Unit: Orders_Controller::get_sync_status() — the REST exposure of delivery-status
- * sync freshness (SP-10 spec D9, #828). Covers the nullable states the brief calls
- * out explicitly: never synced, no cron hook, and an aggregate where one carrier is
- * much staler than another.
+ * sync freshness (SP-10 spec D9, #828). Covers the nullable states: never synced, no
+ * cron hook, an aggregate where one carrier is much staler than another, and — the
+ * load-bearing case, reversed from round 1 — an aggregate that goes to null the
+ * moment ANY registered carrier has never synced, even while a sibling is fresh.
  *
  * @package Woodev\Tests\Unit\Shipping\Rest_Api
  */
@@ -160,11 +161,14 @@ final class OrdersControllerSyncStatusTest extends TestCase {
 	}
 
 	/**
-	 * A never-synced carrier does not silently drop out of the response — its own
-	 * `null` survives in the per-carrier breakdown, which is what the tooltip reads,
-	 * even though the aggregate here is computed from the carriers that HAVE synced.
+	 * THE load-bearing case (coordinator, reversing the round-1 reading): one
+	 * never-synced carrier must pull the AGGREGATE down to null, even though a
+	 * sibling carrier synced recently — "обновлено 10 минут назад" would otherwise
+	 * be shown while it is false for every row of the never-synced carrier. Its own
+	 * `null` still survives in the per-carrier breakdown untouched, which is what
+	 * tells the merchant WHICH carrier is the reason.
 	 */
-	public function test_a_never_synced_carrier_still_appears_in_the_breakdown_alongside_the_aggregate(): void {
+	public function test_one_never_synced_carrier_pulls_the_aggregate_to_null_even_though_a_sibling_is_fresh(): void {
 		$this->register( 'cdek', 'СДЭК', '_m1' );
 		$this->register( 'yandex', 'Яндекс доставка', '_m2' );
 
@@ -173,14 +177,33 @@ final class OrdersControllerSyncStatusTest extends TestCase {
 
 		$data = $this->controller()->get_sync_status( new \WP_REST_Request() );
 
-		$this->assertSame( 1700000000, $data['last_updated'] );
+		$this->assertNull(
+			$data['last_updated'],
+			'ANY registered carrier that has never synced must make the aggregate null, not just the never-synced one\'s own field'
+		);
 
 		$by_id = [];
 		foreach ( $data['carriers'] as $carrier ) {
 			$by_id[ $carrier['id'] ] = $carrier;
 		}
 
-		$this->assertNull( $by_id['yandex']['last_updated'] );
+		$this->assertNull( $by_id['yandex']['last_updated'], 'the per-carrier breakdown must still say WHICH carrier caused the null aggregate' );
 		$this->assertSame( 1700000000, $by_id['cdek']['last_updated'] );
+	}
+
+	/**
+	 * Control for the case above: once EVERY carrier has synced at least once, the
+	 * aggregate goes back to being a real number — the oldest of them — not null.
+	 */
+	public function test_the_aggregate_is_a_real_number_once_every_carrier_has_synced_at_least_once(): void {
+		$this->register( 'cdek', 'СДЭК', '_m1' );
+		$this->register( 'yandex', 'Яндекс доставка', '_m2' );
+
+		Delivery_Sync_Status::record_last_updated( 'cdek', 1700000000 );
+		Delivery_Sync_Status::record_last_updated( 'yandex', 1000000000 );
+
+		$data = $this->controller()->get_sync_status( new \WP_REST_Request() );
+
+		$this->assertSame( 1000000000, $data['last_updated'] );
 	}
 }

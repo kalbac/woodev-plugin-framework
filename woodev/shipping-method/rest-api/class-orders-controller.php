@@ -295,13 +295,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * carrier's `last_updated`/`next_update`, plus an aggregate `last_updated` for the
 		 * (later) "Data status" panel.
 		 *
-		 * The aggregate is the OLDEST `last_updated` among carriers that have EVER synced —
-		 * reporting the freshest carrier would hide the stale one, which is the whole point
-		 * of the panel. A carrier that has never synced does not pull the aggregate down to
-		 * null by itself: its own `never synced` state already travels honestly in the
-		 * per-carrier breakdown this response carries alongside, which is what the tooltip
-		 * reads. The aggregate is null only when NO carrier has ever synced (an empty
-		 * registry counts as this too).
+		 * **The aggregate is `null` the moment ANY registered carrier has never synced —
+		 * not the oldest of only the carriers that HAVE.** The aggregate exists to make one
+		 * honest statement about the whole table: if СДЭК synced ten minutes ago and Яндекс
+		 * has never synced at all, "обновлено 10 минут назад" is FALSE for every Яндекс row
+		 * on screen. Overstating freshness is exactly the failure this panel exists to
+		 * prevent (§D9's premise is that the delivery status is the one thing on this page
+		 * that CAN be stale); understating it merely sends the merchant to look, and it
+		 * self-corrects the moment that carrier syncs once. A carrier that has never synced
+		 * is not "missing from the calculation" — it is infinitely stale, and the oldest
+		 * (here, effectively infinite) wins. When every carrier HAS synced at least once,
+		 * the aggregate is the oldest of their timestamps, same as before.
+		 *
+		 * The per-carrier breakdown this response carries alongside still reports `null`
+		 * for a never-synced carrier exactly as before — that is what tells the merchant
+		 * WHICH carrier is the reason the aggregate reads `null`.
+		 *
+		 * ⚠ Known gap, accepted for now (#828, flagged for the operator): a carrier that is
+		 * registered but has placed no orders at all yet is indistinguishable here from one
+		 * that has orders and simply never synced — both read `null` and both hold the
+		 * aggregate at `null`. That is honest (this store cannot tell the two apart) if
+		 * unhelpful. Deliberately NOT fixed by coupling this panel to the row/order query —
+		 * that is different scope.
 		 *
 		 * @since 2.0.2
 		 *
@@ -309,14 +324,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * @return \WP_REST_Response
 		 */
 		public function get_sync_status( $request ) {
-			$carriers = [];
-			$oldest   = null;
+			$carriers         = [];
+			$oldest           = null;
+			$any_never_synced = false;
 
 			foreach ( $this->registry->get_providers() as $provider ) {
 				$last_updated = Delivery_Sync_Status::get_last_updated( $provider->get_id() );
 				$next_update  = Delivery_Sync_Status::get_next_update( $provider->get_cron_hook() );
 
-				if ( null !== $last_updated && ( null === $oldest || $last_updated < $oldest ) ) {
+				if ( null === $last_updated ) {
+					$any_never_synced = true;
+				} elseif ( null === $oldest || $last_updated < $oldest ) {
 					$oldest = $last_updated;
 				}
 
@@ -330,7 +348,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 
 			return rest_ensure_response(
 				[
-					'last_updated' => $oldest,
+					'last_updated' => $any_never_synced ? null : $oldest,
 					'carriers'     => $carriers,
 				]
 			);
