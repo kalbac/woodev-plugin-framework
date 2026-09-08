@@ -55,6 +55,115 @@ export interface WcTableCardProps {
 	onQueryChange?: ( param: string ) => ( value: string ) => void;
 }
 
+/**
+ * `@woocommerce/date`'s `getCurrentDates()` return shape (SP-10 spec D11, increment 7)
+ * — `primary`/`secondary` `DateValue` objects, each carrying real `moment` instances
+ * for `before`/`after` (`packages/js/date/README.md`, not recalled: `getCurrentDates`
+ * returns `{ primary: DateValue, secondary: DateValue }` where `DateValue` is
+ * `{ label, range, before: Moment, after: Moment }`). Only `.format()` is typed here
+ * — this page never does date arithmetic of its own, only formats what
+ * `@woocommerce/date` already resolved.
+ */
+export interface WcMomentLike {
+	format: ( dateFormat: string ) => string;
+}
+
+export interface WcDateValue {
+	label: string;
+	range: string;
+	before: WcMomentLike | null;
+	after: WcMomentLike | null;
+}
+
+export interface WcDateParams {
+	period: string;
+	compare: string;
+	before: WcMomentLike | null;
+	after: WcMomentLike | null;
+}
+
+/**
+ * `DateRangeFilterPicker`'s required `dateQuery` prop
+ * (`packages/js/components/src/date-range-filter-picker/README.md`): the raw
+ * `period`/`compare`/`before`/`after` plus the two resolved `DateValue`s the
+ * component actually renders from.
+ */
+export interface WcDateRangeFilterPickerDateQuery extends WcDateParams {
+	primaryDate: WcDateValue;
+	secondaryDate: WcDateValue;
+}
+
+export interface WcDateRangeFilterPickerProps {
+	dateQuery: WcDateRangeFilterPickerDateQuery;
+	isoDateFormat: string;
+	/**
+	 * Called with the new `{ period, compare, before, after }` on a pick. The
+	 * component itself does not navigate (unlike `FilterPicker`) — the caller is
+	 * expected to push it into the URL via `wc.navigation.updateQueryString()`,
+	 * the same way WooCommerce's own `ReportFilters` wires it.
+	 */
+	onRangeSelect: ( update: Record<string, string> ) => void;
+}
+
+/**
+ * One selectable value of an {@link WcAdvancedFiltersFilterDef}'s `SelectControl`
+ * input (`packages/js/components/src/advanced-filters/README.md`).
+ */
+export interface WcAdvancedFiltersSelectOption {
+	key: string;
+	label: string;
+}
+
+/** One filter's match rule (e.g. "Is" / "Is Not") — the `<rule/>` slot in its `title`. */
+export interface WcAdvancedFiltersRule {
+	value: string;
+	label: string;
+}
+
+/**
+ * One entry of an {@link WcAdvancedFiltersConfig}'s `filters` map. Every filter
+ * this page declares uses `component: 'SelectControl'` with exactly one rule and
+ * `allowMultiple: false`, so each produces exactly one query key in WooCommerce's
+ * own `{filterKey}_{rule}=value` convention (confirmed against the README's own
+ * worked example, `status_is=pending` — not recalled).
+ */
+export interface WcAdvancedFiltersFilterDef {
+	labels: {
+		add: string;
+		remove: string;
+		title: string;
+		rule?: string;
+		filter?: string;
+	};
+	rules: WcAdvancedFiltersRule[];
+	input: {
+		component: 'SelectControl';
+		options: WcAdvancedFiltersSelectOption[];
+	};
+	allowMultiple: boolean;
+}
+
+export interface WcAdvancedFiltersConfig {
+	title: string;
+	filters: Record<string, WcAdvancedFiltersFilterDef>;
+}
+
+export interface WcAdvancedFiltersProps {
+	config: WcAdvancedFiltersConfig;
+	path: string;
+	query?: Record<string, string | undefined>;
+	onAdvancedFilterAction?: () => void;
+	/** Optional, default `'en_US'` — this page always passes the admin's own Russian locale. */
+	siteLocale?: string;
+	/**
+	 * Required by `AdvancedFilters`' own propTypes, an instance of
+	 * `@woocommerce/currency`'s `CurrencyFactory()` — this page never declares a
+	 * `Number`/currency-typed filter, so nothing here actually reads its fields;
+	 * it exists only to satisfy the component's contract.
+	 */
+	currency?: Record<string, unknown>;
+}
+
 /** One entry of the `woocommerce_admin_pages_list` filter's array (WC docs: `working-with-woocommerce-admin-pages.md`). */
 export interface WcAdminPage {
 	container: ComponentType;
@@ -116,6 +225,10 @@ declare global {
 				 */
 				SummaryListPlaceholder?: ComponentType< { numberOfItems: number } >;
 				ChartPlaceholder?: ComponentType< { height: number } >;
+				/** SP-10 spec D11 (increment 7) — the date-range half of the filter row. */
+				DateRangeFilterPicker?: ComponentType< WcDateRangeFilterPickerProps >;
+				/** SP-10 spec D10 (increment 7) — the delivery-status/order-status/tracking filters, named by the operator. */
+				AdvancedFilters?: ComponentType< WcAdvancedFiltersProps >;
 			};
 			/**
 			 * `@woocommerce/navigation`, behind the `wc-navigation` script handle
@@ -127,6 +240,59 @@ declare global {
 				getQuery: () => Record< string, string | undefined >;
 				getPath: () => string;
 				addHistoryListener: ( listener: () => void ) => () => void;
+				/**
+				 * `updateQueryString(query, path, currentQuery)` (`packages/js/navigation/README.md`)
+				 * — merges `query` into `currentQuery` and navigates, the same way
+				 * `FilterPicker` does internally. `DateRangeFilterPicker` does NOT
+				 * navigate on its own, so this page wires its `onRangeSelect` through
+				 * this function explicitly.
+				 */
+				updateQueryString?: (
+					query: Record< string, string | undefined >,
+					path: string,
+					currentQuery: Record< string, string | undefined >
+				) => void;
+			};
+			/**
+			 * `@woocommerce/date`, behind the `wc-date` handle (SP-10 spec D11's own
+			 * contract note: `getDateParamsFromQuery()`, `getCurrentDates()`,
+			 * `isoDateFormat`).
+			 */
+			date?: {
+				getDateParamsFromQuery: (
+					query: Record< string, string | undefined >,
+					defaultDateRange: string
+				) => WcDateParams;
+				getCurrentDates: (
+					query: Record< string, string | undefined >,
+					defaultDateRange: string
+				) => { primary: WcDateValue; secondary: WcDateValue };
+				isoDateFormat: string;
+			};
+			/**
+			 * `@woocommerce/currency`'s default export, behind the `wc-currency`
+			 * handle — a factory, not a class (`CurrencyFactory(storeSettings?)`
+			 * returns an instance; called with no args it falls back to `$`/2dp
+			 * formatting, per the package's own README). `AdvancedFilters` requires
+			 * an instance as its `currency` prop; this page never reads its fields.
+			 */
+			currency?: ( storeSettings?: Record< string, unknown > ) => Record< string, unknown >;
+			/**
+			 * `@woocommerce/settings`, behind the `wc-settings` handle — read-only
+			 * access to data WooCommerce's own admin already registers (WC docs:
+			 * `overview-of-data-flow.md`, `wc.wcSettings.getSetting( name, fallback )`).
+			 *
+			 * ⚠ `wc-settings` is deliberately NOT one of `Orders_Registry::enqueue_assets()`'s
+			 * declared script dependencies (measured against WC 11.1.0: it is only
+			 * conditionally registered, so a hard dependency on it can drop this
+			 * whole bundle silently — see that method's own comment). It is picked
+			 * up here opportunistically — present transitively whenever `wc-currency`/
+			 * `wc-navigation` are, absent otherwise — for the order-status filter's
+			 * options only; the page degrades, omitting that one filter, when it is
+			 * absent, same as everywhere else a runtime surface is optional.
+			 */
+			wcSettings?: {
+				getSetting: <T>( name: string, fallback: T ) => T;
 			};
 		};
 	}

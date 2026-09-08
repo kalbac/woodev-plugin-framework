@@ -26,11 +26,13 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	fetchOrders: jest.fn(),
 } ) );
 
-function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary } ) {
+function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange } ) {
 	return (
 		<div>
 			<h2>{ title }</h2>
 			<div>{ actions }</div>
+			{ /* Exists only so a test can drive `page` without a real `TableCard`. */ }
+			<button onClick={ () => onPageChange( 2 ) }>Следующая страница</button>
 			{ isLoading ? (
 				<p>Загрузка…</p>
 			) : 0 === rows.length ? (
@@ -88,6 +90,48 @@ function FakeFilterPicker( { config, path, query } ) {
 	);
 }
 
+/**
+ * Stands in for `@woocommerce/components`' `DateRangeFilterPicker`. It does
+ * NOT navigate on its own (unlike `FilterPicker`) — its `onRangeSelect` is the
+ * whole contract, so the fake exposes a button that calls it with a fixed
+ * update, letting a test assert exactly what App does with it.
+ */
+function FakeDateRangeFilterPicker( { dateQuery, isoDateFormat, onRangeSelect } ) {
+	return (
+		<div data-testid="date-range-filter" data-period={ dateQuery.period } data-iso-format={ isoDateFormat }>
+			<button
+				onClick={ () =>
+					onRangeSelect( { period: 'custom', compare: dateQuery.compare, before: '2026-02-01', after: '2026-01-01' } )
+				}
+			>
+				Изменить период
+			</button>
+		</div>
+	);
+}
+
+/**
+ * Stands in for `@woocommerce/components`' `AdvancedFilters`. Real WooCommerce
+ * writes its own query keys and navigates on apply; this fake only surfaces
+ * the CONFIG this page hands it, which is the actual seam under test.
+ */
+function FakeAdvancedFilters( { config, path, query } ) {
+	return (
+		<div data-testid="advanced-filters" data-path={ path } data-active={ JSON.stringify( query ) }>
+			<ul>
+				{ Object.keys( config.filters ).map( ( key ) => (
+					<li key={ key }>{ config.filters[ key ].labels.add }</li>
+				) ) }
+			</ul>
+		</div>
+	);
+}
+
+/** A `moment`-like stub — only `.format()` is ever called on one of these. */
+function fakeMoment( isoString ) {
+	return { format: () => isoString };
+}
+
 /** The URL query the fake `wc.navigation` reports; reset per test. */
 let fakeQuery = {};
 
@@ -109,6 +153,9 @@ function navigate( query ) {
 	} );
 }
 
+/** Every `navigation.updateQueryString()` call — reset per test. */
+let updateQueryStringCalls = [];
+
 beforeAll( () => {
 	window.wc = {
 		components: {
@@ -121,6 +168,8 @@ beforeAll( () => {
 			ChartPlaceholder: ( { height } ) => (
 				<div data-testid="chart-placeholder" data-height={ height } />
 			),
+			DateRangeFilterPicker: FakeDateRangeFilterPicker,
+			AdvancedFilters: FakeAdvancedFilters,
 		},
 		navigation: {
 			getQuery: () => fakeQuery,
@@ -132,6 +181,43 @@ beforeAll( () => {
 					historyListeners = historyListeners.filter( ( entry ) => entry !== listener );
 				};
 			},
+			// `DateRangeFilterPicker` does not navigate on its own — App is
+			// expected to push its `onRangeSelect` update through this, then this
+			// fake mirrors what the real function does: change the query and fire
+			// history listeners, exactly like `navigate()` below.
+			updateQueryString: ( query, path, currentQuery ) => {
+				updateQueryStringCalls.push( { query, path, currentQuery } );
+				navigate( { ...currentQuery, ...query } );
+			},
+		},
+		date: {
+			getDateParamsFromQuery: ( query, defaultDateRange ) => ( {
+				period: query.period || defaultDateRange.split( '=' )[ 1 ],
+				compare: query.compare || 'previous_period',
+				before: query.before ? fakeMoment( query.before ) : null,
+				after: query.after ? fakeMoment( query.after ) : null,
+			} ),
+			// Deterministic for tests — a real `@woocommerce/date` resolves
+			// `period=year` into "since Jan 1st"; this fake just hardcodes that one
+			// resolution and otherwise trusts an explicit `after`/`before` already
+			// in the query (the "custom" period), rather than doing real date math.
+			getCurrentDates: ( query ) => ( {
+				primary: {
+					label: 'Test range',
+					range: '',
+					before: fakeMoment( query.before || '2026-09-08' ),
+					after: fakeMoment( query.after || '2026-01-01' ),
+				},
+				secondary: { label: 'Test previous range', range: '', before: null, after: null },
+			} ),
+			isoDateFormat: 'YYYY-MM-DD',
+		},
+		currency: () => ( { getCurrencyConfig: () => ( {} ) } ),
+		wcSettings: {
+			getSetting: ( name, fallback ) =>
+				'orderStatuses' === name
+					? { pending: 'В ожидании', completed: 'Выполнен' }
+					: fallback,
 		},
 	};
 } );
@@ -195,6 +281,7 @@ beforeEach( () => {
 	jest.clearAllMocks();
 	fakeQuery = {};
 	historyListeners = [];
+	updateQueryStringCalls = [];
 } );
 
 describe( 'carrier filter', () => {
@@ -244,8 +331,14 @@ describe( 'carrier filter', () => {
 		expect( filter.closest( 'table' ) ).toBeNull();
 	} );
 
-	/** `staticParams` is empty on purpose: `paged` must not survive a carrier change. */
-	test( 'the filter owns the carrier query param and carries nothing across a change', async () => {
+	/**
+	 * `staticParams` carries every OTHER filter-row query key (increment 7) —
+	 * the date range and the advanced filters describe "what work queue view am
+	 * I in", independent of carrier, so a carrier switch must not silently drop
+	 * them. `paged` is still not one of these keys: it is component state, not
+	 * a URL param, so it still cannot survive a carrier change.
+	 */
+	test( 'the filter owns the carrier query param and carries the rest of the filter row across a change', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -256,7 +349,10 @@ describe( 'carrier filter', () => {
 		const filter = screen.getByTestId( 'carrier-filter' );
 
 		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
-		expect( filter ).toHaveAttribute( 'data-static-params', '' );
+		expect( filter ).toHaveAttribute(
+			'data-static-params',
+			'period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+		);
 		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
 	} );
 } );
@@ -481,5 +577,217 @@ describe( 'the delivery-analytics panel (#711)', () => {
 		expect( container.querySelector( 'table' ) ).toBeInTheDocument();
 
 		window.wc.components = components;
+	} );
+} );
+
+describe( 'the date range filter (SP-10 #826, increment 7)', () => {
+	test( 'with no period in the URL, it defaults to period=year and resolves it into after/before for the REST call', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { after: '2026-01-01', before: '2026-09-08' } )
+			)
+		);
+
+		expect( screen.getByTestId( 'date-range-filter' ) ).toHaveAttribute( 'data-period', 'year' );
+		expect( screen.getByTestId( 'date-range-filter' ) ).toHaveAttribute( 'data-iso-format', 'YYYY-MM-DD' );
+	} );
+
+	test( 'a custom range already in the URL scopes the very first fetch', async () => {
+		fakeQuery = { period: 'custom', after: '2026-02-01', before: '2026-03-01' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { after: '2026-02-01', before: '2026-03-01' } )
+			)
+		);
+	} );
+
+	/**
+	 * `DateRangeFilterPicker` does not navigate on its own (unlike
+	 * `FilterPicker`) — App is expected to push its `onRangeSelect` update
+	 * through `wc.navigation.updateQueryString()` itself.
+	 */
+	test( 'picking a new range pushes it through updateQueryString and re-scopes the fetch', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { after: '2026-01-01', before: '2026-09-08' } )
+			)
+		);
+
+		act( () => {
+			screen.getByText( 'Изменить период' ).click();
+		} );
+
+		expect( updateQueryStringCalls ).toHaveLength( 1 );
+		expect( updateQueryStringCalls[ 0 ].path ).toBe( '/woodev-shipping-orders' );
+		expect( updateQueryStringCalls[ 0 ].query ).toEqual(
+			expect.objectContaining( { period: 'custom', before: '2026-02-01', after: '2026-01-01' } )
+		);
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { after: '2026-01-01', before: '2026-02-01' } )
+			)
+		);
+	} );
+
+	test( 'changing the date range resets the page to 1', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
+		);
+
+		act( () => {
+			screen.getByText( 'Следующая страница' ).click();
+		} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
+		);
+
+		act( () => {
+			screen.getByText( 'Изменить период' ).click();
+		} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 1 } ) )
+		);
+	} );
+} );
+
+describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
+	test( 'offers delivery status, WC order status and tracking presence — never delivery type', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		const list = screen.getByTestId( 'advanced-filters' );
+		expect( list ).toHaveTextContent( 'Статус доставки' );
+		expect( list ).toHaveTextContent( 'Трек-номер' );
+		expect( list ).toHaveTextContent( 'Статус заказа' );
+		expect( list ).not.toHaveTextContent( 'Тип доставки' );
+	} );
+
+	/** D10: order-status options have no framework-owned source — `wcSettings` is a WooCommerce Core admin setting this page only reads defensively. */
+	test( 'omits the order-status filter, but keeps the other two, when wcSettings is unavailable', async () => {
+		const wcSettings = window.wc.wcSettings;
+		delete window.wc.wcSettings;
+
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		const list = screen.getByTestId( 'advanced-filters' );
+		expect( list ).toHaveTextContent( 'Статус доставки' );
+		expect( list ).toHaveTextContent( 'Трек-номер' );
+		expect( list ).not.toHaveTextContent( 'Статус заказа' );
+
+		window.wc.wcSettings = wcSettings;
+	} );
+
+	/** `AdvancedFilters` is required by its own contract to carry a `currency` instance; no `wc-currency` means the control degrades like the others. */
+	test( 'the whole control is skipped, without crashing, when wc-currency is unavailable', async () => {
+		const currency = window.wc.currency;
+		delete window.wc.currency;
+
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( 'table' ) ).toBeInTheDocument();
+
+		window.wc.currency = currency;
+	} );
+
+	test( 'a delivery-status filter already in the URL scopes the very first fetch', async () => {
+		fakeQuery = { delivery_status_is: 'in_transit' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { deliveryStatus: 'in_transit' } )
+			)
+		);
+	} );
+
+	/** `status_is` carries one WC order-status slug; `fetchOrders()` still takes the REST route's own array shape. */
+	test( 'an order-status filter already in the URL is sent as a one-element array', async () => {
+		fakeQuery = { status_is: 'processing' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { status: [ 'processing' ] } ) )
+		);
+	} );
+
+	describe( 'has_tracking_is', () => {
+		test( '"yes" translates to hasTracking: true', async () => {
+			fakeQuery = { has_tracking_is: 'yes' };
+			getProviders.mockReturnValue( oneProvider() );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			render( <App /> );
+
+			await waitFor( () =>
+				expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { hasTracking: true } ) )
+			);
+		} );
+
+		test( '"no" translates to hasTracking: false — not falsy-and-therefore-absent', async () => {
+			fakeQuery = { has_tracking_is: 'no' };
+			getProviders.mockReturnValue( oneProvider() );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			render( <App /> );
+
+			await waitFor( () =>
+				expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { hasTracking: false } ) )
+			);
+		} );
+
+		test( 'absent from the URL stays undefined — the REST route reads presence, not truthiness', async () => {
+			getProviders.mockReturnValue( oneProvider() );
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+			render( <App /> );
+
+			await waitFor( () =>
+				expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { hasTracking: undefined } ) )
+			);
+		} );
 	} );
 } );

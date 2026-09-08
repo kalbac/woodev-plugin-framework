@@ -134,7 +134,12 @@ export function getProviders(): OrdersProvider[] {
 	return bootstrap().providers || [];
 }
 
-/** Request params `fetchOrders()` accepts — exactly what increment 1's REST route already takes. */
+/**
+ * Request params `fetchOrders()` accepts — increment 1's original set plus the
+ * SP-10 spec D10/D11 filter row (increment 6's server half, already merged:
+ * `Orders_Controller::register_routes()` — read with Serena, not inferred from
+ * a consumer).
+ */
 export interface FetchOrdersArgs {
 	carrier?: string;
 	page?: number;
@@ -142,13 +147,24 @@ export interface FetchOrdersArgs {
 	orderby?: string;
 	order?: string;
 	search?: string;
+	/** ISO `YYYY-MM-DD`, inclusive lower bound on `date_created`. */
+	after?: string;
+	/** ISO `YYYY-MM-DD`, inclusive upper bound on `date_created`. */
+	before?: string;
+	/** Native WC order status slugs (the REST route's own `status` arg — an array, not a single value). */
+	status?: string[];
+	/** One canonical {@link DeliveryStatusCanonical} value, or '' for "no filter". */
+	deliveryStatus?: string;
+	/**
+	 * `undefined` means "no filter" — distinct from `false`. The REST route's
+	 * `has_tracking` arg carries no default; its PRESENCE, not its truthiness,
+	 * decides whether the query applies it (D10), so this must stay a tri-state.
+	 */
+	hasTracking?: boolean;
 }
 
 /**
  * Fetches one page of rows for a carrier (or the aggregate).
- *
- * Only the params increment 1's REST route already accepts are sent — no new
- * REST param is invented here.
  */
 export function fetchOrders( {
 	carrier = 'all',
@@ -157,6 +173,11 @@ export function fetchOrders( {
 	orderby = 'date',
 	order = 'DESC',
 	search = '',
+	after = '',
+	before = '',
+	status = [],
+	deliveryStatus = '',
+	hasTracking,
 }: FetchOrdersArgs = {} ): Promise<OrdersResponse> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
@@ -170,6 +191,28 @@ export function fetchOrders( {
 
 	if ( search ) {
 		params.set( 'search', search );
+	}
+
+	if ( after ) {
+		params.set( 'after', after );
+	}
+
+	if ( before ) {
+		params.set( 'before', before );
+	}
+
+	if ( status.length > 0 ) {
+		// The REST route's `status` arg is a WP REST `array` type — a comma-separated
+		// string is WordPress's own documented shorthand for it, not an invented one.
+		params.set( 'status', status.join( ',' ) );
+	}
+
+	if ( deliveryStatus ) {
+		params.set( 'delivery_status', deliveryStatus );
+	}
+
+	if ( undefined !== hasTracking ) {
+		params.set( 'has_tracking', hasTracking ? 'true' : 'false' );
 	}
 
 	return apiFetch<OrdersResponse>( {

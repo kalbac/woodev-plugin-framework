@@ -314,8 +314,20 @@ contract was also read off the live page, since the shipped bundle is minified a
 - `wc-navigation` joins `wc-components` / `wc-admin-app` in the hand-declared script dependencies —
   Route B applies to `@woocommerce/navigation` exactly as it does to the components.
 
-`config.staticParams` is deliberately **empty**: nothing is carried across a carrier change, so
-`paged` cannot survive it and strand the merchant on a page that no longer exists.
+`config.staticParams` **carries every other filter-row query key, and deliberately not `paged`.**
+
+⚠ **This corrects an earlier version of this line, which said the list was deliberately EMPTY.** The
+REASON given there survives and is still the rule — `paged` must not survive a carrier change and
+strand the merchant on a page that no longer exists — but the empty list was the wrong instrument
+for it, and increment 7 found out why: `FilterPicker` does not carry an unlisted param across its
+navigation *at all*, so an empty list silently wiped the entire filter row on every carrier change.
+The date range and the advanced filters answer *which work queue view am I in*, independently of
+which carrier is scoped, so they must survive. `paged` still does not — it is component state here,
+not a URL param, so it cannot be in this list in the first place.
+
+The transferable half: when a decision is recorded as a MECHANISM ("the list is empty") rather than
+as its PURPOSE ("`paged` must not survive"), the mechanism is what a later reader defends. State the
+purpose.
 
 **The data layer is untouched by all of this.** The registry, the descriptor, the dual-datastore
 scope query, the canonical status and the REST row contract are UI-agnostic and survived this

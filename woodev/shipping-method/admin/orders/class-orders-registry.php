@@ -277,7 +277,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// `wc-navigation` carries `@woocommerce/navigation`: the carrier `FilterPicker`
 			// above the table changes scope by NAVIGATING, so the page reads the active
 			// carrier out of the URL query and listens for history changes.
-			$dependencies = array_merge( (array) $asset['dependencies'], [ 'wc-components', 'wc-navigation', 'wc-admin-app' ] );
+			// SP-10 spec D11 (increment 7): `wc-date` carries `@woocommerce/date`, which
+			// resolves `DateRangeFilterPicker`'s `period`/`compare` into real dates.
+			// `wc-currency` carries `@woocommerce/currency`, whose `CurrencyFactory()`
+			// instance `AdvancedFilters` requires as its own `currency` prop.
+			//
+			// `wc-settings` (`@woocommerce/settings`) is READ defensively at runtime
+			// (`window.wc.wcSettings?.getSetting(...)`, for the order-status filter's
+			// options — a WooCommerce Core admin setting, not ours) but deliberately
+			// NOT declared as a script dependency here. Measured against WC 11.1.0:
+			// it is only CONDITIONALLY registered (`WCAdminAssets.php:460` guards it
+			// with `wp_script_is( 'wc-settings', 'registered' )` rather than assuming
+			// it), so a hard dependency on a handle that may not exist drops this
+			// entire bundle SILENTLY (WP_Dependencies cannot resolve the chain) — the
+			// page would render nothing and read as a broken build, not a missing
+			// handle. It is also already pulled in TRANSITIVELY whenever it exists:
+			// the same `WCAdminAssets` method injects it into `wc-currency` and
+			// `wc-navigation`, both already declared below. And declaring it directly
+			// is a known error condition when a script prints in the header
+			// (`AssetsController.php:534-556`) — WooCommerce swaps in an error handle
+			// for that. So: consume it opportunistically, never require it.
+			$dependencies = array_merge(
+				(array) $asset['dependencies'],
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ]
+			);
 
 			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
 			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
