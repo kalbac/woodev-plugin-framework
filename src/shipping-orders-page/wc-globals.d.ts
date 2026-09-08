@@ -107,10 +107,18 @@ export interface WcDateRangeFilterPickerProps {
 
 /**
  * One selectable value of an {@link WcAdvancedFiltersFilterDef}'s `SelectControl`
- * input (`packages/js/components/src/advanced-filters/README.md`).
+ * input. Upstream's own option type
+ * (`packages/js/components/src/advanced-filters/types.ts`): `{ value, label }` —
+ * NOT `{ key, label }`. The `SelectControl` this renders into does
+ * `<option value={ option.value }>`; a `key` field is invisible to it, so
+ * `getDefaultOptionValue()` (`packages/js/components/src/navigation/src/filters.js`)
+ * reads `undefined` off it, and everything downstream degrades silently:
+ * `addFilter()` sets `newFilter.value = undefined`, the URL-writing guard
+ * `if ( filter.value )` never fires, and the «Filter» button renders disabled
+ * instead of navigating (measured on the rig, 08.09.2026 — SP-10 #837 defect 1).
  */
 export interface WcAdvancedFiltersSelectOption {
-	key: string;
+	value: string;
 	label: string;
 }
 
@@ -209,6 +217,22 @@ export interface WcFilterPickerProps {
 	config: WcFilterPickerConfig;
 	path: string;
 	query: Record< string, string | undefined >;
+	/**
+	 * ⚠ REQUIRED whenever `config.param` is `'filter'`, and optional otherwise —
+	 * WooCommerce hard-codes that param name. `FilterPicker.update()`
+	 * (`packages/js/components/src/filter-picker/index.js:174`) reads
+	 * `advancedFilters.filters` when the value moves AWAY from `'advanced'`, and
+	 * `FilterPicker.defaultProps` supplies only `query` and `onFilterSelect` — so
+	 * omitting it throws a `TypeError` on the way out of advanced mode and leaves
+	 * the merchant stuck there. That same branch is what clears the `*_is` params,
+	 * so passing it is also the only way leaving advanced mode drops the advanced
+	 * filters rather than stranding them in the URL.
+	 *
+	 * ⚠ Do not "simplify" this to optional-everywhere without keeping the note:
+	 * a hand-written `.d.ts` is a CLAIM about someone else's bundle, and this one
+	 * cost a crash the type checker could never have seen.
+	 */
+	advancedFilters?: WcAdvancedFiltersConfig;
 }
 
 declare global {

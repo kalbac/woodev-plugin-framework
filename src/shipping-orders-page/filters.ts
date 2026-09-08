@@ -19,29 +19,73 @@ import type {
 
 type WcQuery = Record<string, string | undefined>;
 
-/** Query key `FilterPicker` (the existing carrier control) already owns. */
+/** Query key the carrier `FilterPicker` owns — carrier SCOPE only, since #835. */
 export const CARRIER_PARAM = 'carrier';
+
+/**
+ * Query key the display-mode `FilterPicker` owns — «Все заказы» vs
+ * «Расширенные фильтры». Split from `CARRIER_PARAM` by operator decision,
+ * recorded as a comment on #835, 08.09.2026: WooCommerce's own «Аналитика →
+ * Заказы» folds both into one `carrier`-like `Show` picker, but that conflated
+ * scope and display mode here — an unrecognised `carrier` value could never be
+ * told apart from a deliberate "show advanced filters" pick. Two independent
+ * pickers, two independent params.
+ */
+export const FILTER_PARAM = 'filter';
 
 /** Carrier value meaning "every provider" — the aggregate #694 made the default. */
 export const ALL_CARRIERS = 'all';
 
 /**
- * The `carrier` value that reveals `AdvancedFilters` instead of scoping to a
- * carrier. Measured against WooCommerce's own «Аналитика → Заказы» on the rig
- * (08.09.2026): its «Show» picker carries exactly two options, `All orders` and
- * **`Advanced filters` last** — the advanced block is not a permanently visible
- * region there, it is revealed by the last item of that same picker. Operator
- * asked for the same shape, 08.09.2026.
- *
- * It shares the `carrier` parameter because `FilterPicker` owns exactly one, and
- * the two are mutually exclusive in the reference too: choosing the advanced view
- * scopes to every carrier.
+ * The `filter` value that reveals `AdvancedFilters`. Modelled on WooCommerce's
+ * own «Аналитика → Заказы» `Show` picker (rig measurement, 08.09.2026: exactly
+ * two options, `All orders` and **`Advanced filters` last** — the advanced
+ * block is not a permanently visible region there, it is revealed by the last
+ * item of that picker) — except here it is its OWN picker on its OWN param
+ * (`FILTER_PARAM`), not folded into the carrier picker (#835, operator
+ * decision, 08.09.2026). Two `FilterPicker`s side by side is the native
+ * WooCommerce composition for this, not a workaround — see `ReportFilters` in
+ * `packages/js/components/src/filters/index.js`, which maps an array of
+ * filter configs to one `FilterPicker` each.
  */
 export const ADVANCED_FILTERS_VALUE = 'advanced';
 
 /** Whether the advanced-filter block should be shown for this query. */
 export function isAdvancedFiltersOpen( query: WcQuery ): boolean {
-	return ADVANCED_FILTERS_VALUE === query[ CARRIER_PARAM ];
+	return ADVANCED_FILTERS_VALUE === query[ FILTER_PARAM ];
+}
+
+/**
+ * The query update that turns the advanced-filter block on or off.
+ *
+ * ⚠ Turning it OFF must also drop every advanced filter, and that is OUR job now.
+ * It used to be WooCommerce's: `FilterPicker.update()` special-cases
+ * `config.param === 'filter'` and, on any value other than `advanced`, clears the
+ * active filters through `getQueryFromActiveFilters( [], … )`
+ * (`packages/js/components/src/filter-picker/index.js:174`). The operator replaced
+ * that picker with a toggle — a two-state control has no business being a list —
+ * so the branch no longer runs and the `*_is` keys would otherwise stay in the URL,
+ * invisible, still filtering a table whose filter block is hidden.
+ *
+ * `undefined` is how `@wordpress/url`'s `addQueryArgs()` removes a key, which is
+ * what `updateQueryString()` ends up calling.
+ *
+ * @param open whether the advanced block should be open.
+ * @return the query patch to hand to `wc.navigation.updateQueryString()`.
+ */
+export function advancedFiltersToggleQuery( open: boolean ): Record<string, string | undefined> {
+	if ( open ) {
+		return { [ FILTER_PARAM ]: ADVANCED_FILTERS_VALUE };
+	}
+
+	return {
+		[ FILTER_PARAM ]: undefined,
+		[ DELIVERY_STATUS_PARAM ]: undefined,
+		[ ORDER_STATUS_PARAM ]: undefined,
+		[ HAS_TRACKING_PARAM ]: undefined,
+		// `AdvancedFilters` writes this itself when its All/Any select is used.
+		match: undefined,
+	};
 }
 
 /**
@@ -78,13 +122,16 @@ export const DEFAULT_DATE_RANGE = 'period=year&compare=previous_year';
 export function getCarrierFromQuery( query: WcQuery ): string {
 	const value = query[ CARRIER_PARAM ];
 
-	// `advanced` selects a VIEW, not a carrier — the rows stay unscoped, exactly
-	// as Analytics' own `Advanced filters` option leaves the report scope alone.
-	if ( ! value || ADVANCED_FILTERS_VALUE === value ) {
-		return ALL_CARRIERS;
-	}
-
-	return value;
+	// #835: `carrier` and `filter` are independent params now, so nothing here
+	// singles out `advanced` any more. An unrecognised carrier reaches the server
+	// unchanged, and the server answers it — `Orders_Controller` returns a 400
+	// «Неизвестный перевозчик» (`class-orders-controller.php`, pinned by
+	// `OrdersRestTest::test_unknown_carrier_is_a_400_not_a_silent_fallback_to_the_aggregate`),
+	// which the page now shows above a settled empty table rather than instead of
+	// the whole page. Operator decision, 08.09.2026: a hand-edited carrier should
+	// say WHY the table is empty, and what matters is only that it no longer
+	// widens the selection to every order.
+	return value ? value : ALL_CARRIERS;
 }
 
 /** '' means "no delivery-status filter" — a value the REST route's own `validate_delivery_status` also treats as valid. */
@@ -217,8 +264,8 @@ export function buildAdvancedFiltersConfig(
 			rules: [ isRule ],
 			input: {
 				component: 'SelectControl',
-				options: Object.entries( deliveryStatusLabels ).map( ( [ key, label ] ) => ( {
-					key,
+				options: Object.entries( deliveryStatusLabels ).map( ( [ value, label ] ) => ( {
+					value,
 					label,
 				} ) ),
 			},
@@ -234,8 +281,8 @@ export function buildAdvancedFiltersConfig(
 			input: {
 				component: 'SelectControl',
 				options: [
-					{ key: HAS_TRACKING_YES, label: __( 'Есть', 'woodev-plugin-framework' ) },
-					{ key: HAS_TRACKING_NO, label: __( 'Отсутствует', 'woodev-plugin-framework' ) },
+					{ value: HAS_TRACKING_YES, label: __( 'Есть', 'woodev-plugin-framework' ) },
+					{ value: HAS_TRACKING_NO, label: __( 'Отсутствует', 'woodev-plugin-framework' ) },
 				],
 			},
 			allowMultiple: false,
@@ -252,8 +299,8 @@ export function buildAdvancedFiltersConfig(
 			rules: [ isRule ],
 			input: {
 				component: 'SelectControl',
-				options: Object.entries( orderStatusOptions ).map( ( [ key, label ] ) => ( {
-					key,
+				options: Object.entries( orderStatusOptions ).map( ( [ value, label ] ) => ( {
+					value,
 					label,
 				} ) ),
 			},

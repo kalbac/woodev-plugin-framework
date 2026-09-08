@@ -242,6 +242,48 @@
 	flex-wrap: wrap;
 	align-items: flex-end;
 	gap: 16px;
+
+	/**
+	 * ⚠ WooCommerce gives `.woocommerce-filters-filter` a FIXED 430px — measured on the
+	 * rig 09.09.2026, at a 1100px viewport: the row is 860px, two pickers took 430 each,
+	 * and the toggle had nowhere to go. That is why the row broke onto three lines on the
+	 * operator's medium screen, and it is not a wrapping bug: 430px is simply far more
+	 * than «Все перевозчики (71)» or a date range needs.
+	 *
+	 * Analytics never shows this because its own rows carry fewer controls in a wider
+	 * container. Bounded here, inside our own container only, exactly as the advanced
+	 * block's value select is bounded below.
+	 */
+	.woocommerce-filters-filter {
+		flex: 0 1 auto;
+		width: auto;
+		min-width: 200px;
+		max-width: 430px;
+
+		.woocommerce-filters-label {
+			width: auto;
+		}
+	}
+}
+
+/**
+ * The display-mode TOGGLE (operator, 09.09.2026 — a two-state control has no business
+ * being a list).
+ *
+ * ⚠ It lives on its OWN row BENEATH the pickers, not inside their flex row — operator,
+ * same pass, after seeing it wedged between the two selects. Every picker carries a label
+ * above its control, so they align on their bottom edge; a toggle has none, and in among
+ * them it reads as something that fell out of alignment rather than as its own control.
+ * Keep it out of `.woodev-orders__basic-filters`.
+ */
+.woodev-orders__mode-toggle {
+	display: flex;
+	align-items: center;
+	margin-top: 12px;
+
+	.components-toggle-control .components-base-control__field {
+		margin-bottom: 0;
+	}
 }
 
 /**

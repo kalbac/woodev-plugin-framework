@@ -72,6 +72,26 @@ A "matches nothing" sentinel expressed as a `meta_query` clause is dropped on th
 like every other clause, so **"no carriers registered" returns every order on the site** instead of
 none. Whatever expresses emptiness has to be asserted on both paths, separately.
 
+### s128: the SAME divergence bit again, on the STATUS argument
+
+"Narrow to nothing when the merchant asked for a status that does not exist" (#837 defect 3) has
+three plausible mechanisms, and **two of them diverge between the datastores in opposite
+directions**:
+
+| mechanism | HPOS | legacy CPT |
+|---|---|---|
+| `'status' => []` | **every valid status** — `OrdersTableQuery::sanitize_status()` expands an empty list | — |
+| `'status' => [ 'a-bogus-slug' ]` | 0 rows — the slug survives sanitising and becomes `status IN (…)` | **every row** — `WP_Query` walks only REGISTERED post statuses and drops the rest, so the condition vanishes |
+| empty the PROVIDER scope → `NO_MATCH_META_QUERY` | 0 rows | 0 rows, via the query-var translation above |
+
+The bogus slug passed the unit suite, passed on the rig, and returned a row in the integration
+suite — which is the split this whole gotcha is about. **There is exactly one "matches nothing"
+mechanism in this codebase and both datastore paths already share it; do not invent a second.**
+
+The transferable half: "matches nothing" is never the absence of a condition. Every layer between
+you and the database is entitled to read an empty or unrecognised filter as "no filter", and at
+least one of them will.
+
 ## Related
 
 - [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — how to run the

@@ -67,8 +67,14 @@ before any of its logic is really under test. One is not a small N, it is a diff
 
 ## Its siblings on the same page
 
-- `delivery_status=unknown` returns every row for the same reason — recorded on **#837**, unfixed.
-- `carrier=advanced` widens to all instead of matching nothing — **#835**.
+- `delivery_status=unknown` returned every row for the same reason — **fixed in s128** the same
+  way, 71 → 9 on the rig. It needs a THIRD level of nesting, because the `unknown` condition is
+  itself an `OR` pair: `AND( marker EXISTS, OR( status NOT EXISTS, status NOT IN known ) )`.
+- `carrier=advanced` widened to all instead of matching nothing — **fixed in s128 on the CLIENT**:
+  `getCarrierFromQuery()` was coercing `advanced` to `all` before the request was ever made, so the
+  server never saw the unknown value. The server's own answer is a 400, not an empty set (**#835**).
+- ⚠ Each binding costs one more `LEFT JOIN` per provider, and the aggregate does not scale in join
+  count — measured and tracked as **#839**, not a blocker at real carrier counts.
 - Any future "is not" rule from **#836** walks straight into this; ⚠ and it cannot be written as a
   `NOT IN` either, for a different reason — see the Related gotcha.
 

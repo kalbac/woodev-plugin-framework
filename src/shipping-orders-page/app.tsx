@@ -35,7 +35,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl } from '@wordpress/components';
+import { Notice, SearchControl, ToggleControl } from '@wordpress/components';
 import { fetchOrders, getProviders } from './rest';
 import type {
 	OrderRow,
@@ -50,8 +50,10 @@ import {
 	ALL_CARRIERS,
 	CARRIER_PARAM,
 	DELIVERY_STATUS_PARAM,
+	FILTER_PARAM,
 	HAS_TRACKING_PARAM,
 	ORDER_STATUS_PARAM,
+	advancedFiltersToggleQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
@@ -67,8 +69,21 @@ import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-g
 /** Rows per page — increment 1's REST default. */
 const DEFAULT_PER_PAGE = 20;
 
-/** Every URL query key any control in the filter row can write. Used only as `carrierConfig.staticParams` — see its own comment. */
-const FILTER_QUERY_PARAMS = [
+/**
+ * The date-range and `AdvancedFilters` query keys — every filter-row key that
+ * belongs to neither `CARRIER_PARAM` nor `FILTER_PARAM`. Listed in both pickers'
+ * `staticParams`.
+ *
+ * ⚠ NOT because an unlisted param would be dropped — it would not.
+ * `FilterPicker.update()` re-asserts `staticParams` from the current query and
+ * then calls `updateQueryString()`, which merges the WHOLE existing query
+ * (`getNewPath()`); an unlisted param survives on its own. What `staticParams`
+ * actually protects against is `getAllFilterParams()`, which explicitly sets
+ * every param belonging to THIS picker's own config to `undefined` on each
+ * update. Listing them is cheap and harmless either way, but the reason matters:
+ * the earlier comment here claimed a contract the component does not have.
+ */
+const DATE_AND_ADVANCED_PARAMS = [
 	'period',
 	'compare',
 	'before',
@@ -324,12 +339,29 @@ export default function OrdersPage() {
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 
-	// Every control in the filter row — carrier `FilterPicker`, `DateRangeFilterPicker`,
-	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back
-	// with a value, so the only way to learn about a pick, or about the browser's
-	// back button, is the history. The listener returns its own unlisten function
-	// (verified against the live runtime). A change to any of them starts at page 1
-	// (requirement #4) — `filtersEqual` is what decides "any of them".
+	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
+	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
+	// value, so the only way to learn about a pick, or about the browser's back button,
+	// is the history.
+	//
+	// ⚠ TWO steps, and it is not a style choice. `addHistoryListener` monkey-patches
+	// `window.history.pushState` (`packages/js/navigation/src/index.js:134`) and fires its
+	// `pushstate` event BEFORE delegating to the real `pushState`:
+	//
+	//     history.pushState = function ( state ) {
+	//         window.dispatchEvent( pushStateEvent );       // listeners run HERE
+	//         return pushState.apply( history, arguments ); // the URL changes AFTER
+	//     };
+	//
+	// so calling `getQuery()` inside the listener reads the PREVIOUS URL and the page is
+	// permanently one navigation behind — measured on the rig 09.09.2026: pressing «Filter»
+	// wrote `delivery_status_is=pending` into the address bar and the table went on showing
+	// every order. Raising a flag here and reading the query in the effect below puts the
+	// read after the current call stack, by which time the URL has settled. This is exactly
+	// the shape WooCommerce's own `useQuery()` hook uses (same file, :216) and for exactly
+	// this reason.
+	const [ locationChanged, setLocationChanged ] = useState( false );
+
 	useEffect( () => {
 		const navigation = window.wc?.navigation;
 
@@ -337,22 +369,32 @@ export default function OrdersPage() {
 			return;
 		}
 
-		return navigation.addHistoryListener( () => {
-			const query = navigation.getQuery();
-
-			setDateFilterState( readDateFilterState( query ) );
-
-			setUrlFilters( ( current ) => {
-				const next = readUrlFilters( query );
-
-				if ( ! filtersEqual( current, next ) ) {
-					setPage( 1 );
-				}
-
-				return next;
-			} );
-		} );
+		// The listener returns its own unlisten function (verified against the live runtime).
+		return navigation.addHistoryListener( () => setLocationChanged( true ) );
 	}, [] );
+
+	// A change to any filter starts at page 1 (requirement #4) — `filtersEqual` decides "any".
+	useEffect( () => {
+		if ( ! locationChanged ) {
+			return;
+		}
+
+		const query = getQuery();
+
+		setDateFilterState( readDateFilterState( query ) );
+
+		setUrlFilters( ( current ) => {
+			const next = readUrlFilters( query );
+
+			if ( ! filtersEqual( current, next ) ) {
+				setPage( 1 );
+			}
+
+			return next;
+		} );
+
+		setLocationChanged( false );
+	}, [ locationChanged ] );
 
 	// Debounce the search box into `search`, which is what actually drives the fetch.
 	useEffect( () => {
@@ -402,6 +444,13 @@ export default function OrdersPage() {
 					( err && err.message ) ||
 						__( 'Не удалось загрузить заказы.', 'woodev-plugin-framework' )
 				);
+				// `rows` was reset to `null` at the top of this effect and this
+				// branch never touched it, so `TableCard`'s `isLoading={ null ===
+				// rows }` stayed `true` forever — a permanent loading skeleton
+				// under the error notice above it. Settling to an empty table
+				// here is what `isLoading` becoming `false` actually looks like.
+				setRows( [] );
+				setTotal( 0 );
 			} );
 
 		return () => {
@@ -440,34 +489,24 @@ export default function OrdersPage() {
 		/>,
 	];
 
+	// #835: carrier SCOPE and display MODE are two independent `FilterPicker`s
+	// now, each on its own param — see `filters.ts`'s `CARRIER_PARAM`/
+	// `FILTER_PARAM` doc comments for why. Each one's `staticParams` carries
+	// the OTHER picker's param plus the date-range/advanced keys, or a pick on
+	// one silently drops the other (`FilterPicker`'s own contract). `paged` is
+	// deliberately in neither list — it is component state, not a URL param at
+	// all here — so it still cannot survive a change and strand the merchant on
+	// a page that no longer exists.
 	const carrierConfig: WcFilterPickerConfig = {
-		label: __( 'Показать', 'woodev-plugin-framework' ),
+		label: __( 'Перевозчик', 'woodev-plugin-framework' ),
 		param: CARRIER_PARAM,
-		// Every OTHER filter-row query key IS carried across a carrier change —
-		// the date range and the advanced filters describe "what work queue view
-		// am I in", independent of which carrier is scoped, so switching tabs must
-		// not silently drop them (`FilterPicker`'s own contract: an unlisted param
-		// does not survive its navigation). `paged` is deliberately not one of
-		// these keys — it is component state, not a URL param at all here — so it
-		// still cannot survive a carrier change and strand the merchant on a page
-		// that no longer exists.
-		staticParams: FILTER_QUERY_PARAMS,
+		staticParams: [ FILTER_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
-		filters: [
-			...providers.map( ( p ) => ( {
-				label: `${ p.label } (${ p.count })`,
-				value: p.id,
-			} ) ),
-			// LAST on purpose. WooCommerce's own «Аналитика → Заказы» «Show» picker
-			// carries exactly `All orders` + `Advanced filters`, advanced last —
-			// measured on the rig, 08.09.2026 — and the advanced block is revealed
-			// by that option rather than standing open. Operator asked for the same.
-			{
-				label: __( 'Расширенные фильтры', 'woodev-plugin-framework' ),
-				value: ADVANCED_FILTERS_VALUE,
-			},
-		],
+		filters: providers.map( ( p ) => ( {
+			label: `${ p.label } (${ p.count })`,
+			value: p.id,
+		} ) ),
 	};
 
 	const dateApi = window.wc?.date;
@@ -482,14 +521,6 @@ export default function OrdersPage() {
 		{}
 	);
 	const advancedFiltersConfig = buildAdvancedFiltersConfig( DELIVERY_STATUS_LABELS, orderStatusOptions );
-
-	if ( error ) {
-		return (
-			<Notice status="error" isDismissible={ false }>
-				{ error }
-			</Notice>
-		);
-	}
 
 	const TableCard = window.wc?.components?.TableCard;
 	const FilterPicker = window.wc?.components?.FilterPicker;
@@ -513,24 +544,40 @@ export default function OrdersPage() {
 	// the actual condition guarding that JSX, not from a boolean copy of it — so
 	// this is only for the wrapper `<div>`'s own visibility.
 	/**
-	 * The advanced block is revealed by the carrier picker's LAST option, never
+	 * The advanced block is revealed by the display-mode picker's LAST option
+	 * (#835 — its own `FILTER_PARAM`, split from the carrier picker), never
 	 * standing open. Read from the URL like every other filter here —
 	 * `FilterPicker` navigates instead of calling back.
 	 */
 	const advancedOpen = isAdvancedFiltersOpen( getQuery() );
 
+	// The display-mode picker (#835) is offered whenever `FilterPicker` exists, so it
+	// subsumes the carrier picker's own condition — `hasCarrierFilter` only decides
+	// whether the CARRIER picker renders, further down, not whether the row does.
 	const hasAnyFilterControl = Boolean(
-		( hasCarrierFilter && FilterPicker && navigation ) ||
+		( FilterPicker && navigation ) ||
 			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
 			( advancedOpen && AdvancedFilters && navigation && currency )
 	);
 
 	return (
 		<>
+			{ /*
+			 * #837 defect 5: a rejected query parameter used to return this
+			 * `Notice` INSTEAD OF the whole page, leaving bare text on an
+			 * otherwise empty screen with no way back. It now renders ABOVE the
+			 * filter row and table, which stay mounted, so the merchant can use
+			 * the very controls that caused the error to fix it.
+			 */ }
+			{ error && (
+				<Notice status="error" isDismissible={ false }>
+					{ error }
+				</Notice>
+			) }
 			{ hasAnyFilterControl && (
 				<div className="woodev-orders__filters">
 					{ /*
-					 * The two basic pickers sit on ONE row. WooCommerce's own
+					 * The basic pickers sit on ONE row. WooCommerce's own
 					 * «Аналитика → Заказы» puts both inside a single flex
 					 * `.woocommerce-filters__basic-filters` — measured on the rig,
 					 * 08.09.2026. Stacking them was a defect the operator caught.
@@ -564,8 +611,42 @@ export default function OrdersPage() {
 					) }
 					</div>
 					{ /*
-					 * NOT a permanently visible region: revealed by the carrier
-					 * picker's «Расширенные фильтры» option, the way Analytics does it.
+					 * The display MODE is a TOGGLE, not a picker — operator, 09.09.2026, on the
+					 * rig. While «Показать» held one axis (a specific carrier OR a pointwise
+					 * filter across all of them) a list was the honest control. Splitting the
+					 * carrier out onto its own picker (#835) left this one with exactly two
+					 * states, and a two-state list is a wasted click plus a false promise of a
+					 * third option. The control type carries part of the meaning (Rule 10a).
+					 *
+					 * It sits on its OWN row BENEATH the two pickers, not between them — operator,
+					 * 09.09.2026, after seeing it wedged in the middle. A toggle has no label above
+					 * it, so in a row of labelled selects it reads as something that fell out of
+					 * alignment rather than as a control of its own.
+					 *
+					 * ⚠ Turning it OFF must also clear the advanced filters, and that is now OUR
+					 * job: the clearing used to come free from `FilterPicker.update()`'s
+					 * hard-coded `param === 'filter'` branch, which no longer runs. See
+					 * `advancedFiltersToggleQuery()`.
+					 */ }
+					{ navigation && (
+						<div className="woodev-orders__mode-toggle">
+							<ToggleControl
+								__nextHasNoMarginBottom
+								label={ __( 'Расширенные фильтры', 'woodev-plugin-framework' ) }
+								checked={ advancedOpen }
+								onChange={ ( next: boolean ) => {
+									navigation.updateQueryString?.(
+										advancedFiltersToggleQuery( next ),
+										navigation.getPath(),
+										navigation.getQuery()
+									);
+								} }
+							/>
+						</div>
+					) }
+					{ /*
+					 * NOT a permanently visible region: revealed by the display-mode TOGGLE
+					 * above (#835, operator 09.09.2026), the way Analytics reveals its own.
 					 *
 					 * `currency` is required by `AdvancedFilters`' own contract (its
 					 * README: an instance of `@woocommerce/currency`'s `CurrencyFactory`).

@@ -543,6 +543,136 @@ class OrdersRestTest extends TestCase {
 		$this->assertContains( $unmapped_order->get_id(), $ids );
 	}
 
+	/**
+	 * ⚠ The same filter on the AGGREGATE, which is where it was broken (#837 defect 2) — and
+	 * the test above cannot see it, because it scopes to ONE carrier and a single provider's
+	 * clause is never OR-ed against anybody's.
+	 *
+	 * Each provider's `unknown` clause is a NEGATIVE statement about that provider's own
+	 * status meta, and «carrier B wrote no status meta» is trivially true of every carrier A
+	 * order. OR-ed across providers and left unbound, it therefore matches the whole table:
+	 * measured on the rig 08.09.2026, `delivery_status=unknown` returned 71 of 71. The fix
+	 * binds each clause to its provider's own marker, exactly as the `has_tracking=false`
+	 * clause was repaired in s127 — gotcha
+	 * `a-negative-meta-clause-or-ed-across-providers-matches-every-order`.
+	 *
+	 * This test exists because a unit test can only assert the meta_query SHAPE. Whether that
+	 * nested AND-over-OR actually selects the right ROWS is a question for the database, and
+	 * the answer has to come from real orders.
+	 */
+	public function test_delivery_status_unknown_on_the_aggregate_does_not_match_another_carriers_mapped_order(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker = '_woodev_test_unknown_aggregate_a_marker';
+		$a_status = '_woodev_test_unknown_aggregate_a_status';
+		$b_marker = '_woodev_test_unknown_aggregate_b_marker';
+		$b_status = '_woodev_test_unknown_aggregate_b_status';
+
+		// ⚠ Down to EXACTLY the two providers this defect needs, dropping setUp's cdek/yandex.
+		// Not tidiness — cost. The aggregate delivery-status filter emits ~3 postmeta LEFT JOINs
+		// per status-carrying provider plus one per provider for the scope, and on the legacy CPT
+		// datastore those joins multiply: at four providers the query reached TWELVE LEFT JOINs on
+		// `wp_postmeta` and MySQL sat in "Sending data" for over four minutes (measured 08.09.2026,
+		// which is how this was found — the suite hung). Two status-carrying providers is the
+		// minimal reproduction of an OR-across-providers defect, and it runs in milliseconds.
+		// The join growth itself is real and tracked separately; it is not what this test asserts.
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'unknown_aggregate_a',
+				'Unknown Aggregate A',
+				$a_marker,
+				[ 'unknown_aggregate_a' ],
+				[
+					'status_meta_key' => $a_status,
+					'status_map'      => [ 'A_ACCEPTED' => Delivery_Status::IN_TRANSIT ],
+				]
+			)
+		);
+		$registry->register_provider(
+			Orders_Provider::create(
+				'unknown_aggregate_b',
+				'Unknown Aggregate B',
+				$b_marker,
+				[ 'unknown_aggregate_b' ],
+				[
+					'status_meta_key' => $b_status,
+					'status_map'      => [ 'B_SHIPPED' => Delivery_Status::IN_TRANSIT ],
+				]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// Carrier A, and its raw status IS mapped — so it is NOT unknown. Before the fix this
+		// row matched anyway, because carrier B's clause said «no B status meta here», which
+		// is true of every carrier A order.
+		$a_mapped = wc_create_order();
+		$a_mapped->set_status( 'processing' );
+		$a_mapped->update_meta_data( $a_marker, '1' );
+		$a_mapped->update_meta_data( $a_status, 'A_ACCEPTED' );
+		$a_mapped->save();
+
+		// Carrier B, mapped — the mirror image, so neither provider is privileged by ordering.
+		$b_mapped = wc_create_order();
+		$b_mapped->set_status( 'processing' );
+		$b_mapped->update_meta_data( $b_marker, '1' );
+		$b_mapped->update_meta_data( $b_status, 'B_SHIPPED' );
+		$b_mapped->save();
+
+		// Genuinely unknown: carrier A order the carrier never reported on.
+		$a_unknown = wc_create_order();
+		$a_unknown->set_status( 'processing' );
+		$a_unknown->update_meta_data( $a_marker, '1' );
+		$a_unknown->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'delivery_status', Delivery_Status::UNKNOWN );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_unknown->get_id(), $ids, 'An order its carrier never reported on IS unknown.' );
+		$this->assertNotContains(
+			$a_mapped->get_id(),
+			$ids,
+			'A mapped carrier-A order must not match `unknown` just because carrier B wrote nothing on it.'
+		);
+		$this->assertNotContains( $b_mapped->get_id(), $ids, 'Mirror image of the same rule.' );
+	}
+
+	/**
+	 * A status filter the merchant DID send, in which nothing is a real WC status, must
+	 * narrow to nothing rather than quietly returning the whole default list (#837 defect 3).
+	 * Measured on the rig 08.09.2026: `status=["nonsense"]` returned 71 of 71.
+	 */
+	public function test_a_status_filter_with_nothing_recognized_returns_no_rows(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$order = $this->create_marked_order( self::CDEK_MARKER );
+		$order->set_status( 'processing' );
+		$order->save();
+
+		$sanity = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$sanity_ids = array_column( rest_get_server()->dispatch( $sanity )->get_data()['rows'], 'id' );
+		$this->assertContains( $order->get_id(), $sanity_ids, 'Control: the order is visible without a status filter.' );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'status', [ 'Pending payment' ] );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+
+		$this->assertSame( [], $data['rows'] );
+		$this->assertSame( 0, $data['total'] );
+	}
+
 	public function test_has_tracking_true_scopes_to_orders_with_the_tracking_meta(): void {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
 

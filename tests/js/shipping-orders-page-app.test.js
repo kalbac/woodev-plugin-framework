@@ -70,15 +70,35 @@ function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage
  * and `query` and owns the query parameter named by `config.param`; it does not
  * call back with a value, it navigates. Asserting against this fake therefore
  * asserts the config we hand WooCommerce, which is the actual seam.
+ *
+ * The page now renders TWO of these side by side (#835 — carrier scope and
+ * display mode are independent pickers), so the fake's test id is keyed by
+ * `config.param` rather than a fixed string, letting a test address either one.
  */
-function FakeFilterPicker( { config, path, query } ) {
+function FakeFilterPicker( { config, path, query, advancedFilters } ) {
+	// ⚠ Reproduces the ONE branch of the real `update()` that crashes, rather than
+	// merely recording a prop. WooCommerce hard-codes the param name `filter`
+	// (`packages/js/components/src/filter-picker/index.js:174`) and dereferences
+	// `advancedFilters.filters` when the value moves AWAY from `advanced` — and
+	// `advancedFilters` has no defaultProp. Omit it and leaving advanced mode throws,
+	// the URL never changes, and the merchant is stuck there. Asserting a prop is
+	// present would pass for a prop that is present and wrong; running the branch does not.
+	const leaveAdvancedMode = () => {
+		if ( 'filter' === config.param ) {
+			// Throws exactly as upstream does when `advancedFilters` is missing.
+			return Object.keys( advancedFilters.filters || {} ).length;
+		}
+		return 0;
+	};
+
 	return (
 		<div
-			data-testid="carrier-filter"
+			data-testid={ `filter-picker-${ config.param }` }
 			data-param={ config.param }
 			data-path={ path }
 			data-static-params={ config.staticParams.join( ',' ) }
 			data-active={ query[ config.param ] || '' }
+			data-leaving-advanced-mode={ String( leaveAdvancedMode() ) }
 		>
 			<span>{ config.label }</span>
 			<ul>
@@ -139,8 +159,26 @@ let fakeQuery = {};
 let historyListeners = [];
 
 /**
- * Simulates what `FilterPicker` really does on a pick — and what the browser's
- * back button does: change the query, then fire the history listeners.
+ * Simulates what `FilterPicker` really does on a pick, and what the browser's back button
+ * does.
+ *
+ * ⚠ THE ORDER HERE IS THE WHOLE POINT, and this fake had it BACKWARDS until s128.
+ * `addHistoryListener` monkey-patches `window.history.pushState`
+ * (`packages/js/navigation/src/index.js:134`) and dispatches its `pushstate` event
+ * BEFORE delegating to the real `pushState`:
+ *
+ *     history.pushState = function ( state ) {
+ *         window.dispatchEvent( pushStateEvent );      // listeners run HERE
+ *         return pushState.apply( history, arguments ); // URL changes AFTER
+ *     };
+ *
+ * So a listener that calls `getQuery()` synchronously reads the PREVIOUS URL, and a page
+ * built that way is permanently one navigation behind. The old fake updated `fakeQuery`
+ * first, which made that bug impossible to express — 1831 green tests, and the live page
+ * did not filter at all.
+ *
+ * WooCommerce's own `useQuery()` hook (same file, :216) is the shape that survives it: the
+ * listener only raises a flag, and the query is read in a LATER effect.
  *
  * @param {Object} query the new URL query.
  */
@@ -148,8 +186,9 @@ function navigate( query ) {
 	// Wrapped in `act()` because the listeners set React state, exactly as the
 	// real history events do in the browser.
 	act( () => {
-		fakeQuery = query;
+		// Listeners first, still seeing the OLD query — as in the browser.
 		historyListeners.forEach( ( listener ) => listener() );
+		fakeQuery = query;
 	} );
 }
 
@@ -187,7 +226,20 @@ beforeAll( () => {
 			// history listeners, exactly like `navigate()` below.
 			updateQueryString: ( query, path, currentQuery ) => {
 				updateQueryStringCalls.push( { query, path, currentQuery } );
-				navigate( { ...currentQuery, ...query } );
+
+				// ⚠ `undefined` REMOVES a key — that is how `@wordpress/url`'s
+				// `addQueryArgs()` behaves, and it is the mechanism the advanced-filter
+				// reset depends on. A plain spread would keep the key with an undefined
+				// value, so a test asserting "the filters were cleared" would pass for
+				// the wrong reason. Same class of fiction as the event ordering above.
+				const merged = { ...currentQuery, ...query };
+				Object.keys( merged ).forEach( ( key ) => {
+					if ( undefined === merged[ key ] ) {
+						delete merged[ key ];
+					}
+				} );
+
+				navigate( merged );
 			},
 		},
 		date: {
@@ -320,7 +372,7 @@ describe( 'carrier filter', () => {
 
 		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
 
-		expect( screen.queryByTestId( 'carrier-filter' ) ).not.toBeInTheDocument();
+		expect( screen.queryByTestId( 'filter-picker-carrier' ) ).not.toBeInTheDocument();
 	} );
 
 	test( 'the carrier filter renders its options once there is more than one provider', async () => {
@@ -329,9 +381,9 @@ describe( 'carrier filter', () => {
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		expect( screen.getByText( 'Показать' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Все перевозчики (5)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'СДЭК (3)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Яндекс Доставка (2)' ) ).toBeInTheDocument();
@@ -349,9 +401,9 @@ describe( 'carrier filter', () => {
 
 		const { container } = render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		const filter = screen.getByTestId( 'carrier-filter' );
+		const filter = screen.getByTestId( 'filter-picker-carrier' );
 		const card = container.querySelector( '.woodev-orders__filters' );
 
 		expect( card ).toContainElement( filter );
@@ -359,11 +411,13 @@ describe( 'carrier filter', () => {
 	} );
 
 	/**
-	 * `staticParams` carries every OTHER filter-row query key (increment 7) —
-	 * the date range and the advanced filters describe "what work queue view am
-	 * I in", independent of carrier, so a carrier switch must not silently drop
-	 * them. `paged` is still not one of these keys: it is component state, not
-	 * a URL param, so it still cannot survive a carrier change.
+	 * `staticParams` carries every OTHER filter-row query key (increment 7),
+	 * including the display-mode toggle's own `filter` param (#835) — the date
+	 * range, the advanced filters and the display mode all describe "what work
+	 * queue view am I in", independent of carrier, so a carrier switch must not
+	 * silently drop them. `paged` is still not one of these keys: it is
+	 * component state, not a URL param, so it still cannot survive a carrier
+	 * change.
 	 */
 	test( 'the filter owns the carrier query param and carries the rest of the filter row across a change', async () => {
 		getProviders.mockReturnValue( twoProviders() );
@@ -371,16 +425,232 @@ describe( 'carrier filter', () => {
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
 
-		const filter = screen.getByTestId( 'carrier-filter' );
+		const filter = screen.getByTestId( 'filter-picker-carrier' );
 
 		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
 		expect( filter ).toHaveAttribute(
 			'data-static-params',
-			'period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+			'filter,period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
 		);
 		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
+	} );
+} );
+
+describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026)', () => {
+	/**
+	 * The operator's reasoning, on the rig: while «Показать» held ONE axis — a specific
+	 * carrier or a pointwise filter across all of them — a list was the honest control.
+	 * Splitting the carrier onto its own picker left this one with exactly two states,
+	 * and a two-state list is a wasted click plus a false promise of a third option.
+	 */
+	test( 'renders as a toggle regardless of provider count, and no mode picker survives', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
+
+		expect( screen.queryByTestId( 'filter-picker-filter' ) ).toBeNull();
+		expect( screen.queryByText( 'Фильтры' ) ).toBeNull();
+		expect( screen.queryByText( 'Все заказы' ) ).toBeNull();
+	} );
+
+	test( 'reflects the URL rather than its own state', async () => {
+		fakeQuery = { filter: 'advanced' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeChecked()
+		);
+	} );
+
+	test( 'switching it on writes filter=advanced and touches nothing else', async () => {
+		fakeQuery = { carrier: 'cdek' };
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Расширенные фильтры' } );
+
+		act( () => {
+			toggle.click();
+		} );
+
+		expect( updateQueryStringCalls.at( -1 ).query ).toEqual( { filter: 'advanced' } );
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+	} );
+
+	/**
+	 * ⚠ The half that used to come free and no longer does. `FilterPicker.update()`
+	 * special-cases `param === 'filter'` and clears the active filters on the way out
+	 * (`filter-picker/index.js:174`). With the picker gone that branch never runs, so
+	 * leaving advanced mode would strand `*_is` in the URL — invisible, still filtering
+	 * a table whose filter block is hidden.
+	 */
+	test( 'switching it off clears the advanced filters, not just the mode', async () => {
+		fakeQuery = {
+			carrier: 'cdek',
+			filter: 'advanced',
+			delivery_status_is: 'in_transit',
+			status_is: 'wc-processing',
+			has_tracking_is: 'yes',
+		};
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const toggle = await screen.findByRole( 'checkbox', { name: 'Расширенные фильтры' } );
+
+		act( () => {
+			toggle.click();
+		} );
+
+		const sent = updateQueryStringCalls.at( -1 ).query;
+
+		expect( sent.filter ).toBeUndefined();
+		expect( sent.delivery_status_is ).toBeUndefined();
+		expect( sent.status_is ).toBeUndefined();
+		expect( sent.has_tracking_is ).toBeUndefined();
+
+		// And it must reach the FETCH, not merely the URL — the carrier scope survives.
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { carrier: 'cdek', deliveryStatus: '', status: [] } )
+			)
+		);
+	} );
+
+	/**
+	 * ⚠ Placement, not presence. The operator moved this toggle out from BETWEEN the two
+	 * pickers onto its own row beneath them (09.09.2026): every picker carries a label above
+	 * its control and they align on their bottom edge, so a label-less toggle among them
+	 * reads as something that fell out of alignment. Nothing else in this file can see where
+	 * the control sits, so folding it back into the row would go unnoticed.
+	 */
+	test( 'the toggle sits on its own row, NOT inside the pickers row', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
+
+		const row = container.querySelector( '.woodev-orders__basic-filters' );
+		const toggle = container.querySelector( '.woodev-orders__mode-toggle' );
+
+		expect( row ).not.toBeNull();
+		expect( toggle ).not.toBeNull();
+		expect( row.contains( toggle ) ).toBe( false );
+
+		// …and it comes AFTER the row, not before it.
+		expect( row.compareDocumentPosition( toggle ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
+	} );
+
+	test( 'the carrier picker still renders beside it, owning its own param', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
+
+		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toHaveAttribute( 'data-param', 'carrier' );
+		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * #835 point 3: an unrecognized carrier must reach the server unchanged —
+	 * no client-side coercion to the aggregate, and no confusion with the
+	 * (now-separate) `filter=advanced` display mode.
+	 */
+	test( 'an unrecognized carrier in the URL is sent to the server verbatim, not coerced to the aggregate', async () => {
+		fakeQuery = { carrier: 'unknown-carrier' };
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { carrier: 'unknown-carrier' } ) )
+		);
+	} );
+
+	/**
+	 * #835's own warning: `filter` (display mode) must NOT enter the
+	 * `UrlFilters`/`filtersEqual` snapshot `readUrlFilters()` builds, or
+	 * switching modes would reset pagination the same way a real filter
+	 * change does — a change of VIEW is not a change of selection. Confirmed
+	 * here rather than assumed, exactly as the brief for this asked.
+	 */
+	test( 'switching display mode does not reset the page — it is a view change, not a filter change', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { page: 1 } ) )
+		);
+
+		act( () => {
+			screen.getByText( 'Следующая страница' ).click();
+		} );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
+		);
+
+		navigate( { filter: 'advanced' } );
+
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) );
+	} );
+
+	/**
+	 * ⚠ The defect this whole file's `navigate()` helper was blind to, and the one the rig
+	 * found on 09.09.2026: pressing «Filter» wrote `delivery_status_is` into the address bar
+	 * and the table went on showing every order.
+	 *
+	 * `addHistoryListener` fires its event BEFORE the real `pushState`, so a listener that
+	 * reads `getQuery()` synchronously sees the PREVIOUS URL and the page is permanently one
+	 * navigation behind. `navigate()` now reproduces that ordering, which is what lets this
+	 * test fail against the one-step listener.
+	 *
+	 * It asserts the FETCH, not the URL — the URL was never the broken part.
+	 */
+	test( 'a filter arriving by history push reaches the fetch, not the previous query', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { deliveryStatus: '' } )
+			)
+		);
+
+		navigate( { filter: 'advanced', delivery_status_is: 'in_transit' } );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { deliveryStatus: 'in_transit' } )
+			)
+		);
 	} );
 } );
 
@@ -544,6 +814,49 @@ describe( 'empty and error states', () => {
 			expect( screen.getAllByText( 'Не удалось загрузить заказы.' ).length ).toBeGreaterThan( 0 )
 		);
 	} );
+
+	/**
+	 * #837 defect 5a's regression guard: a rejected query parameter used to
+	 * return the error `Notice` INSTEAD OF the whole page — bare text on an
+	 * otherwise empty screen, with no filter controls left to fix the thing
+	 * that broke. The notice must render ABOVE the filter row and table, both
+	 * of which stay mounted, rather than replacing them.
+	 */
+	test( 'a rejected fetch keeps the filter row and the table mounted alongside the error notice', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockRejectedValue( new Error( 'Неверный параметр фильтра.' ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Неверный параметр фильтра.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.woodev-orders__filters' ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * Follow-up to the fix above: `rows` was reset to `null` at the top of the
+	 * fetch effect and the `.catch()` branch never touched it again, so
+	 * `TableCard` kept rendering `isLoading={ true }` forever — a permanent
+	 * loading skeleton sitting under the error notice, "pretending to load".
+	 * Asserted on the RENDERED loading text, not the internal `rows` state.
+	 */
+	test( 'a rejected fetch settles the table out of its loading state, not a permanent spinner', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockRejectedValue( new Error( 'Сервер недоступен.' ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Сервер недоступен.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.queryByText( 'Загрузка…' ) ).not.toBeInTheDocument();
+	} );
 } );
 
 describe( 'the delivery-analytics panel (#711)', () => {
@@ -705,34 +1018,23 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 	 * The operator caught this on his own rig pass, 08.09.2026: the advanced
 	 * block must NOT be a permanently visible region. WooCommerce's own
 	 * «Аналитика → Заказы» reveals it from the last option of the same «Show»
-	 * picker — measured there before this was built.
+	 * picker — measured there before this was built. Here it is revealed by
+	 * the display-mode toggle's own `filter` param (#835), split from carrier.
 	 */
-	test( 'stays hidden until the carrier picker\'s advanced option is chosen', async () => {
+	test( 'stays hidden until the display-mode picker\'s advanced option is chosen', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'carrier-filter' ) ).toBeInTheDocument() );
+		await waitFor( () =>
+			expect( screen.getByRole( 'checkbox', { name: 'Расширенные фильтры' } ) ).toBeInTheDocument()
+		);
 		expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument();
 
-		navigate( { carrier: 'advanced' } );
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
-	} );
-
-	/** …and the option that reveals it is the LAST one in that picker, as in Analytics. */
-	test( 'the carrier picker offers «Расширенные фильтры» as its last option', async () => {
-		getProviders.mockReturnValue( twoProviders() );
-		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
-
-		render( <App /> );
-
-		const picker = await screen.findByTestId( 'carrier-filter' );
-		const options = picker.textContent;
-
-		expect( options ).toContain( 'Расширенные фильтры' );
-		expect( options.trim().endsWith( 'Расширенные фильтры' ) ).toBe( true );
 	} );
 
 	test( 'offers delivery status, WC order status and tracking presence — never delivery type', async () => {
@@ -740,9 +1042,10 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
-		// The block is revealed by the carrier picker's own last option, so the
-		// query has to say so before it renders at all.
-		navigate( { carrier: 'advanced' } );
+		// The block is revealed by the display-mode TOGGLE (operator, 09.09.2026)
+		// (#835 — its own `filter` param, split from `carrier`), so the query
+		// has to say so before it renders at all.
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 
@@ -762,7 +1065,7 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
 		render( <App /> );
-		navigate( { carrier: 'advanced' } );
+		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 
