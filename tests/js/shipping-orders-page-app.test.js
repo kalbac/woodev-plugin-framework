@@ -159,8 +159,26 @@ let fakeQuery = {};
 let historyListeners = [];
 
 /**
- * Simulates what `FilterPicker` really does on a pick — and what the browser's
- * back button does: change the query, then fire the history listeners.
+ * Simulates what `FilterPicker` really does on a pick, and what the browser's back button
+ * does.
+ *
+ * ⚠ THE ORDER HERE IS THE WHOLE POINT, and this fake had it BACKWARDS until s128.
+ * `addHistoryListener` monkey-patches `window.history.pushState`
+ * (`packages/js/navigation/src/index.js:134`) and dispatches its `pushstate` event
+ * BEFORE delegating to the real `pushState`:
+ *
+ *     history.pushState = function ( state ) {
+ *         window.dispatchEvent( pushStateEvent );      // listeners run HERE
+ *         return pushState.apply( history, arguments ); // URL changes AFTER
+ *     };
+ *
+ * So a listener that calls `getQuery()` synchronously reads the PREVIOUS URL, and a page
+ * built that way is permanently one navigation behind. The old fake updated `fakeQuery`
+ * first, which made that bug impossible to express — 1831 green tests, and the live page
+ * did not filter at all.
+ *
+ * WooCommerce's own `useQuery()` hook (same file, :216) is the shape that survives it: the
+ * listener only raises a flag, and the query is read in a LATER effect.
  *
  * @param {Object} query the new URL query.
  */
@@ -168,8 +186,9 @@ function navigate( query ) {
 	// Wrapped in `act()` because the listeners set React state, exactly as the
 	// real history events do in the browser.
 	act( () => {
-		fakeQuery = query;
+		// Listeners first, still seeing the OLD query — as in the browser.
 		historyListeners.forEach( ( listener ) => listener() );
+		fakeQuery = query;
 	} );
 }
 
@@ -516,6 +535,39 @@ describe( 'the display-mode filter (#835 — split from carrier scope)', () => {
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
 
 		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) );
+	} );
+
+	/**
+	 * ⚠ The defect this whole file's `navigate()` helper was blind to, and the one the rig
+	 * found on 09.09.2026: pressing «Filter» wrote `delivery_status_is` into the address bar
+	 * and the table went on showing every order.
+	 *
+	 * `addHistoryListener` fires its event BEFORE the real `pushState`, so a listener that
+	 * reads `getQuery()` synchronously sees the PREVIOUS URL and the page is permanently one
+	 * navigation behind. `navigate()` now reproduces that ordering, which is what lets this
+	 * test fail against the one-step listener.
+	 *
+	 * It asserts the FETCH, not the URL — the URL was never the broken part.
+	 */
+	test( 'a filter arriving by history push reaches the fetch, not the previous query', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith(
+				expect.objectContaining( { deliveryStatus: '' } )
+			)
+		);
+
+		navigate( { filter: 'advanced', delivery_status_is: 'in_transit' } );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { deliveryStatus: 'in_transit' } )
+			)
+		);
 	} );
 } );
 

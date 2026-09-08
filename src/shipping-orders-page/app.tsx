@@ -339,12 +339,29 @@ export default function OrdersPage() {
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 
-	// Every control in the filter row — carrier `FilterPicker`, `DateRangeFilterPicker`,
-	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back
-	// with a value, so the only way to learn about a pick, or about the browser's
-	// back button, is the history. The listener returns its own unlisten function
-	// (verified against the live runtime). A change to any of them starts at page 1
-	// (requirement #4) — `filtersEqual` is what decides "any of them".
+	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
+	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
+	// value, so the only way to learn about a pick, or about the browser's back button,
+	// is the history.
+	//
+	// ⚠ TWO steps, and it is not a style choice. `addHistoryListener` monkey-patches
+	// `window.history.pushState` (`packages/js/navigation/src/index.js:134`) and fires its
+	// `pushstate` event BEFORE delegating to the real `pushState`:
+	//
+	//     history.pushState = function ( state ) {
+	//         window.dispatchEvent( pushStateEvent );       // listeners run HERE
+	//         return pushState.apply( history, arguments ); // the URL changes AFTER
+	//     };
+	//
+	// so calling `getQuery()` inside the listener reads the PREVIOUS URL and the page is
+	// permanently one navigation behind — measured on the rig 09.09.2026: pressing «Filter»
+	// wrote `delivery_status_is=pending` into the address bar and the table went on showing
+	// every order. Raising a flag here and reading the query in the effect below puts the
+	// read after the current call stack, by which time the URL has settled. This is exactly
+	// the shape WooCommerce's own `useQuery()` hook uses (same file, :216) and for exactly
+	// this reason.
+	const [ locationChanged, setLocationChanged ] = useState( false );
+
 	useEffect( () => {
 		const navigation = window.wc?.navigation;
 
@@ -352,22 +369,32 @@ export default function OrdersPage() {
 			return;
 		}
 
-		return navigation.addHistoryListener( () => {
-			const query = navigation.getQuery();
-
-			setDateFilterState( readDateFilterState( query ) );
-
-			setUrlFilters( ( current ) => {
-				const next = readUrlFilters( query );
-
-				if ( ! filtersEqual( current, next ) ) {
-					setPage( 1 );
-				}
-
-				return next;
-			} );
-		} );
+		// The listener returns its own unlisten function (verified against the live runtime).
+		return navigation.addHistoryListener( () => setLocationChanged( true ) );
 	}, [] );
+
+	// A change to any filter starts at page 1 (requirement #4) — `filtersEqual` decides "any".
+	useEffect( () => {
+		if ( ! locationChanged ) {
+			return;
+		}
+
+		const query = getQuery();
+
+		setDateFilterState( readDateFilterState( query ) );
+
+		setUrlFilters( ( current ) => {
+			const next = readUrlFilters( query );
+
+			if ( ! filtersEqual( current, next ) ) {
+				setPage( 1 );
+			}
+
+			return next;
+		} );
+
+		setLocationChanged( false );
+	}, [ locationChanged ] );
 
 	// Debounce the search box into `search`, which is what actually drives the fetch.
 	useEffect( () => {
