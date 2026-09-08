@@ -79,6 +79,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			],
 		];
 
+
 		/**
 		 * Custom query var carrying the already-built delivery-status meta clauses, for
 		 * the legacy CPT datastore path (SP-10 spec D10). Built by
@@ -144,10 +145,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type string   $before          ISO 8601 `YYYY-MM-DD`; orders created on/before this
 		 *                                     day. Independent of `$after`.
 		 *     @type string[] $status          native WC order statuses, with or without the `wc-`
-		 *                                     prefix. An unrecognized value is dropped; an
-		 *                                     empty/all-dropped result keeps the default status
-		 *                                     list (every status except cancelled/failed) rather
-		 *                                     than an unfiltered one.
+		 *                                     prefix. Omitted or empty keeps the default status
+		 *                                     list (every status except cancelled/failed).
+		 *                                     Recognized values override that default entirely.
+		 *                                     A non-empty request in which NOTHING is recognized
+		 *                                     narrows to nothing, through the same
+		 *                                     {@see self::NO_MATCH_META_QUERY} an unrecognized
+		 *                                     carrier gets; it does NOT fall back to the
+		 *                                     unfiltered table.
 		 *     @type string   $delivery_status one of
 		 *                                     {@see \Woodev\Framework\Shipping\Order\Delivery_Status::canonical_states()}
 		 *                                     or {@see \Woodev\Framework\Shipping\Order\Delivery_Status::UNKNOWN}.
@@ -184,12 +189,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$args['date_created'] = $date_created;
 			}
 
+			/*
+			 * `null` means no status override; `[]` means the merchant DID ask for statuses
+			 * and none of them is real, which must narrow to nothing (#837 defect 3).
+			 *
+			 * ⚠ "Narrow to nothing" is expressed by emptying the PROVIDER scope, so it flows
+			 * through {@see self::NO_MATCH_META_QUERY} — the one "matches nothing" mechanism
+			 * both datastore paths already share. The obvious alternative, passing a bogus
+			 * status slug, was implemented first and is WRONG: it empties the table on HPOS
+			 * but does nothing at all on the legacy CPT datastore, because `WP_Query` walks
+			 * the REGISTERED post statuses and silently drops any value that is not one, so
+			 * the status condition disappears and every row comes back. Measured both ways
+			 * 08.09.2026 — HPOS returned 0, the CPT integration suite returned the row.
+			 * An empty status ARRAY is worse still: HPOS's `OrdersTableQuery::sanitize_status()`
+			 * expands it into every valid status.
+			 */
 			$requested_statuses = $this->resolve_requested_statuses( $request );
-			if ( [] !== $requested_statuses ) {
+			$status_matches_nothing = ( [] === $requested_statuses );
+
+			if ( null !== $requested_statuses && ! $status_matches_nothing ) {
 				$args['status'] = $requested_statuses;
 			}
 
-			$providers = $this->resolve_providers( $carrier );
+			$providers = $status_matches_nothing ? [] : $this->resolve_providers( $carrier );
 			$keys      = array_map(
 				static function ( Orders_Provider $provider ): string {
 					return $provider->get_marker_meta_key();
@@ -376,6 +398,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * LEFT JOIN, so a lone `NOT IN` silently drops every order that has no status
 		 * meta at all — which is the commonest unknown there is. See the clause itself.
 		 *
+		 * ⚠ And that OR must itself be bound to the provider's own marker, for the same
+		 * reason {@see self::tracking_meta_clauses()}'s negative case is — see the comment
+		 * on the clause below.
+		 *
 		 * A provider with no status concept of its own (`get_status_meta_key()` is null,
 		 * or its `status_map` maps nothing to a valid canonical state) is either ALWAYS
 		 * unknown — for which its marker key (guaranteed present within scope, so this is
@@ -424,26 +450,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 						continue;
 					}
 
-					// TWO clauses, not one, and this is the whole point: `NOT IN` alone
-					// does NOT match an order with no status meta at all. Only `NOT
-					// EXISTS` makes WP_Meta_Query use a LEFT JOIN — WordPress says so
-					// itself in `class-wp-meta-query.php`: «If any JOINs are LEFT JOINs
-					// (as in the case of NOT EXISTS), then all JOINs should be LEFT.
-					// Otherwise posts with no metadata will be excluded from results.»
-					// An order that never received a carrier status is the COMMONEST
-					// unknown, so a lone `NOT IN` silently hides most of what the filter
-					// exists to find. Measured, not reasoned: the integration test
-					// covering the no-status order failed with exactly that shape.
+					/*
+					 * TWO status clauses, not one, and this is the whole point: `NOT IN`
+					 * alone does NOT match an order with no status meta at all. Only `NOT
+					 * EXISTS` makes WP_Meta_Query use a LEFT JOIN — WordPress says so
+					 * itself in `class-wp-meta-query.php`: «If any JOINs are LEFT JOINs
+					 * (as in the case of NOT EXISTS), then all JOINs should be LEFT.
+					 * Otherwise posts with no metadata will be excluded from results.»
+					 * An order that never received a carrier status is the COMMONEST
+					 * unknown, so a lone `NOT IN` silently hides most of what the filter
+					 * exists to find. Measured, not reasoned: the integration test
+					 * covering the no-status order failed with exactly that shape.
+					 *
+					 * ⚠ And the pair MUST be bound to this provider's own marker, for the
+					 * same reason the negative tracking case below is. These clauses are
+					 * OR-ed across providers, and «carrier B wrote no status meta» is
+					 * trivially TRUE of every carrier A order — a carrier never writes
+					 * another's meta. Unbound, the OR therefore matches the entire table:
+					 * measured on the rig 08.09.2026 with two carriers,
+					 * `delivery_status=unknown` returned 71 of 71 (#837 defect 2), while
+					 * each single-carrier view was correct, because only one provider
+					 * participates there. Same defect, same shape, same fix as the
+					 * `has_tracking=false` clause repaired in s127.
+					 */
 					$clauses[] = [
-						'relation' => 'OR',
+						'relation' => 'AND',
 						[
-							'key'     => $status_key,
-							'compare' => 'NOT EXISTS',
+							'key'     => $provider->get_marker_meta_key(),
+							'compare' => 'EXISTS',
 						],
 						[
-							'key'     => $status_key,
-							'value'   => $known,
-							'compare' => 'NOT IN',
+							'relation' => 'OR',
+							[
+								'key'     => $status_key,
+								'compare' => 'NOT EXISTS',
+							],
+							[
+								'key'     => $status_key,
+								'value'   => $known,
+								'compare' => 'NOT IN',
+							],
 						],
 					];
 
@@ -456,6 +502,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 					continue;
 				}
 
+				// `IN` on a carrier's OWN status key already implies that carrier's
+				// order, so it needs no binding — the same asymmetry as `EXISTS` versus
+				// `NOT EXISTS` in {@see self::tracking_meta_clauses()}.
 				$clauses[] = [
 					'key'     => $status_key,
 					'value'   => $raw_values,
@@ -597,27 +646,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * validated against {@see wc_get_order_statuses()}, tolerating the value with or
 		 * without its `wc-` prefix (both are seen in the wild: `wc_get_order_statuses()`
 		 * keys always carry it, but a status is commonly referred to without it, e.g.
-		 * {@see \WC_Order::update_status()}). An unrecognized value is dropped rather
-		 * than rejected here — {@see self::build_args()} is "pure; injectable for tests"
-		 * and must degrade sanely on its own; the REST layer additionally rejects
-		 * anything not a string outright before this is ever reached. An empty result
-		 * (nothing requested, or nothing requested survived) means "no override" — the
-		 * caller keeps the default status list, deliberately including its
-		 * cancelled/failed exclusion; an explicit `status` filter overrides that default
-		 * entirely, cancelled/failed included, since the merchant asked for exactly those
-		 * statuses.
+		 * {@see \WC_Order::update_status()}).
+		 *
+		 * ⚠ Three outcomes, and the middle one is the defect this method used to have
+		 * (#837 defect 3):
+		 *
+		 * - `null` — nothing was asked for. The caller keeps its default status list,
+		 *   cancelled/failed exclusion included.
+		 * - `[]` — a filter WAS asked for and nothing in it is a real status. The request
+		 *   must narrow to NOTHING. This used to return the same empty array as the case
+		 *   above, so `status=["Pending payment"]` or `status=["nonsense"]` silently
+		 *   returned the whole unfiltered table — a garbage value WIDENED the selection
+		 *   instead of emptying it. Measured on the rig 08.09.2026: 71 of 71 rows.
+		 * - a non-empty list — recognized statuses, which override the default entirely,
+		 *   cancelled/failed included, since the merchant asked for exactly those.
+		 *
+		 * Values that are not strings never reach here — the REST layer rejects them
+		 * outright — and this method still degrades sanely on its own, because
+		 * {@see self::build_args()} is "pure; injectable for tests".
 		 *
 		 * @since 2.0.2
 		 *
 		 * @param array<string,mixed> $request see {@see self::build_args()}.
-		 * @return string[] valid `wc-`-prefixed statuses, or empty for "no override".
+		 * @return string[]|null `null` for "no override", `[]` for "matches nothing",
+		 *                       otherwise the recognized `wc-`-prefixed statuses.
 		 */
-		private function resolve_requested_statuses( array $request ): array {
+		private function resolve_requested_statuses( array $request ): ?array {
 			if ( ! isset( $request['status'] ) || ! is_array( $request['status'] ) ) {
-				return [];
+				return null;
 			}
-
-			$valid = array_keys( wc_get_order_statuses() );
 
 			$normalized = array_map(
 				static function ( $status ): string {
@@ -627,6 +684,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				},
 				$request['status']
 			);
+
+			// An all-blank request ('', '   ') is indistinguishable from asking for nothing
+			// at all, so it keeps meaning "no override" — only a request with actual content
+			// that matches no real status is a narrowing.
+			$normalized = array_values(
+				array_filter(
+					$normalized,
+					static function ( string $status ): bool {
+						return '' !== $status && 'wc-' !== $status;
+					}
+				)
+			);
+
+			if ( [] === $normalized ) {
+				return null;
+			}
+
+			$valid = array_keys( wc_get_order_statuses() );
 
 			return array_values( array_unique( array_intersect( $normalized, $valid ) ) );
 		}

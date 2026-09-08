@@ -377,8 +377,57 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame( [ 'wc-cancelled' ], $args['status'] );
 	}
 
-	public function test_an_unrecognized_status_is_dropped_and_the_default_survives_if_nothing_else_valid(): void {
+	/**
+	 * A status filter the merchant DID request, in which nothing is a real status,
+	 * must narrow to nothing — never widen back to the default list (#837 defect 3).
+	 *
+	 * ⚠ This test asserted the opposite until the rig disproved it: `status=["nonsense"]`
+	 * returned all 71 rows, because "requested but nothing recognized" was indistinguishable
+	 * from "nothing requested".
+	 *
+	 * ⚠ And the SHAPE of the answer matters as much as the answer. Two mechanisms were tried
+	 * and both are wrong: an empty status array (HPOS's `OrdersTableQuery::sanitize_status()`
+	 * expands it into EVERY valid status) and a bogus status slug (empties the table on HPOS,
+	 * does nothing on the legacy CPT datastore, where `WP_Query` drops unregistered statuses
+	 * and the condition vanishes — caught by the integration suite, not by this file). What
+	 * survives is the one "matches nothing" mechanism both datastore paths already share.
+	 */
+	public function test_a_status_request_with_nothing_recognized_narrows_to_nothing(): void {
 		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'not-a-real-status' ] ] );
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'], 'The status arg itself is left alone — the narrowing is expressed in the meta_query.' );
+	}
+
+	/**
+	 * The operator's own reproduction — a human-readable STATUS LABEL pasted where a slug
+	 * belongs, which is exactly what the broken filter UI was submitting (#837 defect 1).
+	 */
+	public function test_a_status_label_where_a_slug_belongs_narrows_to_nothing(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'Pending payment' ] ] );
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+	}
+
+	/**
+	 * The legacy CPT datastore must narrow the same way — it carries marker keys as a query
+	 * var rather than a `meta_query`, and an empty list is what
+	 * {@see Orders_Registry::translate_marker_keys_query_var()} turns back into the sentinel.
+	 * This is the path on which the bogus-slug attempt silently returned every row.
+	 */
+	public function test_a_status_request_with_nothing_recognized_narrows_to_nothing_on_the_legacy_cpt_path(): void {
+		$args = $this->query_with_hpos( false )->build_args( [ 'status' => [ 'nonsense' ] ] );
+
+		$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, Orders_Query::meta_query_for_keys( $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ) );
+	}
+
+	/**
+	 * An all-blank request is indistinguishable from asking for nothing at all, so it
+	 * keeps meaning "no override" rather than emptying the table.
+	 */
+	public function test_a_blank_status_request_still_means_no_override(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ '', '   ' ] ] );
 
 		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
 	}
@@ -518,6 +567,10 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * should be LEFT. Otherwise posts with no metadata will be excluded from
 	 * results." A lone `NOT IN` therefore hides the commonest unknown of all: the
 	 * order the carrier has never reported on.
+	 *
+	 * ⚠ And that OR pair must itself sit under an `AND` with the provider's own marker —
+	 * see {@see self::test_delivery_status_unknown_on_the_aggregate_binds_each_provider_to_its_marker()}
+	 * for why, and for the defect that shape prevents.
 	 */
 	public function test_delivery_status_unknown_against_a_real_status_map_covers_missing_and_unmapped(): void {
 		$registry = Orders_Registry::instance();
@@ -534,19 +587,72 @@ class ShippingOrdersQueryTest extends TestCase {
 
 		$this->assertSame(
 			[
-				'relation' => 'OR',
+				'relation' => 'AND',
 				[
-					'key'     => '_cdek_status',
-					'compare' => 'NOT EXISTS',
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
 				],
 				[
-					'key'     => '_cdek_status',
-					'value'   => [ 'CDEK_ACCEPTED' ],
-					'compare' => 'NOT IN',
+					'relation' => 'OR',
+					[
+						'key'     => '_cdek_status',
+						'compare' => 'NOT EXISTS',
+					],
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_ACCEPTED' ],
+						'compare' => 'NOT IN',
+					],
 				],
 			],
 			$args['meta_query'][1][0]
 		);
+	}
+
+	/**
+	 * ⚠ The regression this whole fix exists for (#837 defect 2), and it is INVISIBLE with a
+	 * single provider registered — which is why every earlier test above passed.
+	 *
+	 * Each provider's `unknown` clause is a NEGATIVE statement about that provider's own
+	 * status meta, and these clauses are OR-ed across providers. «Carrier B wrote no status
+	 * meta» is trivially TRUE of every carrier A order, because a carrier never writes
+	 * another's meta — so unbound, the OR matches the entire table. Measured on the rig
+	 * 08.09.2026 with two carriers: `delivery_status=unknown` returned 71 of 71.
+	 *
+	 * Binding each half to its own provider's marker is the same repair the
+	 * `has_tracking=false` clause needed in s127, and the gotcha
+	 * `a-negative-meta-clause-or-ed-across-providers-matches-every-order` is the shared
+	 * root. So this test asserts the BINDING, not merely the OR.
+	 */
+	public function test_delivery_status_unknown_on_the_aggregate_binds_each_provider_to_its_marker(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+		$registry->register_provider(
+			$this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YA_SHIPPED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[ 'delivery_status' => Delivery_Status::UNKNOWN ]
+		);
+
+		$status_part = $args['meta_query'][1];
+
+		$this->assertSame( 'OR', $status_part['relation'] );
+
+		foreach ( [ 0, 1 ] as $index ) {
+			$this->assertSame(
+				'AND',
+				$status_part[ $index ]['relation'],
+				'Each provider clause must be an AND binding it to its own marker, or the OR matches every order.'
+			);
+			$this->assertSame( 'EXISTS', $status_part[ $index ][0]['compare'] );
+			$this->assertStringEndsWith( '_marker', $status_part[ $index ][0]['key'] );
+		}
+
+		$this->assertSame( '_cdek_marker', $status_part[0][0]['key'] );
+		$this->assertSame( '_yandex_marker', $status_part[1][0]['key'] );
 	}
 
 	/**
