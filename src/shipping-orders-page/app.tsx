@@ -459,8 +459,12 @@ export default function OrdersPage() {
 	};
 
 	const dateApi = window.wc?.date;
-	const currencyFactory = window.wc?.currency;
-	const currency = currencyFactory ? currencyFactory() : undefined;
+	// ⚠ `window.wc.currency` is the MODULE, not the factory — measured on the rig:
+	// `typeof wc.currency === 'object'` and it is NOT callable, while
+	// `wc.currency.CurrencyFactory` is the function and calling it returns the
+	// instance `AdvancedFilters` wants. Calling the module directly threw
+	// `TypeError: B is not a function` and took the whole wc-admin app down.
+	const currency = window.wc?.currency?.CurrencyFactory?.();
 	const orderStatusOptions = window.wc?.wcSettings?.getSetting<Record<string, string>>(
 		'orderStatuses',
 		{}

@@ -235,7 +235,11 @@ beforeAll( () => {
 			},
 			isoDateFormat: 'YYYY-MM-DD',
 		},
-		currency: () => ( { getCurrencyConfig: () => ( {} ) } ),
+		// Mirrors the real module shape, measured on the rig: `wc.currency` is an
+		// OBJECT that is not callable, and the factory hangs off it. The previous
+		// fake made the module itself a function, so the page's `wc.currency()`
+		// passed every test and threw `B is not a function` in the browser.
+		currency: { CurrencyFactory: () => ( { getCurrencyConfig: () => ( {} ) } ) },
 		wcSettings: {
 			getSetting: ( name, fallback ) =>
 				'orderStatuses' === name

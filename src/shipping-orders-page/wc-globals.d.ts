@@ -270,13 +270,24 @@ declare global {
 				isoDateFormat: string;
 			};
 			/**
-			 * `@woocommerce/currency`'s default export, behind the `wc-currency`
-			 * handle — a factory, not a class (`CurrencyFactory(storeSettings?)`
-			 * returns an instance; called with no args it falls back to `$`/2dp
-			 * formatting, per the package's own README). `AdvancedFilters` requires
-			 * an instance as its `currency` prop; this page never reads its fields.
+			 * `@woocommerce/currency`, behind the `wc-currency` handle.
+			 *
+			 * ⚠ **This is a MODULE OBJECT and is NOT callable** — measured on the rig
+			 * (WC 11.1.0): `typeof wc.currency === 'object'`, and the factory lives on
+			 * it as `CurrencyFactory`. An earlier version of this declaration typed the
+			 * module itself as the factory; the page then called it and threw
+			 * `TypeError: B is not a function`, which crashes the ENTIRE wc-admin app
+			 * rather than just this control. TypeScript could not catch that, because a
+			 * hand-written declaration for a runtime global is an assertion about
+			 * someone else's bundle, not a check of it — so anything added here must be
+			 * measured in the browser first.
+			 *
+			 * `CurrencyFactory(storeSettings?)` returns the instance `AdvancedFilters`
+			 * requires as its `currency` prop; this page never reads its fields.
 			 */
-			currency?: ( storeSettings?: Record< string, unknown > ) => Record< string, unknown >;
+			currency?: {
+				CurrencyFactory?: ( storeSettings?: Record< string, unknown > ) => Record< string, unknown >;
+			};
 			/**
 			 * `@woocommerce/settings`, behind the `wc-settings` handle — read-only
 			 * access to data WooCommerce's own admin already registers (WC docs:
