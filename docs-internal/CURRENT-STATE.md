@@ -35,10 +35,11 @@ silently (gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-th
 filter is **URL-driven**: `FilterPicker` navigates rather than calling back, so the page re-reads the
 query through `wc.navigation.addHistoryListener()`.
 
-⚠ **Orca's browser is FLAKY for wp-admin and needs the operator to log in once.** **Cheaper and
-proven twice (s127, s128): drive the code the page calls via `wp eval` inside the rig container** —
-no login, exact numbers, and it is what settled both #830 and #837's server half. ⚠ The rig runs
-**`WPLANG=en_US`** — English dates and WC chrome there are the LOCALE, not a defect.
+⚠ **Do NOT ask the operator to log into the rig — a Playwright probe logs in itself**
+(`admin`/`password`, wp-env default; s127, s128). For numbers without a browser, drive the code via
+`wp eval` in the container. **But only the browser catches a client defect**: s128 shipped a green
+REST half whose table never updated. ⚠ The rig runs **`WPLANG=en_US`** — English chrome is the
+LOCALE, not a defect.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
