@@ -498,9 +498,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 					continue;
 				}
 
+				if ( $has_tracking ) {
+					// `EXISTS` on a carrier's OWN tracking key already implies that
+					// carrier's order, so it needs no binding.
+					$clauses[] = [
+						'key'     => $tracking_key,
+						'compare' => 'EXISTS',
+					];
+
+					continue;
+				}
+
+				/*
+				 * ⚠ The NEGATIVE case MUST be bound to this provider's own marker.
+				 *
+				 * These clauses are OR-ed across providers, and «carrier B's tracking
+				 * key does not exist» is trivially TRUE of every carrier A order — a
+				 * carrier never writes another's meta. Unbound, the OR therefore matches
+				 * the entire table: measured on the rig 08.09.2026 with two carriers,
+				 * `has_tracking=false` returned 71 of 71 instead of 24, while each
+				 * single-carrier view (11 of 34, 13 of 37) was correct, because only one
+				 * provider participates there. That is why this is bound and `EXISTS`
+				 * above is not.
+				 */
 				$clauses[] = [
-					'key'     => $tracking_key,
-					'compare' => $has_tracking ? 'EXISTS' : 'NOT EXISTS',
+					'relation' => 'AND',
+					[
+						'key'     => $provider->get_marker_meta_key(),
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => $tracking_key,
+						'compare' => 'NOT EXISTS',
+					],
 				];
 			}
 

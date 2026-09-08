@@ -40,11 +40,24 @@ final class TestOrdersSeederTest extends TestCase {
 	}
 
 	/**
-	 * Once seeded, the option is never re-consulted against the trigger — seeding
-	 * must never run twice on the same site, even while the trigger stays on.
+	 * Once seeded AT THE CURRENT VERSION, seeding must never run again on the same
+	 * site, however often `admin_init` fires.
 	 */
-	public function test_never_reseeds_once_the_option_is_set(): void {
-		$this->assertFalse( \Woodev_Test_Orders_Seeder::should_seed( true, '1' ) );
+	public function test_never_reseeds_once_the_current_version_is_recorded(): void {
+		$this->assertFalse(
+			\Woodev_Test_Orders_Seeder::should_seed( true, \Woodev_Test_Orders_Seeder::SEED_VERSION )
+		);
+	}
+
+	/**
+	 * …but a rig seeded by an OLDER version of the demo set re-seeds exactly once.
+	 * Without this the set could only ever grow on a fresh site, and the operator
+	 * would have to delete an option by hand to see rows added for pagination.
+	 * The stored value is the version, never a bare '1'.
+	 */
+	public function test_reseeds_once_when_the_demo_set_version_moved_on(): void {
+		$this->assertTrue( \Woodev_Test_Orders_Seeder::should_seed( true, '1' ) );
+		$this->assertNotSame( '1', \Woodev_Test_Orders_Seeder::SEED_VERSION );
 	}
 
 	/**

@@ -48,6 +48,17 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		public const SEEDED_OPTION = 'woodev_test_shipping_demo_orders_seeded';
 
 		/**
+		 * Bumped whenever {@see self::demo_orders()} changes, so an existing rig
+		 * re-seeds instead of silently keeping the old, smaller set. The option
+		 * stores this value rather than a bare '1'.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const SEED_VERSION = '2';
+
+		/**
 		 * Must match the marker key {@see \Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()}
 		 * registers the `Orders_Provider` under — a seeded order the provider does
 		 * not recognize would never appear on the rig at all.
@@ -102,41 +113,103 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 * @return bool
 		 */
 		public static function should_seed( bool $trigger_enabled, string $seeded_option_value ): bool {
-			return $trigger_enabled && '' === $seeded_option_value;
+			return $trigger_enabled && self::SEED_VERSION !== $seeded_option_value;
 		}
 
 		/**
-		 * The demo orders' raw definitions — one mapped, in-transit-ish status; one
-		 * mapped, ready-for-pickup status with no tracking number; and one carrying
-		 * `LOST_IN_TRANSIT`, the provider's own deliberately unmapped raw value (see
-		 * `init_test_shipping_orders_page()`'s docblock) — so the unmapped-status
-		 * branch is visible on THIS carrier's tab too, not only in a test.
+		 * The demo orders' raw definitions.
 		 *
-		 * Pure — no WordPress calls — so the seeded shape itself is unit-testable
-		 * without a database.
+		 * The first three are the ones that carry MEANING and are kept verbatim: a
+		 * mapped in-transit status, a mapped ready-for-pickup status with no tracking
+		 * number, and one carrying `LOST_IN_TRANSIT` — the provider's own deliberately
+		 * unmapped raw value (see `init_test_shipping_orders_page()`'s docblock) — so
+		 * the unmapped-status branch is visible on THIS carrier's rows, not only in a
+		 * test.
+		 *
+		 * The rest are GENERATED rather than typed out, because their only job is
+		 * volume: the operator needs more rows than one page holds (the REST default
+		 * is 20) to exercise the table's pagination and its date filter at all. Typing
+		 * thirty near-identical literals invites a copy-paste defect in the one that
+		 * matters — see the framework's own rule about deriving tables instead of
+		 * hand-writing them.
+		 *
+		 * ⚠ Dates: most land inside the CURRENT year, because the page's default
+		 * period is `period=year` (D11) and anything older is hidden until the
+		 * merchant widens the range. A few are deliberately pushed into LAST year, so
+		 * that the date filter has something to reveal and hide.
+		 *
+		 * Pure — no WordPress calls beyond date arithmetic — so the seeded shape stays
+		 * inspectable without a database.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, days_ago:int}>
 		 */
 		public static function demo_orders(): array {
-			return [
+			$orders = [
 				[
 					'status'     => 'processing',
 					'raw_status' => 'ON_THE_WAY',
 					'tracking'   => 'TESTCARRIER-000123',
+					'days_ago'   => 0,
 				],
 				[
 					'status'     => 'processing',
 					'raw_status' => 'ARRIVED_PVZ',
 					'tracking'   => null,
+					'days_ago'   => 0,
 				],
 				[
 					'status'     => 'processing',
 					'raw_status' => 'LOST_IN_TRANSIT',
 					'tracking'   => 'TESTCARRIER-000125',
+					'days_ago'   => 0,
 				],
 			];
+
+			/*
+			 * Every raw status this provider declares, so the canonical column has
+			 * something to map on most rows and something to fail to map on a few.
+			 *
+			 * ⚠ These are the provider's OWN keys and must stay in step with the
+			 * `status_map` / `status_labels` it registers in
+			 * `woodev-test-shipping-method.php`. A raw value that exists in neither
+			 * renders as a bare key — `RawStatusVocabularyTest` pins that, because the
+			 * first draft of this list was typed from memory and invented three
+			 * statuses (`DELIVERED`, `RETURNING`, `CANCELED`) that this carrier has
+			 * never spoken.
+			 */
+			$raw_statuses = [
+				'CREATED',
+				'PICKED_UP',
+				'ON_THE_WAY',
+				'ARRIVED_PVZ',
+				'HANDED_TO_CLIENT',
+				'RETURN_STARTED',
+				'RETURNED_TO_SENDER',
+				'CANCELLED_BY_CLIENT',
+				'LOST_IN_TRANSIT',
+			];
+			$wc_statuses  = [ 'processing', 'on-hold', 'completed', 'pending' ];
+
+			// Spread across the year: mostly recent, thinning out backwards, with the
+			// last few beyond the year boundary on purpose.
+			$spread = [ 1, 2, 3, 5, 8, 11, 15, 19, 24, 30, 37, 45, 54, 64, 75, 87, 100, 114, 129, 145, 162, 180, 199, 219, 240, 262, 285, 309, 334, 400, 430 ];
+
+			foreach ( $spread as $index => $days_ago ) {
+				$raw = $raw_statuses[ $index % count( $raw_statuses ) ];
+
+				$orders[] = [
+					'status'     => $wc_statuses[ $index % count( $wc_statuses ) ],
+					'raw_status' => $raw,
+					// Every third row carries no tracking number, so the
+					// tracking-presence filter has both sides to find.
+					'tracking'   => 0 === $index % 3 ? null : sprintf( 'TESTCARRIER-%06d', 200 + $index ),
+					'days_ago'   => $days_ago,
+				];
+			}
+
+			return $orders;
 		}
 
 		/**
@@ -165,7 +238,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 				self::seed_one( $definition );
 			}
 
-			update_option( self::SEEDED_OPTION, '1' );
+			update_option( self::SEEDED_OPTION, self::SEED_VERSION );
 		}
 
 		/**
@@ -180,6 +253,14 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		private static function seed_one( array $definition ): void {
 			$order = wc_create_order();
 			$order->set_status( $definition['status'] );
+
+			// Backdate, so the list has a real spread to sort and filter by. WooCommerce
+			// stamps `date_created` at creation, so it has to be set explicitly here.
+			$days_ago = isset( $definition['days_ago'] ) ? (int) $definition['days_ago'] : 0;
+
+			if ( 0 < $days_ago ) {
+				$order->set_date_created( time() - ( $days_ago * DAY_IN_SECONDS ) );
+			}
 			$order->update_meta_data( self::MARKER_META_KEY, '1' );
 			$order->update_meta_data( self::STATUS_META_KEY, $definition['raw_status'] );
 

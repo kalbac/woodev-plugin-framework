@@ -59,6 +59,14 @@ function woodev_realistic_shipping_plugin_init(): void {
 	// Card #734: this carrier's OWN pickup point source — see that file's header for why a
 	// second fixture carrier exists and why its Краснодар entry holds exactly one point.
 	require_once $plugin_path . '/includes/class-realistic-point-source.php';
+	// Rig-only demo orders. Declaring the class costs nothing; `maybe_seed()` is a
+	// no-op unless WOODEV_TEST_SEED_ORDERS_DEMO is truthy AND this version of the
+	// demo set has not been seeded yet — see that file's own docblock.
+	require_once $plugin_path . '/includes/class-realistic-orders-seeder.php';
+
+	// `admin_init`, not plugin construction: WooCommerce's order and order-item
+	// classes are not guaranteed to exist yet when the bootstrap builds this plugin.
+	add_action( 'admin_init', [ 'Woodev_Realistic_Orders_Seeder', 'maybe_seed' ] );
 
 	woodev_realistic_shipping_plugin();
 }

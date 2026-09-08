@@ -645,7 +645,11 @@ class ShippingOrdersQueryTest extends TestCase {
 		);
 	}
 
-	public function test_has_tracking_false_builds_a_not_exists_clause(): void {
+	/**
+	 * The NEGATIVE case is bound to the provider's own marker — see the aggregate
+	 * test below for why that binding is not decoration.
+	 */
+	public function test_has_tracking_false_binds_not_exists_to_the_providers_own_marker(): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider(
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
@@ -661,12 +665,68 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame(
 			[
 				[
-					'key'     => '_cdek_tracking',
-					'compare' => 'NOT EXISTS',
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => '_cdek_tracking',
+						'compare' => 'NOT EXISTS',
+					],
 				],
 			],
 			$args['meta_query'][1]
 		);
+	}
+
+	/**
+	 * The regression this binding exists for, and it needs TWO providers to show at
+	 * all — which is exactly why it went unnoticed: every earlier tracking test
+	 * registered one.
+	 *
+	 * Unbound, the clauses OR to «cdek has no tracking» OR «yandex has no tracking»,
+	 * and the second half is trivially TRUE of every cdek order, because a carrier
+	 * never writes another carrier's meta. The aggregate then matched the whole
+	 * table. Measured on the rig 08.09.2026 before the fix: `has_tracking=false`
+	 * returned 71 of 71 rows instead of 24, while each single-carrier view was
+	 * right (11 of 34 and 13 of 37).
+	 */
+	public function test_has_tracking_false_on_the_aggregate_does_not_match_every_order(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'tracking_meta_key' => '_yandex_tracking' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'      => 'all',
+				'has_tracking' => false,
+			]
+		);
+
+		$tracking_part = $args['meta_query'][1];
+
+		$this->assertSame( 'OR', $tracking_part['relation'] );
+
+		// Every branch of that OR must name its own marker, or it is satisfiable by
+		// an order belonging to the OTHER carrier.
+		foreach ( [ 0, 1 ] as $index ) {
+			$branch = $tracking_part[ $index ];
+
+			$this->assertSame( 'AND', $branch['relation'], 'each branch must bind marker AND tracking' );
+
+			$keys = [ $branch[0]['key'], $branch[1]['key'] ];
+
+			$this->assertContains( 'NOT EXISTS', [ $branch[0]['compare'], $branch[1]['compare'] ] );
+			$this->assertNotEmpty(
+				preg_grep( '/_marker$/', $keys ),
+				'a NOT EXISTS branch that names no marker matches the other carrier\'s orders'
+			);
+		}
 	}
 
 	/**
