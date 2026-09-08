@@ -6,16 +6,20 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-08 (s127).** ✅ **Three SP-10 branches MERGED** (`e901b27`) — **#831** (#828
-foundation, the delivery-status freshness seam), **#833** (#830, a second `Orders_Provider` on the
-fixture) and **#832** (increment 7, the filter row's client half). `main` now carries SP-10
-increments 1, 2a, 2b, 6 and 7 plus the #828 data layer. Cards **#826 #827 #830** closed; **#828**
-stays open for its panel (increment 8). Detail: `sessions/s127.md`.
+**As of 2026-09-09 (s128).** 🚧 **PR #840 open, CI green, awaiting the operator's visual pass** —
+filtering on the orders page now filters: #837 defects 1, 2, 3 and 5a plus **#835** in full.
+Detail: `sessions/s128.md`. ⚠ The root of the main defect was `{ key, label }` where WooCommerce's
+`FilterOption` is `{ value, label }`, which made «Filter» render as a DISABLED button; the tests
+asserted the broken shape, so 1820 green jest tests never saw it.
 
-Open work on the page: **#824 #828 #829**, plus the operator's 08.09.2026 rig pass — **#834 #835
-#836 #837 #838**. ⚠ **Recon is done and recorded ON THOSE CARDS; no fix was started.** #837
-(filtering does not work — five distinct defects, three silent) is the blocker; #836 waits on his
-product decision.
+⚠ **«Matches nothing» has exactly ONE correct mechanism here, and two plausible ones are wrong.**
+An empty status array is expanded by HPOS into EVERY valid status; a bogus status slug empties the
+table on HPOS and does nothing on the legacy CPT datastore, where `WP_Query` walks only REGISTERED
+statuses and drops the condition. Use `Orders_Query::NO_MATCH_META_QUERY` — the only one both
+datastore paths share. Measured s128; the integration suite caught the second, a unit test could not.
+
+Open work on the page: **#824 #828 #829 #834 #836 #838**, plus **#839** (join growth, debt).
+**#836 waits on his product decision**; #837 keeps only defect 4, which is part of that decision.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -31,12 +35,10 @@ silently (gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-th
 filter is **URL-driven**: `FilterPicker` navigates rather than calling back, so the page re-reads the
 query through `wc.navigation.addHistoryListener()`.
 
-⚠ **Orca's own browser is FLAKY for wp-admin** — `orca snapshot` returned `runtime_unavailable` in
-s125 and again in s127; the runtime recovered on its own both times and live workers were unaffected.
-It still needs the operator to log in once. **Cheaper and proven in s127: drive the REST route the
-page actually calls, via `wp eval` inside the rig container** — no login, exact numbers, and it is
-what discharged #830. ⚠ The rig runs **`WPLANG=en_US`** — English dates and English WC chrome there
-are the LOCALE, not a defect; our Russian msgids show through it by design.
+⚠ **Orca's browser is FLAKY for wp-admin and needs the operator to log in once.** **Cheaper and
+proven twice (s127, s128): drive the code the page calls via `wp eval` inside the rig container** —
+no login, exact numbers, and it is what settled both #830 and #837's server half. ⚠ The rig runs
+**`WPLANG=en_US`** — English dates and WC chrome there are the LOCALE, not a defect.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -53,19 +55,19 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null. Субсистемы с
 **0** незащищённых вызовов остаются опциональными.
 
-⚠ **`test-cdek` is a client of the LIVE CDEK test contour, not a fixture dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
+⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a fixture dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 08.09.2026 (s127) on the MERGED `main` at `e901b27`:** unit **3732** /
-**9162**, 1 skipped, with sodium ON; jest **1817** in **31** suites; **integration 184 / 671**;
-`npm run build` produces **zero git diff**, so the primary checkout reproduces the committed bundles
-exactly; phpcs clean — **with the warning level ON**; phpstan level 3 no errors; `lint:i18n`,
-`lint:mo` and `lint:docs` OK; catalogue **782** entries, **429** translated. Nothing on this line is
-carried forward.
+**Baselines — 09.09.2026 (s128) on PR #840, `23adaf5`:**
+unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1832** in **31** suites;
+**integration 186 / 679**; `npm run build` produces **zero git diff**, so the primary checkout
+reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
+level 3 no errors; every `lint:*` OK; catalogue **786** entries, **429** translated. Nothing on
+this line is carried forward.
 
-**Before the merge, same day:** `main` at `93fd2e5` read unit **3699 / 9088**, jest **1772** in 29
-suites, integration **180 / 658**, catalogue **769** — that is what the three branches moved.
+**`main` at `e901b27` (s127), for comparison:** unit **3732 / 9162**, jest **1817**, integration
+**184 / 671**, catalogue **782** — that is what PR #840 moves.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -169,9 +171,9 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7 и слой данных #828.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель «Data status» — UI поверх готового шва), плюс #824 #829. **Волна 2 написана в брифах, но НЕ запущена** — брифы лежат готовыми, конфликт по `app.tsx` и реестру снят мержем. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7 и слой данных #828; в PR #840 — рабочая фильтрация.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель «Data status» — UI поверх готового шва), плюс #824 #829. **Волна 2 написана в брифах, но НЕ запущена.** **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
-✅ **На риге теперь ДВА перевозчика** (#830 смержена + `WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`): `providers=2`, агрегат `total=8` (5 + 3), в строках виден незамапленный статус ВТОРОГО словаря. До этого провайдер был один, и селектор перевозчика, разбивка счётчика §D6 и OR-агрегат M2 в браузере не воспроизводились вовсе.
+✅ **На риге ДВА перевозчика и 71 заказ** (`WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** ровно это скрывало два дефекта подряд (s127 `has_tracking`, s128 `delivery_status=unknown`). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -245,7 +247,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **300**.
+Gotchas: **303**.
 
 ## Program status (high level)
 

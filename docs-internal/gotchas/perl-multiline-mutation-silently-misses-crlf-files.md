@@ -77,6 +77,31 @@ npm run test:js -- --roots "<rootDir>/tests/js"
 Only a mutation you have SEEN in the file makes the following test run meaningful. If you must
 use `perl`, match `\r?\n` — but prefer `Edit`.
 
+## s128: the CHECK for CRLF lies too, in both directions
+
+Twice in one session, the tool used to answer «is this file CRLF?» gave the wrong answer:
+
+```bash
+grep -c $'\r' class-orders-query.php     # -> 0        WRONG, the file was CRLF throughout
+sed -n '3584,3588p' catalogue.pot | od -c # -> only \n  WRONG, the file is CRLF throughout
+```
+
+Both files really were CRLF — `file` said so, and git said
+`CRLF will be replaced by LF the next time Git touches it`. So a negative from an inline shell
+check is not evidence, and this matters because the whole gotcha above turns on knowing a file's
+endings before you act on it.
+
+✅ **Authorities that told the truth:** `file <path>`, git's own warning, and reading the bytes in
+ONE process:
+
+```bash
+node -e "const t=require('fs').readFileSync(p,'utf8'); console.log(t.includes('\r\n'))"
+```
+
+Prefer the last one when a script has to BRANCH on the answer — and have it preserve what it
+found, rather than normalising a file whose CRLF is deliberate (the `.po`/`.pot` catalogues are
+committed CRLF; rewriting their endings buries a three-line addition in a whole-file diff).
+
 ## Related
 
 - [a-mutation-you-did-not-confirm-applied-proves-nothing](a-mutation-you-did-not-confirm-applied-proves-nothing.md)

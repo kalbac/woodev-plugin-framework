@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 300 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 303 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -84,6 +84,8 @@
 - [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
+- [woocommerce/navigation] **`addHistoryListener` fires BEFORE the real `pushState`, so `getQuery()` inside it reads the PREVIOUS URL and the page stays one navigation behind. Raise a flag; read the query in a later effect.** → [addhistorylistener-fires-before-the-url-changes](gotchas/addhistorylistener-fires-before-the-url-changes.md) (s128)
+- [woocommerce/filter-options] **An `AdvancedFilters` option keyed `key` instead of `value` makes «Filter» a DISABLED button: no URL, no request. A picked option then submits its LABEL.** → [a-filter-option-keyed-key-instead-of-value-disables-the-filter-button](gotchas/a-filter-option-keyed-key-instead-of-value-disables-the-filter-button.md) (s128)
 - [woocommerce/script-handles] **Declaring `wc-settings` as a script dependency makes WordPress drop your whole bundle SILENTLY — it is only conditionally registered.** → [declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle](gotchas/declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle.md) (s127)
 - [woocommerce/address-save] **WooCommerce saves no address until every required TEXT field in the block is filled — the gate is in the JS.** → [wc-does-not-save-the-address-until-every-required-text-field-is-filled](gotchas/wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) (s65)
 - [woocommerce/session] **A guest's `WC()->session->set()` can silently not persist — a logged-in developer never sees it.** → [guest-session-write-needs-the-cart-cookie](gotchas/guest-session-write-needs-the-cart-cookie.md) (s65)
@@ -130,6 +132,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/integration] **A hung PHPUnit killed at the shell leaves its query RUNNING in MySQL, so the NEXT run hangs on `DROP TABLE wp_users`. Read `SHOW FULL PROCESSLIST` first.** → [killing-phpunit-leaves-its-mysql-query-running-and-holding-locks](gotchas/killing-phpunit-leaves-its-mysql-query-running-and-holding-locks.md) (s128)
 - [testing/environment-split] **`wc_get_orders()` DROPS `meta_query` on the legacy CPT datastore and still returns a successful, UNFILTERED result — and the dev rig is HPOS while the test environment is CPT, so a probe on one proves nothing about the other.** → [wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore](gotchas/wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore.md) (s125)
 - [testing/ci] **`plugins-reference/` is GITIGNORED, so a test that reads it is green on every local checkout AND every worktree, and red in CI — the one place that gates the merge. Skip on absence; keep the rules on temp fixtures.** → [a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci](gotchas/a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci.md) (s117)
 - [testing/coverage] **Four fixtures agreeing is ONE sample copied four times: every one built `Shipping_Rate` with 4 of 6 args, so an entire output branch never ran while the class looked covered.** → [every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted](gotchas/every-fixture-omitting-an-optional-argument-leaves-a-branch-unexecuted.md) (s116)
