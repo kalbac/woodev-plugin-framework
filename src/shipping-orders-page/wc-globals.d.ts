@@ -217,6 +217,22 @@ export interface WcFilterPickerProps {
 	config: WcFilterPickerConfig;
 	path: string;
 	query: Record< string, string | undefined >;
+	/**
+	 * ⚠ REQUIRED whenever `config.param` is `'filter'`, and optional otherwise —
+	 * WooCommerce hard-codes that param name. `FilterPicker.update()`
+	 * (`packages/js/components/src/filter-picker/index.js:174`) reads
+	 * `advancedFilters.filters` when the value moves AWAY from `'advanced'`, and
+	 * `FilterPicker.defaultProps` supplies only `query` and `onFilterSelect` — so
+	 * omitting it throws a `TypeError` on the way out of advanced mode and leaves
+	 * the merchant stuck there. That same branch is what clears the `*_is` params,
+	 * so passing it is also the only way leaving advanced mode drops the advanced
+	 * filters rather than stranding them in the URL.
+	 *
+	 * ⚠ Do not "simplify" this to optional-everywhere without keeping the note:
+	 * a hand-written `.d.ts` is a CLAIM about someone else's bundle, and this one
+	 * cost a crash the type checker could never have seen.
+	 */
+	advancedFilters?: WcAdvancedFiltersConfig;
 }
 
 declare global {

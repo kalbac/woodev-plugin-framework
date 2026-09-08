@@ -70,12 +70,18 @@ import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-g
 const DEFAULT_PER_PAGE = 20;
 
 /**
- * The date-range and `AdvancedFilters` query keys — every filter-row key
- * that belongs to neither `CARRIER_PARAM` nor `FILTER_PARAM`. Each of the two
- * `FilterPicker`s below (#835) must carry this list PLUS the other picker's
- * own param in its `staticParams`, or `FilterPicker`'s navigation drops
- * whatever it does not list (its own contract — an unlisted param does not
- * survive its navigation).
+ * The date-range and `AdvancedFilters` query keys — every filter-row key that
+ * belongs to neither `CARRIER_PARAM` nor `FILTER_PARAM`. Listed in both pickers'
+ * `staticParams`.
+ *
+ * ⚠ NOT because an unlisted param would be dropped — it would not.
+ * `FilterPicker.update()` re-asserts `staticParams` from the current query and
+ * then calls `updateQueryString()`, which merges the WHOLE existing query
+ * (`getNewPath()`); an unlisted param survives on its own. What `staticParams`
+ * actually protects against is `getAllFilterParams()`, which explicitly sets
+ * every param belonging to THIS picker's own config to `undefined` on each
+ * update. Listing them is cheap and harmless either way, but the reason matters:
+ * the earlier comment here claimed a contract the component does not have.
  */
 const DATE_AND_ADVANCED_PARAMS = [
 	'period',
@@ -577,10 +583,27 @@ export default function OrdersPage() {
 					 * #835: display MODE is its own `FilterPicker`, independent of
 					 * carrier scope — always offered, unlike the carrier picker
 					 * above which only exists once there is more than one provider.
+					 *
+					 * ⚠ `advancedFilters` is REQUIRED here and only here, because
+					 * WooCommerce hard-codes our param name. `FilterPicker.update()`
+					 * (`packages/js/components/src/filter-picker/index.js:174`) does:
+					 *
+					 *     if ( config.param === 'filter' && value !== 'advanced' ) {
+					 *         … getQueryFromActiveFilters( [], query, advancedFilters.filters || {} );
+					 *
+					 * and `advancedFilters` has NO defaultProp — `FilterPicker.defaultProps`
+					 * sets only `query` and `onFilterSelect`. So leaving it off makes
+					 * picking «Все заказы» out of advanced mode throw a TypeError, the
+					 * URL never changes and the merchant is stuck in advanced mode with
+									 * no way back. Passing it also does the right thing: that branch is
+					 * what CLEARS the `*_is` params on the way out, so leaving advanced
+					 * mode drops the advanced filters instead of stranding them in the
+					 * URL. Upstream `ReportFilters` passes it for exactly this reason.
 					 */ }
 					{ FilterPicker && navigation && (
 						<FilterPicker
 							config={ filterModeConfig }
+							advancedFilters={ advancedFiltersConfig }
 							path={ navigation.getPath() }
 							query={ navigation.getQuery() }
 						/>

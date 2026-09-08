@@ -64,6 +64,22 @@ class ShippingOrdersQueryTest extends TestCase {
 	}
 
 	/**
+	 * A registry with ONE provider, for tests whose subject is not the carrier scope.
+	 *
+	 * ⚠ Needed because an EMPTY registry already produces `NO_MATCH_META_QUERY` on its
+	 * own: a test that asserts "the query matches nothing" against no providers passes
+	 * whatever the code under test does, and stays green when the fix is reverted. Found
+	 * by the s128 critic on exactly the three status tests below — the assertion was
+	 * about the fixture, not about the behaviour.
+	 */
+	private function registry_with_one_provider(): Orders_Registry {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		return $registry;
+	}
+
+	/**
 	 * Builds an Orders_Query whose datastore detection is pinned to $hpos, bypassing
 	 * the real (always-false-under-Brain-Monkey) static call. See the class docblock.
 	 */
@@ -393,7 +409,9 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * survives is the one "matches nothing" mechanism both datastore paths already share.
 	 */
 	public function test_a_status_request_with_nothing_recognized_narrows_to_nothing(): void {
-		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'not-a-real-status' ] ] );
+		$registry = $this->registry_with_one_provider();
+
+		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'status' => [ 'not-a-real-status' ] ] );
 
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
 		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'], 'The status arg itself is left alone — the narrowing is expressed in the meta_query.' );
@@ -404,7 +422,9 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * belongs, which is exactly what the broken filter UI was submitting (#837 defect 1).
 	 */
 	public function test_a_status_label_where_a_slug_belongs_narrows_to_nothing(): void {
-		$args = $this->query_with_hpos( true )->build_args( [ 'status' => [ 'Pending payment' ] ] );
+		$registry = $this->registry_with_one_provider();
+
+		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'status' => [ 'Pending payment' ] ] );
 
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
 	}
@@ -416,7 +436,9 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * This is the path on which the bogus-slug attempt silently returned every row.
 	 */
 	public function test_a_status_request_with_nothing_recognized_narrows_to_nothing_on_the_legacy_cpt_path(): void {
-		$args = $this->query_with_hpos( false )->build_args( [ 'status' => [ 'nonsense' ] ] );
+		$registry = $this->registry_with_one_provider();
+
+		$args = $this->query_with_hpos( false, $registry )->build_args( [ 'status' => [ 'nonsense' ] ] );
 
 		$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, Orders_Query::meta_query_for_keys( $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ) );

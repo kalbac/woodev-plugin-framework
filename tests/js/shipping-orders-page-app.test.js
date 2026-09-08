@@ -75,7 +75,22 @@ function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage
  * display mode are independent pickers), so the fake's test id is keyed by
  * `config.param` rather than a fixed string, letting a test address either one.
  */
-function FakeFilterPicker( { config, path, query } ) {
+function FakeFilterPicker( { config, path, query, advancedFilters } ) {
+	// ⚠ Reproduces the ONE branch of the real `update()` that crashes, rather than
+	// merely recording a prop. WooCommerce hard-codes the param name `filter`
+	// (`packages/js/components/src/filter-picker/index.js:174`) and dereferences
+	// `advancedFilters.filters` when the value moves AWAY from `advanced` — and
+	// `advancedFilters` has no defaultProp. Omit it and leaving advanced mode throws,
+	// the URL never changes, and the merchant is stuck there. Asserting a prop is
+	// present would pass for a prop that is present and wrong; running the branch does not.
+	const leaveAdvancedMode = () => {
+		if ( 'filter' === config.param ) {
+			// Throws exactly as upstream does when `advancedFilters` is missing.
+			return Object.keys( advancedFilters.filters || {} ).length;
+		}
+		return 0;
+	};
+
 	return (
 		<div
 			data-testid={ `filter-picker-${ config.param }` }
@@ -83,6 +98,7 @@ function FakeFilterPicker( { config, path, query } ) {
 			data-path={ path }
 			data-static-params={ config.staticParams.join( ',' ) }
 			data-active={ query[ config.param ] || '' }
+			data-leaving-advanced-mode={ String( leaveAdvancedMode() ) }
 		>
 			<span>{ config.label }</span>
 			<ul>
