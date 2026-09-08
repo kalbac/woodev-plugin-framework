@@ -111,6 +111,27 @@ if ( ! defined( 'WOODEV_TEST_PICKUP_SELECTION_REFRESH_CHECKOUT' ) ) {
 }
 
 /**
+ * Issue #830: opt-in switch that seeds a handful of demo orders carrying THIS
+ * fixture's own `Orders_Provider` marker (see
+ * `Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()`) — without
+ * this, the rig's «Заказы доставки» page shows only the `realistic` fixture's
+ * carrier and the OR-aggregate, the counter breakdown and the canonical-status
+ * mapping over two DIFFERENT raw vocabularies are all unobservable in a browser.
+ * Defaults to `false`: neither the unit suite, the integration suite, nor CI ever
+ * defines this, so no test run creates stray orders. Flip via
+ * `define( 'WOODEV_TEST_SEED_ORDERS_DEMO', true );` in wp-config.php, or the
+ * `.wp-env.json` `config` block, same idiom as the pickup constants above.
+ *
+ * Seeding runs at most once per site: {@see Woodev_Test_Orders_Seeder::maybe_seed()}
+ * guards on a `woodev_test_shipping_demo_orders_seeded` option, so flipping this
+ * constant on and leaving it on does not create a new batch of orders on every
+ * `admin_init` — it is an explicit, one-shot trigger, not a per-page-load fixture.
+ */
+if ( ! defined( 'WOODEV_TEST_SEED_ORDERS_DEMO' ) ) {
+	define( 'WOODEV_TEST_SEED_ORDERS_DEMO', false );
+}
+
+/**
  * Определяем корневую директорию фреймворка.
  *
  * В wp-env контейнере: WOODEV_FRAMEWORK_DIR задаётся через config в .wp-env.json
@@ -330,6 +351,12 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// #337 lock rule) observable on a live provider instead of on our own assumptions.
 	// Required unconditionally, same reasoning as the requires just above.
 	require_once __DIR__ . '/class-test-cdek-location-provider.php';
+
+	// Issue #830: the demo-orders seeder behind WOODEV_TEST_SEED_ORDERS_DEMO — see that
+	// constant's own docblock. Required unconditionally, same reasoning as the requires
+	// just above: declaring the class is free, only its maybe_seed() call (hooked below)
+	// does anything, and only when the constant is truthy.
+	require_once __DIR__ . '/class-test-orders-seeder.php';
 
 	// Registers the fixture providers alongside the bundled DaData one — NEITHER made
 	// active by default (the store's `active_provider` setting still defaults to
@@ -759,6 +786,97 @@ function woodev_test_shipping_method_plugin_init(): void {
 				// reads it this request — see maybe_seed_location_credentials_from_rig_constants()'s
 				// own docblock.
 				$this->maybe_seed_location_credentials_from_rig_constants();
+
+				// SP-10 #830: registers this fixture's OWN Orders_Provider, so the rig's
+				// «Заказы доставки» page shows a SECOND carrier alongside `realistic` — see
+				// self::init_test_shipping_orders_page()'s own docblock.
+				$this->init_test_shipping_orders_page();
+			}
+
+			/**
+			 * Registers this fixture's `Orders_Provider` with the framework-owned «Заказы
+			 * доставки» page (SP-10 #830) — deliberately DIFFERENT in content from the
+			 * `realistic` fixture's own provider ({@see \Woodev_Realistic_Shipping_Plugin::init_realistic_orders_page()}),
+			 * though identical in shape: before this, `grep -rln "Orders_Provider"
+			 * tests/_fixtures/` found exactly one file, so the rig ran the degenerate
+			 * single-carrier case and the operator — who accepts this page with his eyes —
+			 * could not see the carrier `FilterPicker`, the D6 counter's SUM/breakdown, the
+			 * M2 `relation => OR` aggregate, or D4's canonical status over two DIFFERENT raw
+			 * vocabularies.
+			 *
+			 * `marker_meta_key` is this fixture's OWN key (`_woodev_test_shipping_marker`),
+			 * distinct from `realistic`'s — M2's aggregate keys on it, so a shared key would
+			 * make both "carriers" the same query branch.
+			 *
+			 * `method_ids` names the ONE shipping method id this fixture actually ships
+			 * (`self::PLUGIN_ID`'s only entry in {@see self::get_shipping_method_classes()}
+			 * is `woodev_test_shipping`) — round 2 of #820 found that omitting a real method
+			 * id makes the `type` column report `unknown` for it, so every id the fixture
+			 * ships is named here, not just a convenient one.
+			 *
+			 * `status_map` uses its OWN raw vocabulary, deliberately unlike `realistic`'s
+			 * (`NEW`/`ACCEPTED`/`IN_TRANSIT`/…): if both carriers spoke the same raw words,
+			 * D4's canonical mapping would never demonstrate that it does anything carrier-
+			 * specific. It ALSO leaves one raw value — `LOST_IN_TRANSIT` — deliberately
+			 * unmapped, its own analogous gap to `realistic`'s omitted `CUSTOMS_HOLD`, on a
+			 * DIFFERENT raw value so the two fixtures are not silently testing the same
+			 * branch twice.
+			 *
+			 * Guarded exactly like `realistic`'s own registration: this fixture is also
+			 * loaded by the unit suite, where the orders classes may not be included, and it
+			 * must stay loadable there.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @return void
+			 */
+			private function init_test_shipping_orders_page(): void {
+
+				if ( ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Provider' )
+					|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' ) ) {
+					return;
+				}
+
+				// The literal method id (= Woodev_Test_Shipping_Method::METHOD_ID), not the
+				// class constant — this runs before the shipping-method class file is
+				// require_once'd by init_plugin(), same reasoning as the literal method id
+				// used in get_checkout_handler() and get_shipping_method_classes() above.
+				$provider = \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider::create(
+					'test_shipping',
+					'Тестовая доставка',
+					'_woodev_test_shipping_marker',
+					[ 'woodev_test_shipping' ],
+					[
+						'status_meta_key'       => '_woodev_test_shipping_status',
+						'status_map'            => [
+							'CREATED'             => 'created',
+							'PICKED_UP'            => 'in_transit',
+							'ON_THE_WAY'           => 'in_transit',
+							'ARRIVED_PVZ'          => 'ready_for_pickup',
+							'HANDED_TO_CLIENT'     => 'delivered',
+							'RETURN_STARTED'       => 'returning',
+							'RETURNED_TO_SENDER'   => 'returned',
+							'CANCELLED_BY_CLIENT'  => 'cancelled',
+							// 'LOST_IN_TRANSIT' is INTENTIONALLY absent — see this method's docblock.
+						],
+						'status_labels'         => [
+							'CREATED'            => 'Создан',
+							'PICKED_UP'          => 'Забран у отправителя',
+							'ON_THE_WAY'         => 'В пути',
+							'ARRIVED_PVZ'        => 'Прибыл в пункт выдачи',
+							'HANDED_TO_CLIENT'   => 'Вручён получателю',
+							'RETURN_STARTED'     => 'Оформлен возврат',
+							'RETURNED_TO_SENDER' => 'Возвращён отправителю',
+							'CANCELLED_BY_CLIENT' => 'Отменён клиентом',
+							'LOST_IN_TRANSIT'    => 'Утерян при перевозке',
+						],
+						'tracking_meta_key'     => '_woodev_test_shipping_tracking_number',
+						'tracking_url_template' => 'https://testcarrier.example.test/track/{tracking}',
+						'pickup_point_meta_key' => '_woodev_test_shipping_pickup_point',
+					]
+				);
+
+				\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
 			}
 
 			/**
@@ -1375,6 +1493,17 @@ function woodev_test_shipping_method_plugin_init(): void {
 			return $glyphs;
 		}
 	);
+
+	// -----------------------------------------------------------------------
+	// Issue #830: the demo-orders seeder — hooked on `admin_init` (not run
+	// directly during construction) because `wc_create_order()` and the shipping
+	// order-item classes are not guaranteed available yet at the point the
+	// bootstrap constructs this plugin. `maybe_seed()` itself is a no-op unless
+	// WOODEV_TEST_SEED_ORDERS_DEMO is truthy AND seeding has not already run once
+	// — see class-test-orders-seeder.php's own docblock.
+	// -----------------------------------------------------------------------
+
+	add_action( 'admin_init', [ 'Woodev_Test_Orders_Seeder', 'maybe_seed' ] );
 
 	/**
 	 * Глобальный хелпер для доступа к тестовому плагину из тестов.
