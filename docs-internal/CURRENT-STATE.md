@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-09 (s128).** 🚧 **PR #840 open, CI green, awaiting the operator's visual pass** —
-filtering on the orders page now filters: #837 defects 1, 2, 3 and 5a plus **#835** in full.
-Detail: `sessions/s128.md`. ⚠ The root of the main defect was `{ key, label }` where WooCommerce's
-`FilterOption` is `{ value, label }`, which made «Filter» render as a DISABLED button; the tests
-asserted the broken shape, so 1820 green jest tests never saw it.
+**As of 2026-09-09 (s128).** ✅ **PR #840 MERGED** (`af08aef`) — filtering on the orders page
+filters: #837 defects 1, 2, 3, 5a plus **#835**, and the display mode is a TOGGLE on its own row
+(operator, two rig passes). Detail: `sessions/s128.md`. ⚠ The main defect's root was `{ key, label }`
+where WooCommerce's `FilterOption` is `{ value, label }`, which rendered «Filter» as a DISABLED
+button — and the tests asserted the broken shape, so 1820 green jest tests never saw it.
 
 ⚠ **«Matches nothing» has exactly ONE correct mechanism here, and two plausible ones are wrong.**
 An empty status array is expanded by HPOS into EVERY valid status; a bogus status slug empties the
@@ -18,9 +18,9 @@ table on HPOS and does nothing on the legacy CPT datastore, where `WP_Query` wal
 statuses and drops the condition. Use `Orders_Query::NO_MATCH_META_QUERY` — the only one both
 datastore paths share. Measured s128; the integration suite caught the second, a unit test could not.
 
-Open work on the page: **#824 #828 #829 #834 #836 #838**, plus **#839** (join growth) and
-**#841** («только новые» + what «new» even means) — both debt, neither a blocker.
-**#836 waits on his product decision**; #837 keeps only defect 4, which is part of that decision.
+Open on the page: **#824 #828 #829 #834 #836 #838 #839 #841**. ⚠ **#836 no longer waits on him** —
+he moved it to Бэклог 09.09.2026 («там не на что отвечать»), so the card IS the brief; #837 keeps
+only defect 4, which belongs to that work.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -36,10 +36,9 @@ AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-compon
 `addhistorylistener-fires-before-the-url-changes`).
 
 ⚠ **Do NOT ask the operator to log into the rig — a Playwright probe logs in itself**
-(`admin`/`password`, wp-env default; s127, s128). For numbers without a browser, drive the code via
-`wp eval` in the container. **But only the browser catches a client defect**: s128 shipped a green
-REST half whose table never updated. ⚠ The rig runs **`WPLANG=en_US`** — English chrome is the
-LOCALE, not a defect.
+(`admin`/`password`; s127, s128). For numbers without a browser use `wp eval` in the container, but
+**only the browser catches a client defect**: s128 had a green REST half whose table never updated.
+⚠ The rig runs **`WPLANG=en_US`** — English chrome is the LOCALE, not a defect.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
@@ -49,26 +48,26 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count ([migration/signature-probe.md](migration/signature-probe.md), gotcha `a-stricter-base-class-fatals-on-signatures`). (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
+⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count (gotcha `a-stricter-base-class-fatals-on-signatures`). (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
 фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null. Субсистемы с
 **0** незащищённых вызовов остаются опциональными.
 
-⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a fixture dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
+⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota is consumed. The symptom of the old block (every job failing in two seconds with no log, which reads as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — 09.09.2026 (s128) on PR #840, `70282b1`:**
-unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1836** in **31** suites;
+**Baselines — re-measured 09.09.2026 (s128) on MERGED `main` at `af08aef`:**
+unit **3746** / **9448**, 1 skipped, with sodium ON; jest **1837** in **31** suites;
 **integration 186 / 679**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
 level 3 no errors; every `lint:*` OK; catalogue **786** entries, **429** translated. Nothing on
 this line is carried forward.
 
 **`main` at `e901b27` (s127), for comparison:** unit **3732 / 9162**, jest **1817**, integration
-**184 / 671**, catalogue **782** — that is what PR #840 moves.
+**184 / 671**, catalogue **782** — that is what PR #840 moved.
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -103,7 +102,9 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 53 (measured 08.09.2026, s127, after closing #826 #827 #830; every one carries a priority, Инбокс empty), and PRIORITY NOW LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 59, measured 09.09.2026 TWICE** (`gh issue list --limit 300` and the board): Инбокс
+EMPTY, 2 in «В работе». ⚠ **s127 recorded 53 — an undercount**, the very `--limit` trap its own
+handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
