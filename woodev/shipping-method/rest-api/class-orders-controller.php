@@ -94,51 +94,69 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'callback'            => [ $this, 'get_items' ],
 					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 					'args'                => [
-						'carrier'         => [
+						'carrier'             => [
 							'type'    => 'string',
 							'default' => 'all',
 						],
-						'page'            => [
+						'page'                => [
 							'type'    => 'integer',
 							'default' => 1,
 						],
-						'per_page'        => [
+						'per_page'            => [
 							'type'    => 'integer',
 							'default' => Orders_Query::DEFAULT_PER_PAGE,
 						],
-						'orderby'         => [
+						'orderby'             => [
 							'type'    => 'string',
 							'default' => 'date',
 						],
-						'order'           => [
+						'order'               => [
 							'type'    => 'string',
 							'default' => 'DESC',
 						],
-						'search'          => [
+						'search'              => [
 							'type'    => 'string',
 							'default' => '',
 						],
-						'after'           => [
+						'after'               => [
 							'type'              => 'string',
 							'default'           => '',
 							'validate_callback' => [ __CLASS__, 'validate_iso_date' ],
 						],
-						'before'          => [
+						'before'              => [
 							'type'              => 'string',
 							'default'           => '',
 							'validate_callback' => [ __CLASS__, 'validate_iso_date' ],
 						],
-						'status'          => [
+						'status'              => [
 							'type'    => 'array',
 							'items'   => [ 'type' => 'string' ],
 							'default' => [],
 						],
-						'delivery_status' => [
+						// 'is not' rule for `status` (#836) — every valid WC status except these.
+						'status_not'          => [
+							'type'    => 'array',
+							'items'   => [ 'type' => 'string' ],
+							'default' => [],
+						],
+						'delivery_status'     => [
 							'type'              => 'string',
 							'default'           => '',
 							'validate_callback' => [ __CLASS__, 'validate_delivery_status' ],
 						],
-						'has_tracking'    => [
+						// 'is not' rule for `delivery_status` (#836) — same value set.
+						'delivery_status_not' => [
+							'type'              => 'string',
+							'default'           => '',
+							'validate_callback' => [ __CLASS__, 'validate_delivery_status' ],
+						],
+						'has_tracking'        => [
+							'type'              => 'boolean',
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
+						// present (any value) => filters on pickup-point meta presence (#836);
+						// absent => not filtered — same presence rule as `has_tracking`.
+						'has_pickup_point'    => [
 							'type'              => 'boolean',
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
@@ -249,23 +267,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			$params = [
-				'carrier'         => $carrier,
-				'page'            => $request->get_param( 'page' ),
-				'per_page'        => $request->get_param( 'per_page' ),
-				'orderby'         => $request->get_param( 'orderby' ),
-				'order'           => $request->get_param( 'order' ),
-				'search'          => $request->get_param( 'search' ),
-				'after'           => $request->get_param( 'after' ),
-				'before'          => $request->get_param( 'before' ),
-				'status'          => $request->get_param( 'status' ),
-				'delivery_status' => $request->get_param( 'delivery_status' ),
+				'carrier'             => $carrier,
+				'page'                => $request->get_param( 'page' ),
+				'per_page'            => $request->get_param( 'per_page' ),
+				'orderby'             => $request->get_param( 'orderby' ),
+				'order'               => $request->get_param( 'order' ),
+				'search'              => $request->get_param( 'search' ),
+				'after'               => $request->get_param( 'after' ),
+				'before'              => $request->get_param( 'before' ),
+				'status'              => $request->get_param( 'status' ),
+				'status_not'          => $request->get_param( 'status_not' ),
+				'delivery_status'     => $request->get_param( 'delivery_status' ),
+				'delivery_status_not' => $request->get_param( 'delivery_status_not' ),
 			];
 
-			// `has_tracking` carries no default (SP-10 spec D10): an explicit `false` must
-			// still filter, so its PRESENCE — not its truthiness — decides whether
-			// Orders_Query::build_args() applies the filter at all.
+			// `has_tracking`/`has_pickup_point` carry no default (SP-10 spec D10; pickup
+			// point added #836): an explicit `false` must still filter, so PRESENCE — not
+			// truthiness — decides whether Orders_Query::build_args() applies the filter
+			// at all.
 			if ( $request->has_param( 'has_tracking' ) && null !== $request->get_param( 'has_tracking' ) ) {
 				$params['has_tracking'] = $request->get_param( 'has_tracking' );
+			}
+
+			if ( $request->has_param( 'has_pickup_point' ) && null !== $request->get_param( 'has_pickup_point' ) ) {
+				$params['has_pickup_point'] = $request->get_param( 'has_pickup_point' );
 			}
 
 			$result = $this->query->get_results( $params );

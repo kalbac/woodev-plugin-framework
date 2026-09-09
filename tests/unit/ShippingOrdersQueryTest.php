@@ -963,6 +963,489 @@ class ShippingOrdersQueryTest extends TestCase {
 		);
 	}
 
+	// ----- delivery-status 'is not' rule (#836) -----
+
+	public function test_delivery_status_not_hpos_single_carrier_builds_the_not_in_or_not_exists_shape(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'             => 'cdek',
+				'delivery_status_not' => Delivery_Status::IN_TRANSIT,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'relation' => 'AND',
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+				[
+					'relation' => 'OR',
+					[
+						'key'     => '_cdek_status',
+						'compare' => 'NOT EXISTS',
+					],
+					[
+						'key'     => '_cdek_status',
+						'value'   => [ 'CDEK_ACCEPTED' ],
+						'compare' => 'NOT IN',
+					],
+				],
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	/**
+	 * ⚠ Needs TWO providers, the same regression shape `has_tracking=false` and
+	 * `delivery_status=unknown` needed — an unbound negative clause OR-ed across
+	 * providers would let carrier B's orders satisfy "carrier A's status is not X"
+	 * for free.
+	 */
+	public function test_delivery_status_not_on_the_aggregate_binds_each_provider_to_its_marker(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] )
+		);
+		$registry->register_provider(
+			$this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YA_DONE' => Delivery_Status::DELIVERED ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[ 'delivery_status_not' => Delivery_Status::DELIVERED ]
+		);
+
+		$status_part = $args['meta_query'][1];
+
+		$this->assertSame( 'OR', $status_part['relation'] );
+
+		foreach ( [ 0, 1 ] as $index ) {
+			$this->assertSame(
+				'AND',
+				$status_part[ $index ]['relation'],
+				'Each provider clause must be an AND binding it to its own marker, or the OR matches every order.'
+			);
+			$this->assertSame( 'EXISTS', $status_part[ $index ][0]['compare'] );
+			$this->assertStringEndsWith( '_marker', $status_part[ $index ][0]['key'] );
+		}
+	}
+
+	/**
+	 * A provider that never maps anything to X has EVERY order qualifying as "not X" —
+	 * its marker key stands in for "always true", the same shape the no-status-concept
+	 * branch already uses.
+	 */
+	public function test_delivery_status_not_a_provider_that_never_maps_to_x_matches_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'             => 'cdek',
+				'delivery_status_not' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_cdek_marker',
+				'compare' => 'EXISTS',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	/**
+	 * A provider with no status concept at all is ALWAYS unknown, so it always
+	 * qualifies as "not X" for any real canonical state X.
+	 */
+	public function test_delivery_status_not_a_provider_with_no_status_concept_matches_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_status( 'novendor', '_novendor_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'             => 'novendor',
+				'delivery_status_not' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_novendor_marker',
+				'compare' => 'EXISTS',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	/**
+	 * "Is not unknown" — the mirror image of `unknown`: a definite known status, i.e.
+	 * the plain `IN $known` clause.
+	 */
+	public function test_delivery_status_not_unknown_builds_an_in_known_clause(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status(
+				'cdek',
+				'_cdek_marker',
+				'_cdek_status',
+				[
+					'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT,
+					'CDEK_DONE'     => Delivery_Status::DELIVERED,
+				]
+			)
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'             => 'cdek',
+				'delivery_status_not' => Delivery_Status::UNKNOWN,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'key'     => '_cdek_status',
+				'value'   => [ 'CDEK_ACCEPTED', 'CDEK_DONE' ],
+				'compare' => 'IN',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	public function test_delivery_status_takes_precedence_over_delivery_status_not_when_both_are_sent(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'             => 'cdek',
+				'delivery_status'     => Delivery_Status::IN_TRANSIT,
+				'delivery_status_not' => Delivery_Status::IN_TRANSIT,
+			]
+		);
+
+		// The 'is' clause won, not the 'is not' one — a plain IN, not a NOT-IN/AND shape.
+		$this->assertSame(
+			[
+				'key'     => '_cdek_status',
+				'value'   => [ 'CDEK_ACCEPTED' ],
+				'compare' => 'IN',
+			],
+			$args['meta_query'][1][0]
+		);
+	}
+
+	public function test_delivery_status_not_legacy_cpt_carries_the_status_clauses_query_var_not_meta_query(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] )
+		);
+
+		$args = $this->query_with_hpos( false, $registry )->build_args(
+			[
+				'carrier'             => 'cdek',
+				'delivery_status_not' => Delivery_Status::DELIVERED,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame(
+			[
+				[
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+					[
+						'relation' => 'OR',
+						[
+							'key'     => '_cdek_status',
+							'compare' => 'NOT EXISTS',
+						],
+						[
+							'key'     => '_cdek_status',
+							'value'   => [ 'CDEK_DONE' ],
+							'compare' => 'NOT IN',
+						],
+					],
+				],
+			],
+			$args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ]
+		);
+	}
+
+	// ----- native WC order status 'is not' rule (#836) -----
+
+	public function test_status_not_excludes_the_requested_status_from_the_full_valid_list(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ 'wc-processing' ] ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+	}
+
+	/**
+	 * The 'is not' baseline is the FULL valid list (cancelled/failed included), not the
+	 * default view's narrower one — the brief's own words: "every valid status except X".
+	 */
+	public function test_status_not_baseline_includes_cancelled_and_failed(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ 'wc-pending' ] ] );
+
+		$this->assertContains( 'wc-cancelled', $args['status'] );
+		$this->assertContains( 'wc-failed', $args['status'] );
+	}
+
+	public function test_a_status_not_without_the_wc_prefix_is_normalized(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ 'processing' ] ] );
+
+		$this->assertNotContains( 'wc-processing', $args['status'] );
+	}
+
+	public function test_status_takes_precedence_over_status_not_when_both_are_sent(): void {
+		$args = $this->query_with_hpos( true )->build_args(
+			[
+				'status'     => [ 'wc-processing' ],
+				'status_not' => [ 'wc-pending' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+	}
+
+	/**
+	 * Nothing recognized in `status_not` excludes nothing — the honest result is the
+	 * FULL valid list, not a silent fallback to the default cancelled/failed exclusion.
+	 */
+	public function test_a_status_not_request_with_nothing_recognized_excludes_nothing(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ 'not-a-real-status' ] ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+	}
+
+	public function test_a_blank_status_not_request_still_means_no_override(): void {
+		$args = $this->query_with_hpos( true )->build_args( [ 'status_not' => [ '', '   ' ] ] );
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	// ----- pickup-point-presence filter (#836) -----
+
+	public function test_has_pickup_point_true_builds_an_exists_clause(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_pickup_point',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	/**
+	 * The NEGATIVE case is bound to the provider's own marker — see the aggregate
+	 * test below for why that binding is not decoration.
+	 */
+	public function test_has_pickup_point_false_binds_not_exists_to_the_providers_own_marker(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => '_cdek_pickup_point',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	/**
+	 * ⚠ Needs TWO providers, the same regression shape `has_tracking=false` needed —
+	 * unbound, «carrier B has no pickup point» is trivially true of every carrier A
+	 * order.
+	 */
+	public function test_has_pickup_point_false_on_the_aggregate_does_not_match_every_order(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'pickup_point_meta_key' => '_yandex_pickup_point' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'all',
+				'has_pickup_point' => false,
+			]
+		);
+
+		$pickup_part = $args['meta_query'][1];
+
+		$this->assertSame( 'OR', $pickup_part['relation'] );
+
+		foreach ( [ 0, 1 ] as $index ) {
+			$branch = $pickup_part[ $index ];
+
+			$this->assertSame( 'AND', $branch['relation'], 'each branch must bind marker AND pickup point' );
+
+			$keys = [ $branch[0]['key'], $branch[1]['key'] ];
+
+			$this->assertContains( 'NOT EXISTS', [ $branch[0]['compare'], $branch[1]['compare'] ] );
+			$this->assertNotEmpty(
+				preg_grep( '/_marker$/', $keys ),
+				'a NOT EXISTS branch that names no marker matches the other carrier\'s orders'
+			);
+		}
+	}
+
+	/**
+	 * A carrier without a pickup-point concept at all can never report `true`.
+	 */
+	public function test_has_pickup_point_true_for_a_carrier_without_pickup_point_builds_the_no_match_sentinel(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => true,
+			]
+		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+	}
+
+	/**
+	 * The same carrier ALWAYS counts as "no pickup point" — never having any
+	 * pickup-point concept means it never has a pickup point either.
+	 */
+	public function test_has_pickup_point_false_for_a_carrier_without_pickup_point_matches_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	public function test_has_pickup_point_absent_never_adds_a_meta_query_part(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query']
+		);
+	}
+
+	/**
+	 * `has_param()`-style tri-state: an EXPLICIT `false` must still filter, not be
+	 * mistaken for "absent" — read via `array_key_exists()`, not `isset()`.
+	 */
+	public function test_has_pickup_point_explicit_false_is_not_mistaken_for_absent(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => false,
+			]
+		);
+
+		$this->assertArrayHasKey( 'meta_query', $args );
+		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + pickup point part.
+	}
+
+	public function test_has_pickup_point_legacy_cpt_carries_the_pickup_point_clauses_query_var_not_meta_query(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
+		);
+
+		$args = $this->query_with_hpos( false, $registry )->build_args(
+			[
+				'carrier'          => 'cdek',
+				'has_pickup_point' => true,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_pickup_point',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args[ Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES ]
+		);
+	}
+
 	// ----- combining more than one filter -----
 
 	/**
