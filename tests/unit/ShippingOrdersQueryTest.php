@@ -1446,6 +1446,215 @@ class ShippingOrdersQueryTest extends TestCase {
 		);
 	}
 
+	// ----- export-presence filter / "new orders" (SP-10 #841) -----
+
+	public function test_is_exported_true_builds_an_exists_clause(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_carrier_order_id',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	/**
+	 * The NEGATIVE case is bound to the provider's own marker — see the aggregate
+	 * test below for why that binding is not decoration.
+	 */
+	public function test_is_exported_false_binds_not_exists_to_the_providers_own_marker(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'relation' => 'AND',
+					[
+						'key'     => '_cdek_marker',
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => '_cdek_carrier_order_id',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	/**
+	 * ⚠ Needs TWO providers, the same regression shape `has_tracking=false` and
+	 * `has_pickup_point=false` needed — unbound, «carrier B has no carrier-order-id»
+	 * is trivially true of every carrier A order.
+	 */
+	public function test_is_exported_false_on_the_aggregate_does_not_match_every_order(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'carrier_order_id_meta_key' => '_yandex_carrier_order_id' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'all',
+				'is_exported' => false,
+			]
+		);
+
+		$exported_part = $args['meta_query'][1];
+
+		$this->assertSame( 'OR', $exported_part['relation'] );
+
+		foreach ( [ 0, 1 ] as $index ) {
+			$branch = $exported_part[ $index ];
+
+			$this->assertSame( 'AND', $branch['relation'], 'each branch must bind marker AND carrier-order-id' );
+
+			$keys = [ $branch[0]['key'], $branch[1]['key'] ];
+
+			$this->assertContains( 'NOT EXISTS', [ $branch[0]['compare'], $branch[1]['compare'] ] );
+			$this->assertNotEmpty(
+				preg_grep( '/_marker$/', $keys ),
+				'a NOT EXISTS branch that names no marker matches the other carrier\'s orders'
+			);
+		}
+	}
+
+	/**
+	 * A carrier without a declared carrier-order-id key at all can never report
+	 * `true` — the framework has no way to know it was exported.
+	 */
+	public function test_is_exported_true_for_a_carrier_without_carrier_order_id_key_builds_the_no_match_sentinel(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => true,
+			]
+		);
+
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+	}
+
+	/**
+	 * The same carrier ALWAYS counts as "not exported" — the framework never
+	 * observes an export it has no key to detect, so every one of its orders is
+	 * "new" by definition.
+	 */
+	public function test_is_exported_false_for_a_carrier_without_carrier_order_id_key_matches_via_its_marker_key(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => false,
+			]
+		);
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query'][1]
+		);
+	}
+
+	public function test_is_exported_absent_never_adds_a_meta_query_part(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args['meta_query']
+		);
+	}
+
+	/**
+	 * `has_param()`-style tri-state: an EXPLICIT `false` must still filter, not be
+	 * mistaken for "absent" — read via `array_key_exists()`, not `isset()`.
+	 */
+	public function test_is_exported_explicit_false_is_not_mistaken_for_absent(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
+		);
+
+		$args = $this->query_with_hpos( true, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => false,
+			]
+		);
+
+		$this->assertArrayHasKey( 'meta_query', $args );
+		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + exported part.
+	}
+
+	public function test_is_exported_legacy_cpt_carries_the_exported_clauses_query_var_not_meta_query(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
+		);
+
+		$args = $this->query_with_hpos( false, $registry )->build_args(
+			[
+				'carrier'     => 'cdek',
+				'is_exported' => true,
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'meta_query', $args );
+		$this->assertSame(
+			[
+				[
+					'key'     => '_cdek_carrier_order_id',
+					'compare' => 'EXISTS',
+				],
+			],
+			$args[ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ]
+		);
+	}
+
 	// ----- combining more than one filter -----
 
 	/**

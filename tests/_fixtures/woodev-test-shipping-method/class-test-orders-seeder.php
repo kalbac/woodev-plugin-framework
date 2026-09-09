@@ -56,7 +56,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '2';
+		public const SEED_VERSION = '3';
 
 		/**
 		 * Must match the marker key {@see \Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()}
@@ -86,6 +86,17 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 * @var string
 		 */
 		public const TRACKING_META_KEY = '_woodev_test_shipping_tracking_number';
+
+		/**
+		 * Must match the provider's own `carrier_order_id_meta_key` (SP-10 #841) — the
+		 * presence of this meta is what «Заказы доставки» reads as "this order has been
+		 * exported to the carrier".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const CARRIER_ORDER_ID_META_KEY = '_woodev_test_shipping_carrier_order_id';
 
 		/**
 		 * The literal shipping method id this fixture ships — same literal-not-
@@ -141,29 +152,39 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 * Pure — no WordPress calls beyond date arithmetic — so the seeded shape stays
 		 * inspectable without a database.
 		 *
+		 * ⚠ `carrier_order_id` (SP-10 #841) is written to only PART of the set — never
+		 * all, never none — so the «Заказы доставки» page's "new orders" filter
+		 * (`is_exported`) has both sides to find on the rig, the same reason `tracking`
+		 * is already split above.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string, days_ago:int}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int}>
 		 */
 		public static function demo_orders(): array {
 			$orders = [
 				[
-					'status'     => 'processing',
-					'raw_status' => 'ON_THE_WAY',
-					'tracking'   => 'TESTCARRIER-000123',
-					'days_ago'   => 0,
+					'status'            => 'processing',
+					'raw_status'        => 'ON_THE_WAY',
+					'tracking'          => 'TESTCARRIER-000123',
+					'carrier_order_id' => 'TESTCARRIER-EXPORT-000123',
+					'days_ago'          => 0,
 				],
 				[
-					'status'     => 'processing',
-					'raw_status' => 'ARRIVED_PVZ',
-					'tracking'   => null,
-					'days_ago'   => 0,
+					'status'            => 'processing',
+					'raw_status'        => 'ARRIVED_PVZ',
+					'tracking'          => null,
+					'carrier_order_id' => 'TESTCARRIER-EXPORT-000124',
+					'days_ago'          => 0,
 				],
 				[
-					'status'     => 'processing',
-					'raw_status' => 'LOST_IN_TRANSIT',
-					'tracking'   => 'TESTCARRIER-000125',
-					'days_ago'   => 0,
+					'status'            => 'processing',
+					'raw_status'        => 'LOST_IN_TRANSIT',
+					'tracking'          => 'TESTCARRIER-000125',
+					// Deliberately NOT exported — «lost» does not imply the framework's
+					// own export marker was ever written; the two are independent facts.
+					'carrier_order_id' => null,
+					'days_ago'          => 0,
 				],
 			];
 
@@ -200,12 +221,16 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 				$raw = $raw_statuses[ $index % count( $raw_statuses ) ];
 
 				$orders[] = [
-					'status'     => $wc_statuses[ $index % count( $wc_statuses ) ],
-					'raw_status' => $raw,
+					'status'            => $wc_statuses[ $index % count( $wc_statuses ) ],
+					'raw_status'        => $raw,
 					// Every third row carries no tracking number, so the
 					// tracking-presence filter has both sides to find.
-					'tracking'   => 0 === $index % 3 ? null : sprintf( 'TESTCARRIER-%06d', 200 + $index ),
-					'days_ago'   => $days_ago,
+					'tracking'          => 0 === $index % 3 ? null : sprintf( 'TESTCARRIER-%06d', 200 + $index ),
+					// Every other row is "new" (never exported), on a DIFFERENT modulo
+					// than `tracking` above, so `is_exported` and `has_tracking` overlap
+					// in both directions rather than perfectly tracking one another.
+					'carrier_order_id'  => 0 === $index % 2 ? sprintf( 'TESTCARRIER-EXPORT-%06d', 200 + $index ) : null,
+					'days_ago'          => $days_ago,
 				];
 			}
 
@@ -246,7 +271,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array{status:string, raw_status:string, tracking:?string} $definition
+		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string} $definition
 		 *
 		 * @return void
 		 */
@@ -266,6 +291,10 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 
 			if ( null !== $definition['tracking'] ) {
 				$order->update_meta_data( self::TRACKING_META_KEY, $definition['tracking'] );
+			}
+
+			if ( isset( $definition['carrier_order_id'] ) && null !== $definition['carrier_order_id'] ) {
+				$order->update_meta_data( self::CARRIER_ORDER_ID_META_KEY, $definition['carrier_order_id'] );
 			}
 
 			$shipping_item = new \WC_Order_Item_Shipping();

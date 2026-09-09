@@ -119,6 +119,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		const QUERY_VAR_PICKUP_POINT_CLAUSES = 'woodev_shipping_pickup_point_clauses';
 
 		/**
+		 * Custom query var carrying the already-built export-presence meta clauses,
+		 * for the legacy CPT datastore path (SP-10 #841). Same shape and reason as
+		 * {@see self::QUERY_VAR_PICKUP_POINT_CLAUSES}, built by
+		 * {@see self::is_exported_meta_clauses()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const QUERY_VAR_EXPORTED_CLAUSES = 'woodev_shipping_exported_clauses';
+
+		/**
 		 * Registry to read providers from.
 		 *
 		 * @since 2.0.2
@@ -188,6 +200,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type bool     $has_pickup_point    present (any value) => filters on whether the matched
 		 *                                         carrier's own pickup-point meta exists (#836); absent
 		 *                                         => not filtered. Same presence rule as `$has_tracking`.
+		 *     @type bool     $is_exported         present (any value) => filters on whether the matched
+		 *                                         carrier's own carrier-order-id meta exists (SP-10 #841)
+		 *                                         — i.e. whether the order has ever been exported to the
+		 *                                         carrier; absent => not filtered. Same presence rule as
+		 *                                         `$has_tracking`.
 		 * }
 		 * @return array<string,mixed>
 		 */
@@ -277,6 +294,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$meta_query_parts[]   = self::meta_query_for_clauses( $pickup_point_clauses );
 			}
 
+			$exported_clauses = null;
+			if ( array_key_exists( 'is_exported', $request ) ) {
+				$exported_clauses   = $this->is_exported_meta_clauses( $providers, wc_string_to_bool( $request['is_exported'] ) );
+				$meta_query_parts[] = self::meta_query_for_clauses( $exported_clauses );
+			}
+
 			if ( $this->is_hpos_enabled() ) {
 				$args['meta_query'] = self::combine_meta_queries( $meta_query_parts ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- the framework's supported HPOS row-scope/filter mechanism (SP-10 spec M2, D10); never reached on the legacy CPT datastore (see class docblock).
 			} else {
@@ -297,6 +320,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 				if ( null !== $pickup_point_clauses ) {
 					$args[ self::QUERY_VAR_PICKUP_POINT_CLAUSES ] = $pickup_point_clauses;
+				}
+
+				if ( null !== $exported_clauses ) {
+					$args[ self::QUERY_VAR_EXPORTED_CLAUSES ] = $exported_clauses;
 				}
 			}
 
@@ -764,6 +791,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 					],
 					[
 						'key'     => $pickup_point_key,
+						'compare' => 'NOT EXISTS',
+					],
+				];
+			}
+
+			return $clauses;
+		}
+
+
+		/**
+		 * Builds one export-presence meta clause per provider (SP-10 #841) — the exact
+		 * same asymmetry as {@see self::pickup_point_meta_clauses()}. A provider with
+		 * no declared carrier-order-id key (`get_carrier_order_id_meta_key()` is null)
+		 * can never report `true` — the framework has no way to know whether such a
+		 * carrier's orders were exported, so it does not guess — and for `false` it
+		 * always counts as "not exported", its marker key standing in for "always
+		 * true": every one of its orders belongs in the "new" bucket by definition.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Orders_Provider[] $providers   providers in scope.
+		 * @param bool              $is_exported true => the carrier-order-id meta must
+		 *                                       exist; false => it must not.
+		 * @return array<int,array<string,mixed>> one clause per participating provider.
+		 */
+		private function is_exported_meta_clauses( array $providers, bool $is_exported ): array {
+			$clauses = [];
+
+			foreach ( $providers as $provider ) {
+				$carrier_order_id_key = $provider->get_carrier_order_id_meta_key();
+
+				if ( null === $carrier_order_id_key ) {
+					if ( ! $is_exported ) {
+						$clauses[] = [
+							'key'     => $provider->get_marker_meta_key(),
+							'compare' => 'EXISTS',
+						];
+					}
+
+					continue;
+				}
+
+				if ( $is_exported ) {
+					// `EXISTS` on a carrier's OWN carrier-order-id key already implies
+					// that carrier's order, so it needs no binding.
+					$clauses[] = [
+						'key'     => $carrier_order_id_key,
+						'compare' => 'EXISTS',
+					];
+
+					continue;
+				}
+
+				// ⚠ The NEGATIVE case MUST be bound to this provider's own marker — same
+				// reason as {@see self::pickup_point_meta_clauses()}'s negative case: OR-ed
+				// across providers, «carrier B's carrier-order-id key does not exist» is
+				// trivially true of every carrier A order.
+				$clauses[] = [
+					'relation' => 'AND',
+					[
+						'key'     => $provider->get_marker_meta_key(),
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => $carrier_order_id_key,
 						'compare' => 'NOT EXISTS',
 					],
 				];

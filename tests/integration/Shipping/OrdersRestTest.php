@@ -1112,6 +1112,130 @@ class OrdersRestTest extends TestCase {
 		);
 	}
 
+	// SP-10 #841 — is_exported ("new orders" — never exported to the carrier).
+
+	/**
+	 * `is_exported=true` on the aggregate, across two carriers each with their own
+	 * carrier-order-id meta key.
+	 */
+	public function test_is_exported_true_on_the_aggregate_scopes_to_orders_with_a_carrier_order_id(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker             = '_woodev_test_exported_true_a_marker';
+		$a_carrier_order_id_key = '_woodev_test_exported_true_a_carrier_order_id';
+		$b_marker             = '_woodev_test_exported_true_b_marker';
+		$b_carrier_order_id_key = '_woodev_test_exported_true_b_carrier_order_id';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'exported_true_a', 'Exported True A', $a_marker, [ 'exported_true_a' ], [ 'carrier_order_id_meta_key' => $a_carrier_order_id_key ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'exported_true_b', 'Exported True B', $b_marker, [ 'exported_true_b' ], [ 'carrier_order_id_meta_key' => $b_carrier_order_id_key ] )
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$a_exported = wc_create_order();
+		$a_exported->set_status( 'processing' );
+		$a_exported->update_meta_data( $a_marker, '1' );
+		$a_exported->update_meta_data( $a_carrier_order_id_key, 'CDEK-000123' );
+		$a_exported->save();
+
+		$a_new = wc_create_order();
+		$a_new->set_status( 'processing' );
+		$a_new->update_meta_data( $a_marker, '1' );
+		$a_new->save();
+
+		$b_exported = wc_create_order();
+		$b_exported->set_status( 'processing' );
+		$b_exported->update_meta_data( $b_marker, '1' );
+		$b_exported->update_meta_data( $b_carrier_order_id_key, 'YANDEX-000456' );
+		$b_exported->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'is_exported', true );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_exported->get_id(), $ids );
+		$this->assertContains( $b_exported->get_id(), $ids );
+		$this->assertNotContains( $a_new->get_id(), $ids );
+	}
+
+	/**
+	 * The `is_exported=false` mirror — the "new orders" view. Same aggregate
+	 * regression shape as
+	 * {@see self::test_has_pickup_point_false_on_the_aggregate_does_not_match_another_carriers_order()}:
+	 * unbound, "carrier A's carrier-order-id key does not exist" is trivially true of
+	 * every carrier B order. Also covers the no-meta-at-all row (NOT EXISTS vs NOT IN).
+	 */
+	public function test_is_exported_false_on_the_aggregate_does_not_match_another_carriers_order(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker             = '_woodev_test_exported_false_a_marker';
+		$a_carrier_order_id_key = '_woodev_test_exported_false_a_carrier_order_id';
+		$b_marker             = '_woodev_test_exported_false_b_marker';
+		$b_carrier_order_id_key = '_woodev_test_exported_false_b_carrier_order_id';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'exported_false_a', 'Exported False A', $a_marker, [ 'exported_false_a' ], [ 'carrier_order_id_meta_key' => $a_carrier_order_id_key ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'exported_false_b', 'Exported False B', $b_marker, [ 'exported_false_b' ], [ 'carrier_order_id_meta_key' => $b_carrier_order_id_key ] )
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// Carrier A, WITH a carrier-order-id — must be excluded.
+		$a_exported = wc_create_order();
+		$a_exported->set_status( 'processing' );
+		$a_exported->update_meta_data( $a_marker, '1' );
+		$a_exported->update_meta_data( $a_carrier_order_id_key, 'CDEK-000789' );
+		$a_exported->save();
+
+		// Carrier A, no carrier-order-id meta at all — the "new" order — must be
+		// included (only NOT EXISTS, via a LEFT JOIN, sees a row with no meta key at all).
+		$a_new = wc_create_order();
+		$a_new->set_status( 'processing' );
+		$a_new->update_meta_data( $a_marker, '1' );
+		$a_new->save();
+
+		// Carrier B, WITH a carrier-order-id, and carrier B never writes carrier A's
+		// carrier-order-id meta — the regression row: unbound, carrier A's "not
+		// exported" clause reads "A's carrier-order-id meta does not exist", trivially
+		// true here, and would incorrectly let this row through.
+		$b_exported = wc_create_order();
+		$b_exported->set_status( 'processing' );
+		$b_exported->update_meta_data( $b_marker, '1' );
+		$b_exported->update_meta_data( $b_carrier_order_id_key, 'YANDEX-000987' );
+		$b_exported->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'is_exported', false );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_new->get_id(), $ids );
+		$this->assertNotContains( $a_exported->get_id(), $ids );
+		$this->assertNotContains(
+			$b_exported->get_id(),
+			$ids,
+			'A carrier-B order with its own carrier-order-id must not match "not exported" just because carrier A wrote nothing on it.'
+		);
+	}
+
 	/**
 	 * Adds the ambient `woodev_test_shipping` fixture method to a real shipping zone
 	 * and returns its instance id.

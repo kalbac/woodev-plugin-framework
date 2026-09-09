@@ -411,9 +411,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 		/**
 		 * Translates {@see Orders_Query}'s custom query vars — marker keys, plus the
-		 * optional delivery-status, tracking-presence and pickup-point-presence filter
-		 * clauses (SP-10 spec D10; pickup-point added #836) — into one real `meta_query`
-		 * on the legacy CPT order datastore.
+		 * optional delivery-status, tracking-presence, pickup-point-presence and
+		 * export-presence filter clauses (SP-10 spec D10; pickup-point added #836,
+		 * export-presence added #841) — into one real `meta_query` on the legacy CPT
+		 * order datastore.
 		 *
 		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly —
 		 * measured correct against a real HPOS install (SP-10 spec M2). On the legacy CPT
@@ -427,8 +428,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * meta-based filter D10 added, not only the marker-key scope: each of
 		 * {@see Orders_Query::QUERY_VAR_MARKER_KEYS},
 		 * {@see Orders_Query::QUERY_VAR_STATUS_CLAUSES},
-		 * {@see Orders_Query::QUERY_VAR_TRACKING_CLAUSES} and
-		 * {@see Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES}, when present, becomes one
+		 * {@see Orders_Query::QUERY_VAR_TRACKING_CLAUSES},
+		 * {@see Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES} and
+		 * {@see Orders_Query::QUERY_VAR_EXPORTED_CLAUSES}, when present, becomes one
 		 * `meta_query` part, and the parts are ANDed together through
 		 * {@see Orders_Query::combine_meta_queries()} — the SAME combination rule
 		 * {@see Orders_Query::build_args()} uses on HPOS, so the two datastore paths
@@ -459,6 +461,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			if ( array_key_exists( Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES, $query_vars ) ) {
 				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES ] );
+			}
+
+			if ( array_key_exists( Orders_Query::QUERY_VAR_EXPORTED_CLAUSES, $query_vars ) ) {
+				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ] );
 			}
 
 			if ( [] === $parts ) {
