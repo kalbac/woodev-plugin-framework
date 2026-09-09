@@ -15,8 +15,11 @@ import {
 	filtersEqual,
 	getCarrierFromQuery,
 	getDeliveryStatusFromQuery,
+	getDeliveryStatusNotFromQuery,
+	getHasPickupPointFromQuery,
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
+	getOrderStatusNotFromQuery,
 	isAdvancedFiltersOpen,
 	readDateFilters,
 } from '../../src/shipping-orders-page/filters';
@@ -98,7 +101,19 @@ describe( 'getHasTrackingFromQuery', () => {
 } );
 
 describe( 'filtersEqual', () => {
-	const base = { carrier: 'all', after: '', before: '', deliveryStatus: '', status: [], hasTracking: undefined };
+	// #836 added three dimensions; a snapshot missing one is not a valid UrlFilters, so the
+	// base here carries every field the type declares.
+	const base = {
+		carrier: 'all',
+		after: '',
+		before: '',
+		deliveryStatus: '',
+		deliveryStatusNot: '',
+		status: [],
+		statusNot: [],
+		hasTracking: undefined,
+		hasPickupPoint: undefined,
+	};
 
 	test( 'two identical snapshots are equal', () => {
 		expect( filtersEqual( base, { ...base } ) ).toBe( true );
@@ -345,6 +360,90 @@ describe( 'advancedFiltersToggleQuery — the reset WooCommerce used to do for u
 
 		[ 'carrier', 'period', 'compare', 'before', 'after', 'paged' ].forEach( ( key ) => {
 			expect( patch ).not.toHaveProperty( key );
+		} );
+	} );
+} );
+
+describe( 'per-filter rules and the pickup-point filter (#836)', () => {
+	const deliveryStatusLabels = { pending: 'Ожидает отправки', in_transit: 'В пути' };
+
+	/**
+	 * The operator's complaint was that every filter had ONE fixed rule. Delivery status and
+	 * order status now carry a real negation; presence filters do not, because «нет» is
+	 * already one of their two values.
+	 */
+	test( 'the two status filters carry both rules, the presence filters carry one', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { 'wc-processing': 'В обработке' } );
+
+		expect( config.filters.delivery_status.rules.map( ( r ) => r.value ) ).toEqual( [ 'is', 'is_not' ] );
+		expect( config.filters.status.rules.map( ( r ) => r.value ) ).toEqual( [ 'is', 'is_not' ] );
+		expect( config.filters.has_tracking.rules.map( ( r ) => r.value ) ).toEqual( [ 'is' ] );
+		expect( config.filters.has_pickup_point.rules.map( ( r ) => r.value ) ).toEqual( [ 'is' ] );
+	} );
+
+	/**
+	 * ⚠ Presence must be a two-option SELECT, never a valueless rule:
+	 * `getQueryFromActiveFilters()` skips any active filter whose `value` is falsy, so a rule
+	 * carrying no value never reaches the URL at all. Measured in the upstream source, s128.
+	 */
+	test( 'the pickup-point filter is a presence select, matching the tracking one', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels );
+
+		const values = config.filters.has_pickup_point.input.options.map( ( o ) => o.value );
+
+		expect( values ).toEqual( [ 'yes', 'no' ] );
+		expect( config.filters.has_pickup_point.input.component ).toBe( 'SelectControl' );
+	} );
+
+	/** Every option still has to satisfy WooCommerce's own `{ value, label }` contract. */
+	test( 'every option of every filter still carries a non-empty string value', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { 'wc-processing': 'В обработке' } );
+
+		Object.values( config.filters )
+			.flatMap( ( filter ) => filter.input.options )
+			.forEach( ( option ) => {
+				expect( typeof option.value ).toBe( 'string' );
+				expect( option.value.length ).toBeGreaterThan( 0 );
+				expect( option ).not.toHaveProperty( 'key' );
+			} );
+	} );
+
+	test( 'the negation readers take their own URL keys, not a flag on the positive one', () => {
+		expect( getDeliveryStatusNotFromQuery( { delivery_status_is_not: 'in_transit' } ) ).toBe( 'in_transit' );
+		expect( getDeliveryStatusNotFromQuery( { delivery_status_is: 'in_transit' } ) ).toBe( '' );
+
+		expect( getOrderStatusNotFromQuery( { status_is_not: 'wc-completed' } ) ).toEqual( [ 'wc-completed' ] );
+		expect( getOrderStatusNotFromQuery( {} ) ).toEqual( [] );
+	} );
+
+	/** `undefined` is "no filter" and is distinct from `false`, exactly as for tracking. */
+	test( 'the pickup-point reader distinguishes absent from false', () => {
+		expect( getHasPickupPointFromQuery( { has_pickup_point_is: 'yes' } ) ).toBe( true );
+		expect( getHasPickupPointFromQuery( { has_pickup_point_is: 'no' } ) ).toBe( false );
+		expect( getHasPickupPointFromQuery( {} ) ).toBeUndefined();
+	} );
+
+	/**
+	 * ⚠ Leaving advanced mode must drop the NEW keys too. The clearing is ours now — the
+	 * branch inside `FilterPicker` that used to do it went away with the picker — so every
+	 * key added to the block has to be added here as well, or it keeps filtering a table
+	 * whose filter block is no longer on screen.
+	 */
+	test( 'switching the block off drops every advanced key, the new ones included', () => {
+		const patch = advancedFiltersToggleQuery( false );
+
+		[
+			'filter',
+			'delivery_status_is',
+			'delivery_status_is_not',
+			'status_is',
+			'status_is_not',
+			'has_tracking_is',
+			'has_pickup_point_is',
+			'match',
+		].forEach( ( key ) => {
+			expect( patch ).toHaveProperty( key );
+			expect( patch[ key ] ).toBeUndefined();
 		} );
 	} );
 } );

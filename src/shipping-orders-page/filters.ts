@@ -81,8 +81,11 @@ export function advancedFiltersToggleQuery( open: boolean ): Record<string, stri
 	return {
 		[ FILTER_PARAM ]: undefined,
 		[ DELIVERY_STATUS_PARAM ]: undefined,
+		[ DELIVERY_STATUS_NOT_PARAM ]: undefined,
 		[ ORDER_STATUS_PARAM ]: undefined,
+		[ ORDER_STATUS_NOT_PARAM ]: undefined,
 		[ HAS_TRACKING_PARAM ]: undefined,
+		[ HAS_PICKUP_POINT_PARAM ]: undefined,
 		// `AdvancedFilters` writes this itself when its All/Any select is used.
 		match: undefined,
 	};
@@ -98,6 +101,22 @@ export function advancedFiltersToggleQuery( open: boolean ): Record<string, stri
 export const DELIVERY_STATUS_PARAM = 'delivery_status_is';
 export const ORDER_STATUS_PARAM = 'status_is';
 export const HAS_TRACKING_PARAM = 'has_tracking_is';
+
+/**
+ * The NEGATIVE rules (#836). WooCommerce composes a filter's URL key as
+ * `${filterKey}_${rule}` (`getUrlKey()`, `packages/js/navigation/src/filters.js`), so a
+ * second rule on the same filter simply owns a second key. Nothing here is invented.
+ *
+ * ⚠ Server-side every one of these is a NOT EXISTS group bound to the provider's own
+ * marker, never a bare `NOT IN`: a lone `NOT IN` drops rows that have no such meta at
+ * all, and an unbound negation OR-ed across providers matches the entire table. Both
+ * defects have shipped here already (s127, s128).
+ */
+export const DELIVERY_STATUS_NOT_PARAM = 'delivery_status_is_not';
+export const ORDER_STATUS_NOT_PARAM = 'status_is_not';
+
+/** Presence of a pickup point (#836) — the fourth thing a provider declares a meta key for. */
+export const HAS_PICKUP_POINT_PARAM = 'has_pickup_point_is';
 
 /** `has_tracking_is` values — `AdvancedFilters`' `SelectControl` input only ever carries strings. */
 export const HAS_TRACKING_YES = 'yes';
@@ -139,6 +158,35 @@ export function getDeliveryStatusFromQuery( query: WcQuery ): DeliveryStatusCano
 	return ( query[ DELIVERY_STATUS_PARAM ] as DeliveryStatusCanonical | undefined ) || '';
 }
 
+/** The «не равен» half of the same filter (#836); '' means "not filtering that way". */
+export function getDeliveryStatusNotFromQuery( query: WcQuery ): DeliveryStatusCanonical | '' {
+	return ( query[ DELIVERY_STATUS_NOT_PARAM ] as DeliveryStatusCanonical | undefined ) || '';
+}
+
+/** WC order statuses the merchant asked to EXCLUDE (#836). */
+export function getOrderStatusNotFromQuery( query: WcQuery ): string[] {
+	const value = query[ ORDER_STATUS_NOT_PARAM ];
+	return value ? [ value ] : [];
+}
+
+/**
+ * Presence of a pickup point. `undefined` means "no filter" — distinct from `false`,
+ * exactly like {@link getHasTrackingFromQuery}.
+ */
+export function getHasPickupPointFromQuery( query: WcQuery ): boolean | undefined {
+	const value = query[ HAS_PICKUP_POINT_PARAM ];
+
+	if ( HAS_TRACKING_YES === value ) {
+		return true;
+	}
+
+	if ( HAS_TRACKING_NO === value ) {
+		return false;
+	}
+
+	return undefined;
+}
+
 /**
  * `status_is` carries one WC order-status slug (`allowMultiple: false` — see
  * the module doc). `fetchOrders()` still takes an array, because that is the
@@ -174,20 +222,31 @@ export interface UrlFilters {
 	after: string;
 	before: string;
 	deliveryStatus: DeliveryStatusCanonical | '';
+	/** #836: the «не равен» rule of the same filter — a separate URL key, not a flag. */
+	deliveryStatusNot: DeliveryStatusCanonical | '';
 	status: string[];
+	/** #836: WC order statuses to EXCLUDE. */
+	statusNot: string[];
 	hasTracking: boolean | undefined;
+	/** #836: presence of a pickup point; `undefined` is "no filter", as with tracking. */
+	hasPickupPoint: boolean | undefined;
 }
 
 /** Whether two {@link UrlFilters} snapshots represent the same filter state. */
 export function filtersEqual( a: UrlFilters, b: UrlFilters ): boolean {
+	const sameList = ( x: string[], y: string[] ): boolean =>
+		x.length === y.length && x.every( ( value, index ) => value === y[ index ] );
+
 	return (
 		a.carrier === b.carrier &&
 		a.after === b.after &&
 		a.before === b.before &&
 		a.deliveryStatus === b.deliveryStatus &&
+		a.deliveryStatusNot === b.deliveryStatusNot &&
 		a.hasTracking === b.hasTracking &&
-		a.status.length === b.status.length &&
-		a.status.every( ( value, index ) => value === b.status[ index ] )
+		a.hasPickupPoint === b.hasPickupPoint &&
+		sameList( a.status, b.status ) &&
+		sameList( a.statusNot, b.statusNot )
 	);
 }
 
@@ -236,23 +295,54 @@ export function readDateFilters( dateApi: WcDateApi, query: WcQuery ): DateFilte
 }
 
 /**
- * Builds the `AdvancedFilters` config for the three filters D10 measured as
- * actually reachable — delivery status, WC order status, tracking presence.
- * No delivery-type entry: D10 found three hops ending in the shipping zones,
- * with nothing to query.
+ * Builds the `AdvancedFilters` config: four filters, each with its OWN rules (#836).
  *
- * `orderStatusOptions` is optional and omits that one filter when absent — the
- * same degrade-rather-than-crash rule `app.tsx`'s `RoiPanel` already follows —
- * because the option list has no framework-owned source; it comes from
- * `window.wc.wcSettings`, a WooCommerce Core admin setting this page only
- * reads defensively.
+ * The set is bounded by what `Orders_Provider` actually declares a meta key for, measured
+ * on the rig 09.09.2026 and recorded on #836. Two candidates were REJECTED by that
+ * measurement rather than by taste:
+ *
+ * - **«Ожидает оплаты»** — `needs_payment()` is COMPUTED from status and total and stored
+ *   nowhere, so the database cannot be asked about it. The control would look alive and
+ *   filter nothing.
+ * - **Метод доставки** — `get_method_ids()` declares an INCOMPLETE list (3 rig orders use a
+ *   method no provider names), so the filter would silently lose rows. Card #842.
+ *
+ * ⚠ And two SHAPES are not available, which is why the operator's «сперва тип сравнения,
+ * поле появляется только для нужных правил» is not built literally:
+ *
+ * 1. `AdvancedFilters` picks its input component per FILTER, never per rule
+ *    (`componentMap` in `advanced-filters/item.tsx`), and an unknown component name renders
+ *    NOTHING at all, silently — the map is closed.
+ * 2. `getQueryFromActiveFilters()` skips any active filter whose `value` is falsy, so a
+ *    rule that carries no value never reaches the URL. Presence therefore has to be a
+ *    two-option select, not a valueless rule.
+ *
+ * Free-text matching on a tracking number needs the `Search` component, which requires an
+ * autocompleter and `getLabels` — a separate piece of work, not a rule.
+ *
+ * `orderStatusOptions` is optional and omits that one filter when absent — the same
+ * degrade-rather-than-crash rule `app.tsx`'s `RoiPanel` already follows — because the
+ * option list has no framework-owned source; it comes from `window.wc.wcSettings`.
  */
 export function buildAdvancedFiltersConfig(
 	deliveryStatusLabels: Record<DeliveryStatusCanonical, string>,
 	orderStatusOptions?: Record<string, string>
 ): WcAdvancedFiltersConfig {
-	/** Every filter below uses this single rule — there is nothing server-side to negate ("is not") against. */
 	const isRule = { value: 'is', label: __( 'равен', 'woodev-plugin-framework' ) };
+
+	/**
+	 * ⚠ The negation is honest ONLY because the server builds it as a `NOT EXISTS` group
+	 * bound to each provider's own marker. A bare `NOT IN` drops every row that has no such
+	 * meta at all, and an unbound negation OR-ed across providers matches the entire table —
+	 * both have shipped here (s127 `has_tracking`, s128 `delivery_status=unknown`).
+	 */
+	const isNotRule = { value: 'is_not', label: __( 'не равен', 'woodev-plugin-framework' ) };
+
+	/** Presence is a two-option select, not a valueless rule — see the module doc above. */
+	const presenceOptions = [
+		{ value: HAS_TRACKING_YES, label: __( 'Есть', 'woodev-plugin-framework' ) },
+		{ value: HAS_TRACKING_NO, label: __( 'Отсутствует', 'woodev-plugin-framework' ) },
+	];
 
 	const filters: WcAdvancedFiltersConfig[ 'filters' ] = {
 		delivery_status: {
@@ -261,7 +351,7 @@ export function buildAdvancedFiltersConfig(
 				remove: __( 'Убрать фильтр по статусу доставки', 'woodev-plugin-framework' ),
 				title: __( 'Статус доставки {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
 			},
-			rules: [ isRule ],
+			rules: [ isRule, isNotRule ],
 			input: {
 				component: 'SelectControl',
 				options: Object.entries( deliveryStatusLabels ).map( ( [ value, label ] ) => ( {
@@ -278,13 +368,17 @@ export function buildAdvancedFiltersConfig(
 				title: __( 'Трек-номер {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
 			},
 			rules: [ isRule ],
-			input: {
-				component: 'SelectControl',
-				options: [
-					{ value: HAS_TRACKING_YES, label: __( 'Есть', 'woodev-plugin-framework' ) },
-					{ value: HAS_TRACKING_NO, label: __( 'Отсутствует', 'woodev-plugin-framework' ) },
-				],
+			input: { component: 'SelectControl', options: presenceOptions },
+			allowMultiple: false,
+		},
+		has_pickup_point: {
+			labels: {
+				add: __( 'Пункт выдачи', 'woodev-plugin-framework' ),
+				remove: __( 'Убрать фильтр по пункту выдачи', 'woodev-plugin-framework' ),
+				title: __( 'Пункт выдачи {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
 			},
+			rules: [ isRule ],
+			input: { component: 'SelectControl', options: presenceOptions },
 			allowMultiple: false,
 		},
 	};
@@ -296,7 +390,7 @@ export function buildAdvancedFiltersConfig(
 				remove: __( 'Убрать фильтр по статусу заказа', 'woodev-plugin-framework' ),
 				title: __( 'Статус заказа {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
 			},
-			rules: [ isRule ],
+			rules: [ isRule, isNotRule ],
 			input: {
 				component: 'SelectControl',
 				options: Object.entries( orderStatusOptions ).map( ( [ value, label ] ) => ( {

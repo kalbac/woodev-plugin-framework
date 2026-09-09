@@ -287,30 +287,56 @@
 }
 
 /**
+ * The advanced-filter CARD itself.
+ *
+ * ⚠ WooCommerce lets it fill whatever it is given; the operator measured its own
+ * «Аналитика → Заказы» card at **882px** in the same window where ours spanned the full
+ * container (#836). A filter block is a form, not a table — past a certain width the eye
+ * stops connecting a label to its control.
+ */
+.woocommerce-filters-advanced {
+	max-width: 882px;
+}
+
+/**
  * `AdvancedFilters`' own row: the rule `<select>` and the value `<select>`.
  *
- * ⚠ Two deliberate corrections to what the component renders by default, both
- * from the operator's rig pass (08.09.2026):
+ * ⚠ **The rule select is VISIBLE again as of #836.** It was hidden in s127 for a reason
+ * that has since stopped being true: every filter then had exactly one rule («равен»),
+ * because the server could not honestly offer a negation. It can now — each «не равен» is
+ * a `NOT EXISTS` group bound to the provider's own marker, which is what makes it honest
+ * (a bare `NOT IN` drops rows with no such meta at all; unbound, an OR across providers
+ * matches the whole table). A select with two real choices is not noise.
  *
- * 1. The VALUE select stretched to the full width of the card (measured: 968px
- *    against a 117px rule select), because it is a flex child with nothing
- *    bounding it. Analytics never shows this, since its own value controls are
- *    autocompletes rather than plain selects. Bounded here instead.
- * 2. The RULE select is hidden. Every filter on this page has exactly ONE rule —
- *    «равен» — because the server cannot honestly offer its negation: a `NOT IN`
- *    meta clause silently drops every row that has no such meta at all (gotcha
- *    `a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all`). A
- *    select whose only choice is already made is noise, and the operator called
- *    it out as one. The component still submits `is`; only the control is gone.
+ * ⚠ The VALUE select still needs bounding: it is a flex child with nothing to stop it, and
+ * it stretched to 968px against a 117px rule select. Analytics never shows this because
+ * its own value controls are autocompletes rather than plain selects.
+ *
+ * The three parts are laid out as COLUMNS rather than left to flow, which is the operator's
+ * fourth complaint on #836: fields jumped as filters were added, while WooCommerce's own
+ * block keeps label / rule / value in line.
  */
 .woocommerce-filters-advanced__line-item {
-	.woocommerce-filters-advanced__rule {
-		display: none;
+	.woocommerce-filters-advanced__fieldset {
+		display: grid;
+		grid-template-columns: minmax(140px, max-content) minmax(120px, max-content) minmax(200px, 320px);
+		align-items: center;
+		gap: 8px 12px;
 	}
 
+	.woocommerce-filters-advanced__rule,
 	.woocommerce-filters-advanced__input {
-		flex: 0 1 auto;
-		max-width: 320px;
-		min-width: 220px;
+		width: 100%;
+		min-width: 0;
+	}
+}
+
+/**
+ * Below the grid's own breathing room the columns stop helping and start truncating, so
+ * hand the row back to normal flow rather than squeezing three controls into a phone.
+ */
+@media ( max-width: 782px ) {
+	.woocommerce-filters-advanced__line-item .woocommerce-filters-advanced__fieldset {
+		grid-template-columns: 1fr;
 	}
 }
