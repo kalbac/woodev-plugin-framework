@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 304 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 305 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -132,6 +132,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/integration] **Two integration runs at once share ONE test database, so the loser reports YOUR code failing — 3 failures and 22 risky on a tree that is green alone. A private worktree copy does not isolate it.** → [two-concurrent-integration-runs-share-one-test-database](gotchas/two-concurrent-integration-runs-share-one-test-database.md) (s129)
 - [testing/integration] **A hung PHPUnit killed at the shell leaves its query RUNNING in MySQL, so the NEXT run hangs on `DROP TABLE wp_users`. Read `SHOW FULL PROCESSLIST` first.** → [killing-phpunit-leaves-its-mysql-query-running-and-holding-locks](gotchas/killing-phpunit-leaves-its-mysql-query-running-and-holding-locks.md) (s128)
 - [testing/environment-split] **`wc_get_orders()` DROPS `meta_query` on the legacy CPT datastore and still returns a successful, UNFILTERED result — and the dev rig is HPOS while the test environment is CPT, so a probe on one proves nothing about the other.** → [wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore](gotchas/wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore.md) (s125)
 - [testing/ci] **`plugins-reference/` is GITIGNORED, so a test that reads it is green on every local checkout AND every worktree, and red in CI — the one place that gates the merge. Skip on absence; keep the rules on temp fixtures.** → [a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci](gotchas/a-test-reading-a-gitignored-directory-is-green-locally-and-red-in-ci.md) (s117)
