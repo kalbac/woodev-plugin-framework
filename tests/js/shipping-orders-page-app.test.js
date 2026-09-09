@@ -432,7 +432,7 @@ describe( 'carrier filter', () => {
 		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
 		expect( filter ).toHaveAttribute(
 			'data-static-params',
-			'filter,period,compare,before,after,delivery_status_is,status_is,has_tracking_is'
+			'filter,period,compare,before,after,delivery_status_is,delivery_status_is_not,status_is,status_is_not,has_tracking_is,has_pickup_point_is'
 		);
 		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
 	} );

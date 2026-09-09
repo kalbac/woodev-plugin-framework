@@ -107,6 +107,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		const QUERY_VAR_TRACKING_CLAUSES = 'woodev_shipping_tracking_clauses';
 
 		/**
+		 * Custom query var carrying the already-built pickup-point-presence meta clauses,
+		 * for the legacy CPT datastore path (#836). Same shape and reason as
+		 * {@see self::QUERY_VAR_TRACKING_CLAUSES}, built by
+		 * {@see self::pickup_point_meta_clauses()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const QUERY_VAR_PICKUP_POINT_CLAUSES = 'woodev_shipping_pickup_point_clauses';
+
+		/**
 		 * Registry to read providers from.
 		 *
 		 * @since 2.0.2
@@ -134,34 +146,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * @param array<string,mixed> $request {
 		 *     Optional. Request-shaped params.
 		 *
-		 *     @type string   $carrier         provider id, or 'all'/''/omitted for the aggregate.
-		 *     @type int      $page            1-based page number. Default 1.
-		 *     @type int      $per_page        page size. Default {@see self::DEFAULT_PER_PAGE}.
-		 *     @type string   $orderby         wc_get_orders() orderby. Default 'date'.
-		 *     @type string   $order           'ASC' or 'DESC'. Default 'DESC'.
-		 *     @type string   $search          free-text search term.
-		 *     @type string   $after           ISO 8601 `YYYY-MM-DD`; orders created on/after this
-		 *                                     day (SP-10 spec D10/D11). Independent of `$before`.
-		 *     @type string   $before          ISO 8601 `YYYY-MM-DD`; orders created on/before this
-		 *                                     day. Independent of `$after`.
-		 *     @type string[] $status          native WC order statuses, with or without the `wc-`
-		 *                                     prefix. Omitted or empty keeps the default status
-		 *                                     list (every status except cancelled/failed).
-		 *                                     Recognized values override that default entirely.
-		 *                                     A non-empty request in which NOTHING is recognized
-		 *                                     narrows to nothing, through the same
-		 *                                     {@see self::NO_MATCH_META_QUERY} an unrecognized
-		 *                                     carrier gets; it does NOT fall back to the
-		 *                                     unfiltered table.
-		 *     @type string   $delivery_status one of
-		 *                                     {@see \Woodev\Framework\Shipping\Order\Delivery_Status::canonical_states()}
-		 *                                     or {@see \Woodev\Framework\Shipping\Order\Delivery_Status::UNKNOWN}.
-		 *                                     An unrecognized value is ignored (no filter applied).
-		 *     @type bool     $has_tracking    present (any value) => filters on whether the
-		 *                                     matched carrier's own tracking-number meta exists;
-		 *                                     absent => not filtered. Read via `array_key_exists()`,
-		 *                                     not `isset()`, so an explicit `false` still counts as
-		 *                                     present.
+		 *     @type string   $carrier             provider id, or 'all'/''/omitted for the aggregate.
+		 *     @type int      $page                1-based page number. Default 1.
+		 *     @type int      $per_page            page size. Default {@see self::DEFAULT_PER_PAGE}.
+		 *     @type string   $orderby             wc_get_orders() orderby. Default 'date'.
+		 *     @type string   $order               'ASC' or 'DESC'. Default 'DESC'.
+		 *     @type string   $search              free-text search term.
+		 *     @type string   $after               ISO 8601 `YYYY-MM-DD`; orders created on/after this
+		 *                                         day (SP-10 spec D10/D11). Independent of `$before`.
+		 *     @type string   $before              ISO 8601 `YYYY-MM-DD`; orders created on/before this
+		 *                                         day. Independent of `$after`.
+		 *     @type string[] $status              native WC order statuses ('is'), with or without the
+		 *                                         `wc-` prefix. Omitted or empty keeps the default status
+		 *                                         list (every status except cancelled/failed).
+		 *                                         Recognized values override that default entirely.
+		 *                                         A non-empty request in which NOTHING is recognized
+		 *                                         narrows to nothing, through the same
+		 *                                         {@see self::NO_MATCH_META_QUERY} an unrecognized
+		 *                                         carrier gets; it does NOT fall back to the
+		 *                                         unfiltered table. Takes precedence over `$status_not`
+		 *                                         if both are somehow sent.
+		 *     @type string[] $status_not          native WC order statuses ('is not', #836) — "every
+		 *                                         valid status except these", computed against the FULL
+		 *                                         valid list (cancelled/failed included), never the
+		 *                                         default view's narrower one. This is a native `status`
+		 *                                         arg, not a meta clause — order status lives on the
+		 *                                         order itself. Ignored when `$status` is also present.
+		 *     @type string   $delivery_status     one of
+		 *                                         {@see \Woodev\Framework\Shipping\Order\Delivery_Status::canonical_states()}
+		 *                                         or {@see \Woodev\Framework\Shipping\Order\Delivery_Status::UNKNOWN}
+		 *                                         ('is'). An unrecognized value is ignored (no filter
+		 *                                         applied). Takes precedence over `$delivery_status_not`
+		 *                                         if both are somehow sent.
+		 *     @type string   $delivery_status_not same value set as `$delivery_status` ('is not', #836).
+		 *                                         Ignored when `$delivery_status` is also present.
+		 *     @type bool     $has_tracking        present (any value) => filters on whether the
+		 *                                         matched carrier's own tracking-number meta exists;
+		 *                                         absent => not filtered. Read via `array_key_exists()`,
+		 *                                         not `isset()`, so an explicit `false` still counts as
+		 *                                         present.
+		 *     @type bool     $has_pickup_point    present (any value) => filters on whether the matched
+		 *                                         carrier's own pickup-point meta exists (#836); absent
+		 *                                         => not filtered. Same presence rule as `$has_tracking`.
 		 * }
 		 * @return array<string,mixed>
 		 */
@@ -221,10 +247,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 			$meta_query_parts = [ self::meta_query_for_keys( $keys ) ];
 
-			$delivery_status = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
-			$status_clauses  = null;
-			if ( '' !== $delivery_status && in_array( $delivery_status, array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] ), true ) ) {
-				$status_clauses     = $this->delivery_status_meta_clauses( $providers, $delivery_status );
+			// `delivery_status` ('is') and `delivery_status_not` ('is not', #836) are mutually
+			// exclusive from the UI's own rule picker; if a caller somehow sends both, 'is'
+			// wins — there is exactly one status_clauses part either way.
+			$valid_delivery_statuses = array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] );
+			$delivery_status         = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
+			$delivery_status_not     = isset( $request['delivery_status_not'] ) ? (string) $request['delivery_status_not'] : '';
+			$status_clauses          = null;
+
+			if ( '' !== $delivery_status && in_array( $delivery_status, $valid_delivery_statuses, true ) ) {
+				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status, false );
+			} elseif ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid_delivery_statuses, true ) ) {
+				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status_not, true );
+			}
+
+			if ( null !== $status_clauses ) {
 				$meta_query_parts[] = self::meta_query_for_clauses( $status_clauses );
 			}
 
@@ -232,6 +269,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			if ( array_key_exists( 'has_tracking', $request ) ) {
 				$tracking_clauses   = $this->tracking_meta_clauses( $providers, wc_string_to_bool( $request['has_tracking'] ) );
 				$meta_query_parts[] = self::meta_query_for_clauses( $tracking_clauses );
+			}
+
+			$pickup_point_clauses = null;
+			if ( array_key_exists( 'has_pickup_point', $request ) ) {
+				$pickup_point_clauses = $this->pickup_point_meta_clauses( $providers, wc_string_to_bool( $request['has_pickup_point'] ) );
+				$meta_query_parts[]   = self::meta_query_for_clauses( $pickup_point_clauses );
 			}
 
 			if ( $this->is_hpos_enabled() ) {
@@ -250,6 +293,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 				if ( null !== $tracking_clauses ) {
 					$args[ self::QUERY_VAR_TRACKING_CLAUSES ] = $tracking_clauses;
+				}
+
+				if ( null !== $pickup_point_clauses ) {
+					$args[ self::QUERY_VAR_PICKUP_POINT_CLAUSES ] = $pickup_point_clauses;
 				}
 			}
 
@@ -390,6 +437,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * Builds one delivery-status meta clause per provider able to say anything about
 		 * a canonical state, inverting each provider's OWN `status_map` (SP-10 spec D10) —
 		 * never a single shared map, because carriers do not share raw vocabularies.
+		 * `$negate` (#836) builds the 'is not' rule instead of 'is' — see below.
 		 *
 		 * `unknown` is deliberately BOTH things {@see Delivery_Status::resolve()} already
 		 * treats as unknown: a raw value absent from the map, and a raw value present but
@@ -408,21 +456,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * never a false positive) stands in for "always true" — or NEVER matches a
 		 * specific canonical state, in which case it contributes no clause at all.
 		 *
+		 * `$negate` (#836, "is not X"): honestly, "not X" includes every order this
+		 * provider could report that ISN'T X — including one with no status meta at all,
+		 * because "unknown" trivially satisfies "not X" too. So the negative branches
+		 * reuse the exact same NOT-EXISTS-OR-NOT-IN shape the `unknown` branch already
+		 * needs, just scoped to X's own raw values instead of every known raw value; and
+		 * a provider that never maps anything to X has EVERY order qualifying as "not X",
+		 * the same "always true via the marker" shape the no-status-concept branch above
+		 * already uses. "Is not unknown" (negating the `unknown` canonical itself) is the
+		 * mirror image: a definite known status, i.e. the plain `IN $known` clause.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param Orders_Provider[] $providers providers in scope.
 		 * @param string            $canonical one of {@see Delivery_Status::canonical_states()}
 		 *                                     or {@see Delivery_Status::UNKNOWN}.
+		 * @param bool              $negate    false => 'is' (default); true => 'is not' (#836).
 		 * @return array<int,array<string,mixed>> one clause per participating provider.
 		 */
-		private function delivery_status_meta_clauses( array $providers, string $canonical ): array {
+		private function delivery_status_meta_clauses( array $providers, string $canonical, bool $negate = false ): array {
 			$clauses = [];
 
 			foreach ( $providers as $provider ) {
 				$status_key = $provider->get_status_meta_key();
 
 				if ( null === $status_key ) {
-					if ( Delivery_Status::UNKNOWN === $canonical ) {
+					// A provider with no status concept of its own is ALWAYS unknown.
+					$provider_matches = ( Delivery_Status::UNKNOWN === $canonical ) !== $negate;
+
+					if ( $provider_matches ) {
 						$clauses[] = [
 							'key'     => $provider->get_marker_meta_key(),
 							'compare' => 'EXISTS',
@@ -442,55 +504,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 					$known = array_values( array_unique( $known ) );
 
 					if ( [] === $known ) {
+						// Maps nothing to any canonical state => this provider is ALWAYS unknown.
+						if ( ! $negate ) {
+							$clauses[] = [
+								'key'     => $provider->get_marker_meta_key(),
+								'compare' => 'EXISTS',
+							];
+						}
+
+						continue;
+					}
+
+					if ( ! $negate ) {
+						/*
+						 * TWO status clauses, not one, and this is the whole point: `NOT IN`
+						 * alone does NOT match an order with no status meta at all. Only `NOT
+						 * EXISTS` makes WP_Meta_Query use a LEFT JOIN — WordPress says so
+						 * itself in `class-wp-meta-query.php`: «If any JOINs are LEFT JOINs
+						 * (as in the case of NOT EXISTS), then all JOINs should be LEFT.
+						 * Otherwise posts with no metadata will be excluded from results.»
+						 * An order that never received a carrier status is the COMMONEST
+						 * unknown, so a lone `NOT IN` silently hides most of what the filter
+						 * exists to find. Measured, not reasoned: the integration test
+						 * covering the no-status order failed with exactly that shape.
+						 *
+						 * ⚠ And the pair MUST be bound to this provider's own marker, for the
+						 * same reason the negative tracking case below is. These clauses are
+						 * OR-ed across providers, and «carrier B wrote no status meta» is
+						 * trivially TRUE of every carrier A order — a carrier never writes
+						 * another's meta. Unbound, the OR therefore matches the entire table:
+						 * measured on the rig 08.09.2026 with two carriers,
+						 * `delivery_status=unknown` returned 71 of 71 (#837 defect 2), while
+						 * each single-carrier view was correct, because only one provider
+						 * participates there. Same defect, same shape, same fix as the
+						 * `has_tracking=false` clause repaired in s127.
+						 */
 						$clauses[] = [
-							'key'     => $provider->get_marker_meta_key(),
-							'compare' => 'EXISTS',
+							'relation' => 'AND',
+							[
+								'key'     => $provider->get_marker_meta_key(),
+								'compare' => 'EXISTS',
+							],
+							[
+								'relation' => 'OR',
+								[
+									'key'     => $status_key,
+									'compare' => 'NOT EXISTS',
+								],
+								[
+									'key'     => $status_key,
+									'value'   => $known,
+									'compare' => 'NOT IN',
+								],
+							],
 						];
 
 						continue;
 					}
 
-					/*
-					 * TWO status clauses, not one, and this is the whole point: `NOT IN`
-					 * alone does NOT match an order with no status meta at all. Only `NOT
-					 * EXISTS` makes WP_Meta_Query use a LEFT JOIN — WordPress says so
-					 * itself in `class-wp-meta-query.php`: «If any JOINs are LEFT JOINs
-					 * (as in the case of NOT EXISTS), then all JOINs should be LEFT.
-					 * Otherwise posts with no metadata will be excluded from results.»
-					 * An order that never received a carrier status is the COMMONEST
-					 * unknown, so a lone `NOT IN` silently hides most of what the filter
-					 * exists to find. Measured, not reasoned: the integration test
-					 * covering the no-status order failed with exactly that shape.
-					 *
-					 * ⚠ And the pair MUST be bound to this provider's own marker, for the
-					 * same reason the negative tracking case below is. These clauses are
-					 * OR-ed across providers, and «carrier B wrote no status meta» is
-					 * trivially TRUE of every carrier A order — a carrier never writes
-					 * another's meta. Unbound, the OR therefore matches the entire table:
-					 * measured on the rig 08.09.2026 with two carriers,
-					 * `delivery_status=unknown` returned 71 of 71 (#837 defect 2), while
-					 * each single-carrier view was correct, because only one provider
-					 * participates there. Same defect, same shape, same fix as the
-					 * `has_tracking=false` clause repaired in s127.
-					 */
+					// "is not unknown" (#836): a definite known status. `IN` on the provider's
+					// own key already implies both existence and that provider's order.
 					$clauses[] = [
-						'relation' => 'AND',
-						[
-							'key'     => $provider->get_marker_meta_key(),
-							'compare' => 'EXISTS',
-						],
-						[
-							'relation' => 'OR',
-							[
-								'key'     => $status_key,
-								'compare' => 'NOT EXISTS',
-							],
-							[
-								'key'     => $status_key,
-								'value'   => $known,
-								'compare' => 'NOT IN',
-							],
-						],
+						'key'     => $status_key,
+						'value'   => $known,
+						'compare' => 'IN',
 					];
 
 					continue;
@@ -498,17 +575,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 				$raw_values = $inverted[ $canonical ] ?? [];
 
-				if ( [] === $raw_values ) {
+				if ( ! $negate ) {
+					if ( [] === $raw_values ) {
+						continue;
+					}
+
+					// `IN` on a carrier's OWN status key already implies that carrier's
+					// order, so it needs no binding — the same asymmetry as `EXISTS` versus
+					// `NOT EXISTS` in {@see self::tracking_meta_clauses()}.
+					$clauses[] = [
+						'key'     => $status_key,
+						'value'   => $raw_values,
+						'compare' => 'IN',
+					];
+
 					continue;
 				}
 
-				// `IN` on a carrier's OWN status key already implies that carrier's
-				// order, so it needs no binding — the same asymmetry as `EXISTS` versus
-				// `NOT EXISTS` in {@see self::tracking_meta_clauses()}.
+				// "is not X" (#836):
+				if ( [] === $raw_values ) {
+					// This provider never maps anything to X, so every one of its orders
+					// qualifies as "not X" — its marker key stands in for "always true",
+					// same as the no-status-concept branch above.
+					$clauses[] = [
+						'key'     => $provider->get_marker_meta_key(),
+						'compare' => 'EXISTS',
+					];
+
+					continue;
+				}
+
+				/*
+				 * bound(marker) AND (status NOT EXISTS OR status NOT IN raw-values-for-X) —
+				 * the same two-clause shape the `unknown` branch above needs, because "no
+				 * status meta at all" trivially satisfies "not X" too, and only `NOT EXISTS`
+				 * makes WP_Meta_Query LEFT JOIN (see the `unknown` branch's comment). Bound
+				 * to the marker for the same reason: OR-ed across providers, «carrier B's
+				 * status is not X» is trivially true of every carrier A order.
+				 */
 				$clauses[] = [
-					'key'     => $status_key,
-					'value'   => $raw_values,
-					'compare' => 'IN',
+					'relation' => 'AND',
+					[
+						'key'     => $provider->get_marker_meta_key(),
+						'compare' => 'EXISTS',
+					],
+					[
+						'relation' => 'OR',
+						[
+							'key'     => $status_key,
+							'compare' => 'NOT EXISTS',
+						],
+						[
+							'key'     => $status_key,
+							'value'   => $raw_values,
+							'compare' => 'NOT IN',
+						],
+					],
 				];
 			}
 
@@ -586,6 +708,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			return $clauses;
 		}
 
+
+		/**
+		 * Builds one pickup-point-presence meta clause per provider (#836) — the exact
+		 * same asymmetry as {@see self::tracking_meta_clauses()}. A provider with no
+		 * pickup-point concept of its own (`get_pickup_point_meta_key()` is null) can
+		 * never report `true`, so it contributes nothing to that case; for `false` it
+		 * always counts as "no pickup point", its marker key standing in for "always
+		 * true".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Orders_Provider[] $providers        providers in scope.
+		 * @param bool              $has_pickup_point true => the pickup-point meta must
+		 *                                            exist; false => it must not.
+		 * @return array<int,array<string,mixed>> one clause per participating provider.
+		 */
+		private function pickup_point_meta_clauses( array $providers, bool $has_pickup_point ): array {
+			$clauses = [];
+
+			foreach ( $providers as $provider ) {
+				$pickup_point_key = $provider->get_pickup_point_meta_key();
+
+				if ( null === $pickup_point_key ) {
+					if ( ! $has_pickup_point ) {
+						$clauses[] = [
+							'key'     => $provider->get_marker_meta_key(),
+							'compare' => 'EXISTS',
+						];
+					}
+
+					continue;
+				}
+
+				if ( $has_pickup_point ) {
+					// `EXISTS` on a carrier's OWN pickup-point key already implies that
+					// carrier's order, so it needs no binding.
+					$clauses[] = [
+						'key'     => $pickup_point_key,
+						'compare' => 'EXISTS',
+					];
+
+					continue;
+				}
+
+				// ⚠ The NEGATIVE case MUST be bound to this provider's own marker — same
+				// reason as {@see self::tracking_meta_clauses()}'s negative case: OR-ed
+				// across providers, «carrier B's pickup-point key does not exist» is
+				// trivially true of every carrier A order.
+				$clauses[] = [
+					'relation' => 'AND',
+					[
+						'key'     => $provider->get_marker_meta_key(),
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => $pickup_point_key,
+						'compare' => 'NOT EXISTS',
+					],
+				];
+			}
+
+			return $clauses;
+		}
+
 		/**
 		 * Builds the `date_created` arg from `after`/`before`, both optional and
 		 * independent (SP-10 spec D10/D11). Uses WooCommerce's own documented date-query
@@ -642,11 +828,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * Resolves an explicit native WC order-status filter (SP-10 spec D10) —
-		 * validated against {@see wc_get_order_statuses()}, tolerating the value with or
-		 * without its `wc-` prefix (both are seen in the wild: `wc_get_order_statuses()`
-		 * keys always carry it, but a status is commonly referred to without it, e.g.
-		 * {@see \WC_Order::update_status()}).
+		 * Resolves an explicit native WC order-status filter (SP-10 spec D10; `is not`
+		 * added #836) — validated against {@see wc_get_order_statuses()}, tolerating the
+		 * value with or without its `wc-` prefix (both are seen in the wild:
+		 * `wc_get_order_statuses()` keys always carry it, but a status is commonly
+		 * referred to without it, e.g. {@see \WC_Order::update_status()}).
 		 *
 		 * ⚠ Three outcomes, and the middle one is the defect this method used to have
 		 * (#837 defect 3):
@@ -661,6 +847,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * - a non-empty list — recognized statuses, which override the default entirely,
 		 *   cancelled/failed included, since the merchant asked for exactly those.
 		 *
+		 * `status_not` ('is not', #836) is native `status`, not a meta clause — order
+		 * status lives on the order itself, so "is not X" is expressible directly as
+		 * "every valid status except X" against the FULL valid list (cancelled/failed
+		 * included — this is an explicit filter overriding the default entirely, the same
+		 * as `status` already does). `status` takes precedence when both are present.
+		 *
 		 * Values that are not strings never reach here — the REST layer rejects them
 		 * outright — and this method still degrades sanely on its own, because
 		 * {@see self::build_args()} is "pure; injectable for tests".
@@ -672,7 +864,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *                       otherwise the recognized `wc-`-prefixed statuses.
 		 */
 		private function resolve_requested_statuses( array $request ): ?array {
-			if ( ! isset( $request['status'] ) || ! is_array( $request['status'] ) ) {
+			$valid = array_keys( wc_get_order_statuses() );
+
+			$positive = self::normalize_status_list( $request['status'] ?? null );
+			if ( null !== $positive ) {
+				return array_values( array_unique( array_intersect( $positive, $valid ) ) );
+			}
+
+			$negative = self::normalize_status_list( $request['status_not'] ?? null );
+			if ( null !== $negative ) {
+				$excluded = array_intersect( $negative, $valid );
+
+				return array_values( array_diff( $valid, $excluded ) );
+			}
+
+			return null;
+		}
+
+		/**
+		 * Normalizes a raw `status`/`status_not` request value: trims each entry, adds
+		 * the `wc-` prefix when missing, and drops blanks. Shared by both directions of
+		 * {@see self::resolve_requested_statuses()} so they cannot silently diverge on
+		 * what counts as "no override" versus "asked for something".
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $value candidate request value.
+		 * @return string[]|null `null` when not an array, or an all-blank/empty one
+		 *                       (indistinguishable from "no override"); otherwise the
+		 *                       normalized, non-blank entries.
+		 */
+		private static function normalize_status_list( $value ): ?array {
+			if ( ! is_array( $value ) ) {
 				return null;
 			}
 
@@ -682,7 +905,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 					return ( '' !== $status && 0 !== strpos( $status, 'wc-' ) ) ? 'wc-' . $status : $status;
 				},
-				$request['status']
+				$value
 			);
 
 			// An all-blank request ('', '   ') is indistinguishable from asking for nothing
@@ -697,13 +920,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				)
 			);
 
-			if ( [] === $normalized ) {
-				return null;
-			}
-
-			$valid = array_keys( wc_get_order_statuses() );
-
-			return array_values( array_unique( array_intersect( $normalized, $valid ) ) );
+			return [] === $normalized ? null : $normalized;
 		}
 
 		/**

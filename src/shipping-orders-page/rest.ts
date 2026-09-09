@@ -155,6 +155,12 @@ export interface FetchOrdersArgs {
 	status?: string[];
 	/** One canonical {@link DeliveryStatusCanonical} value, or '' for "no filter". */
 	deliveryStatus?: string;
+	/** #836: «не равен» — a separate REST arg, built server-side as a marker-bound NOT EXISTS group. */
+	deliveryStatusNot?: string;
+	/** #836: WC order statuses to EXCLUDE. */
+	statusNot?: string[];
+	/** #836: presence of a pickup point; PRESENCE of the arg decides, as with `hasTracking`. */
+	hasPickupPoint?: boolean;
 	/**
 	 * `undefined` means "no filter" — distinct from `false`. The REST route's
 	 * `has_tracking` arg carries no default; its PRESENCE, not its truthiness,
@@ -176,8 +182,11 @@ export function fetchOrders( {
 	after = '',
 	before = '',
 	status = [],
+	statusNot = [],
 	deliveryStatus = '',
+	deliveryStatusNot = '',
 	hasTracking,
+	hasPickupPoint,
 }: FetchOrdersArgs = {} ): Promise<OrdersResponse> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
@@ -207,12 +216,24 @@ export function fetchOrders( {
 		params.set( 'status', status.join( ',' ) );
 	}
 
+	if ( statusNot.length > 0 ) {
+		params.set( 'status_not', statusNot.join( ',' ) );
+	}
+
 	if ( deliveryStatus ) {
 		params.set( 'delivery_status', deliveryStatus );
 	}
 
+	if ( deliveryStatusNot ) {
+		params.set( 'delivery_status_not', deliveryStatusNot );
+	}
+
 	if ( undefined !== hasTracking ) {
 		params.set( 'has_tracking', hasTracking ? 'true' : 'false' );
+	}
+
+	if ( undefined !== hasPickupPoint ) {
+		params.set( 'has_pickup_point', hasPickupPoint ? 'true' : 'false' );
 	}
 
 	return apiFetch<OrdersResponse>( {

@@ -62,6 +62,23 @@ directory. That is why the gate could go into the existing `lint` CI job (which 
 instead of standing up a container. The wp-cli phar is **pinned at 2.12.0**, the rig container's
 version, so the gate's answer drifts with this repo rather than with upstream.
 
+## s129: a TypeScript string is gated by this PHP-shaped gate, through the BUILT BUNDLE
+
+The extraction runs over `woodev/`, and `woodev/assets/build/**` lives inside it. So a string added
+in `src/shipping-orders-page/*.ts` reaches this gate **after `npm run build`**, as
+`#: assets/build/shipping-orders-page/index.js:1`. Two consequences that cost a CI round in s129:
+
+- **A front-end-only change can fail an i18n gate.** PR #844 was green on jest, typecheck,
+  `lint:ts-baseline`, `lint:i18n`, `lint:mo` and `lint:phone-masks` locally, and CI's `Lint` job
+  still failed on three msgids («не равен», «Убрать фильтр по пункту выдачи», «Пункт выдачи
+  {{rule /}} {{filter /}}») introduced by a `.ts` file. Running four of the five lint scripts is
+  not running the gate — `lint:i18n-sources` is the one that reads the code.
+- **Adding the entries is the sanctioned fix, and it is additive.** Both files, msgstr empty (the
+  shape every Russian admin msgid here already uses — the `.mo` carries only *translated* entries,
+  so its 429 do not move). Do **not** "fix" it with a full `wp i18n update-po` rebuild: that drops
+  the obsolete `#~` tail and renumbers every reference, which is a separate decision — see the
+  Related link.
+
 ## Related
 
 - [a-docs-gate-checks-links-not-listings](a-docs-gate-checks-links-not-listings.md) — the same
@@ -73,3 +90,7 @@ version, so the gate's answer drifts with this repo rather than with upstream.
   this family; `.mo` is rebuilt only by `wp i18n make-mo` in the rig container.
 - [classify-an-i18n-string-by-its-render-path-not-its-file-path](classify-an-i18n-string-by-its-render-path-not-its-file-path.md)
   — which language a msgid should be in, once it does reach the catalogue.
+- [a-po-merge-that-drops-obsolete-entries-still-looks-well-formed](a-po-merge-that-drops-obsolete-entries-still-looks-well-formed.md)
+  — why the s129 fix added three entries by hand instead of regenerating the catalogue.
+- [npm-run-test-js-is-not-the-whole-js-gate](npm-run-test-js-is-not-the-whole-js-gate.md) — the same
+  lesson from the JS side: the CI job runs more commands than the one you ran locally.
