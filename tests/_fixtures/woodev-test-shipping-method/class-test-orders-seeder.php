@@ -167,14 +167,14 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					'status'            => 'processing',
 					'raw_status'        => 'ON_THE_WAY',
 					'tracking'          => 'TESTCARRIER-000123',
-					'carrier_order_id' => 'TESTCARRIER-EXPORT-000123',
+					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000123',
 					'days_ago'          => 0,
 				],
 				[
 					'status'            => 'processing',
 					'raw_status'        => 'ARRIVED_PVZ',
 					'tracking'          => null,
-					'carrier_order_id' => 'TESTCARRIER-EXPORT-000124',
+					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000124',
 					'days_ago'          => 0,
 				],
 				[
@@ -183,7 +183,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					'tracking'          => 'TESTCARRIER-000125',
 					// Deliberately NOT exported — «lost» does not imply the framework's
 					// own export marker was ever written; the two are independent facts.
-					'carrier_order_id' => null,
+					'carrier_order_id'  => null,
 					'days_ago'          => 0,
 				],
 			];
