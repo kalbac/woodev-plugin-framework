@@ -43,7 +43,6 @@ import type {
 	OrderRowDeliveryStatus,
 	OrderRowPayment,
 	OrderRowTracking,
-	SyncStatusCarrier,
 	SyncStatusResponse,
 } from './rest';
 import {
@@ -340,48 +339,6 @@ function RoiPanel() {
 }
 
 /**
- * Renders one carrier's line in {@link DataStatusPanel}: when it last synced,
- * and when it will next — «Обновится …», or, for a webhook-only carrier with
- * no cron (`next_update: null`), an honest «По расписанию не обновляется»
- * rather than a blank space.
- */
-function SyncCarrierRow( { carrier }: { carrier: SyncStatusCarrier } ) {
-	const lastUpdatedText =
-		null === carrier.last_updated
-			? __( 'Ни разу не синхронизировалось', 'woodev-plugin-framework' )
-			: sprintf(
-					__( 'Обновлено %s', 'woodev-plugin-framework' ),
-					formatSyncTimestamp( carrier.last_updated ).text
-			  );
-
-	const nextUpdateText =
-		null === carrier.next_update
-			? __( 'По расписанию не обновляется', 'woodev-plugin-framework' )
-			: sprintf(
-					__( 'Обновится %s', 'woodev-plugin-framework' ),
-					formatSyncTimestamp( carrier.next_update ).text
-			  );
-
-	return (
-		<li className="woodev-orders-sync__carrier">
-			<span className="woodev-orders-sync__carrier-label">{ carrier.label }</span>
-			<span
-				className="woodev-orders-sync__carrier-meta"
-				title={ formatSyncTimestamp( carrier.last_updated ).title }
-			>
-				{ lastUpdatedText }
-			</span>
-			<span
-				className="woodev-orders-sync__carrier-meta"
-				title={ formatSyncTimestamp( carrier.next_update ).title }
-			>
-				{ nextUpdateText }
-			</span>
-		</li>
-	);
-}
-
-/**
  * The «Data status» panel (#828 increment 8, SP-10 spec D9) — the third block
  * in the filter row, beside «Перевозчик» and the date range picker. Consumes
  * the seam `Orders_Controller::get_sync_status()` already exposes (#831,
@@ -424,28 +381,92 @@ function DataStatusPanel() {
 		return null;
 	}
 
-	const aggregate = formatSyncTimestamp( syncStatus.last_updated );
-	const aggregateText =
-		null === syncStatus.last_updated
-			? __(
-					'Не все перевозчики синхронизировались хотя бы раз — часть статусов доставки может быть устаревшей.',
-					'woodev-plugin-framework'
-			  )
-			: sprintf( __( 'Обновлено %s', 'woodev-plugin-framework' ), aggregate.text );
+	/**
+	 * ⚠ Shaped after WooCommerce's OWN «Data status» block, captured from the rig
+	 * 09.09.2026 rather than approximated: a label above a bordered bar, and inside it
+	 * two `label above value` columns («Last updated» / «Next update»). The operator
+	 * asked for that block, not for something in the same row — the first attempt was a
+	 * heading plus prose, and its long sentence could not fit the row at all, so flex
+	 * dropped the whole block onto its own line.
+	 *
+	 * The per-carrier breakdown that sentence carried is not lost: it moves into the
+	 * bar's tooltip, which is the only place it can live without deciding the width of
+	 * the filter row.
+	 */
+	const lastUpdated = formatSyncTimestamp( syncStatus.last_updated );
+
+	/**
+	 * The soonest scheduled update across carriers — «when will anything refresh»,
+	 * which is the question the column asks. A carrier on webhooks alone carries no
+	 * `next_update` and simply does not participate; when none does, the column says so
+	 * rather than rendering an empty cell.
+	 */
+	const nextUpdates = syncStatus.carriers
+		.map( ( carrier ) => carrier.next_update )
+		.filter( ( value ): value is number => 'number' === typeof value );
+	const nextUpdate = nextUpdates.length > 0 ? formatSyncTimestamp( Math.min( ...nextUpdates ) ) : null;
+
+	/**
+	 * ⚠ The aggregate reads `null` the moment ANY carrier has never synced (a server-side
+	 * decision, see `Orders_Controller::get_sync_status()`), so «Ни разу» here is a
+	 * statement about the WHOLE table, not about one carrier. The tooltip is what says
+	 * which carrier is the reason — without it the value would be true but unactionable.
+	 */
+	const breakdown = syncStatus.carriers
+		.map( ( carrier ) => {
+			const synced =
+				null === carrier.last_updated
+					? __( 'ни разу не синхронизировалось', 'woodev-plugin-framework' )
+					: formatSyncTimestamp( carrier.last_updated ).title;
+			const scheduled =
+				null === carrier.next_update
+					? __( 'по расписанию не обновляется', 'woodev-plugin-framework' )
+					: formatSyncTimestamp( carrier.next_update ).title;
+
+			return `${ carrier.label }: ${ synced }, ${ scheduled }`;
+		} )
+		.join( '\n' );
 
 	return (
 		<div className="woodev-orders-sync">
-			<p className="woodev-orders-sync__title">
+			<div className="woodev-orders-sync__label">
 				{ __( 'Статус данных', 'woodev-plugin-framework' ) }
-			</p>
-			<p className="woodev-orders-sync__aggregate" title={ aggregate.title }>
-				{ aggregateText }
-			</p>
-			<ul className="woodev-orders-sync__carriers">
-				{ syncStatus.carriers.map( ( carrier ) => (
-					<SyncCarrierRow key={ carrier.id } carrier={ carrier } />
-				) ) }
-			</ul>
+			</div>
+			{ /*
+			 * `role="status"` + `aria-live="polite"` mirror WooCommerce's own bar: the
+			 * values arrive after a fetch, and a screen reader has to hear them without
+			 * the focus moving.
+			 */ }
+			<div
+				className="woodev-orders-sync__bar"
+				role="status"
+				aria-live="polite"
+				aria-atomic="true"
+				title={ breakdown }
+			>
+				<div className="woodev-orders-sync__content">
+					<span className="woodev-orders-sync__item">
+						<span className="woodev-orders-sync__item-label">
+							{ __( 'Обновлено', 'woodev-plugin-framework' ) }
+						</span>
+						<span className="woodev-orders-sync__item-value">
+							{ null === syncStatus.last_updated
+								? __( 'Ни разу', 'woodev-plugin-framework' )
+								: lastUpdated.title }
+						</span>
+					</span>
+					<span className="woodev-orders-sync__item">
+						<span className="woodev-orders-sync__item-label">
+							{ __( 'Обновится', 'woodev-plugin-framework' ) }
+						</span>
+						<span className="woodev-orders-sync__item-value">
+							{ null === nextUpdate
+								? __( 'Не по расписанию', 'woodev-plugin-framework' )
+								: nextUpdate.title }
+						</span>
+					</span>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -714,6 +735,7 @@ export default function OrdersPage() {
 			) }
 			{ hasAnyFilterControl && (
 				<div className="woodev-orders__filters">
+					<div className="woodev-orders__header">
 					{ /*
 					 * The basic pickers sit on ONE row. WooCommerce's own
 					 * «Аналитика → Заказы» puts both inside a single flex
@@ -747,13 +769,14 @@ export default function OrdersPage() {
 							} }
 						/>
 					) }
+					</div>
 					{ /*
-					 * The third block in the row (#828 increment 8) — beside
-					 * «Перевозчик» and the date range, not among `TableCard`'s own
-					 * `actions`, the same placement rule the two pickers above
-					 * already follow. It manages its own visibility (no data yet,
-					 * or no carriers registered at all) rather than needing a
-					 * condition here.
+					 * ⚠ The «Статус данных» block is a SIBLING of the pickers, not one of
+					 * them — that is how WooCommerce lays its own out, measured on the rig
+					 * 09.09.2026: `.woocommerce-analytics-report-header` is the flex row, and
+					 * it holds `.woocommerce-filters` and the status wrapper side by side.
+					 * Putting it INSIDE the pickers row is what made it wrap onto its own
+					 * line (operator, same day). It manages its own visibility.
 					 */ }
 					<DataStatusPanel />
 					</div>

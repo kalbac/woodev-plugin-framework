@@ -3575,6 +3575,30 @@ msgid "Статус данных"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "Обновлено"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Обновится"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Ни разу"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не по расписанию"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "ни разу не синхронизировалось"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "по расписанию не обновляется"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Обновлено %s"
 msgstr ""
 
