@@ -7,6 +7,7 @@
 import {
 	DELIVERY_STATUS_LABELS,
 	formatOrderDate,
+	formatSyncTimestamp,
 	getStatusTone,
 	hasTrackingNumber,
 } from '../../src/shipping-orders-page/columns';
@@ -46,6 +47,56 @@ describe( 'formatOrderDate', () => {
 		const inOneHour = new Date( Date.now() + 60 * 60 * 1000 ).toISOString();
 
 		const result = formatOrderDate( inOneHour );
+
+		expect( result.text ).not.toBe( '' );
+	} );
+} );
+
+describe( 'formatSyncTimestamp (#828 increment 8)', () => {
+	test( 'null returns empty text and title — the "never synced" / "no cron" case', () => {
+		expect( formatSyncTimestamp( null ) ).toEqual( { text: '', title: '' } );
+	} );
+
+	test( 'undefined returns empty text and title', () => {
+		expect( formatSyncTimestamp( undefined ) ).toEqual( { text: '', title: '' } );
+	} );
+
+	test( 'a past timestamp under 24h old renders relative text, not the raw value re-printed', () => {
+		const twoHoursAgo = Math.floor( ( Date.now() - 2 * 60 * 60 * 1000 ) / 1000 );
+
+		const result = formatSyncTimestamp( twoHoursAgo );
+
+		expect( result.text ).not.toBe( '' );
+		expect( result.title ).not.toBe( '' );
+		expect( result.text ).not.toBe( String( twoHoursAgo ) );
+	} );
+
+	test( 'a past timestamp 24h or older renders an absolute date, not a relative one', () => {
+		const twoDaysAgo = Math.floor( ( Date.now() - 2 * 24 * 60 * 60 * 1000 ) / 1000 );
+
+		const result = formatSyncTimestamp( twoDaysAgo );
+
+		expect( result.text.toLowerCase() ).not.toMatch( /назад|ago/ );
+	} );
+
+	/**
+	 * `next_update` is always AHEAD of now — this is the one case
+	 * `formatOrderDate()` never has to handle, and the reason this is its own
+	 * function rather than a reuse.
+	 */
+	test( 'a future timestamp under 24h away renders relative text — "Обновится" needs this direction', () => {
+		const inOneHour = Math.floor( ( Date.now() + 60 * 60 * 1000 ) / 1000 );
+
+		const result = formatSyncTimestamp( inOneHour );
+
+		expect( result.text ).not.toBe( '' );
+		expect( result.text.toLowerCase() ).not.toMatch( /назад|ago/ );
+	} );
+
+	test( 'a future timestamp 24h or more away renders an absolute date', () => {
+		const inTwoDays = Math.floor( ( Date.now() + 2 * 24 * 60 * 60 * 1000 ) / 1000 );
+
+		const result = formatSyncTimestamp( inTwoDays );
 
 		expect( result.text ).not.toBe( '' );
 	} );

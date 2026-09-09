@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchOrders } from '../../src/shipping-orders-page/rest';
+import { fetchOrders, fetchSyncStatus } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -71,5 +71,46 @@ describe( 'fetchOrders — the new filter-row params', () => {
 			await fetchOrders( {} );
 			expect( new URL( calledUrl() ).searchParams.has( 'has_tracking' ) ).toBe( false );
 		} );
+	} );
+} );
+
+describe( 'fetchSyncStatus (#828 increment 8)', () => {
+	test( 'requests the sync-status sibling route under the same REST root, with the nonce header', async () => {
+		apiFetch.mockResolvedValue( { last_updated: null, carriers: [] } );
+
+		await fetchSyncStatus();
+
+		const call = apiFetch.mock.calls[ 0 ][ 0 ];
+		expect( call.url ).toBe(
+			'https://example.test/wp-json/woodev/v1/shipping/orders/sync-status'
+		);
+		expect( call.method ).toBe( 'GET' );
+		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
+	} );
+
+	test( 'strips a trailing slash from restRoot before appending the sub-path', async () => {
+		window.woodevShippingOrders = {
+			restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders/',
+			nonce: 'abc',
+		};
+		apiFetch.mockResolvedValue( { last_updated: null, carriers: [] } );
+
+		await fetchSyncStatus();
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toBe(
+			'https://example.test/wp-json/woodev/v1/shipping/orders/sync-status'
+		);
+	} );
+
+	test( 'resolves with whatever the route returns, untouched', async () => {
+		const response = {
+			last_updated: 1788900000,
+			carriers: [
+				{ id: 'test_shipping', label: 'Тестовая доставка', last_updated: 1788900000, next_update: 1788903600 },
+			],
+		};
+		apiFetch.mockResolvedValue( response );
+
+		await expect( fetchSyncStatus() ).resolves.toEqual( response );
 	} );
 } );

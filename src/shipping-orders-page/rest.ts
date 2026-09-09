@@ -242,3 +242,39 @@ export function fetchOrders( {
 		headers: { 'X-WP-Nonce': nonce },
 	} );
 }
+
+/** One entry of `GET /shipping/orders/sync-status`'s `carriers` array. */
+export interface SyncStatusCarrier {
+	id: string;
+	label: string;
+	/** Unix timestamp (seconds), or `null` when this carrier has never synced. */
+	last_updated: number | null;
+	/** Unix timestamp (seconds), or `null` for a webhook-only carrier — it has no cron to report. */
+	next_update: number | null;
+}
+
+/**
+ * `GET /shipping/orders/sync-status`'s response (#828, `Orders_Controller::get_sync_status()`,
+ * read with Serena). `last_updated` here is the AGGREGATE: `null` the moment any registered
+ * carrier has never synced, not merely the oldest of the ones that have — see that method's
+ * own docblock. `carriers` is what explains WHY, and is never empty unless no carrier is
+ * registered at all.
+ */
+export interface SyncStatusResponse {
+	last_updated: number | null;
+	carriers: SyncStatusCarrier[];
+}
+
+/**
+ * Fetches the delivery-status sync freshness (#828 increment 8). Same `bootstrap()`/`apiFetch`
+ * wiring as {@link fetchOrders}, at a sibling route under the same REST root.
+ */
+export function fetchSyncStatus(): Promise<SyncStatusResponse> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<SyncStatusResponse>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/sync-status`,
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}

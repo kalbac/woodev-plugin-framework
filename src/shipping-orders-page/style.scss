@@ -267,6 +267,48 @@
 }
 
 /**
+ * The «Data status» panel (#828 increment 8) — the third block in
+ * `.woodev-orders__basic-filters`, beside the two pickers. It carries no
+ * dropdown of its own, so it does not get `.woocommerce-filters-filter`'s
+ * fixed width bounds above; it is plain text and only needs to not stretch
+ * past what it says.
+ */
+.woodev-orders-sync {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 13px;
+	color: wd.$muted;
+
+	&__title {
+		margin: 0;
+		font-weight: 600;
+		color: wd.$ink;
+	}
+
+	&__aggregate {
+		margin: 0;
+	}
+
+	&__carriers {
+		margin: 2px 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__carrier {
+		display: flex;
+		flex-wrap: wrap;
+		gap: wd.$gap-xs;
+	}
+
+	&__carrier-label {
+		font-weight: 600;
+		color: wd.$ink;
+	}
+}
+
+/**
  * The display-mode TOGGLE (operator, 09.09.2026 — a two-state control has no business
  * being a list).
  *
