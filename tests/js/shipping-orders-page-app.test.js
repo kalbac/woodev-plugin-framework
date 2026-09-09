@@ -1,7 +1,7 @@
 /**
  * Component tests for the shipping orders page App (SP-10 increment 2b rewrite).
  *
- * `./rest` is mocked wholesale — `getProviders`/`fetchOrders` are the only
+ * `./rest` is mocked wholesale — `getProviders`/`fetchOrders` are the main
  * seam between App and the server, so every scenario below drives them
  * directly rather than reaching for a real REST layer.
  *
@@ -25,6 +25,11 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	getProviders: jest.fn(),
 	fetchOrders: jest.fn(),
 	fetchSyncStatus: jest.fn(),
+	// #837 defect 4: the reachable-status list. Defaults to [] — the same
+	// «bootstrap did not say» answer the real accessor gives, which makes the
+	// filter offer every canonical state, so these tests keep asserting what
+	// they asserted before the list existed.
+	getReachableDeliveryStatuses: jest.fn( () => [] ),
 } ) );
 
 function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange } ) {

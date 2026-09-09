@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Settings\Settings_Page_Registry;
+use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -313,9 +314,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'woodev-shipping-orders-page',
 				'window.woodevShippingOrders = ' . wp_json_encode(
 					[
-						'restRoot'  => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders' ) ),
-						'nonce'     => wp_create_nonce( 'wp_rest' ),
-						'providers' => $this->build_bootstrap_providers(),
+						'restRoot'         => esc_url_raw( rest_url( \Woodev_REST_V1_Registrar::ROUTE_NAMESPACE . '/shipping/orders' ) ),
+						'nonce'            => wp_create_nonce( 'wp_rest' ),
+						'providers'        => $this->build_bootstrap_providers(),
+						// The delivery-status options this shop can actually produce (#837
+						// defect 4) — see build_reachable_delivery_statuses() for why the
+						// full canonical list was wrong to offer.
+						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
 					]
 				) . ';',
 				'before'
@@ -383,6 +388,55 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			return $entries;
+		}
+
+		/**
+		 * The canonical delivery statuses THIS SHOP can actually produce — the option
+		 * set the delivery-status filter offers (#837 defect 4).
+		 *
+		 * ⚠ The filter used to offer all ten canonical states unconditionally, and one
+		 * of them was unreachable on every shop measured: **no `status_map` anywhere
+		 * names `pending`** — both fixtures send their «just created» raw status to
+		 * `created` instead (measured s129, and it is why `delivery_status=pending`
+		 * returned 0 on the rig). A merchant picking «Ожидает отправки» therefore got
+		 * an empty table and concluded the filter was broken. The list is derived here
+		 * rather than curated, so it stays true for whatever carriers a shop actually
+		 * has, and starts offering a state the day some carrier maps to it.
+		 *
+		 * `UNKNOWN` is always included and is not derived: it is what
+		 * {@see \Woodev\Framework\Shipping\Order\Delivery_Status::resolve()} returns for
+		 * a raw status a provider left unmapped AND for an order carrying no status meta
+		 * at all, so it is reachable on every shop that has any orders — including one
+		 * whose providers declare no `status_map` between them.
+		 *
+		 * Order follows {@see Delivery_Status::canonical_states()} rather than the order
+		 * providers happen to be registered in, so the dropdown reads the same on every
+		 * shop.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int,string> canonical slugs, always non-empty (`unknown` at least).
+		 */
+		private function build_reachable_delivery_statuses(): array {
+			$produced = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				foreach ( $provider->get_status_map() as $canonical ) {
+					$produced[ $canonical ] = true;
+				}
+			}
+
+			$reachable = [];
+
+			foreach ( Delivery_Status::canonical_states() as $canonical ) {
+				if ( isset( $produced[ $canonical ] ) ) {
+					$reachable[] = $canonical;
+				}
+			}
+
+			$reachable[] = Delivery_Status::UNKNOWN;
+
+			return $reachable;
 		}
 
 		/**

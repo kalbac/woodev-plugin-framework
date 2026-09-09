@@ -326,7 +326,8 @@ export function readDateFilters( dateApi: WcDateApi, query: WcQuery ): DateFilte
  */
 export function buildAdvancedFiltersConfig(
 	deliveryStatusLabels: Record<DeliveryStatusCanonical, string>,
-	orderStatusOptions?: Record<string, string>
+	orderStatusOptions?: Record<string, string>,
+	reachableDeliveryStatuses: string[] = []
 ): WcAdvancedFiltersConfig {
 	const isRule = { value: 'is', label: __( 'равен', 'woodev-plugin-framework' ) };
 
@@ -337,6 +338,25 @@ export function buildAdvancedFiltersConfig(
 	 * both have shipped here (s127 `has_tracking`, s128 `delivery_status=unknown`).
 	 */
 	const isNotRule = { value: 'is_not', label: __( 'не равен', 'woodev-plugin-framework' ) };
+
+	/**
+	 * ⚠ Only the states this shop can actually PRODUCE (#837 defect 4). The list used to
+	 * be every canonical state, and one of them was unreachable everywhere measured: no
+	 * carrier maps a raw status to `pending`, so «Ожидает отправки» returned an empty
+	 * table and read as a broken filter. The server derives the reachable set from the
+	 * providers' own `status_map`s.
+	 *
+	 * An EMPTY list means the bootstrap did not state it — not «this shop produces
+	 * nothing» — so we fall back to the full set rather than rendering a filter with no
+	 * options, which would be a worse version of the same defect. The server always
+	 * includes `unknown`, so a real answer is never empty.
+	 */
+	const deliveryStatusOptions = Object.entries( deliveryStatusLabels )
+		.filter(
+			( [ value ] ) =>
+				reachableDeliveryStatuses.length === 0 || reachableDeliveryStatuses.includes( value )
+		)
+		.map( ( [ value, label ] ) => ( { value, label } ) );
 
 	/** Presence is a two-option select, not a valueless rule — see the module doc above. */
 	const presenceOptions = [
@@ -354,10 +374,7 @@ export function buildAdvancedFiltersConfig(
 			rules: [ isRule, isNotRule ],
 			input: {
 				component: 'SelectControl',
-				options: Object.entries( deliveryStatusLabels ).map( ( [ value, label ] ) => ( {
-					value,
-					label,
-				} ) ),
+				options: deliveryStatusOptions,
 			},
 			allowMultiple: false,
 		},
