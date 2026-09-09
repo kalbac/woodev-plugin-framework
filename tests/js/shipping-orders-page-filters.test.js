@@ -290,6 +290,42 @@ describe( 'buildAdvancedFiltersConfig', () => {
 		] );
 	} );
 
+	/**
+	 * #837 defect 4. The list used to be every canonical state, and one of them was
+	 * unreachable on every shop measured — no carrier maps a raw status to `pending`,
+	 * so picking «Ожидает отправки» returned an empty table and read as a broken
+	 * filter. The server now derives what the shop can produce; this is the client
+	 * half of that contract.
+	 */
+	test( 'offers only the delivery statuses the shop can actually produce', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, undefined, [ 'delivered' ] );
+
+		expect( config.filters.delivery_status.input.options ).toEqual( [
+			{ value: 'delivered', label: 'Доставлено' },
+		] );
+	} );
+
+	/**
+	 * ⚠ Empty means «the bootstrap did not say», NOT «this shop produces nothing» —
+	 * an older inlined bootstrap carries no list at all. Rendering a filter with zero
+	 * options would be a worse version of the very defect this fixes, so the fallback
+	 * is the full set. A real answer is never empty: the server always adds `unknown`.
+	 */
+	test( 'falls back to every label when the reachable list is not stated', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, undefined, [] );
+
+		expect( config.filters.delivery_status.input.options ).toEqual( [
+			{ value: 'pending', label: 'Ожидает отправки' },
+			{ value: 'delivered', label: 'Доставлено' },
+		] );
+	} );
+
+	test( 'a reachable list naming a state the shop has no label for offers nothing for it', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, undefined, [ 'returning' ] );
+
+		expect( config.filters.delivery_status.input.options ).toEqual( [] );
+	} );
+
 	test( 'no filter here allows multiple instances of itself — one value per filter', () => {
 		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { pending: 'В обработке' } );
 

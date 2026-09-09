@@ -113,6 +113,13 @@ export interface ShippingOrdersBootstrap {
 	restRoot: string;
 	nonce: string;
 	providers: OrdersProvider[];
+	/**
+	 * The canonical delivery statuses THIS SHOP can produce (#837 defect 4), built by
+	 * `Orders_Registry::build_reachable_delivery_statuses()`. Optional on purpose: an
+	 * older inlined bootstrap does not carry it, and the filter then degrades to
+	 * offering every canonical state rather than offering none.
+	 */
+	deliveryStatuses?: string[];
 }
 
 declare global {
@@ -132,6 +139,17 @@ function bootstrap(): Partial<ShippingOrdersBootstrap> {
  */
 export function getProviders(): OrdersProvider[] {
 	return bootstrap().providers || [];
+}
+
+/**
+ * The canonical delivery statuses this shop can actually produce, or an EMPTY array
+ * when the bootstrap does not say — two different answers the caller must not
+ * conflate: empty means «not stated», and the filter then offers all of them. A shop
+ * that genuinely produces none still gets `unknown` from the server, so a non-empty
+ * list is never ambiguous.
+ */
+export function getReachableDeliveryStatuses(): string[] {
+	return bootstrap().deliveryStatuses || [];
 }
 
 /**

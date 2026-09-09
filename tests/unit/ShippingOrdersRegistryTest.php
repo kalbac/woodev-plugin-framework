@@ -35,6 +35,79 @@ class ShippingOrdersRegistryTest extends TestCase {
 		return Orders_Provider::create( $id, $label, $marker, [ $id ] );
 	}
 
+	/**
+	 * Calls the private list builder. Private on purpose — it is an implementation
+	 * detail of the inlined bootstrap, not API — but the RULE it encodes (#837 defect
+	 * 4) is exactly the kind that regresses silently, so it is pinned directly rather
+	 * than through the enqueue path, which would need half of wc-admin stubbed.
+	 *
+	 * @return array<int,string>
+	 */
+	private function reachable_delivery_statuses(): array {
+		$method = new \ReflectionMethod( Orders_Registry::class, 'build_reachable_delivery_statuses' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return (array) $method->invoke( Orders_Registry::instance() );
+	}
+
+	private function provider_with_map( string $id, array $status_map ): Orders_Provider {
+		return Orders_Provider::create(
+			$id,
+			$id,
+			'_marker_' . $id,
+			[ $id ],
+			[
+				'status_meta_key' => '_status_' . $id,
+				'status_map'      => $status_map,
+			]
+		);
+	}
+
+	/**
+	 * #837 defect 4: the delivery-status filter offered every canonical state, and one
+	 * of them — `pending` — is produced by no carrier measured anywhere, so picking it
+	 * returned an empty table and read as a broken filter.
+	 */
+	public function test_reachable_delivery_statuses_are_only_those_a_provider_produces(): void {
+		Orders_Registry::instance()->register_provider(
+			$this->provider_with_map( 'cdek', [ 'CREATED' => 'created', 'ON_THE_WAY' => 'in_transit' ] )
+		);
+
+		$this->assertSame( [ 'created', 'in_transit', 'unknown' ], $this->reachable_delivery_statuses() );
+	}
+
+	public function test_reachable_delivery_statuses_unions_every_provider(): void {
+		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'cdek', [ 'CREATED' => 'created' ] ) );
+		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'yandex', [ 'DONE' => 'delivered' ] ) );
+
+		$this->assertSame( [ 'created', 'delivered', 'unknown' ], $this->reachable_delivery_statuses() );
+	}
+
+	/**
+	 * ⚠ `unknown` is not derived and must never drop out: it is what an unmapped raw
+	 * status AND an order with no status meta both resolve to, so it is reachable even
+	 * on a shop whose carriers declare no map between them.
+	 */
+	public function test_unknown_is_always_offered_even_with_no_status_map_anywhere(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		$this->assertSame( [ 'unknown' ], $this->reachable_delivery_statuses() );
+	}
+
+	/**
+	 * The order is the canonical one, not registration order — otherwise the dropdown
+	 * reads differently on two shops that produce the same set.
+	 */
+	public function test_reachable_delivery_statuses_follow_the_canonical_order(): void {
+		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'a', [ 'X' => 'delivered' ] ) );
+		Orders_Registry::instance()->register_provider( $this->provider_with_map( 'b', [ 'Y' => 'created' ] ) );
+
+		$this->assertSame( [ 'created', 'delivered', 'unknown' ], $this->reachable_delivery_statuses() );
+	}
+
 	public function test_has_providers_is_false_initially(): void {
 		$this->assertFalse( Orders_Registry::instance()->has_providers() );
 	}

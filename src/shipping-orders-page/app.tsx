@@ -36,7 +36,7 @@
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Notice, SearchControl, ToggleControl } from '@wordpress/components';
-import { fetchOrders, fetchSyncStatus, getProviders } from './rest';
+import { fetchOrders, fetchSyncStatus, getProviders, getReachableDeliveryStatuses } from './rest';
 import type {
 	OrderRow,
 	OrderRowCustomer,
@@ -654,7 +654,11 @@ export default function OrdersPage() {
 		'orderStatuses',
 		{}
 	);
-	const advancedFiltersConfig = buildAdvancedFiltersConfig( DELIVERY_STATUS_LABELS, orderStatusOptions );
+	const advancedFiltersConfig = buildAdvancedFiltersConfig(
+		DELIVERY_STATUS_LABELS,
+		orderStatusOptions,
+		getReachableDeliveryStatuses()
+	);
 
 	const TableCard = window.wc?.components?.TableCard;
 	const FilterPicker = window.wc?.components?.FilterPicker;
