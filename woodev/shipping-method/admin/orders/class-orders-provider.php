@@ -141,6 +141,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $pickup_point_meta_key;
 
 		/**
+		 * Order-meta key the carrier writes when it exports an order — the same real
+		 * key {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * stores its `CARRIER_ORDER_ID_FIELD` under via
+		 * {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler::set()}, or null
+		 * when this carrier has declared no such key. Declared here rather than read
+		 * out of the handler's own logical-field map for the same reason
+		 * `tracking_number` is: the orders page must not depend on whether the plugin
+		 * happens to have built an order handler (SP-10 #841).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string|null
+		 */
+		private $carrier_order_id_meta_key;
+
+		/**
 		 * Legacy v1 orders-page slug, for the future redirect. Accepted, not yet
 		 * consumed (increment 5).
 		 *
@@ -168,18 +184,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param string               $id                     carrier/tab id.
-		 * @param string               $label                  tab label.
-		 * @param string               $marker_meta_key        order-meta marker key.
-		 * @param string[]             $method_ids             WC shipping method ids.
-		 * @param string|null          $status_meta_key        carrier status order-meta key.
-		 * @param array<string,string> $status_map             raw status => canonical state.
-		 * @param array<string,string> $status_labels          raw status => human label.
-		 * @param string|null          $tracking_url_template  tracking-number link template.
-		 * @param string|null          $tracking_meta_key      tracking-number order-meta key.
-		 * @param string|null          $pickup_point_meta_key  pickup-point order-meta key.
-		 * @param string|null          $legacy_page_slug       legacy v1 orders-page slug.
-		 * @param string|null          $cron_hook              carrier cron hook that refreshes delivery statuses.
+		 * @param string               $id                         carrier/tab id.
+		 * @param string               $label                      tab label.
+		 * @param string               $marker_meta_key            order-meta marker key.
+		 * @param string[]             $method_ids                 WC shipping method ids.
+		 * @param string|null          $status_meta_key            carrier status order-meta key.
+		 * @param array<string,string> $status_map                 raw status => canonical state.
+		 * @param array<string,string> $status_labels              raw status => human label.
+		 * @param string|null          $tracking_url_template      tracking-number link template.
+		 * @param string|null          $tracking_meta_key          tracking-number order-meta key.
+		 * @param string|null          $pickup_point_meta_key      pickup-point order-meta key.
+		 * @param string|null          $carrier_order_id_meta_key  carrier-order-id order-meta key.
+		 * @param string|null          $legacy_page_slug           legacy v1 orders-page slug.
+		 * @param string|null          $cron_hook                  carrier cron hook that refreshes delivery statuses.
 		 */
 		private function __construct(
 			string $id,
@@ -192,21 +209,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $tracking_url_template,
 			?string $tracking_meta_key,
 			?string $pickup_point_meta_key,
+			?string $carrier_order_id_meta_key,
 			?string $legacy_page_slug,
 			?string $cron_hook
 		) {
-			$this->id                     = $id;
-			$this->label                  = $label;
-			$this->marker_meta_key        = $marker_meta_key;
-			$this->method_ids             = $method_ids;
-			$this->status_meta_key        = $status_meta_key;
-			$this->status_map             = $status_map;
-			$this->status_labels          = $status_labels;
-			$this->tracking_url_template  = $tracking_url_template;
-			$this->tracking_meta_key      = $tracking_meta_key;
-			$this->pickup_point_meta_key  = $pickup_point_meta_key;
-			$this->legacy_page_slug       = $legacy_page_slug;
-			$this->cron_hook              = $cron_hook;
+			$this->id                        = $id;
+			$this->label                     = $label;
+			$this->marker_meta_key           = $marker_meta_key;
+			$this->method_ids                = $method_ids;
+			$this->status_meta_key           = $status_meta_key;
+			$this->status_map                = $status_map;
+			$this->status_labels             = $status_labels;
+			$this->tracking_url_template     = $tracking_url_template;
+			$this->tracking_meta_key         = $tracking_meta_key;
+			$this->pickup_point_meta_key     = $pickup_point_meta_key;
+			$this->carrier_order_id_meta_key = $carrier_order_id_meta_key;
+			$this->legacy_page_slug          = $legacy_page_slug;
+			$this->cron_hook                 = $cron_hook;
 		}
 
 		/**
@@ -223,14 +242,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param array<string,mixed> $args            {
 		 *     Optional fields.
 		 *
-		 *     @type string               $status_meta_key       carrier status order-meta key.
-		 *     @type array<string,string> $status_map            raw status => canonical state.
-		 *     @type array<string,string> $status_labels         raw status => human label.
-		 *     @type string               $tracking_url_template tracking-number link template.
-		 *     @type string               $tracking_meta_key     tracking-number order-meta key.
-		 *     @type string               $pickup_point_meta_key pickup-point order-meta key.
-		 *     @type string               $legacy_page_slug      legacy v1 orders-page slug.
-		 *     @type string               $cron_hook             carrier cron hook that refreshes delivery statuses.
+		 *     @type string               $status_meta_key           carrier status order-meta key.
+		 *     @type array<string,string> $status_map                raw status => canonical state.
+		 *     @type array<string,string> $status_labels             raw status => human label.
+		 *     @type string               $tracking_url_template     tracking-number link template.
+		 *     @type string               $tracking_meta_key         tracking-number order-meta key.
+		 *     @type string               $pickup_point_meta_key     pickup-point order-meta key.
+		 *     @type string               $carrier_order_id_meta_key carrier-order-id order-meta key (SP-10 #841).
+		 *     @type string               $legacy_page_slug          legacy v1 orders-page slug.
+		 *     @type string               $cron_hook                 carrier cron hook that refreshes delivery statuses.
 		 * }
 		 * @return self
 		 *
@@ -276,6 +296,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'tracking_url_template' ),
 				$nullable_string( $args, 'tracking_meta_key' ),
 				$nullable_string( $args, 'pickup_point_meta_key' ),
+				$nullable_string( $args, 'carrier_order_id_meta_key' ),
 				$nullable_string( $args, 'legacy_page_slug' ),
 				$nullable_string( $args, 'cron_hook' )
 			);
@@ -392,6 +413,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function get_pickup_point_meta_key(): ?string {
 			return $this->pickup_point_meta_key;
+		}
+
+		/**
+		 * Returns the carrier-order-id order-meta key, or null when this carrier has
+		 * declared none (SP-10 #841).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string|null
+		 */
+		public function get_carrier_order_id_meta_key(): ?string {
+			return $this->carrier_order_id_meta_key;
 		}
 
 		/**

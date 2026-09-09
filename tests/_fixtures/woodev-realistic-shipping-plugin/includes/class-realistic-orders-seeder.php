@@ -44,7 +44,7 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '1';
+		public const SEED_VERSION = '2';
 
 		/**
 		 * This carrier's marker meta key — the same one its `Orders_Provider`
@@ -73,6 +73,19 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 * @var string
 		 */
 		public const TRACKING_META_KEY = '_woodev_realistic_tracking_number';
+
+		/**
+		 * Where this carrier stores the id the carrier itself assigned — the meta
+		 * whose PRESENCE is what «выгружен» means (SP-10 #841). Must match the
+		 * `carrier_order_id_meta_key` this fixture's `Orders_Provider` registers in
+		 * `class-realistic-shipping-plugin.php`; the filter reads the provider's
+		 * declaration, so a divergence here silently makes every order look new.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const CARRIER_ORDER_ID_META_KEY = '_woodev_realistic_carrier_order_id';
 
 		/**
 		 * The two shipping method ids this fixture ships — a carrier commonly has
@@ -117,7 +130,7 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string, days_ago:int, method_id:string}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string}>
 		 */
 		public static function demo_orders(): array {
 			$raw_statuses = [ 'NEW', 'ACCEPTED', 'IN_TRANSIT', 'READY', 'DELIVERED', 'RETURNED', 'CANCELLED', 'CUSTOMS_HOLD' ];
@@ -128,15 +141,22 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 
 			foreach ( $spread as $index => $days_ago ) {
 				$orders[] = [
-					'status'     => $wc_statuses[ $index % count( $wc_statuses ) ],
-					'raw_status' => $raw_statuses[ $index % count( $raw_statuses ) ],
+					'status'           => $wc_statuses[ $index % count( $wc_statuses ) ],
+					'raw_status'       => $raw_statuses[ $index % count( $raw_statuses ) ],
 					// Every third row carries no tracking number, so the
 					// tracking-presence filter has both sides to find.
-					'tracking'   => 0 === $index % 3 ? null : sprintf( 'RL%09d', 200100000 + $index ),
-					'days_ago'   => $days_ago,
+					'tracking'         => 0 === $index % 3 ? null : sprintf( 'RL%09d', 200100000 + $index ),
+					// ⚠ Only PART of the set is exported (SP-10 #841), for the same
+					// reason tracking above is partial: a filter whose "true" side is
+					// empty on the rig cannot be verified there at all, and an
+					// all-or-nothing set hides a defect in whichever side is missing.
+					// Every second row, so the split stays visible on this carrier
+					// alone as well as on the two-carrier aggregate.
+					'carrier_order_id' => 0 === $index % 2 ? sprintf( 'RL-EXPORT-%06d', 300 + $index ) : null,
+					'days_ago'         => $days_ago,
 					// Alternate the two methods, so the `type` column shows both
 					// «Курьер» and «Пункт выдачи» rather than one of them.
-					'method_id'  => self::METHOD_IDS[ $index % count( self::METHOD_IDS ) ],
+					'method_id'        => self::METHOD_IDS[ $index % count( self::METHOD_IDS ) ],
 				];
 			}
 
@@ -174,7 +194,7 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array{status:string, raw_status:string, tracking:?string, days_ago:int, method_id:string} $definition
+		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string} $definition
 		 *
 		 * @return void
 		 */
@@ -193,6 +213,10 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 
 			if ( null !== $definition['tracking'] ) {
 				$order->update_meta_data( self::TRACKING_META_KEY, $definition['tracking'] );
+			}
+
+			if ( null !== $definition['carrier_order_id'] ) {
+				$order->update_meta_data( self::CARRIER_ORDER_ID_META_KEY, $definition['carrier_order_id'] );
 			}
 
 			$shipping_item = new \WC_Order_Item_Shipping();

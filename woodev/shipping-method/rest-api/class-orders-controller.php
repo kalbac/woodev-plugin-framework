@@ -160,6 +160,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 							'type'              => 'boolean',
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
+						// present (any value) => filters on whether the order was ever
+						// exported to the carrier (SP-10 #841); absent => not filtered —
+						// same presence rule as `has_tracking`.
+						'is_exported'         => [
+							'type'              => 'boolean',
+							'sanitize_callback' => 'rest_sanitize_boolean',
+						],
 					],
 				]
 			);
@@ -281,16 +288,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				'delivery_status_not' => $request->get_param( 'delivery_status_not' ),
 			];
 
-			// `has_tracking`/`has_pickup_point` carry no default (SP-10 spec D10; pickup
-			// point added #836): an explicit `false` must still filter, so PRESENCE — not
-			// truthiness — decides whether Orders_Query::build_args() applies the filter
-			// at all.
+			// `has_tracking`/`has_pickup_point`/`is_exported` carry no default (SP-10 spec
+			// D10; pickup point added #836, is_exported added #841): an explicit `false`
+			// must still filter, so PRESENCE — not truthiness — decides whether
+			// Orders_Query::build_args() applies the filter at all.
 			if ( $request->has_param( 'has_tracking' ) && null !== $request->get_param( 'has_tracking' ) ) {
 				$params['has_tracking'] = $request->get_param( 'has_tracking' );
 			}
 
 			if ( $request->has_param( 'has_pickup_point' ) && null !== $request->get_param( 'has_pickup_point' ) ) {
 				$params['has_pickup_point'] = $request->get_param( 'has_pickup_point' );
+			}
+
+			if ( $request->has_param( 'is_exported' ) && null !== $request->get_param( 'is_exported' ) ) {
+				$params['is_exported'] = $request->get_param( 'is_exported' );
 			}
 
 			$result = $this->query->get_results( $params );

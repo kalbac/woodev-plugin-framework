@@ -847,8 +847,8 @@ function woodev_test_shipping_method_plugin_init(): void {
 					'_woodev_test_shipping_marker',
 					[ 'woodev_test_shipping' ],
 					[
-						'status_meta_key'       => '_woodev_test_shipping_status',
-						'status_map'            => [
+						'status_meta_key'           => '_woodev_test_shipping_status',
+						'status_map'                => [
 							'CREATED'             => 'created',
 							'PICKED_UP'            => 'in_transit',
 							'ON_THE_WAY'           => 'in_transit',
@@ -859,7 +859,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 							'CANCELLED_BY_CLIENT'  => 'cancelled',
 							// 'LOST_IN_TRANSIT' is INTENTIONALLY absent — see this method's docblock.
 						],
-						'status_labels'         => [
+						'status_labels'             => [
 							'CREATED'            => 'Создан',
 							'PICKED_UP'          => 'Забран у отправителя',
 							'ON_THE_WAY'         => 'В пути',
@@ -870,9 +870,10 @@ function woodev_test_shipping_method_plugin_init(): void {
 							'CANCELLED_BY_CLIENT' => 'Отменён клиентом',
 							'LOST_IN_TRANSIT'    => 'Утерян при перевозке',
 						],
-						'tracking_meta_key'     => '_woodev_test_shipping_tracking_number',
-						'tracking_url_template' => 'https://testcarrier.example.test/track/{tracking}',
-						'pickup_point_meta_key' => '_woodev_test_shipping_pickup_point',
+						'tracking_meta_key'         => '_woodev_test_shipping_tracking_number',
+						'tracking_url_template'     => 'https://testcarrier.example.test/track/{tracking}',
+						'pickup_point_meta_key'     => '_woodev_test_shipping_pickup_point',
+						'carrier_order_id_meta_key' => '_woodev_test_shipping_carrier_order_id',
 					]
 				);
 

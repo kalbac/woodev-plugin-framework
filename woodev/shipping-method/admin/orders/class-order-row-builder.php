@@ -122,9 +122,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 *
 		 * M1: byte-for-byte identical across the shipped plugins for the title+total
 		 * pair. The reference's «Заказ может быть неоплаченым» hint is gated on
-		 * `! is_exported() && needs_payment()` — `is_exported()` is a carrier concept
-		 * this framework does not own yet, so only `needs_payment` is emitted; a
-		 * carrier-specific hint is that carrier's own column (D3), not this one.
+		 * `! is_exported() && needs_payment()`, and only `needs_payment` is emitted
+		 * here — a carrier-specific hint is that carrier's own column (D3), not this
+		 * one.
+		 *
+		 * ⚠ The framework DOES own «exported» since #841: it is the presence of the
+		 * meta a provider declares as `carrier_order_id_meta_key`, and
+		 * {@see Orders_Query}'s `is_exported` argument filters on it. This row is
+		 * still not gated on it, deliberately — that would put a carrier fact into a
+		 * shared column. Do not read this paragraph as "the concept is missing": it
+		 * said exactly that until #841 landed, and that sentence is why #841 spent a
+		 * session looking for a definition the framework had no field for.
 		 *
 		 * @since 2.0.2
 		 *

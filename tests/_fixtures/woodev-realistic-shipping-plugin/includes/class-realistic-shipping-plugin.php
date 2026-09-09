@@ -71,8 +71,8 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 			'_woodev_realistic_shipping_marker',
 			[ 'woodev_realistic_shipping', 'woodev_realistic_pickup_shipping' ],
 			[
-				'status_meta_key'       => '_woodev_realistic_status',
-				'status_map'            => [
+				'status_meta_key'           => '_woodev_realistic_status',
+				'status_map'                => [
 					'NEW'        => 'created',
 					'ACCEPTED'   => 'in_transit',
 					'IN_TRANSIT' => 'in_transit',
@@ -82,7 +82,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 					'CANCELLED'  => 'cancelled',
 					// 'CUSTOMS_HOLD' is INTENTIONALLY absent — see this method's docblock.
 				],
-				'status_labels'         => [
+				'status_labels'             => [
 					'NEW'          => 'Создан',
 					'ACCEPTED'     => 'Принят перевозчиком',
 					'IN_TRANSIT'   => 'В пути',
@@ -92,9 +92,10 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 					'CANCELLED'    => 'Отменён',
 					'CUSTOMS_HOLD' => 'Задержан на таможне',
 				],
-				'tracking_meta_key'     => '_woodev_realistic_tracking_number',
-				'tracking_url_template' => 'https://realistic.example.test/track/{tracking}',
-				'pickup_point_meta_key' => '_woodev_realistic_pickup_point',
+				'tracking_meta_key'         => '_woodev_realistic_tracking_number',
+				'tracking_url_template'     => 'https://realistic.example.test/track/{tracking}',
+				'pickup_point_meta_key'     => '_woodev_realistic_pickup_point',
+				'carrier_order_id_meta_key' => '_woodev_realistic_carrier_order_id',
 			]
 		);
 
