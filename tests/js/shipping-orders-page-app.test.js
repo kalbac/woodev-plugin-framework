@@ -17,13 +17,14 @@
  */
 
 import '@testing-library/jest-dom';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
-import { fetchOrders, getProviders } from '../../src/shipping-orders-page/rest';
+import { fetchOrders, fetchSyncStatus, getProviders } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	getProviders: jest.fn(),
 	fetchOrders: jest.fn(),
+	fetchSyncStatus: jest.fn(),
 } ) );
 
 function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange } ) {
@@ -361,6 +362,10 @@ beforeEach( () => {
 	fakeQuery = {};
 	historyListeners = [];
 	updateQueryStringCalls = [];
+	// Every existing test in this file renders `App` without caring about the
+	// data-status panel — default it to "no carriers registered", which is the
+	// one case the panel is required to render as nothing at all (#828).
+	fetchSyncStatus.mockResolvedValue( { last_updated: null, carriers: [] } );
 } );
 
 describe( 'carrier filter', () => {
@@ -1157,5 +1162,168 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 				expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { hasTracking: undefined } ) )
 			);
 		} );
+	} );
+} );
+
+describe( 'the data-status panel (#828 increment 8)', () => {
+	test( 'no carriers registered at all — the panel renders nothing', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockResolvedValue( { last_updated: null, carriers: [] } );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchSyncStatus ).toHaveBeenCalled() );
+
+		expect( container.querySelector( '.woodev-orders-sync' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'a fetch rejection degrades quietly — no panel, no error notice, the rest of the page is untouched', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockRejectedValue( new Error( 'Сервер недоступен.' ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( fetchSyncStatus ).toHaveBeenCalled() );
+		// Let the rejected promise settle before asserting its absence.
+		await waitFor( () => expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument() );
+
+		expect( container.querySelector( '.woodev-orders-sync' ) ).not.toBeInTheDocument();
+		// Scoped to the render container, not `screen` (= document.body) — a
+		// `@wordpress/a11y` speak region from an EARLIER test in this file lives
+		// outside the container and can carry this exact string as leftover
+		// pollution, which is not what this assertion means to catch.
+		expect( within( container ).queryByText( 'Сервер недоступен.' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'every carrier has synced — the aggregate reads "Обновлено …", not the honest fallback', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockResolvedValue( {
+			last_updated: Math.floor( ( Date.now() - 10 * 60 * 1000 ) / 1000 ),
+			carriers: [
+				{
+					id: 'test_shipping',
+					label: 'Тестовая доставка',
+					last_updated: Math.floor( ( Date.now() - 10 * 60 * 1000 ) / 1000 ),
+					next_update: Math.floor( ( Date.now() + 50 * 60 * 1000 ) / 1000 ),
+				},
+			],
+		} );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
+
+		expect( screen.getByText( /^Обновлено /, { selector: '.woodev-orders-sync__aggregate' } ) ).toBeInTheDocument();
+		expect(
+			screen.queryByText( /синхронизировались хотя бы раз/ )
+		).not.toBeInTheDocument();
+
+		// The per-carrier row: label, "Обновлено …" and "Обновится …" all rendered.
+		expect( screen.getByText( 'Тестовая доставка' ) ).toBeInTheDocument();
+		const carrierRow = screen.getByText( 'Тестовая доставка' ).closest( 'li' );
+		expect( carrierRow ).toHaveTextContent( /^Тестовая доставкаОбновлено .+Обновится /s );
+	} );
+
+	/**
+	 * The aggregate `null` case (#828's whole reason for existing): the server
+	 * sends `last_updated: null` the moment ANY registered carrier has never
+	 * synced. The panel must say so honestly, not print a blank "Обновлено",
+	 * and the breakdown beneath it must show WHICH carrier is why.
+	 */
+	test( 'one carrier never synced — aggregate null renders the honest sentence, and the breakdown shows why', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockResolvedValue( {
+			last_updated: null,
+			carriers: [
+				{
+					id: 'cdek',
+					label: 'СДЭК',
+					last_updated: Math.floor( ( Date.now() - 10 * 60 * 1000 ) / 1000 ),
+					next_update: Math.floor( ( Date.now() + 50 * 60 * 1000 ) / 1000 ),
+				},
+				{ id: 'yandex', label: 'Яндекс Доставка', last_updated: null, next_update: null },
+			],
+		} );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect(
+				screen.getByText( /Не все перевозчики синхронизировались хотя бы раз/ )
+			).toBeInTheDocument()
+		);
+
+		// Never rendered as a blank "Обновлено" with nothing after it.
+		expect(
+			screen.queryByText( /^Обновлено\s*$/, { selector: '.woodev-orders-sync__aggregate' } )
+		).not.toBeInTheDocument();
+
+		// The breakdown shows exactly which carrier is why: СДЭК has synced,
+		// Яндекс never has.
+		const yandexRow = screen.getByText( 'Яндекс Доставка' ).closest( 'li' );
+		expect( yandexRow ).toHaveTextContent( 'Ни разу не синхронизировалось' );
+
+		const cdekRow = screen.getByText( 'СДЭК' ).closest( 'li' );
+		expect( cdekRow ).toHaveTextContent( /^СДЭКОбновлено /s );
+	} );
+
+	/**
+	 * A webhook-only carrier has no cron, so `next_update` is `null` — normal,
+	 * not an error, and it must render as a stated fact, never a blank cell.
+	 */
+	test( 'a webhook-only carrier (next_update: null) renders "По расписанию не обновляется", not a blank', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockResolvedValue( {
+			last_updated: null,
+			carriers: [
+				{
+					id: 'realistic',
+					label: 'Реалистичная доставка',
+					last_updated: null,
+					next_update: null,
+				},
+			],
+		} );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByText( 'Реалистичная доставка' ) ).toBeInTheDocument()
+		);
+
+		const row = screen.getByText( 'Реалистичная доставка' ).closest( 'li' );
+		expect( row ).toHaveTextContent( 'По расписанию не обновляется' );
+		expect( row ).not.toHaveTextContent( 'Обновится' );
+	} );
+
+	/** The brief's own placement requirement: third block, beside the other two. */
+	test( 'renders as the third block in the basic-filters row, beside the carrier and date pickers', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchSyncStatus.mockResolvedValue( {
+			last_updated: Math.floor( Date.now() / 1000 ),
+			carriers: [
+				{ id: 'cdek', label: 'СДЭК', last_updated: Math.floor( Date.now() / 1000 ), next_update: null },
+			],
+		} );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
+
+		const row = container.querySelector( '.woodev-orders__basic-filters' );
+		const panel = container.querySelector( '.woodev-orders-sync' );
+		const carrierFilter = screen.getByTestId( 'filter-picker-carrier' );
+
+		expect( row ).toContainElement( panel );
+		expect( row ).toContainElement( carrierFilter );
+		expect(
+			carrierFilter.compareDocumentPosition( panel ) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
 	} );
 } );

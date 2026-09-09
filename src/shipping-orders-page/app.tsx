@@ -36,15 +36,23 @@
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Notice, SearchControl, ToggleControl } from '@wordpress/components';
-import { fetchOrders, getProviders } from './rest';
+import { fetchOrders, fetchSyncStatus, getProviders } from './rest';
 import type {
 	OrderRow,
 	OrderRowCustomer,
 	OrderRowDeliveryStatus,
 	OrderRowPayment,
 	OrderRowTracking,
+	SyncStatusCarrier,
+	SyncStatusResponse,
 } from './rest';
-import { DELIVERY_STATUS_LABELS, formatOrderDate, getStatusTone, hasTrackingNumber } from './columns';
+import {
+	DELIVERY_STATUS_LABELS,
+	formatOrderDate,
+	formatSyncTimestamp,
+	getStatusTone,
+	hasTrackingNumber,
+} from './columns';
 import {
 	ADVANCED_FILTERS_VALUE,
 	ALL_CARRIERS,
@@ -328,6 +336,117 @@ function RoiPanel() {
 				</p>
 			</div>
 		</section>
+	);
+}
+
+/**
+ * Renders one carrier's line in {@link DataStatusPanel}: when it last synced,
+ * and when it will next — «Обновится …», or, for a webhook-only carrier with
+ * no cron (`next_update: null`), an honest «По расписанию не обновляется»
+ * rather than a blank space.
+ */
+function SyncCarrierRow( { carrier }: { carrier: SyncStatusCarrier } ) {
+	const lastUpdatedText =
+		null === carrier.last_updated
+			? __( 'Ни разу не синхронизировалось', 'woodev-plugin-framework' )
+			: sprintf(
+					__( 'Обновлено %s', 'woodev-plugin-framework' ),
+					formatSyncTimestamp( carrier.last_updated ).text
+			  );
+
+	const nextUpdateText =
+		null === carrier.next_update
+			? __( 'По расписанию не обновляется', 'woodev-plugin-framework' )
+			: sprintf(
+					__( 'Обновится %s', 'woodev-plugin-framework' ),
+					formatSyncTimestamp( carrier.next_update ).text
+			  );
+
+	return (
+		<li className="woodev-orders-sync__carrier">
+			<span className="woodev-orders-sync__carrier-label">{ carrier.label }</span>
+			<span
+				className="woodev-orders-sync__carrier-meta"
+				title={ formatSyncTimestamp( carrier.last_updated ).title }
+			>
+				{ lastUpdatedText }
+			</span>
+			<span
+				className="woodev-orders-sync__carrier-meta"
+				title={ formatSyncTimestamp( carrier.next_update ).title }
+			>
+				{ nextUpdateText }
+			</span>
+		</li>
+	);
+}
+
+/**
+ * The «Data status» panel (#828 increment 8, SP-10 spec D9) — the third block
+ * in the filter row, beside «Перевозчик» and the date range picker. Consumes
+ * the seam `Orders_Controller::get_sync_status()` already exposes (#831,
+ * increment 7's server half); this component only renders it.
+ *
+ * Degrades the same way {@link RoiPanel} does: no data yet, or the fetch
+ * failed, and the block simply does not render rather than breaking the page.
+ * A registry with no carriers at all is the one case that is not a loading
+ * or error state — it is rendered, and it means there is nothing to show.
+ *
+ * The aggregate `last_updated` reads `null` the instant ANY registered
+ * carrier has never synced (server-side decision, not this component's) —
+ * overstating freshness is exactly the defect this panel exists to prevent,
+ * so that case gets an honest sentence instead of a blank «Обновлено», and
+ * the per-carrier breakdown beneath it — always rendered — is what shows
+ * WHICH carrier is the reason.
+ */
+function DataStatusPanel() {
+	const [ syncStatus, setSyncStatus ] = useState<SyncStatusResponse | null>( null );
+
+	useEffect( () => {
+		let cancelled = false;
+
+		fetchSyncStatus()
+			.then( ( res ) => {
+				if ( ! cancelled ) {
+					setSyncStatus( res );
+				}
+			} )
+			// Degrades like `RoiPanel` — no error notice of its own; the block
+			// just does not render (`syncStatus` stays `null`).
+			.catch( () => undefined );
+
+		return () => {
+			cancelled = true;
+		};
+	}, [] );
+
+	if ( ! syncStatus || 0 === syncStatus.carriers.length ) {
+		return null;
+	}
+
+	const aggregate = formatSyncTimestamp( syncStatus.last_updated );
+	const aggregateText =
+		null === syncStatus.last_updated
+			? __(
+					'Не все перевозчики синхронизировались хотя бы раз — часть статусов доставки может быть устаревшей.',
+					'woodev-plugin-framework'
+			  )
+			: sprintf( __( 'Обновлено %s', 'woodev-plugin-framework' ), aggregate.text );
+
+	return (
+		<div className="woodev-orders-sync">
+			<p className="woodev-orders-sync__title">
+				{ __( 'Статус данных', 'woodev-plugin-framework' ) }
+			</p>
+			<p className="woodev-orders-sync__aggregate" title={ aggregate.title }>
+				{ aggregateText }
+			</p>
+			<ul className="woodev-orders-sync__carriers">
+				{ syncStatus.carriers.map( ( carrier ) => (
+					<SyncCarrierRow key={ carrier.id } carrier={ carrier } />
+				) ) }
+			</ul>
+		</div>
 	);
 }
 
@@ -624,6 +743,15 @@ export default function OrdersPage() {
 							} }
 						/>
 					) }
+					{ /*
+					 * The third block in the row (#828 increment 8) — beside
+					 * «Перевозчик» and the date range, not among `TableCard`'s own
+					 * `actions`, the same placement rule the two pickers above
+					 * already follow. It manages its own visibility (no data yet,
+					 * or no carriers registered at all) rather than needing a
+					 * condition here.
+					 */ }
+					<DataStatusPanel />
 					</div>
 					{ /*
 					 * The display MODE is a TOGGLE, not a picker — operator, 09.09.2026, on the

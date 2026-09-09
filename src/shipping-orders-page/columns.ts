@@ -45,6 +45,33 @@ export function formatOrderDate( isoString?: string | null ): FormattedOrderDate
 	return { text, title };
 }
 
+/**
+ * Formats a unix timestamp (seconds) from `GET /shipping/orders/sync-status` (#828) the same
+ * way {@link formatOrderDate} formats `date_created`: relative under 24h, absolute otherwise,
+ * full timestamp always in `title`. A separate function rather than a reuse of
+ * `formatOrderDate` itself — `next_update` is always AHEAD of now, so the diff can be
+ * negative here, unlike a row's `date_created`, and the 24h window has to apply to both
+ * directions instead of only the past one.
+ */
+export function formatSyncTimestamp( unixSeconds?: number | null ): FormattedOrderDate {
+	if ( 'number' !== typeof unixSeconds ) {
+		return { text: '', title: '' };
+	}
+
+	const date = new Date( unixSeconds * 1000 );
+
+	if ( Number.isNaN( date.getTime() ) ) {
+		return { text: '', title: '' };
+	}
+
+	const diffMs = Date.now() - date.getTime();
+	const title = dateI18n( 'j M Y H:i', date );
+	const text =
+		Math.abs( diffMs ) < DAY_MS ? humanTimeDiff( date ) : dateI18n( 'j M Y', date );
+
+	return { text, title };
+}
+
 export type StatusTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
 
 /** Canonical delivery status => badge tone. */

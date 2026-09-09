@@ -3590,6 +3590,30 @@ msgid "Пункт выдачи {{rule /}} {{filter /}}"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "Статус данных"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Обновлено %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Обновится %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Ни разу не синхронизировалось"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "По расписанию не обновляется"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Не все перевозчики синхронизировались хотя бы раз — часть статусов доставки может быть устаревшей."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Есть"
 msgstr ""
 
