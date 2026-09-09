@@ -761,6 +761,357 @@ class OrdersRestTest extends TestCase {
 		$this->assertNotContains( $with_tracking->get_id(), $ids );
 	}
 
+	// -------------------------------------------------------------------------------
+	// SP-10 increment 7 (#836) — delivery_status_not, status_not, has_pickup_point.
+	//
+	// NOT RUN BY THE WORKER THAT AUTHORED THESE TESTS, same as the rest of this file.
+	// Every aggregate case below uses TWO carriers on purpose: an aggregate with a
+	// single provider registered cannot see the OR-across-providers binding defect
+	// (#837 defect 2's shape) — «carrier B's meta does not exist» is trivially true
+	// of every carrier A order unless each negative clause is bound to its own
+	// provider's marker. Each aggregate case below also includes an order with NO
+	// meta key at all for the negated concept, per the
+	// `a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all` gotcha — only
+	// `NOT EXISTS` (LEFT JOIN) sees such a row; a lone `NOT IN` would silently drop it.
+	// -------------------------------------------------------------------------------
+
+	/**
+	 * The `delivery_status_not` mirror of
+	 * {@see self::test_delivery_status_unknown_on_the_aggregate_does_not_match_another_carriers_mapped_order()}:
+	 * unbound, "carrier B's status is not DELIVERED" is trivially true of every
+	 * carrier A order, because carrier B never writes carrier A's status meta.
+	 */
+	public function test_delivery_status_not_on_the_aggregate_does_not_match_another_carriers_excluded_order(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker = '_woodev_test_dsn_agg_a_marker';
+		$a_status = '_woodev_test_dsn_agg_a_status';
+		$b_marker = '_woodev_test_dsn_agg_b_marker';
+		$b_status = '_woodev_test_dsn_agg_b_status';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'dsn_agg_a',
+				'DSN Aggregate A',
+				$a_marker,
+				[ 'dsn_agg_a' ],
+				[
+					'status_meta_key' => $a_status,
+					'status_map'      => [
+						'A_ACCEPTED' => Delivery_Status::IN_TRANSIT,
+						'A_DONE'     => Delivery_Status::DELIVERED,
+					],
+				]
+			)
+		);
+		$registry->register_provider(
+			Orders_Provider::create(
+				'dsn_agg_b',
+				'DSN Aggregate B',
+				$b_marker,
+				[ 'dsn_agg_b' ],
+				[
+					'status_meta_key' => $b_status,
+					'status_map'      => [ 'B_DONE' => Delivery_Status::DELIVERED ],
+				]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// Carrier A, DELIVERED — must be excluded ("is not delivered" is false for it).
+		$a_delivered = wc_create_order();
+		$a_delivered->set_status( 'processing' );
+		$a_delivered->update_meta_data( $a_marker, '1' );
+		$a_delivered->update_meta_data( $a_status, 'A_DONE' );
+		$a_delivered->save();
+
+		// Carrier A, IN_TRANSIT — must be included (not delivered).
+		$a_in_transit = wc_create_order();
+		$a_in_transit->set_status( 'processing' );
+		$a_in_transit->update_meta_data( $a_marker, '1' );
+		$a_in_transit->update_meta_data( $a_status, 'A_ACCEPTED' );
+		$a_in_transit->save();
+
+		// Carrier A, no status meta at all — "unknown" also qualifies as "not delivered",
+		// and only NOT EXISTS (not NOT IN) sees a row with no meta key at all.
+		$a_no_status = wc_create_order();
+		$a_no_status->set_status( 'processing' );
+		$a_no_status->update_meta_data( $a_marker, '1' );
+		$a_no_status->save();
+
+		// Carrier B, DELIVERED, and carrier B never writes carrier A's status meta —
+		// the regression row: unbound, carrier A's "not delivered" clause reads "A's
+		// status meta does not exist", which is trivially true here.
+		$b_delivered = wc_create_order();
+		$b_delivered->set_status( 'processing' );
+		$b_delivered->update_meta_data( $b_marker, '1' );
+		$b_delivered->update_meta_data( $b_status, 'B_DONE' );
+		$b_delivered->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'delivery_status_not', Delivery_Status::DELIVERED );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_in_transit->get_id(), $ids );
+		$this->assertContains( $a_no_status->get_id(), $ids, 'no status meta at all still counts as "not delivered".' );
+		$this->assertNotContains( $a_delivered->get_id(), $ids );
+		$this->assertNotContains(
+			$b_delivered->get_id(),
+			$ids,
+			'A delivered carrier-B order must not match "not delivered" just because carrier A wrote nothing on it.'
+		);
+	}
+
+	/**
+	 * The single-carrier scope: `delivery_status_not` excludes exactly the orders
+	 * mapped to the requested state, keeps the ones mapped elsewhere, and keeps the
+	 * one with no status meta at all (same NOT-EXISTS-vs-NOT-IN gotcha as the
+	 * aggregate case above, without needing a second carrier to see it).
+	 */
+	public function test_delivery_status_not_single_carrier_excludes_the_mapped_state_but_keeps_the_rest(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker          = '_woodev_test_dsn_single_marker';
+		$status_meta_key = '_woodev_test_dsn_single_status';
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'dsn_single_carrier',
+				'DSN Single Carrier',
+				$marker,
+				[ 'dsn_single_carrier' ],
+				[
+					'status_meta_key' => $status_meta_key,
+					'status_map'      => [
+						'SINGLE_DONE'  => Delivery_Status::DELIVERED,
+						'SINGLE_GOING' => Delivery_Status::IN_TRANSIT,
+					],
+				]
+			)
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$delivered_order = wc_create_order();
+		$delivered_order->set_status( 'processing' );
+		$delivered_order->update_meta_data( $marker, '1' );
+		$delivered_order->update_meta_data( $status_meta_key, 'SINGLE_DONE' );
+		$delivered_order->save();
+
+		$transit_order = wc_create_order();
+		$transit_order->set_status( 'processing' );
+		$transit_order->update_meta_data( $marker, '1' );
+		$transit_order->update_meta_data( $status_meta_key, 'SINGLE_GOING' );
+		$transit_order->save();
+
+		$no_status_order = wc_create_order();
+		$no_status_order->set_status( 'processing' );
+		$no_status_order->update_meta_data( $marker, '1' );
+		$no_status_order->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'carrier', 'dsn_single_carrier' );
+		$request->set_param( 'delivery_status_not', Delivery_Status::DELIVERED );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $transit_order->get_id(), $ids );
+		$this->assertContains( $no_status_order->get_id(), $ids, 'no status meta at all still counts as "not delivered".' );
+		$this->assertNotContains( $delivered_order->get_id(), $ids );
+	}
+
+	/**
+	 * `status_not` on the aggregate, across the two carriers registered in setUp —
+	 * a native `status` arg, so unlike the meta-based filters above it needs no
+	 * provider binding, but it must still exclude the requested status for BOTH
+	 * carriers' orders, not just one.
+	 */
+	public function test_status_not_excludes_the_requested_status_across_both_carriers(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$cdek_on_hold = $this->create_marked_order( self::CDEK_MARKER );
+		$cdek_on_hold->set_status( 'on-hold' );
+		$cdek_on_hold->save();
+
+		$yandex_on_hold = $this->create_marked_order( self::YANDEX_MARKER );
+		$yandex_on_hold->set_status( 'on-hold' );
+		$yandex_on_hold->save();
+
+		$cdek_processing = $this->create_marked_order( self::CDEK_MARKER );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'status_not', [ 'on-hold' ] );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $cdek_processing->get_id(), $ids );
+		$this->assertNotContains( $cdek_on_hold->get_id(), $ids );
+		$this->assertNotContains( $yandex_on_hold->get_id(), $ids );
+	}
+
+	/**
+	 * The integration-level confirmation of the unit-pinned "excludes nothing"
+	 * behaviour (#836): a `status_not` request in which nothing is a real status
+	 * must NOT narrow the result — the honest reading is "no override", not
+	 * "exclude the whole table" nor "exclude nothing recognized therefore keep the
+	 * default view's cancelled/failed exclusion" (it is the FULL valid list).
+	 */
+	public function test_a_status_not_filter_with_nothing_recognized_excludes_nothing(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$cdek_order   = $this->create_marked_order( self::CDEK_MARKER );
+		$yandex_order = $this->create_marked_order( self::YANDEX_MARKER );
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'status_not', [ 'not-a-real-status' ] );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $cdek_order->get_id(), $ids );
+		$this->assertContains( $yandex_order->get_id(), $ids );
+	}
+
+	/**
+	 * `has_pickup_point=true` on the aggregate, across two carriers each with their
+	 * own pickup-point meta key.
+	 */
+	public function test_has_pickup_point_true_on_the_aggregate_scopes_to_orders_with_a_pickup_point(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker     = '_woodev_test_pickup_true_a_marker';
+		$a_pickup_key = '_woodev_test_pickup_true_a_pickup_point';
+		$b_marker     = '_woodev_test_pickup_true_b_marker';
+		$b_pickup_key = '_woodev_test_pickup_true_b_pickup_point';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'pickup_true_a', 'Pickup True A', $a_marker, [ 'pickup_true_a' ], [ 'pickup_point_meta_key' => $a_pickup_key ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'pickup_true_b', 'Pickup True B', $b_marker, [ 'pickup_true_b' ], [ 'pickup_point_meta_key' => $b_pickup_key ] )
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$a_with_pickup = wc_create_order();
+		$a_with_pickup->set_status( 'processing' );
+		$a_with_pickup->update_meta_data( $a_marker, '1' );
+		$a_with_pickup->update_meta_data( $a_pickup_key, [ 'address' => 'ПВЗ A' ] );
+		$a_with_pickup->save();
+
+		$a_without_pickup = wc_create_order();
+		$a_without_pickup->set_status( 'processing' );
+		$a_without_pickup->update_meta_data( $a_marker, '1' );
+		$a_without_pickup->save();
+
+		$b_with_pickup = wc_create_order();
+		$b_with_pickup->set_status( 'processing' );
+		$b_with_pickup->update_meta_data( $b_marker, '1' );
+		$b_with_pickup->update_meta_data( $b_pickup_key, [ 'address' => 'ПВЗ B' ] );
+		$b_with_pickup->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'has_pickup_point', true );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_with_pickup->get_id(), $ids );
+		$this->assertContains( $b_with_pickup->get_id(), $ids );
+		$this->assertNotContains( $a_without_pickup->get_id(), $ids );
+	}
+
+	/**
+	 * The `has_pickup_point=false` mirror of
+	 * {@see self::test_has_tracking_false_scopes_to_orders_without_the_tracking_meta()}'s
+	 * aggregate regression: unbound, "carrier A's pickup-point key does not exist" is
+	 * trivially true of every carrier B order, because carrier A never writes carrier
+	 * B's meta. Also covers the no-meta-at-all row (NOT EXISTS vs NOT IN).
+	 */
+	public function test_has_pickup_point_false_on_the_aggregate_does_not_match_another_carriers_order(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$a_marker     = '_woodev_test_pickup_false_a_marker';
+		$a_pickup_key = '_woodev_test_pickup_false_a_pickup_point';
+		$b_marker     = '_woodev_test_pickup_false_b_marker';
+		$b_pickup_key = '_woodev_test_pickup_false_b_pickup_point';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'pickup_false_a', 'Pickup False A', $a_marker, [ 'pickup_false_a' ], [ 'pickup_point_meta_key' => $a_pickup_key ] )
+		);
+		$registry->register_provider(
+			Orders_Provider::create( 'pickup_false_b', 'Pickup False B', $b_marker, [ 'pickup_false_b' ], [ 'pickup_point_meta_key' => $b_pickup_key ] )
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// Carrier A, WITH a pickup point — must be excluded.
+		$a_with_pickup = wc_create_order();
+		$a_with_pickup->set_status( 'processing' );
+		$a_with_pickup->update_meta_data( $a_marker, '1' );
+		$a_with_pickup->update_meta_data( $a_pickup_key, [ 'address' => 'ПВЗ A' ] );
+		$a_with_pickup->save();
+
+		// Carrier A, no pickup-point meta at all — must be included (only NOT EXISTS,
+		// via a LEFT JOIN, sees a row with no meta key at all).
+		$a_without_pickup = wc_create_order();
+		$a_without_pickup->set_status( 'processing' );
+		$a_without_pickup->update_meta_data( $a_marker, '1' );
+		$a_without_pickup->save();
+
+		// Carrier B, WITH a pickup point, and carrier B never writes carrier A's
+		// pickup-point meta — the regression row: unbound, carrier A's "no pickup
+		// point" clause reads "A's pickup-point meta does not exist", trivially true
+		// here, and would incorrectly let this row through.
+		$b_with_pickup = wc_create_order();
+		$b_with_pickup->set_status( 'processing' );
+		$b_with_pickup->update_meta_data( $b_marker, '1' );
+		$b_with_pickup->update_meta_data( $b_pickup_key, [ 'address' => 'ПВЗ B' ] );
+		$b_with_pickup->save();
+
+		$request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$request->set_param( 'has_pickup_point', false );
+
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data()['rows'], 'id' );
+
+		$this->assertContains( $a_without_pickup->get_id(), $ids );
+		$this->assertNotContains( $a_with_pickup->get_id(), $ids );
+		$this->assertNotContains(
+			$b_with_pickup->get_id(),
+			$ids,
+			'A carrier-B order with its own pickup point must not match "no pickup point" just because carrier A wrote nothing on it.'
+		);
+	}
+
 	/**
 	 * Adds the ambient `woodev_test_shipping` fixture method to a real shipping zone
 	 * and returns its instance id.
