@@ -538,9 +538,27 @@ export default function OrdersPage() {
 		setUrlFilters( ( current ) => {
 			const next = readUrlFilters( query );
 
-			if ( ! filtersEqual( current, next ) ) {
-				setPage( 1 );
+			/**
+			 * ⚠ Returning `current` — the SAME reference — is what stops a navigation that
+			 * changed no filter from refetching the table (#850, operator on the rig
+			 * 11.09.2026: the «Расширенные фильтры» toggle sent an identical request).
+			 *
+			 * `readUrlFilters()` builds a fresh object every time, and React bails out of a
+			 * state update by `Object.is`, not by contents — so handing back an equal-but-new
+			 * object IS a state change. The fetch effect below lists `urlFilters` among its
+			 * dependencies, so it re-ran, `setRows( null )` dropped the table into its loading
+			 * skeleton, and the same query came back with the same rows.
+			 *
+			 * `filter=advanced` is not one of the nine fields `readUrlFilters()` reads, which
+			 * is why this shows up on a control that selects nothing at all. The verdict was
+			 * already being computed here — it was spent on the page reset and thrown away for
+			 * the identity, which is the whole defect.
+			 */
+			if ( filtersEqual( current, next ) ) {
+				return current;
 			}
+
+			setPage( 1 );
 
 			return next;
 		} );

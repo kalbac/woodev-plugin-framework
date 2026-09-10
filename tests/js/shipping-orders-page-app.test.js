@@ -662,6 +662,51 @@ describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026
 			)
 		);
 	} );
+
+	/**
+	 * ⚠ #850, the operator on the rig 11.09.2026: switching «Расширенные фильтры» ON sent a
+	 * request byte-identical to the one already answered — same carrier, same page, same
+	 * dates — and `setRows( null )` dropped the table into its loading skeleton while it
+	 * flew. Nothing had been selected yet; `filter=advanced` is not even a field the fetch
+	 * reads.
+	 *
+	 * ⚠ THIS ASSERTS THE CALL COUNT, and that is the point. The test right above already
+	 * navigated with exactly `{ filter: 'advanced' }` and stayed green through the whole
+	 * defect, because `toHaveBeenLastCalledWith` cannot see a REPEAT of the same call — the
+	 * last call matched either way. A redundant fetch is only visible by counting.
+	 *
+	 * The control is in the same file rather than in this test: «a history change re-scopes
+	 * the fetch» proves a navigation that DOES change a filter still refetches, so a fix
+	 * that simply stopped reacting to history would fail there instead.
+	 */
+	test( 'a history change that alters no filter does not refetch — the count stays put', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		const callsBefore = fetchOrders.mock.calls.length;
+
+		// The toggle's own navigation: it adds `filter=advanced` and touches nothing else.
+		navigate( { filter: 'advanced' } );
+
+		// The advanced block appearing is the proof the navigation was actually processed —
+		// without it a passing count would only mean the page ignored the event entirely.
+		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders.mock.calls.length ).toBe( callsBefore );
+
+		// And back off again — the same navigation in reverse, equally free of any selection.
+		navigate( {} );
+
+		await waitFor( () =>
+			expect( screen.queryByTestId( 'advanced-filters' ) ).not.toBeInTheDocument()
+		);
+
+		expect( fetchOrders.mock.calls.length ).toBe( callsBefore );
+	} );
 } );
 
 describe( 'the carrier lives in the URL, not in component state', () => {
