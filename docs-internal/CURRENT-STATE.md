@@ -6,18 +6,17 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-09 (s129).** ✅ **PR #844 MERGED** (`316b437`) — both halves of **#836**: the
-`is`/`is not` rules, the «Пункт выдачи» filter, 882 px width, aligned columns. **#836 CLOSED.**
-Detail: `sessions/s129.md`. ⚠ Every negation was checked on the rig as a COMPLEMENT (each pair sums
-to 71), so the unbound-negation failure that reached him twice is measured absent, not assumed.
+**As of 2026-09-09 (s129).** ✅ **Four PRs merged — #844 #845 #846 #847.** ⚠ **PR #848 is OPEN and green, waiting on his visual pass (card #849); the tree is parked on `fix/sp10-data-status-block` so the rig serves it — do NOT switch it away first.** (`316b437`) — both halves of **#836**: the
+filter rules, the «Пункт выдачи» and `is_exported` filters, and only the delivery statuses a shop
+can produce. Detail: `sessions/s129.md`. ⚠ Every negation was checked on the rig as a COMPLEMENT
+(each pair sums to the unfiltered total) — the unbound-negation failure is measured absent.
 
-⚠ **Two integration runs at once share ONE test database** and the loser reports YOUR code failing —
+⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-⚠ **«Matches nothing» has exactly ONE correct mechanism, and two plausible ones are wrong.** An
-empty status array is expanded by HPOS into EVERY valid status; a bogus slug empties the table on
-HPOS and does nothing on legacy CPT, where `WP_Query` walks only REGISTERED statuses. Use
-`Orders_Query::NO_MATCH_META_QUERY`. The integration suite caught the second; a unit test could not.
+⚠ **«Matches nothing» has exactly ONE correct mechanism — `Orders_Query::NO_MATCH_META_QUERY`.**
+An empty status array is expanded by HPOS into every valid status, and a bogus slug behaves
+differently on each datastore; both look right in a unit test (s128).
 
 Open on the page: **#824 #828 #829 #834 #838 #839 #841 #842 #843**. **#828** and **#841** are IN
 FLIGHT (s129). ⚠ **#841 and #834 share one prerequisite:** «exported» is `carrier_order_id`, which
@@ -61,15 +60,14 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 09.09.2026 (s129) on MERGED `main` at `316b437`:**
-unit **3767** / **9485**, 1 skipped, with sodium ON; jest **1843** in **31** suites;
-**integration 192 / 703**; `npm run build` produces **zero git diff**, so the primary checkout
+**Baselines — re-measured 09.09.2026 (s129) on MERGED `main` at `3b0580a`:**
+unit **3779** / **9505**, 1 skipped, with sodium ON; jest **1861** in **31** suites (1863 on #848);
+**integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
-level 3 no errors; every `lint:*` OK; catalogue **789** entries, **429** translated. Nothing on
+level 3 no errors; every `lint:*` OK; catalogue **803** entries, **429** translated. Nothing on
 this line is carried forward.
 
-⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the built bundle, so front-end
-strings reach that gate too (s129).
+⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
 ⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
 work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
@@ -177,7 +175,7 @@ gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
 **SP-10: в `main` инкременты 1, 2a, 2b, 6, 7, слой данных #828 и рабочая фильтрация с правилами.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель — UI поверх готового шва), плюс #824 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
-✅ **На риге ДВА перевозчика и 71 заказ** (`WOODEV_TEST_SEED_ORDERS_DEMO` в локальном `.wp-env.override.json`). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** ровно это скрывало два дефекта подряд (s127 `has_tracking`, s128 `delivery_status=unknown`). Любой тест на агрегат регистрирует минимум двух перевозчиков.
+✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
@@ -251,7 +249,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **304**.
+Gotchas: **307**.
 
 ## Program status (high level)
 

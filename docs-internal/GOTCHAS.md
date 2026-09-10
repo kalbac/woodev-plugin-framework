@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 306 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 307 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -86,6 +86,7 @@
 ### [woocommerce/*] — WooCommerce-specific (session)
 - [woocommerce/navigation] **A sidebar link's `href` carries no query, and `wc-admin` re-adds the date params anyway (`getPersistedQuery()`) — so a probe using a full page load proves the OPPOSITE of what a click does.** → [wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry](gotchas/wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry.md) (s129)
 - [woocommerce/navigation] **`addHistoryListener` fires BEFORE the real `pushState`, so `getQuery()` inside it reads the PREVIOUS URL and the page stays one navigation behind. Raise a flag; read the query in a later effect.** → [addhistorylistener-fires-before-the-url-changes](gotchas/addhistorylistener-fires-before-the-url-changes.md) (s128)
+- [woocommerce/filter-options] **The rule select comes from the TITLE token, but the URL key and reading the filter BACK come from `rules` — dropping the rule to hide a one-option select kills the round trip.** → [advancedfilters-renders-the-rule-select-only-where-the-title-asks-for-it](gotchas/advancedfilters-renders-the-rule-select-only-where-the-title-asks-for-it.md) (s129)
 - [woocommerce/filter-options] **An `AdvancedFilters` option keyed `key` instead of `value` makes «Filter» a DISABLED button: no URL, no request. A picked option then submits its LABEL.** → [a-filter-option-keyed-key-instead-of-value-disables-the-filter-button](gotchas/a-filter-option-keyed-key-instead-of-value-disables-the-filter-button.md) (s128)
 - [woocommerce/script-handles] **Declaring `wc-settings` as a script dependency makes WordPress drop your whole bundle SILENTLY — it is only conditionally registered.** → [declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle](gotchas/declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle.md) (s127)
 - [woocommerce/address-save] **WooCommerce saves no address until every required TEXT field in the block is filled — the gate is in the JS.** → [wc-does-not-save-the-address-until-every-required-text-field-is-filled](gotchas/wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) (s65)
