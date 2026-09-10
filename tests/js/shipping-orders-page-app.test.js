@@ -1217,19 +1217,23 @@ describe( 'the data-status panel (#828 increment 8)', () => {
 			],
 		} );
 
-		render( <App /> );
+		const { container } = render( <App /> );
 
 		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
 
-		expect( screen.getByText( /^Обновлено /, { selector: '.woodev-orders-sync__aggregate' } ) ).toBeInTheDocument();
-		expect(
-			screen.queryByText( /синхронизировались хотя бы раз/ )
-		).not.toBeInTheDocument();
+		// Two labelled columns — WooCommerce's own shape, asserted on RENDERED text.
+		expect( screen.getByText( 'Обновлено' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Обновится' ) ).toBeInTheDocument();
 
-		// The per-carrier row: label, "Обновлено …" and "Обновится …" all rendered.
-		expect( screen.getByText( 'Тестовая доставка' ) ).toBeInTheDocument();
-		const carrierRow = screen.getByText( 'Тестовая доставка' ).closest( 'li' );
-		expect( carrierRow ).toHaveTextContent( /^Тестовая доставкаОбновлено .+Обновится /s );
+		// The «Обновлено» column carries a real timestamp: never «Ни разу», never blank.
+		const updated = screen.getByText( 'Обновлено' ).nextElementSibling;
+		expect( updated.textContent.trim().length ).toBeGreaterThan( 0 );
+		expect( updated ).not.toHaveTextContent( 'Ни разу' );
+
+		// The per-carrier detail moved into the bar's tooltip when the block took
+		// WooCommerce's shape — not lost, it just no longer decides the row width.
+		const bar = container.querySelector( '.woodev-orders-sync__bar' );
+		expect( bar.getAttribute( 'title' ) ).toContain( 'Тестовая доставка' );
 	} );
 
 	/**
@@ -1254,26 +1258,21 @@ describe( 'the data-status panel (#828 increment 8)', () => {
 			],
 		} );
 
-		render( <App /> );
+		const { container } = render( <App /> );
 
-		await waitFor( () =>
-			expect(
-				screen.getByText( /Не все перевозчики синхронизировались хотя бы раз/ )
-			).toBeInTheDocument()
-		);
+		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
 
-		// Never rendered as a blank "Обновлено" with nothing after it.
-		expect(
-			screen.queryByText( /^Обновлено\s*$/, { selector: '.woodev-orders-sync__aggregate' } )
-		).not.toBeInTheDocument();
+		// The aggregate says «Ни разу» — a statement about the WHOLE table, never a
+		// blank cell and never an overstated «Обновлено».
+		const updated = screen.getByText( 'Обновлено' ).nextElementSibling;
+		expect( updated ).toHaveTextContent( 'Ни разу' );
 
-		// The breakdown shows exactly which carrier is why: СДЭК has synced,
-		// Яндекс never has.
-		const yandexRow = screen.getByText( 'Яндекс Доставка' ).closest( 'li' );
-		expect( yandexRow ).toHaveTextContent( 'Ни разу не синхронизировалось' );
-
-		const cdekRow = screen.getByText( 'СДЭК' ).closest( 'li' );
-		expect( cdekRow ).toHaveTextContent( /^СДЭКОбновлено /s );
+		// ⚠ The tooltip is what makes that actionable — it names WHICH carrier is the
+		// reason. Without it the value is true but unusable.
+		const bar = container.querySelector( '.woodev-orders-sync__bar' );
+		expect( bar.getAttribute( 'title' ) ).toContain( 'Яндекс Доставка: ни разу не синхронизировалось' );
+		expect( bar.getAttribute( 'title' ) ).toContain( 'СДЭК: ' );
+		expect( bar.getAttribute( 'title' ) ).not.toContain( 'СДЭК: ни разу' );
 	} );
 
 	/**
@@ -1295,19 +1294,26 @@ describe( 'the data-status panel (#828 increment 8)', () => {
 			],
 		} );
 
-		render( <App /> );
+		const { container } = render( <App /> );
 
-		await waitFor( () =>
-			expect( screen.getByText( 'Реалистичная доставка' ) ).toBeInTheDocument()
-		);
+		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
 
-		const row = screen.getByText( 'Реалистичная доставка' ).closest( 'li' );
-		expect( row ).toHaveTextContent( 'По расписанию не обновляется' );
-		expect( row ).not.toHaveTextContent( 'Обновится' );
+		// No carrier has a cron, so the column states that instead of rendering blank.
+		const next = screen.getByText( 'Обновится' ).nextElementSibling;
+		expect( next ).toHaveTextContent( 'Не по расписанию' );
+
+		const bar = container.querySelector( '.woodev-orders-sync__bar' );
+		expect( bar.getAttribute( 'title' ) ).toContain( 'по расписанию не обновляется' );
 	} );
 
-	/** The brief's own placement requirement: third block, beside the other two. */
-	test( 'renders as the third block in the basic-filters row, beside the carrier and date pickers', async () => {
+	/**
+	 * ⚠ Placement, and this is the assertion that changed when the operator sent a
+	 * screenshot of WooCommerce's own block: the panel is a SIBLING of the pickers
+	 * container inside the header row, NOT one of the controls in it. Inside the
+	 * pickers row its width competed with two 430px-capped pickers and flex dropped
+	 * it onto a line of its own — exactly what he saw on the rig.
+	 */
+	test( 'sits beside the pickers container in the header row, not inside it', async () => {
 		getProviders.mockReturnValue( twoProviders() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 		fetchSyncStatus.mockResolvedValue( {
@@ -1321,14 +1327,18 @@ describe( 'the data-status panel (#828 increment 8)', () => {
 
 		await waitFor( () => expect( screen.getByText( 'Статус данных' ) ).toBeInTheDocument() );
 
-		const row = container.querySelector( '.woodev-orders__basic-filters' );
+		const header = container.querySelector( '.woodev-orders__header' );
+		const pickers = container.querySelector( '.woodev-orders__basic-filters' );
 		const panel = container.querySelector( '.woodev-orders-sync' );
 		const carrierFilter = screen.getByTestId( 'filter-picker-carrier' );
 
-		expect( row ).toContainElement( panel );
-		expect( row ).toContainElement( carrierFilter );
+		expect( header ).toContainElement( pickers );
+		expect( header ).toContainElement( panel );
+		expect( pickers ).toContainElement( carrierFilter );
+		// The assertion that would have caught the defect: the panel is NOT a picker.
+		expect( pickers ).not.toContainElement( panel );
 		expect(
-			carrierFilter.compareDocumentPosition( panel ) & Node.DOCUMENT_POSITION_FOLLOWING
+			pickers.compareDocumentPosition( panel ) & Node.DOCUMENT_POSITION_FOLLOWING
 		).toBeTruthy();
 	} );
 } );

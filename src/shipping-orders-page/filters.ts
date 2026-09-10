@@ -382,7 +382,7 @@ export function buildAdvancedFiltersConfig(
 			labels: {
 				add: __( 'Трек-номер', 'woodev-plugin-framework' ),
 				remove: __( 'Убрать фильтр по трек-номеру', 'woodev-plugin-framework' ),
-				title: __( 'Трек-номер {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
+				title: __( 'Трек-номер {{filter /}}', 'woodev-plugin-framework' ),
 			},
 			rules: [ isRule ],
 			input: { component: 'SelectControl', options: presenceOptions },
@@ -392,7 +392,7 @@ export function buildAdvancedFiltersConfig(
 			labels: {
 				add: __( 'Пункт выдачи', 'woodev-plugin-framework' ),
 				remove: __( 'Убрать фильтр по пункту выдачи', 'woodev-plugin-framework' ),
-				title: __( 'Пункт выдачи {{rule /}} {{filter /}}', 'woodev-plugin-framework' ),
+				title: __( 'Пункт выдачи {{filter /}}', 'woodev-plugin-framework' ),
 			},
 			rules: [ isRule ],
 			input: { component: 'SelectControl', options: presenceOptions },

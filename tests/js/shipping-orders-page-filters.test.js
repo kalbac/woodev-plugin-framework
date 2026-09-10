@@ -418,6 +418,40 @@ describe( 'per-filter rules and the pickup-point filter (#836)', () => {
 	} );
 
 	/**
+	 * ⚠ A presence filter keeps its single rule but does NOT ask for it in the title,
+	 * and the two halves of that sentence are load-bearing in opposite directions
+	 * (operator, 09.09.2026: «зачем этот селект если нет выбора кроме равен»).
+	 *
+	 * `AdvancedFilters` interpolates the rule SelectControl only where the title asks
+	 * for `{{rule /}}`, so dropping the token is what removes the un-operable control.
+	 * The rule itself must stay: `getUrlKey( key, rule )` builds the query key from it
+	 * (`has_tracking_is`), and `getActiveFiltersFromQuery()` iterates `rules` to read
+	 * the filter back OUT of the URL.
+	 *
+	 * Measured on the rig before it was written this way — with `rules: []` the
+	 * component returns `[]` for a URL that plainly carries the filter, so the block
+	 * shows nothing after the merchant applies it: not editable, not clearable. The
+	 * cheap-looking fix is the one that breaks the round trip.
+	 */
+	test( 'a presence filter asks for no rule in its title, yet still declares one', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels );
+
+		[ 'has_tracking', 'has_pickup_point' ].forEach( ( key ) => {
+			expect( config.filters[ key ].labels.title ).not.toContain( '{{rule' );
+			expect( config.filters[ key ].labels.title ).toContain( '{{filter' );
+			// The round trip depends on this staying non-empty.
+			expect( config.filters[ key ].rules.length ).toBe( 1 );
+		} );
+	} );
+
+	test( 'a filter with a real choice of rules still asks for it', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { 'wc-processing': 'В обработке' } );
+
+		expect( config.filters.delivery_status.labels.title ).toContain( '{{rule' );
+		expect( config.filters.status.labels.title ).toContain( '{{rule' );
+	} );
+
+	/**
 	 * ⚠ Presence must be a two-option SELECT, never a valueless rule:
 	 * `getQueryFromActiveFilters()` skips any active filter whose `value` is falsy, so a rule
 	 * carrying no value never reaches the URL at all. Measured in the upstream source, s128.
