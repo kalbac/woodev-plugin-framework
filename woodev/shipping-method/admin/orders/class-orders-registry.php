@@ -38,6 +38,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
 
+		/**
+		 * Transient holding the menu badge's counts — the aggregate AND the per-carrier
+		 * breakdown, in ONE entry (#834 follow-up).
+		 *
+		 * ⚠ One entry, deliberately, not one per carrier: two entries can expire at
+		 * different moments and then disagree, and the tooltip's whole job is to be a
+		 * complete account of the number in the bubble. Both numbers come from the same
+		 * snapshot or neither does.
+		 *
+		 * ⚠ The key is SHARED across users and must stay that way. The badge is already
+		 * gated on {@see self::get_page_capability()}, and past that gate the count is
+		 * identical for everyone: {@see Orders_Query} scopes rows by carrier marker meta
+		 * and order status only — it has no author, assignee or per-user term in it, so
+		 * there is nothing for a per-user key to vary on. Making this key user-specific
+		 * would multiply the entry by the number of shop managers and buy nothing.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const NEW_COUNTS_TRANSIENT = 'woodev_shipping_orders_new_counts';
+
+		/**
+		 * Default lifetime of {@see self::NEW_COUNTS_TRANSIENT}, in seconds.
+		 *
+		 * A badge that lags a minute is normal — core caches its own update counts for
+		 * far longer — and the page itself is always live, so nothing a merchant acts on
+		 * is ever the cached number.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		const NEW_COUNTS_TTL = 60;
+
 		/** @var self|null singleton. */
 		private static $instance = null;
 
@@ -270,6 +305,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * v1 badge misreports any shop with ≥1000 new orders. The outer `count-%d` class
 		 * takes the raw integer, which is what core's own `wp-admin/menu.php` does.
 		 *
+		 * Both numbers come from ONE call to {@see self::get_new_order_counts()}, so the
+		 * bubble and the lines behind it are always the same snapshot.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param string $page_title plain, unmarked-up page title.
@@ -283,19 +321,165 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return $page_title;
 			}
 
-			$query = new Orders_Query( $this );
-			$total = (int) $query->get_results( self::new_orders_request() )->total;
+			$counts = $this->get_new_order_counts();
 
-			if ( $total < 1 ) {
+			if ( $counts['total'] < 1 ) {
 				return $page_title;
 			}
 
 			return $page_title . sprintf(
 				' <span class="update-plugins count-%1$d" title="%2$s"><span class="new-count">%3$s</span></span>',
-				$total,
-				esc_attr( $this->build_new_orders_breakdown( $query ) ),
-				number_format_i18n( $total )
+				$counts['total'],
+				esc_attr( $this->build_new_orders_breakdown( $counts['carriers'] ) ),
+				number_format_i18n( $counts['total'] )
 			);
+		}
+
+		/**
+		 * Drops the cached badge counts, so the next admin request recomputes them.
+		 *
+		 * ⚠ An extension seam with no caller inside the framework yet, and that is not an
+		 * argument against it. The natural consumer is the export path: the moment
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * writes a `carrier_order_id` an order stops being new, and the badge should say
+		 * so without waiting out the TTL. Wiring that call lives in the shipment handler
+		 * and is a change of its own.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function flush_new_order_counts(): void {
+			delete_transient( self::NEW_COUNTS_TRANSIENT );
+		}
+
+		/**
+		 * The badge's numbers, served from {@see self::NEW_COUNTS_TRANSIENT} while it holds
+		 * a usable snapshot and recomputed at most once per TTL otherwise (#834 follow-up).
+		 *
+		 * ⚠ Why the cache exists at all: {@see self::register_page()} runs on `admin_menu`,
+		 * so without it the badge queries on EVERY admin page load, not only on the orders
+		 * page — measured on the rig at ~43 ms and three queries for two carriers, whose
+		 * SQL carries three joins on the order-meta table PER PROVIDER. Card #839 measured
+		 * where that shape ends up: on the legacy CPT datastore with four carriers the same
+		 * query sat in MySQL `Sending data` for over four minutes. That price is fine once
+		 * a minute; it is not fine once per request to every admin screen on every install.
+		 *
+		 * A filter returning something non-numeric falls back to the default rather than to
+		 * zero — the same guard {@see self::get_providers()} applies to its own filter. A
+		 * TTL of zero or less IS honoured, as "do not cache": that is what a shop chasing a
+		 * stale badge wants from `add_filter( ..., '__return_zero' )`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{total:int,carriers:array<string,int>}
+		 */
+		private function get_new_order_counts(): array {
+			$provider_ids = array_keys( $this->get_providers() );
+
+			/**
+			 * Filters how long the menu badge's counts stay cached, in seconds.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int $ttl lifetime in seconds; zero or less disables the cache.
+			 */
+			$ttl = apply_filters( 'woodev_shipping_orders_new_counts_ttl', self::NEW_COUNTS_TTL );
+			$ttl = is_numeric( $ttl ) ? (int) $ttl : self::NEW_COUNTS_TTL;
+
+			if ( $ttl > 0 ) {
+				$cached = get_transient( self::NEW_COUNTS_TRANSIENT );
+
+				if ( self::is_usable_counts_payload( $cached, $provider_ids ) ) {
+					// Rebuilt rather than handed back as-is: a transient outlives a plugin
+					// update, so its stored shape is external input as far as this class is
+					// concerned.
+					return [
+						'total'    => (int) $cached['total'],
+						'carriers' => array_map( 'intval', $cached['carriers'] ),
+					];
+				}
+			}
+
+			$counts = $this->query_new_order_counts( $provider_ids );
+
+			if ( $ttl > 0 ) {
+				set_transient( self::NEW_COUNTS_TRANSIENT, $counts, $ttl );
+			}
+
+			return $counts;
+		}
+
+		/**
+		 * Whether a value read back from the transient can still be trusted for today's
+		 * carriers.
+		 *
+		 * The registered set changes between requests — a carrier plugin activated, or one
+		 * hidden behind a feature flag through `woodev_shipping_orders_providers`. A
+		 * snapshot that does not carry exactly today's carriers cannot produce a breakdown
+		 * that accounts for the bubble, so it is discarded rather than patched up.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed             $cached       raw transient value (`false` when unset).
+		 * @param array<int,string> $provider_ids ids registered right now.
+		 * @return bool
+		 */
+		private static function is_usable_counts_payload( $cached, array $provider_ids ): bool {
+			if ( ! is_array( $cached ) || ! isset( $cached['total'] ) || ! isset( $cached['carriers'] ) ) {
+				return false;
+			}
+
+			if ( ! is_numeric( $cached['total'] ) || ! is_array( $cached['carriers'] ) ) {
+				return false;
+			}
+
+			$cached_ids = array_keys( $cached['carriers'] );
+
+			sort( $cached_ids );
+			sort( $provider_ids );
+
+			return $cached_ids === $provider_ids;
+		}
+
+		/**
+		 * Runs the queries behind the badge: the aggregate, then one per carrier.
+		 *
+		 * ⚠ When the aggregate is zero every carrier is zero too, and that is DERIVED, not
+		 * assumed: a single-carrier request narrows {@see Orders_Query} to that carrier's
+		 * marker and its own export clause, both of which are OR-ed into the aggregate's,
+		 * with every other argument identical — so one carrier's matches are always a
+		 * subset of the aggregate's. Skipping the per-carrier queries there is what keeps
+		 * the common case (a shop with nothing new) at one query per TTL rather than N + 1.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,string> $provider_ids ids registered right now.
+		 * @return array{total:int,carriers:array<string,int>}
+		 */
+		private function query_new_order_counts( array $provider_ids ): array {
+			$query = new Orders_Query( $this );
+			$total = (int) $query->get_results( self::new_orders_request() )->total;
+
+			if ( $total < 1 ) {
+				return [
+					'total'    => 0,
+					'carriers' => array_fill_keys( $provider_ids, 0 ),
+				];
+			}
+
+			$carriers = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$carrier_id = $provider->get_id();
+
+				$carriers[ $carrier_id ] = (int) $query->get_results( self::new_orders_request( $carrier_id ) )->total;
+			}
+
+			return [
+				'total'    => $total,
+				'carriers' => $carriers,
+			];
 		}
 
 		/**
@@ -304,21 +488,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * expresses several lines.
 		 *
 		 * Every provider is listed, including one contributing nothing, so the breakdown
-		 * is readable as a complete account of the number in the bubble rather than a
-		 * selection from it.
+		 * reads as a complete account of the number in the bubble rather than a selection
+		 * from it. The counts are read from the SAME snapshot the bubble came from, never
+		 * queried again here — that is what makes the two agree even when both are served
+		 * from cache.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Query $query the SAME query object the aggregate count came from,
-		 *                            so a per-carrier line cannot be built by a different
-		 *                            mechanism than the total it breaks down.
+		 * @param array<string,int> $carriers count per provider id, from
+		 *                                    {@see self::get_new_order_counts()}.
 		 * @return string
 		 */
-		private function build_new_orders_breakdown( Orders_Query $query ): string {
+		private function build_new_orders_breakdown( array $carriers ): string {
 			$lines = [];
 
 			foreach ( $this->get_providers() as $provider ) {
-				$count = (int) $query->get_results( self::new_orders_request( $provider->get_id() ) )->total;
+				$count = (int) ( $carriers[ $provider->get_id() ] ?? 0 );
 
 				$lines[] = $provider->get_label() . ': ' . number_format_i18n( $count );
 			}

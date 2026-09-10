@@ -17,10 +17,20 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 
 class ShippingOrdersRegistryTest extends TestCase {
 
+	/**
+	 * In-memory stand-in for the options table behind get/set/delete_transient(),
+	 * wired up by {@see self::stubOrdersQueryEnvironment()} and emptied between tests.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private $fake_transients = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		Functions\stubs( [ 'add_action', 'remove_action', 'add_filter', 'remove_filter', 'apply_filters' ] );
+
+		$this->fake_transients = [];
 
 		Orders_Registry::instance()->reset_for_tests();
 	}
@@ -554,6 +564,40 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 * @return void
 	 */
 	private function stubOrdersQueryEnvironment( callable $totals, array &$captured, bool $user_can = true ): void {
+		/*
+		 * A real round-tripping transient store, not a pair of no-ops: the badge's cache
+		 * is only observable if a value written by set_transient() comes back out of
+		 * get_transient(), and every "does not re-query" assertion below rests on that.
+		 *
+		 * `apply_filters` is re-stubbed here because Brain Monkey's plain stubs() default
+		 * is returnArg() — argument ONE, the hook name — so the registry would read its
+		 * TTL filter as the string 'woodev_shipping_orders_new_counts_ttl' and cast it to
+		 * 0, silently disabling the very cache under test. returnArg( 2 ) is what an
+		 * unhooked filter actually does.
+		 */
+		$store = &$this->fake_transients;
+
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		Functions\when( 'get_transient' )->alias(
+			static function ( string $key ) use ( &$store ) {
+				return array_key_exists( $key, $store ) ? $store[ $key ] : false;
+			}
+		);
+		Functions\when( 'set_transient' )->alias(
+			static function ( string $key, $value, $ttl = 0 ) use ( &$store ): bool {
+				$store[ $key ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'delete_transient' )->alias(
+			static function ( string $key ) use ( &$store ): bool {
+				unset( $store[ $key ] );
+
+				return true;
+			}
+		);
+
 		Functions\when( 'current_user_can' )->justReturn( $user_can );
 		Functions\when( 'number_format_i18n' )->alias(
 			static function ( $number ): string {
@@ -831,5 +875,234 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertStringContainsString( 'count-1234"', $title );
 		$this->assertStringContainsString( '<span class="new-count">1 234</span>', $title );
+	}
+
+	// -----------------------------------------------------------------------
+	// #834 follow-up — the counts are cached, because register_page() is hooked on
+	// `admin_menu` and would otherwise query on EVERY admin page load. Measured on
+	// the rig: ~43 ms and three queries for two carriers, with three joins on the
+	// order-meta table PER PROVIDER; card #839 measured the same shape sitting in
+	// MySQL `Sending data` for over four minutes on the CPT datastore at four
+	// carriers.
+	//
+	// The query COUNT is the observable throughout. It genuinely discriminates:
+	// test_a_zero_ttl_disables_the_cache_entirely below runs the same fixture with
+	// caching off and pins SIX, against three here.
+	// -----------------------------------------------------------------------
+
+	/** Registers the two-carrier fixture the caching tests share. */
+	private function register_two_carriers(): Orders_Registry {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+		$registry->register_provider( $this->exportable_provider( 'yandex', 'Яндекс' ) );
+
+		return $registry;
+	}
+
+	/**
+	 * Counts by marker key, so a carrier's line and the bubble are distinguishable.
+	 * The two carriers are disjoint here — 48 + 53 = 101, the shape a real shop has,
+	 * where an order carries exactly one carrier's marker.
+	 */
+	private function disjoint_carrier_totals(): callable {
+		return static function ( array $args ): int {
+			$keys = $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ];
+
+			if ( [ '_marker_cdek' ] === $keys ) {
+				return 48;
+			}
+
+			if ( [ '_marker_yandex' ] === $keys ) {
+				return 53;
+			}
+
+			return 101;
+		};
+	}
+
+	/**
+	 * The point of the cache: a second badge build inside one request must not go
+	 * back to the database.
+	 */
+	public function test_the_second_badge_build_in_one_request_does_not_query_again(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		$registry = $this->register_two_carriers();
+
+		$first = $this->menu_title( $registry );
+		$this->assertCount( 3, $captured, 'the cold build runs the aggregate plus one query per carrier' );
+
+		$second = $this->menu_title( $registry );
+
+		$this->assertCount( 3, $captured, 'the second build must be served from the cache, not re-queried' );
+		$this->assertSame( $first, $second );
+	}
+
+	/**
+	 * One transient holds BOTH numbers. Two entries could expire at different moments
+	 * and then disagree, and the tooltip's whole job is to account for the bubble.
+	 */
+	public function test_both_numbers_live_in_one_shared_cache_entry(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		$this->menu_title( $this->register_two_carriers() );
+
+		$this->assertSame(
+			[ Orders_Registry::NEW_COUNTS_TRANSIENT ],
+			array_keys( $this->fake_transients ),
+			'the badge must write exactly one cache entry, never one per carrier'
+		);
+
+		$payload = $this->fake_transients[ Orders_Registry::NEW_COUNTS_TRANSIENT ];
+
+		$this->assertSame( 101, $payload['total'] );
+		$this->assertSame(
+			[
+				'cdek'   => 48,
+				'yandex' => 53,
+			],
+			$payload['carriers']
+		);
+
+		/*
+		 * The key is deliberately NOT per-user. Past the get_page_capability() gate the
+		 * count is identical for everyone: Orders_Query scopes rows by carrier marker
+		 * meta and order status only, with no author/assignee/per-user term in it.
+		 */
+		$this->assertStringNotContainsString( 'user', Orders_Registry::NEW_COUNTS_TRANSIENT );
+	}
+
+	/**
+	 * The property the coordinator measured on the rig — 48 + 53 = 101 — must survive
+	 * caching. It survives because both numbers come out of ONE snapshot, so this
+	 * asserts on the SECOND build, the one served entirely from cache.
+	 *
+	 * ⚠ The equality itself is a property of the data (each order carries one carrier's
+	 * marker), not an invariant the code enforces — an order marked by two carriers
+	 * counts in both lines. What the code guarantees, and what this pins, is that the
+	 * bubble and its lines are never two different snapshots.
+	 */
+	public function test_the_breakdown_still_accounts_for_the_bubble_when_both_come_from_cache(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		$registry = $this->register_two_carriers();
+
+		$this->menu_title( $registry );
+		$queries_after_warm = count( $captured );
+
+		$title = $this->menu_title( $registry );
+
+		$this->assertCount( $queries_after_warm, $captured, 'the asserted build must be the cached one' );
+
+		$this->assertStringContainsString( '<span class="new-count">101</span>', $title );
+		$this->assertStringContainsString( 'title="СДЭК: 48' . "\n" . 'Яндекс: 53"', $title );
+		$this->assertSame( 101, 48 + 53 );
+	}
+
+	/**
+	 * The seam the export path will use: once an order stops being new, the badge
+	 * should say so without waiting out the TTL.
+	 */
+	public function test_flushing_the_counts_makes_the_next_badge_query_again(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		$registry = $this->register_two_carriers();
+
+		$this->menu_title( $registry );
+		$this->assertCount( 3, $captured );
+
+		$registry->flush_new_order_counts();
+
+		$this->assertSame( [], $this->fake_transients, 'the flush must actually delete the entry' );
+
+		$this->menu_title( $registry );
+
+		$this->assertCount( 6, $captured, 'after a flush the next build must recompute' );
+	}
+
+	/**
+	 * `add_filter( 'woodev_shipping_orders_new_counts_ttl', '__return_zero' )` is what a
+	 * shop chasing a stale badge reaches for, so zero is honoured as "do not cache"
+	 * rather than handed to set_transient(), where WordPress reads 0 as "never expire"
+	 * — the exact opposite.
+	 *
+	 * This is also what proves the query-count assertions above discriminate: same
+	 * fixture, same two calls, six queries instead of three.
+	 */
+	public function test_a_zero_ttl_disables_the_cache_entirely(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		Functions\when( 'apply_filters' )->alias(
+			static function ( string $hook, $value ) {
+				return 'woodev_shipping_orders_new_counts_ttl' === $hook ? 0 : $value;
+			}
+		);
+
+		$registry = $this->register_two_carriers();
+
+		$this->menu_title( $registry );
+		$this->menu_title( $registry );
+
+		$this->assertCount( 6, $captured, 'a zero TTL must not cache' );
+		$this->assertSame( [], $this->fake_transients, 'and must not write an entry WordPress would keep forever' );
+	}
+
+	/**
+	 * The registered set changes between requests — a carrier plugin activated, or one
+	 * hidden through `woodev_shipping_orders_providers`. A snapshot naming other
+	 * carriers cannot account for today's bubble, so it is discarded, not patched.
+	 */
+	public function test_a_cached_snapshot_for_a_different_carrier_set_is_discarded(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment( $this->disjoint_carrier_totals(), $captured );
+
+		$this->fake_transients[ Orders_Registry::NEW_COUNTS_TRANSIENT ] = [
+			'total'    => 99,
+			'carriers' => [ 'dhl' => 99 ],
+		];
+
+		$title = $this->menu_title( $this->register_two_carriers() );
+
+		$this->assertNotSame( [], $captured, 'a snapshot for other carriers must not be served' );
+		$this->assertStringContainsString( '<span class="new-count">101</span>', $title );
+		$this->assertStringContainsString( 'title="СДЭК: 48' . "\n" . 'Яндекс: 53"', $title );
+	}
+
+	/**
+	 * A shop with nothing new is the common case and must stay at ONE query, not N + 1:
+	 * when the aggregate is zero every carrier is zero too, because a single-carrier
+	 * request narrows the query to a subset of the aggregate's matches.
+	 */
+	public function test_the_empty_state_costs_one_query_and_still_caches(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 0;
+			},
+			$captured
+		);
+
+		$registry = $this->register_two_carriers();
+
+		$this->assertSame( 'Заказы доставки', $this->menu_title( $registry ) );
+		$this->assertCount( 1, $captured, 'a zero aggregate implies zero per carrier — do not query for it' );
+
+		$this->assertSame(
+			[
+				'cdek'   => 0,
+				'yandex' => 0,
+			],
+			$this->fake_transients[ Orders_Registry::NEW_COUNTS_TRANSIENT ]['carriers'],
+			'the empty state must cache a COMPLETE snapshot, or it can never be served back'
+		);
+
+		$this->menu_title( $registry );
+
+		$this->assertCount( 1, $captured, 'and the empty state must be cached like any other' );
 	}
 }
