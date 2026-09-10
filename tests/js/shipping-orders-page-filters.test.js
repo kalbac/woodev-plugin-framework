@@ -20,8 +20,11 @@ import {
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
 	getOrderStatusNotFromQuery,
+	getScopeFromQuery,
 	isAdvancedFiltersOpen,
+	isExportedForScope,
 	readDateFilters,
+	scopeQuery,
 } from '../../src/shipping-orders-page/filters';
 
 function fakeMoment( isoString ) {
@@ -105,6 +108,7 @@ describe( 'filtersEqual', () => {
 	// base here carries every field the type declares.
 	const base = {
 		carrier: 'all',
+		scope: 'all',
 		after: '',
 		before: '',
 		deliveryStatus: '',
@@ -121,6 +125,17 @@ describe( 'filtersEqual', () => {
 
 	test( 'a different carrier is not equal', () => {
 		expect( filtersEqual( base, { ...base, carrier: 'cdek' } ) ).toBe( false );
+	} );
+
+	/**
+	 * ⚠ #841. The scope has to be part of this comparison, not merely part of the URL:
+	 * `filtersEqual` is what decides whether a navigation refetches and resets the page
+	 * (#850's guard), so a scope left out of it would switch the link's `current` mark
+	 * and go on showing the previous scope's rows.
+	 */
+	test( 'a different scope is not equal', () => {
+		expect( filtersEqual( base, { ...base, scope: 'new' } ) ).toBe( false );
+		expect( filtersEqual( { ...base, scope: 'new' }, { ...base, scope: 'new' } ) ).toBe( true );
 	} );
 
 	test( 'a different date range is not equal', () => {
@@ -515,5 +530,62 @@ describe( 'per-filter rules and the pickup-point filter (#836)', () => {
 			expect( patch ).toHaveProperty( key );
 			expect( patch[ key ] ).toBeUndefined();
 		} );
+	} );
+} );
+
+/**
+ * The «Все / Новые» scope (#841). Three pure functions, and the reason each exists is
+ * a contract that a display-side shortcut would break:
+ *
+ *  - `getScopeFromQuery` degrades an unrecognised value to «Все», so a hand-edited URL
+ *    shows the whole queue rather than an empty table under an unselected link;
+ *  - `isExportedForScope` owns the TRI-STATE — «Все» is the ABSENCE of `is_exported`,
+ *    not `true`, because the REST route reads that arg's presence and `true` would
+ *    filter to the exported ones instead of to everything;
+ *  - `scopeQuery` REMOVES the key for «Все» rather than writing `scope=all`, so there is
+ *    exactly one spelling of the default view.
+ */
+describe( 'the «Все / Новые» scope (#841)', () => {
+	test( 'an absent, empty or unrecognised scope param reads as «Все»', () => {
+		expect( getScopeFromQuery( {} ) ).toBe( 'all' );
+		expect( getScopeFromQuery( { scope: '' } ) ).toBe( 'all' );
+		expect( getScopeFromQuery( { scope: 'all' } ) ).toBe( 'all' );
+		expect( getScopeFromQuery( { scope: 'НЕЧТО' } ) ).toBe( 'all' );
+	} );
+
+	test( 'scope=new is the «Новые» scope', () => {
+		expect( getScopeFromQuery( { scope: 'new' } ) ).toBe( 'new' );
+	} );
+
+	/**
+	 * ⚠ `undefined` and not `true`. `false` here would be a tri-state collapsed to a
+	 * boolean, and the REST arg's PRESENCE is what decides whether the query filters at
+	 * all — «Все» has to send nothing.
+	 */
+	test( '«Все» sends no is_exported at all, «Новые» sends false', () => {
+		expect( isExportedForScope( 'all' ) ).toBeUndefined();
+		expect( isExportedForScope( '' ) ).toBeUndefined();
+		expect( isExportedForScope( 'new' ) ).toBe( false );
+	} );
+
+	test( 'the «Все» link removes the scope key instead of writing scope=all', () => {
+		const patch = scopeQuery( 'all' );
+
+		expect( patch ).toHaveProperty( 'scope' );
+		expect( patch.scope ).toBeUndefined();
+	} );
+
+	test( 'the «Новые» link writes scope=new', () => {
+		expect( scopeQuery( 'new' ) ).toEqual( { scope: 'new' } );
+	} );
+
+	/**
+	 * ⚠ The scope is NOT an advanced filter. Closing the «Расширенные фильтры» block
+	 * while standing in «Новые» must leave the merchant in «Новые» — the block holds
+	 * pointwise conditions, the scope says which work queue is on screen.
+	 */
+	test( 'closing the advanced block does not clear the scope', () => {
+		expect( advancedFiltersToggleQuery( false ) ).not.toHaveProperty( 'scope' );
+		expect( advancedFiltersToggleQuery( true ) ).not.toHaveProperty( 'scope' );
 	} );
 } );

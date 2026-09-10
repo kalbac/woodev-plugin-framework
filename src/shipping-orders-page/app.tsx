@@ -43,6 +43,7 @@ import type {
 	OrderRowDeliveryStatus,
 	OrderRowPayment,
 	OrderRowTracking,
+	OrdersScopeCounts,
 	SyncStatusResponse,
 } from './rest';
 import {
@@ -61,8 +62,10 @@ import {
 	FILTER_PARAM,
 	HAS_PICKUP_POINT_PARAM,
 	HAS_TRACKING_PARAM,
+	NEW_SCOPE,
 	ORDER_STATUS_NOT_PARAM,
 	ORDER_STATUS_PARAM,
+	SCOPE_PARAM,
 	advancedFiltersToggleQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
@@ -73,8 +76,11 @@ import {
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
 	getOrderStatusNotFromQuery,
+	getScopeFromQuery,
 	isAdvancedFiltersOpen,
+	isExportedForScope,
 	readDateFilters,
+	scopeQuery,
 } from './filters';
 import type { DateFilterState, UrlFilters } from './filters';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
@@ -123,6 +129,7 @@ function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters
 
 	return {
 		carrier: getCarrierFromQuery( query ),
+		scope: getScopeFromQuery( query ),
 		after,
 		before,
 		deliveryStatus: getDeliveryStatusFromQuery( query ),
@@ -471,6 +478,92 @@ function DataStatusPanel() {
 	);
 }
 
+/**
+ * The «Все (134) | Новые (7)» scope links directly above the table (#841).
+ *
+ * ⚠ **The NUMBERS are the requirement, not the switching.** The operator chose this
+ * form over a toggle on 11.09.2026, with an ASCII mock in front of him, for one
+ * stated reason: the count is visible, so the merchant can check «Новые (7)» against
+ * the badge in the admin menu with their own eyes. A control that switched scope
+ * without showing both counts would satisfy the mechanics and lose the point.
+ *
+ * Both numbers come from ONE response (`scope_counts`,
+ * `Orders_Controller::build_scope_counts()`), and that too is the requirement rather
+ * than an optimisation — two round trips can answer from two different states of the
+ * table, and a pair of links whose numbers can contradict each other is worse than
+ * no links.
+ *
+ * ⚠ **Real `href`s, not buttons.** Same rule as every other filter on this page: the
+ * scope lives in the URL, so the view is linkable and the browser's back button works
+ * on it. `getNewPath()` builds the href and `Link type="wc-admin"` prefixes it and
+ * keeps the click inside the single-page app — the two are a documented pair, and
+ * hand-building that prefix would be a guess. Missing either one means an older
+ * runtime, and then this control does not render rather than rendering a dead link
+ * (the same degrade rule {@link DataStatusPanel} and {@link RoiPanel} follow).
+ *
+ * The shape is WordPress's own counted-scope row («Все (134) | Новые (7)»), including
+ * marking the current one `current` the way a WP list table does. The separator is
+ * drawn in CSS rather than written into the DOM, so a screen reader hears two links
+ * and not a stray pipe.
+ */
+function ScopeLinks( {
+	scope,
+	counts,
+}: {
+	scope: string;
+	counts: OrdersScopeCounts;
+} ) {
+	const Link = window.wc?.components?.Link;
+	const navigation = window.wc?.navigation;
+	const getNewPath = navigation?.getNewPath;
+
+	if ( ! Link || ! navigation || ! getNewPath ) {
+		return null;
+	}
+
+	const path = navigation.getPath();
+	const query = navigation.getQuery();
+
+	const scopes: { value: string; label: string; count: number }[] = [
+		{ value: 'all', label: __( 'Все', 'woodev-plugin-framework' ), count: counts.all },
+		{ value: NEW_SCOPE, label: __( 'Новые', 'woodev-plugin-framework' ), count: counts.new },
+	];
+
+	return (
+		<ul className="woodev-orders__scopes">
+			{ scopes.map( ( entry ) => {
+				const isCurrent = entry.value === scope;
+
+				return (
+					<li key={ entry.value } className="woodev-orders__scope">
+						<Link
+							href={ getNewPath( scopeQuery( entry.value ), path, query ) }
+							type="wc-admin"
+							className={
+								isCurrent
+									? 'woodev-orders__scope-link current'
+									: 'woodev-orders__scope-link'
+							}
+							aria-current={ isCurrent ? 'page' : undefined }
+						>
+							{ entry.label }{ ' ' }
+							{ /*
+							 * Rendered at zero as well — a count that disappears when it
+							 * reaches 0 is exactly the moment the merchant most needs to
+							 * read it, because «Новые (0)» is the answer «нет новых
+							 * заказов», while a missing number reads as a broken control.
+							 */ }
+							<span className="woodev-orders__scope-count">
+								({ entry.count })
+							</span>
+						</Link>
+					</li>
+				);
+			} ) }
+		</ul>
+	);
+}
+
 export default function OrdersPage() {
 	const providers = getProviders();
 	const hasCarrierFilter = providers.length > 1;
@@ -487,6 +580,13 @@ export default function OrdersPage() {
 	const [ search, setSearch ] = useState( '' );
 	const [ rows, setRows ] = useState<OrderRow[] | null>( null );
 	const [ total, setTotal ] = useState( 0 );
+	/**
+	 * #841 — both scope-link numbers, straight from the response that built the rows.
+	 * `null` means "we do not have them", which is why {@link ScopeLinks} does not
+	 * render then: showing a number the page had to invent would defeat the whole
+	 * reason the operator chose counted links.
+	 */
+	const [ scopeCounts, setScopeCounts ] = useState<OrdersScopeCounts | null>( null );
 	const [ error, setError ] = useState( '' );
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -601,6 +701,10 @@ export default function OrdersPage() {
 			deliveryStatusNot: urlFilters.deliveryStatusNot,
 			hasTracking: urlFilters.hasTracking,
 			hasPickupPoint: urlFilters.hasPickupPoint,
+			// #841: «Новые» IS `is_exported=false`, and «Все» is the absence of the arg
+			// rather than `true` — `filters.ts` owns that mapping because the tri-state
+			// is a REST contract, not a display choice.
+			isExported: isExportedForScope( urlFilters.scope ),
 		} )
 			.then( ( res ) => {
 				if ( cancelled ) {
@@ -608,6 +712,9 @@ export default function OrdersPage() {
 				}
 				setRows( ( res && res.rows ) || [] );
 				setTotal( ( res && res.total ) || 0 );
+				// An older server sends no `scope_counts` at all; `null` is «not
+				// stated», which hides the links rather than showing them zeros.
+				setScopeCounts( ( res && res.scope_counts ) || null );
 			} )
 			.catch( ( err: { message?: string } ) => {
 				if ( cancelled ) {
@@ -624,6 +731,12 @@ export default function OrdersPage() {
 				// here is what `isLoading` becoming `false` actually looks like.
 				setRows( [] );
 				setTotal( 0 );
+				// #841: the last response's counts described a table that is no longer
+				// on screen, and a stale «Новые (7)» above an empty table is exactly
+				// the number the merchant would carry over to the menu badge and
+				// mistrust. Dropping the links is the honest answer; the carrier
+				// picker and the toggle stay mounted, so the view is still escapable.
+				setScopeCounts( null );
 			} );
 
 		return () => {
@@ -673,7 +786,11 @@ export default function OrdersPage() {
 	const carrierConfig: WcFilterPickerConfig = {
 		label: __( 'Перевозчик', 'woodev-plugin-framework' ),
 		param: CARRIER_PARAM,
-		staticParams: [ FILTER_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
+		// `SCOPE_PARAM` (#841) belongs to neither picker's config, so it would survive
+		// `getAllFilterParams()` on its own — it is listed for the same reason as the
+		// rest: «which work queue am I in» is independent of carrier, and the list is
+		// where that intent is written down.
+		staticParams: [ FILTER_PARAM, SCOPE_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
 		filters: providers.map( ( p ) => ( {
@@ -852,6 +969,15 @@ export default function OrdersPage() {
 					) }
 				</div>
 			) }
+			{ /*
+			 * ⚠ The scope links sit BETWEEN the filter row and the table — their own
+			 * row, outside `.woodev-orders__filters` entirely (#841, operator
+			 * 11.09.2026, ASCII mock). NOT in the row of pickers: he has corrected
+			 * that row's geometry twice in two days, and a counted-link pair is not a
+			 * filter control anyway — it is the same «Все (134) | Новые (7)» row an
+			 * ordinary WordPress list puts directly above its table.
+			 */ }
+			{ scopeCounts && <ScopeLinks scope={ urlFilters.scope } counts={ scopeCounts } /> }
 			<TableCard
 				className="woodev-orders"
 				title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }

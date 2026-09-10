@@ -148,6 +148,21 @@ if ( 'integration' === $test_suite ) {
 			}
 
 			/**
+			 * Whether a param was sent AT ALL, which for the tri-state args
+			 * (`has_tracking`, `has_pickup_point`, `is_exported`) is a different
+			 * question from what its value is: an explicit `false` must still filter,
+			 * so production code asks this before reading the value. `array_key_exists`
+			 * and not `isset()` for exactly that reason — a param sent as `null` is
+			 * present.
+			 *
+			 * @param string $key param name.
+			 * @return bool
+			 */
+			public function has_param( $key ) {
+				return array_key_exists( $key, $this->params );
+			}
+
+			/**
 			 * @param string $key header name, NOT normalised — see the note above.
 			 * @return string|null
 			 */

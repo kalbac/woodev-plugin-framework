@@ -94,11 +94,37 @@ export interface OrderRow {
 	delivery_status: OrderRowDeliveryStatus;
 }
 
+/**
+ * The two numbers the «Все / Новые» scope links above the table render (#841),
+ * `Orders_Controller::build_scope_counts()`.
+ *
+ * ⚠ Neither of these is `total`. `total` is the count for the scope the merchant is
+ * currently IN and drives pagination; these two describe what EACH link would show,
+ * so on «Новые» `total === scope_counts.new` while `scope_counts.all` is the larger
+ * number the other link needs. Both respect every other active filter.
+ *
+ * They arrive in this response and not in one of their own on purpose: two round
+ * trips can answer from two different states of the table, and a pair of links whose
+ * numbers can contradict each other is worse than no links at all.
+ */
+export interface OrdersScopeCounts {
+	all: number;
+	new: number;
+}
+
 /** The full response envelope `Orders_Controller::get_items()` returns. */
 export interface OrdersResponse {
 	rows: OrderRow[];
 	total: number;
 	total_pages: number;
+	/**
+	 * Optional only because an older server does not send it (#841's server half and
+	 * this bundle ship together, but a cached bundle can outlive a rollback). Absent
+	 * means «not stated», and the scope links then do not render — a link showing a
+	 * number it had to invent would defeat the entire point of the control, which is
+	 * that the merchant can check the number against the badge in the menu.
+	 */
+	scope_counts?: OrdersScopeCounts;
 }
 
 /** One entry of the inlined provider list (`Orders_Registry::build_bootstrap_providers()`). */
@@ -185,6 +211,12 @@ export interface FetchOrdersArgs {
 	 * decides whether the query applies it (D10), so this must stay a tri-state.
 	 */
 	hasTracking?: boolean;
+	/**
+	 * #841: whether the order has ever been exported to the carrier. The «Новые»
+	 * scope link sends `false`; «Все» sends nothing at all. Tri-state for the same
+	 * reason as `hasTracking` — the REST arg's PRESENCE is what decides.
+	 */
+	isExported?: boolean;
 }
 
 /**
@@ -205,6 +237,7 @@ export function fetchOrders( {
 	deliveryStatusNot = '',
 	hasTracking,
 	hasPickupPoint,
+	isExported,
 }: FetchOrdersArgs = {} ): Promise<OrdersResponse> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
@@ -252,6 +285,10 @@ export function fetchOrders( {
 
 	if ( undefined !== hasPickupPoint ) {
 		params.set( 'has_pickup_point', hasPickupPoint ? 'true' : 'false' );
+	}
+
+	if ( undefined !== isExported ) {
+		params.set( 'is_exported', isExported ? 'true' : 'false' );
 	}
 
 	return apiFetch<OrdersResponse>( {

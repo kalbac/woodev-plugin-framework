@@ -114,3 +114,31 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
 		await expect( fetchSyncStatus() ).resolves.toEqual( response );
 	} );
 } );
+
+/**
+ * `isExported` (#841) — the arg the «Новые» scope link sends. A tri-state read by
+ * PRESENCE on the server (`Orders_Controller::register_routes()` gives `is_exported`
+ * no default, and `Orders_Query::build_args()` uses `array_key_exists`), so the URL
+ * this builds is the whole contract: an omitted param means «не фильтровать», and
+ * `is_exported=false` means «только новые». Sending `true` for «Все» would silently
+ * show the ALREADY-EXPORTED orders under a link that says «Все».
+ */
+describe( 'isExported — the «Новые» scope arg (#841)', () => {
+	test( 'false sends is_exported=false — an explicit false must still filter', async () => {
+		await fetchOrders( { isExported: false } );
+
+		expect( new URL( calledUrl() ).searchParams.get( 'is_exported' ) ).toBe( 'false' );
+	} );
+
+	test( 'true sends is_exported=true', async () => {
+		await fetchOrders( { isExported: true } );
+
+		expect( new URL( calledUrl() ).searchParams.get( 'is_exported' ) ).toBe( 'true' );
+	} );
+
+	test( 'undefined omits the param entirely — that, and not `true`, is «Все»', async () => {
+		await fetchOrders( {} );
+
+		expect( new URL( calledUrl() ).searchParams.has( 'is_exported' ) ).toBe( false );
+	} );
+} );
