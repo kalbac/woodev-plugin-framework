@@ -246,10 +246,16 @@
  * width competed with two 430px-capped pickers and flex dropped it onto a line of its
  * own (operator, 09.09.2026, with a screenshot). As a sibling it simply sits after them.
  */
+/**
+ * ⚠ `align-items: stretch`, not `flex-start` — operator, 10.09.2026. Both children then
+ * share the row's height, which is what lets the status bar below size itself off
+ * WooCommerce's own picker button instead of a number we would have to keep in sync.
+ * Measured before the change: the bar ran 158→212 against the buttons' 160→210.
+ */
 .woodev-orders__header {
 	display: flex;
 	flex-wrap: wrap;
-	align-items: flex-start;
+	align-items: stretch;
 	gap: 16px;
 }
 
@@ -292,25 +298,79 @@
 .woodev-orders-sync {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
 
+	/**
+	 * ⚠ The column hugs the row's BOTTOM, and that is the load-bearing half of the
+	 * alignment. WooCommerce's own picker label carries a RESPONSIVE margin — measured on
+	 * the rig 10.09.2026, its container is 78px at a 1280 viewport and 82px at 1600, while
+	 * the button stays 50px and hangs off the bottom. So «row top + our label + our gap»
+	 * is not a fixed distance to their button's top, and anything that grows downward from
+	 * the top drifts by exactly that 4px on a wide screen. Their bottom edge does not move.
+	 */
+	justify-content: flex-end;
+
+	/**
+	 * 5px — WooCommerce's own `.woocommerce-filters-label` carries `margin: 5px 0`, so this
+	 * is the distance between THEIR label and THEIR button, measured on the rig 10.09.2026.
+	 * With the column anchored to the bottom this places our caption on their caption's
+	 * line: both read 137→155 at a 1280 viewport.
+	 *
+	 * ⚠ It is 7px in their rule above ~1400px, and we do NOT copy that media query —
+	 * duplicating someone else's breakpoint is a thing that goes stale silently. The cost of
+	 * not copying it is our caption sitting 2px lower than theirs on a wide screen, which is
+	 * below the threshold of noticing; the BAR, which is what the operator was looking at,
+	 * stays exact at every width because it is anchored to the bottom, not to the caption.
+	 */
+	gap: 5px;
+
+	/**
+	 * ⚠ Pushed to the RIGHT edge of the filter row — operator, 10.09.2026, with a
+	 * screenshot. It sat immediately after the date picker, 305px short of the container
+	 * (right edge 935 against 1240). `margin-left: auto` is the flex idiom for it and
+	 * survives a third picker appearing beside the two.
+	 */
+	margin-left: auto;
+
+	/**
+	 * The caption takes `.woocommerce-filters-label`'s own metrics, measured on the rig
+	 * 10.09.2026: 13px/1.4 (18.2px, against the 20px this block used to set) and `#3c434a`
+	 * (against `$ink` #1d2327). Two captions in different weights of grey on one row is
+	 * exactly the kind of near-miss that reads as sloppy without being nameable — and this
+	 * block's whole brief is to take WooCommerce's shape. Their literal, like the `#ddd`
+	 * and `#757575` below: `$muted` is #646970 and is NOT this colour.
+	 */
 	&__label {
 		font-size: 13px;
-		line-height: 20px;
-		color: wd.$ink;
+		line-height: 1.4;
+		color: #3c434a;
 	}
 
 	/**
 	 * The bordered bar itself. Every number here was measured off
 	 * `.woocommerce-analytics-import-status-bar` on the rig (09.09.2026), not chosen:
-	 * 1px #ddd, 4px radius, 6px/12px padding, 13px/20px text, and a 32px gap between
-	 * the two columns. The operator asked for THEIR block, so the numbers are theirs.
+	 * 1px #ddd, 4px radius, 13px/20px text, and a 32px gap between the two columns. The
+	 * operator asked for THEIR block, so the numbers are theirs.
+	 *
+	 * ⚠ The VERTICAL sizing is the one part that is deliberately NOT their status bar's.
+	 * Theirs owns a row and is free to be any height; ours has to end on the same line as
+	 * the pickers beside it (operator, 10.09.2026) — with their 6px padding it stood 54px
+	 * against the buttons' 50px, which is the 2px overhang top and bottom that he saw.
+	 *
+	 * So the height is `.woocommerce-dropdown-button`'s own — **50px, measured on the rig
+	 * at 980/1100/1280/1440/1600, where it never varied** — and the content is centred in
+	 * it rather than spaced by a padding that would fight that height. It is their number
+	 * either way; this way it is written down as one, next to what it has to match, instead
+	 * of being the sum of a padding and two line heights. `flex: 0 0 auto` keeps the row's
+	 * stretch from growing it past that.
 	 */
 	&__bar {
 		display: flex;
+		align-items: center;
+		flex: 0 0 auto;
+		min-height: 50px;
 		border: 1px solid #ddd;
 		border-radius: 4px;
-		padding: 6px 12px;
+		padding: 0 12px;
 		font-size: 13px;
 		line-height: 20px;
 	}
