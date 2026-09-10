@@ -210,15 +210,152 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			wc_admin_register_page(
-				[
-					'id'         => self::PAGE_SLUG,
-					'title'      => __( 'Заказы доставки', 'woodev-plugin-framework' ),
-					'parent'     => 'woocommerce',
-					'path'       => '/' . self::PAGE_SLUG,
-					'capability' => $this->get_page_capability(),
-				]
+			wc_admin_register_page( $this->build_page_args() );
+		}
+
+		/**
+		 * Builds the `wc_admin_register_page()` argument array.
+		 *
+		 * Split out of {@see self::register_page()} so the argument shape — in particular
+		 * the `title`/`page_title` split below, which is the whole of #834's escaping
+		 * constraint — is reachable from a unit test. `wc_admin_register_page()` itself is
+		 * deliberately never stubbed in this project's unit suite: touching it once leaks
+		 * `function_exists( 'wc_admin_register_page' )` as permanently `true` for the rest
+		 * of the PHPUnit process, which would disarm {@see self::register_page()}'s own
+		 * fail-soft guard test.
+		 *
+		 * ⚠ `title` and `page_title` MUST both be passed, and only `title` may carry
+		 * markup. `wc_admin_register_page()` hands `title` straight through to
+		 * `add_submenu_page()` as the MENU title, which WordPress echoes unescaped — that
+		 * is what lets the badge render at all (measured on the rig, #834, 11.09.2026).
+		 * But WooCommerce's `PageController::register_page()` copies `title` into
+		 * `page_title` when the latter is empty, and `page_title` IS escaped, so leaving
+		 * it out puts the raw `<span …>` markup into the browser tab's `<title>`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,mixed>
+		 */
+		private function build_page_args(): array {
+			$page_title = __( 'Заказы доставки', 'woodev-plugin-framework' );
+
+			return [
+				'id'         => self::PAGE_SLUG,
+				'title'      => $this->build_menu_title( $page_title ),
+				'page_title' => $page_title,
+				'parent'     => 'woocommerce',
+				'path'       => '/' . self::PAGE_SLUG,
+				'capability' => $this->get_page_capability(),
+			];
+		}
+
+		/**
+		 * Appends the "new orders" counter badge to the submenu title (#834).
+		 *
+		 * The markup is WordPress's own update-counter bubble — the same one core uses
+		 * for pending plugin updates and the same one the shipped v1 plugin emits
+		 * (`woocommerce-edostavka/includes/admin/class-wc-edostavka-admin.php:71`) — so no
+		 * stylesheet of ours is involved and the bubble matches every other count in the
+		 * admin menu. Like the v1 plugin, nothing is appended when the count is zero: an
+		 * empty bubble reads as "0 waiting", which is noise, not information.
+		 *
+		 * The one addition over v1 is the `title` attribute carrying the per-carrier
+		 * breakdown, one line per registered provider. That is the same plain-attribute
+		 * technique the page's own «Статус данных» bar already uses
+		 * (`src/shipping-orders-page/app.tsx`, `.woodev-orders-sync__bar[title]`) rather
+		 * than a JS tooltip, which the admin menu could not host anyway.
+		 *
+		 * ⚠ The inner span uses `%s` with {@see number_format_i18n()}, not v1's `%d`:
+		 * `sprintf( '%d', '1 234' )` truncates a thousands-separated string to `1`, so the
+		 * v1 badge misreports any shop with ≥1000 new orders. The outer `count-%d` class
+		 * takes the raw integer, which is what core's own `wp-admin/menu.php` does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $page_title plain, unmarked-up page title.
+		 * @return string menu title, with the badge appended when there is one to show.
+		 */
+		private function build_menu_title( string $page_title ): string {
+			// The badge counts orders this user is not necessarily allowed to see. The
+			// page capability is the registry's own answer to "may this user look at
+			// shipping orders" — reuse it rather than widening it to "can see a menu".
+			if ( ! current_user_can( $this->get_page_capability() ) ) {
+				return $page_title;
+			}
+
+			$query = new Orders_Query( $this );
+			$total = (int) $query->get_results( self::new_orders_request() )->total;
+
+			if ( $total < 1 ) {
+				return $page_title;
+			}
+
+			return $page_title . sprintf(
+				' <span class="update-plugins count-%1$d" title="%2$s"><span class="new-count">%3$s</span></span>',
+				$total,
+				esc_attr( $this->build_new_orders_breakdown( $query ) ),
+				number_format_i18n( $total )
 			);
+		}
+
+		/**
+		 * Builds the badge's per-carrier tooltip text — one `«Перевозчик»: N` line per
+		 * registered provider, joined by newlines, which is how a `title` attribute
+		 * expresses several lines.
+		 *
+		 * Every provider is listed, including one contributing nothing, so the breakdown
+		 * is readable as a complete account of the number in the bubble rather than a
+		 * selection from it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Orders_Query $query the SAME query object the aggregate count came from,
+		 *                            so a per-carrier line cannot be built by a different
+		 *                            mechanism than the total it breaks down.
+		 * @return string
+		 */
+		private function build_new_orders_breakdown( Orders_Query $query ): string {
+			$lines = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$count = (int) $query->get_results( self::new_orders_request( $provider->get_id() ) )->total;
+
+				$lines[] = $provider->get_label() . ': ' . number_format_i18n( $count );
+			}
+
+			return implode( "\n", $lines );
+		}
+
+		/**
+		 * The request that defines "new" for the badge: an order nobody has exported to
+		 * the carrier yet.
+		 *
+		 * ⚠ "New" is `is_exported => false` and nothing else — settled by measurement in
+		 * #841: an order is new until {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * has written its `carrier_order_id`. There is no separate "new" flag to read.
+		 *
+		 * ⚠ This goes through {@see Orders_Query} — the very query the table runs — and
+		 * NOT through a hand-rolled `wc_get_orders()`/`$wpdb` count. That is what makes
+		 * the number in the menu equal what the page shows under the same filter BY
+		 * CONSTRUCTION. It also keeps both datastores honest: on the legacy CPT datastore
+		 * `wc_get_orders()` silently DROPS `meta_query` (gotcha
+		 * `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`), and only
+		 * `Orders_Query` knows to pass its own query vars there instead.
+		 *
+		 * `build_args()` always sets `paginate => true`, so `->total` on the result is the
+		 * count and `per_page => 1` keeps the row fetch to a single order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $carrier provider id, or 'all' for the aggregate.
+		 * @return array<string,mixed>
+		 */
+		private static function new_orders_request( string $carrier = 'all' ): array {
+			return [
+				'carrier'     => $carrier,
+				'is_exported' => false,
+				'per_page'    => 1,
+			];
 		}
 
 		/**

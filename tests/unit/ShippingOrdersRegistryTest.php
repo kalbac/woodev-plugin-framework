@@ -516,4 +516,320 @@ class ShippingOrdersRegistryTest extends TestCase {
 			$this->assertSame( [ 'id', 'label' ], array_keys( $entry ) );
 		}
 	}
+
+	// -----------------------------------------------------------------------
+	// #834 — the «Заказы доставки» submenu item carries a badge with the number
+	// of NEW orders, and hovering it breaks that number down per carrier.
+	//
+	// `wc_admin_register_page()` is still never stubbed here (see register_page()'s
+	// own tests above for why), so the two things under test are reached through the
+	// private builders they were split into: build_page_args() and build_menu_title().
+	// -----------------------------------------------------------------------
+
+	/**
+	 * A provider that declares a carrier-order-id key — without one there is nothing
+	 * for `is_exported` to be false ABOUT, and the badge would count differently.
+	 */
+	private function exportable_provider( string $id, string $label ): Orders_Provider {
+		return Orders_Provider::create(
+			$id,
+			$label,
+			'_marker_' . $id,
+			[ $id ],
+			[ 'carrier_order_id_meta_key' => '_carrier_order_id_' . $id ]
+		);
+	}
+
+	/**
+	 * Stubs everything Orders_Query::build_args() reaches for, plus the two functions
+	 * the badge itself calls, and routes wc_get_orders() through $totals — a callback
+	 * handed the BUILT args, so a test can return a different count per carrier.
+	 *
+	 * Every call's args land in $captured, which is what lets a test assert the badge
+	 * asked the table's own question rather than one of its own.
+	 *
+	 * @param callable         $totals   built args => row count.
+	 * @param array<int,array> $captured out; one entry per wc_get_orders() call.
+	 * @param bool             $user_can what current_user_can() answers.
+	 * @return void
+	 */
+	private function stubOrdersQueryEnvironment( callable $totals, array &$captured, bool $user_can = true ): void {
+		Functions\when( 'current_user_can' )->justReturn( $user_can );
+		Functions\when( 'number_format_i18n' )->alias(
+			static function ( $number ): string {
+				return number_format( (float) $number, 0, ',', ' ' );
+			}
+		);
+		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'wc_string_to_bool' )->alias(
+			static function ( $value ): bool {
+				return is_bool( $value ) ? $value : ( 'yes' === $value || 'true' === $value || '1' === $value || 1 === $value );
+			}
+		);
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$captured, $totals ) {
+				$captured[] = $args;
+
+				return (object) [
+					'orders'        => [],
+					'total'         => (int) $totals( $args ),
+					'max_num_pages' => 1,
+				];
+			}
+		);
+	}
+
+	/**
+	 * Calls the private menu-title builder — same reflection route, and for the same
+	 * reason, as {@see self::reachable_delivery_statuses()}.
+	 *
+	 * @param Orders_Registry $registry registry under test.
+	 * @return string
+	 */
+	private function menu_title( Orders_Registry $registry ): string {
+		$method = new \ReflectionMethod( Orders_Registry::class, 'build_menu_title' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return (string) $method->invoke( $registry, 'Заказы доставки' );
+	}
+
+	/**
+	 * Calls the private page-args builder.
+	 *
+	 * @param Orders_Registry $registry registry under test.
+	 * @return array<string,mixed>
+	 */
+	private function page_args( Orders_Registry $registry ): array {
+		$method = new \ReflectionMethod( Orders_Registry::class, 'build_page_args' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return (array) $method->invoke( $registry );
+	}
+
+	/**
+	 * The shipped v1 plugin appends the bubble only when the count is above zero
+	 * (`woocommerce-edostavka/includes/admin/class-wc-edostavka-admin.php:69`), and so
+	 * does this: an empty bubble reads as "0 waiting", which is noise.
+	 */
+	public function test_menu_title_carries_no_badge_when_nothing_is_new(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 0;
+			},
+			$captured
+		);
+
+		Orders_Registry::instance()->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$this->assertSame( 'Заказы доставки', $this->menu_title( Orders_Registry::instance() ) );
+	}
+
+	/**
+	 * Pinned as an exact string, not "a span exists": the markup IS the requirement —
+	 * it is WordPress's own update-counter bubble, the one core uses for pending plugin
+	 * updates, so no stylesheet of ours is involved and it matches every other count in
+	 * the admin menu.
+	 */
+	public function test_menu_title_appends_wordpress_own_update_counter_markup(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 3;
+			},
+			$captured
+		);
+
+		Orders_Registry::instance()->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$this->assertSame(
+			'Заказы доставки <span class="update-plugins count-3" title="СДЭК: 3"><span class="new-count">3</span></span>',
+			$this->menu_title( Orders_Registry::instance() )
+		);
+	}
+
+	/**
+	 * The defect this test exists to prevent is a bespoke `wc_get_orders()`/`$wpdb`
+	 * count: a number that agrees with the table by coincidence and drifts the first
+	 * time either side changes. The badge must run the table's OWN query.
+	 */
+	public function test_badge_count_runs_the_tables_own_query_with_is_exported_false(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 2;
+			},
+			$captured
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$this->menu_title( $registry );
+
+		$this->assertNotSame( [], $captured, 'the badge must actually have run a query' );
+
+		$expected = ( new Orders_Query( $registry ) )->build_args(
+			[
+				'carrier'     => 'all',
+				'is_exported' => false,
+				'per_page'    => 1,
+			]
+		);
+
+		$this->assertSame( $expected, $captured[0] );
+
+		/*
+		 * Spelled out as well, so the assertion above cannot pass vacuously if both
+		 * sides ever stop asking about exports. Brain Monkey reports the legacy CPT
+		 * datastore, where `meta_query` is silently DROPPED by wc_get_orders() — the
+		 * export filter has to travel as Orders_Query's own query var instead, which
+		 * is precisely what a hand-rolled count would get wrong.
+		 */
+		$this->assertSame(
+			[
+				[
+					'relation' => 'AND',
+					[
+						'key'     => '_marker_cdek',
+						'compare' => 'EXISTS',
+					],
+					[
+						'key'     => '_carrier_order_id_cdek',
+						'compare' => 'NOT EXISTS',
+					],
+				],
+			],
+			$captured[0][ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ]
+		);
+
+		// `paginate => true` is what makes ->total the count; per_page => 1 keeps the
+		// row fetch down to a single order.
+		$this->assertTrue( $captured[0]['paginate'] );
+		$this->assertSame( 1, $captured[0]['limit'] );
+	}
+
+	public function test_badge_tooltip_breaks_the_count_down_per_carrier(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function ( array $args ): int {
+				$keys = $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ];
+
+				if ( [ '_marker_cdek' ] === $keys ) {
+					return 2;
+				}
+
+				if ( [ '_marker_yandex' ] === $keys ) {
+					return 5;
+				}
+
+				return 6; // The aggregate — deliberately NOT 2 + 5; see below.
+			},
+			$captured
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+		$registry->register_provider( $this->exportable_provider( 'yandex', 'Яндекс' ) );
+
+		$title = $this->menu_title( $registry );
+
+		// A `title` attribute expresses several lines with newlines — the same plain
+		// technique the page's own «Статус данных» bar uses, not a JS tooltip.
+		$this->assertStringContainsString( 'title="СДЭК: 2' . "\n" . 'Яндекс: 5"', $title );
+
+		/*
+		 * The bubble shows the aggregate query's answer, never the sum of the lines:
+		 * one order can carry two carriers' markers, so the aggregate is its own
+		 * query. A badge built by adding the breakdown up would print 7 here.
+		 */
+		$this->assertStringContainsString( '<span class="new-count">6</span>', $title );
+		$this->assertStringContainsString( 'count-6"', $title );
+	}
+
+	/**
+	 * The badge counts orders a viewer may not be allowed to see. `get_page_capability()`
+	 * is the registry's own answer to "may this user look at shipping orders" — reuse it,
+	 * never widen it, and do not even run the query for someone who fails it.
+	 */
+	public function test_no_badge_and_no_query_for_a_user_without_the_page_capability(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 9;
+			},
+			$captured,
+			false
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$this->assertSame( 'Заказы доставки', $this->menu_title( $registry ) );
+		$this->assertSame( [], $captured, 'a user who may not open the page must not have its orders counted for them' );
+	}
+
+	/**
+	 * ⚠ `page_title` must be passed explicitly and must stay plain. `title` reaches
+	 * `add_submenu_page()` as the MENU title, which WordPress echoes unescaped — that
+	 * is what lets the badge render. But WooCommerce's `PageController::register_page()`
+	 * copies `title` into `page_title` when that is empty, and `page_title` IS escaped,
+	 * so omitting it puts the raw `<span …>` into the browser tab's `<title>`
+	 * (measured on the rig, #834, 11.09.2026).
+	 */
+	public function test_page_args_pass_page_title_explicitly_and_free_of_markup(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 4;
+			},
+			$captured
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$args = $this->page_args( $registry );
+
+		$this->assertSame( 'Заказы доставки', $args['page_title'] );
+		$this->assertStringNotContainsString( '<', $args['page_title'] );
+		$this->assertStringContainsString( '<span class="update-plugins count-4"', $args['title'] );
+
+		$this->assertSame( Orders_Registry::PAGE_SLUG, $args['id'] );
+		$this->assertSame( 'woocommerce', $args['parent'] );
+		$this->assertSame( '/' . Orders_Registry::PAGE_SLUG, $args['path'] );
+		$this->assertSame( 'manage_woocommerce', $args['capability'] );
+	}
+
+	/**
+	 * The shipped v1 plugin prints the already-formatted number through `%d`, and
+	 * `sprintf( '%d', '1 234' )` truncates it back to 1 — its badge misreports every
+	 * shop with a four-figure backlog. Only the visible number is formatted here; the
+	 * class name keeps the raw integer, which is what core's own `wp-admin/menu.php`
+	 * does.
+	 */
+	public function test_badge_count_is_locale_formatted_and_not_truncated_at_a_thousand(): void {
+		$captured = [];
+		$this->stubOrdersQueryEnvironment(
+			static function (): int {
+				return 1234;
+			},
+			$captured
+		);
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->exportable_provider( 'cdek', 'СДЭК' ) );
+
+		$title = $this->menu_title( $registry );
+
+		$this->assertStringContainsString( 'count-1234"', $title );
+		$this->assertStringContainsString( '<span class="new-count">1 234</span>', $title );
+	}
 }
