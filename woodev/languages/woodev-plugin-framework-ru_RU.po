@@ -3594,6 +3594,14 @@ msgid "Статус данных"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "Трек-номер {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Пункт выдачи {{filter /}}"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Обновлено"
 msgstr ""
 
