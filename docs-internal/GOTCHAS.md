@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 307 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 308 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -84,6 +84,7 @@
 - [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
+- [woocommerce/navigation] **`wc-admin` REWRITES `document.title` after it mounts, so a DOM read says the markup never leaked while the response body shows it did — ask the response, not the settled DOM, about anything the server rendered.** → [a-dom-read-cannot-answer-a-question-about-server-rendered-markup](gotchas/a-dom-read-cannot-answer-a-question-about-server-rendered-markup.md) (s130)
 - [woocommerce/navigation] **A sidebar link's `href` carries no query, and `wc-admin` re-adds the date params anyway (`getPersistedQuery()`) — so a probe using a full page load proves the OPPOSITE of what a click does.** → [wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry](gotchas/wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry.md) (s129)
 - [woocommerce/navigation] **`addHistoryListener` fires BEFORE the real `pushState`, so `getQuery()` inside it reads the PREVIOUS URL and the page stays one navigation behind. Raise a flag; read the query in a later effect.** → [addhistorylistener-fires-before-the-url-changes](gotchas/addhistorylistener-fires-before-the-url-changes.md) (s128)
 - [woocommerce/filter-options] **The rule select comes from the TITLE token, but the URL key and reading the filter BACK come from `rules` — dropping the rule to hide a one-option select kills the round trip.** → [advancedfilters-renders-the-rule-select-only-where-the-title-asks-for-it](gotchas/advancedfilters-renders-the-rule-select-only-where-the-title-asks-for-it.md) (s129)
