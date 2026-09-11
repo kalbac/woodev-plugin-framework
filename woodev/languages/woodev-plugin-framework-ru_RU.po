@@ -3688,3 +3688,67 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Новые"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Всё время"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Сегодня"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Вчера"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "С начала недели"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Прошлая неделя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "С начала месяца"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Прошлый месяц"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "С начала квартала"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Прошлый квартал"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "С начала года"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Прошлый год"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Произвольный период"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выберите период"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Применить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Период"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Период заказов"
+msgstr ""

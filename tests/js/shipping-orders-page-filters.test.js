@@ -8,9 +8,15 @@
 import {
 	ADVANCED_FILTERS_VALUE,
 	ALL_CARRIERS,
+	ALL_TIME_PERIOD,
+	CUSTOM_PERIOD,
+	DEFAULT_COMPARE,
 	DEFAULT_DATE_RANGE,
 	FILTER_PARAM,
+	PERIOD_PRESETS,
 	advancedFiltersToggleQuery,
+	getPeriodFromQuery,
+	periodQuery,
 	buildAdvancedFiltersConfig,
 	filtersEqual,
 	getCarrierFromQuery,
@@ -224,25 +230,82 @@ describe( 'readDateFilters', () => {
 		expect( ALLOWED_COMPARE ).toContain( parsed.compare );
 	} );
 
-	test( 'an empty query resolves the default period into after/before', () => {
-		const result = readDateFilters( fakeDateApi(), {} );
+	// ---- the three URL states of the «Период» control (#855) ----
+
+	/**
+	 * State 1 of the contract: «Всё время», the page's DEFAULT. An empty query means no
+	 * date bound at all — NOT the widest preset, which is what it used to mean. Empty
+	 * strings are what `fetchOrders()` omits (`rest.ts`), so this is the page asking the
+	 * server for every order, however old.
+	 */
+	test( 'an empty query is «всё время» — no dates at all, and wc.date is never asked', () => {
+		const dateApi = fakeDateApi();
+		const getCurrentDates = jest.fn( dateApi.getCurrentDates );
+
+		const result = readDateFilters( { ...dateApi, getCurrentDates }, {} );
+
+		expect( result.after ).toBe( '' );
+		expect( result.before ).toBe( '' );
+		// ⚠ Not a purity check. `@woocommerce/date` has no "all time" to resolve, so the
+		// only way to ask it for one is to ask it for something else — which is exactly
+		// how the page ended up always carrying dates.
+		expect( getCurrentDates ).not.toHaveBeenCalled();
+	} );
+
+	/** State 2: a preset resolves through `wc.date`, as it always did. */
+	test( 'a preset period resolves into after/before through wc.date', () => {
+		const result = readDateFilters( fakeDateApi(), { period: 'year', compare: 'previous_year' } );
 
 		expect( result.after ).toBe( '2026-01-01' );
 		expect( result.before ).toBe( '2026-09-08' );
-		expect( result.dateQuery.period ).toBe( 'year' );
-		expect( result.dateQuery.compare ).toBe( 'previous_year' );
 	} );
 
+	/** State 3: a custom range carries its own two dates. */
 	test( 'a custom range in the query resolves to its own after/before', () => {
 		const result = readDateFilters( fakeDateApi(), {
 			period: 'custom',
+			compare: 'previous_year',
 			before: '2026-03-01',
 			after: '2026-02-01',
 		} );
 
 		expect( result.after ).toBe( '2026-02-01' );
 		expect( result.before ).toBe( '2026-03-01' );
-		expect( result.dateQuery.period ).toBe( 'custom' );
+	} );
+
+	/**
+	 * ⚠ `compare` is written by the control on every pick, but the URL is hand-editable
+	 * and the browser's back button can land on an old one. `getCurrentDates()` throws
+	 * `Cannot find compare:` on an absent one and the throw kills the whole wc-admin app,
+	 * so `readDateFilters()` must supply it rather than forward whatever the URL has.
+	 */
+	test( 'a period with no compare beside it still resolves — the compare is supplied, not forwarded', () => {
+		const result = readDateFilters( fakeDateApi(), { period: 'year' } );
+
+		expect( result.after ).toBe( '2026-01-01' );
+		expect( result.before ).toBe( '2026-09-08' );
+	} );
+
+	/**
+	 * The two inputs `@woocommerce/date` answers by THROWING, each of which takes the
+	 * entire admin app down rather than this one control. Both have to degrade to «всё
+	 * время» here, at the boundary — the only place that can tell them apart from a real
+	 * period.
+	 */
+	test( 'an unknown period degrades to «всё время» instead of throwing Cannot find period', () => {
+		const result = readDateFilters( fakeDateApi(), { period: 'all', compare: 'previous_year' } );
+
+		expect( result ).toEqual( { after: '', before: '' } );
+	} );
+
+	test( 'a custom period missing one of its two dates degrades to «всё время»', () => {
+		expect(
+			readDateFilters( fakeDateApi(), { period: 'custom', compare: 'previous_year', after: '2026-02-01' } )
+		).toEqual( { after: '', before: '' } );
+
+		expect(
+			readDateFilters( fakeDateApi(), { period: 'custom', compare: 'previous_year', before: '2026-03-01' } )
+		).toEqual( { after: '', before: '' } );
 	} );
 
 	test( 'a missing primary.after/before resolves to an empty string, never a crash', () => {
@@ -255,10 +318,99 @@ describe( 'readDateFilters', () => {
 			isoDateFormat: 'YYYY-MM-DD',
 		};
 
-		const result = readDateFilters( dateApi, {} );
+		const result = readDateFilters( dateApi, { period: 'year' } );
 
 		expect( result.after ).toBe( '' );
 		expect( result.before ).toBe( '' );
+	} );
+} );
+
+describe( 'getPeriodFromQuery (#855)', () => {
+	test( 'no period param is «всё время» — the page default', () => {
+		expect( getPeriodFromQuery( {} ) ).toBe( ALL_TIME_PERIOD );
+	} );
+
+	test( 'every preset the control offers reads back verbatim', () => {
+		PERIOD_PRESETS.forEach( ( preset ) => {
+			expect( getPeriodFromQuery( { period: preset.value } ) ).toBe( preset.value );
+		} );
+	} );
+
+	/**
+	 * `custom` is the one period that needs two dates beside it, and the one whose
+	 * absence throws inside `@woocommerce/date` rather than returning something odd.
+	 */
+	test( 'custom counts as custom only with BOTH dates beside it', () => {
+		expect( getPeriodFromQuery( { period: 'custom', after: '2026-02-01', before: '2026-03-01' } ) ).toBe(
+			CUSTOM_PERIOD
+		);
+		expect( getPeriodFromQuery( { period: 'custom', after: '2026-02-01' } ) ).toBe( ALL_TIME_PERIOD );
+		expect( getPeriodFromQuery( { period: 'custom', before: '2026-03-01' } ) ).toBe( ALL_TIME_PERIOD );
+		expect( getPeriodFromQuery( { period: 'custom' } ) ).toBe( ALL_TIME_PERIOD );
+	} );
+
+	/**
+	 * ⚠ `all` in particular: it is the value one would reach for to spell «всё время»,
+	 * and writing it into the URL is exactly what crashes the app. The control expresses
+	 * that state as the ABSENCE of the param, so reading one back has to degrade.
+	 */
+	test( 'an unrecognised period — «all» included — reads as «всё время»', () => {
+		expect( getPeriodFromQuery( { period: 'all' } ) ).toBe( ALL_TIME_PERIOD );
+		expect( getPeriodFromQuery( { period: 'decade' } ) ).toBe( ALL_TIME_PERIOD );
+	} );
+
+	/** `custom` is reached through its own menu item, never as a preset. */
+	test( 'the preset list does not offer custom', () => {
+		expect( PERIOD_PRESETS.map( ( preset ) => preset.value ) ).not.toContain( CUSTOM_PERIOD );
+	} );
+} );
+
+describe( 'periodQuery (#855)', () => {
+	/**
+	 * The «Всё время» row of the URL contract: no `period`, no `after`, no `before` —
+	 * and no `compare` either, which exists only to keep `@woocommerce/date`'s input
+	 * contract for a period we are no longer asking about. `undefined` is how
+	 * `addQueryArgs()` drops a key, the same mechanism `scopeQuery()` uses for «Все».
+	 */
+	test( '«всё время» clears every date key rather than writing a value', () => {
+		expect( periodQuery( ALL_TIME_PERIOD ) ).toEqual( {
+			period: undefined,
+			compare: undefined,
+			after: undefined,
+			before: undefined,
+		} );
+	} );
+
+	/**
+	 * A preset carries `compare`, and that is not decoration:
+	 * `getDateParamsFromQuery()` reads the query's own dates ONLY when BOTH `period` and
+	 * `compare` are present, and `getCurrentDates()` throws without a known compare.
+	 */
+	test( 'a preset writes period + compare and clears any leftover custom dates', () => {
+		expect( periodQuery( 'last_week' ) ).toEqual( {
+			period: 'last_week',
+			compare: DEFAULT_COMPARE,
+			after: undefined,
+			before: undefined,
+		} );
+	} );
+
+	test( 'a custom range writes period=custom with both dates and the compare', () => {
+		expect( periodQuery( CUSTOM_PERIOD, '2026-02-01', '2026-03-01' ) ).toEqual( {
+			period: 'custom',
+			compare: DEFAULT_COMPARE,
+			after: '2026-02-01',
+			before: '2026-03-01',
+		} );
+	} );
+
+	/** Round-trip: what the control writes is what it reads back. */
+	test( 'every state it writes reads back as the state it wrote', () => {
+		expect( getPeriodFromQuery( periodQuery( ALL_TIME_PERIOD ) ) ).toBe( ALL_TIME_PERIOD );
+		expect( getPeriodFromQuery( periodQuery( 'quarter' ) ) ).toBe( 'quarter' );
+		expect( getPeriodFromQuery( periodQuery( CUSTOM_PERIOD, '2026-02-01', '2026-03-01' ) ) ).toBe(
+			CUSTOM_PERIOD
+		);
 	} );
 } );
 

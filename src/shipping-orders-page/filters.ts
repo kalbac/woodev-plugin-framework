@@ -10,14 +10,9 @@
 
 import { __ } from '@wordpress/i18n';
 import type { DeliveryStatusCanonical } from './rest';
-import type {
-	WcAdvancedFiltersConfig,
-	WcDateParams,
-	WcDateRangeFilterPickerDateQuery,
-	WcDateValue,
-} from './wc-globals';
+import type { WcAdvancedFiltersConfig, WcDateParams, WcDateValue } from './wc-globals';
 
-type WcQuery = Record<string, string | undefined>;
+export type WcQuery = Record<string, string | undefined>;
 
 /** Query key the carrier `FilterPicker` owns — carrier SCOPE only, since #835. */
 export const CARRIER_PARAM = 'carrier';
@@ -142,21 +137,165 @@ export const HAS_PICKUP_POINT_PARAM = 'has_pickup_point_is';
 export const HAS_TRACKING_YES = 'yes';
 export const HAS_TRACKING_NO = 'no';
 
+/** The URL keys the «Период» control owns (#855). */
+export const PERIOD_PARAM = 'period';
+export const COMPARE_PARAM = 'compare';
+export const AFTER_PARAM = 'after';
+export const BEFORE_PARAM = 'before';
+
 /**
- * WooCommerce's date picker has no "all time" preset (D11) — the operator chose
- * the widest one instead: a delivery-orders list is a work queue, and an order
- * stuck two months ago is exactly the one a merchant opens the page for.
- *
- * ⚠ `compare` MUST be present here even though this page shows no period
- * comparison and never sends `compare` to our REST route. `getCurrentDates()`
- * resolves the compare value against a fixed list and throws
- * `Cannot find compare:` when it is absent — which crashes the whole wc-admin
- * app, not just this control. D11's "no period comparison" is about the UI and
- * the server args; it is not licence to break `@woocommerce/date`'s own input
- * contract. WooCommerce's own default is `period=month&compare=previous_year`;
- * only the period differs here.
+ * The `period` value that means "a hand-picked pair of dates" — `@woocommerce/date`'s
+ * own spelling, not ours, and the ONLY period value that also requires `after`/`before`.
  */
-export const DEFAULT_DATE_RANGE = 'period=year&compare=previous_year';
+export const CUSTOM_PERIOD = 'custom';
+
+/**
+ * «Всё время» is the ABSENCE of `period`, exactly like «Все» is the absence of
+ * {@link SCOPE_PARAM} — not a value of its own (#855).
+ *
+ * ⚠ It cannot be a value. `@woocommerce/date`'s `getCurrentDates()` resolves the period
+ * against its own fixed `presetValues` list and throws `Cannot find period: all` for
+ * anything else, and that throw takes the WHOLE wc-admin app down, not just this
+ * control (measured by the operator on the rig, 12.09.2026). So an unknown period never
+ * reaches `wc.date` — {@link getPeriodFromQuery} degrades it to «всё время» here.
+ */
+export const ALL_TIME_PERIOD = '';
+
+/**
+ * ⚠ `compare` travels with every `period` we write, and NOT because of the dropdown
+ * WooCommerce draws for it — this page renders no comparison control at all (#855).
+ *
+ * It is load-bearing twice over, both measured off the shipped `wc-date` bundle
+ * (WooCommerce 10.9.4, `assets/client/admin/date/index.js`):
+ *
+ * 1. `getDateParamsFromQuery()` reads the query's own `after`/`before` ONLY when the
+ *    query carries BOTH `period` and `compare` (`if (period && compare) return {…}`);
+ *    otherwise it discards them and resolves the default range instead. Write
+ *    `period=custom&after=…&before=…` without `compare` and the merchant's own dates
+ *    are silently replaced by the default range's.
+ * 2. `getCurrentDates()` resolves the compare value against a fixed list and throws
+ *    `Cannot find compare:` when it is absent — again taking the whole app down.
+ *
+ * `previous_year` is WooCommerce's own default and nothing here reads it back.
+ */
+export const DEFAULT_COMPARE = 'previous_year';
+
+/**
+ * The period presets, in WooCommerce's own order and with WooCommerce's own values —
+ * `presetValues` from the shipped `wc-date` bundle, `custom` excluded because it is
+ * reached through «Произвольный период» and needs two dates beside it.
+ *
+ * The labels are ours: WooCommerce's «Week to date» means "from the start of the week
+ * until today", which is what «С начала недели» says in Russian without the jargon.
+ *
+ * ⚠ This list is also the GUARD. A `period` the list does not know never reaches
+ * `wc.date` (see {@link ALL_TIME_PERIOD}), so it has to hold every value the control can
+ * write, and only those.
+ */
+export const PERIOD_PRESETS: { value: string; label: string }[] = [
+	{ value: 'today', label: __( 'Сегодня', 'woodev-plugin-framework' ) },
+	{ value: 'yesterday', label: __( 'Вчера', 'woodev-plugin-framework' ) },
+	{ value: 'week', label: __( 'С начала недели', 'woodev-plugin-framework' ) },
+	{ value: 'last_week', label: __( 'Прошлая неделя', 'woodev-plugin-framework' ) },
+	{ value: 'month', label: __( 'С начала месяца', 'woodev-plugin-framework' ) },
+	{ value: 'last_month', label: __( 'Прошлый месяц', 'woodev-plugin-framework' ) },
+	{ value: 'quarter', label: __( 'С начала квартала', 'woodev-plugin-framework' ) },
+	{ value: 'last_quarter', label: __( 'Прошлый квартал', 'woodev-plugin-framework' ) },
+	{ value: 'year', label: __( 'С начала года', 'woodev-plugin-framework' ) },
+	{ value: 'last_year', label: __( 'Прошлый год', 'woodev-plugin-framework' ) },
+];
+
+/**
+ * A REQUIRED ARGUMENT OF SOMEONE ELSE'S API, and nothing more (#855).
+ *
+ * ⚠ It is NOT this page's default period. The page's default is «всё время» — no
+ * `period`, no `after`, no `before` in the URL and no date bound on the query — and
+ * {@link readDateFilters} answers that state itself, without asking `wc.date`
+ * anything. The `year` in here is a leftover of the period that default USED to be,
+ * and a docblock explaining that choice would be explaining a decision that no longer
+ * exists.
+ *
+ * `getCurrentDates( query, defaultDateRange )` takes this second argument and falls
+ * back to it whenever the query carries no `period`+`compare` pair. {@link
+ * readDateFilters} always hands it a complete pair, so the fallback is unreachable —
+ * but the parameter is not optional, and passing a string that would THROW if it ever
+ * were reached is not a saving.
+ */
+export const DEFAULT_DATE_RANGE = `period=year&compare=${ DEFAULT_COMPARE }`;
+
+/**
+ * Which period the URL is currently asking for: {@link ALL_TIME_PERIOD}, one of
+ * {@link PERIOD_PRESETS}' values, or {@link CUSTOM_PERIOD}.
+ *
+ * Everything else — an unknown preset, or `custom` without BOTH dates beside it —
+ * reads as «всё время». That is not tidiness: both would throw inside `@woocommerce/date`
+ * and take the entire wc-admin app down with them (`Cannot find period: X`, and
+ * `Custom date range requires both after and before dates.`), so the degrade has to
+ * happen HERE, at the boundary, and not at each place that reads the period.
+ */
+export function getPeriodFromQuery( query: WcQuery ): string {
+	const period = query[ PERIOD_PARAM ];
+
+	if ( ! period ) {
+		return ALL_TIME_PERIOD;
+	}
+
+	if ( CUSTOM_PERIOD === period ) {
+		return query[ AFTER_PARAM ] && query[ BEFORE_PARAM ] ? CUSTOM_PERIOD : ALL_TIME_PERIOD;
+	}
+
+	return PERIOD_PRESETS.some( ( preset ) => preset.value === period )
+		? period
+		: ALL_TIME_PERIOD;
+}
+
+/**
+ * The query patch one period pick navigates to (#855).
+ *
+ * «Всё время» REMOVES all four keys (`undefined` is how `@wordpress/url`'s
+ * `addQueryArgs()` drops one, which is what `updateQueryString()` ends up calling), so
+ * the default view's URL stays clean and there is exactly one spelling of it — the same
+ * rule {@link scopeQuery} follows. `compare` goes with them: it exists only to keep
+ * `@woocommerce/date`'s input contract for a period we are no longer asking about.
+ *
+ * @param period the picked period: {@link ALL_TIME_PERIOD}, a preset value, or {@link CUSTOM_PERIOD}.
+ * @param after  ISO `YYYY-MM-DD` lower bound — required for, and only read for, {@link CUSTOM_PERIOD}.
+ * @param before ISO `YYYY-MM-DD` upper bound — likewise.
+ * @return the query patch to hand to `wc.navigation.updateQueryString()`.
+ */
+export function periodQuery(
+	period: string,
+	after = '',
+	before = ''
+): Record< string, string | undefined > {
+	if ( CUSTOM_PERIOD === period ) {
+		return {
+			[ PERIOD_PARAM ]: CUSTOM_PERIOD,
+			[ COMPARE_PARAM ]: DEFAULT_COMPARE,
+			[ AFTER_PARAM ]: after,
+			[ BEFORE_PARAM ]: before,
+		};
+	}
+
+	if ( ALL_TIME_PERIOD === period ) {
+		return {
+			[ PERIOD_PARAM ]: undefined,
+			[ COMPARE_PARAM ]: undefined,
+			[ AFTER_PARAM ]: undefined,
+			[ BEFORE_PARAM ]: undefined,
+		};
+	}
+
+	return {
+		[ PERIOD_PARAM ]: period,
+		[ COMPARE_PARAM ]: DEFAULT_COMPARE,
+		// A preset resolves its own dates, so leftover custom ones would both
+		// contradict it and — through `getDateParamsFromQuery()` — survive into the
+		// next custom pick as its starting value.
+		[ AFTER_PARAM ]: undefined,
+		[ BEFORE_PARAM ]: undefined,
+	};
+}
 
 export function getCarrierFromQuery( query: WcQuery ): string {
 	const value = query[ CARRIER_PARAM ];
@@ -320,34 +459,51 @@ export interface WcDateApi {
 }
 
 export interface DateFilterState {
-	/** `DateRangeFilterPicker`'s own required prop. */
-	dateQuery: WcDateRangeFilterPickerDateQuery;
 	/** Resolved ISO `after`/`before` for `fetchOrders()` — `compare` never reaches it (D11). */
 	after: string;
 	before: string;
 }
 
 /**
- * Resolves `period`/`compare`/custom `before`/`after` out of the URL into both
- * `DateRangeFilterPicker`'s `dateQuery` prop and the plain ISO `after`/`before`
- * the REST route actually understands. `@woocommerce/date` is what turns a
- * period preset into real dates (D11's own contract note); `compare` is read
- * only because `dateQuery` must carry it, and is dropped before it ever
- * reaches {@link import('./rest').fetchOrders}.
+ * Resolves the URL's `period`/`compare`/`after`/`before` into the plain ISO
+ * `after`/`before` the REST route actually understands. `@woocommerce/date` is what
+ * turns a period preset into real dates; `compare` is written only to satisfy its input
+ * contract (see {@link DEFAULT_COMPARE}) and is dropped before it ever reaches
+ * {@link import('./rest').fetchOrders}.
+ *
+ * ⚠ An EMPTY pair is «всё время», not «не удалось» (#855). It is this page's default
+ * state and its own answer: `fetchOrders()` omits an empty `after`/`before` entirely
+ * (`rest.ts`), so no date bound reaches the query — which is the whole point, because
+ * a work queue's oldest stuck order is exactly the one the merchant opens the page for.
+ * It is returned WITHOUT asking `wc.date` anything, because there is no period to
+ * resolve and `@woocommerce/date` has no "all time" to resolve it into.
  */
 export function readDateFilters( dateApi: WcDateApi, query: WcQuery ): DateFilterState {
-	const params = dateApi.getDateParamsFromQuery( query, DEFAULT_DATE_RANGE );
-	const { primary, secondary } = dateApi.getCurrentDates( query, DEFAULT_DATE_RANGE );
+	const period = getPeriodFromQuery( query );
+
+	if ( ALL_TIME_PERIOD === period ) {
+		return { after: '', before: '' };
+	}
+
+	/**
+	 * ⚠ `wc.date` is handed a query BUILT HERE, never the raw URL one. Every input
+	 * `getCurrentDates()` rejects it rejects by THROWING, and the throw escapes this
+	 * page and kills the whole wc-admin app — an unknown period, a `custom` missing one
+	 * of its two dates, an absent `compare`. {@link getPeriodFromQuery} has already
+	 * decided which of those the URL is, so passing the decision instead of the raw
+	 * query is what makes those branches unreachable rather than merely unlikely.
+	 */
+	const { primary } = dateApi.getCurrentDates(
+		{
+			[ PERIOD_PARAM ]: period,
+			[ COMPARE_PARAM ]: DEFAULT_COMPARE,
+			[ AFTER_PARAM ]: query[ AFTER_PARAM ],
+			[ BEFORE_PARAM ]: query[ BEFORE_PARAM ],
+		},
+		DEFAULT_DATE_RANGE
+	);
 
 	return {
-		dateQuery: {
-			period: params.period,
-			compare: params.compare,
-			before: params.before,
-			after: params.after,
-			primaryDate: primary,
-			secondaryDate: secondary,
-		},
 		after: primary.after ? primary.after.format( dateApi.isoDateFormat ) : '',
 		before: primary.before ? primary.before.format( dateApi.isoDateFormat ) : '',
 	};

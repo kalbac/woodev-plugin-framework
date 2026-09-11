@@ -211,23 +211,107 @@
 }
 
 /**
- * `DateRangeFilterPicker` always renders two labels on its button: the chosen
- * range, and Analytics' «vs. Previous <period>» comparison line. This page is a
- * work queue, not a trend — the operator settled that in D11 — so a comparison
- * line that drives nothing is a promise the page does not keep.
+ * The «Период» control (#855). It renders `FilterPicker`'s own markup, so it inherits
+ * `.woocommerce-filters-filter`'s metrics from WooCommerce's own stylesheet and from the
+ * bound `.woodev-orders__basic-filters` puts on that class below — there is nothing to
+ * restate here for the button itself.
  *
- * It cannot be removed through the component: `dateQuery.secondaryDate` is
- * REQUIRED, and omitting it throws `Cannot read properties of undefined
- * (reading 'label')` and takes the whole wc-admin app down (measured on the rig,
- * 08.09.2026 — the label did vanish, but only because the page had died).
- * So it is hidden here, scoped to this page's own filter row, and the compare
- * value itself stays exactly where D11 put it: never sent to our REST route.
+ * ⚠ The rule that used to live here — hiding the second `<span>` of a multi-line
+ * dropdown button — is GONE with `DateRangeFilterPicker`. That component always drew
+ * Analytics' «vs. Previous year» comparison line and could not be told not to
+ * (`dateQuery.secondaryDate` is required, and omitting it took the whole wc-admin app
+ * down). Our button carries one label because this page makes no comparison, so there is
+ * no second line to hide — and a CSS rule guarding against markup that can no longer
+ * exist is a trap for whoever reads it next.
  */
-.woodev-orders__filters {
-	.woocommerce-dropdown-button.is-multi-line .woocommerce-dropdown-button__labels {
-		span + span {
-			display: none;
+.woodev-orders__period-content {
+	/**
+	 * ⚠ The calendar gets the WHOLE popover width, and this is a crash-shaped layout bug,
+	 * not a taste choice. `react-dates` renders `.CalendarMonth` at a FIXED 300px; the
+	 * popover is 320px; so any horizontal padding on the wrapper squeezes the month table
+	 * until it overflows and the grid reads as slid to the right. Measured on the rig
+	 * 12.09.2026, which is how the operator caught it:
+	 *
+	 * | | WooCommerce `/analytics/orders` | this control, before |
+	 * |---|---|---|
+	 * | popover            | 320 | 320 |
+	 * | `.woocommerce-calendar` | **318** | **286** |
+	 * | `.CalendarMonth`   | 300 — fits | 300 — overflows by 14 |
+	 *
+	 * `padding: 16px` here was the whole of that 34px. WooCommerce gives its own calendar
+	 * the full width and lets `.woocommerce-calendar__inputs` carry the inset, so we do the
+	 * same: nothing horizontal on the wrapper, and the buttons below get their own.
+	 */
+	.woodev-orders__period-custom {
+		padding: 0;
+	}
+
+	/**
+	 * «Всё время» spans BOTH columns. Eleven pills in a two-column grid leave an orphan
+	 * twelfth cell, and WooCommerce's stylesheet paints every cell of that container — so
+	 * the orphan renders as a filled grey pill that does nothing, which reads as a broken
+	 * control. Widening the first one leaves the ten presets filling five rows exactly,
+	 * which is the shape WooCommerce's own grid has.
+	 *
+	 * It also happens to be the honest hierarchy: «Всё время» is the default and the only
+	 * entry that is not a period at all, so it is not one of ten peers.
+	 */
+	/**
+	 * The two wide rows — «Всё время» above the grid, «Произвольный период» below it. They
+	 * must look IDENTICAL to each other and belong to the same block as the ten pills
+	 * between them (operator, 12.09.2026): same fill, same hover, same height, text centred.
+	 *
+	 * Everything visual is WooCommerce's, inherited through their own
+	 * `.woocommerce-segmented-selection__label` class — fill `#f0f0f0`, hover `#e0e0e0`,
+	 * padding `12px 12px 12px 36px`, and the blue `::before` dot on the checked one. Only
+	 * three things are ours, and each has a reason:
+	 *
+	 * 1. `text-align: center` — every pill in the grid carries its text on the left of a
+	 *    half-width cell, so a full-width row with the text still left reads as «one filled
+	 *    cell + one empty». Centring is the cue that the row IS one cell.
+	 * 2. `cursor: pointer` — WooCommerce sets none anywhere in this component (checked in
+	 *    their stylesheet, not assumed), so the rows read as non-clickable. The operator
+	 *    reported exactly that.
+	 * 3. The `<button>` reset — «Произвольный период» is a button, not a radio, and a bare
+	 *    button brings its own border, font and line-height. Without the reset it stood
+	 *    taller than every row above it and read as a stray link.
+	 *
+	 * No borders here on purpose: the grid's own `border-top`/`border-bottom` already draw
+	 * the rule between each wide row and the pills.
+	 */
+	.woodev-orders__period-wide {
+		.woocommerce-segmented-selection__label {
+			text-align: center;
+			cursor: pointer;
 		}
+
+		button.woocommerce-segmented-selection__label {
+			width: 100%;
+			margin: 0;
+			border: 0;
+			border-radius: 0;
+			font: inherit;
+			color: inherit;
+			appearance: none;
+		}
+	}
+
+	/** Same reason as the wide rows: their component declares no cursor at all. */
+	.woocommerce-segmented-selection__label {
+		cursor: pointer;
+	}
+
+	/**
+	 * «Назад» left, «Применить» right — the pair reads as "leave / commit", and the
+	 * commit is the one on the side the eye ends on. WooCommerce's own date picker puts
+	 * its «Reset»/«Update» pair the same way round.
+	 */
+	.woodev-orders__period-actions {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		margin-top: 12px;
+		padding: 0 16px 16px;
 	}
 }
 

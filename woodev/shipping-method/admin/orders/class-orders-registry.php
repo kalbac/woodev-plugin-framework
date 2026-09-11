@@ -232,8 +232,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * screen. Rows are NOT inlined — the app fetches them from
 		 * `GET woodev/v1/shipping/orders` (cap-filtered server-side, increment 1); what IS
 		 * inlined is what the page needs before its first fetch: the REST root, a nonce, and
-		 * the provider list (id, label, and a count each carrier can show immediately,
-		 * increment 2b's `SelectControl` filter — see `./app.tsx`).
+		 * the provider list (id and label only, so the carrier picker can render before the
+		 * first response — the per-carrier counts arrive WITH the rows, #855, because they
+		 * depend on the page's filters and this runs before any of them exist).
 		 *
 		 * @internal
 		 *
@@ -350,40 +351,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 		/**
 		 * Builds the inlined provider list: the aggregate entry first, then one per
-		 * registered provider, each carrying a cheap `wc_get_orders()` count
-		 * (`per_page => 1`, only `total` is read) so every tab can show a count
-		 * before it is ever the active one — the aggregate tab's own count is this
-		 * same mechanism, not a separate one.
+		 * registered provider — `id` and `label`, and nothing else.
+		 *
+		 * The list itself has to be inlined because the carrier picker renders before the
+		 * first REST response arrives; WHICH carriers exist is a fact about the site, and
+		 * a page-render-time answer to it is a correct one.
+		 *
+		 * ⚠ THE COUNTS ARE GONE (#855), and they were not merely redundant here. «How many
+		 * orders does this carrier have» is a question that includes the page's filters —
+		 * period, scope, statuses — and the bootstrap is written once per page load,
+		 * before any of them exist. With «С начала недели» picked the picker read «СДЭК
+		 * (71)» beside a table of four, and the number that disagreed with the table was
+		 * the one the merchant would carry away. They now travel in the response that
+		 * builds the rows, counted under the very same request — see
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::build_carrier_counts()}.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int,array{id:string,label:string,count:int}>
+		 * @return array<int,array{id:string,label:string}>
 		 */
 		private function build_bootstrap_providers(): array {
-			$query = new Orders_Query( $this );
-
 			$entries   = [];
 			$entries[] = [
 				'id'    => 'all',
 				'label' => __( 'Все перевозчики', 'woodev-plugin-framework' ),
-				'count' => (int) $query->get_results(
-					[
-						'carrier' => 'all',
-						'per_page' => 1,
-					]
-				)->total,
 			];
 
 			foreach ( $this->get_providers() as $provider ) {
 				$entries[] = [
 					'id'    => $provider->get_id(),
 					'label' => $provider->get_label(),
-					'count' => (int) $query->get_results(
-						[
-							'carrier' => $provider->get_id(),
-							'per_page' => 1,
-						]
-					)->total,
 				];
 			}
 
