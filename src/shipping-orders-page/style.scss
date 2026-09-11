@@ -258,6 +258,19 @@
 	 */
 	.woodev-orders__period-item--wide {
 		grid-column: 1 / -1;
+
+		/**
+		 * ⚠ Centred, and that is not decoration. Spanning both columns is not enough on its
+		 * own: every other pill carries its text on the left of a 159px cell, so a 318px
+		 * cell with the text still on the left reads as «one filled cell + one empty», which
+		 * is exactly what the operator reported after the span was already in place and
+		 * measured (grid-column `1 / -1`, width 318, one uniform background across the whole
+		 * row — the geometry was never the problem). Centring is the cue that says the row IS
+		 * one cell.
+		 */
+		.woocommerce-segmented-selection__label {
+			text-align: center;
+		}
 	}
 
 	/**
