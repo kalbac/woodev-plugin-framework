@@ -500,8 +500,20 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertArrayNotHasKey( 'adminUrl', $data );
 		$this->assertSame( [ 'all', 'cdek', 'yandex' ], array_column( $data['providers'], 'id' ) );
 		$this->assertSame( [ 'Все перевозчики', 'СДЭК', 'Яндекс' ], array_column( $data['providers'], 'label' ) );
+
+		/*
+		 * ⚠ ID AND LABEL ONLY (#855). The bootstrap used to inline a count per carrier,
+		 * run at page-render time with no filters at all — so with any period or scope
+		 * picked the picker read «СДЭК (71)» beside a table of four, and the number that
+		 * disagreed with the table was the one the merchant would carry away. The counts
+		 * now come back with the rows, counted under the same request
+		 * (Orders_Controller::build_carrier_counts()).
+		 *
+		 * Asserting the KEY SET rather than merely the absence of `count`: a stray extra
+		 * field here is inlined into every page load, and this is the only gate that sees it.
+		 */
 		foreach ( $data['providers'] as $entry ) {
-			$this->assertSame( 5, $entry['count'] );
+			$this->assertSame( [ 'id', 'label' ], array_keys( $entry ) );
 		}
 	}
 }

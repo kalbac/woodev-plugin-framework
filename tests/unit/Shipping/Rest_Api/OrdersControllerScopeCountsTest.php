@@ -122,6 +122,31 @@ final class OrdersControllerScopeCountsTest extends TestCase {
 		return new Orders_Controller( Orders_Registry::instance(), $query, new Order_Row_Builder() );
 	}
 
+	/**
+	 * The calls `build_scope_counts()` itself made — the rows query at the front and the
+	 * carrier-count queries at the back removed.
+	 *
+	 * ⚠ Why this exists at all: since #855 the same response also carries one count per
+	 * carrier, and those run AFTER the scope counts. The claim these tests defend —
+	 * «only ONE extra query, because the current view's total already IS one of the two
+	 * counts» — was always about the SCOPE counts and never about the response's total
+	 * query budget, so counting `$query->calls` wholesale would now measure someone
+	 * else's work and read as a regression in this one.
+	 *
+	 * The tail length is DERIVED from the registry rather than written down: one query per
+	 * carrier option except the current one, which reuses the row query's total exactly as
+	 * the current scope does.
+	 *
+	 * @param object $query the recording query.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function scope_count_calls( $query ): array {
+		$options  = 1 + count( Orders_Registry::instance()->get_providers() );
+		$trailing = $options - 1;
+
+		return array_slice( $query->calls, 1, count( $query->calls ) - 1 - $trailing );
+	}
+
 	// ---- the aggregate view: «Все» is the total already in hand ----
 
 	/**
@@ -137,9 +162,9 @@ final class OrdersControllerScopeCountsTest extends TestCase {
 
 		$this->assertSame( [ 'all' => 134, 'new' => 7 ], $data['scope_counts'] );
 		$this->assertCount(
-			2,
-			$query->calls,
-			'the rows query plus ONE count query — a third call means a count was asked for twice'
+			1,
+			$this->scope_count_calls( $query ),
+			'ONE count query — a second means a scope count was asked for twice'
 		);
 		$this->assertSame( 134, $data['total'], 'the pagination total is untouched by the scope counts' );
 	}
@@ -175,7 +200,7 @@ final class OrdersControllerScopeCountsTest extends TestCase {
 		$data = $this->controller( $query )->get_items( $this->request( [ 'is_exported' => false ] ) );
 
 		$this->assertSame( [ 'all' => 134, 'new' => 7 ], $data['scope_counts'] );
-		$this->assertCount( 2, $query->calls );
+		$this->assertCount( 1, $this->scope_count_calls( $query ) );
 		$this->assertFalse( $query->calls[0]['is_exported'], 'the rows query is the scoped one here' );
 		$this->assertArrayNotHasKey(
 			'is_exported',
@@ -261,7 +286,7 @@ final class OrdersControllerScopeCountsTest extends TestCase {
 
 		$this->assertSame( [ 'all' => 134, 'new' => 7 ], $data['scope_counts'] );
 		$this->assertSame( 127, $data['total'], 'the table still reports what IT matched' );
-		$this->assertCount( 3, $query->calls );
+		$this->assertCount( 2, $this->scope_count_calls( $query ) );
 		$this->assertArrayNotHasKey( 'is_exported', $query->calls[1] );
 		$this->assertFalse( $query->calls[2]['is_exported'] );
 	}

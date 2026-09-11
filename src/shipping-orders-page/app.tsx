@@ -18,9 +18,9 @@
  * and re-reads it on every history change.
  *
  * SP-10 increment 7 (D10/D11) adds the rest of the filter row beside it, all
- * URL-driven the same way: `DateRangeFilterPicker` (default `period=year` —
- * this is a work queue, not a trend, so `compare` is read only because the
- * component requires it and is never sent to the server) and `AdvancedFilters`
+ * URL-driven the same way: the «Период» picker (`./period-picker` — ours since
+ * #855, because this page's default period is «всё время» and WooCommerce's own
+ * picker has no such preset and no seam to add one) and `AdvancedFilters`
  * for delivery status / WC order status / tracking presence — the three D10
  * measured as actually reachable through `Orders_Controller`'s `after`,
  * `before`, `delivery_status`, `status` and `has_tracking` args (increment 6's
@@ -82,7 +82,8 @@ import {
 	readDateFilters,
 	scopeQuery,
 } from './filters';
-import type { DateFilterState, UrlFilters } from './filters';
+import type { UrlFilters } from './filters';
+import PeriodPicker from './period-picker';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
@@ -139,12 +140,6 @@ function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters
 		hasTracking: getHasTrackingFromQuery( query ),
 		hasPickupPoint: getHasPickupPointFromQuery( query ),
 	};
-}
-
-/** Resolves `DateRangeFilterPicker`'s own `dateQuery` prop, or `null` when `wc-date` is unavailable — the page degrades rather than crash. */
-function readDateFilterState( query: Record<string, string | undefined> ): DateFilterState | null {
-	const dateApi = window.wc?.date;
-	return dateApi ? readDateFilters( dateApi, query ) : null;
 }
 
 /** Debounce for the search box, ms. */
@@ -569,9 +564,6 @@ export default function OrdersPage() {
 	const hasCarrierFilter = providers.length > 1;
 
 	const [ urlFilters, setUrlFilters ] = useState<UrlFilters>( () => readUrlFilters( getQuery() ) );
-	const [ dateFilterState, setDateFilterState ] = useState<DateFilterState | null>( () =>
-		readDateFilterState( getQuery() )
-	);
 	const [ page, setPage ] = useState( 1 );
 	const [ perPage, setPerPage ] = useState( DEFAULT_PER_PAGE );
 	const [ orderby, setOrderby ] = useState( 'date' );
@@ -587,6 +579,16 @@ export default function OrdersPage() {
 	 * reason the operator chose counted links.
 	 */
 	const [ scopeCounts, setScopeCounts ] = useState<OrdersScopeCounts | null>( null );
+	/**
+	 * #855 — one number per carrier, from the response that built the rows, so the
+	 * carrier picker's counts follow the period and every other active filter instead of
+	 * standing for "the whole table, forever" the way the inlined bootstrap ones did.
+	 *
+	 * `null` means «мы ещё не знаем», and that is NOT zero: before the first response the
+	 * options render with no number at all rather than with «(0)», which would be a
+	 * measurement the page never took.
+	 */
+	const [ carrierCounts, setCarrierCounts ] = useState<Record<string, number> | null>( null );
 	const [ error, setError ] = useState( '' );
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -632,8 +634,6 @@ export default function OrdersPage() {
 		}
 
 		const query = getQuery();
-
-		setDateFilterState( readDateFilterState( query ) );
 
 		setUrlFilters( ( current ) => {
 			const next = readUrlFilters( query );
@@ -715,6 +715,9 @@ export default function OrdersPage() {
 				// An older server sends no `scope_counts` at all; `null` is «not
 				// stated», which hides the links rather than showing them zeros.
 				setScopeCounts( ( res && res.scope_counts ) || null );
+				// #855: same rule for the carrier counts — «not stated» leaves the
+				// picker's options unnumbered rather than numbered zero.
+				setCarrierCounts( ( res && res.carrier_counts ) || null );
 			} )
 			.catch( ( err: { message?: string } ) => {
 				if ( cancelled ) {
@@ -737,6 +740,10 @@ export default function OrdersPage() {
 				// mistrust. Dropping the links is the honest answer; the carrier
 				// picker and the toggle stay mounted, so the view is still escapable.
 				setScopeCounts( null );
+				// #855: and the carrier counts described the same dead table. Dropping
+				// them leaves the picker's options unnumbered — the control still works,
+				// it just stops claiming to know how many orders each carrier has.
+				setCarrierCounts( null );
 			} );
 
 		return () => {
@@ -793,10 +800,24 @@ export default function OrdersPage() {
 		staticParams: [ FILTER_PARAM, SCOPE_PARAM, ...DATE_AND_ADVANCED_PARAMS ],
 		showFilters: () => true,
 		defaultValue: ALL_CARRIERS,
-		filters: providers.map( ( p ) => ( {
-			label: `${ p.label } (${ p.count })`,
-			value: p.id,
-		} ) ),
+		/**
+		 * #855: the number comes from the RESPONSE, not from the inlined bootstrap, so
+		 * it describes the same orders the table beside it does — pick «С начала
+		 * недели» and «СДЭК (3)» means three this week, not three ever.
+		 *
+		 * ⚠ No number at all until a response has arrived, and «(0)» is not the same
+		 * statement. `undefined` here is «мы ещё не считали»; zero is «посчитали, и их
+		 * нет». Rendering the second while meaning the first is how a merchant reads a
+		 * loading page as an empty shop.
+		 */
+		filters: providers.map( ( p ) => {
+			const count = carrierCounts ? carrierCounts[ p.id ] : undefined;
+
+			return {
+				label: undefined === count ? p.label : `${ p.label } (${ count })`,
+				value: p.id,
+			};
+		} ),
 	};
 
 	const dateApi = window.wc?.date;
@@ -818,7 +839,6 @@ export default function OrdersPage() {
 
 	const TableCard = window.wc?.components?.TableCard;
 	const FilterPicker = window.wc?.components?.FilterPicker;
-	const DateRangeFilterPicker = window.wc?.components?.DateRangeFilterPicker;
 	const AdvancedFilters = window.wc?.components?.AdvancedFilters;
 	const navigation = window.wc?.navigation;
 
@@ -834,9 +854,9 @@ export default function OrdersPage() {
 	}
 
 	// Each control below is checked again, inline, right where it renders — TS
-	// only narrows `DateRangeFilterPicker`/`dateFilterState`/`dateApi` etc. from
-	// the actual condition guarding that JSX, not from a boolean copy of it — so
-	// this is only for the wrapper `<div>`'s own visibility.
+	// only narrows `dateApi`/`currency` etc. from the actual condition guarding
+	// that JSX, not from a boolean copy of it — so this is only for the wrapper
+	// `<div>`'s own visibility.
 	/**
 	 * The advanced block is revealed by the display-mode picker's LAST option
 	 * (#835 — its own `FILTER_PARAM`, split from the carrier picker), never
@@ -850,7 +870,7 @@ export default function OrdersPage() {
 	// whether the CARRIER picker renders, further down, not whether the row does.
 	const hasAnyFilterControl = Boolean(
 		( FilterPicker && navigation ) ||
-			( DateRangeFilterPicker && dateFilterState && navigation && dateApi ) ||
+			( navigation && dateApi ) ||
 			( advancedOpen && AdvancedFilters && navigation && currency )
 	);
 
@@ -886,18 +906,26 @@ export default function OrdersPage() {
 						/>
 					) }
 					{ /*
+					 * #855: OUR control, not `DateRangeFilterPicker` — the default
+					 * period on this page is «всё время», which theirs cannot offer
+					 * (its preset list comes from `@woocommerce/date`'s module export,
+					 * not from a prop). It reuses their calendar for the custom range
+					 * and their class names for the shape.
+					 *
 					 * Degrades — renders nothing for this one control — when `wc-date`
-					 * or the component itself is unavailable (an older WooCommerce),
-					 * the same rule `RoiPanel` already follows, rather than crashing
-					 * the whole page over one missing filter.
+					 * is unavailable (an older WooCommerce), the same rule `RoiPanel`
+					 * already follows, rather than crashing the whole page over one
+					 * missing filter. Without `wc.date` there is nothing to resolve a
+					 * period INTO, so a picker that still rendered would write a URL
+					 * that filters nothing.
 					 */ }
-					{ DateRangeFilterPicker && dateFilterState && navigation && dateApi && (
-						<DateRangeFilterPicker
-							dateQuery={ dateFilterState.dateQuery }
-							isoDateFormat={ dateApi.isoDateFormat }
-							onRangeSelect={ ( update ) => {
+					{ navigation && dateApi && (
+						<PeriodPicker
+							query={ getQuery() }
+							dateApi={ dateApi }
+							onUpdate={ ( patch ) => {
 								navigation.updateQueryString?.(
-									update,
+									patch,
 									navigation.getPath(),
 									navigation.getQuery()
 								);

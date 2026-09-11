@@ -211,23 +211,39 @@
 }
 
 /**
- * `DateRangeFilterPicker` always renders two labels on its button: the chosen
- * range, and Analytics' «vs. Previous <period>» comparison line. This page is a
- * work queue, not a trend — the operator settled that in D11 — so a comparison
- * line that drives nothing is a promise the page does not keep.
+ * The «Период» control (#855). It renders `FilterPicker`'s own markup, so it inherits
+ * `.woocommerce-filters-filter`'s metrics from WooCommerce's own stylesheet and from the
+ * bound `.woodev-orders__basic-filters` puts on that class below — there is nothing to
+ * restate here for the button itself.
  *
- * It cannot be removed through the component: `dateQuery.secondaryDate` is
- * REQUIRED, and omitting it throws `Cannot read properties of undefined
- * (reading 'label')` and takes the whole wc-admin app down (measured on the rig,
- * 08.09.2026 — the label did vanish, but only because the page had died).
- * So it is hidden here, scoped to this page's own filter row, and the compare
- * value itself stays exactly where D11 put it: never sent to our REST route.
+ * ⚠ The rule that used to live here — hiding the second `<span>` of a multi-line
+ * dropdown button — is GONE with `DateRangeFilterPicker`. That component always drew
+ * Analytics' «vs. Previous year» comparison line and could not be told not to
+ * (`dateQuery.secondaryDate` is required, and omitting it took the whole wc-admin app
+ * down). Our button carries one label because this page makes no comparison, so there is
+ * no second line to hide — and a CSS rule guarding against markup that can no longer
+ * exist is a trap for whoever reads it next.
  */
-.woodev-orders__filters {
-	.woocommerce-dropdown-button.is-multi-line .woocommerce-dropdown-button__labels {
-		span + span {
-			display: none;
-		}
+.woodev-orders__period-content {
+	/**
+	 * The custom-range view is the calendar plus its two buttons. WooCommerce's own
+	 * `.woocommerce-filters-date__content` is wider than a plain preset list for the same
+	 * reason — two months of `DayPickerRangeController` do not fit in a menu's width.
+	 */
+	.woodev-orders__period-custom {
+		padding: 16px;
+	}
+
+	/**
+	 * «Назад» left, «Применить» right — the pair reads as "leave / commit", and the
+	 * commit is the one on the side the eye ends on. WooCommerce's own date picker puts
+	 * its «Reset»/«Update» pair the same way round.
+	 */
+	.woodev-orders__period-actions {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		margin-top: 12px;
 	}
 }
 

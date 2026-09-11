@@ -125,13 +125,34 @@ export interface OrdersResponse {
 	 * that the merchant can check the number against the badge in the menu.
 	 */
 	scope_counts?: OrdersScopeCounts;
+	/**
+	 * One number per carrier id — `all` plus every registered provider (#855),
+	 * `Orders_Controller::build_carrier_counts()`.
+	 *
+	 * Computed from the SAME request as the rows, so they follow the period and every
+	 * other active filter: with «С начала недели» picked, «СДЭК (3)» means three this
+	 * week. The counts used to be inlined into the page bootstrap once per page load and
+	 * therefore described the whole table forever, which made them disagree with the
+	 * table under every filter the page has.
+	 *
+	 * Optional for the same reason as {@link OrdersScopeCounts}: a cached bundle can
+	 * outlive a rollback, and «not stated» must not be rendered as «(0)».
+	 */
+	carrier_counts?: Record<string, number>;
 }
 
-/** One entry of the inlined provider list (`Orders_Registry::build_bootstrap_providers()`). */
+/**
+ * One entry of the inlined provider list (`Orders_Registry::build_bootstrap_providers()`).
+ *
+ * ⚠ NO COUNT (#855). What the page needs before its first fetch is WHICH carriers exist,
+ * so the picker can render; how many orders each has is an answer to a question that
+ * includes the current filters, and the bootstrap is written once per page load and
+ * knows none of them. That number arrives with the rows — see
+ * {@link OrdersResponse.carrier_counts}.
+ */
 export interface OrdersProvider {
 	id: string;
 	label: string;
-	count: number;
 }
 
 /** `window.woodevShippingOrders`, inlined by `Orders_Registry::enqueue_assets()`. */
@@ -160,8 +181,8 @@ function bootstrap(): Partial<ShippingOrdersBootstrap> {
 
 /**
  * Returns the inlined provider list — the aggregate entry first, then one per
- * registered carrier, each already carrying a count (see
- * `Orders_Registry::build_bootstrap_providers()`).
+ * registered carrier (see `Orders_Registry::build_bootstrap_providers()`). Ids and
+ * labels only; the counts come back with the rows (#855).
  */
 export function getProviders(): OrdersProvider[] {
 	return bootstrap().providers || [];

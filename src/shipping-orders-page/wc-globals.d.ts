@@ -83,26 +83,50 @@ export interface WcDateParams {
 }
 
 /**
- * `DateRangeFilterPicker`'s required `dateQuery` prop
- * (`packages/js/components/src/date-range-filter-picker/README.md`): the raw
- * `period`/`compare`/`before`/`after` plus the two resolved `DateValue`s the
- * component actually renders from.
+ * The patch `DateRange` hands back through `onUpdate` — a PARTIAL of the caller's own
+ * range state, never a whole new value. Read off the shipped bundle (WooCommerce 10.9.4,
+ * `assets/client/admin/components/index.js`), where the component emits three different
+ * shapes: `{ after, before, afterText, beforeText, afterError, beforeError }` when a day
+ * is clicked, `{ focusedInput }` when focus moves between the two inputs, and
+ * `{ after|before, afterText|beforeText, afterError|beforeError }` when one input is
+ * typed into — the last one already run through `validateDateInputForRange()` INSIDE the
+ * component, which is why the caller never validates anything itself.
  */
-export interface WcDateRangeFilterPickerDateQuery extends WcDateParams {
-	primaryDate: WcDateValue;
-	secondaryDate: WcDateValue;
+export interface WcDateRangeUpdate {
+	after?: WcMomentLike | null;
+	before?: WcMomentLike | null;
+	afterText?: string;
+	beforeText?: string;
+	afterError?: string | null;
+	beforeError?: string | null;
+	focusedInput?: 'startDate' | 'endDate';
 }
 
-export interface WcDateRangeFilterPickerProps {
-	dateQuery: WcDateRangeFilterPickerDateQuery;
-	isoDateFormat: string;
-	/**
-	 * Called with the new `{ period, compare, before, after }` on a pick. The
-	 * component itself does not navigate (unlike `FilterPicker`) — the caller is
-	 * expected to push it into the URL via `wc.navigation.updateQueryString()`,
-	 * the same way WooCommerce's own `ReportFilters` wires it.
-	 */
-	onRangeSelect: ( update: Record<string, string> ) => void;
+/**
+ * `DateRange` — the CALENDAR ALONE (`packages/js/components/src/calendar/date-range.js`):
+ * two typed date inputs over a `DayPickerRangeController`, and nothing else. The presets
+ * list and the «compare to» radios that surround it inside
+ * `DateRangeFilterPicker` live in a sibling container and are NOT part of this component,
+ * which is exactly why #855 can reuse it: the page needs the calendar and owns the rest.
+ *
+ * It is fully CONTROLLED — it holds no state of its own and pushes every change through
+ * `onUpdate`.
+ */
+export interface WcDateRangeProps {
+	after: WcMomentLike | null;
+	before: WcMomentLike | null;
+	afterText: string;
+	beforeText: string;
+	afterError: string | null;
+	beforeError: string | null;
+	focusedInput: 'startDate' | 'endDate';
+	/** A `moment` format string — it parses the typed inputs as well as printing them. */
+	shortDateFormat: string;
+	/** Placeholder for the two inputs; falls back to `shortDateFormat` when absent. */
+	shortDateFormatPlaceholder?: string;
+	/** Days the calendar refuses to select, as native `Date`s. */
+	isInvalidDate?: ( date: Date ) => boolean;
+	onUpdate: ( update: WcDateRangeUpdate ) => void;
 }
 
 /**
@@ -269,8 +293,16 @@ declare global {
 				 */
 				SummaryListPlaceholder?: ComponentType< { numberOfItems: number } >;
 				ChartPlaceholder?: ComponentType< { height: number } >;
-				/** SP-10 spec D11 (increment 7) — the date-range half of the filter row. */
-				DateRangeFilterPicker?: ComponentType< WcDateRangeFilterPickerProps >;
+				/**
+				 * #855 — the calendar half of WooCommerce's own date picker, reused
+				 * inside this page's «Период» control (`./period-picker`).
+				 *
+				 * `DateRangeFilterPicker` is deliberately NOT declared here any more: its
+				 * preset list is taken from `@woocommerce/date`'s own `presetValues` and
+				 * not from a prop, so it can offer no «Всё время» — which is this page's
+				 * DEFAULT period. The whole control is ours now; only the calendar is theirs.
+				 */
+				DateRange?: ComponentType< WcDateRangeProps >;
 				/** SP-10 spec D10 (increment 7) — the delivery-status/order-status/tracking filters, named by the operator. */
 				AdvancedFilters?: ComponentType< WcAdvancedFiltersProps >;
 				/** #841 — the «Все / Новые» scope links above the table. See {@link WcLinkProps}. */

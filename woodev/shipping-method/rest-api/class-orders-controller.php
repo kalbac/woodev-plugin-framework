@@ -255,7 +255,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * Returns the paginated row list, plus the two scope counts the «Все / Новые»
 		 * links above the table render (`scope_counts`, SP-10 #841 — see
 		 * {@see self::build_scope_counts()} for why they travel in THIS response and not
-		 * in one of their own).
+		 * in one of their own) and one count per carrier for the picker above them
+		 * (`carrier_counts`, SP-10 #855, {@see self::build_carrier_counts()}).
 		 *
 		 * @since 2.0.2
 		 *
@@ -322,12 +323,68 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 
 			return rest_ensure_response(
 				[
-					'rows'         => $rows,
-					'total'        => (int) $result->total,
-					'total_pages'  => (int) $result->max_num_pages,
-					'scope_counts' => $this->build_scope_counts( $params, (int) $result->total ),
+					'rows'           => $rows,
+					'total'          => (int) $result->total,
+					'total_pages'    => (int) $result->max_num_pages,
+					'scope_counts'   => $this->build_scope_counts( $params, (int) $result->total ),
+					'carrier_counts' => $this->build_carrier_counts( $params, (int) $result->total ),
 				]
 			);
+		}
+
+		/**
+		 * One number per carrier for the «Перевозчик» picker above the table (SP-10 #855),
+		 * in the SAME response as the rows — built on {@see self::build_scope_counts()}'s
+		 * pattern, for the same reasons, and differing from it only in which axis is
+		 * overridden.
+		 *
+		 * **They used to be computed in the page bootstrap**
+		 * ({@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::build_bootstrap_providers()}),
+		 * once per page load, with no filters at all. So the picker read «СДЭК (71)» beside
+		 * a table of four the moment any filter was on, and the number that disagreed with
+		 * the table was the one the merchant would carry away. Computing them here is what
+		 * makes «Все перевозчики (12) | СДЭК (9) | Яндекс (3)» a description of the period
+		 * the merchant is actually looking at.
+		 *
+		 * **Every OTHER filter of the request is inherited**, `carrier` alone is
+		 * overridden: that is the axis the picker selects between, so inheriting it would
+		 * make every option report the current carrier's number.
+		 *
+		 * ⚠ The scope (`is_exported`) is inherited on purpose, unlike in
+		 * {@see self::build_scope_counts()} where it is the overridden axis. Standing in
+		 * «Новые», «СДЭК (9)» has to mean nine NEW СДЭК orders — the count describes what
+		 * the table would show if the merchant followed that option, and following it does
+		 * not leave «Новые».
+		 *
+		 * The current carrier's own count is the row query's `total`, reused rather than
+		 * re-asked for exactly as the current scope's is: it is then provably the same
+		 * number the table was built from rather than a second query's opinion of it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $params request params as handed to {@see Orders_Query::get_results()}.
+		 * @param int                 $total  the total this request's own query already reported.
+		 * @return array<string,int> carrier id (including `all`) => count.
+		 */
+		private function build_carrier_counts( array $params, int $total ): array {
+			$current = isset( $params['carrier'] ) ? (string) $params['carrier'] : 'all';
+
+			$ids = [ 'all' ];
+			foreach ( $this->registry->get_providers() as $provider ) {
+				$ids[] = $provider->get_id();
+			}
+
+			$counts = [];
+			foreach ( $ids as $id ) {
+				if ( $id === $current ) {
+					$counts[ $id ] = $total;
+					continue;
+				}
+
+				$counts[ $id ] = $this->count_matching( array_merge( $params, [ 'carrier' => $id ] ) );
+			}
+
+			return $counts;
 		}
 
 		/**

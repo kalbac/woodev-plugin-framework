@@ -117,20 +117,32 @@ function FakeFilterPicker( { config, path, query, advancedFilters } ) {
 }
 
 /**
- * Stands in for `@woocommerce/components`' `DateRangeFilterPicker`. It does
- * NOT navigate on its own (unlike `FilterPicker`) — its `onRangeSelect` is the
- * whole contract, so the fake exposes a button that calls it with a fixed
- * update, letting a test assert exactly what App does with it.
+ * Stands in for `@woocommerce/components`' `DateRange` — the CALENDAR the page's own
+ * «Период» control (#855) opens behind «Произвольный период». The control itself is
+ * ours and renders for real in these tests; only this piece is WooCommerce's.
+ *
+ * Its `onUpdate` patch shapes are read off the shipped bundle, not invented: the real
+ * component emits `{ after, before, afterText, beforeText, afterError, beforeError }`
+ * on a day click and one side of that at a time on a typed input.
  */
-function FakeDateRangeFilterPicker( { dateQuery, isoDateFormat, onRangeSelect } ) {
+function FakeDateRange( { onUpdate } ) {
+	const moment = ( iso, short ) => ( {
+		format: ( format ) => ( 'YYYY-MM-DD' === format ? iso : short ),
+	} );
+
 	return (
-		<div data-testid="date-range-filter" data-period={ dateQuery.period } data-iso-format={ isoDateFormat }>
+		<div data-testid="date-range">
 			<button
 				onClick={ () =>
-					onRangeSelect( { period: 'custom', compare: dateQuery.compare, before: '2026-02-01', after: '2026-01-01' } )
+					onUpdate( {
+						after: moment( '2026-01-01', '01.01.2026' ),
+						before: moment( '2026-02-01', '01.02.2026' ),
+						afterText: '01.01.2026',
+						beforeText: '01.02.2026',
+					} )
 				}
 			>
-				Изменить период
+				Выбрать обе даты
 			</button>
 		</div>
 	);
@@ -246,7 +258,7 @@ beforeAll( () => {
 			ChartPlaceholder: ( { height } ) => (
 				<div data-testid="chart-placeholder" data-height={ height } />
 			),
-			DateRangeFilterPicker: FakeDateRangeFilterPicker,
+			DateRange: FakeDateRange,
 			AdvancedFilters: FakeAdvancedFilters,
 			Link: FakeLink,
 		},
@@ -280,10 +292,10 @@ beforeAll( () => {
 					historyListeners = historyListeners.filter( ( entry ) => entry !== listener );
 				};
 			},
-			// `DateRangeFilterPicker` does not navigate on its own — App is
-			// expected to push its `onRangeSelect` update through this, then this
-			// fake mirrors what the real function does: change the query and fire
-			// history listeners, exactly like `navigate()` below.
+			// The «Период» control does not navigate on its own — App is expected to
+			// push its query patch through this, then this fake mirrors what the real
+			// function does: change the query and fire history listeners, exactly
+			// like `navigate()` below.
 			updateQueryString: ( query, path, currentQuery ) => {
 				updateQueryStringCalls.push( { query, path, currentQuery } );
 
@@ -409,11 +421,17 @@ function resultOf( rows, extra = {} ) {
 	return { rows, total: rows.length, total_pages: 1, ...extra };
 }
 
-const oneProvider = () => [ { id: 'all', label: 'Все перевозчики', count: 3 } ];
+/**
+ * ⚠ No `count` on a bootstrap provider since #855. The inlined list says WHICH carriers
+ * exist — that is a fact about the site the page needs before its first fetch — and the
+ * numbers come back with the rows, counted under the same filters. A fixture that still
+ * carried a count would let a picker reading the old field pass.
+ */
+const oneProvider = () => [ { id: 'all', label: 'Все перевозчики' } ];
 const twoProviders = () => [
-	{ id: 'all', label: 'Все перевозчики', count: 5 },
-	{ id: 'cdek', label: 'СДЭК', count: 3 },
-	{ id: 'yandex', label: 'Яндекс Доставка', count: 2 },
+	{ id: 'all', label: 'Все перевозчики' },
+	{ id: 'cdek', label: 'СДЭК' },
+	{ id: 'yandex', label: 'Яндекс Доставка' },
 ];
 
 beforeEach( () => {
@@ -441,14 +459,15 @@ describe( 'carrier filter', () => {
 
 	test( 'the carrier filter renders its options once there is more than one provider', async () => {
 		getProviders.mockReturnValue( twoProviders() );
-		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+		fetchOrders.mockResolvedValue(
+			resultOf( [ makeRow() ], { carrier_counts: { all: 5, cdek: 3, yandex: 2 } } )
+		);
 
 		render( <App /> );
 
-		await waitFor( () => expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByText( 'Все перевозчики (5)' ) ).toBeInTheDocument() );
 
 		expect( screen.getByText( 'Перевозчик' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Все перевозчики (5)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'СДЭК (3)' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Яндекс Доставка (2)' ) ).toBeInTheDocument();
 	} );
@@ -1029,8 +1048,58 @@ describe( 'the delivery-analytics panel (#711)', () => {
 	} );
 } );
 
-describe( 'the date range filter (SP-10 #826, increment 7)', () => {
-	test( 'with no period in the URL, it defaults to period=year and resolves it into after/before for the REST call', async () => {
+/**
+ * The «Период» control (SP-10 #826, increment 7; ours since #855).
+ *
+ * The control itself renders FOR REAL here — it is this repo's component, not a
+ * WooCommerce global — so these tests drive it the way the merchant does, through its own
+ * dropdown, and assert what reaches `fetchOrders()` and `updateQueryString()`. Its own
+ * entries and labels are pinned in `shipping-orders-page-period-picker.test.js`; what is
+ * pinned HERE is the wiring: URL → request, and pick → URL.
+ */
+describe( 'the period filter (SP-10 #826, increment 7; #855)', () => {
+	/**
+	 * Opens the period dropdown and clicks one entry.
+	 *
+	 * `aria-expanded` is the selector because it is the one thing on the page that only
+	 * this control has — the table's own buttons carry no expanded state, and the toggle
+	 * is a checkbox. `await act( async … )` flushes the popover's asynchronous
+	 * positioning, which otherwise sets state outside `act()` and fails the NEXT assertion.
+	 *
+	 * @param {string} label the entry to pick.
+	 */
+	async function pickPeriod( label ) {
+		await act( async () => {
+			screen.getByRole( 'button', { expanded: false } ).click();
+		} );
+
+		await act( async () => {
+			screen.getByText( label ).click();
+		} );
+	}
+
+	/**
+	 * The heart of #855. The default used to be `period=year`, so the page silently hid
+	 * every order older than January — on a WORK QUEUE, where the order stuck since June
+	 * is exactly the one being looked for. Empty strings are what `fetchOrders()` omits
+	 * from the request entirely (`rest.ts`), so this asserts "no date bound at all", not
+	 * "a wide one".
+	 */
+	test( 'with no period in the URL the request carries no date bound at all', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { after: '', before: '' } ) )
+		);
+
+		expect( screen.getByRole( 'button', { expanded: false } ) ).toHaveTextContent( 'Всё время' );
+	} );
+
+	test( 'a preset in the URL resolves into after/before for the REST call', async () => {
+		fakeQuery = { period: 'year', compare: 'previous_year' };
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -1041,13 +1110,10 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 				expect.objectContaining( { after: '2026-01-01', before: '2026-09-08' } )
 			)
 		);
-
-		expect( screen.getByTestId( 'date-range-filter' ) ).toHaveAttribute( 'data-period', 'year' );
-		expect( screen.getByTestId( 'date-range-filter' ) ).toHaveAttribute( 'data-iso-format', 'YYYY-MM-DD' );
 	} );
 
 	test( 'a custom range already in the URL scopes the very first fetch', async () => {
-		fakeQuery = { period: 'custom', after: '2026-02-01', before: '2026-03-01' };
+		fakeQuery = { period: 'custom', compare: 'previous_year', after: '2026-02-01', before: '2026-03-01' };
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -1061,11 +1127,51 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 	} );
 
 	/**
-	 * `DateRangeFilterPicker` does not navigate on its own (unlike
-	 * `FilterPicker`) — App is expected to push its `onRangeSelect` update
-	 * through `wc.navigation.updateQueryString()` itself.
+	 * The control does not navigate on its own (unlike `FilterPicker`) — App is expected
+	 * to push its query patch through `wc.navigation.updateQueryString()` itself.
 	 */
-	test( 'picking a new range pushes it through updateQueryString and re-scopes the fetch', async () => {
+	test( 'picking a preset pushes it through updateQueryString and re-scopes the fetch', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { after: '', before: '' } ) )
+		);
+
+		await pickPeriod( 'С начала года' );
+
+		expect( updateQueryStringCalls ).toHaveLength( 1 );
+		expect( updateQueryStringCalls[ 0 ].path ).toBe( '/woodev-shipping-orders' );
+		expect( updateQueryStringCalls[ 0 ].query ).toEqual(
+			expect.objectContaining( { period: 'year', compare: 'previous_year' } )
+		);
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( { after: '2026-01-01', before: '2026-09-08' } )
+			)
+		);
+
+		/*
+		 * ⚠ The RENDERED label, not the query object. The control reads its period out of
+		 * the URL on every render, and the URL only settles a tick after the pick — so a
+		 * page that filtered correctly while its own button still said «Всё время» would
+		 * pass every assertion above. That is the shape of defect a green suite has
+		 * certified here before.
+		 */
+		expect( screen.getByRole( 'button', { expanded: false } ) ).toHaveTextContent( 'С начала года' );
+	} );
+
+	/**
+	 * ⚠ Back to «Всё время» must DROP the keys, not write `period=all` — that value throws
+	 * inside `@woocommerce/date` and takes the whole wc-admin app down. The fake
+	 * `updateQueryString` deletes `undefined` keys exactly as `addQueryArgs()` does, so
+	 * the resulting query here is the real one.
+	 */
+	test( 'picking «Всё время» clears the date keys and the request loses its bounds', async () => {
+		fakeQuery = { period: 'year', compare: 'previous_year' };
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -1077,14 +1183,43 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 			)
 		);
 
-		act( () => {
-			screen.getByText( 'Изменить период' ).click();
+		await pickPeriod( 'Всё время' );
+
+		expect( fakeQuery.period ).toBeUndefined();
+		expect( fakeQuery.compare ).toBeUndefined();
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { after: '', before: '' } ) )
+		);
+
+		expect( screen.getByRole( 'button', { expanded: false } ) ).toHaveTextContent( 'Всё время' );
+	} );
+
+	/** «Произвольный период» reaches WooCommerce's calendar and its two days reach the request. */
+	test( 'a custom range picked in the calendar reaches the URL and the request', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		await pickPeriod( 'Произвольный период' );
+
+		await act( async () => {
+			screen.getByText( 'Выбрать обе даты' ).click();
+		} );
+		await act( async () => {
+			screen.getByText( 'Применить' ).click();
 		} );
 
-		expect( updateQueryStringCalls ).toHaveLength( 1 );
-		expect( updateQueryStringCalls[ 0 ].path ).toBe( '/woodev-shipping-orders' );
 		expect( updateQueryStringCalls[ 0 ].query ).toEqual(
-			expect.objectContaining( { period: 'custom', before: '2026-02-01', after: '2026-01-01' } )
+			expect.objectContaining( {
+				period: 'custom',
+				compare: 'previous_year',
+				after: '2026-01-01',
+				before: '2026-02-01',
+			} )
 		);
 
 		await waitFor( () =>
@@ -1094,7 +1229,7 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 		);
 	} );
 
-	test( 'changing the date range resets the page to 1', async () => {
+	test( 'changing the period resets the page to 1', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
 
@@ -1112,13 +1247,124 @@ describe( 'the date range filter (SP-10 #826, increment 7)', () => {
 			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 2 } ) )
 		);
 
-		act( () => {
-			screen.getByText( 'Изменить период' ).click();
-		} );
+		await pickPeriod( 'Прошлый месяц' );
 
 		await waitFor( () =>
 			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { page: 1 } ) )
 		);
+	} );
+
+	/**
+	 * Degrades rather than crashes when `wc-date` is missing (an older WooCommerce).
+	 * Without it there is nothing to resolve a period INTO, so a control that still
+	 * rendered would write a URL that filters nothing.
+	 */
+	test( 'no wc.date at all — the control is skipped and the rest of the page stands', async () => {
+		const date = window.wc.date;
+		delete window.wc.date;
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		try {
+			render( <App /> );
+
+			await waitFor( () =>
+				expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { after: '', before: '' } ) )
+			);
+
+			expect( screen.queryByText( 'Всё время' ) ).not.toBeInTheDocument();
+			expect( screen.getByText( 'Заказы доставки' ) ).toBeInTheDocument();
+		} finally {
+			window.wc.date = date;
+		}
+	} );
+} );
+
+/**
+ * The carrier counts (#855). They used to be inlined into the page bootstrap once per
+ * page load, so they described the whole table forever and disagreed with it under every
+ * filter the page has. They now arrive with the rows, counted under the same request.
+ */
+describe( 'the carrier counts (#855)', () => {
+	test( 'the counts come from the response, so they follow the period', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders
+			.mockResolvedValueOnce( resultOf( [ makeRow() ], { carrier_counts: { all: 71, cdek: 68, yandex: 3 } } ) )
+			.mockResolvedValueOnce( resultOf( [ makeRow() ], { carrier_counts: { all: 4, cdek: 3, yandex: 1 } } ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'СДЭК (68)' ) ).toBeInTheDocument() );
+
+		await act( async () => {
+			screen.getByRole( 'button', { expanded: false } ).click();
+		} );
+		await act( async () => {
+			screen.getByText( 'С начала недели' ).click();
+		} );
+
+		await waitFor( () => expect( screen.getByText( 'СДЭК (3)' ) ).toBeInTheDocument() );
+		expect( screen.getByText( 'Все перевозчики (4)' ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * ⚠ «Ещё не знаем» and «ноль» are different states, and rendering the first as the
+	 * second is how a loading page reads as an empty shop. Before any response has landed
+	 * the options carry NO number — not «(0)».
+	 */
+	test( 'before the first response the options carry no number at all, never «(0)»', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockReturnValue( new Promise( () => {} ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'СДЭК' ) ).toBeInTheDocument() );
+
+		expect( screen.queryByText( 'СДЭК (0)' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Все перевозчики' ) ).toBeInTheDocument();
+	} );
+
+	/** An older server sends no `carrier_counts` — «not stated» leaves the options unnumbered. */
+	test( 'a response without carrier_counts leaves the options unnumbered', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( fetchOrders ).toHaveBeenCalled() );
+
+		expect( screen.getByText( 'СДЭК' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /СДЭК \(/ ) ).not.toBeInTheDocument();
+	} );
+
+	/**
+	 * A failed fetch's counts described a table that is no longer on screen — the same
+	 * rule the scope links follow. Dropping them leaves the picker usable and silent
+	 * rather than confidently wrong.
+	 */
+	test( 'a failed fetch drops the counts instead of showing stale ones', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders
+			.mockResolvedValueOnce( resultOf( [ makeRow() ], { carrier_counts: { all: 71, cdek: 68, yandex: 3 } } ) )
+			.mockRejectedValue( { message: 'Счётчики недоступны.' } );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'СДЭК (68)' ) ).toBeInTheDocument() );
+
+		navigate( { carrier: 'yandex' } );
+
+		// `getAllByText` and a message of this test's OWN, for the reason spelled out on
+		// the scope-links twin below: `Notice` also announces itself into a document-level
+		// a11y-speak live region that OUTLIVES the test, so a message shared with another
+		// test is found there before this render has settled — and the assertion then runs
+		// against the previous state. That is not hypothetical; it is what failed here first.
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Счётчики недоступны.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.queryByText( 'СДЭК (68)' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'СДЭК' ) ).toBeInTheDocument();
 	} );
 } );
 
