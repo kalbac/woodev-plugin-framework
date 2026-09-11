@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 309 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 310 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -373,6 +373,7 @@
 - [tooling/git] **A PR BODY closes cards behind the commit-msg hook's back — GitHub matches `close #N` inside «why this does not close #N» and ignores the negation. Also: `gh project item-list` silently truncates at `--limit`.** → [a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused](gotchas/a-pr-body-closes-cards-that-the-commit-msg-hook-would-have-refused.md) (s111)
 - [tooling/phpcs] **A rule silenced by `exclude-pattern` cannot be revived by any CLI flag, so a documented "measure it on demand" command returns an empty report that reads as "no violations".** → [a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli](gotchas/a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli.md) (s110)
 - [tooling/parallel-agents] **Codex's tool shell is NOT fixed — bash in s107, PowerShell in s108 on the same machine. The unreadable `gitdir` and `orca` off PATH are both downstream of it, so measure it first; the relative-`gitdir` rewrite is conditional, not a step 0.** → [codex-in-wsl-needs-a-relative-gitdir](gotchas/codex-in-wsl-needs-a-relative-gitdir.md) (s107, fixed s108)
+- [tooling/serena] **A bare `CONNECTION_CLOSED` from Serena is `uvx` taking the newest Python, which a dependency has no wheel for — run the launch command by hand for the real error, and patch the non-orphaned CACHE copy, not the marketplace one.** → [serenas-mcp-dies-when-uvx-picks-a-python-with-no-pyyaml-wheel](gotchas/serenas-mcp-dies-when-uvx-picks-a-python-with-no-pyyaml-wheel.md) (s131)
 - [tooling/serena] **Serena IGNORES `tests/` — symbolic ops there fail with "while the path is ignored", so `Read`/`Edit` is the only tool and is NOT a rule violation (and test files escape the CRLF flip).** → [serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there](gotchas/serena-refuses-the-tests-directory-so-the-never-read-php-rule-cannot-apply-there.md) (s105)
 - [tooling/orca] **A BACKGROUNDED `check --wait` holds the FIFO waiter, so every later wait returns empty in seconds and reads as "the worker produced nothing"; `--json` is also a keepalive STREAM, not one object.** → [a-backgrounded-orca-check-wait-starves-every-later-waiter](gotchas/a-backgrounded-orca-check-wait-starves-every-later-waiter.md) (s105)
 - [tooling/worktrees] **A worktree's COPIED Composer classmap knows no class that did not exist when it was made — a rename elsewhere OR one you just added. `Class "…" not found` reads as a broken diff.** → [a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename](gotchas/a-worktree-s-vendor-autoload-goes-stale-after-a-class-rename.md) (s104, again s121)
