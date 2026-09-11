@@ -135,9 +135,22 @@ async function open( query = {} ) {
 	await click( screen.getByRole( 'button', { expanded: false } ) );
 }
 
-/** The dropdown list's entries, in order, as the merchant reads them. */
+/**
+ * The dropdown's entries, in order, as the merchant reads them.
+ *
+ * ⚠ Read from the RENDERED labels, not from any array the component was handed. The
+ * preset block is WooCommerce's `SegmentedSelection` markup — radio inputs whose visible
+ * text lives in a sibling `<label>` — and «Произвольный период» is a button BELOW that
+ * grid, because it opens a calendar rather than picking a value. Both are entries the
+ * merchant sees, so both belong in this list, in the order they appear.
+ */
 function entryLabels() {
-	return screen.getAllByRole( 'listitem' ).map( ( item ) => item.textContent.trim() );
+	const presets = screen
+		.getAllByRole( 'radio' )
+		.map( ( input ) => input.labels[ 0 ].textContent.trim() );
+	const custom = screen.queryByRole( 'button', { name: 'Произвольный период' } );
+
+	return custom ? [ ...presets, custom.textContent.trim() ] : presets;
 }
 
 describe( 'the button label', () => {
@@ -211,16 +224,27 @@ describe( 'the entries it offers', () => {
 
 		expect( screen.queryByText( /compare/i ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( /сравн/i ) ).not.toBeInTheDocument();
-		expect( screen.queryAllByRole( 'radio' ) ).toHaveLength( 0 );
+
+		/**
+		 * ⚠ This assertion used to read `queryAllByRole( 'radio' )` → length 0, which was a
+		 * PROXY for «no compare block» and stopped being one the day the presets became
+		 * WooCommerce's own `SegmentedSelection` — a radio group of their own. A proxy that
+		 * silently starts measuring something else is worse than no test, so it now names
+		 * the thing itself: every radio on screen belongs to the PERIOD group, and no
+		 * `compare` group exists beside it.
+		 */
+		const groups = new Set( screen.getAllByRole( 'radio' ).map( ( input ) => input.name ) );
+
+		expect( [ ...groups ] ).toEqual( [ 'woodev-orders-period' ] );
 	} );
 
 	test( 'the current period is the marked entry', async () => {
 		await open( { period: 'quarter' } );
 
 		const selected = screen
-			.getAllByRole( 'listitem' )
-			.filter( ( item ) => item.className.includes( 'is-selected' ) )
-			.map( ( item ) => item.textContent.trim() );
+			.getAllByRole( 'radio' )
+			.filter( ( input ) => input.checked )
+			.map( ( input ) => input.labels[ 0 ].textContent.trim() );
 
 		expect( selected ).toEqual( [ 'С начала квартала' ] );
 	} );

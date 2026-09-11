@@ -262,27 +262,74 @@ function PeriodPickerContent( { query, dateApi, onSelect, onClose }: PeriodPicke
 			: [] ),
 	];
 
+	const presets = entries.filter( ( entry ) => ! entry.isCustom );
+	const custom = entries.find( ( entry ) => entry.isCustom );
+
+	/**
+	 * The preset grid is WooCommerce's OWN `SegmentedSelection` markup, class for class
+	 * (`fieldset.woocommerce-segmented-selection` → `__container` → `__item` →
+	 * `__input` + `<label><span class="__label">`), copied from the live DOM of their date
+	 * picker on `/analytics/orders` rather than guessed. Their stylesheet lays that
+	 * container out as `display: grid; grid-template-columns: 159px 159px` — measured on
+	 * the rig 12.09.2026 — so the two columns and every pill border come from THEIR CSS and
+	 * there is nothing for us to restate.
+	 *
+	 * A one-column `FilterPicker` list was what this control shipped with first, and the
+	 * operator caught it on his own rig pass: their date picker is two columns, and eleven
+	 * periods stacked in one made a scroll-length ribbon of it.
+	 *
+	 * ⚠ «Произвольный период» is deliberately NOT in the grid. It does not pick a value —
+	 * it swaps the whole panel for a calendar, which is exactly why WooCommerce keeps its
+	 * own `Custom` on a separate TAB rather than among the preset pills. A pill that
+	 * behaves differently from the ten beside it is the kind of thing nobody notices until
+	 * it misfires.
+	 */
 	return (
-		<ul className="woocommerce-filters-filter__content-list">
-			{ entries.map( ( entry ) => (
-				<li
-					key={ entry.value || 'all-time' }
-					className={
-						'woocommerce-filters-filter__content-list-item' +
-						( entry.value === period ? ' is-selected' : '' )
-					}
-				>
-					<Button
-						className="woocommerce-filters-filter__button"
-						onClick={ () =>
-							entry.isCustom ? setShowCustom( true ) : pick( entry.value )
-						}
-					>
-						{ entry.label }
+		<>
+			<fieldset className="woocommerce-segmented-selection">
+				<legend className="screen-reader-text">
+					{ __( 'Выберите период', 'woodev-plugin-framework' ) }
+				</legend>
+				<div className="woocommerce-segmented-selection__container">
+					{ presets.map( ( entry ) => {
+						const id = `woodev-period-${ entry.value || 'all-time' }`;
+
+						return (
+							<div
+								className={
+									'woocommerce-segmented-selection__item' +
+									( entry.value === ALL_TIME_PERIOD
+										? ' woodev-orders__period-item--wide'
+										: '' )
+								}
+								key={ id }
+							>
+								<input
+									className="woocommerce-segmented-selection__input"
+									type="radio"
+									name="woodev-orders-period"
+									id={ id }
+									checked={ entry.value === period }
+									onChange={ () => pick( entry.value ) }
+								/>
+								<label htmlFor={ id }>
+									<span className="woocommerce-segmented-selection__label">
+										{ entry.label }
+									</span>
+								</label>
+							</div>
+						);
+					} ) }
+				</div>
+			</fieldset>
+			{ custom && (
+				<div className="woodev-orders__period-custom-entry">
+					<Button variant="tertiary" onClick={ () => setShowCustom( true ) }>
+						{ custom.label }
 					</Button>
-				</li>
-			) ) }
-		</ul>
+				</div>
+			) }
+		</>
 	);
 }
 
