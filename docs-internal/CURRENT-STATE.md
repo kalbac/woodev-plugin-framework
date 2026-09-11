@@ -6,23 +6,25 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-09 (s129).** ✅ **Four PRs merged — #844 #845 #846 #847.** ⚠ **PR #848 is OPEN and green, waiting on his visual pass (card #849); the tree is parked on `fix/sp10-data-status-block` so the rig serves it — do NOT switch it away first.** (`316b437`) — both halves of **#836**: the
-filter rules, the «Пункт выдачи» and `is_exported` filters, and only the delivery statuses a shop
-can produce. Detail: `sessions/s129.md`. ⚠ Every negation was checked on the rig as a COMPLEMENT
-(each pair sums to the unfiltered total) — the unbound-negation failure is measured absent.
+**As of 2026-09-11 (s130).** ✅ **#848 #851 #854 merged; tree on `main` @ `b1f9c77`, clean.**
+⚠ **PR #852 (the menu badge, #834) is OPEN, green and DELIBERATELY HELD** — it counts all-time
+(101) against the page's year default (83), and the operator has settled that those must agree.
+**#855 unblocks it and it will then agree without an edit to it.** Detail: `sessions/s130.md`.
+
+⚠ **Four numbers on this page describe four different periods, and only one of them is new.**
+The carrier picker already said «Все перевозчики (134)» above a table of 110 rows on `main` — it
+counts all-time, the table counts the period. Operator, 11.09.2026: **the counts describe what is IN
+THE TABLE, and the default period widens to all time** (#855, «Сейчас»). Year was never chosen for
+its own sake — D11 took it because WooCommerce ships no wider preset.
 
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-⚠ **«Matches nothing» has exactly ONE correct mechanism — `Orders_Query::NO_MATCH_META_QUERY`.**
-An empty status array is expanded by HPOS into every valid status, and a bogus slug behaves
-differently on each datastore; both look right in a unit test (s128).
-
-Open on the page: **#824 #828 #829 #834 #838 #839 #841 #842 #843**. **#828** and **#841** are IN
-FLIGHT (s129). ⚠ **#841 and #834 share one prerequisite:** «exported» is `carrier_order_id`, which
-`Abstract_Shipment_Handler::export()` writes and `Orders_Provider` does NOT declare — until it does,
-neither the quick filter nor the badge has anything to count. Canonical `pending` is not the answer:
-no dictionary maps into it (both fixtures send «just created» to `created`).
+Open on the page: **#824 #829 #834 #839 #842 #843 #853 #855**. «New» is settled and shipped:
+`is_exported=false`, derived from `carrier_order_id` — the REST arg, the «Все / Новые» links and the
+badge all read it through the SAME `Orders_Query`, which is what makes their numbers agree by
+construction rather than by coincidence (verified end-to-end through the page's own REST route,
+s130: 101 = 101, breakdown 48 + 53).
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -60,11 +62,11 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 09.09.2026 (s129) on MERGED `main` at `3b0580a`:**
-unit **3779** / **9505**, 1 skipped, with sodium ON; jest **1861** in **31** suites (1863 on #848);
+**Baselines — re-measured 11.09.2026 (s130) on MERGED `main` at `b1f9c77`:**
+unit **3786** / **9529**, 1 skipped, with sodium ON; jest **1885** in **31** suites;
 **integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
-level 3 no errors; every `lint:*` OK; catalogue **803** entries, **429** translated. Nothing on
+level 3 no errors; every `lint:*` OK; catalogue **805** entries, **429** translated. Nothing on
 this line is carried forward.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -173,7 +175,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7, слой данных #828 и рабочая фильтрация с правилами.** Осталось: 3 (массовые действия), 4 (счётчик), 5 (редирект слагов), 8 (панель — UI поверх готового шва), плюс #824 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7, 8 (панель), фильтрация с правилами и ссылки области «Все / Новые» (#841).** Осталось: 3 (массовые действия), 4 (счётчик — код готов, PR #852 придержан за #855), 5 (редирект слагов), плюс #824 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
 ✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
@@ -249,7 +251,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **307**.
+Gotchas: **309**.
 
 ## Program status (high level)
 
