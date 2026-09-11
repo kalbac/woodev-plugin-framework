@@ -470,3 +470,76 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/**
+ * The «Все (134) | Новые (7)» scope links (#841, operator 11.09.2026), on their own
+ * row between the filter row and the table.
+ *
+ * ⚠ Modelled on WordPress's own counted-scope row — `.subsubsub` in wp-admin's
+ * `common.css`: the links read as body text, the current one goes semibold and dark,
+ * and the count sits beside the label in the muted grey. Deliberately NOT reusing the
+ * `.subsubsub` class itself: that rule carries wp-list-table's own float/margin
+ * geometry, which fights a wc-admin card's, and inheriting it once already produced a
+ * row that sat too tight against the card's top edge.
+ *
+ * ⚠ The «|» separator is drawn HERE and not written into the JSX. WordPress puts a
+ * literal pipe in the markup, and a screen reader then reads it — two links with a
+ * decorative divider between them is the honest DOM, so the divider is CSS.
+ */
+.woodev-orders__scopes {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	// wp-admin gives every `ul` a default margin; this row's spacing is its own.
+	margin: 16px 0 8px;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.woodev-orders__scope {
+	margin: 0;
+
+	// The divider between two links, never before the first one.
+	& + & {
+		&::before {
+			content: '|';
+			margin: 0 6px;
+			color: wd.$line;
+		}
+	}
+}
+
+.woodev-orders__scope-link {
+	// `Link` renders an `<a>`; wc-admin colours those with the WP admin blue, which
+	// would make BOTH scopes read as "not the current one".
+	color: wd.$muted;
+	text-decoration: none;
+
+	&:hover,
+	&:focus {
+		color: wd.$accent-strong;
+		text-decoration: underline;
+	}
+
+	/**
+	 * The current scope, marked the way a WP list table marks it (`aria-current="page"`
+	 * carries the same fact to a screen reader — the weight alone would not).
+	 */
+	&.current {
+		color: wd.$ink;
+		font-weight: 600;
+	}
+}
+
+/**
+ * ⚠ The count stays muted even inside the CURRENT link, and it must stay legible: this
+ * number is the entire reason the operator chose counted links over a toggle — he
+ * checks «Новые (7)» against the badge in the admin menu by eye. `$muted` is #646970,
+ * 5.74:1 on white, so it is a de-emphasis and not a whisper.
+ */
+.woodev-orders__scope-count {
+	color: wd.$muted;
+	font-weight: 400;
+}

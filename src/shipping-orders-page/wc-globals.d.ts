@@ -235,6 +235,26 @@ export interface WcFilterPickerProps {
 	advancedFilters?: WcAdvancedFiltersConfig;
 }
 
+/**
+ * `@woocommerce/components`' `Link` (#841) — how a wc-admin page renders a link to
+ * another view of itself and stays a single-page app: it emits a real `<a href>` AND
+ * intercepts the click to push onto wc-admin's own history.
+ *
+ * ⚠ `href` is the value `getNewPath()` returns, and `type` is what appends the right
+ * prefix to it (`packages/js/components/src/link/README.md`: "The `type` prop, which
+ * defaults to 'wc-admin', determines the type of link and ensures the correct prefix
+ * is appended"). The two are a PAIR — hand-building the `admin.php?page=wc-admin&…`
+ * prefix ourselves would be the same class of guess this file exists to prevent.
+ */
+export interface WcLinkProps {
+	href: string;
+	/** Defaults to `wc-admin` upstream; passed explicitly here so the prefix is not implicit. */
+	type?: 'wc-admin' | 'wp-admin' | 'external';
+	className?: string;
+	'aria-current'?: 'page' | undefined;
+	children?: ReactNode;
+}
+
 declare global {
 	interface Window {
 		wc?: {
@@ -253,6 +273,8 @@ declare global {
 				DateRangeFilterPicker?: ComponentType< WcDateRangeFilterPickerProps >;
 				/** SP-10 spec D10 (increment 7) — the delivery-status/order-status/tracking filters, named by the operator. */
 				AdvancedFilters?: ComponentType< WcAdvancedFiltersProps >;
+				/** #841 — the «Все / Новые» scope links above the table. See {@link WcLinkProps}. */
+				Link?: ComponentType< WcLinkProps >;
 			};
 			/**
 			 * `@woocommerce/navigation`, behind the `wc-navigation` script handle
@@ -264,6 +286,22 @@ declare global {
 				getQuery: () => Record< string, string | undefined >;
 				getPath: () => string;
 				addHistoryListener: ( listener: () => void ) => () => void;
+				/**
+				 * `getNewPath(query, path, currentQuery)` — "Return a URL with set query
+				 * parameters […] merging query params into existing params"
+				 * (`packages/js/navigation/README.md`). This is the href half of the
+				 * scope links (#841); {@link WcLinkProps} is the other half, and the
+				 * prefix belongs to it, not to the caller.
+				 *
+				 * Optional like `updateQueryString`: an older `wc-navigation` may not
+				 * export it, and the scope links then do not render rather than
+				 * rendering an href that goes nowhere.
+				 */
+				getNewPath?: (
+					query: Record< string, string | undefined >,
+					path: string,
+					currentQuery: Record< string, string | undefined >
+				) => string;
 				/**
 				 * `updateQueryString(query, path, currentQuery)` (`packages/js/navigation/README.md`)
 				 * — merges `query` into `currentQuery` and navigates, the same way

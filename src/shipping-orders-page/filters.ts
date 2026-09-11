@@ -33,6 +33,26 @@ export const CARRIER_PARAM = 'carrier';
  */
 export const FILTER_PARAM = 'filter';
 
+/**
+ * Query key the «Все / Новые» scope links own (#841). Its own param, like every
+ * other filter here, so the view is linkable and the browser's back button works
+ * on it — the links are real `href`s that navigate, not buttons that call back.
+ *
+ * ⚠ It is NOT one of the advanced-filter keys and must never be cleared by
+ * {@link advancedFiltersToggleQuery}: the scope is which work queue the merchant is
+ * looking at, not one of the pointwise conditions the toggle reveals. Closing the
+ * advanced block while standing in «Новые» must leave them in «Новые».
+ */
+export const SCOPE_PARAM = 'scope';
+
+/**
+ * The `scope` value for «Новые» — orders the carrier has no order id for yet.
+ * «Все» is the ABSENCE of the param rather than a value of its own, the same way
+ * this page expresses every other "no filter" state, so the default view carries a
+ * clean URL and an unrecognised value degrades to it.
+ */
+export const NEW_SCOPE = 'new';
+
 /** Carrier value meaning "every provider" — the aggregate #694 made the default. */
 export const ALL_CARRIERS = 'all';
 
@@ -153,6 +173,37 @@ export function getCarrierFromQuery( query: WcQuery ): string {
 	return value ? value : ALL_CARRIERS;
 }
 
+/**
+ * Which scope link is the current one (#841). Anything other than {@link NEW_SCOPE} —
+ * absent, empty, or a hand-edited value — reads as «Все», so a broken URL shows the
+ * whole queue rather than an empty table under a link that looks unselected.
+ */
+export function getScopeFromQuery( query: WcQuery ): 'all' | typeof NEW_SCOPE {
+	return NEW_SCOPE === query[ SCOPE_PARAM ] ? NEW_SCOPE : 'all';
+}
+
+/**
+ * The `is_exported` value a scope sends to {@link import('./rest').fetchOrders} —
+ * `false` for «Новые», `undefined` (i.e. "do not filter on export state at all")
+ * for «Все».
+ *
+ * Derived HERE, at the boundary, rather than at the call site: `is_exported` is a
+ * tri-state whose PRESENCE is what the REST route reads, and the one place that
+ * knows «Все» means absence and not `true` is this module.
+ */
+export function isExportedForScope( scope: string ): boolean | undefined {
+	return NEW_SCOPE === scope ? false : undefined;
+}
+
+/**
+ * The query patch one scope link navigates to. «Все» REMOVES the key (`undefined` is
+ * how `@wordpress/url`'s `addQueryArgs()` drops one) instead of writing `scope=all`,
+ * so the default view's URL stays clean and there is exactly one spelling of it.
+ */
+export function scopeQuery( scope: string ): Record<string, string | undefined> {
+	return { [ SCOPE_PARAM ]: NEW_SCOPE === scope ? NEW_SCOPE : undefined };
+}
+
 /** '' means "no delivery-status filter" — a value the REST route's own `validate_delivery_status` also treats as valid. */
 export function getDeliveryStatusFromQuery( query: WcQuery ): DeliveryStatusCanonical | '' {
 	return ( query[ DELIVERY_STATUS_PARAM ] as DeliveryStatusCanonical | undefined ) || '';
@@ -219,6 +270,13 @@ export function getHasTrackingFromQuery( query: WcQuery ): boolean | undefined {
 /** One comparable snapshot of every URL-driven filter — used to decide whether a change should reset `paged` to 1 (requirement #4). */
 export interface UrlFilters {
 	carrier: string;
+	/**
+	 * #841: which of the «Все / Новые» links is current. In this snapshot — and so in
+	 * {@link filtersEqual} — because it scopes the fetch: leave it out and switching
+	 * scope neither refetches nor resets the page, while a navigation that changed
+	 * only the scope would read as "no filter changed" (#850's guard).
+	 */
+	scope: string;
 	after: string;
 	before: string;
 	deliveryStatus: DeliveryStatusCanonical | '';
@@ -239,6 +297,7 @@ export function filtersEqual( a: UrlFilters, b: UrlFilters ): boolean {
 
 	return (
 		a.carrier === b.carrier &&
+		a.scope === b.scope &&
 		a.after === b.after &&
 		a.before === b.before &&
 		a.deliveryStatus === b.deliveryStatus &&

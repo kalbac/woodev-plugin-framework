@@ -17,7 +17,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
 import { fetchOrders, fetchSyncStatus, getProviders } from '../../src/shipping-orders-page/rest';
 
@@ -153,6 +153,39 @@ function FakeAdvancedFilters( { config, path, query } ) {
 	);
 }
 
+/**
+ * Stands in for `@woocommerce/components`' `Link` (#841 — the «Все / Новые» scope
+ * links). The real one renders a genuine `<a href>` AND intercepts the click to push
+ * onto wc-admin's own history, so this fake does BOTH: the href reaches the DOM, and
+ * clicking it navigates.
+ *
+ * ⚠ The navigation is derived FROM THE HREF, not from a query the fake rebuilds. A
+ * fake that recomputed the target could disagree with `getNewPath()` and then a
+ * passing test would only prove the fake and the page agree — the same class of
+ * fiction as a test double that gets someone else's runtime wrong. Parsing the href
+ * means the assertion "the link points at scope=new" and the behaviour "clicking it
+ * lands in «Новые»" are backed by the same string.
+ */
+function FakeLink( { href, type, className, children, ...rest } ) {
+	return (
+		<a
+			href={ href }
+			data-link-type={ type }
+			className={ className }
+			{ ...rest }
+			onClick={ ( event ) => {
+				event.preventDefault();
+
+				const search = href.includes( '?' ) ? href.slice( href.indexOf( '?' ) + 1 ) : '';
+
+				navigate( Object.fromEntries( new URLSearchParams( search ).entries() ) );
+			} }
+		>
+			{ children }
+		</a>
+	);
+}
+
 /** A `moment`-like stub — only `.format()` is ever called on one of these. */
 function fakeMoment( isoString ) {
 	return { format: () => isoString };
@@ -215,10 +248,31 @@ beforeAll( () => {
 			),
 			DateRangeFilterPicker: FakeDateRangeFilterPicker,
 			AdvancedFilters: FakeAdvancedFilters,
+			Link: FakeLink,
 		},
 		navigation: {
 			getQuery: () => fakeQuery,
 			getPath: () => '/woodev-shipping-orders',
+			/**
+			 * `getNewPath(query, path, currentQuery)` — "Return a URL with set query
+			 * parameters […] merging query params into existing params"
+			 * (`packages/js/navigation/README.md`).
+			 *
+			 * ⚠ It drops keys whose value is `undefined`, because that is what
+			 * `@wordpress/url`'s `addQueryArgs()` does and it is the mechanism «Все»
+			 * uses to CLEAR the scope rather than write `scope=all`. A fake that kept
+			 * the key with an undefined value would let a broken «Все» link pass.
+			 */
+			getNewPath: ( query, path, currentQuery ) => {
+				const merged = { ...currentQuery, ...query };
+				Object.keys( merged ).forEach( ( key ) => {
+					if ( undefined === merged[ key ] ) {
+						delete merged[ key ];
+					}
+				} );
+
+				return `${ path }?${ new URLSearchParams( merged ).toString() }`;
+			},
 			addHistoryListener: ( listener ) => {
 				historyListeners.push( listener );
 
@@ -422,12 +476,12 @@ describe( 'carrier filter', () => {
 
 	/**
 	 * `staticParams` carries every OTHER filter-row query key (increment 7),
-	 * including the display-mode toggle's own `filter` param (#835) — the date
-	 * range, the advanced filters and the display mode all describe "what work
-	 * queue view am I in", independent of carrier, so a carrier switch must not
-	 * silently drop them. `paged` is still not one of these keys: it is
-	 * component state, not a URL param, so it still cannot survive a carrier
-	 * change.
+	 * including the display-mode toggle's own `filter` param (#835) and the
+	 * «Все / Новые» scope's `scope` (#841) — the date range, the advanced
+	 * filters, the display mode and the scope all describe "what work queue view
+	 * am I in", independent of carrier, so a carrier switch must not silently
+	 * drop them. `paged` is still not one of these keys: it is component state,
+	 * not a URL param, so it still cannot survive a carrier change.
 	 */
 	test( 'the filter owns the carrier query param and carries the rest of the filter row across a change', async () => {
 		getProviders.mockReturnValue( twoProviders() );
@@ -442,7 +496,7 @@ describe( 'carrier filter', () => {
 		expect( filter ).toHaveAttribute( 'data-param', 'carrier' );
 		expect( filter ).toHaveAttribute(
 			'data-static-params',
-			'filter,period,compare,before,after,delivery_status_is,delivery_status_is_not,status_is,status_is_not,has_tracking_is,has_pickup_point_is'
+			'filter,scope,period,compare,before,after,delivery_status_is,delivery_status_is_not,status_is,status_is_not,has_tracking_is,has_pickup_point_is'
 		);
 		expect( filter ).toHaveAttribute( 'data-path', '/woodev-shipping-orders' );
 	} );
@@ -1385,5 +1439,284 @@ describe( 'the data-status panel (#828 increment 8)', () => {
 		expect(
 			pickers.compareDocumentPosition( panel ) & Node.DOCUMENT_POSITION_FOLLOWING
 		).toBeTruthy();
+	} );
+} );
+
+/**
+ * The «Все (134) | Новые (7)» scope links (#841, operator 11.09.2026 with an ASCII
+ * mock in front of him).
+ *
+ * ⚠ EVERY assertion here reads the RENDERED TEXT of a link, numbers included, and
+ * never a prop or a component's internal value. Three times in this project a green
+ * suite certified a widget whose visible text was wrong, and here the visible number
+ * IS the requirement: the operator chose counted links over a toggle so the merchant
+ * can check «Новые (7)» against the badge in the admin menu by eye. `getByRole(
+ * 'link', … )` asserts two things at once — the accessible text, and that the control
+ * really is a link rather than a button dressed as one.
+ */
+describe( 'the «Все / Новые» scope links (#841)', () => {
+	const withCounts = ( rows, counts ) => resultOf( rows, { scope_counts: counts } );
+
+	test( 'both scopes render with their counts as visible text', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 7 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toBeInTheDocument()
+		);
+
+		expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toBeInTheDocument();
+	} );
+
+	/**
+	 * The number is the point, so a count of zero must still be ON SCREEN. «Новые (0)»
+	 * is the answer «новых заказов нет»; a link that silently loses its number reads as
+	 * a broken control instead.
+	 */
+	test( 'a zero count renders rather than disappearing', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 0 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Новые (0)' } ) ).toBeInTheDocument()
+		);
+	} );
+
+	/**
+	 * ⚠ Real `href`s (requirement 2), because the scope lives in the URL like every
+	 * other filter here — that is what makes the view linkable and the back button
+	 * work. «Все» REMOVES the key rather than writing `scope=all`, so the default view
+	 * has exactly one spelling.
+	 */
+	test( 'the links are real hrefs: «Новые» carries scope=new, «Все» carries no scope at all', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 7 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toBeInTheDocument()
+		);
+
+		const newLink = screen.getByRole( 'link', { name: 'Новые (7)' } );
+		const allLink = screen.getByRole( 'link', { name: 'Все (134)' } );
+
+		expect( newLink.getAttribute( 'href' ) ).toContain( 'scope=new' );
+		expect( allLink.getAttribute( 'href' ) ).not.toContain( 'scope' );
+		// `type` is what makes the prefix a wc-admin one instead of a hand-built guess.
+		expect( newLink ).toHaveAttribute( 'data-link-type', 'wc-admin' );
+	} );
+
+	/** WordPress marks the active scope `current`; `aria-current` carries the same fact to a screen reader. */
+	test( 'the active scope is visibly the active one', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 7 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toBeInTheDocument()
+		);
+
+		expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toHaveClass( 'current' );
+		expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toHaveAttribute( 'aria-current', 'page' );
+		expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).not.toHaveClass( 'current' );
+		expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).not.toHaveAttribute( 'aria-current' );
+	} );
+
+	test( 'a scope already in the URL is the current one, and scopes the very first fetch', async () => {
+		fakeQuery = { scope: 'new' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 7 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { isExported: false } ) )
+		);
+
+		expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toHaveClass( 'current' );
+		expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).not.toHaveClass( 'current' );
+	} );
+
+	/**
+	 * ⚠ THIS ASSERTS THE CALL COUNT, and that is deliberate. `toHaveBeenLastCalledWith`
+	 * cannot see a REPEAT of an identical call — that is exactly how #850 stayed green
+	 * through a live redundant-fetch defect for two sessions. A scope switch is one
+	 * navigation and must be one request.
+	 *
+	 * The new rows on screen are what proves the whole cycle actually completed; without
+	 * that wait a passing count could just mean the click did nothing at all.
+	 */
+	test( 'switching scope issues exactly ONE fetch, not two', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders
+			.mockResolvedValueOnce( withCounts( [ makeRow() ], { all: 134, new: 7 } ) )
+			.mockResolvedValue(
+				withCounts( [ makeRow( { id: 77, order_number: '77' } ) ], { all: 134, new: 7 } )
+			);
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toBeInTheDocument()
+		);
+
+		const callsBefore = fetchOrders.mock.calls.length;
+
+		fireEvent.click( screen.getByRole( 'link', { name: 'Новые (7)' } ) );
+
+		await waitFor( () => expect( screen.getByText( 'Заказ 77' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders.mock.calls.length ).toBe( callsBefore + 1 );
+		expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { isExported: false } ) );
+		expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toHaveClass( 'current' );
+	} );
+
+	/**
+	 * ⚠ Back to «Все» must send NOTHING, not `is_exported=true`. The REST arg is a
+	 * tri-state whose presence decides whether the query filters at all, so `true` would
+	 * quietly turn «Все» into «уже экспортированные» — a wrong table under a link that
+	 * says «Все».
+	 */
+	test( 'switching back to «Все» sends no isExported at all — and still only one fetch', async () => {
+		fakeQuery = { scope: 'new' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders
+			.mockResolvedValueOnce( withCounts( [ makeRow() ], { all: 134, new: 7 } ) )
+			.mockResolvedValue(
+				withCounts( [ makeRow( { id: 88, order_number: '88' } ) ], { all: 134, new: 7 } )
+			);
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toBeInTheDocument()
+		);
+
+		const callsBefore = fetchOrders.mock.calls.length;
+
+		fireEvent.click( screen.getByRole( 'link', { name: 'Все (134)' } ) );
+
+		await waitFor( () => expect( screen.getByText( 'Заказ 88' ) ).toBeInTheDocument() );
+
+		expect( fetchOrders.mock.calls.length ).toBe( callsBefore + 1 );
+		expect( fetchOrders.mock.calls[ callsBefore ][ 0 ].isExported ).toBeUndefined();
+		expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toHaveClass( 'current' );
+	} );
+
+	/**
+	 * The counts describe what the table would show, so a scope switch must carry every
+	 * other filter with it — the operator's own case: with a carrier picked, «Новые»
+	 * means new among THAT carrier's orders.
+	 */
+	test( 'a scope switch keeps every other filter on the request', async () => {
+		fakeQuery = { carrier: 'cdek', delivery_status_is: 'in_transit' };
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 12, new: 3 } ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Новые (3)' } ) ).toBeInTheDocument()
+		);
+
+		fireEvent.click( screen.getByRole( 'link', { name: 'Новые (3)' } ) );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith(
+				expect.objectContaining( {
+					carrier: 'cdek',
+					deliveryStatus: 'in_transit',
+					isExported: false,
+				} )
+			)
+		);
+	} );
+
+	/**
+	 * The links go ABOVE THE TABLE on their own row — not into the row of filter
+	 * controls. The operator has corrected that row's geometry twice in two days, and a
+	 * counted-link pair is not a filter control anyway; it is WordPress's own scope row.
+	 */
+	test( 'the links sit above the table and outside the filter row', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( withCounts( [ makeRow() ], { all: 134, new: 7 } ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Все (134)' } ) ).toBeInTheDocument()
+		);
+
+		const scopes = container.querySelector( '.woodev-orders__scopes' );
+		const filters = container.querySelector( '.woodev-orders__filters' );
+
+		expect( scopes ).not.toBeNull();
+		expect( filters ).not.toContainElement( scopes );
+		expect( scopes.closest( 'table' ) ).toBeNull();
+		// Above the table: the scope row precedes the table in document order.
+		expect(
+			scopes.compareDocumentPosition( screen.getByRole( 'table' ) ) &
+				Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+	} );
+
+	/**
+	 * A response with no `scope_counts` is an older server, and «not stated» is not
+	 * «zero»: rendering invented numbers would destroy the one property this control
+	 * has — that its numbers can be trusted against the menu badge. The table renders
+	 * as before.
+	 */
+	test( 'a response without scope_counts renders no links at all', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByRole( 'table' ) ).toBeInTheDocument() );
+
+		expect( screen.queryByRole( 'link', { name: /^Все \(/ } ) ).toBeNull();
+		expect( screen.queryByRole( 'link', { name: /^Новые \(/ } ) ).toBeNull();
+	} );
+
+	/**
+	 * A failed fetch leaves the previous counts describing a table that is no longer on
+	 * screen. A stale «Новые (7)» above an empty table is precisely the number the
+	 * merchant would carry to the menu badge and then mistrust, so the links go rather
+	 * than lie — the carrier picker and the toggle stay mounted, so the view is still
+	 * escapable.
+	 */
+	test( 'a failed fetch drops the links instead of showing stale counts', async () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders
+			.mockResolvedValueOnce( withCounts( [ makeRow() ], { all: 134, new: 7 } ) )
+			.mockRejectedValue( { message: 'Неизвестный перевозчик.' } );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( screen.getByRole( 'link', { name: 'Новые (7)' } ) ).toBeInTheDocument()
+		);
+
+		navigate( { carrier: 'nope' } );
+
+		// `getAllByText`, not `getByText`: `@wordpress/components`' `Notice` also
+		// announces itself through an a11y-speak live region, so the same text
+		// legitimately appears twice — and because that region is populated
+		// asynchronously, `getByText` here is not merely wrong, it is FLAKY (it passed
+		// alone and failed in the suite).
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Неизвестный перевозчик.' ).length ).toBeGreaterThan( 0 )
+		);
+
+		expect( screen.queryByRole( 'link', { name: 'Новые (7)' } ) ).toBeNull();
+		expect( screen.queryByRole( 'link', { name: 'Все (134)' } ) ).toBeNull();
+		// The row of filter controls survives, so the merchant can undo what broke it.
+		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument();
 	} );
 } );

@@ -252,7 +252,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		}
 
 		/**
-		 * Returns the paginated row list.
+		 * Returns the paginated row list, plus the two scope counts the «Все / Новые»
+		 * links above the table render (`scope_counts`, SP-10 #841 — see
+		 * {@see self::build_scope_counts()} for why they travel in THIS response and not
+		 * in one of their own).
 		 *
 		 * @since 2.0.2
 		 *
@@ -319,11 +322,93 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 
 			return rest_ensure_response(
 				[
-					'rows'        => $rows,
-					'total'       => (int) $result->total,
-					'total_pages' => (int) $result->max_num_pages,
+					'rows'         => $rows,
+					'total'        => (int) $result->total,
+					'total_pages'  => (int) $result->max_num_pages,
+					'scope_counts' => $this->build_scope_counts( $params, (int) $result->total ),
 				]
 			);
+		}
+
+		/**
+		 * Both numbers the «Все / Новые» scope links above the table show (SP-10 #841),
+		 * in the SAME response as the rows they describe.
+		 *
+		 * **One response, not two, is the whole point of computing this here.** The
+		 * control exists so the merchant can check «Новые (7)» against the badge in the
+		 * admin menu with their own eyes (operator, 11.09.2026) — two round trips can
+		 * answer from two different states of the table and disagree, and a control whose
+		 * two numbers can contradict each other is worse than no control.
+		 *
+		 * **Both counts respect every OTHER filter of the request.** With «Реалистичная
+		 * доставка» picked, «Новые» is the new orders among THAT carrier's, because the
+		 * numbers describe what the table would show if the merchant followed the link.
+		 * Only the scope's own arg — `is_exported` — is overridden: that is the axis the
+		 * two links select between, so it cannot be inherited from the current view or
+		 * both links would report the same number.
+		 *
+		 * **«New» is `is_exported = false`**, i.e. the carrier has no order id for it yet
+		 * — settled by measurement: an order stops being new when
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * writes its `carrier_order_id`.
+		 *
+		 * ⚠ Only ONE extra query ever runs, and not as an optimisation for its own sake:
+		 * the current view's own `total` is BY DEFINITION one of the two counts (the
+		 * aggregate view's total IS «Все», the «Новые» view's total IS «Новые»), so
+		 * reusing it is what makes that link's number provably the same number the table
+		 * was built from rather than a second query's opinion of it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $params request params as handed to {@see Orders_Query::get_results()}.
+		 * @param int                 $total  the total this request's own query already reported.
+		 * @return array{all:int,new:int}
+		 */
+		private function build_scope_counts( array $params, int $total ): array {
+			$all_params = $params;
+			unset( $all_params['is_exported'] );
+
+			$new_params                = $all_params;
+			$new_params['is_exported'] = false;
+
+			// `wc_string_to_bool()` and not a cast, because that is what
+			// `Orders_Query::build_args()` reads the very same value with — a different
+			// reader here could call a request «Новые» that the query then filtered as
+			// «экспортированные», and the count would describe another table.
+			$is_new_scope = array_key_exists( 'is_exported', $params ) && ! wc_string_to_bool( $params['is_exported'] );
+			$is_all_scope = ! array_key_exists( 'is_exported', $params );
+
+			return [
+				'all' => $is_all_scope ? $total : $this->count_matching( $all_params ),
+				'new' => $is_new_scope ? $total : $this->count_matching( $new_params ),
+			];
+		}
+
+		/**
+		 * Counts the orders one set of request params matches, through the SAME
+		 * {@see Orders_Query} the rows come from.
+		 *
+		 * ⚠ Never `wc_get_orders()` or a `$wpdb` count of its own. On the legacy CPT
+		 * datastore `wc_get_orders()` silently DROPS `meta_query` (gotcha
+		 * `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`), so a bespoke
+		 * count would report the WHOLE table there while the rows beside it were
+		 * correctly scoped — the two datastores would disagree and only one of them
+		 * would look wrong. Going through `Orders_Query` is what keeps both honest,
+		 * because it is the object that owns the datastore branch.
+		 *
+		 * Asks for the smallest page there is: only the paginated result's `total` is
+		 * read, so the page size is pure cost.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $params request params to count under.
+		 * @return int
+		 */
+		private function count_matching( array $params ): int {
+			$params['page']     = 1;
+			$params['per_page'] = 1;
+
+			return (int) $this->query->get_results( $params )->total;
 		}
 
 		/**
