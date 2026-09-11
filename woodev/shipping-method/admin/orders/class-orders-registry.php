@@ -38,6 +38,41 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
 
+		/**
+		 * Transient holding the menu badge's counts — the aggregate AND the per-carrier
+		 * breakdown, in ONE entry (#834 follow-up).
+		 *
+		 * ⚠ One entry, deliberately, not one per carrier: two entries can expire at
+		 * different moments and then disagree, and the tooltip's whole job is to be a
+		 * complete account of the number in the bubble. Both numbers come from the same
+		 * snapshot or neither does.
+		 *
+		 * ⚠ The key is SHARED across users and must stay that way. The badge is already
+		 * gated on {@see self::get_page_capability()}, and past that gate the count is
+		 * identical for everyone: {@see Orders_Query} scopes rows by carrier marker meta
+		 * and order status only — it has no author, assignee or per-user term in it, so
+		 * there is nothing for a per-user key to vary on. Making this key user-specific
+		 * would multiply the entry by the number of shop managers and buy nothing.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const NEW_COUNTS_TRANSIENT = 'woodev_shipping_orders_new_counts';
+
+		/**
+		 * Default lifetime of {@see self::NEW_COUNTS_TRANSIENT}, in seconds.
+		 *
+		 * A badge that lags a minute is normal — core caches its own update counts for
+		 * far longer — and the page itself is always live, so nothing a merchant acts on
+		 * is ever the cached number.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		const NEW_COUNTS_TTL = 60;
+
 		/** @var self|null singleton. */
 		private static $instance = null;
 
@@ -179,6 +214,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
@@ -210,15 +246,399 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			wc_admin_register_page(
-				[
-					'id'         => self::PAGE_SLUG,
-					'title'      => __( 'Заказы доставки', 'woodev-plugin-framework' ),
-					'parent'     => 'woocommerce',
-					'path'       => '/' . self::PAGE_SLUG,
-					'capability' => $this->get_page_capability(),
-				]
+			wc_admin_register_page( $this->build_page_args() );
+		}
+
+		/**
+		 * Builds the `wc_admin_register_page()` argument array.
+		 *
+		 * Split out of {@see self::register_page()} so the argument shape — in particular
+		 * the `title`/`page_title` split below, which is the whole of #834's escaping
+		 * constraint — is reachable from a unit test. `wc_admin_register_page()` itself is
+		 * deliberately never stubbed in this project's unit suite: touching it once leaks
+		 * `function_exists( 'wc_admin_register_page' )` as permanently `true` for the rest
+		 * of the PHPUnit process, which would disarm {@see self::register_page()}'s own
+		 * fail-soft guard test.
+		 *
+		 * ⚠ `title` and `page_title` MUST both be passed, and only `title` may carry
+		 * markup. `wc_admin_register_page()` hands `title` straight through to
+		 * `add_submenu_page()` as the MENU title, which WordPress echoes unescaped — that
+		 * is what lets the badge render at all (measured on the rig, #834, 11.09.2026).
+		 * But WooCommerce's `PageController::register_page()` copies `title` into
+		 * `page_title` when the latter is empty, and `page_title` IS escaped, so leaving
+		 * it out puts the raw `<span …>` markup into the browser tab's `<title>`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,mixed>
+		 */
+		private function build_page_args(): array {
+			$page_title = __( 'Заказы доставки', 'woodev-plugin-framework' );
+
+			return [
+				'id'         => self::PAGE_SLUG,
+				'title'      => $this->build_menu_title( $page_title ),
+				'page_title' => $page_title,
+				'parent'     => 'woocommerce',
+				'path'       => '/' . self::PAGE_SLUG,
+				'capability' => $this->get_page_capability(),
+			];
+		}
+
+		/**
+		 * Moves «Заказы доставки» directly below WooCommerce's own «Orders» in the
+		 * WooCommerce submenu (operator, 12.09.2026).
+		 *
+		 * ⚠ Deliberately NOT done with `wc_admin_register_page()`'s position argument, and
+		 * the reason is measured rather than assumed (WooCommerce 11.1.0, 12.09.2026):
+		 *
+		 * - The `order` key their docblock advertises is a DECOY for this purpose:
+		 *   `PageController::register_page()` never reads it — it is absent from that
+		 *   method's `$defaults` — and what reaches `add_submenu_page()` is `position`.
+		 * - `position` is an INDEX into `$submenu['woocommerce']`, and WooCommerce's own
+		 *   items (`Orders`, `Customers`, `Coupons`, `Reports`, `Settings`, `Status`,
+		 *   `Extensions`) pass NO position at all — every one of them is appended, so their
+		 *   indices are an accident of registration order. Pinning ourselves to a number
+		 *   derived from today's arrangement survives exactly until they add or reorder one.
+		 *
+		 * So the position is resolved by the NEIGHBOUR'S SLUG instead, which is a contract
+		 * they cannot renumber. Both spellings of that neighbour are accepted: `wc-orders`
+		 * on HPOS and `edit.php?post_type=shop_order` on the legacy post store — the rig
+		 * runs HPOS, and a shop that has not migrated must not lose the placement.
+		 *
+		 * Fail-soft throughout: an absent menu, an absent entry of ours, or an «Orders» that
+		 * cannot be found all leave the submenu exactly as it was. A menu that is merely in
+		 * the wrong order is a blemish; a menu this method broke is a support ticket.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function move_menu_item_after_orders(): void {
+			global $submenu;
+
+			if ( empty( $submenu['woocommerce'] ) || ! is_array( $submenu['woocommerce'] ) ) {
+				return;
+			}
+
+			$ours   = null;
+			$others = [];
+
+			foreach ( $submenu['woocommerce'] as $item ) {
+				if ( ! is_array( $item ) || ! isset( $item[2] ) ) {
+					$others[] = $item;
+					continue;
+				}
+
+				if ( null === $ours && false !== strpos( (string) $item[2], 'path=/' . self::PAGE_SLUG ) ) {
+					$ours = $item;
+					continue;
+				}
+
+				$others[] = $item;
+			}
+
+			if ( null === $ours ) {
+				return;
+			}
+
+			$reordered = [];
+			$placed    = false;
+
+			foreach ( $others as $item ) {
+				$reordered[] = $item;
+
+				if ( $placed || ! is_array( $item ) || ! isset( $item[2] ) ) {
+					continue;
+				}
+
+				if ( self::is_orders_menu_slug( (string) $item[2] ) ) {
+					$reordered[] = $ours;
+					$placed      = true;
+				}
+			}
+
+			if ( ! $placed ) {
+				return;
+			}
+
+			$submenu['woocommerce'] = $reordered;
+		}
+
+		/**
+		 * Whether a submenu slug is WooCommerce's own orders screen, in either store.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $slug the submenu entry's slug (`$submenu[$parent][$i][2]`).
+		 *
+		 * @return bool
+		 */
+		private static function is_orders_menu_slug( string $slug ): bool {
+			return 'wc-orders' === $slug
+				|| 'admin.php?page=wc-orders' === $slug
+				|| false !== strpos( $slug, 'post_type=shop_order' );
+		}
+
+		/**
+		 * Appends the "new orders" counter badge to the submenu title (#834).
+		 *
+		 * The markup is WordPress's own update-counter bubble — the same one core uses
+		 * for pending plugin updates and the same one the shipped v1 plugin emits
+		 * (`woocommerce-edostavka/includes/admin/class-wc-edostavka-admin.php:71`) — so no
+		 * stylesheet of ours is involved and the bubble matches every other count in the
+		 * admin menu. Like the v1 plugin, nothing is appended when the count is zero: an
+		 * empty bubble reads as "0 waiting", which is noise, not information.
+		 *
+		 * The one addition over v1 is the `title` attribute carrying the per-carrier
+		 * breakdown, one line per registered provider. That is the same plain-attribute
+		 * technique the page's own «Статус данных» bar already uses
+		 * (`src/shipping-orders-page/app.tsx`, `.woodev-orders-sync__bar[title]`) rather
+		 * than a JS tooltip, which the admin menu could not host anyway.
+		 *
+		 * ⚠ The inner span uses `%s` with {@see number_format_i18n()}, not v1's `%d`:
+		 * `sprintf( '%d', '1 234' )` truncates a thousands-separated string to `1`, so the
+		 * v1 badge misreports any shop with ≥1000 new orders. The outer `count-%d` class
+		 * takes the raw integer, which is what core's own `wp-admin/menu.php` does.
+		 *
+		 * Both numbers come from ONE call to {@see self::get_new_order_counts()}, so the
+		 * bubble and the lines behind it are always the same snapshot.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $page_title plain, unmarked-up page title.
+		 * @return string menu title, with the badge appended when there is one to show.
+		 */
+		private function build_menu_title( string $page_title ): string {
+			// The badge counts orders this user is not necessarily allowed to see. The
+			// page capability is the registry's own answer to "may this user look at
+			// shipping orders" — reuse it rather than widening it to "can see a menu".
+			if ( ! current_user_can( $this->get_page_capability() ) ) {
+				return $page_title;
+			}
+
+			$counts = $this->get_new_order_counts();
+
+			if ( $counts['total'] < 1 ) {
+				return $page_title;
+			}
+
+			return $page_title . sprintf(
+				' <span class="update-plugins count-%1$d" title="%2$s"><span class="new-count">%3$s</span></span>',
+				$counts['total'],
+				esc_attr( $this->build_new_orders_breakdown( $counts['carriers'] ) ),
+				number_format_i18n( $counts['total'] )
 			);
+		}
+
+		/**
+		 * Drops the cached badge counts, so the next admin request recomputes them.
+		 *
+		 * ⚠ An extension seam with no caller inside the framework yet, and that is not an
+		 * argument against it. The natural consumer is the export path: the moment
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * writes a `carrier_order_id` an order stops being new, and the badge should say
+		 * so without waiting out the TTL. Wiring that call lives in the shipment handler
+		 * and is a change of its own.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function flush_new_order_counts(): void {
+			delete_transient( self::NEW_COUNTS_TRANSIENT );
+		}
+
+		/**
+		 * The badge's numbers, served from {@see self::NEW_COUNTS_TRANSIENT} while it holds
+		 * a usable snapshot and recomputed at most once per TTL otherwise (#834 follow-up).
+		 *
+		 * ⚠ Why the cache exists at all: {@see self::register_page()} runs on `admin_menu`,
+		 * so without it the badge queries on EVERY admin page load, not only on the orders
+		 * page — measured on the rig at ~43 ms and three queries for two carriers, whose
+		 * SQL carries three joins on the order-meta table PER PROVIDER. Card #839 measured
+		 * where that shape ends up: on the legacy CPT datastore with four carriers the same
+		 * query sat in MySQL `Sending data` for over four minutes. That price is fine once
+		 * a minute; it is not fine once per request to every admin screen on every install.
+		 *
+		 * A filter returning something non-numeric falls back to the default rather than to
+		 * zero — the same guard {@see self::get_providers()} applies to its own filter. A
+		 * TTL of zero or less IS honoured, as "do not cache": that is what a shop chasing a
+		 * stale badge wants from `add_filter( ..., '__return_zero' )`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{total:int,carriers:array<string,int>}
+		 */
+		private function get_new_order_counts(): array {
+			$provider_ids = array_keys( $this->get_providers() );
+
+			/**
+			 * Filters how long the menu badge's counts stay cached, in seconds.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param int $ttl lifetime in seconds; zero or less disables the cache.
+			 */
+			$ttl = apply_filters( 'woodev_shipping_orders_new_counts_ttl', self::NEW_COUNTS_TTL );
+			$ttl = is_numeric( $ttl ) ? (int) $ttl : self::NEW_COUNTS_TTL;
+
+			if ( $ttl > 0 ) {
+				$cached = get_transient( self::NEW_COUNTS_TRANSIENT );
+
+				if ( self::is_usable_counts_payload( $cached, $provider_ids ) ) {
+					// Rebuilt rather than handed back as-is: a transient outlives a plugin
+					// update, so its stored shape is external input as far as this class is
+					// concerned.
+					return [
+						'total'    => (int) $cached['total'],
+						'carriers' => array_map( 'intval', $cached['carriers'] ),
+					];
+				}
+			}
+
+			$counts = $this->query_new_order_counts( $provider_ids );
+
+			if ( $ttl > 0 ) {
+				set_transient( self::NEW_COUNTS_TRANSIENT, $counts, $ttl );
+			}
+
+			return $counts;
+		}
+
+		/**
+		 * Whether a value read back from the transient can still be trusted for today's
+		 * carriers.
+		 *
+		 * The registered set changes between requests — a carrier plugin activated, or one
+		 * hidden behind a feature flag through `woodev_shipping_orders_providers`. A
+		 * snapshot that does not carry exactly today's carriers cannot produce a breakdown
+		 * that accounts for the bubble, so it is discarded rather than patched up.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed             $cached       raw transient value (`false` when unset).
+		 * @param array<int,string> $provider_ids ids registered right now.
+		 * @return bool
+		 */
+		private static function is_usable_counts_payload( $cached, array $provider_ids ): bool {
+			if ( ! is_array( $cached ) || ! isset( $cached['total'] ) || ! isset( $cached['carriers'] ) ) {
+				return false;
+			}
+
+			if ( ! is_numeric( $cached['total'] ) || ! is_array( $cached['carriers'] ) ) {
+				return false;
+			}
+
+			$cached_ids = array_keys( $cached['carriers'] );
+
+			sort( $cached_ids );
+			sort( $provider_ids );
+
+			return $cached_ids === $provider_ids;
+		}
+
+		/**
+		 * Runs the queries behind the badge: the aggregate, then one per carrier.
+		 *
+		 * ⚠ When the aggregate is zero every carrier is zero too, and that is DERIVED, not
+		 * assumed: a single-carrier request narrows {@see Orders_Query} to that carrier's
+		 * marker and its own export clause, both of which are OR-ed into the aggregate's,
+		 * with every other argument identical — so one carrier's matches are always a
+		 * subset of the aggregate's. Skipping the per-carrier queries there is what keeps
+		 * the common case (a shop with nothing new) at one query per TTL rather than N + 1.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,string> $provider_ids ids registered right now.
+		 * @return array{total:int,carriers:array<string,int>}
+		 */
+		private function query_new_order_counts( array $provider_ids ): array {
+			$query = new Orders_Query( $this );
+			$total = (int) $query->get_results( self::new_orders_request() )->total;
+
+			if ( $total < 1 ) {
+				return [
+					'total'    => 0,
+					'carriers' => array_fill_keys( $provider_ids, 0 ),
+				];
+			}
+
+			$carriers = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$carrier_id = $provider->get_id();
+
+				$carriers[ $carrier_id ] = (int) $query->get_results( self::new_orders_request( $carrier_id ) )->total;
+			}
+
+			return [
+				'total'    => $total,
+				'carriers' => $carriers,
+			];
+		}
+
+		/**
+		 * Builds the badge's per-carrier tooltip text — one `«Перевозчик»: N` line per
+		 * registered provider, joined by newlines, which is how a `title` attribute
+		 * expresses several lines.
+		 *
+		 * Every provider is listed, including one contributing nothing, so the breakdown
+		 * reads as a complete account of the number in the bubble rather than a selection
+		 * from it. The counts are read from the SAME snapshot the bubble came from, never
+		 * queried again here — that is what makes the two agree even when both are served
+		 * from cache.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,int> $carriers count per provider id, from
+		 *                                    {@see self::get_new_order_counts()}.
+		 * @return string
+		 */
+		private function build_new_orders_breakdown( array $carriers ): string {
+			$lines = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$count = (int) ( $carriers[ $provider->get_id() ] ?? 0 );
+
+				$lines[] = $provider->get_label() . ': ' . number_format_i18n( $count );
+			}
+
+			return implode( "\n", $lines );
+		}
+
+		/**
+		 * The request that defines "new" for the badge: an order nobody has exported to
+		 * the carrier yet.
+		 *
+		 * ⚠ "New" is `is_exported => false` and nothing else — settled by measurement in
+		 * #841: an order is new until {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * has written its `carrier_order_id`. There is no separate "new" flag to read.
+		 *
+		 * ⚠ This goes through {@see Orders_Query} — the very query the table runs — and
+		 * NOT through a hand-rolled `wc_get_orders()`/`$wpdb` count. That is what makes
+		 * the number in the menu equal what the page shows under the same filter BY
+		 * CONSTRUCTION. It also keeps both datastores honest: on the legacy CPT datastore
+		 * `wc_get_orders()` silently DROPS `meta_query` (gotcha
+		 * `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`), and only
+		 * `Orders_Query` knows to pass its own query vars there instead.
+		 *
+		 * `build_args()` always sets `paginate => true`, so `->total` on the result is the
+		 * count and `per_page => 1` keeps the row fetch to a single order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $carrier provider id, or 'all' for the aggregate.
+		 * @return array<string,mixed>
+		 */
+		private static function new_orders_request( string $carrier = 'all' ): array {
+			return [
+				'carrier'     => $carrier,
+				'is_exported' => false,
+				'per_page'    => 1,
+			];
 		}
 
 		/**
