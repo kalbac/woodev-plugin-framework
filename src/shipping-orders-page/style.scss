@@ -256,40 +256,49 @@
 	 * It also happens to be the honest hierarchy: «Всё время» is the default and the only
 	 * entry that is not a period at all, so it is not one of ten peers.
 	 */
-	.woodev-orders__period-item--wide {
-		grid-column: 1 / -1;
-
-		/**
-		 * ⚠ Centred, and that is not decoration. Spanning both columns is not enough on its
-		 * own: every other pill carries its text on the left of a 159px cell, so a 318px
-		 * cell with the text still on the left reads as «one filled cell + one empty», which
-		 * is exactly what the operator reported after the span was already in place and
-		 * measured (grid-column `1 / -1`, width 318, one uniform background across the whole
-		 * row — the geometry was never the problem). Centring is the cue that says the row IS
-		 * one cell.
-		 */
+	/**
+	 * The two wide rows — «Всё время» above the grid, «Произвольный период» below it. They
+	 * must look IDENTICAL to each other and belong to the same block as the ten pills
+	 * between them (operator, 12.09.2026): same fill, same hover, same height, text centred.
+	 *
+	 * Everything visual is WooCommerce's, inherited through their own
+	 * `.woocommerce-segmented-selection__label` class — fill `#f0f0f0`, hover `#e0e0e0`,
+	 * padding `12px 12px 12px 36px`, and the blue `::before` dot on the checked one. Only
+	 * three things are ours, and each has a reason:
+	 *
+	 * 1. `text-align: center` — every pill in the grid carries its text on the left of a
+	 *    half-width cell, so a full-width row with the text still left reads as «one filled
+	 *    cell + one empty». Centring is the cue that the row IS one cell.
+	 * 2. `cursor: pointer` — WooCommerce sets none anywhere in this component (checked in
+	 *    their stylesheet, not assumed), so the rows read as non-clickable. The operator
+	 *    reported exactly that.
+	 * 3. The `<button>` reset — «Произвольный период» is a button, not a radio, and a bare
+	 *    button brings its own border, font and line-height. Without the reset it stood
+	 *    taller than every row above it and read as a stray link.
+	 *
+	 * No borders here on purpose: the grid's own `border-top`/`border-bottom` already draw
+	 * the rule between each wide row and the pills.
+	 */
+	.woodev-orders__period-wide {
 		.woocommerce-segmented-selection__label {
 			text-align: center;
+			cursor: pointer;
+		}
+
+		button.woocommerce-segmented-selection__label {
+			width: 100%;
+			margin: 0;
+			border: 0;
+			border-radius: 0;
+			font: inherit;
+			color: inherit;
+			appearance: none;
 		}
 	}
 
-	/**
-	 * «Произвольный период» sits below the preset grid rather than inside it — see the
-	 * component for why. It needs the inset the grid gets from WooCommerce's own rules.
-	 */
-	.woodev-orders__period-custom-entry {
-		padding: 0 16px 16px;
-
-		/**
-		 * Full width, so the panel reads as three bands: «Всё время» across the top, the ten
-		 * presets in two columns, «Произвольный период» across the bottom (operator,
-		 * 12.09.2026). A centred link between two full-width rows looked like a stray.
-		 */
-		.components-button {
-			display: flex;
-			width: 100%;
-			justify-content: center;
-		}
+	/** Same reason as the wide rows: their component declares no cursor at all. */
+	.woocommerce-segmented-selection__label {
+		cursor: pointer;
 	}
 
 	/**

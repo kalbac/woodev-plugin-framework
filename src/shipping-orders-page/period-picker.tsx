@@ -262,74 +262,102 @@ function PeriodPickerContent( { query, dateApi, onSelect, onClose }: PeriodPicke
 			: [] ),
 	];
 
-	const presets = entries.filter( ( entry ) => ! entry.isCustom );
+	const presets = entries.filter(
+		( entry ) => ! entry.isCustom && entry.value !== ALL_TIME_PERIOD
+	);
 	const custom = entries.find( ( entry ) => entry.isCustom );
+	const allTimeId = `woodev-period-${ ALL_TIME_PERIOD || 'all-time' }`;
 
 	/**
-	 * The preset grid is WooCommerce's OWN `SegmentedSelection` markup, class for class
-	 * (`fieldset.woocommerce-segmented-selection` → `__container` → `__item` →
-	 * `__input` + `<label><span class="__label">`), copied from the live DOM of their date
-	 * picker on `/analytics/orders` rather than guessed. Their stylesheet lays that
-	 * container out as `display: grid; grid-template-columns: 159px 159px` — measured on
-	 * the rig 12.09.2026 — so the two columns and every pill border come from THEIR CSS and
-	 * there is nothing for us to restate.
+	 * Three bands: «Всё время» across the top, the TEN presets in WooCommerce's two-column
+	 * grid, «Произвольный период» across the bottom (operator, 12.09.2026). Both wide rows
+	 * look the same — same fill, same hover, same height, text centred.
 	 *
-	 * A one-column `FilterPicker` list was what this control shipped with first, and the
-	 * operator caught it on his own rig pass: their date picker is two columns, and eleven
-	 * periods stacked in one made a scroll-length ribbon of it.
+	 * ⚠ The grid holds EXACTLY the ten presets, and that is a correctness constraint, not
+	 * tidiness. WooCommerce draws the column divider and the row rules by CHILD PARITY:
 	 *
-	 * ⚠ «Произвольный период» is deliberately NOT in the grid. It does not pick a value —
-	 * it swaps the whole panel for a calendar, which is exactly why WooCommerce keeps its
-	 * own `Custom` on a separate TAB rather than among the preset pills. A pill that
-	 * behaves differently from the ten beside it is the kind of thing nobody notices until
-	 * it misfires.
+	 * ```css
+	 * .woocommerce-segmented-selection__item:nth-child(2n)   { border-left: 1px solid #ccc; border-top: 1px solid #ccc }
+	 * .woocommerce-segmented-selection__item:nth-child(2n+1) { border-top: 1px solid #ccc }
+	 * .woocommerce-segmented-selection__item:nth-child(-n+2) { border-top: 0 }
+	 * ```
+	 *
+	 * So a wide row INSIDE the container shifts every following item's parity by one: the
+	 * left column takes the divider that belongs to the right one, and the top rules land a
+	 * row out. That is exactly what shipped and what the operator caught. Ten items keep
+	 * their parity honest and their whole stylesheet applies untouched — the markup is
+	 * theirs, class for class, copied from the live DOM of their picker on
+	 * `/analytics/orders` rather than guessed.
+	 *
+	 * The wide rows sit OUTSIDE the container for the same reason, and they need no borders
+	 * of their own: the container already carries `border-top`/`border-bottom`, which is the
+	 * rule between each wide row and the grid.
 	 */
 	return (
-		<>
-			<fieldset className="woocommerce-segmented-selection">
-				<legend className="screen-reader-text">
-					{ __( 'Выберите период', 'woodev-plugin-framework' ) }
-				</legend>
-				<div className="woocommerce-segmented-selection__container">
-					{ presets.map( ( entry ) => {
-						const id = `woodev-period-${ entry.value || 'all-time' }`;
+		<fieldset className="woocommerce-segmented-selection woodev-orders__period-selection">
+			<legend className="screen-reader-text">
+				{ __( 'Выберите период', 'woodev-plugin-framework' ) }
+			</legend>
 
-						return (
-							<div
-								className={
-									'woocommerce-segmented-selection__item' +
-									( entry.value === ALL_TIME_PERIOD
-										? ' woodev-orders__period-item--wide'
-										: '' )
-								}
-								key={ id }
-							>
-								<input
-									className="woocommerce-segmented-selection__input"
-									type="radio"
-									name="woodev-orders-period"
-									id={ id }
-									checked={ entry.value === period }
-									onChange={ () => pick( entry.value ) }
-								/>
-								<label htmlFor={ id }>
-									<span className="woocommerce-segmented-selection__label">
-										{ entry.label }
-									</span>
-								</label>
-							</div>
-						);
-					} ) }
-				</div>
-			</fieldset>
+			<div className="woodev-orders__period-wide">
+				<input
+					className="woocommerce-segmented-selection__input"
+					type="radio"
+					name="woodev-orders-period"
+					id={ allTimeId }
+					checked={ ALL_TIME_PERIOD === period }
+					onChange={ () => pick( ALL_TIME_PERIOD ) }
+				/>
+				<label htmlFor={ allTimeId }>
+					<span className="woocommerce-segmented-selection__label">
+						{ __( 'Всё время', 'woodev-plugin-framework' ) }
+					</span>
+				</label>
+			</div>
+
+			<div className="woocommerce-segmented-selection__container">
+				{ presets.map( ( entry ) => {
+					const id = `woodev-period-${ entry.value }`;
+
+					return (
+						<div className="woocommerce-segmented-selection__item" key={ id }>
+							<input
+								className="woocommerce-segmented-selection__input"
+								type="radio"
+								name="woodev-orders-period"
+								id={ id }
+								checked={ entry.value === period }
+								onChange={ () => pick( entry.value ) }
+							/>
+							<label htmlFor={ id }>
+								<span className="woocommerce-segmented-selection__label">
+									{ entry.label }
+								</span>
+							</label>
+						</div>
+					);
+				} ) }
+			</div>
+
+			{ /*
+			 * A BUTTON, not a radio: it picks no value, it swaps the panel for a calendar.
+			 * It carries WooCommerce's own `__label` class so the fill, the hover and the
+			 * height are theirs rather than a second set of numbers that drifts from them —
+			 * the operator's report was that it read as a stray link, taller than the rows
+			 * above it, which is what a `Button` component's own metrics do here.
+			 */ }
 			{ custom && (
-				<div className="woodev-orders__period-custom-entry">
-					<Button variant="tertiary" onClick={ () => setShowCustom( true ) }>
+				<div className="woodev-orders__period-wide woodev-orders__period-wide--action">
+					<button
+						type="button"
+						className="woocommerce-segmented-selection__label"
+						onClick={ () => setShowCustom( true ) }
+					>
 						{ custom.label }
-					</Button>
+					</button>
 				</div>
 			) }
-		</>
+		</fieldset>
 	);
 }
 
