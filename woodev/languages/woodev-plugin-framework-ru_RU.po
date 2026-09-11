@@ -3738,6 +3738,10 @@ msgid "Произвольный период"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "Выберите период"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Применить"
 msgstr ""
 
