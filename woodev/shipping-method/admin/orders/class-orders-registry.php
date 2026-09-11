@@ -214,6 +214,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
@@ -282,6 +283,103 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'path'       => '/' . self::PAGE_SLUG,
 				'capability' => $this->get_page_capability(),
 			];
+		}
+
+		/**
+		 * Moves «Заказы доставки» directly below WooCommerce's own «Orders» in the
+		 * WooCommerce submenu (operator, 12.09.2026).
+		 *
+		 * ⚠ Deliberately NOT done with `wc_admin_register_page()`'s position argument, and
+		 * the reason is measured rather than assumed (WooCommerce 11.1.0, 12.09.2026):
+		 *
+		 * - The `order` key their docblock advertises is a DECOY for this purpose:
+		 *   `PageController::register_page()` never reads it — it is absent from that
+		 *   method's `$defaults` — and what reaches `add_submenu_page()` is `position`.
+		 * - `position` is an INDEX into `$submenu['woocommerce']`, and WooCommerce's own
+		 *   items (`Orders`, `Customers`, `Coupons`, `Reports`, `Settings`, `Status`,
+		 *   `Extensions`) pass NO position at all — every one of them is appended, so their
+		 *   indices are an accident of registration order. Pinning ourselves to a number
+		 *   derived from today's arrangement survives exactly until they add or reorder one.
+		 *
+		 * So the position is resolved by the NEIGHBOUR'S SLUG instead, which is a contract
+		 * they cannot renumber. Both spellings of that neighbour are accepted: `wc-orders`
+		 * on HPOS and `edit.php?post_type=shop_order` on the legacy post store — the rig
+		 * runs HPOS, and a shop that has not migrated must not lose the placement.
+		 *
+		 * Fail-soft throughout: an absent menu, an absent entry of ours, or an «Orders» that
+		 * cannot be found all leave the submenu exactly as it was. A menu that is merely in
+		 * the wrong order is a blemish; a menu this method broke is a support ticket.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function move_menu_item_after_orders(): void {
+			global $submenu;
+
+			if ( empty( $submenu['woocommerce'] ) || ! is_array( $submenu['woocommerce'] ) ) {
+				return;
+			}
+
+			$ours   = null;
+			$others = [];
+
+			foreach ( $submenu['woocommerce'] as $item ) {
+				if ( ! is_array( $item ) || ! isset( $item[2] ) ) {
+					$others[] = $item;
+					continue;
+				}
+
+				if ( null === $ours && false !== strpos( (string) $item[2], 'path=/' . self::PAGE_SLUG ) ) {
+					$ours = $item;
+					continue;
+				}
+
+				$others[] = $item;
+			}
+
+			if ( null === $ours ) {
+				return;
+			}
+
+			$reordered = [];
+			$placed    = false;
+
+			foreach ( $others as $item ) {
+				$reordered[] = $item;
+
+				if ( $placed || ! is_array( $item ) || ! isset( $item[2] ) ) {
+					continue;
+				}
+
+				if ( self::is_orders_menu_slug( (string) $item[2] ) ) {
+					$reordered[] = $ours;
+					$placed      = true;
+				}
+			}
+
+			if ( ! $placed ) {
+				return;
+			}
+
+			$submenu['woocommerce'] = $reordered;
+		}
+
+		/**
+		 * Whether a submenu slug is WooCommerce's own orders screen, in either store.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $slug the submenu entry's slug (`$submenu[$parent][$i][2]`).
+		 *
+		 * @return bool
+		 */
+		private static function is_orders_menu_slug( string $slug ): bool {
+			return 'wc-orders' === $slug
+				|| 'admin.php?page=wc-orders' === $slug
+				|| false !== strpos( $slug, 'post_type=shop_order' );
 		}
 
 		/**

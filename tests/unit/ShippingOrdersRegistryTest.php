@@ -1105,4 +1105,117 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertCount( 1, $captured, 'and the empty state must be cached like any other' );
 	}
+
+	/**
+	 * Builds a `$submenu['woocommerce']` in WooCommerce's own shape — `[ page_title,
+	 * capability, slug, ... ]` — with our page wherever `$ours_at` says.
+	 *
+	 * @param string $orders_slug the slug WooCommerce's own orders entry carries.
+	 * @param int    $ours_at     index our entry is registered at.
+	 *
+	 * @return array<int,array<int,string>>
+	 */
+	private function woocommerce_submenu( string $orders_slug = 'wc-orders', int $ours_at = 5 ): array {
+		$items = [
+			[ 'Home', 'read', 'admin.php?page=wc-admin' ],
+			[ 'Orders', 'edit_shop_orders', $orders_slug ],
+			[ 'Customers', 'read', 'admin.php?page=wc-admin&path=/customers' ],
+			[ 'Coupons', 'read', 'admin.php?page=coupons-moved' ],
+			[ 'Reports', 'read', 'wc-reports' ],
+			[ 'Settings', 'manage_woocommerce', 'wc-settings' ],
+		];
+
+		array_splice(
+			$items,
+			$ours_at,
+			0,
+			[ [ 'Заказы доставки', 'read', 'admin.php?page=wc-admin&path=/woodev-shipping-orders' ] ]
+		);
+
+		return $items;
+	}
+
+	/** The visible titles of a submenu, in order — what the merchant actually reads. */
+	private function submenu_titles( array $submenu ): array {
+		return array_map(
+			static function ( $item ) {
+				return $item[0];
+			},
+			$submenu
+		);
+	}
+
+	public function test_our_page_is_moved_directly_below_woocommerce_orders(): void {
+		global $submenu;
+
+		$submenu = [ 'woocommerce' => $this->woocommerce_submenu() ];
+
+		Orders_Registry::instance()->move_menu_item_after_orders();
+
+		$this->assertSame(
+			[ 'Home', 'Orders', 'Заказы доставки', 'Customers', 'Coupons', 'Reports', 'Settings' ],
+			$this->submenu_titles( $submenu['woocommerce'] )
+		);
+	}
+
+	/**
+	 * The legacy post store spells that entry `edit.php?post_type=shop_order`. A shop that
+	 * has not migrated to HPOS must not silently lose the placement — and the rig runs HPOS,
+	 * so this branch has no other witness.
+	 */
+	public function test_the_legacy_post_store_spelling_of_orders_is_recognised(): void {
+		global $submenu;
+
+		$submenu = [ 'woocommerce' => $this->woocommerce_submenu( 'edit.php?post_type=shop_order' ) ];
+
+		Orders_Registry::instance()->move_menu_item_after_orders();
+
+		$titles = $this->submenu_titles( $submenu['woocommerce'] );
+
+		$this->assertSame( 'Заказы доставки', $titles[2] );
+		$this->assertSame( 'Orders', $titles[1] );
+	}
+
+	/**
+	 * ⚠ Both no-op cases assert the submenu is UNCHANGED, not merely that nothing crashed.
+	 * A menu in the wrong order is a blemish; a menu this method mangled is a support
+	 * ticket, so «leave it exactly as found» is the contract when either end is missing.
+	 */
+	public function test_a_submenu_without_our_page_is_left_untouched(): void {
+		global $submenu;
+
+		$without_ours = $this->woocommerce_submenu();
+		unset( $without_ours[5] );
+		$without_ours = array_values( $without_ours );
+
+		$submenu = [ 'woocommerce' => $without_ours ];
+
+		Orders_Registry::instance()->move_menu_item_after_orders();
+
+		$this->assertSame( $without_ours, $submenu['woocommerce'] );
+	}
+
+	public function test_a_submenu_without_woocommerce_orders_is_left_untouched(): void {
+		global $submenu;
+
+		$without_orders = $this->woocommerce_submenu();
+		unset( $without_orders[1] );
+		$without_orders = array_values( $without_orders );
+
+		$submenu = [ 'woocommerce' => $without_orders ];
+
+		Orders_Registry::instance()->move_menu_item_after_orders();
+
+		$this->assertSame( $without_orders, $submenu['woocommerce'] );
+	}
+
+	public function test_an_absent_woocommerce_menu_is_not_created(): void {
+		global $submenu;
+
+		$submenu = [];
+
+		Orders_Registry::instance()->move_menu_item_after_orders();
+
+		$this->assertSame( [], $submenu );
+	}
 }
