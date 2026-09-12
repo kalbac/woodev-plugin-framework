@@ -74,7 +74,52 @@ export function formatSyncTimestamp( unixSeconds?: number | null ): FormattedOrd
 
 export type StatusTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
 
-/** Canonical delivery status => badge tone. */
+/**
+ * Canonical delivery status => badge tone, and each tone => one WooCommerce
+ * order-status colour (#829). The palette itself is WooCommerce's own,
+ * measured against a live WooCommerce 11.1.0 install, not chosen —
+ * `.order-status.status-*` in `assets/css/admin.css` (issue #829 comment,
+ * 08.09.2026):
+ *
+ * | WC rule                  | background | text     |
+ * |---------------------------|-----------|----------|
+ * | `.order-status` (base)    | `#e5e5e5` | `#454545`|
+ * | `.status-processing`      | `#c6e1c6` | `#2c4700`|
+ * | `.status-on-hold`         | `#f8dda7` | `#573b00`|
+ * | `.status-completed`       | `#c8d7e1` | `#003d66`|
+ * | `.status-failed`/`-trash` | `#eba3a3` | `#570000`/`#550202` |
+ *
+ * `@woocommerce/components` ships no coloured badge of its own
+ * (`.woocommerce-badge`/`.woocommerce-pill` are both neutral — measured in
+ * the same pass), so this table is the ONLY legitimate colour source; badge
+ * *shape* is free to follow their components, colour is not.
+ *
+ * Five WC colours for five tones, one-to-one — `.status-failed` and
+ * `.status-trash` share a background in WC itself, so `trash`'s marginally
+ * darker text is dropped in favour of `failed`'s and no sixth tone is
+ * needed. The tone <-> WC-status pairing below is picked by matching what
+ * each WC status actually MEANS to what each tone means, not by which
+ * colour "looks right":
+ *
+ * - `muted` (`unknown`) <-> base/neutral — both mean "no specific state".
+ * - `info` (`in_transit`, `ready_for_pickup` — the shipment actively moving
+ *   through the pipeline) <-> `processing` (green) — WC's processing is
+ *   "the order is actively being worked on", the closest existing WC state
+ *   to "currently in motion".
+ * - `warn` (`pending`, `created`, `returning` — not yet resolved, wants
+ *   attention) <-> `on-hold` (amber) — WC's on-hold literally means
+ *   "paused, needs someone's attention".
+ * - `ok` (`delivered` — the successful end state) <-> `completed` (blue) —
+ *   WC's completed is the successful terminal state of an order, exactly
+ *   what `delivered` is for a shipment.
+ * - `error` (`returned`, `failed`, `cancelled` — terminal and negative)
+ *   <-> `failed` (red).
+ *
+ * The actual hex values live in `style.scss` (`.woodev-orders-status--*`)
+ * rather than here, since they are pure presentation — this constant only
+ * carries the WHICH-STATE-GETS-WHICH-TONE decision that both the badge and
+ * (previously) the dot indicator drew from.
+ */
 const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
 	pending: 'warn',
 	created: 'warn',
@@ -86,7 +131,7 @@ const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
 	failed: 'error',
 	cancelled: 'error',
 	unknown: 'muted',
-};
+};;
 
 /**
  * Returns the badge tone for a canonical delivery status. An unrecognized

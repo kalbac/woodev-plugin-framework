@@ -35,7 +35,7 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl, ToggleControl } from '@wordpress/components';
+import { Notice, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
 import { fetchOrders, fetchSyncStatus, getProviders, getReachableDeliveryStatuses } from './rest';
 import type {
 	OrderRow,
@@ -153,25 +153,25 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Renders the «Статус» cell: canonical label with a tone dot, raw carrier
- * label as the muted secondary line — `unknown` renders visibly as
- * "Неизвестно", never dressed up as a real state (it already carries its own
- * canonical_label from the server, so no special-casing is needed here).
+ * Renders the «Статус» cell: one WooCommerce-coloured badge carrying our
+ * canonical status (#829) — `unknown` renders visibly as "Неизвестно", never
+ * dressed up as a real state (it already carries its own canonical_label
+ * from the server, so no special-casing is needed here).
  */
 function StatusCell( { deliveryStatus }: { deliveryStatus: OrderRowDeliveryStatus } ) {
 	const tone = getStatusTone( deliveryStatus.canonical );
-
-	return (
-		<>
-			<span className={ `woodev-orders-status woodev-orders-status--${ tone }` }>
-				<span className="woodev-orders-status__dot" aria-hidden="true" />
-				{ deliveryStatus.canonical_label }
-			</span>
-			{ deliveryStatus.raw_label && (
-				<span className="woodev-orders-cell__meta">{ deliveryStatus.raw_label }</span>
-			) }
-		</>
+	const badge = (
+		<span className={ `woodev-orders-status woodev-orders-status--${ tone }` }>
+			{ deliveryStatus.canonical_label }
+		</span>
 	);
+
+	// The carrier's own word (#829) lives in a hover tooltip, not a second
+	// visible line — it stays valuable exactly when it carries something the
+	// canonical status lost ("Неизвестно" / "Задержан на таможне"). No
+	// tooltip at all when there is nothing to say, per the card: an empty
+	// `raw_label` renders no `Tooltip`, never an empty one.
+	return deliveryStatus.raw_label ? <Tooltip text={ deliveryStatus.raw_label }>{ badge }</Tooltip> : badge;
 }
 
 /**

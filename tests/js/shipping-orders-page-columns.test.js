@@ -118,6 +118,25 @@ describe( 'getStatusTone', () => {
 	test( 'a value outside the enum falls back to muted, never a false ok/error', () => {
 		expect( getStatusTone( 'something_the_server_never_sends' ) ).toBe( 'muted' );
 	} );
+
+	/**
+	 * The full nine-to-five mapping (#829) — `STATUS_TONE`'s own docblock
+	 * derives each pairing from what the WooCommerce status behind that tone
+	 * actually means, not from picking a colour that "looks right". This
+	 * test pins the whole table down so a future edit that quietly reshuffles
+	 * one state onto a different tone fails here, not on the rig.
+	 */
+	test( 'every one of the nine canonical states maps onto its documented tone', () => {
+		expect( getStatusTone( 'pending' ) ).toBe( 'warn' );
+		expect( getStatusTone( 'created' ) ).toBe( 'warn' );
+		expect( getStatusTone( 'returning' ) ).toBe( 'warn' );
+		expect( getStatusTone( 'in_transit' ) ).toBe( 'info' );
+		expect( getStatusTone( 'ready_for_pickup' ) ).toBe( 'info' );
+		expect( getStatusTone( 'delivered' ) ).toBe( 'ok' );
+		expect( getStatusTone( 'returned' ) ).toBe( 'error' );
+		expect( getStatusTone( 'failed' ) ).toBe( 'error' );
+		expect( getStatusTone( 'cancelled' ) ).toBe( 'error' );
+	} );
 } );
 
 describe( 'DELIVERY_STATUS_LABELS', () => {
