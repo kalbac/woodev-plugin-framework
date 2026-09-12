@@ -206,6 +206,55 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( $second, Orders_Registry::instance()->get_shipment_handler( 'cdek' ) );
 	}
 
+	/**
+	 * Round 2 (HIGH 2): registering a provider descriptor a SECOND time under an id
+	 * already in use is a REPLACEMENT — the previous descriptor's shipment handler must
+	 * not survive it, or a replacement registered by a different carrier's plugin would
+	 * expose action buttons that still execute the OLD carrier's handler.
+	 */
+	public function test_replacing_a_provider_descriptor_drops_the_previous_shipment_handler(): void {
+		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek', 'СДЭК v1' ) );
+		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
+
+		// A different carrier's plugin (or the same one, reloaded) replaces the descriptor.
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek', 'СДЭК v2' ) );
+
+		$this->assertNull( Orders_Registry::instance()->get_shipment_handler( 'cdek' ) );
+	}
+
+	/**
+	 * The dropped handler slot is not permanently broken — a handler registered
+	 * AFTERWARDS for the new descriptor works normally.
+	 */
+	public function test_a_handler_registered_after_a_replacement_works_normally(): void {
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek', 'СДЭК v1' ) );
+		Orders_Registry::instance()->register_shipment_handler( 'cdek', Mockery::mock( Abstract_Shipment_Handler::class ) );
+
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek', 'СДЭК v2' ) );
+
+		$new_handler = Mockery::mock( Abstract_Shipment_Handler::class );
+		Orders_Registry::instance()->register_shipment_handler( 'cdek', $new_handler );
+
+		$this->assertSame( $new_handler, Orders_Registry::instance()->get_shipment_handler( 'cdek' ) );
+	}
+
+	/**
+	 * A FIRST-time registration under an id must never drop a handler — a plugin is free
+	 * to call `register_shipment_handler()` BEFORE `register_provider()`
+	 * ({@see self::test_register_shipment_handler_does_not_require_a_matching_provider()}),
+	 * and that handler must survive the descriptor's own (first) registration.
+	 */
+	public function test_registering_a_provider_for_the_first_time_does_not_drop_a_handler_registered_before_it(): void {
+		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+
+		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		$this->assertSame( $handler, Orders_Registry::instance()->get_shipment_handler( 'cdek' ) );
+	}
+
 	public function test_reset_for_tests_clears_registered_shipment_handlers(): void {
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', Mockery::mock( Abstract_Shipment_Handler::class ) );
 

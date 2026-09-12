@@ -288,4 +288,74 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 502, $result->get_error_data()['status'] );
 	}
+
+	// ----- round 2 MEDIUM 3: dispatch_action()'s default: branch is a real seam -----
+
+	/**
+	 * Installs the `print_label` extra the same way `ShippingOrderActionsTest`'s
+	 * `test_filter_can_add_a_carrier_specific_action` does, and lets a test's own
+	 * closure additionally decide `woodev_shipping_perform_order_action`.
+	 */
+	private function stub_carrier_extra_action( ?callable $perform = null ): void {
+		Functions\when( 'apply_filters' )->alias(
+			static function ( $hook, $value, ...$args ) use ( $perform ) {
+				if ( 'woodev_shipping_order_actions' === $hook ) {
+					$value[] = [
+						'action'      => 'print_label',
+						'label'       => 'Печать этикетки',
+						'title'       => '',
+						'destructive' => false,
+					];
+
+					return $value;
+				}
+
+				if ( 'woodev_shipping_perform_order_action' === $hook && null !== $perform ) {
+					return $perform( ...$args );
+				}
+
+				return $value;
+			}
+		);
+	}
+
+	/**
+	 * The seam is advertised (via `woodev_shipping_order_actions`) but nothing hooks its
+	 * performing side — `dispatch_action()`'s `default:` filter keeps its `false`
+	 * default, so the action fails honestly instead of reporting a fake success.
+	 */
+	public function test_an_unhandled_carrier_extra_action_still_fails(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$this->stub_carrier_extra_action();
+
+		$order = $this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A carrier plugin hooking `woodev_shipping_perform_order_action` and returning
+	 * `true` makes its own declared action actually succeed — the row comes back.
+	 */
+	public function test_a_filtered_carrier_extra_action_that_returns_true_succeeds(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$this->stub_carrier_extra_action(
+			static function ( string $action ): bool {
+				return 'print_label' === $action;
+			}
+		);
+
+		$order = $this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
+
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey( 'row', $result );
+		$this->assertSame( 123, $result['row']['id'] );
+	}
 }

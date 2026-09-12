@@ -744,6 +744,19 @@ export default function OrdersPage() {
 	);
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
+	/**
+	 * #824 round 2 (MEDIUM 4) — bumped every time the fetch effect below starts a NEW
+	 * GET, so {@link performAction} can tell whether the view it fired an action from
+	 * is still the current one by the time the action's response comes back.
+	 *
+	 * Sequence this guards: click «Выгрузить» on order 42 in «Все»; switch to «Новые»
+	 * while the POST is in flight; the new GET (which bumps this ref) legitimately
+	 * excludes 42; the POST then resolves — without the guard it would still write the
+	 * exported row 42 into the rows array, resurrecting it into a table it no longer
+	 * belongs in. The NOTICE still shows either way: the action really did happen and
+	 * the merchant must be told. Only the row swap is conditional.
+	 */
+	const fetchGeneration = useRef( 0 );
 
 	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
 	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
@@ -834,6 +847,8 @@ export default function OrdersPage() {
 
 	useEffect( () => {
 		let cancelled = false;
+
+		fetchGeneration.current += 1;
 
 		setError( '' );
 		setRows( null );
@@ -945,12 +960,23 @@ export default function OrdersPage() {
 			[ row.id ]: { pendingAction: action.action, confirmingAction: null },
 		} ) );
 
+		// Captured NOW, before the request goes out — compared against the live ref
+		// when the response comes back, so a refetch that lands first (the merchant
+		// switched scope/filter/page while the action was in flight) is detected.
+		const generation = fetchGeneration.current;
+
 		performOrderAction( row.id, action.action )
 			.then( ( res ) => {
-				setRows( ( current ) =>
-					current ? current.map( ( r ) => ( r.id === row.id ? res.row : r ) ) : current
-				);
 				setActionNotice( { status: 'success', text: res.message } );
+
+				// The action really did happen — the notice above always shows. Only the
+				// row swap is conditional: a table refetched since this action started is
+				// no longer the view this row belongs in.
+				if ( fetchGeneration.current === generation ) {
+					setRows( ( current ) =>
+						current ? current.map( ( r ) => ( r.id === row.id ? res.row : r ) ) : current
+					);
+				}
 				setActionRowStates( ( current ) => {
 					const next = { ...current };
 					delete next[ row.id ];

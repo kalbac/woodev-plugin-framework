@@ -686,7 +686,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			try {
-				$succeeded = $this->dispatch_action( $handler, $order, $action );
+				$succeeded = $this->dispatch_action( $handler, $order, $action, $provider );
 			} catch ( \Throwable $exception ) {
 				$this->log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -716,14 +716,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
 		 * return bool.
 		 *
+		 * The framework itself performs only its own three verbs — export/cancel/
+		 * update. Anything else is a carrier extra declared via the
+		 * `woodev_shipping_order_actions` filter ({@see Order_Actions::for_order()});
+		 * the `default:` branch below is the matching PERFORMING-side extension
+		 * point, so such an action is not merely advertised but actually executed by
+		 * the carrier plugin that declared it. An action nothing hooks still fails
+		 * honestly (`false`) rather than reporting a fake success.
+		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (MEDIUM 3): the `default:` branch applies the
+		 *              `woodev_shipping_perform_order_action` filter instead of
+		 *              unconditionally returning false, so a carrier's own declared
+		 *              action can actually be performed.
 		 *
 		 * @param Abstract_Shipment_Handler $handler handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order   the order.
 		 * @param string                    $action  one of {@see Order_Actions}' action ids.
+		 * @param Orders_Provider           $provider the matched carrier descriptor.
 		 * @return bool
 		 */
-		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action ): bool {
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): bool {
 			switch ( $action ) {
 				case Order_Actions::EXPORT:
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
@@ -737,7 +750,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					return $handler->update( $order );
 
 				default:
-					return false;
+					/**
+					 * Performs a carrier's own extra order action (one declared via the
+					 * `woodev_shipping_order_actions` filter, not one of the framework's
+					 * own export/update/cancel verbs).
+					 *
+					 * The carrier plugin that declared the action is the only one that
+					 * knows how to perform it, so it hooks this filter, checks `$action`
+					 * (and, if it serves more than one carrier, `$provider`) is its own,
+					 * performs the action against its own API, and returns whether it
+					 * succeeded. Defaults to `false`, so an action nothing hooks still
+					 * fails honestly instead of reporting success it never earned.
+					 *
+					 * @since 2.0.2
+					 *
+					 * @param bool            $performed whether the action was performed successfully; default false.
+					 * @param string          $action    the action id, as declared by the carrier's filter.
+					 * @param \WC_Order       $order     the order the action was requested for.
+					 * @param Orders_Provider $provider  the matched carrier descriptor.
+					 */
+					return (bool) apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
 			}
 		}
 
