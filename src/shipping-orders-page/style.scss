@@ -74,6 +74,19 @@
 }
 
 /**
+ * A formatted money amount, on top of the shared meta class (#865).
+ *
+ * `wc_price()` separates thousands with a space, so the browser treats
+ * «3 980,00 ₽» as two words and breaks it across lines as soon as the column
+ * is narrower than the amount — measured on the rig at 50px of content box
+ * against 59px of text, on every row. The shared meta class cannot carry this
+ * rule: «Доставка» renders a postal address through it and that one must wrap.
+ */
+.woodev-orders-amount {
+	white-space: nowrap;
+}
+
+/**
  * The status badge (#829). Its geometry is WooCommerce's own `.order-status`
  * rule — not eyeballed, and not copied out of their stylesheet either.
  *

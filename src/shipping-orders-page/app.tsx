@@ -220,12 +220,25 @@ function CustomerCell( { customer }: { customer: OrderRowCustomer } ) {
 /**
  * Renders the «Оплата» cell: method + formatted total, with a soft warning
  * badge when the order still needs payment.
+ *
+ * ⚠ The total carries its OWN class on top of the shared meta one (#865). A
+ * formatted price separates thousands with a space, so «3 980,00 ₽» breaks
+ * across two lines the moment the column is narrower than the amount — which
+ * is exactly what happened once #861 gave seeded orders real totals. The
+ * shared `woodev-orders-cell__meta` cannot carry `white-space: nowrap`: the
+ * «Доставка» cell renders a postal address through the same class and that one
+ * MUST wrap. Hence a dedicated class rather than a rule on the shared one, and
+ * rather than an `:nth-child()` on the cell — `TableCard` gives its cells no
+ * per-column class, and adding the «Действие» column (#824) would shift any
+ * positional selector.
  */
 function PaymentCell( { payment }: { payment: OrderRowPayment } ) {
 	return (
 		<>
 			<span>{ payment.method_title }</span>
-			<span className="woodev-orders-cell__meta">{ payment.formatted_total }</span>
+			<span className="woodev-orders-cell__meta woodev-orders-amount">
+				{ payment.formatted_total }
+			</span>
 			{ payment.needs_payment && (
 				<span className="woodev-orders-badge woodev-orders-badge--warn">
 					{ __( 'Ожидает оплаты', 'woodev-plugin-framework' ) }
