@@ -8,7 +8,7 @@
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { fetchOrders, fetchSyncStatus } from '../../src/shipping-orders-page/rest';
+import { fetchOrders, fetchSyncStatus, performOrderAction } from '../../src/shipping-orders-page/rest';
 
 jest.mock( '@wordpress/api-fetch' );
 
@@ -123,6 +123,56 @@ describe( 'fetchSyncStatus (#828 increment 8)', () => {
  * `is_exported=false` means «только новые». Sending `true` for «Все» would silently
  * show the ALREADY-EXPORTED orders under a link that says «Все».
  */
+/**
+ * `performOrderAction` (#824) — the write route behind one «Действие» button. Its
+ * `apiFetch` call is the actual server contract §2 of the brief fixes, so these pin the
+ * URL/method/headers, not just that SOMETHING gets called.
+ */
+describe( 'performOrderAction (#824)', () => {
+	test( 'POSTs to the order/action sub-path under the same REST root, with the nonce header', async () => {
+		apiFetch.mockResolvedValue( { row: {}, message: 'Заказ выгружен.' } );
+
+		await performOrderAction( 42, 'export' );
+
+		const call = apiFetch.mock.calls[ 0 ][ 0 ];
+		expect( call.url ).toBe(
+			'https://example.test/wp-json/woodev/v1/shipping/orders/42/actions/export'
+		);
+		expect( call.method ).toBe( 'POST' );
+		expect( call.headers ).toEqual( { 'X-WP-Nonce': 'abc' } );
+	} );
+
+	test( 'strips a trailing slash from restRoot before appending the sub-path', async () => {
+		window.woodevShippingOrders = {
+			restRoot: 'https://example.test/wp-json/woodev/v1/shipping/orders/',
+			nonce: 'abc',
+		};
+		apiFetch.mockResolvedValue( { row: {}, message: 'Заказ выгружен.' } );
+
+		await performOrderAction( 42, 'export' );
+
+		expect( apiFetch.mock.calls[ 0 ][ 0 ].url ).toBe(
+			'https://example.test/wp-json/woodev/v1/shipping/orders/42/actions/export'
+		);
+	} );
+
+	test( 'resolves with the row and message untouched', async () => {
+		const response = { row: { id: 42 }, message: 'Заказ выгружен.' };
+		apiFetch.mockResolvedValue( response );
+
+		await expect( performOrderAction( 42, 'export' ) ).resolves.toEqual( response );
+	} );
+
+	test( 'rejects with whatever apiFetch rejects with — the server\'s Russian message is never swallowed', async () => {
+		apiFetch.mockRejectedValue( { message: 'СДЭК недоступен.', code: 'woodev_carrier_unavailable' } );
+
+		await expect( performOrderAction( 42, 'export' ) ).rejects.toEqual( {
+			message: 'СДЭК недоступен.',
+			code: 'woodev_carrier_unavailable',
+		} );
+	} );
+} );
+
 describe( 'isExported — the «Новые» scope arg (#841)', () => {
 	test( 'false sends is_exported=false — an explicit false must still filter', async () => {
 		await fetchOrders( { isExported: false } );

@@ -35,10 +35,17 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
-import { fetchOrders, fetchSyncStatus, getProviders, getReachableDeliveryStatuses } from './rest';
+import { Button, Notice, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
+import {
+	fetchOrders,
+	fetchSyncStatus,
+	getProviders,
+	getReachableDeliveryStatuses,
+	performOrderAction,
+} from './rest';
 import type {
 	OrderRow,
+	OrderRowAction,
 	OrderRowCustomer,
 	OrderRowDeliveryStatus,
 	OrderRowPayment,
@@ -268,6 +275,101 @@ function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
 }
 
 /**
+ * One row's action-button state (#824), keyed by order id in the page's own
+ * `actionRowStates`. `pendingAction` scopes the in-flight/disabled state to THIS row —
+ * one order's export must not freeze every other row's buttons. `confirmingAction` is the
+ * inline «Да / Нет» step a `destructive` action needs before it fires; both are cleared
+ * together once the request settles (success or failure), so a row never gets stuck
+ * showing a stale confirm after its own request already answered.
+ */
+interface RowActionState {
+	pendingAction: string | null;
+	confirmingAction: string | null;
+}
+
+/**
+ * Renders the «Действие» cell (#824): one small `Button` per entry in `row.actions`, in
+ * server order. Absent/empty `actions` renders nothing — never an invented button.
+ *
+ * ⚠ No `window.confirm()` for a `destructive` action — a native modal blocks the page and
+ * the browser automation the rig is verified with. Instead the button itself flips to an
+ * inline «Отменить? Да / Нет» pair; the first click never reaches the network.
+ */
+function ActionsCell( {
+	row,
+	rowState,
+	onActionClick,
+	onCancelConfirm,
+}: {
+	row: OrderRow;
+	rowState?: RowActionState;
+	onActionClick: ( row: OrderRow, action: OrderRowAction ) => void;
+	onCancelConfirm: ( orderId: number ) => void;
+} ) {
+	if ( ! row.actions || 0 === row.actions.length ) {
+		return null;
+	}
+
+	const pendingAction = rowState?.pendingAction ?? null;
+	const confirmingAction = rowState?.confirmingAction ?? null;
+	const rowBusy = null !== pendingAction;
+
+	return (
+		<div className="woodev-orders-actions">
+			{ row.actions.map( ( action ) => {
+				if ( action.destructive && confirmingAction === action.action ) {
+					return (
+						<span key={ action.action } className="woodev-orders-actions__confirm">
+							<span>
+								{ sprintf(
+									/* translators: %s: the action's own label, e.g. "Отменить". */
+									__( '%s?', 'woodev-plugin-framework' ),
+									action.label
+								) }
+							</span>
+							<Button
+								variant="secondary"
+								isDestructive
+								isBusy={ pendingAction === action.action }
+								disabled={ rowBusy }
+								onClick={ () => onActionClick( row, action ) }
+							>
+								{ __( 'Да', 'woodev-plugin-framework' ) }
+							</Button>
+							<Button
+								variant="tertiary"
+								disabled={ rowBusy }
+								onClick={ () => onCancelConfirm( row.id ) }
+							>
+								{ __( 'Нет', 'woodev-plugin-framework' ) }
+							</Button>
+						</span>
+					);
+				}
+
+				const button = (
+					<Button
+						variant="secondary"
+						isDestructive={ action.destructive }
+						isBusy={ pendingAction === action.action }
+						disabled={ rowBusy }
+						onClick={ () => onActionClick( row, action ) }
+					>
+						{ action.label }
+					</Button>
+				);
+
+				return (
+					<span key={ action.action }>
+						{ action.title ? <Tooltip text={ action.title }>{ button }</Tooltip> : button }
+					</span>
+				);
+			} ) }
+		</div>
+	);
+}
+
+/**
  * `TableCard`'s column headers. Only `ID` and `date` carry `isSortable` —
  * increment 1's REST route (`Orders_Controller::register_routes()`) passes
  * `orderby` straight through to `wc_get_orders()`, and those are the two
@@ -285,10 +387,18 @@ const HEADERS: WcTableHeader[] = [
 	{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ) },
 	{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ) },
 	{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ) },
+	{ key: 'actions', label: __( 'Действие', 'woodev-plugin-framework' ) },
 ];
 
+/** The action-cell callbacks {@link buildRow} needs, threaded through from `OrdersPage`. */
+interface OrderActionsCallbacks {
+	rowState?: RowActionState;
+	onActionClick: ( row: OrderRow, action: OrderRowAction ) => void;
+	onCancelConfirm: ( orderId: number ) => void;
+}
+
 /** Builds one `TableCard` row from a REST row — display cell + raw sort value each. */
-function buildRow( row: OrderRow ): WcTableRowCell[] {
+function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCell[] {
 	const date = formatOrderDate( row.date_created );
 
 	return [
@@ -306,6 +416,19 @@ function buildRow( row: OrderRow ): WcTableRowCell[] {
 		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
 		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
 		{ display: <TrackingCell tracking={ row.tracking } />, value: row.tracking.number || '' },
+		{
+			display: (
+				<ActionsCell
+					row={ row }
+					rowState={ actions.rowState }
+					onActionClick={ actions.onActionClick }
+					onCancelConfirm={ actions.onCancelConfirm }
+				/>
+			),
+			// No meaningful ordering behind this column — nothing sorts on it server-side,
+			// same reason the header itself carries no `isSortable`.
+			value: '',
+		},
 	];
 }
 
@@ -603,6 +726,22 @@ export default function OrdersPage() {
 	 */
 	const [ carrierCounts, setCarrierCounts ] = useState<Record<string, number> | null>( null );
 	const [ error, setError ] = useState( '' );
+	/**
+	 * #824 — one {@link RowActionState} per order id, only for rows that currently have
+	 * something to show (pending or awaiting confirm); a row absent from this map is
+	 * neither. A plain object rather than a `Map` because it is only ever read/written
+	 * through `setState`, the same way every other piece of state on this page is.
+	 */
+	const [ actionRowStates, setActionRowStates ] = useState<Record<number, RowActionState>>( {} );
+	/**
+	 * #824 — the last row action's outcome, shown in the SAME `Notice` slot the fetch
+	 * error above already uses rather than a second mechanism. Unlike `error`, this is
+	 * dismissible: it reports a single past event, not a condition the table is still in,
+	 * so there is nothing wrong with the merchant clearing it themselves.
+	 */
+	const [ actionNotice, setActionNotice ] = useState<{ status: 'success' | 'error'; text: string } | null>(
+		null
+	);
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 
@@ -786,6 +925,81 @@ export default function OrdersPage() {
 		}
 	};
 
+	/**
+	 * #824 — sends one row action. Success swaps the row IN PLACE (never a refetch: a
+	 * refetch can return a different page of a moving dataset and the merchant loses
+	 * their place) and shows the server's message; failure leaves the row untouched and
+	 * shows the server's message as an error. Both branches clear this row's
+	 * pending/confirm state, whether the call succeeded or not.
+	 *
+	 * ⚠ The scope counts and carrier counts above the table are computed by the SAME
+	 * request that built the rows, and a successful export changes which bucket the order
+	 * is in — replacing one row does not update them. Left stale until the next natural
+	 * refetch on purpose: recomputing them client-side would defeat the reason they are
+	 * server-computed at all (#841/#855 — the merchant checks them against the menu
+	 * badge), and staleness here is honest, not silent.
+	 */
+	const performAction = ( row: OrderRow, action: OrderRowAction ) => {
+		setActionRowStates( ( current ) => ( {
+			...current,
+			[ row.id ]: { pendingAction: action.action, confirmingAction: null },
+		} ) );
+
+		performOrderAction( row.id, action.action )
+			.then( ( res ) => {
+				setRows( ( current ) =>
+					current ? current.map( ( r ) => ( r.id === row.id ? res.row : r ) ) : current
+				);
+				setActionNotice( { status: 'success', text: res.message } );
+				setActionRowStates( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+			} )
+			.catch( ( err: { message?: string } ) => {
+				setActionNotice( {
+					status: 'error',
+					text:
+						( err && err.message ) ||
+						__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' ),
+				} );
+				setActionRowStates( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+			} );
+	};
+
+	/**
+	 * A `destructive` action's first click never reaches the network — it only flips
+	 * this row into the inline «Да / Нет» confirm state. A second click on the SAME
+	 * action (now rendered as «Да») is what {@link ActionsCell} routes back here as the
+	 * real confirmation, so a non-destructive action and a confirmed destructive one
+	 * both end up calling {@link performAction} the same way.
+	 */
+	const onActionClick = ( row: OrderRow, action: OrderRowAction ) => {
+		if ( action.destructive && actionRowStates[ row.id ]?.confirmingAction !== action.action ) {
+			setActionRowStates( ( current ) => ( {
+				...current,
+				[ row.id ]: { pendingAction: null, confirmingAction: action.action },
+			} ) );
+			return;
+		}
+
+		performAction( row, action );
+	};
+
+	/** «Нет» on the inline confirm — drops the row back to its normal, un-confirming state. */
+	const onCancelConfirm = ( orderId: number ) => {
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			delete next[ orderId ];
+			return next;
+		} );
+	};
+
 	const actions = [
 		<SearchControl
 			key="search"
@@ -899,6 +1113,16 @@ export default function OrdersPage() {
 			{ error && (
 				<Notice status="error" isDismissible={ false }>
 					{ error }
+				</Notice>
+			) }
+			{ /* #824 — one row action's outcome, in the SAME slot as the fetch error above. */ }
+			{ actionNotice && (
+				<Notice
+					status={ actionNotice.status }
+					isDismissible
+					onRemove={ () => setActionNotice( null ) }
+				>
+					{ actionNotice.text }
 				</Notice>
 			) }
 			{ hasAnyFilterControl && (
@@ -1023,7 +1247,17 @@ export default function OrdersPage() {
 				className="woodev-orders"
 				title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
 				headers={ HEADERS }
-				rows={ null === rows ? [] : rows.map( buildRow ) }
+				rows={
+					null === rows
+						? []
+						: rows.map( ( row ) =>
+								buildRow( row, {
+									rowState: actionRowStates[ row.id ],
+									onActionClick,
+									onCancelConfirm,
+								} )
+						  )
+				}
 				rowsPerPage={ perPage }
 				totalRows={ total }
 				isLoading={ null === rows }
