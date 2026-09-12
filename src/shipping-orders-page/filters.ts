@@ -557,7 +557,7 @@ export function buildAdvancedFiltersConfig(
 	/**
 	 * ⚠ Only the states this shop can actually PRODUCE (#837 defect 4). The list used to
 	 * be every canonical state, and one of them was unreachable everywhere measured: no
-	 * carrier maps a raw status to `pending`, so «Ожидает отправки» returned an empty
+	 * carrier maps a raw status to `pending`, so «К отправке» returned an empty
 	 * table and read as a broken filter. The server derives the reachable set from the
 	 * providers' own `status_map`s.
 	 *

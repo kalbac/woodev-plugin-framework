@@ -819,7 +819,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * of them was unreachable on every shop measured: **no `status_map` anywhere
 		 * names `pending`** — both fixtures send their «just created» raw status to
 		 * `created` instead (measured s129, and it is why `delivery_status=pending`
-		 * returned 0 on the rig). A merchant picking «Ожидает отправки» therefore got
+		 * returned 0 on the rig). A merchant picking «К отправке» therefore got
 		 * an empty table and concluded the filter was broken. The list is derived here
 		 * rather than curated, so it stays true for whatever carriers a shop actually
 		 * has, and starts offering a state the day some carrier maps to it.
