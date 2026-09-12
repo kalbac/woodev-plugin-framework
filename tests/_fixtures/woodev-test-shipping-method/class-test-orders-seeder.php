@@ -56,7 +56,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '3';
+		public const SEED_VERSION = '4';
 
 		/**
 		 * Must match the marker key {@see \Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()}
@@ -109,6 +109,39 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		public const METHOD_ID = 'woodev_test_shipping';
 
 		/**
+		 * Must match the provider's own `pickup_point_meta_key` (see
+		 * `woodev-test-shipping-method.php`'s registration) — this is what
+		 * `Order_Row_Builder::resolve_destination()` reads to show a pickup point
+		 * instead of a plain address (#861).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const PICKUP_POINT_META_KEY = '_woodev_test_shipping_pickup_point';
+
+		/**
+		 * SKU of the single demo product seeded orders add a line item for (#861) —
+		 * found-or-created once, never duplicated across requests.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const DEMO_PRODUCT_SKU = 'woodev-test-demo-item';
+
+		/**
+		 * Login of the one demo WordPress user some seeded orders attach as a
+		 * registered customer (#861) — the rest stay guest orders (`customer_id`
+		 * 0), so the «Покупатель» cell shows both a linked and a plain name.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const DEMO_CUSTOMER_LOGIN = 'woodev_test_demo_customer';
+
+		/**
 		 * Decides whether seeding should run.
 		 *
 		 * Pure — no WordPress calls — so this rule is unit-testable on its own, same
@@ -125,6 +158,75 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 */
 		public static function should_seed( bool $trigger_enabled, string $seeded_option_value ): bool {
 			return $trigger_enabled && self::SEED_VERSION !== $seeded_option_value;
+		}
+
+		/**
+		 * The customer personas seeded orders cycle through (#861) — deliberately
+		 * HETEROGENEOUS: a short name and a long double-barrelled one, a short
+		 * address and one long enough to wrap in the «Доставка» cell. Pure data, no
+		 * WordPress calls, so it stays inspectable without a database.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array{first_name:string, last_name:string, email:string, phone:string, city:string, address_1:string, postcode:string}>
+		 */
+		public static function customer_pool(): array {
+			return [
+				[
+					'first_name' => 'Ева',
+					'last_name'  => 'Ким',
+					'email'      => 'eva.kim@example.com',
+					'phone'      => '+7 903 111-22-33',
+					'city'       => 'Тверь',
+					'address_1'  => 'ул. Мира, д. 5',
+					'postcode'   => '170100',
+				],
+				[
+					'first_name' => 'Александра',
+					'last_name'  => 'Константинова-Виноградова',
+					'email'      => 'a.konstantinova-vinogradova@example.com',
+					'phone'      => '+7 916 555-77-99',
+					'city'       => 'Санкт-Петербург',
+					'address_1'  => 'Гражданский проспект, д. 47, корпус 3, кв. 158, подъезд 2',
+					'postcode'   => '195279',
+				],
+				[
+					'first_name' => 'Пётр',
+					'last_name'  => 'Носов',
+					'email'      => 'p.nosov@example.com',
+					'phone'      => '+7 927 222-33-44',
+					'city'       => 'Казань',
+					'address_1'  => 'ул. Баумана, д. 9, кв. 12',
+					'postcode'   => '420111',
+				],
+				[
+					'first_name' => 'Юлия',
+					'last_name'  => 'Смирнова',
+					'email'      => 'yulia.smirnova@example.com',
+					'phone'      => '+7 912 345-67-89',
+					'city'       => 'Екатеринбург',
+					'address_1'  => 'просп. Ленина, д. 24',
+					'postcode'   => '620014',
+				],
+				[
+					'first_name' => 'Дмитрий',
+					'last_name'  => 'Соколов',
+					'email'      => 'd.sokolov@example.com',
+					'phone'      => '+7 923 456-78-90',
+					'city'       => 'Новосибирск',
+					'address_1'  => 'Красный проспект, д. 82, офис 301',
+					'postcode'   => '630099',
+				],
+				[
+					'first_name' => 'Мария',
+					'last_name'  => 'Кузнецова',
+					'email'      => 'maria.kuznecova@example.com',
+					'phone'      => '+7 926 111-22-33',
+					'city'       => 'Москва',
+					'address_1'  => 'ул. Тверская, д. 12, кв. 45',
+					'postcode'   => '125009',
+				],
+			];
 		}
 
 		/**
@@ -157,9 +259,16 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 * (`is_exported`) has both sides to find on the rig, the same reason `tracking`
 		 * is already split above.
 		 *
+		 * ⚠ Customer/address/line-item fields (#861): `customer_index` selects a
+		 * persona from {@see self::customer_pool()}, `is_guest` decides whether the
+		 * order attaches a registered `WP_User` or stays anonymous, `has_pickup`
+		 * decides whether the destination is a pickup point instead of a plain
+		 * address, and `qty` varies the line item so «Оплата» is not a uniform
+		 * total across every row.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, customer_index:int, is_guest:bool, has_pickup:bool, qty:int}>
 		 */
 		public static function demo_orders(): array {
 			$orders = [
@@ -169,6 +278,10 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					'tracking'          => 'TESTCARRIER-000123',
 					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000123',
 					'days_ago'          => 0,
+					'customer_index'    => 0,
+					'is_guest'          => true,
+					'has_pickup'        => false,
+					'qty'               => 1,
 				],
 				[
 					'status'            => 'processing',
@@ -176,6 +289,12 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					'tracking'          => null,
 					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000124',
 					'days_ago'          => 0,
+					// A registered customer whose parcel arrived at the pickup point —
+					// «ARRIVED_PVZ» and `has_pickup` agree on purpose.
+					'customer_index'    => 1,
+					'is_guest'          => false,
+					'has_pickup'        => true,
+					'qty'               => 2,
 				],
 				[
 					'status'            => 'processing',
@@ -185,6 +304,10 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					// own export marker was ever written; the two are independent facts.
 					'carrier_order_id'  => null,
 					'days_ago'          => 0,
+					'customer_index'    => 2,
+					'is_guest'          => true,
+					'has_pickup'        => false,
+					'qty'               => 1,
 				],
 			];
 
@@ -217,6 +340,8 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 			// last few beyond the year boundary on purpose.
 			$spread = [ 1, 2, 3, 5, 8, 11, 15, 19, 24, 30, 37, 45, 54, 64, 75, 87, 100, 114, 129, 145, 162, 180, 199, 219, 240, 262, 285, 309, 334, 400, 430 ];
 
+			$persona_count = count( self::customer_pool() );
+
 			foreach ( $spread as $index => $days_ago ) {
 				$raw = $raw_statuses[ $index % count( $raw_statuses ) ];
 
@@ -231,6 +356,16 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					// in both directions rather than perfectly tracking one another.
 					'carrier_order_id'  => 0 === $index % 2 ? sprintf( 'TESTCARRIER-EXPORT-%06d', 200 + $index ) : null,
 					'days_ago'          => $days_ago,
+					// Cycles through every persona so a large set exercises every
+					// name/address length, not just the three hand-typed rows above.
+					'customer_index'    => $index % $persona_count,
+					// Mostly guest, every fourth row a registered customer — a DIFFERENT
+					// modulo than the two above, same reasoning: independent facts
+					// should not collapse onto the same divisor.
+					'is_guest'          => 0 !== $index % 4,
+					// Every fifth row shows a pickup point instead of a plain address.
+					'has_pickup'        => 0 === $index % 5,
+					'qty'               => 1 + ( $index % 3 ),
 				];
 			}
 
@@ -255,7 +390,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 				return;
 			}
 
-			if ( ! function_exists( 'wc_create_order' ) || ! class_exists( '\WC_Order_Item_Shipping' ) ) {
+			if ( ! function_exists( 'wc_create_order' ) || ! class_exists( '\WC_Order_Item_Shipping' ) || ! class_exists( '\WC_Product_Simple' ) ) {
 				return;
 			}
 
@@ -271,7 +406,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string} $definition
+		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, customer_index:int, is_guest:bool, has_pickup:bool, qty:int} $definition
 		 *
 		 * @return void
 		 */
@@ -297,13 +432,141 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 				$order->update_meta_data( self::CARRIER_ORDER_ID_META_KEY, $definition['carrier_order_id'] );
 			}
 
+			self::apply_customer( $order, $definition );
+
 			$shipping_item = new \WC_Order_Item_Shipping();
 			$shipping_item->set_method_title( 'Тестовая доставка' );
 			$shipping_item->set_method_id( self::METHOD_ID );
 			$shipping_item->set_total( '0' );
 			$order->add_item( $shipping_item );
 
+			$product = self::demo_product();
+
+			if ( null !== $product ) {
+				$order->add_product( $product, $definition['qty'] );
+			}
+
+			// Without this, `_order_total`/`_order_shipping_total` stay at the
+			// defaults the item-level setters above never touch, and «Оплата»
+			// keeps showing 0,00 ₽ even though a real line item now exists (#861).
+			$order->calculate_totals();
 			$order->save();
+		}
+
+		/**
+		 * Applies one {@see self::customer_pool()} persona to an order: billing +
+		 * shipping fields always, a registered `WP_User` when the definition asks
+		 * for one, and a pickup-point destination when it asks for that too (#861).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order                                                              $order      order being built.
+		 * @param array{customer_index:int, is_guest:bool, has_pickup:bool}               $definition demo order definition.
+		 *
+		 * @return void
+		 */
+		private static function apply_customer( \WC_Order $order, array $definition ): void {
+			$pool    = self::customer_pool();
+			$persona = $pool[ $definition['customer_index'] % count( $pool ) ];
+
+			$order->set_billing_first_name( $persona['first_name'] );
+			$order->set_billing_last_name( $persona['last_name'] );
+			$order->set_billing_email( $persona['email'] );
+			$order->set_billing_phone( $persona['phone'] );
+			$order->set_billing_city( $persona['city'] );
+			$order->set_billing_address_1( $persona['address_1'] );
+			$order->set_billing_postcode( $persona['postcode'] );
+			$order->set_billing_country( 'RU' );
+
+			$order->set_shipping_first_name( $persona['first_name'] );
+			$order->set_shipping_last_name( $persona['last_name'] );
+			$order->set_shipping_city( $persona['city'] );
+			$order->set_shipping_address_1( $persona['address_1'] );
+			$order->set_shipping_postcode( $persona['postcode'] );
+			$order->set_shipping_country( 'RU' );
+
+			if ( ! $definition['is_guest'] ) {
+				$order->set_customer_id( self::demo_customer_id() );
+			}
+
+			if ( $definition['has_pickup'] ) {
+				$order->update_meta_data(
+					self::PICKUP_POINT_META_KEY,
+					[
+						'id'      => sprintf( 'TEST-PVZ-%d', $order->get_id() ),
+						'name'    => 'Пункт выдачи «Тестовый» на ' . $persona['city'],
+						'address' => $persona['city'] . ', ' . $persona['address_1'],
+						'lat'     => 55.7558,
+						'lng'     => 37.6173,
+						'type'    => [
+							'code'  => 'pvz',
+							'label' => 'Пункт выдачи',
+						],
+					]
+				);
+			}
+		}
+
+		/**
+		 * Finds or creates the single demo product seeded orders add a line item
+		 * for (#861) — idempotent, so re-seeding on a version bump never creates a
+		 * duplicate.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \WC_Product|null null only when the found/created product could
+		 *                          not be loaded back — a display-only seeder must
+		 *                          not fatal the whole batch over one product.
+		 */
+		private static function demo_product(): ?\WC_Product {
+			$product_id = wc_get_product_id_by_sku( self::DEMO_PRODUCT_SKU );
+
+			if ( 0 === $product_id ) {
+				$product = new \WC_Product_Simple();
+				$product->set_name( 'Демо-товар для тестовой доставки' );
+				$product->set_sku( self::DEMO_PRODUCT_SKU );
+				$product->set_regular_price( '1990' );
+				$product->set_price( '1990' );
+				$product->set_status( 'publish' );
+				$product->set_catalog_visibility( 'hidden' );
+				$product_id = $product->save();
+			}
+
+			$product = wc_get_product( $product_id );
+
+			return $product instanceof \WC_Product ? $product : null;
+		}
+
+		/**
+		 * Finds or creates the single demo `WP_User` some seeded orders attach as a
+		 * registered customer (#861) — idempotent by login, so re-seeding never
+		 * creates a duplicate account.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int the user id, or 0 when creation failed (the order then simply
+		 *             stays a guest order rather than fataling the whole batch).
+		 */
+		private static function demo_customer_id(): int {
+			$existing = get_user_by( 'login', self::DEMO_CUSTOMER_LOGIN );
+
+			if ( $existing instanceof \WP_User ) {
+				return $existing->ID;
+			}
+
+			$user_id = wp_insert_user(
+				[
+					'user_login'   => self::DEMO_CUSTOMER_LOGIN,
+					'user_pass'    => wp_generate_password(),
+					'user_email'   => 'demo.customer@woodev.test',
+					'display_name' => 'Игорь Дорофеев',
+					'first_name'   => 'Игорь',
+					'last_name'    => 'Дорофеев',
+					'role'         => 'customer',
+				]
+			);
+
+			return is_wp_error( $user_id ) ? 0 : (int) $user_id;
 		}
 	}
 }
