@@ -35,7 +35,18 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Dashicon, Notice, Popover, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
+import {
+	Button,
+	Dashicon,
+	Modal,
+	Notice,
+	SearchControl,
+	SnackbarList,
+	ToggleControl,
+	Tooltip,
+} from '@wordpress/components';
+import { dispatch, useSelect } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
 import type { ComponentProps } from 'react';
 import {
 	fetchOrders,
@@ -310,31 +321,69 @@ interface RowActionState {
  */
 type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
 
+/**
+ * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their own
+ * stylesheets rather than chosen here. `woocommerce-edostavka` and `woodev-russian-post`
+ * agree glyph for glyph, which is what makes this a common set rather than one carrier's
+ * taste:
+ *
+ * | action | reference CSS     | codepoint | Dashicon           |
+ * |--------|-------------------|-----------|--------------------|
+ * | export | `*-export::after` | `317`   | `dashicons-upload` |
+ * | update | `*-update::after` | `463`   | `dashicons-update` |
+ * | cancel | `*-cancel::after` | `14f`   | `dashicons-remove` |
+ *
+ * Codepoint → name from WordPress's own `wp-includes/css/dashicons.css`, not from memory.
+ * A carrier extra declared through `woodev_shipping_order_actions` has no entry and falls
+ * back to a neutral glyph — it renders rather than vanishing.
+ */
 const ACTION_ICONS: Record< string, DashiconName > = {
 	export: 'upload',
 	update: 'update',
 	cancel: 'remove',
+	waybill: 'media-document',
+	barcode: 'media-document',
 };
 
 const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
 
 /**
- * Renders the «Действие» cell (#824): one icon-only `Button` per entry in `row.actions`,
- * in server order. Absent/empty `actions` renders nothing — never an invented button.
+ * Associative background per action (operator, rig round 2): *«экспортировать — зелёная,
+ * отменить — красная, обновить — оранжевая, скачать документ — серая, default — серая»*.
  *
- * ⚠ **Icons, inline, never text and never stacked.** The first implementation used text
- * buttons; on the rig they wrapped «Обновить» and «Отменить» onto two lines in 11 rows of
- * 19 and the operator rejected it against his own plugins. The row is `nowrap` and the
- * buttons are square — see `style.scss`.
+ * The tone names map onto the SAME four WooCommerce colours the status badges already use
+ * — measured off a live WooCommerce 11.1.0 `assets/css/admin.css` and documented in
+ * `columns.ts`. Reusing them rather than picking fresh greens and reds is what keeps the
+ * row reading as one palette instead of two.
  *
- * ⚠ The accessible NAME stays the short verb («Выгрузить»), while the TOOLTIP carries the
- * explanation: `Button`'s own `label` would make one string do both, so the tooltip is
- * ours and `showTooltip` is off to avoid rendering two.
+ * A document action (waybill/barcode) is grey by his rule; both are SP-7/SP-8 and do not
+ * exist yet, so they would land on the default anyway — named here so the rule is legible
+ * rather than implied.
+ */
+type ActionTone = 'go' | 'stop' | 'warn' | 'neutral';
+
+const ACTION_TONES: Record< string, ActionTone > = {
+	export: 'go',
+	cancel: 'stop',
+	update: 'warn',
+	waybill: 'neutral',
+	barcode: 'neutral',
+};
+
+const FALLBACK_ACTION_TONE: ActionTone = 'neutral';
+
+/**
+ * Renders the «Действие» cell (#824) as a BUTTON GROUP, not a row of bare icons
+ * (operator, rig round 2: *«кнопки должны быть кнопками»*). One action is a single square
+ * button; two or more are pressed flush against each other with a visible divider
+ * between them, and only the outer corners are rounded — the same 4px the status badges
+ * use, so the two controls read as one family.
  *
- * ⚠ A `destructive` action confirms in a `Popover`, not inline. An inline confirm grows
- * the cell, which is the very thing that got the text version rejected; a popover leaves
- * the row's height and width untouched. Still no `window.confirm()` — a native modal
- * blocks the page and the browser automation the rig is verified with.
+ * ⚠ Inline, never stacked, and never text: both were rejected on the rig.
+ *
+ * ⚠ A destructive action confirms in a `Modal`, not a popover — the popover was rejected
+ * outright. Still never `window.confirm()`: a native modal dialog blocks the page and the
+ * browser automation the rig is verified with.
  */
 function ActionsCell( {
 	row,
@@ -351,73 +400,106 @@ function ActionsCell( {
 		return null;
 	}
 
+	const actions = row.actions;
 	const pendingAction = rowState?.pendingAction ?? null;
 	const confirmingAction = rowState?.confirmingAction ?? null;
 	const rowBusy = null !== pendingAction;
+	const confirming = confirmingAction
+		? actions.find( ( a ) => a.action === confirmingAction ) || null
+		: null;
 
 	return (
-		<div className="woodev-orders-actions">
-			{ row.actions.map( ( action ) => {
-				const tooltip = action.title || action.label;
+		<>
+			<div
+				className={
+					'woodev-orders-actions' +
+					( 1 === actions.length ? ' woodev-orders-actions--single' : '' )
+				}
+			>
+				{ actions.map( ( action ) => {
+					const tone = ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
 
-				return (
-					<span key={ action.action } className="woodev-orders-actions__item">
-						<Tooltip text={ tooltip }>
+					return (
+						<Tooltip key={ action.action } text={ action.title || action.label }>
 							<Button
-								// ⚠ A `Dashicon` ELEMENT, not the name as a bare string: `Button`'s
-								// `icon` is typed `IconType`, which a plain `string` does not satisfy —
-								// `tsc` refuses it even though it renders correctly at runtime, so jest
-								// and the rig both stayed green while the typecheck gate went red.
 								icon={ <Dashicon icon={ ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
 								label={ action.label }
 								showTooltip={ false }
-								className={
-									'woodev-orders-actions__button' +
-									( action.destructive ? ' woodev-orders-actions__button--destructive' : '' )
-								}
+								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }
 								isBusy={ pendingAction === action.action }
 								disabled={ rowBusy }
 								onClick={ () => onActionClick( row, action ) }
 							/>
 						</Tooltip>
-						{ confirmingAction === action.action && (
-							<Popover
-								className="woodev-orders-actions__confirm"
-								// ⚠ `bottom-end`, not `bottom center`: «Действие» is the LAST column, so a
-								// centred popover runs off the right edge of the viewport — on the rig it
-								// clipped the question mid-word and cut «Нет» in half. Anchoring the
-								// popover's right edge to the button's keeps it on screen. Nothing in
-								// jsdom can see this; it took a screenshot.
-								placement="bottom-end"
-								focusOnMount="firstElement"
-								onFocusOutside={ () => onCancelConfirm( row.id ) }
-							>
-								<p className="woodev-orders-actions__confirm-text">
-									{ sprintf(
-										/* translators: %s: what the action does, e.g. "Отменить заказ у перевозчика". */
-										__( '%s?', 'woodev-plugin-framework' ),
-										tooltip
-									) }
-								</p>
-								<div className="woodev-orders-actions__confirm-buttons">
-									<Button
-										variant="primary"
-										isDestructive
-										onClick={ () => onActionClick( row, action ) }
-									>
-										{ __( 'Да', 'woodev-plugin-framework' ) }
-									</Button>
-									<Button variant="tertiary" onClick={ () => onCancelConfirm( row.id ) }>
-										{ __( 'Нет', 'woodev-plugin-framework' ) }
-									</Button>
-								</div>
-							</Popover>
-						) }
-					</span>
-				);
-			} ) }
-		</div>
+					);
+				} ) }
+			</div>
+			{ confirming && (
+				<Modal
+					title={ confirming.label }
+					onRequestClose={ () => onCancelConfirm( row.id ) }
+					className="woodev-orders-actions__confirm"
+					size="small"
+				>
+					<p>{ confirmQuestion( confirming, row ) }</p>
+					<div className="woodev-orders-actions__confirm-buttons">
+						<Button variant="tertiary" onClick={ () => onCancelConfirm( row.id ) }>
+							{ __( 'Нет', 'woodev-plugin-framework' ) }
+						</Button>
+						<Button
+							variant="primary"
+							isDestructive={ confirming.destructive }
+							onClick={ () => onActionClick( row, confirming ) }
+						>
+							{ __( 'Да', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</Modal>
+			) }
+		</>
 	);
+}
+
+/**
+ * The confirm question, in the operator's own words for the case that exists today:
+ * *«Вы уверены что хотите отменить этот заказ в %carrier_name%»*.
+ *
+ * A carrier that could not be resolved renders `carrier: null` (the row builder never
+ * guesses one), so the question drops the "в …" clause rather than printing an empty
+ * name or the word "null". A non-cancel destructive action — none ships today, but the
+ * `woodev_shipping_order_actions` filter can declare one — gets the generic form built
+ * from its own label.
+ */
+function confirmQuestion( action: OrderRowAction, row: OrderRow ): string {
+	const carrier = row.carrier ? row.carrier.label : '';
+
+	if ( 'cancel' === action.action ) {
+		return carrier
+			? sprintf(
+					/* translators: %s: carrier name, e.g. "СДЭК". */
+					// ⚠ The name is QUOTED. The operator's wording is «…в %carrier_name%», and
+					// with a real carrier «в СДЭК» reads fine — but a multi-word name does
+					// not decline: «в Почта России» is wrong Russian, and so is the rig's «в
+					// Тестовая доставка». Quoting the proper noun is the standard way out and
+					// keeps his sentence intact for every carrier.
+					__( 'Вы уверены, что хотите отменить этот заказ в «%s»?', 'woodev-plugin-framework' ),
+					carrier
+			  )
+			: __( 'Вы уверены, что хотите отменить этот заказ у перевозчика?', 'woodev-plugin-framework' );
+	}
+
+	return carrier
+		? sprintf(
+				/* translators: 1: action label, e.g. "Обновить". 2: carrier name, e.g. "СДЭК". */
+				__( 'Вы уверены, что хотите выполнить «%1$s» для этого заказа в «%2$s»?', 'woodev-plugin-framework' ),
+				action.label,
+				carrier
+		  )
+		: sprintf(
+				/* translators: %s: action label, e.g. "Обновить". */
+				__( 'Вы уверены, что хотите выполнить «%s» для этого заказа?', 'woodev-plugin-framework' ),
+				action.label
+		  );
 }
 
 /**
@@ -793,6 +875,19 @@ export default function OrdersPage() {
 	const [ actionNotice, setActionNotice ] = useState<{ status: 'success' | 'error'; text: string } | null>(
 		null
 	);
+	/**
+	 * #824 round 2 — the native WP snackbar queue, the same mechanism the settings page
+	 * already uses (`src/settings-page/app.js`). Operator, on the rig: the inline notice
+	 * above the table *«просто не видно»*, and a toast is what the settings pages do.
+	 *
+	 * ⚠ The inline `Notice` STAYS — he was explicit that the existing notification type
+	 * remains as well. The toast is additive: it is what catches the eye at the moment the
+	 * request settles, the inline notice is what is still readable afterwards.
+	 */
+	const snackbars = useSelect(
+		( select ) => select( noticesStore ).getNotices().filter( ( n ) => 'snackbar' === n.type ),
+		[]
+	);
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
 	/**
@@ -1019,6 +1114,7 @@ export default function OrdersPage() {
 		performOrderAction( row.id, action.action )
 			.then( ( res ) => {
 				setActionNotice( { status: 'success', text: res.message } );
+				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
 
 				// The action really did happen — the notice above always shows. Only the
 				// row swap is conditional: a table refetched since this action started is
@@ -1035,12 +1131,12 @@ export default function OrdersPage() {
 				} );
 			} )
 			.catch( ( err: { message?: string } ) => {
-				setActionNotice( {
-					status: 'error',
-					text:
-						( err && err.message ) ||
-						__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' ),
-				} );
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' );
+
+				setActionNotice( { status: 'error', text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
 				setActionRowStates( ( current ) => {
 					const next = { ...current };
 					delete next[ row.id ];
@@ -1353,6 +1449,13 @@ export default function OrdersPage() {
 				}
 			/>
 			<RoiPanel />
+			{ /* #824 round 2 — native WP toasts, the same queue the settings page uses. Rendered
+			     last so it floats over the page rather than sitting inside the table card. */ }
+			<SnackbarList
+				className="woodev-orders__snackbars"
+				notices={ snackbars }
+				onRemove={ ( id: string ) => dispatch( noticesStore ).removeNotice( id ) }
+			/>
 		</>
 	);
 }

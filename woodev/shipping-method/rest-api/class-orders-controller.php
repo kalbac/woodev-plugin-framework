@@ -665,9 +665,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
 
 			if ( ! in_array( $action, $available, true ) ) {
+				// ⚠ Say WHY, not just "no". The gate that refused was computed one line
+				// above out of framework-owned state, so the reason is in hand — reporting
+				// the bare fact sends the merchant to support asking what it means
+				// (operator, s134). {@see Order_Actions::unavailable_reason()} answers for
+				// the framework's own gate only; a CARRIER-side refusal is #819's boundary
+				// and cannot be described here at all today.
 				return new \WP_Error(
 					'woodev_shipping_orders_action_not_available',
-					__( 'Это действие недоступно для данного заказа.', 'woodev-plugin-framework' ),
+					$this->order_actions->unavailable_reason( $order, $provider, $action ),
 					[ 'status' => 400 ]
 				);
 			}

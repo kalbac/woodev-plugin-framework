@@ -321,4 +321,117 @@ class ShippingOrderActionsTest extends TestCase {
 
 		$this->assertSame( [ Order_Actions::EXPORT ], $this->action_ids( $actions ) );
 	}
+
+	/* ---------------------------------------------------------------------
+	 * unavailable_reason() — every branch. The operator's complaint (s134) was that
+	 * «Это действие недоступно для данного заказа.» sends merchants to support asking
+	 * what it means; each branch below is one answer he should get instead.
+	 * ------------------------------------------------------------------ */
+
+	public function test_reason_without_a_provider_names_the_unresolved_carrier(): void {
+		$reason = $this->actions()->unavailable_reason( $this->order(), null, Order_Actions::EXPORT );
+
+		$this->assertStringContainsString( 'перевозчика', $reason );
+	}
+
+	public function test_reason_without_a_registered_handler_says_so(): void {
+		// No register_handler() call here — that is the case under test.
+		$reason = $this->actions()->unavailable_reason( $this->order(), $this->provider(), Order_Actions::EXPORT );
+
+		$this->assertStringContainsString( 'обработчик', $reason );
+	}
+
+	public function test_reason_for_export_on_an_already_exported_order(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CDEK-1';
+		$this->register_handler();
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order(),
+			$this->provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] ),
+			Order_Actions::EXPORT
+		);
+
+		$this->assertSame( 'Заказ уже выгружен перевозчику.', $reason );
+	}
+
+	/**
+	 * The status sentence is BUILT from `EXPORTABLE_STATUSES`, not typed out, so it can
+	 * never drift from the gate it explains. The stub below is what makes that visible:
+	 * the reason must carry every slug the constant holds.
+	 */
+	public function test_reason_for_export_from_a_wrong_status_lists_the_allowed_ones(): void {
+		$this->register_handler();
+		Functions\when( 'wc_get_order_status_name' )->alias(
+			static function ( string $status ): string {
+				return 'НАЗВАНИЕ:' . $status;
+			}
+		);
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order( 'completed' ),
+			$this->provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] ),
+			Order_Actions::EXPORT
+		);
+
+		foreach ( Order_Actions::EXPORTABLE_STATUSES as $status ) {
+			$this->assertStringContainsString( 'НАЗВАНИЕ:' . $status, $reason );
+		}
+	}
+
+	public function test_reason_for_update_on_an_order_that_was_never_exported(): void {
+		$this->register_handler();
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order(),
+			$this->provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] ),
+			Order_Actions::UPDATE
+		);
+
+		$this->assertStringContainsString( 'ещё не выгружен', $reason );
+	}
+
+	public function test_reason_for_update_when_the_carrier_cannot_do_it(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CDEK-1';
+		$this->register_handler( false );
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order(),
+			$this->provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] ),
+			Order_Actions::UPDATE
+		);
+
+		$this->assertStringContainsString( 'не умеет', $reason );
+	}
+
+	public function test_reason_for_cancel_names_the_terminal_delivery_status(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CDEK-1';
+		$this->meta['_cdek_status']           = 'DELIVERED';
+		$this->register_handler();
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order(),
+			$this->provider(
+				[
+					'carrier_order_id_meta_key' => '_cdek_carrier_order_id',
+					'status_meta_key'           => '_cdek_status',
+					'status_map'                => [ 'DELIVERED' => Delivery_Status::DELIVERED ],
+				]
+			),
+			Order_Actions::CANCEL
+		);
+
+		$this->assertStringContainsString( Delivery_Status::label( Delivery_Status::DELIVERED ), $reason );
+	}
+
+	public function test_reason_for_an_unknown_action_falls_back_without_pretending(): void {
+		$this->register_handler();
+
+		$reason = $this->actions()->unavailable_reason(
+			$this->order(),
+			$this->provider(),
+			'print_label'
+		);
+
+		$this->assertNotSame( '', $reason );
+	}
 }

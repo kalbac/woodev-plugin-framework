@@ -3850,3 +3850,61 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Не удалось выполнить действие."
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:208
+msgid "Для этого заказа не удалось определить перевозчика."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:212
+msgid "Для этого перевозчика не настроен обработчик отправлений — действия недоступны."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:220
+msgid "Заказ уже выгружен перевозчику."
+msgstr ""
+
+#. translators: %s: comma-separated WooCommerce order status names.
+#: shipping-method/admin/orders/class-order-actions.php:225
+#, php-format
+msgid "Выгрузить можно только заказ в одном из статусов: %s."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:231
+msgid "Заказ ещё не выгружен перевозчику — обновлять нечего."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:234
+msgid "Этот перевозчик не умеет запрашивать статус заказа из админки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:238
+msgid "Заказ ещё не выгружен перевозчику — отменять нечего."
+msgstr ""
+
+#. translators: %s: canonical delivery status label, e.g. "Доставлено".
+#: shipping-method/admin/orders/class-order-actions.php:243
+#, php-format
+msgid "Отправление уже в конечном статусе «%s» — отменить его нельзя."
+msgstr ""
+
+#. translators: %s: carrier name, e.g. "СДЭК".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Вы уверены, что хотите отменить этот заказ в «%s»?"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Вы уверены, что хотите отменить этот заказ у перевозчика?"
+msgstr ""
+
+#. translators: 1: action label, e.g. "Обновить". 2: carrier name, e.g. "СДЭК".
+#: assets/build/shipping-orders-page/index.js:3
+#, js-format
+msgid "Вы уверены, что хотите выполнить «%1$s» для этого заказа в «%2$s»?"
+msgstr ""
+
+#. translators: %s: action label, e.g. "Обновить".
+#: assets/build/shipping-orders-page/index.js:4
+#, js-format
+msgid "Вы уверены, что хотите выполнить «%s» для этого заказа?"
+msgstr ""

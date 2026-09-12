@@ -2351,7 +2351,7 @@ describe( 'the «Действие» column (#824)', () => {
 			} );
 		}
 
-		test( 'the first click shows an inline confirm and never calls the API', async () => {
+		test( 'the first click opens the confirm modal and never calls the API', async () => {
 			fetchOrders.mockResolvedValue( resultOf( [ cancelRow() ] ) );
 
 			render( <App /> );
@@ -2360,7 +2360,11 @@ describe( 'the «Действие» column (#824)', () => {
 
 			fireEvent.click( cancelButton );
 
-			expect( await screen.findByText( 'Отменить?' ) ).toBeInTheDocument();
+			// The operator's own wording, carrier name and all — the row fixture's carrier
+			// is «СДЭК», and the question must name it rather than saying "the carrier".
+			expect(
+				await screen.findByText( 'Вы уверены, что хотите отменить этот заказ в «СДЭК»?' )
+			).toBeInTheDocument();
 			expect( performOrderAction ).not.toHaveBeenCalled();
 		} );
 
@@ -2396,7 +2400,9 @@ describe( 'the «Действие» column (#824)', () => {
 
 			fireEvent.click( noButton );
 
-			expect( screen.queryByText( 'Отменить?' ) ).not.toBeInTheDocument();
+			expect(
+				screen.queryByText( 'Вы уверены, что хотите отменить этот заказ в «СДЭК»?' )
+			).not.toBeInTheDocument();
 			expect( await screen.findByRole( 'button', { name: 'Отменить' } ) ).toBeInTheDocument();
 			expect( performOrderAction ).not.toHaveBeenCalled();
 		} );

@@ -133,73 +133,126 @@
 }
 
 /**
- * The «Действие» cell (#824) — icon buttons on ONE line.
+ * The «Действие» cell (#824) — a BUTTON GROUP, sized 1:1 with the status badges.
  *
- * ⚠ `nowrap` is the point, not a detail. The first version used text buttons and let them
- * wrap; on the rig «Обновить» and «Отменить» stacked in 11 rows of 19 and the operator
- * rejected it against his own plugins, which render square icon buttons side by side
- * (`woocommerce-edostavka/assets/css/admin/orders-table.css`: `padding: 0`, `height: 2em`,
- * `width: 2em`, `overflow: hidden`, and the glyph on `::after`). The sizes below are
- * those, expressed through the `Button` component instead of an `a.button`.
+ * Operator, rig round 2: *«кнопки должны быть кнопками, а не просто иконками. Один экшен
+ * = одна одиночная кнопка 1:1 с бордер-радиус как статусных бейджей, два экшена = button
+ * group, две кнопки прижаты друг к другу … бордер-радиус только к правой кнопке справа и
+ * у левой кнопки слева. Между кнопками явный разделитель»*.
  *
- * Its own class, never a positional selector — `TableCard` gives its cells no per-column
- * class, and `:nth-child()` would shift the moment another column is added.
+ * So: `2.5em` square (the badge's own `line-height`), `4px` (the badge's own radius) on
+ * the OUTER corners only, zero gap, and a 1px divider between neighbours. Rounding the
+ * ends rather than each button is what makes two of them read as one control.
+ *
+ * ⚠ Its own class, never a positional selector — `TableCard` gives its cells no
+ * per-column class, and `:nth-child()` would shift the moment another column is added.
  */
 .woodev-orders-actions {
 	align-items: center;
-	display: flex;
+	// The group is drawn as ONE control: a single outer frame, rounded at its ends, with
+	// the buttons flush inside it — the operator sketched it that way. `overflow: hidden`
+	// is what makes each end button's own square corner take the frame's radius.
+	border: 1px solid rgba( 0, 0, 0, 0.18 );
+	border-radius: 4px;
+	display: inline-flex;
 	flex-wrap: nowrap;
-	gap: wd.$gap-xs;
-
-	&__item {
-		display: inline-flex;
-		position: relative;
-	}
+	gap: 0;
+	margin: -0.25em 0;
+	overflow: hidden;
 
 	&__button.components-button.has-icon {
-		height: 2em;
-		min-width: 2em;
+		border-radius: 0;
+		height: 2.5em;
+		justify-content: center;
+		min-width: 2.5em;
 		padding: 0;
-		width: 2em;
+		width: 2.5em;
+
+		// The divider the operator asked for: a hairline between neighbours, so a group
+		// still reads as separate buttons rather than one wide blob.
+		& + & {
+			border-left: 1px solid rgba( 0, 0, 0, 0.18 );
+		}
+
+		&:first-child {
+			border-bottom-left-radius: 4px;
+			border-top-left-radius: 4px;
+		}
+
+		&:last-child {
+			border-bottom-right-radius: 4px;
+			border-top-right-radius: 4px;
+		}
+
+		&:disabled,
+		&[aria-disabled='true'] {
+			opacity: 0.55;
+		}
 	}
 
-	// ⚠ A SEPARATE rule, not `&--destructive` nested inside the block above: there `&` is
-	// the whole compound selector, so it would compile to `…__button.components-button
-	// .has-icon--destructive` and silently match nothing. Caught on the rig by the icon
-	// simply not being orange — SCSS compiles it happily.
-	//
-	// The reference marks the destructive action with a filled warm background rather than
-	// red text, so it reads as "careful" at a glance in a dense table
-	// (`…-cancel { background-color: var( --wc-orange ); }`).
-	&__button--destructive.components-button.has-icon {
-		background-color: var( --wc-orange, #af6300 );
-		color: #fff;
+	// `Tooltip` wraps each button in its own element, so `:first-child`/`:last-child`
+	// above match against that wrapper's single child and every button would round. The
+	// group therefore states its ends explicitly, from the WRAPPER's position.
+	> *:not( :first-child ) .woodev-orders-actions__button.components-button.has-icon {
+		border-bottom-left-radius: 0;
+		border-left: 1px solid rgba( 0, 0, 0, 0.18 );
+		border-top-left-radius: 0;
+	}
+
+	> *:not( :last-child ) .woodev-orders-actions__button.components-button.has-icon {
+		border-bottom-right-radius: 0;
+		border-top-right-radius: 0;
+	}
+
+	/**
+	 * Associative colours, per the operator: export green, cancel red, update orange,
+	 * document/default grey. The four are the SAME WooCommerce colours the status badges
+	 * use (`columns.ts` documents where they were measured), so the column reads as one
+	 * palette instead of two.
+	 */
+	&__button.components-button.has-icon {
+		&.woodev-orders-actions__button--go {
+			background: #c6e1c6;
+			color: #2c4700;
+		}
+
+		&.woodev-orders-actions__button--stop {
+			background: #eba3a3;
+			color: #570000;
+		}
+
+		&.woodev-orders-actions__button--warn {
+			background: #f8dda7;
+			color: #573b00;
+		}
+
+		&.woodev-orders-actions__button--neutral {
+			background: #e5e5e5;
+			color: #454545;
+		}
 
 		&:hover:not( :disabled ),
 		&:focus:not( :disabled ) {
-			background-color: var( --wc-orange, #af6300 );
-			color: #fff;
+			// Keep the associative colour on hover — only deepen it. A hover that repaints
+			// the button WooCommerce-blue would throw away the very association the colours
+			// exist for.
+			box-shadow: inset 0 0 0 999px rgba( 0, 0, 0, 0.07 );
+			color: inherit;
 		}
 	}
 
-	// The confirm is a popover so the row's height and width never change — growing the
-	// cell is exactly what got the text version rejected.
-	&__confirm {
-		.components-popover__content {
-			padding: wd.$gap-sm;
-			width: max-content;
-		}
+	// A single action is a lone square button, both ends rounded — nothing to group.
+	&--single &__button.components-button.has-icon {
+		border-radius: 4px;
 	}
+}
 
-	&__confirm-text {
-		margin: 0 0 wd.$gap-xs;
-		max-width: 32ch;
-	}
-
-	&__confirm-buttons {
+.woodev-orders-actions__confirm {
+	.woodev-orders-actions__confirm-buttons {
 		display: flex;
 		gap: wd.$gap-xs;
 		justify-content: flex-end;
+		margin-top: wd.$gap;
 	}
 }
 
