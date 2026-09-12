@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-12 (s133).** ✅ **#858 merged (`829dc78`) — the new-order badge count now drops the
-moment an order is exported.** ⏳ **PR #859 (#829, status badges) is GREEN and CLEAN but deliberately
-NOT merged: it is UI and waits on the operator's visual acceptance.** The primary checkout is
-therefore parked on `feat/829-status-badges`, so the rig serves the badges — do not switch it back
-until that pass is over.
+**As of 2026-09-12 (s133).** ✅ **#858 and #859 both merged (`1d3f8e9`)** — the new-order badge count
+drops the moment an order is exported, and delivery statuses render as WooCommerce-coloured badges.
+The operator ACCEPTED the badges visually («выглядят хорошо») and asked for two follow-ups, now
+**#862**: status labels brought to roughly equal length (he picked the wording himself — the table is
+on the card) and the «Статус» column narrowed to the widest badge. Tree is back on `main`.
 
 ⚠ **Two ways a UI change passes every gate and is still wrong** (both cost s133 a lap): a vendor
 rule copied by GREP is incomplete — `.order-status` also carries `white-space: nowrap`, the badge
@@ -31,7 +31,7 @@ unknown period and the throw unmounts the whole wc-admin app (gotcha
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-Open on the page: **#824 #839 #842 #843 #856 #860 #861** (#829 has an open PR; #853 shipped). «New» is settled and shipped:
+Open on the page: **#824 #839 #842 #843 #856 #860 #861 #862** (#829 and #853 shipped). «New» is settled and shipped:
 `is_exported=false`, derived from `carrier_order_id` — every witness (the REST arg, the «Все /
 Новые» links, the carrier counts, the badge) reads it through the SAME `Orders_Query`, which is why
 their numbers agree by construction rather than by coincidence.
@@ -111,7 +111,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 12.09.2026 (s133); #853 closed, #860 and #861 filed** (`gh issue list --limit 300` and the board): Инбокс
+**Open cards — 58, measured 12.09.2026 (s133); #853 and #829 closed, #860 #861 #862 filed** (`gh issue list --limit 300` and the board): Инбокс
 EMPTY, 1 in «В работе» (the #820 umbrella). ⚠ **s127 recorded 53 — an undercount**, the very
 `--limit` trap its own handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
