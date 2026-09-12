@@ -35,7 +35,8 @@
 
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Notice, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
+import { Button, Dashicon, Notice, Popover, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
+import type { ComponentProps } from 'react';
 import {
 	fetchOrders,
 	fetchSyncStatus,
@@ -278,7 +279,7 @@ function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
  * One row's action-button state (#824), keyed by order id in the page's own
  * `actionRowStates`. `pendingAction` scopes the in-flight/disabled state to THIS row —
  * one order's export must not freeze every other row's buttons. `confirmingAction` is the
- * inline «Да / Нет» step a `destructive` action needs before it fires; both are cleared
+ * «Да / Нет» popover step a `destructive` action needs before it fires; both are cleared
  * together once the request settles (success or failure), so a row never gets stuck
  * showing a stale confirm after its own request already answered.
  */
@@ -288,12 +289,52 @@ interface RowActionState {
 }
 
 /**
- * Renders the «Действие» cell (#824): one small `Button` per entry in `row.actions`, in
- * server order. Absent/empty `actions` renders nothing — never an invented button.
+ * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their
+ * own stylesheets rather than chosen here (operator, rig rejection of the text buttons:
+ * *«см. как у меня в референсных плагинах, там иконки вместо текста с тултипами»*).
  *
- * ⚠ No `window.confirm()` for a `destructive` action — a native modal blocks the page and
- * the browser automation the rig is verified with. Instead the button itself flips to an
- * inline «Отменить? Да / Нет» pair; the first click never reaches the network.
+ * `woocommerce-edostavka/assets/css/admin/orders-table.css` and
+ * `woodev-russian-post/assets/css/admin/orders-table.css` agree glyph for glyph, which is
+ * what makes this a common set rather than one carrier's taste:
+ *
+ * | action | reference CSS      | codepoint | Dashicon           |
+ * |--------|--------------------|-----------|--------------------|
+ * | export | `*-export::after`  | `317`   | `dashicons-upload` |
+ * | update | `*-update::after`  | `463`   | `dashicons-update` |
+ * | cancel | `*-cancel::after`  | `14f`   | `dashicons-remove` |
+ *
+ * The codepoint → name mapping is from WordPress's own `wp-includes/css/dashicons.css`,
+ * not from memory. A carrier extra the server declares through
+ * `woodev_shipping_order_actions` has no entry here and falls back to a neutral glyph —
+ * it renders rather than vanishing.
+ */
+type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
+
+const ACTION_ICONS: Record< string, DashiconName > = {
+	export: 'upload',
+	update: 'update',
+	cancel: 'remove',
+};
+
+const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
+
+/**
+ * Renders the «Действие» cell (#824): one icon-only `Button` per entry in `row.actions`,
+ * in server order. Absent/empty `actions` renders nothing — never an invented button.
+ *
+ * ⚠ **Icons, inline, never text and never stacked.** The first implementation used text
+ * buttons; on the rig they wrapped «Обновить» and «Отменить» onto two lines in 11 rows of
+ * 19 and the operator rejected it against his own plugins. The row is `nowrap` and the
+ * buttons are square — see `style.scss`.
+ *
+ * ⚠ The accessible NAME stays the short verb («Выгрузить»), while the TOOLTIP carries the
+ * explanation: `Button`'s own `label` would make one string do both, so the tooltip is
+ * ours and `showTooltip` is off to avoid rendering two.
+ *
+ * ⚠ A `destructive` action confirms in a `Popover`, not inline. An inline confirm grows
+ * the cell, which is the very thing that got the text version rejected; a popover leaves
+ * the row's height and width untouched. Still no `window.confirm()` — a native modal
+ * blocks the page and the browser automation the rig is verified with.
  */
 function ActionsCell( {
 	row,
@@ -317,51 +358,61 @@ function ActionsCell( {
 	return (
 		<div className="woodev-orders-actions">
 			{ row.actions.map( ( action ) => {
-				if ( action.destructive && confirmingAction === action.action ) {
-					return (
-						<span key={ action.action } className="woodev-orders-actions__confirm">
-							<span>
-								{ sprintf(
-									/* translators: %s: the action's own label, e.g. "Отменить". */
-									__( '%s?', 'woodev-plugin-framework' ),
-									action.label
-								) }
-							</span>
+				const tooltip = action.title || action.label;
+
+				return (
+					<span key={ action.action } className="woodev-orders-actions__item">
+						<Tooltip text={ tooltip }>
 							<Button
-								variant="secondary"
-								isDestructive
+								// ⚠ A `Dashicon` ELEMENT, not the name as a bare string: `Button`'s
+								// `icon` is typed `IconType`, which a plain `string` does not satisfy —
+								// `tsc` refuses it even though it renders correctly at runtime, so jest
+								// and the rig both stayed green while the typecheck gate went red.
+								icon={ <Dashicon icon={ ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
+								label={ action.label }
+								showTooltip={ false }
+								className={
+									'woodev-orders-actions__button' +
+									( action.destructive ? ' woodev-orders-actions__button--destructive' : '' )
+								}
 								isBusy={ pendingAction === action.action }
 								disabled={ rowBusy }
 								onClick={ () => onActionClick( row, action ) }
+							/>
+						</Tooltip>
+						{ confirmingAction === action.action && (
+							<Popover
+								className="woodev-orders-actions__confirm"
+								// ⚠ `bottom-end`, not `bottom center`: «Действие» is the LAST column, so a
+								// centred popover runs off the right edge of the viewport — on the rig it
+								// clipped the question mid-word and cut «Нет» in half. Anchoring the
+								// popover's right edge to the button's keeps it on screen. Nothing in
+								// jsdom can see this; it took a screenshot.
+								placement="bottom-end"
+								focusOnMount="firstElement"
+								onFocusOutside={ () => onCancelConfirm( row.id ) }
 							>
-								{ __( 'Да', 'woodev-plugin-framework' ) }
-							</Button>
-							<Button
-								variant="tertiary"
-								disabled={ rowBusy }
-								onClick={ () => onCancelConfirm( row.id ) }
-							>
-								{ __( 'Нет', 'woodev-plugin-framework' ) }
-							</Button>
-						</span>
-					);
-				}
-
-				const button = (
-					<Button
-						variant="secondary"
-						isDestructive={ action.destructive }
-						isBusy={ pendingAction === action.action }
-						disabled={ rowBusy }
-						onClick={ () => onActionClick( row, action ) }
-					>
-						{ action.label }
-					</Button>
-				);
-
-				return (
-					<span key={ action.action }>
-						{ action.title ? <Tooltip text={ action.title }>{ button }</Tooltip> : button }
+								<p className="woodev-orders-actions__confirm-text">
+									{ sprintf(
+										/* translators: %s: what the action does, e.g. "Отменить заказ у перевозчика". */
+										__( '%s?', 'woodev-plugin-framework' ),
+										tooltip
+									) }
+								</p>
+								<div className="woodev-orders-actions__confirm-buttons">
+									<Button
+										variant="primary"
+										isDestructive
+										onClick={ () => onActionClick( row, action ) }
+									>
+										{ __( 'Да', 'woodev-plugin-framework' ) }
+									</Button>
+									<Button variant="tertiary" onClick={ () => onCancelConfirm( row.id ) }>
+										{ __( 'Нет', 'woodev-plugin-framework' ) }
+									</Button>
+								</div>
+							</Popover>
+						) }
 					</span>
 				);
 			} ) }

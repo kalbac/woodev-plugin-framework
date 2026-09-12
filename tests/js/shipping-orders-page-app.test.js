@@ -2162,12 +2162,19 @@ describe( 'the «Действие» column (#824)', () => {
 
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument() );
 
+		// ⚠ Assert on the ACCESSIBLE NAME, not `textContent`. The buttons are icon-only
+		// since the operator rejected the text version against his own plugins, so every
+		// one of them has an empty `textContent` and a `textContent`-based assertion
+		// compares [] to the labels and fails — or, worse, passes vacuously if it filters
+		// first. The name comes from `aria-label`, which is what a merchant's screen
+		// reader announces and what the tooltip repeats.
 		const labels = [ 'Выгрузить', 'Обновить', 'Отменить' ];
-		const buttons = screen
+		const names = screen
 			.getAllByRole( 'button' )
-			.filter( ( button ) => labels.includes( button.textContent ) );
+			.map( ( button ) => button.getAttribute( 'aria-label' ) )
+			.filter( ( name ) => labels.includes( name ) );
 
-		expect( buttons.map( ( button ) => button.textContent ) ).toEqual( labels );
+		expect( names ).toEqual( labels );
 	} );
 
 	test( 'a non-empty title wraps the button in a tooltip', async () => {

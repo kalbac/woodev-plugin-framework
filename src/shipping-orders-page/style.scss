@@ -133,22 +133,73 @@
 }
 
 /**
- * The «Действие» cell's button row (#824). Its own class, never a positional selector —
- * `TableCard` gives its cells no per-column class, and `:nth-child()` would shift the
- * moment another column is added, which is exactly the trap #865's comment on
- * `PaymentCell` already names.
+ * The «Действие» cell (#824) — icon buttons on ONE line.
+ *
+ * ⚠ `nowrap` is the point, not a detail. The first version used text buttons and let them
+ * wrap; on the rig «Обновить» and «Отменить» stacked in 11 rows of 19 and the operator
+ * rejected it against his own plugins, which render square icon buttons side by side
+ * (`woocommerce-edostavka/assets/css/admin/orders-table.css`: `padding: 0`, `height: 2em`,
+ * `width: 2em`, `overflow: hidden`, and the glyph on `::after`). The sizes below are
+ * those, expressed through the `Button` component instead of an `a.button`.
+ *
+ * Its own class, never a positional selector — `TableCard` gives its cells no per-column
+ * class, and `:nth-child()` would shift the moment another column is added.
  */
 .woodev-orders-actions {
-	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
+	display: flex;
+	flex-wrap: nowrap;
 	gap: wd.$gap-xs;
 
-	&__confirm {
+	&__item {
 		display: inline-flex;
-		align-items: center;
+		position: relative;
+	}
+
+	&__button.components-button.has-icon {
+		height: 2em;
+		min-width: 2em;
+		padding: 0;
+		width: 2em;
+	}
+
+	// ⚠ A SEPARATE rule, not `&--destructive` nested inside the block above: there `&` is
+	// the whole compound selector, so it would compile to `…__button.components-button
+	// .has-icon--destructive` and silently match nothing. Caught on the rig by the icon
+	// simply not being orange — SCSS compiles it happily.
+	//
+	// The reference marks the destructive action with a filled warm background rather than
+	// red text, so it reads as "careful" at a glance in a dense table
+	// (`…-cancel { background-color: var( --wc-orange ); }`).
+	&__button--destructive.components-button.has-icon {
+		background-color: var( --wc-orange, #af6300 );
+		color: #fff;
+
+		&:hover:not( :disabled ),
+		&:focus:not( :disabled ) {
+			background-color: var( --wc-orange, #af6300 );
+			color: #fff;
+		}
+	}
+
+	// The confirm is a popover so the row's height and width never change — growing the
+	// cell is exactly what got the text version rejected.
+	&__confirm {
+		.components-popover__content {
+			padding: wd.$gap-sm;
+			width: max-content;
+		}
+	}
+
+	&__confirm-text {
+		margin: 0 0 wd.$gap-xs;
+		max-width: 32ch;
+	}
+
+	&__confirm-buttons {
+		display: flex;
 		gap: wd.$gap-xs;
-		white-space: nowrap;
+		justify-content: flex-end;
 	}
 }
 
