@@ -393,6 +393,34 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertTrue( $found, 'add_hooks() must hook enqueue_assets() onto admin_enqueue_scripts' );
 	}
 
+	/**
+	 * #853: the badge cache must flush itself the moment ANY order is
+	 * exported, via the framework-wide `woodev_shipping_order_exported` action
+	 * fired by Abstract_Shipment_Handler::export() — not a plugin-prefixed hook,
+	 * since `$hook_prefix` varies per plugin and the framework cannot build a
+	 * fixed hook name from it.
+	 */
+	public function test_add_hooks_subscribes_the_flush_to_the_order_exported_action(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'woodev_shipping_order_exported' === $call[0] && [ $registry, 'flush_new_order_counts' ] === $call[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must subscribe flush_new_order_counts() to woodev_shipping_order_exported' );
+	}
+
 	public function test_enqueue_assets_does_nothing_off_the_wc_admin_screen(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
