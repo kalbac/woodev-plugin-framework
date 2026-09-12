@@ -34,11 +34,38 @@
  */
 
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
-import { Notice, SearchControl, ToggleControl, Tooltip } from '@wordpress/components';
-import { fetchOrders, fetchSyncStatus, getProviders, getReachableDeliveryStatuses } from './rest';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import {
+	Button,
+	CheckboxControl,
+	Dashicon,
+	Modal,
+	Notice,
+	SearchControl,
+	SelectControl,
+	SnackbarList,
+	Spinner,
+	ToggleControl,
+	Tooltip,
+} from '@wordpress/components';
+import { dispatch, useSelect } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
+import type { ComponentProps } from 'react';
+import {
+	fetchOrderPreview,
+	fetchOrders,
+	fetchSyncStatus,
+	getProviders,
+	getReachableDeliveryStatuses,
+	performBulkOrderAction,
+	performOrderAction,
+} from './rest';
 import type {
+	BulkActionResult,
+	OrderPreview,
 	OrderRow,
+	OrderRowAction,
+	OrderRowCarrier,
 	OrderRowCustomer,
 	OrderRowDeliveryStatus,
 	OrderRowPayment,
@@ -268,6 +295,683 @@ function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
 }
 
 /**
+ * One row's action-button state (#824), keyed by order id in the page's own
+ * `actionRowStates`. `pendingAction` scopes the in-flight/disabled state to THIS row —
+ * one order's export must not freeze every other row's buttons. `confirmingAction` is the
+ * «Да / Нет» popover step a `destructive` action needs before it fires; both are cleared
+ * together once the request settles (success or failure), so a row never gets stuck
+ * showing a stale confirm after its own request already answered.
+ */
+interface RowActionState {
+	pendingAction: string | null;
+	confirmingAction: string | null;
+}
+
+/** A row currently has a pending action — shared by #873's busy marker and #874's `cb` disable. */
+function isRowBusy( rowState?: RowActionState ): boolean {
+	return Boolean( rowState?.pendingAction );
+}
+
+/**
+ * The minimum a single-action call actually needs — `performAction`/`onActionClick`/
+ * `confirmQuestion` never read anything else off the row. Widened from a bare `OrderRow`
+ * (#824) to this narrower shape so #875's preview modal — which fetches an `OrderPreview`,
+ * a DIFFERENT response shape — can drive the exact same functions on the exact same order
+ * without a cast: `OrderPreview` carries `id` and `carrier` too, so it satisfies this
+ * structurally.
+ */
+interface ActionableOrder {
+	id: number;
+	carrier: OrderRowCarrier | null;
+}
+
+/**
+ * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their
+ * own stylesheets rather than chosen here (operator, rig rejection of the text buttons:
+ * *«см. как у меня в референсных плагинах, там иконки вместо текста с тултипами»*).
+ *
+ * `woocommerce-edostavka/assets/css/admin/orders-table.css` and
+ * `woodev-russian-post/assets/css/admin/orders-table.css` agree glyph for glyph, which is
+ * what makes this a common set rather than one carrier's taste:
+ *
+ * | action | reference CSS      | codepoint | Dashicon           |
+ * |--------|--------------------|-----------|--------------------|
+ * | export | `*-export::after`  | `317`   | `dashicons-upload` |
+ * | update | `*-update::after`  | `463`   | `dashicons-update` |
+ * | cancel | `*-cancel::after`  | `14f`   | `dashicons-remove` |
+ *
+ * The codepoint → name mapping is from WordPress's own `wp-includes/css/dashicons.css`,
+ * not from memory. A carrier extra the server declares through
+ * `woodev_shipping_order_actions` has no entry here and falls back to a neutral glyph —
+ * it renders rather than vanishing.
+ */
+type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
+
+/**
+ * Dashicon per action id — the SAME glyphs the shipped plugins use, read out of their own
+ * stylesheets rather than chosen here. `woocommerce-edostavka` and `woodev-russian-post`
+ * agree glyph for glyph, which is what makes this a common set rather than one carrier's
+ * taste:
+ *
+ * | action | reference CSS     | codepoint | Dashicon           |
+ * |--------|-------------------|-----------|--------------------|
+ * | export | `*-export::after` | `317`   | `dashicons-upload` |
+ * | update | `*-update::after` | `463`   | `dashicons-update` |
+ * | cancel | `*-cancel::after` | `14f`   | `dashicons-remove` |
+ *
+ * Codepoint → name from WordPress's own `wp-includes/css/dashicons.css`, not from memory.
+ * A carrier extra declared through `woodev_shipping_order_actions` has no entry and falls
+ * back to a neutral glyph — it renders rather than vanishing.
+ */
+const ACTION_ICONS: Record< string, DashiconName > = {
+	export: 'upload',
+	update: 'update',
+	cancel: 'remove',
+	waybill: 'media-document',
+	barcode: 'media-document',
+};
+
+const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
+
+/**
+ * Associative background per action (operator, rig round 2): *«экспортировать — зелёная,
+ * отменить — красная, обновить — оранжевая, скачать документ — серая, default — серая»*.
+ *
+ * The tone names map onto the SAME four WooCommerce colours the status badges already use
+ * — measured off a live WooCommerce 11.1.0 `assets/css/admin.css` and documented in
+ * `columns.ts`. Reusing them rather than picking fresh greens and reds is what keeps the
+ * row reading as one palette instead of two.
+ *
+ * A document action (waybill/barcode) is grey by his rule; both are SP-7/SP-8 and do not
+ * exist yet, so they would land on the default anyway — named here so the rule is legible
+ * rather than implied.
+ */
+type ActionTone = 'go' | 'stop' | 'warn' | 'neutral';
+
+const ACTION_TONES: Record< string, ActionTone > = {
+	export: 'go',
+	cancel: 'stop',
+	update: 'warn',
+	waybill: 'neutral',
+	barcode: 'neutral',
+};
+
+const FALLBACK_ACTION_TONE: ActionTone = 'neutral';
+
+/**
+ * Renders the «Действие» cell (#824) as a BUTTON GROUP, not a row of bare icons
+ * (operator, rig round 2: *«кнопки должны быть кнопками»*). One action is a single square
+ * button; two or more are pressed flush against each other with a visible divider
+ * between them, and only the outer corners are rounded — the same 4px the status badges
+ * use, so the two controls read as one family.
+ *
+ * ⚠ Inline, never stacked, and never text: both were rejected on the rig.
+ *
+ * ⚠ A destructive action confirms in a `Modal`, not a popover — the popover was rejected
+ * outright. Still never `window.confirm()`: a native modal dialog blocks the page and the
+ * browser automation the rig is verified with.
+ *
+ * ⚠ #873's busy-row marker lives HERE, not in a new cell of its own — a busy row is only
+ * possible when it has an action in flight, and this cell already knows that
+ * (`rowBusy`). `.woodev-orders-row-busy` is an otherwise-empty, `aria-hidden` element with
+ * no visual role of its own; `style.scss` reaches the ANCESTOR `<tr>` through
+ * `tr:has( .woodev-orders-row-busy )`, because `table.tsx` gives the row itself no class or
+ * attribute to write into (`wc-globals.d.ts`'s own doc comment, read off the real component,
+ * not recalled) — a `:nth-child()` was ruled out by the brief, and this is the seam picked
+ * instead: an element rendered inside the cell that styles its ancestor row.
+ */
+function ActionsCell( {
+	row,
+	rowState,
+	onActionClick,
+	onCancelConfirm,
+}: {
+	row: OrderRow;
+	rowState?: RowActionState;
+	onActionClick: ( row: ActionableOrder, action: OrderRowAction ) => void;
+	onCancelConfirm: ( orderId: number ) => void;
+} ) {
+	if ( ! row.actions || 0 === row.actions.length ) {
+		return null;
+	}
+
+	const actions = row.actions;
+	const pendingAction = rowState?.pendingAction ?? null;
+	const confirmingAction = rowState?.confirmingAction ?? null;
+	const rowBusy = isRowBusy( rowState );
+	const confirming = confirmingAction
+		? actions.find( ( a ) => a.action === confirmingAction ) || null
+		: null;
+
+	return (
+		<>
+			{ rowBusy && <span className="woodev-orders-row-busy" aria-hidden="true" /> }
+			<div
+				className={
+					'woodev-orders-actions' +
+					( 1 === actions.length ? ' woodev-orders-actions--single' : '' )
+				}
+			>
+				{ actions.map( ( action ) => {
+					const tone = ACTION_TONES[ action.action ] || FALLBACK_ACTION_TONE;
+
+					return (
+						<Tooltip key={ action.action } text={ action.title || action.label }>
+							<Button
+								icon={ <Dashicon icon={ ACTION_ICONS[ action.action ] || FALLBACK_ACTION_ICON } /> }
+								label={ action.label }
+								showTooltip={ false }
+								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }
+								isBusy={ pendingAction === action.action }
+								disabled={ rowBusy }
+								onClick={ () => onActionClick( row, action ) }
+							/>
+						</Tooltip>
+					);
+				} ) }
+			</div>
+			{ confirming && (
+				<Modal
+					title={ confirming.label }
+					onRequestClose={ () => onCancelConfirm( row.id ) }
+					className="woodev-orders-actions__confirm"
+					size="small"
+				>
+					<p>{ confirmQuestion( confirming, row ) }</p>
+					<div className="woodev-orders-actions__confirm-buttons">
+						<Button variant="tertiary" onClick={ () => onCancelConfirm( row.id ) }>
+							{ __( 'Нет', 'woodev-plugin-framework' ) }
+						</Button>
+						<Button
+							variant="primary"
+							isDestructive={ confirming.destructive }
+							onClick={ () => onActionClick( row, confirming ) }
+						>
+							{ __( 'Да', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</Modal>
+			) }
+		</>
+	);
+}
+
+/**
+ * The confirm question, in the operator's own words for the case that exists today:
+ * *«Вы уверены что хотите отменить этот заказ в %carrier_name%»*.
+ *
+ * A carrier that could not be resolved renders `carrier: null` (the row builder never
+ * guesses one), so the question drops the "в …" clause rather than printing an empty
+ * name or the word "null". A non-cancel destructive action — none ships today, but the
+ * `woodev_shipping_order_actions` filter can declare one — gets the generic form built
+ * from its own label.
+ *
+ * Accepts {@link ActionableOrder} rather than a full `OrderRow` — #875's preview modal
+ * drives the same confirm off an `OrderPreview`, which carries `carrier` but none of a
+ * row's other fields, and both shapes satisfy this one structurally.
+ */
+function confirmQuestion( action: OrderRowAction, row: ActionableOrder ): string {
+	const carrier = row.carrier ? row.carrier.label : '';
+
+	if ( 'cancel' === action.action ) {
+		return carrier
+			? sprintf(
+					/* translators: %s: carrier name, e.g. "СДЭК". */
+					// ⚠ The name is QUOTED. The operator's wording is «…в %carrier_name%», and
+					// with a real carrier «в СДЭК» reads fine — but a multi-word name does
+					// not decline: «в Почта России» is wrong Russian, and so is the rig's «в
+					// Тестовая доставка». Quoting the proper noun is the standard way out and
+					// keeps his sentence intact for every carrier.
+					__( 'Вы уверены, что хотите отменить этот заказ в «%s»?', 'woodev-plugin-framework' ),
+					carrier
+			  )
+			: __( 'Вы уверены, что хотите отменить этот заказ у перевозчика?', 'woodev-plugin-framework' );
+	}
+
+	return carrier
+		? sprintf(
+				/* translators: 1: action label, e.g. "Обновить". 2: carrier name, e.g. "СДЭК". */
+				__( 'Вы уверены, что хотите выполнить «%1$s» для этого заказа в «%2$s»?', 'woodev-plugin-framework' ),
+				action.label,
+				carrier
+		  )
+		: sprintf(
+				/* translators: %s: action label, e.g. "Обновить". */
+				__( 'Вы уверены, что хотите выполнить «%s» для этого заказа?', 'woodev-plugin-framework' ),
+				action.label
+		  );
+}
+
+/**
+ * The `cb` column's per-row cell (#874). A row whose `actions` is absent or empty renders
+ * NO checkbox at all — the operator's own rule, so a merchant never selects an order the
+ * bulk toolbar could not act on anyway. Busy (an action in flight, either this row's own or
+ * a bulk request that targeted it — {@link isRowBusy}) disables the control without hiding
+ * it, so the row stays legible as "selected, currently working" rather than vanishing from
+ * the selection the merchant just made.
+ */
+function CheckboxCell( {
+	row,
+	checked,
+	rowState,
+	onToggle,
+}: {
+	row: OrderRow;
+	checked: boolean;
+	rowState?: RowActionState;
+	onToggle: ( orderId: number, checked: boolean ) => void;
+} ) {
+	if ( ! row.actions || 0 === row.actions.length ) {
+		return null;
+	}
+
+	return (
+		<CheckboxControl
+			__nextHasNoMarginBottom
+			checked={ checked }
+			disabled={ isRowBusy( rowState ) }
+			onChange={ ( next ) => onToggle( row.id, next ) }
+			aria-label={ sprintf(
+				/* translators: %s: order number, e.g. "42". */
+				__( 'Выбрать заказ %s', 'woodev-plugin-framework' ),
+				row.order_number
+			) }
+		/>
+	);
+}
+
+/**
+ * The three framework verbs #874 asks for, as DATA rather than three hard-coded JSX
+ * `<option>`s — the operator's own extension seam: a carrier can declare a fourth action
+ * through the server-side `woodev_shipping_order_actions` filter, and with the picker built
+ * off this array, adding that fourth one here is a data change, not a markup change. Tones
+ * intentionally NOT reused from `ACTION_TONES` — a bulk picker has no per-row button to
+ * colour, only this list and the confirm modal below it.
+ */
+interface BulkAction {
+	action: string;
+	label: string;
+	destructive: boolean;
+}
+
+const BULK_ACTIONS: BulkAction[] = [
+	{ action: 'export', label: __( 'Экспортировать', 'woodev-plugin-framework' ), destructive: false },
+	{ action: 'update', label: __( 'Обновить', 'woodev-plugin-framework' ), destructive: false },
+	{ action: 'cancel', label: __( 'Отменить', 'woodev-plugin-framework' ), destructive: true },
+];
+
+/**
+ * The bulk confirm question — the same shape {@link confirmQuestion} builds for a single
+ * row, generalised to a COUNT rather than one order's carrier (a bulk request can span
+ * several carriers at once, so naming one would misrepresent the rest).
+ */
+/**
+ * The bulk destructive confirm's question.
+ *
+ * ⚠ `_n()` HERE IS SAFE, AND THE REASON IS NOT GENERAL — read before rewording. In JS the
+ * catalogue is never consulted at all: `wp_set_script_translations()` is called nowhere in
+ * this framework and there is no `make-json` step (measured, s134), so `@wordpress/i18n`'s
+ * `_n()` always falls back to its own BINARY rule — `1 === n ? single : plural`. Russian
+ * has three forms, so a JS plural is normally wrong at 2-4 and cannot be fixed by adding a
+ * catalogue entry, the way the PHP side's can.
+ *
+ * This particular phrasing survives that because of the preposition: «для» takes the
+ * genitive, and there both 2 and 5 inflect identically — «для 1 выбранного заказа», «для 2
+ * выбранных заказов», «для 5 выбранных заказов». Two forms genuinely cover it.
+ *
+ * Change the preposition or drop it and that stops being true silently — «экспортировано 2
+ * заказа» vs «5 заказов» needs three. If you reword, either keep a construction where the
+ * 2-4 form matches the 5+ form, or make the phrase count-neutral («Выбрано заказов: %d»).
+ * See gotcha `russian-source-i18n-plural-n`.
+ */
+function bulkConfirmQuestion( action: BulkAction, count: number ): string {
+	return sprintf(
+		/* translators: 1: action label, e.g. "Отменить". 2: number of selected orders. */
+		_n(
+			'Вы уверены, что хотите выполнить «%1$s» для %2$d выбранного заказа?',
+			'Вы уверены, что хотите выполнить «%1$s» для %2$d выбранных заказов?',
+			count,
+			'woodev-plugin-framework'
+		),
+		action.label,
+		count
+	);
+}
+
+/**
+ * The bulk-action control (#874) — a picker plus an apply button, beside `TableCard`'s own
+ * `SearchControl` in its `actions` slot (the brief's "above the table, beside the existing
+ * filters"; `SearchControl` is the one existing control already living there). A destructive
+ * pick confirms in the SAME `Modal` pattern {@link ActionsCell} uses, naming how many orders
+ * it will touch rather than any one of them — `onApply` decides whether to confirm first.
+ */
+function BulkActionsBar( {
+	selectedCount,
+	value,
+	onChange,
+	onApply,
+	confirming,
+	onConfirm,
+	onCancelConfirm,
+}: {
+	selectedCount: number;
+	value: string;
+	onChange: ( action: string ) => void;
+	onApply: () => void;
+	confirming: BulkAction | null;
+	onConfirm: () => void;
+	onCancelConfirm: () => void;
+} ) {
+	return (
+		<div className="woodev-orders-bulk">
+			<SelectControl
+				__nextHasNoMarginBottom
+				__next40pxDefaultSize
+				hideLabelFromVision
+				label={ __( 'Массовые действия', 'woodev-plugin-framework' ) }
+				value={ value }
+				options={ [
+					// The operator's own sketch labels the empty state «Выберите действие» —
+					// an instruction, not a repeat of the control's name.
+					{ label: __( 'Выберите действие', 'woodev-plugin-framework' ), value: '' },
+					...BULK_ACTIONS.map( ( a ) => ( { label: a.label, value: a.action } ) ),
+				] }
+				onChange={ onChange }
+			/>
+			<Button
+				className="woodev-orders-bulk__apply"
+				variant="secondary"
+				disabled={ ! value || 0 === selectedCount }
+				onClick={ onApply }
+			>
+				{ /*
+				 * NOT the bare «Применить» a bulk-action row usually carries — this page's
+				 * own «Период» control already has one, visible on the same screen the
+				 * moment its dropdown is open, and two controls sharing one accessible
+				 * name is a real ambiguity for a screen reader, not just a test artifact
+				 * (caught by `shipping-orders-page-app.test.js`'s existing period-picker
+				 * suite the first time this label collided with it).
+				 */ }
+				{ __( 'Применить действие', 'woodev-plugin-framework' ) }
+			</Button>
+			{ confirming && (
+				<Modal
+					title={ confirming.label }
+					onRequestClose={ onCancelConfirm }
+					className="woodev-orders-actions__confirm"
+					size="small"
+				>
+					<p>{ bulkConfirmQuestion( confirming, selectedCount ) }</p>
+					<div className="woodev-orders-actions__confirm-buttons">
+						<Button variant="tertiary" onClick={ onCancelConfirm }>
+							{ __( 'Нет', 'woodev-plugin-framework' ) }
+						</Button>
+						<Button variant="primary" isDestructive onClick={ onConfirm }>
+							{ __( 'Да', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</Modal>
+			) }
+		</div>
+	);
+}
+
+/**
+ * The eye button (#875) beside the order link in the «Заказ» cell — icon-only, an accessible
+ * name AND a tooltip (the brief asks for both explicitly, unlike the action buttons above,
+ * which only carry a tooltip because their `label` already doubles as the accessible name via
+ * `aria-label`; this one needs its own since it sits next to plain link text).
+ */
+function PreviewButton( {
+	row,
+	isLoading,
+	onOpen,
+}: {
+	row: OrderRow;
+	isLoading: boolean;
+	onOpen: ( orderId: number ) => void;
+} ) {
+	const name = sprintf(
+		/* translators: %s: order number, e.g. "42". */
+		__( 'Просмотреть заказ %s', 'woodev-plugin-framework' ),
+		row.order_number
+	);
+
+	return (
+		<Tooltip text={ name }>
+			<Button
+				icon={ <Dashicon icon="visibility" /> }
+				label={ name }
+				showTooltip={ false }
+				className="woodev-orders-preview-button"
+				// The spinner runs ON THE ICON while the preview loads, and the modal opens
+				// only once the data is in hand (operator, rig round 3) — WooCommerce's own
+				// behaviour. A second click needs no request at all.
+				isBusy={ isLoading }
+				disabled={ isLoading }
+				onClick={ () => onOpen( row.id ) }
+			/>
+		</Tooltip>
+	);
+}
+
+/**
+ * One line of the preview's item table (#875). An absent SKU renders NOTHING — never a dash
+ * or the word "null", the same rule {@link TrackingCell} follows for a missing number.
+ */
+function PreviewItemRow( { item }: { item: { name: string; sku: string; quantity: number; formatted_total: string } } ) {
+	return (
+		<tr>
+			<td>
+				<span className="woodev-orders-preview__item-name">{ item.name }</span>
+				{ item.sku && <span className="woodev-orders-cell__meta">{ item.sku }</span> }
+			</td>
+			<td className="woodev-orders-preview__item-qty">{ item.quantity }</td>
+			<td className="woodev-orders-preview__item-total">{ item.formatted_total }</td>
+		</tr>
+	);
+}
+
+/**
+ * The order preview (#875), recomposed after the operator's rig pass: the first version was
+ * a wall of unstyled paragraphs at full viewport width, and he asked for WooCommerce's own
+ * preview «только лучше».
+ *
+ * The brief pins the visual language — this must read as native WordPress admin — so nothing
+ * here invents a palette or a typeface. What it does instead is compose:
+ *
+ * 1. **The header answers THIS page's question first.** WooCommerce's preview leads with the
+ *    ORDER's status; this page exists for the SHIPMENT, so the delivery-status badge leads,
+ *    with the carrier beside it. It is the very same `StatusCell` the table renders, not a
+ *    second styling of the same idea.
+ * 2. **No tracked-out capital labels.** The previous version headed each column with grey
+ *    uppercase («ПОКУПАТЕЛЬ»). WooCommerce itself uses sentence-case bold, and a caps eyebrow
+ *    over every block is the surest tell of a template.
+ * 3. **A label only where the value is ambiguous.** A phone and an email announce themselves
+ *    by shape; a bare carrier code does not, so «Трек» is labelled and they are not.
+ * 4. **Money lives in the item table's foot**, beside the amounts it belongs with, rather than
+ *    as a third labelled block competing with the two that matter.
+ * 5. **The address is a real address.** It arrives with newlines and is now rendered with them
+ *    — the old version collapsed it into one unreadable run, which was most of why the modal
+ *    looked the way it did.
+ *
+ * ⚠ Takes a LOADED `preview` and never fetches. The fetch, its spinner (on the eye icon) and
+ * the cache all live on the page — see `onOpenPreview()`. A modal that fetched on mount had to
+ * mount first, which is exactly the small-then-huge flash the operator rejected.
+ */
+function OrderPreviewModal( {
+	preview,
+	rowState,
+	onActionClick,
+	onCancelConfirm,
+	onClose,
+}: {
+	preview: OrderPreview;
+	rowState?: RowActionState;
+	onActionClick: ( row: ActionableOrder, action: OrderRowAction ) => void;
+	onCancelConfirm: ( orderId: number ) => void;
+	onClose: () => void;
+} ) {
+	const confirmingAction = rowState?.confirmingAction ?? null;
+	const confirming = confirmingAction
+		? preview.actions.find( ( a ) => a.action === confirmingAction ) || null
+		: null;
+	const target: ActionableOrder = { id: preview.id, carrier: preview.carrier };
+	const date = formatOrderDate( preview.date_created );
+
+	return (
+		<Modal
+			title={ sprintf(
+				/* translators: %s: order number, e.g. "301". */
+				__( 'Заказ %s', 'woodev-plugin-framework' ),
+				preview.order_number
+			) }
+			onRequestClose={ onClose }
+			className="woodev-orders-preview"
+		>
+			<div className="woodev-orders-preview__summary">
+				<StatusCell deliveryStatus={ preview.delivery_status } />
+				{ preview.carrier && (
+					<span className="woodev-orders-preview__carrier">{ preview.carrier.label }</span>
+				) }
+				{ date.text && (
+					<span className="woodev-orders-preview__date" title={ date.title }>
+						{ date.text }
+					</span>
+				) }
+			</div>
+
+			<div className="woodev-orders-preview__columns">
+				<section className="woodev-orders-preview__column">
+					<h3>{ __( 'Покупатель', 'woodev-plugin-framework' ) }</h3>
+					<p className="woodev-orders-preview__lead">{ preview.customer.name }</p>
+					{ preview.billing.phone && (
+						<p>
+							<a href={ 'tel:' + preview.billing.phone }>{ preview.billing.phone }</a>
+						</p>
+					) }
+					{ preview.billing.email && (
+						<p>
+							<a href={ 'mailto:' + preview.billing.email }>{ preview.billing.email }</a>
+						</p>
+					) }
+					{ preview.billing.address && (
+						<p className="woodev-orders-preview__address">{ preview.billing.address }</p>
+					) }
+				</section>
+
+				<section className="woodev-orders-preview__column">
+					<h3>{ __( 'Доставка', 'woodev-plugin-framework' ) }</h3>
+					<p className="woodev-orders-preview__lead">{ preview.shipping.destination_text }</p>
+					{ preview.shipping.method_title && (
+						<p className="woodev-orders-cell__meta">{ preview.shipping.method_title }</p>
+					) }
+					{ preview.tracking.number && (
+						<p className="woodev-orders-preview__tracking">
+							<span className="woodev-orders-preview__label">
+								{ __( 'Трек', 'woodev-plugin-framework' ) }
+							</span>
+							{ preview.tracking.url ? (
+								<a href={ preview.tracking.url } target="_blank" rel="noreferrer">
+									{ preview.tracking.number }
+								</a>
+							) : (
+								<span>{ preview.tracking.number }</span>
+							) }
+						</p>
+					) }
+				</section>
+			</div>
+
+			{ preview.items.length > 0 && (
+				<table className="woodev-orders-preview__items">
+					<thead>
+						<tr>
+							<th scope="col">{ __( 'Товар', 'woodev-plugin-framework' ) }</th>
+							<th scope="col" className="woodev-orders-preview__item-qty">
+								{ __( 'Кол-во', 'woodev-plugin-framework' ) }
+							</th>
+							<th scope="col" className="woodev-orders-preview__item-total">
+								{ __( 'Сумма', 'woodev-plugin-framework' ) }
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{ preview.items.map( ( item, index ) => (
+							<PreviewItemRow key={ index } item={ item } />
+						) ) }
+					</tbody>
+					<tfoot>
+						<tr>
+							<th scope="row" colSpan={ 2 }>
+								{ preview.payment.method_title || __( 'Итого', 'woodev-plugin-framework' ) }
+							</th>
+							<td className="woodev-orders-preview__item-total">
+								{ preview.payment.formatted_total }
+								{ preview.payment.needs_payment && (
+									<span className="woodev-orders-badge woodev-orders-badge--warn">
+										{ __( 'Ожидает оплаты', 'woodev-plugin-framework' ) }
+									</span>
+								) }
+							</td>
+						</tr>
+					</tfoot>
+				</table>
+			) }
+
+			{ preview.customer_note && (
+				<section className="woodev-orders-preview__note">
+					<h3>{ __( 'Комментарий покупателя', 'woodev-plugin-framework' ) }</h3>
+					<p>{ preview.customer_note }</p>
+				</section>
+			) }
+
+			{ confirming ? (
+				<footer className="woodev-orders-preview__footer">
+					<p className="woodev-orders-preview__confirm">
+						{ confirmQuestion( confirming, target ) }
+					</p>
+					<div className="woodev-orders-preview__buttons">
+						<Button variant="tertiary" onClick={ () => onCancelConfirm( preview.id ) }>
+							{ __( 'Нет', 'woodev-plugin-framework' ) }
+						</Button>
+						<Button
+							variant="primary"
+							isDestructive={ confirming.destructive }
+							onClick={ () => onActionClick( target, confirming ) }
+						>
+							{ __( 'Да', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</footer>
+			) : (
+				<footer className="woodev-orders-preview__footer">
+					<a className="woodev-orders-preview__edit" href={ preview.edit_url }>
+						{ __( 'Открыть заказ', 'woodev-plugin-framework' ) }
+					</a>
+					{ preview.actions.length > 0 && (
+						<div className="woodev-orders-preview__buttons">
+							{ preview.actions.map( ( action ) => (
+								<Button
+									key={ action.action }
+									variant={ action.destructive ? 'secondary' : 'primary' }
+									isDestructive={ action.destructive }
+									isBusy={ rowState?.pendingAction === action.action }
+									disabled={ isRowBusy( rowState ) }
+									onClick={ () => onActionClick( target, action ) }
+								>
+									{ action.label }
+								</Button>
+							) ) }
+						</div>
+					) }
+				</footer>
+			) }
+		</Modal>
+	);
+}
+
+/**
  * `TableCard`'s column headers. Only `ID` and `date` carry `isSortable` —
  * increment 1's REST route (`Orders_Controller::register_routes()`) passes
  * `orderby` straight through to `wc_get_orders()`, and those are the two
@@ -277,26 +981,103 @@ function TrackingCell( { tracking }: { tracking: OrderRowTracking } ) {
  * are left non-`required` so `TableCard`'s own column-visibility menu
  * (`showMenu`) has something real to toggle.
  */
-const HEADERS: WcTableHeader[] = [
-	{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true },
-	{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true },
-	{ key: 'status', label: __( 'Статус', 'woodev-plugin-framework' ), required: true },
-	{ key: 'customer', label: __( 'Покупатель', 'woodev-plugin-framework' ) },
-	{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ) },
-	{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ) },
-	{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ) },
-];
+/**
+ * Builds `TableCard`'s column headers — a function rather than a constant array since #874's
+ * `cb` header needs to render the select-all checkbox, wired to page-level state. Only `ID`
+ * and `date` carry `isSortable` — increment 1's REST route (`Orders_Controller::register_routes()`)
+ * passes `orderby` straight through to `wc_get_orders()`, and those are the two keys it was
+ * ever exercised against; the rest have no server-side ordering behind them, so they stay
+ * non-sortable rather than sending an `orderby` the query layer would silently ignore.
+ * `Покупатель`/`Доставка`/`Оплата`/`Трек` are left non-`required` so `TableCard`'s own
+ * column-visibility menu (`showMenu`) has something real to toggle.
+ */
+function buildHeaders( {
+	selectAllChecked,
+	selectAllDisabled,
+	onSelectAll,
+}: {
+	selectAllChecked: boolean;
+	selectAllDisabled: boolean;
+	onSelectAll: ( checked: boolean ) => void;
+} ): WcTableHeader[] {
+	return [
+		{
+			key: 'cb',
+			// ⚠ NO `screenReaderLabel` here — `table.tsx` wraps `label` in
+			// `aria-hidden={ Boolean( screenReaderLabel ) }`, and this `label` IS the
+			// accessible control. Adding one would hide the real checkbox from assistive
+			// tech entirely (see `wc-globals.d.ts`'s doc comment on `WcTableHeader`).
+			label: (
+				<CheckboxControl
+					__nextHasNoMarginBottom
+					checked={ selectAllChecked }
+					disabled={ selectAllDisabled }
+					onChange={ onSelectAll }
+					aria-label={ __( 'Выбрать все заказы на странице', 'woodev-plugin-framework' ) }
+				/>
+			),
+			cellClassName: 'woodev-orders-cb-cell',
+			// ⚠ `required` keeps it OUT of `TableCard`'s column-visibility menu, and that is
+			// the only reason it is set — the selection column is not something a merchant
+			// hides. Without it the menu listed `cb` as a toggleable column whose "label" is
+			// this very `<CheckboxControl>`, so a live select-all checkbox was rendered inside
+			// the dropdown with no caption beside it (operator, rig, 13.09.2026).
+			required: true,
+		},
+		{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true },
+		{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true },
+		{ key: 'status', label: __( 'Статус', 'woodev-plugin-framework' ), required: true },
+		{ key: 'customer', label: __( 'Покупатель', 'woodev-plugin-framework' ) },
+		{ key: 'shipping', label: __( 'Доставка', 'woodev-plugin-framework' ) },
+		{ key: 'payment', label: __( 'Оплата', 'woodev-plugin-framework' ) },
+		{ key: 'tracking', label: __( 'Трек', 'woodev-plugin-framework' ) },
+		{ key: 'actions', label: __( 'Действие', 'woodev-plugin-framework' ) },
+	];
+}
+
+/** The per-row callbacks {@link buildRow} needs, threaded through from `OrdersPage`. */
+interface OrderActionsCallbacks {
+	rowState?: RowActionState;
+	onActionClick: ( row: ActionableOrder, action: OrderRowAction ) => void;
+	onCancelConfirm: ( orderId: number ) => void;
+	/** #874 — whether this row is currently in the bulk-action selection. */
+	selected: boolean;
+	onToggleSelected: ( orderId: number, checked: boolean ) => void;
+	/** #875 — opens the preview modal for this row. */
+	onOpenPreview: ( orderId: number ) => void;
+	/** #875 — the order whose preview is being fetched right now, or null. */
+	previewLoadingId: number | null;
+}
 
 /** Builds one `TableCard` row from a REST row — display cell + raw sort value each. */
-function buildRow( row: OrderRow ): WcTableRowCell[] {
+function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCell[] {
 	const date = formatOrderDate( row.date_created );
 
 	return [
 		{
 			display: (
-				<a href={ row.edit_url }>
-					{ sprintf( __( 'Заказ %s', 'woodev-plugin-framework' ), row.order_number ) }
-				</a>
+				<CheckboxCell
+					row={ row }
+					checked={ actions.selected }
+					rowState={ actions.rowState }
+					onToggle={ actions.onToggleSelected }
+				/>
+			),
+			// No ordering behind this column, same reason the «Действие» cell below has none.
+			value: '',
+		},
+		{
+			display: (
+				<>
+					<a href={ row.edit_url }>
+						{ sprintf( __( 'Заказ %s', 'woodev-plugin-framework' ), row.order_number ) }
+					</a>
+					<PreviewButton
+						row={ row }
+						isLoading={ actions.previewLoadingId === row.id }
+						onOpen={ actions.onOpenPreview }
+					/>
+				</>
 			),
 			value: row.id,
 		},
@@ -306,6 +1087,19 @@ function buildRow( row: OrderRow ): WcTableRowCell[] {
 		{ display: <ShippingCell row={ row } />, value: row.shipping.destination_text },
 		{ display: <PaymentCell payment={ row.payment } />, value: row.payment.formatted_total },
 		{ display: <TrackingCell tracking={ row.tracking } />, value: row.tracking.number || '' },
+		{
+			display: (
+				<ActionsCell
+					row={ row }
+					rowState={ actions.rowState }
+					onActionClick={ actions.onActionClick }
+					onCancelConfirm={ actions.onCancelConfirm }
+				/>
+			),
+			// No meaningful ordering behind this column — nothing sorts on it server-side,
+			// same reason the header itself carries no `isSortable`.
+			value: '',
+		},
 	];
 }
 
@@ -603,8 +1397,84 @@ export default function OrdersPage() {
 	 */
 	const [ carrierCounts, setCarrierCounts ] = useState<Record<string, number> | null>( null );
 	const [ error, setError ] = useState( '' );
+	/**
+	 * #824 — one {@link RowActionState} per order id, only for rows that currently have
+	 * something to show (pending or awaiting confirm); a row absent from this map is
+	 * neither. A plain object rather than a `Map` because it is only ever read/written
+	 * through `setState`, the same way every other piece of state on this page is.
+	 */
+	const [ actionRowStates, setActionRowStates ] = useState<Record<number, RowActionState>>( {} );
+	/**
+	 * #824 — the last row action's outcome, shown in the SAME `Notice` slot the fetch
+	 * error above already uses rather than a second mechanism. Unlike `error`, this is
+	 * dismissible: it reports a single past event, not a condition the table is still in,
+	 * so there is nothing wrong with the merchant clearing it themselves.
+	 */
+	const [ actionNotice, setActionNotice ] = useState<{ status: 'success' | 'error'; text: string } | null>(
+		null
+	);
+	/**
+	 * #874 — the bulk request's OWN two sentences, separate from `actionNotice` above: a
+	 * bulk response can carry BOTH a success and an error message at once (partial
+	 * failure), and `actionNotice` only ever holds one. Both render — inline here, and as
+	 * a snackbar each, same as `actionNotice` — when both are present.
+	 */
+	const [ bulkNotice, setBulkNotice ] = useState<{ success?: string; error?: string } | null>( null );
+	/**
+	 * #874 — the ids currently checked in the `cb` column, page-scoped: cleared whenever a
+	 * new page of `rows` is fetched (below), so a stale id from a page the merchant has
+	 * navigated away from can never ride along in a bulk request.
+	 */
+	const [ selectedIds, setSelectedIds ] = useState<Set<number>>( new Set() );
+	/** #874 — the bulk-action picker's own current value; `''` is "nothing chosen". */
+	const [ bulkAction, setBulkAction ] = useState( '' );
+	/** #874 — a destructive bulk pick awaiting «Да / Нет», page-level (not keyed by row). */
+	const [ bulkConfirming, setBulkConfirming ] = useState<BulkAction | null>( null );
+	/** #875 — which order's preview `Modal` is open, or `null` for closed. */
+	const [ previewOrderId, setPreviewOrderId ] = useState<number | null>( null );
+	/**
+	 * #875 round 2 — previews already fetched, keyed by order id, and the id currently being
+	 * fetched (at most one: the merchant clicks one eye at a time).
+	 *
+	 * Operator, on the rig: *«при клике по глазу спиннер крутится на иконке, как только данные
+	 * получены — открывается модалка сразу уже с данными. При повторном клике нового запроса
+	 * уже нет»*. That is WooCommerce's own behaviour, and it is why the fetch lives HERE rather
+	 * than inside the modal: a modal that fetches on mount has to be mounted first, which is
+	 * exactly the small-then-huge flash he rejected.
+	 *
+	 * The cache is dropped whenever a row is rebuilt by an action, so a preview can never show
+	 * a state the action has already changed.
+	 */
+	const [ previewCache, setPreviewCache ] = useState<Record< number, OrderPreview >>( {} );
+	const [ previewLoadingId, setPreviewLoadingId ] = useState<number | null>( null );
+	/**
+	 * #824 round 2 — the native WP snackbar queue, the same mechanism the settings page
+	 * already uses (`src/settings-page/app.js`). Operator, on the rig: the inline notice
+	 * above the table *«просто не видно»*, and a toast is what the settings pages do.
+	 *
+	 * ⚠ The inline `Notice` STAYS — he was explicit that the existing notification type
+	 * remains as well. The toast is additive: it is what catches the eye at the moment the
+	 * request settles, the inline notice is what is still readable afterwards.
+	 */
+	const snackbars = useSelect(
+		( select ) => select( noticesStore ).getNotices().filter( ( n ) => 'snackbar' === n.type ),
+		[]
+	);
 
 	const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>( null );
+	/**
+	 * #824 round 2 (MEDIUM 4) — bumped every time the fetch effect below starts a NEW
+	 * GET, so {@link performAction} can tell whether the view it fired an action from
+	 * is still the current one by the time the action's response comes back.
+	 *
+	 * Sequence this guards: click «Выгрузить» on order 42 in «Все»; switch to «Новые»
+	 * while the POST is in flight; the new GET (which bumps this ref) legitimately
+	 * excludes 42; the POST then resolves — without the guard it would still write the
+	 * exported row 42 into the rows array, resurrecting it into a table it no longer
+	 * belongs in. The NOTICE still shows either way: the action really did happen and
+	 * the merchant must be told. Only the row swap is conditional.
+	 */
+	const fetchGeneration = useRef( 0 );
 
 	// Every control in the filter row — both `FilterPicker`s, `DateRangeFilterPicker`,
 	// `AdvancedFilters` — changes the URL by NAVIGATING rather than calling back with a
@@ -696,8 +1566,14 @@ export default function OrdersPage() {
 	useEffect( () => {
 		let cancelled = false;
 
+		fetchGeneration.current += 1;
+
 		setError( '' );
 		setRows( null );
+		// #874: a fresh page of rows makes any prior selection page-scoped nonsense — an
+		// id selected on the page the merchant just left must never ride along silently
+		// in the NEXT bulk request.
+		setSelectedIds( new Set() );
 
 		fetchOrders( {
 			carrier: urlFilters.carrier,
@@ -786,13 +1662,314 @@ export default function OrdersPage() {
 		}
 	};
 
+	/**
+	 * #824 — sends one row action. Success swaps the row IN PLACE (never a refetch: a
+	 * refetch can return a different page of a moving dataset and the merchant loses
+	 * their place) and shows the server's message; failure leaves the row untouched and
+	 * shows the server's message as an error. Both branches clear this row's
+	 * pending/confirm state, whether the call succeeded or not.
+	 *
+	 * ⚠ The scope counts and carrier counts above the table are computed by the SAME
+	 * request that built the rows, and a successful export changes which bucket the order
+	 * is in — replacing one row does not update them. Left stale until the next natural
+	 * refetch on purpose: recomputing them client-side would defeat the reason they are
+	 * server-computed at all (#841/#855 — the merchant checks them against the menu
+	 * badge), and staleness here is honest, not silent.
+	 *
+	 * Accepts {@link ActionableOrder} rather than a full `OrderRow` since #875 — the
+	 * preview modal drives this same function off an `OrderPreview`. Both branches also
+	 * close the preview modal WHEN IT IS OPEN ON THIS ORDER, whether the call succeeded
+	 * or failed — the brief's own "reflects the result (or closes)": this modal has no
+	 * detailed re-fetch of its own, so closing is what keeps it from showing a now-stale
+	 * preview after the underlying order changed.
+	 */
+	const performAction = ( row: ActionableOrder, action: OrderRowAction ) => {
+		setActionRowStates( ( current ) => ( {
+			...current,
+			[ row.id ]: { pendingAction: action.action, confirmingAction: null },
+		} ) );
+
+		// Captured NOW, before the request goes out — compared against the live ref
+		// when the response comes back, so a refetch that lands first (the merchant
+		// switched scope/filter/page while the action was in flight) is detected.
+		const generation = fetchGeneration.current;
+
+		performOrderAction( row.id, action.action )
+			.then( ( res ) => {
+				setActionNotice( { status: 'success', text: res.message } );
+				dispatch( noticesStore ).createSuccessNotice( res.message, { type: 'snackbar' } );
+
+				// The action really did happen — the notice above always shows. Only the
+				// row swap is conditional: a table refetched since this action started is
+				// no longer the view this row belongs in.
+				if ( fetchGeneration.current === generation ) {
+					setRows( ( current ) =>
+						current ? current.map( ( r ) => ( r.id === row.id ? res.row : r ) ) : current
+					);
+				}
+				setActionRowStates( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+				setPreviewOrderId( ( current ) => ( current === row.id ? null : current ) );
+				// A cached preview describes the order BEFORE the action; drop it, or a second
+				// click on the eye would reopen the stale one instantly (which is exactly what
+				// the cache makes possible).
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+			} )
+			.catch( ( err: { message?: string } ) => {
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось выполнить действие.', 'woodev-plugin-framework' );
+
+				setActionNotice( { status: 'error', text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+				setActionRowStates( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+				setPreviewOrderId( ( current ) => ( current === row.id ? null : current ) );
+				// A cached preview describes the order BEFORE the action; drop it, or a second
+				// click on the eye would reopen the stale one instantly (which is exactly what
+				// the cache makes possible).
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
+			} );
+	};
+
+	/**
+	 * #874 — sends one bulk action over the currently selected ids. Every targeted id is
+	 * marked busy in the SAME `actionRowStates` map a single-row action uses (so the `cb`
+	 * column disables and #873's busy bar shows for every targeted row, not just one),
+	 * and cleared from it once the request settles either way — success, failure, or a
+	 * network-level rejection with no `messages` at all.
+	 *
+	 * ⚠ Selection clearing is SELECTIVE, per the brief: only the ids present in the
+	 * response's `rows` (the ones that actually changed) drop out of `selectedIds`; a
+	 * skipped or failed id stays selected, since nothing happened to it.
+	 */
+	const performBulkAction = ( action: string, ids: number[] ) => {
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			ids.forEach( ( id ) => {
+				next[ id ] = { pendingAction: action, confirmingAction: null };
+			} );
+			return next;
+		} );
+
+		const generation = fetchGeneration.current;
+
+		const clearBusy = () => {
+			setActionRowStates( ( current ) => {
+				const next = { ...current };
+				ids.forEach( ( id ) => delete next[ id ] );
+				return next;
+			} );
+		};
+
+		performBulkOrderAction( action, ids )
+			.then( ( res: BulkActionResult ) => {
+				setBulkNotice( res.messages );
+
+				if ( res.messages.success ) {
+					dispatch( noticesStore ).createSuccessNotice( res.messages.success, { type: 'snackbar' } );
+				}
+				if ( res.messages.error ) {
+					dispatch( noticesStore ).createErrorNotice( res.messages.error, { type: 'snackbar' } );
+				}
+
+				const changedIds = new Set( res.rows.map( ( r ) => r.id ) );
+
+				// Same reason as the single-action path: a cached preview of an order this
+				// bulk run changed is now stale, and the cache would serve it instantly.
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					changedIds.forEach( ( id ) => delete next[ id ] );
+					return next;
+				} );
+
+				if ( fetchGeneration.current === generation ) {
+					setRows( ( current ) =>
+						current
+							? current.map( ( r ) => {
+									const updated = res.rows.find( ( u ) => u.id === r.id );
+									return updated || r;
+							  } )
+							: current
+					);
+				}
+
+				setSelectedIds( ( current ) => {
+					const next = new Set( current );
+					changedIds.forEach( ( id ) => next.delete( id ) );
+					return next;
+				} );
+
+				clearBusy();
+			} )
+			.catch( ( err: { message?: string } ) => {
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось выполнить массовое действие.', 'woodev-plugin-framework' );
+
+				setBulkNotice( { error: text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+				clearBusy();
+			} );
+	};
+
+	/**
+	 * A `destructive` action's first click never reaches the network — it only flips
+	 * this row into the inline «Да / Нет» confirm state. A second click on the SAME
+	 * action (now rendered as «Да») is what {@link ActionsCell} routes back here as the
+	 * real confirmation, so a non-destructive action and a confirmed destructive one
+	 * both end up calling {@link performAction} the same way.
+	 */
+	const onActionClick = ( row: ActionableOrder, action: OrderRowAction ) => {
+		if ( action.destructive && actionRowStates[ row.id ]?.confirmingAction !== action.action ) {
+			setActionRowStates( ( current ) => ( {
+				...current,
+				[ row.id ]: { pendingAction: null, confirmingAction: action.action },
+			} ) );
+			return;
+		}
+
+		performAction( row, action );
+	};
+
+	/** «Нет» on the inline confirm — drops the row back to its normal, un-confirming state. */
+	const onCancelConfirm = ( orderId: number ) => {
+		setActionRowStates( ( current ) => {
+			const next = { ...current };
+			delete next[ orderId ];
+			return next;
+		} );
+	};
+
+	/** #874 — one row's `cb` checkbox toggled. */
+	const onToggleSelected = ( orderId: number, checked: boolean ) => {
+		setSelectedIds( ( current ) => {
+			const next = new Set( current );
+			if ( checked ) {
+				next.add( orderId );
+			} else {
+				next.delete( orderId );
+			}
+			return next;
+		} );
+	};
+
+	// #874: every row on the CURRENT page that has a checkbox at all — never the ones
+	// `CheckboxCell` renders nothing for, never another page's ids, since `rows` only ever
+	// holds this page's data.
+	const checkableIds = ( rows || [] )
+		.filter( ( r ) => r.actions && r.actions.length > 0 )
+		.map( ( r ) => r.id );
+	const selectAllChecked =
+		checkableIds.length > 0 && checkableIds.every( ( id ) => selectedIds.has( id ) );
+
+	/** The header `cb`'s select-all — sets the underlying selection directly, busy rows included. */
+	const onSelectAll = ( checked: boolean ) => {
+		setSelectedIds( ( current ) => {
+			const next = new Set( current );
+			checkableIds.forEach( ( id ) => {
+				if ( checked ) {
+					next.add( id );
+				} else {
+					next.delete( id );
+				}
+			} );
+			return next;
+		} );
+	};
+
+	/** #874 — the bulk picker's «Применить»: a destructive pick confirms first, same as a row action. */
+	const onBulkApply = () => {
+		const chosen = BULK_ACTIONS.find( ( a ) => a.action === bulkAction );
+
+		if ( ! chosen || 0 === selectedIds.size ) {
+			return;
+		}
+
+		if ( chosen.destructive ) {
+			setBulkConfirming( chosen );
+			return;
+		}
+
+		performBulkAction( chosen.action, Array.from( selectedIds ) );
+	};
+
+	const onBulkConfirm = () => {
+		if ( ! bulkConfirming ) {
+			return;
+		}
+
+		performBulkAction( bulkConfirming.action, Array.from( selectedIds ) );
+		setBulkConfirming( null );
+	};
+
+	/** #875 — the eye button opens the preview `Modal` for that order. */
+	const onOpenPreview = ( orderId: number ) => {
+		if ( previewCache[ orderId ] ) {
+			setPreviewOrderId( orderId );
+			return;
+		}
+
+		setPreviewLoadingId( orderId );
+
+		fetchOrderPreview( orderId )
+			.then( ( res ) => {
+				setPreviewCache( ( current ) => ( { ...current, [ orderId ]: res } ) );
+				setPreviewLoadingId( null );
+				setPreviewOrderId( orderId );
+			} )
+			.catch( ( err: { message?: string } ) => {
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось загрузить заказ.', 'woodev-plugin-framework' );
+
+				setPreviewLoadingId( null );
+				setActionNotice( { status: 'error', text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+			} );
+	};
+
+	// ⚠ Bulk group FIRST, search second (operator, rig round 3). `TableCard` renders this
+	// array in order, so DOM order is the desktop order: the group sits at the left and the
+	// search field takes the rest of the row, ending at the right edge. On a narrow screen
+	// `style.scss` flips them — search full width on top, the group beneath — which is the
+	// opposite priority and the reason this is not just `flex-direction` on one breakpoint.
+	// ⚠ ONE element, not two. `TableCard` gives each entry of `actions` its own slot child,
+	// and WooCommerce's own `.woocommerce-table__actions` stretches those children to the
+	// full row — measured on the rig: both controls came back 1146px wide and stacked. Fighting
+	// that with specificity would be a bet on their internals; owning one wrapper and laying it
+	// out ourselves is not.
 	const actions = [
-		<SearchControl
-			key="search"
-			value={ searchInput }
-			placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
-			onChange={ setSearchInput }
-		/>,
+		<div className="woodev-orders__toolbar-row" key="toolbar">
+			<BulkActionsBar
+				selectedCount={ selectedIds.size }
+				value={ bulkAction }
+				onChange={ setBulkAction }
+				onApply={ onBulkApply }
+				confirming={ bulkConfirming }
+				onConfirm={ onBulkConfirm }
+				onCancelConfirm={ () => setBulkConfirming( null ) }
+			/>
+			<SearchControl
+				value={ searchInput }
+				placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
+				onChange={ setSearchInput }
+			/>
+		</div>,
 	];
 
 	// #835: carrier SCOPE and display MODE are two independent `FilterPicker`s
@@ -899,6 +2076,38 @@ export default function OrdersPage() {
 			{ error && (
 				<Notice status="error" isDismissible={ false }>
 					{ error }
+				</Notice>
+			) }
+			{ /* #824 — one row action's outcome, in the SAME slot as the fetch error above. */ }
+			{ actionNotice && (
+				<Notice
+					status={ actionNotice.status }
+					isDismissible
+					onRemove={ () => setActionNotice( null ) }
+				>
+					{ actionNotice.text }
+				</Notice>
+			) }
+			{ /*
+			 * #874 — a bulk response can carry BOTH sentences at once (partial failure);
+			 * both render, per the operator, so this is two `Notice`s, not one.
+			 */ }
+			{ bulkNotice?.success && (
+				<Notice
+					status="success"
+					isDismissible
+					onRemove={ () => setBulkNotice( ( current ) => current && { ...current, success: undefined } ) }
+				>
+					{ bulkNotice.success }
+				</Notice>
+			) }
+			{ bulkNotice?.error && (
+				<Notice
+					status="error"
+					isDismissible
+					onRemove={ () => setBulkNotice( ( current ) => current && { ...current, error: undefined } ) }
+				>
+					{ bulkNotice.error }
 				</Notice>
 			) }
 			{ hasAnyFilterControl && (
@@ -1022,8 +2231,26 @@ export default function OrdersPage() {
 			<TableCard
 				className="woodev-orders"
 				title={ __( 'Заказы доставки', 'woodev-plugin-framework' ) }
-				headers={ HEADERS }
-				rows={ null === rows ? [] : rows.map( buildRow ) }
+				headers={ buildHeaders( {
+					selectAllChecked,
+					selectAllDisabled: 0 === checkableIds.length,
+					onSelectAll,
+				} ) }
+				rows={
+					null === rows
+						? []
+						: rows.map( ( row ) =>
+								buildRow( row, {
+									rowState: actionRowStates[ row.id ],
+									onActionClick,
+									onCancelConfirm,
+									selected: selectedIds.has( row.id ),
+									onToggleSelected,
+									onOpenPreview,
+									previewLoadingId,
+								} )
+						  )
+				}
 				rowsPerPage={ perPage }
 				totalRows={ total }
 				isLoading={ null === rows }
@@ -1042,6 +2269,24 @@ export default function OrdersPage() {
 				}
 			/>
 			<RoiPanel />
+			{ /* #875 — opened only once its data is in hand, from `previewCache`; see
+			     `onOpenPreview()` for the fetch, the icon spinner and the cache. */ }
+			{ null !== previewOrderId && previewCache[ previewOrderId ] && (
+				<OrderPreviewModal
+					preview={ previewCache[ previewOrderId ] }
+					rowState={ actionRowStates[ previewOrderId ] }
+					onActionClick={ onActionClick }
+					onCancelConfirm={ onCancelConfirm }
+					onClose={ () => setPreviewOrderId( null ) }
+				/>
+			) }
+			{ /* #824 round 2 — native WP toasts, the same queue the settings page uses. Rendered
+			     last so it floats over the page rather than sitting inside the table card. */ }
+			<SnackbarList
+				className="woodev-orders__snackbars"
+				notices={ snackbars }
+				onRemove={ ( id: string ) => dispatch( noticesStore ).removeNotice( id ) }
+			/>
 		</>
 	);
 }

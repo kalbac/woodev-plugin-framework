@@ -14,10 +14,15 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 
@@ -62,29 +67,44 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private $row_builder;
 
 		/**
+		 * Action-set builder — also used by {@see self::perform_action()} to refuse
+		 * an action the client's button is stale about (card #824).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Actions
+		 */
+		private $order_actions;
+
+		/**
+		 * Maximum number of order ids one bulk request accepts (card #874). Rejected outright
+		 * with a clear `WP_Error` rather than silently truncated — a truncated batch would
+		 * perform the action on fewer orders than the merchant selected without saying so.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		private const BULK_MAX_IDS = 100;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `$order_actions` (card #824).
 		 *
-		 * @param Orders_Registry        $registry    orders registry.
-		 * @param Orders_Query|null      $query       scope-query builder; defaults to one built from $registry.
-		 * @param Order_Row_Builder|null $row_builder row builder; defaults to a new instance.
+		 * @param Orders_Registry        $registry      orders registry.
+		 * @param Orders_Query|null      $query         scope-query builder; defaults to one built from $registry.
+		 * @param Order_Row_Builder|null $row_builder   row builder; defaults to one built from `$order_actions`.
+		 * @param Order_Actions|null     $order_actions action-set builder; defaults to one built from $registry.
 		 */
-		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null, ?Order_Row_Builder $row_builder = null ) {
-			$this->registry    = $registry;
-			$this->query       = $query ?? new Orders_Query( $registry );
-			$this->row_builder = $row_builder ?? new Order_Row_Builder();
+		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null, ?Order_Row_Builder $row_builder = null, ?Order_Actions $order_actions = null ) {
+			$this->registry      = $registry;
+			$this->query         = $query ?? new Orders_Query( $registry );
+			$this->order_actions = $order_actions ?? new Order_Actions( $registry );
+			$this->row_builder   = $row_builder ?? new Order_Row_Builder( $this->order_actions );
 		}
 
-		/**
-		 * Registers the `/shipping/orders` route.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		public function register_routes(): void {
 			register_rest_route(
 				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
@@ -180,6 +200,85 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 				]
 			);
+
+			// Performs one row action — export/update/cancel (card #824). A write, so
+			// gated on `edit_shop_orders` rather than the (possibly weaker) page
+			// capability {@see self::get_items_permissions_check()} reuses.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/(?P<id>\d+)/actions/(?P<action>[a-z_]+)',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'perform_action' ],
+					'permission_callback' => [ $this, 'perform_action_permissions_check' ],
+					'args'                => [
+						'id'     => [
+							'type' => 'integer',
+						],
+						'action' => [
+							'type' => 'string',
+						],
+					],
+				]
+			);
+
+			// Bulk action + preview routes (SP-10 increment 4, cards #874/#875).
+			$this->register_bulk_action_route();
+		}
+
+		/**
+		 * Registers the `/shipping/orders/bulk/{action}` route.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function register_bulk_action_route(): void {
+			// Performs one action across many orders in a single request (card #874) — one
+			// request rather than N so the client can show ONE aggregate result instead of N
+			// races toasts. Gated the same as the single-order write route.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/bulk/(?P<action>[a-z_]+)',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'perform_bulk_action' ],
+					'permission_callback' => [ $this, 'perform_action_permissions_check' ],
+					'args'                => [
+						'action' => [
+							'type' => 'string',
+						],
+						'ids'    => [
+							'type'              => 'array',
+							'required'          => true,
+							'items'             => [
+								'type'    => 'integer',
+								'minimum' => 1,
+							],
+							'validate_callback' => [ __CLASS__, 'validate_bulk_ids' ],
+						],
+					],
+				]
+			);
+
+			// A read-only preview of one order for the panel a merchant opens without leaving
+			// the table (card #875) — same capability as the row list itself.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/(?P<id>\d+)/preview',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_preview' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => [
+						'id' => [
+							'type' => 'integer',
+						],
+					],
+				]
+			);
 		}
 
 		/**
@@ -193,6 +292,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		public function get_items_permissions_check( $request ): bool {
 			return current_user_can( $this->registry->get_page_capability() );
+		}
+
+		/**
+		 * Permission gate for {@see self::perform_action()}: `edit_shop_orders`, the
+		 * WooCommerce order-edit capability — STRICTER than
+		 * {@see self::get_items_permissions_check()}'s page capability
+		 * ({@see Orders_Registry::get_page_capability()} resolves to
+		 * `manage_woocommerce`), because this route mutates an order at a carrier
+		 * rather than merely reading the page. Mirrors
+		 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::handle_order_action()}'s
+		 * own capability check.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return bool
+		 */
+		public function perform_action_permissions_check( $request ): bool {
+			return current_user_can( 'edit_shop_orders' );
 		}
 
 
@@ -249,6 +367,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				sprintf( __( '%s is not a recognized delivery status.', 'woodev-plugin-framework' ), $param ),
 				[ 'status' => 400 ]
 			);
+		}
+
+		/**
+		 * REST `validate_callback` for `ids` on the bulk action route (card #874): rejects a
+		 * list longer than {@see self::BULK_MAX_IDS} with a clear error rather than silently
+		 * truncating it — a truncated batch would act on fewer orders than the merchant
+		 * selected without saying so. Per-item type/positivity is left to the `items` schema
+		 * declared alongside this callback.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed            $value   the request value.
+		 * @param \WP_REST_Request $request request.
+		 * @param string           $param   parameter name.
+		 * @return bool|\WP_Error
+		 */
+		public static function validate_bulk_ids( $value, $request, string $param ) {
+			if ( is_array( $value ) && count( $value ) > self::BULK_MAX_IDS ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_bulk_too_many_ids',
+					sprintf(
+						/* translators: %d: maximum number of order ids accepted per bulk request. */
+						__( 'За один раз можно обработать не более %d заказов.', 'woodev-plugin-framework' ),
+						self::BULK_MAX_IDS
+					),
+					[ 'status' => 400 ]
+				);
+			}
+
+			return true;
 		}
 
 		/**
@@ -566,6 +714,556 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			return null;
+		}
+
+		/**
+		 * Performs one order-row action — export/update/cancel (card #824).
+		 *
+		 * Never trusts the client's button: recomputes {@see Order_Actions::for_order()}
+		 * for THIS order right now and refuses an action outside that list — the
+		 * client's copy of the row can be stale the moment two requests race, or a
+		 * carrier's own gate (e.g. `supports_update()`) changed underneath it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `id` and `action` come from the route.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function perform_action( $request ) {
+			$order_id = absint( $request->get_param( 'id' ) );
+			$action   = (string) $request->get_param( 'action' );
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_order',
+					__( 'Заказ не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$provider = $this->resolve_matched_provider( $order );
+
+			if ( null === $provider ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_carrier',
+					__( 'Не удалось определить перевозчика для этого заказа.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+
+			if ( ! in_array( $action, $available, true ) ) {
+				// ⚠ Say WHY, not just "no". The gate that refused was computed one line
+				// above out of framework-owned state, so the reason is in hand — reporting
+				// the bare fact sends the merchant to support asking what it means
+				// (operator, s134). {@see Order_Actions::unavailable_reason()} answers for
+				// the framework's own gate only; a CARRIER-side refusal is #819's boundary
+				// and cannot be described here at all today.
+				return new \WP_Error(
+					'woodev_shipping_orders_action_not_available',
+					$this->order_actions->unavailable_reason( $order, $provider, $action ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+			if ( null === $handler ) {
+				// Cannot happen given `$available` is non-empty only when
+				// Order_Actions::for_order() itself resolved a handler — guarded
+				// anyway rather than trusting that invariant across the call above.
+				return new \WP_Error(
+					'woodev_shipping_orders_no_handler',
+					__( 'Для этого перевозчика не настроен обработчик отправлений.', 'woodev-plugin-framework' ),
+					[ 'status' => 500 ]
+				);
+			}
+
+			try {
+				$succeeded = $this->dispatch_action( $handler, $order, $action, $provider );
+			} catch ( \Throwable $exception ) {
+				$this->log_action_failure( $provider->get_id(), $action, $exception );
+
+				return $this->action_upstream_error();
+			}
+
+			if ( ! $succeeded ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_action_failed',
+					self::action_failure_message( $action ),
+					[ 'status' => 502 ]
+				);
+			}
+
+			return rest_ensure_response(
+				[
+					'row'     => $this->build_row( self::reread_order( $order ), $provider ),
+					'message' => self::action_success_message( $action ),
+				]
+			);
+		}
+
+		/**
+		 * Performs one action across many orders in a single request (card #874).
+		 *
+		 * **One request, not N** — N requests would produce N toasts, race the table's own
+		 * re-render, and cannot produce the aggregate sentence this route returns at all.
+		 *
+		 * For EACH id, in the order given: resolves the order and its provider, recomputes
+		 * {@see Order_Actions::for_order()} and checks the requested action is in it — never
+		 * trusting the client's selection, same as {@see self::perform_action()}. An order the
+		 * action does not apply to (unknown id, unresolvable carrier, action outside the
+		 * recomputed gate, no registered handler) is SKIPPED, not failed — the operator's own
+		 * rule: an inapplicable order is simply ignored for that action. Every ELIGIBLE order is
+		 * then dispatched through the same {@see self::dispatch_action()} path the single-order
+		 * route uses, so `export()` returning `''` (#860) counts as a failure there too, and an
+		 * exception is caught PER ORDER and counted as a failure rather than aborting the batch.
+		 *
+		 * Always a 200, even when every eligible order failed — a partial (or total) failure
+		 * among many orders is not a failed REQUEST.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `action` comes from the route, `ids` from
+		 *                                  the body.
+		 * @return \WP_REST_Response
+		 */
+		public function perform_bulk_action( $request ) {
+			$action = (string) $request->get_param( 'action' );
+			$ids    = (array) $request->get_param( 'ids' );
+
+			$eligible  = 0;
+			$succeeded = 0;
+			$failed    = 0;
+			$rows      = [];
+
+			foreach ( $ids as $id ) {
+				$order = wc_get_order( absint( $id ) );
+
+				if ( ! $order instanceof \WC_Order ) {
+					continue;
+				}
+
+				$provider = $this->resolve_matched_provider( $order );
+
+				if ( null === $provider ) {
+					continue;
+				}
+
+				$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+
+				if ( ! in_array( $action, $available, true ) ) {
+					continue;
+				}
+
+				$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+				if ( null === $handler ) {
+					// Cannot happen given `$available` is non-empty only when
+					// Order_Actions::for_order() itself resolved a handler — guarded anyway
+					// rather than trusting that invariant across the call above.
+					continue;
+				}
+
+				++$eligible;
+
+				try {
+					$succeeded_this_order = $this->dispatch_action( $handler, $order, $action, $provider );
+				} catch ( \Throwable $exception ) {
+					$this->log_action_failure( $provider->get_id(), $action, $exception );
+					$succeeded_this_order = false;
+				}
+
+				if ( $succeeded_this_order ) {
+					++$succeeded;
+					$rows[] = $this->build_row( self::reread_order( $order ), $provider );
+					continue;
+				}
+
+				++$failed;
+			}
+
+			return rest_ensure_response(
+				[
+					'action'    => $action,
+					'requested' => count( $ids ),
+					'eligible'  => $eligible,
+					'skipped'   => count( $ids ) - $eligible,
+					'succeeded' => $succeeded,
+					'failed'    => $failed,
+					'rows'      => $rows,
+					'messages'  => self::build_bulk_messages( $action, $eligible, $succeeded, $failed ),
+				]
+			);
+		}
+
+		/**
+		 * Builds the `messages` group of the bulk response.
+		 *
+		 * `success` is present only when `succeeded > 0`, `error` only when `failed > 0` — either
+		 * may be absent. When NOTHING among the requested ids was eligible, that general rule
+		 * would leave `messages` an empty object («Экспортировано 0 из 0» is never built), which
+		 * is honest but tells the merchant nothing about why; a single explanatory message is
+		 * returned instead.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action    the requested action id.
+		 * @param int    $eligible  orders that were actually attempted.
+		 * @param int    $succeeded of those, how many succeeded.
+		 * @param int    $failed    of those, how many failed.
+		 * @return array{success?:string,error?:string}
+		 */
+		private static function build_bulk_messages( string $action, int $eligible, int $succeeded, int $failed ): array {
+			if ( 0 === $eligible ) {
+				return [
+					'error' => __( 'Ни один из выбранных заказов не поддерживает это действие.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			$messages = [];
+
+			if ( $succeeded > 0 ) {
+				$messages['success'] = self::bulk_success_message( $action, $succeeded, $eligible );
+			}
+
+			if ( $failed > 0 ) {
+				$messages['error'] = self::bulk_failure_message( $action, $failed, $eligible );
+			}
+
+			return $messages;
+		}
+
+		/**
+		 * The Russian aggregate success sentence for one bulk action — the operator's own
+		 * wording, near-verbatim: «Экспортировано 3 из 5». **"из N" is the ELIGIBLE count**, not
+		 * the requested one — the sentence describes what was actually attempted.
+		 *
+		 * No countable noun appears here (unlike {@see self::bulk_failure_message()}), matching
+		 * the operator's own example exactly — so no `_n()` call is needed for this half.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action    the requested action id.
+		 * @param int    $succeeded orders successfully processed.
+		 * @param int    $eligible  orders actually attempted.
+		 * @return string
+		 */
+		private static function bulk_success_message( string $action, int $succeeded, int $eligible ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					$template = __( 'Экспортировано %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				case Order_Actions::CANCEL:
+					$template = __( 'Отменено %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				case Order_Actions::UPDATE:
+					$template = __( 'Обновлено %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				default:
+					$template = __( 'Выполнено %1$d из %2$d', 'woodev-plugin-framework' );
+			}
+
+			return sprintf( $template, $succeeded, $eligible );
+		}
+
+		/**
+		 * The Russian aggregate failure sentence for one bulk action — the operator's own
+		 * wording, near-verbatim: «Не удалось экспортировать 2 заказа из 5».
+		 *
+		 * ⚠ Russian has three plural forms («1 заказ» / «2 заказа» / «5 заказов»), so the count
+		 * is threaded through `_n()` rather than hand-built — a hand-built string is wrong at 1,
+		 * 2 and 5 alike. `_n()`'s own untranslated fallback is binary (singular vs one plural),
+		 * exactly like every other `_n()` call already in this framework (e.g. `_n( 'Every %d
+		 * Minute', 'Every %d Minutes', … )`); the THIRD Russian form only renders once the
+		 * shipped `woodev-plugin-framework-ru_RU` catalogue carries an entry for this exact
+		 * singular/plural pair with all three `msgstr` forms — a translation-catalogue update
+		 * this task's scope (`languages/**` is not among the touched paths) does not cover.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action   the requested action id.
+		 * @param int    $failed   orders that failed.
+		 * @param int    $eligible orders actually attempted.
+		 * @return string
+		 */
+		private static function bulk_failure_message( string $action, int $failed, int $eligible ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					$template = _n(
+						'Не удалось экспортировать %1$d заказ из %2$d',
+						'Не удалось экспортировать %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				case Order_Actions::CANCEL:
+					$template = _n(
+						'Не удалось отменить %1$d заказ из %2$d',
+						'Не удалось отменить %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				case Order_Actions::UPDATE:
+					$template = _n(
+						'Не удалось обновить %1$d заказ из %2$d',
+						'Не удалось обновить %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				default:
+					$template = __( 'Не удалось выполнить действие для %1$d из %2$d', 'woodev-plugin-framework' );
+			}
+
+			return sprintf( $template, $failed, $eligible );
+		}
+
+		/**
+		 * Returns what a shop owner needs to see about one order without opening it (card #875).
+		 *
+		 * Same capability as the row list ({@see self::get_items_permissions_check()}) — this is
+		 * a read, not a write.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `id` comes from the route.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function get_preview( $request ) {
+			$order_id = absint( $request->get_param( 'id' ) );
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_order',
+					__( 'Заказ не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$provider = $this->resolve_matched_provider( $order );
+
+			return rest_ensure_response( $this->row_builder->build_preview( $order, $provider ) );
+		}
+
+		/**
+		 * Dispatches one action to the carrier's shipment handler.
+		 *
+		 * ⚠ `export()` returns `''` on failure AND on a carrier response with no id
+		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
+		 * return bool.
+		 *
+		 * The framework itself performs only its own three verbs — export/cancel/
+		 * update. Anything else is a carrier extra declared via the
+		 * `woodev_shipping_order_actions` filter ({@see Order_Actions::for_order()});
+		 * the `default:` branch below is the matching PERFORMING-side extension
+		 * point, so such an action is not merely advertised but actually executed by
+		 * the carrier plugin that declared it. An action nothing hooks still fails
+		 * honestly (`false`) rather than reporting a fake success.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (MEDIUM 3): the `default:` branch applies the
+		 *              `woodev_shipping_perform_order_action` filter instead of
+		 *              unconditionally returning false, so a carrier's own declared
+		 *              action can actually be performed.
+		 *
+		 * @param Abstract_Shipment_Handler $handler handler resolved for the order's carrier.
+		 * @param \WC_Order                 $order   the order.
+		 * @param string                    $action  one of {@see Order_Actions}' action ids.
+		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @return bool
+		 */
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): bool {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
+
+					return '' !== $handler->export( $order, $settlement, $settlement_provider );
+
+				case Order_Actions::CANCEL:
+					return $handler->cancel( $order );
+
+				case Order_Actions::UPDATE:
+					return $handler->update( $order );
+
+				default:
+					/**
+					 * Performs a carrier's own extra order action (one declared via the
+					 * `woodev_shipping_order_actions` filter, not one of the framework's
+					 * own export/update/cancel verbs).
+					 *
+					 * The carrier plugin that declared the action is the only one that
+					 * knows how to perform it, so it hooks this filter, checks `$action`
+					 * (and, if it serves more than one carrier, `$provider`) is its own,
+					 * performs the action against its own API, and returns whether it
+					 * succeeded. Defaults to `false`, so an action nothing hooks still
+					 * fails honestly instead of reporting success it never earned.
+					 *
+					 * @since 2.0.2
+					 *
+					 * @param bool            $performed whether the action was performed successfully; default false.
+					 * @param string          $action    the action id, as declared by the carrier's filter.
+					 * @param \WC_Order       $order     the order the action was requested for.
+					 * @param Orders_Provider $provider  the matched carrier descriptor.
+					 */
+					return (bool) apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
+			}
+		}
+
+		/**
+		 * Re-reads an order's meta after a carrier action wrote to it.
+		 *
+		 * ⚠ Not a defensive nicety — without it the response is WRONG on a legacy-CPT
+		 * shop, and right on an HPOS one, which is exactly why no unit test and no pass
+		 * on the (HPOS) rig can catch it. {@see \Woodev_Order_Compatibility::update_order_meta()}
+		 * branches on the datastore: under HPOS it calls `$order->update_meta_data()` +
+		 * `save_meta_data()`, so the in-memory object this method was handed is already
+		 * current; on the legacy CPT store it calls `update_post_meta()` straight against
+		 * the row, BYPASSING that object's meta cache. So after a successful export the
+		 * same `$order` instance still reports the OLD `carrier_order_id` — and the row
+		 * built from it would come back with `is_exported` false and the pre-action
+		 * button set, leaving «Выгрузить» on screen for an order that was just exported
+		 * and inviting the merchant to export it a second time.
+		 *
+		 * `read_meta_data( true )` forces a re-read past the cache, which is correct on
+		 * both stores: under HPOS it re-reads what was just saved, on the CPT store it
+		 * picks up the write that went around the object.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order a carrier action just wrote to.
+		 * @return \WC_Order the same instance, with its meta re-read from the store.
+		 */
+		private static function reread_order( \WC_Order $order ): \WC_Order {
+			$order->read_meta_data( true );
+
+			return $order;
+		}
+
+		/**
+		 * Resolves the popular-settlements enrolment context for an order about to
+		 * be exported through this route — the settlement the customer picked at
+		 * checkout and the SAME provider that produced it (#488 slice 2).
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()}
+		 * exactly, but reads the framework's own shared singleton
+		 * ({@see Location_Provider_Registry::instance()}) directly rather than
+		 * depending on `Shipping_Admin_Order` — that class is PLUGIN-constructed
+		 * (each carrier plugin builds its own instance) and this REST controller has
+		 * no guaranteed access to one. `Location_Provider_Registry` and its
+		 * `Popular_Settlement_Store` are already framework-level singletons reused
+		 * this same way elsewhere (e.g. {@see Abstract_Shipment_Handler}'s own
+		 * constructor default), so this introduces no new coupling.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order about to be exported.
+		 * @return array{0: Location_Record|null, 1: Location_Provider|null}
+		 */
+		private function resolve_popular_settlement_context( \WC_Order $order ): array {
+			$settlement = Location_Provider_Registry::instance()->popular_settlement_store()->recall_candidate( $order );
+
+			if ( null === $settlement ) {
+				return [ null, null ];
+			}
+
+			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
+
+			return [ $settlement, $provider ];
+		}
+
+		/**
+		 * The Russian success sentence for one action.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action one of {@see Order_Actions}' action ids.
+		 * @return string
+		 */
+		private static function action_success_message( string $action ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					return __( 'Заказ выгружен перевозчику.', 'woodev-plugin-framework' );
+
+				case Order_Actions::CANCEL:
+					return __( 'Отправление отменено.', 'woodev-plugin-framework' );
+
+				case Order_Actions::UPDATE:
+					return __( 'Информация по заказу обновлена.', 'woodev-plugin-framework' );
+
+				default:
+					return __( 'Готово.', 'woodev-plugin-framework' );
+			}
+		}
+
+		/**
+		 * The Russian failure sentence for one action.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action one of {@see Order_Actions}' action ids.
+		 * @return string
+		 */
+		private static function action_failure_message( string $action ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					return __( 'Не удалось выгрузить заказ перевозчику.', 'woodev-plugin-framework' );
+
+				case Order_Actions::CANCEL:
+					return __( 'Не удалось отменить отправление.', 'woodev-plugin-framework' );
+
+				case Order_Actions::UPDATE:
+					return __( 'Не удалось обновить информацию по заказу.', 'woodev-plugin-framework' );
+
+				default:
+					return __( 'Действие не выполнено.', 'woodev-plugin-framework' );
+			}
+		}
+
+		/**
+		 * A generic 502 for an action that threw rather than returning false.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \WP_Error
+		 */
+		private static function action_upstream_error(): \WP_Error {
+			return new \WP_Error(
+				'woodev_shipping_orders_action_error',
+				__( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' ),
+				[ 'status' => 502 ]
+			);
+		}
+
+		/**
+		 * Logs an action failure. The browser only ever sees a generic 502.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string     $provider_id carrier/tab id.
+		 * @param string     $action      one of {@see Order_Actions}' action ids.
+		 * @param \Throwable $exception   the caught failure.
+		 * @return void
+		 */
+		private static function log_action_failure( string $provider_id, string $action, \Throwable $exception ): void {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a carrier failure; the browser only ever sees a generic 502.
+				sprintf(
+					'[woodev] shipping order action "%s" (%s) failed: %s',
+					$action,
+					$provider_id,
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+				)
+			);
 		}
 	}
 

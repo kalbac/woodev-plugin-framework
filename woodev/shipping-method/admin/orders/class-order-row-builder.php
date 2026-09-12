@@ -38,9 +38,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 	class Order_Row_Builder {
 
 		/**
+		 * Declares which of export/update/cancel are available on the row (card
+		 * #824). Defaults to one wired against the framework's shared registry
+		 * singleton — the same optional-dependency-defaults-to-a-singleton idiom
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler}'s own
+		 * constructor already uses for `$popular_settlement_store` — so an existing
+		 * `new Order_Row_Builder()` call site keeps compiling unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Actions
+		 */
+		private Order_Actions $order_actions;
+
+		/**
+		 * Constructor.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Order_Actions|null $order_actions action-set builder; defaults to one
+		 *                                          wired against {@see Orders_Registry::instance()}.
+		 */
+		public function __construct( ?Order_Actions $order_actions = null ) {
+			$this->order_actions = $order_actions ?? new Order_Actions( Orders_Registry::instance() );
+		}
+
+		/**
 		 * Builds the full row for one order.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `is_exported` and `actions` (card #824).
 		 *
 		 * @param \WC_Order            $order    matched order.
 		 * @param Orders_Provider|null $provider the carrier this row belongs to, or null
@@ -72,6 +99,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'type'            => $this->resolve_type( $order, $provider ),
 				'tracking'        => $this->build_tracking( $order, $provider ),
 				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
+				'is_exported'     => self::is_exported( $order, $provider ),
+				'actions'         => $this->order_actions->for_order( $order, $provider ),
 			];
 
 			/**
@@ -86,6 +115,234 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 			$filtered = apply_filters( 'woodev_shipping_orders_row', $row, $order, $provider );
 
 			return is_array( $filtered ) ? $filtered : $row;
+		}
+
+		/**
+		 * Builds what a shop owner needs to see about one order WITHOUT opening it (SP-10 card
+		 * #875) — a deliberate selection, not a dump: billing/shipping blocks, the shipping
+		 * method, the item table and the same actions the row itself offers. WooCommerce's own
+		 * `a.order-preview` panel is the reference for what belongs here.
+		 *
+		 * Reuses {@see self::build_customer()}, {@see self::build_payment()},
+		 * {@see self::build_tracking()} and {@see self::resolve_delivery_status()} — the row and
+		 * the preview describe the same order, so those four groups are byte-for-byte the row's
+		 * own, not second copies.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order to preview.
+		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be
+		 *                                        resolved.
+		 * @return array<string,mixed>
+		 */
+		public function build_preview( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$status  = $order->get_status();
+			$created = $order->get_date_created();
+
+			$preview = [
+				'id'              => $order->get_id(),
+				'order_number'    => $order->get_order_number(),
+				'edit_url'        => $order->get_edit_order_url(),
+				'date_created'    => $created ? $created->date( \DATE_ATOM ) : null,
+				'status'          => [
+					'slug'  => $status,
+					'label' => wc_get_order_status_name( $status ),
+				],
+				'carrier'         => null !== $provider
+					? [
+						'id'    => $provider->get_id(),
+						'label' => $provider->get_label(),
+					]
+					: null,
+				'customer'        => $this->build_customer( $order ),
+				'billing'         => $this->build_preview_billing( $order ),
+				'shipping'        => $this->build_preview_shipping( $order, $provider ),
+				'payment'         => $this->build_payment( $order ),
+				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
+				'tracking'        => $this->build_tracking( $order, $provider ),
+				'items'           => $this->build_preview_items( $order ),
+				'customer_note'   => (string) $order->get_customer_note(),
+				'actions'         => $this->order_actions->for_order( $order, $provider ),
+			];
+
+			/**
+			 * Filters the fully-built order preview before it is returned.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string,mixed>  $preview  built preview.
+			 * @param \WC_Order            $order    the order the preview was built from.
+			 * @param Orders_Provider|null $provider the matched carrier, or null.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_orders_preview', $preview, $order, $provider );
+
+			return is_array( $filtered ) ? $filtered : $preview;
+		}
+
+		/**
+		 * Builds the preview's `billing` field group.
+		 *
+		 * ⚠ HPOS-safe: the address comes from WooCommerce's own
+		 * `WC_Order::get_formatted_billing_address()`, never hand-assembled from
+		 * `get_post_meta()`. Returned as ONE string with real `\n` line breaks (via
+		 * {@see self::to_multiline_plain_text()}) rather than the method's own `<br/>`-joined
+		 * HTML — a REST row is JSON consumed by React, not PHP-rendered markup.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order.
+		 * @return array<string,mixed>
+		 */
+		private function build_preview_billing( \WC_Order $order ): array {
+			return [
+				'address' => self::without_leading_name(
+					self::to_multiline_plain_text( (string) $order->get_formatted_billing_address( '' ) ),
+					$order->get_formatted_billing_full_name()
+				),
+				'email'   => $order->get_billing_email(),
+				'phone'   => $order->get_billing_phone(),
+			];
+		}
+
+		/**
+		 * Builds the preview's `shipping` field group: the formatted shipping address ALONGSIDE
+		 * (not instead of) the resolved destination {@see self::resolve_destination()} already
+		 * gives the row — a pickup point overrides the destination shown to the merchant, but the
+		 * address on file is still worth showing next to it.
+		 *
+		 * ⚠ HPOS-safe: `get_formatted_shipping_address()`, never hand-assembled.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    order.
+		 * @param Orders_Provider|null $provider matched carrier, or null.
+		 * @return array<string,mixed>
+		 */
+		private function build_preview_shipping( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$destination = $this->resolve_destination( $order, $provider );
+
+			return [
+				'address'          => self::without_leading_name(
+					self::to_multiline_plain_text( (string) $order->get_formatted_shipping_address( '' ) ),
+					$order->get_formatted_shipping_full_name()
+				),
+				'method_title'     => $order->get_shipping_method(),
+				'destination_kind' => $destination['kind'],
+				'destination_text' => $destination['text'],
+			];
+		}
+
+		/**
+		 * Builds the preview's `items` field group — one entry per product line item. Fee,
+		 * shipping and tax lines are not order CONTENTS a shop owner is asking about here, so
+		 * they are left out exactly as `WC_Order::get_items()`'s own default `'line_item'` type
+		 * filter already does.
+		 *
+		 * ⚠ A missing SKU renders as `null`, never `''` or `'0'` — the field is genuinely absent,
+		 * not empty text.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order.
+		 * @return array<int,array<string,mixed>>
+		 */
+		private function build_preview_items( \WC_Order $order ): array {
+			$items = [];
+
+			foreach ( $order->get_items() as $item ) {
+				if ( ! $item instanceof \WC_Order_Item_Product ) {
+					continue;
+				}
+
+				$product = $item->get_product();
+				$sku     = $product instanceof \WC_Product ? (string) $product->get_sku() : '';
+
+				$items[] = [
+					'name'            => $item->get_name(),
+					'sku'             => '' !== $sku ? $sku : null,
+					'quantity'        => (int) $item->get_quantity(),
+					'formatted_total' => self::to_plain_text( wc_price( $item->get_total() ) ),
+				];
+			}
+
+			return $items;
+		}
+
+		/**
+		 * Reduces a WooCommerce address string to plain text with real `\n` line breaks.
+		 *
+		 * `WC_Order::get_formatted_billing_address()` / `get_formatted_shipping_address()`
+		 * return HTML with `<br/>`-joined lines — correct for PHP-rendered admin markup, wrong
+		 * for a REST field a React panel prints as text (same reasoning as
+		 * {@see self::to_plain_text()}, which this extends). `<br>` variants are converted to
+		 * `\n` BEFORE the remaining tags are stripped, so the line breaks survive the strip.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $markup address markup, possibly carrying `<br>` line breaks.
+		 * @return string
+		 */
+		private static function to_multiline_plain_text( string $markup ): string {
+			$with_breaks = (string) preg_replace( '/<br\s*\/?>/i', "\n", $markup );
+
+			return trim( html_entity_decode( wp_strip_all_tags( $with_breaks ), ENT_QUOTES, 'UTF-8' ) );
+		}
+
+		/**
+		 * Drops a leading line that merely repeats a name the panel already shows.
+		 *
+		 * WooCommerce's address format opens with `{name}`, so a formatted address always
+		 * starts with the recipient — correct on an order screen that shows nothing else, and
+		 * a visible duplicate in the preview panel, where the customer's name is already the
+		 * heading of the block the address sits in. Caught on the rig, s134: «Александра
+		 * Константинова-Виноградова» appeared twice, two lines apart.
+		 *
+		 * Compares the WHOLE first line, trimmed — not a prefix match. A street that merely
+		 * begins with the customer's surname keeps its line.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $address plain-text address with `\n` line breaks.
+		 * @param string $name    the name already displayed beside it.
+		 * @return string
+		 */
+		private static function without_leading_name( string $address, string $name ): string {
+			$name = trim( $name );
+
+			if ( '' === $name || '' === $address ) {
+				return $address;
+			}
+
+			$lines = explode( "\n", $address );
+
+			if ( trim( (string) reset( $lines ) ) === $name ) {
+				array_shift( $lines );
+			}
+
+			return trim( implode( "\n", $lines ) );
+		}
+
+		/**
+		 * Whether an order has ever been exported to its carrier (card #860): the
+		 * provider's own `carrier_order_id` meta key is present AND non-empty.
+		 *
+		 * Follows the same read pattern as {@see self::build_tracking()}. A provider
+		 * with no declared `carrier_order_id_meta_key` → false: the framework cannot
+		 * know, and does not guess (the same asymmetry
+		 * {@see Orders_Query::is_exported_meta_clauses()} documents).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    order.
+		 * @param Orders_Provider|null $provider matched carrier, or null.
+		 * @return bool
+		 */
+		private static function is_exported( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			if ( null === $provider || null === $provider->get_carrier_order_id_meta_key() ) {
+				return false;
+			}
+
+			return '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_carrier_order_id_meta_key() );
 		}
 
 		/**

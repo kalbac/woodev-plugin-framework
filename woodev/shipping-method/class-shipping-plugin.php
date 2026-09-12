@@ -259,6 +259,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-orders-provider.php';
 			require_once $path . '/admin/orders/class-orders-registry.php';
 			require_once $path . '/admin/orders/class-orders-query.php';
+			require_once $path . '/admin/orders/class-order-actions.php';
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 
 			// REST API (§8 checkout classes' server-side counterparts)

@@ -1,0 +1,116 @@
+#!/usr/bin/env sh
+#
+# Refuses a push whose built bundles or translation catalogue do not match its sources.
+#
+# WHY THIS EXISTS — measured in s134, over all 600 CI runs of `ci.yml`. Taking the FIRST
+# CI run per branch ("was the PR green on the first try?"), dependabot excluded:
+#
+#     W35 (25-31.08)   90 green /  5 red   95%
+#     W36 (01-07.09)   55 green /  2 red   96%
+#     W37 (08-12.09)   19 green /  7 red   73%
+#
+# The collapse is not flakiness. Seven of the eight reds since 05.09 are TWO gate
+# families, both about GENERATED artefacts:
+#
+#     Lint  -> "No source string missing from the translation catalogue" (#791)   x4
+#     JS    -> "No untranslated English msgid in the Russian catalogue"   (#771)   x1
+#     Assets build parity -> "Verify build parity"                                 x3
+#
+# They are the collision of two rules that are each correct on their own:
+#
+#   1. An agent working in a worktree MUST NOT build bundles — a worktree's build cannot
+#      match CI's, so bundles are built and committed in the primary checkout only
+#      (gotcha `local-npm-run-build-is-not-assets-parity-evidence`).
+#   2. `lint:i18n-sources` and `lint:i18n` extract msgids from `woodev/` — which INCLUDES
+#      the built bundle, not `src/` (gotcha, s129).
+#
+# So a Russian string added in a `.tsx` file is invisible to every gate the worker can
+# run: their suite is honestly green, and CI goes red the moment someone builds. Before
+# SP-10 this almost never bit, because the work was mostly PHP, where the worker's gate
+# and CI's gate are the same gate. Since the orders page became React/TS with Russian
+# copy, nearly every PR touches src/ -> bundle -> catalogue.
+#
+# Cost, measured: build 18s + the three catalogue gates 4s = ~22s, and only on a push
+# that actually touches the relevant sources.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Escape hatch (do not make it a habit): git push --no-verify
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+zero='0000000000000000000000000000000000000000'
+relevant=0
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref pushed.
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+	[ "$local_sha" = "$zero" ] && continue
+
+	if [ "$remote_sha" = "$zero" ]; then
+		# New branch: compare against the merge base with main rather than walking its
+		# whole history, which on a long-lived branch would touch everything.
+		base=$(git merge-base "$local_sha" origin/main 2>/dev/null || git rev-parse "$local_sha^" 2>/dev/null || true)
+	else
+		base="$remote_sha"
+	fi
+
+	[ -n "$base" ] || continue
+
+	if git diff --name-only "$base" "$local_sha" -- src woodev ':(exclude)woodev/assets/build' \
+		| grep -q .; then
+		relevant=1
+	fi
+done
+
+if [ "$relevant" -eq 0 ]; then
+	exit 0
+fi
+
+printf 'pre-push: sources under src/ or woodev/ changed — checking bundles and catalogue.\n'
+
+if ! npm run build >/dev/null 2>&1; then
+	printf '\npre-push: REFUSED — `npm run build` failed. Run it yourself to see why.\n'
+	exit 1
+fi
+
+# The exact question CI's "Assets build parity" job asks: does a fresh build reproduce
+# what is committed?
+stale=$(git status --porcelain -- woodev/assets/build)
+
+if [ -n "$stale" ]; then
+	printf '\npre-push: REFUSED — the build changed committed bundles, so this push would fail\n'
+	printf '          CI'"'"'s "Assets build parity" job:\n\n%s\n\n' "$stale"
+	printf '          Commit the rebuilt bundles (primary checkout only) and push again.\n'
+	exit 1
+fi
+
+# Read the EXIT CODE of each gate, never its last lines: s134 pushed a red `lint:i18n`
+# after reading `tail -3` of a `;`-chained run, where the failing lines had scrolled past.
+failed=''
+
+for gate in lint:i18n lint:i18n-sources lint:mo; do
+	if ! npm run "$gate" >/dev/null 2>&1; then
+		failed="$failed $gate"
+	fi
+done
+
+if [ -n "$failed" ]; then
+	printf '\npre-push: REFUSED — catalogue gate(s) failed:%s\n\n' "$failed"
+
+	for gate in $failed; do
+		# ⚠ `printf '--- ...'` is not portable: a format string starting with `--` is read
+		# as an option terminator and bash's builtin refuses it outright — which made this
+		# very hook die with exit 2 instead of printing the failure it had just caught.
+		printf '%s\n' "--- npm run $gate ---"
+		npm run "$gate" 2>&1 | sed 's/^/    /' || true
+		printf '\n'
+	done
+
+	printf '          These are the same gates CI runs (#771, #791). Fix them here, not in a\n'
+	printf '          follow-up commit on the PR.\n'
+	exit 1
+fi
+
+printf 'pre-push: bundles reproduce and the catalogue is complete.\n'
+exit 0

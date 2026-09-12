@@ -211,7 +211,10 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   way while merely describing plans; a deliberate `Closes #123` on its own line still works.
   `post-merge`/`post-checkout`/`post-commit`/`post-rewrite` run `composer dump-autoload` when a
   git operation moved framework sources (#802) — `vendor/` is gitignored, so git never refreshes
-  that snapshot itself. All hooks are committed `100755`: POSIX git silently IGNORES a
+  that snapshot itself. **`pre-push` rebuilds the bundles and runs `lint:i18n`/`lint:i18n-sources`/`lint:mo`
+  by EXIT CODE when a push touches `src/` or `woodev/`** (~22 s; skipped otherwise) — those two gate
+  families were 7 of the 8 first-try CI reds since 05.09, because a worker may not build bundles and
+  both gates read msgids out of the BUILT one (s134). All hooks are committed `100755`: POSIX git silently IGNORES a
   non-executable hook, and on Windows `core.fileMode=false` hides that from you.
 - **Point github.com at `gh` once per machine: `gh auth setup-git`** (#560, operator 27.08.2026).
   Without it `git push` hangs forever with no output, no error and no prompt. Verify BEFORE the

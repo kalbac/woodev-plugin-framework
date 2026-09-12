@@ -1237,6 +1237,96 @@ class OrdersRestTest extends TestCase {
 	}
 
 	/**
+	 * #860, on a REAL database: an order whose carrier-order-id meta EXISTS but is the
+	 * EMPTY STRING is NOT exported, and belongs in «Новые».
+	 *
+	 * ⚠ This population is the whole of #860 and neither sibling test above covers it —
+	 * they only contrast "has an id" against "has no such meta row at all".
+	 * `Abstract_Shipment_Handler::export()` writes the meta UNCONDITIONALLY, including
+	 * the empty string when the carrier answered without an id, so a FAILED export
+	 * created exactly this row and `EXISTS` counted it as exported: the order dropped
+	 * out of «Новые» permanently and the row offered «Обновить»/«Отменить» for a
+	 * shipment that was never created.
+	 *
+	 * It has to be an integration test rather than a unit one because the claim is about
+	 * what `WP_Meta_Query` COMPILES to: the positive clause is `!=` against an INNER
+	 * JOIN (a row with no meta at all must not match) and the negative one ORs
+	 * `NOT EXISTS` with `= ''` on the same key (which must still match a row with no
+	 * meta at all, via the LEFT JOIN the `NOT EXISTS` branch forces). A mocked query
+	 * asserts the array we built, not the SQL WordPress builds from it — and this suite
+	 * runs on the legacy CPT datastore, which is the half the HPOS rig can never prove.
+	 */
+	public function test_an_empty_carrier_order_id_is_not_exported_on_both_sides_of_the_filter(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker               = '_woodev_test_empty_id_marker';
+		$carrier_order_id_key = '_woodev_test_empty_id_carrier_order_id';
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'empty_id_a', 'Empty Id A', $marker, [ 'empty_id_a' ], [ 'carrier_order_id_meta_key' => $carrier_order_id_key ] )
+		);
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		// The #860 row: export ran, the carrier answered with no id, the meta was
+		// written as ''. Not exported.
+		$failed_export = wc_create_order();
+		$failed_export->set_status( 'processing' );
+		$failed_export->update_meta_data( $marker, '1' );
+		$failed_export->update_meta_data( $carrier_order_id_key, '' );
+		$failed_export->save();
+
+		// Never exported at all — no such meta row. Also not exported.
+		$never = wc_create_order();
+		$never->set_status( 'processing' );
+		$never->update_meta_data( $marker, '1' );
+		$never->save();
+
+		// Genuinely exported.
+		$exported = wc_create_order();
+		$exported->set_status( 'processing' );
+		$exported->update_meta_data( $marker, '1' );
+		$exported->update_meta_data( $carrier_order_id_key, 'CDEK-42' );
+		$exported->save();
+
+		$new_request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$new_request->set_param( 'is_exported', false );
+
+		$new_response = rest_get_server()->dispatch( $new_request );
+		$this->assertSame( 200, $new_response->get_status() );
+
+		$new_ids = array_column( $new_response->get_data()['rows'], 'id' );
+
+		$this->assertContains(
+			$failed_export->get_id(),
+			$new_ids,
+			'#860: a failed export stored an empty carrier order id — the order is still new.'
+		);
+		$this->assertContains( $never->get_id(), $new_ids );
+		$this->assertNotContains( $exported->get_id(), $new_ids );
+
+		$exported_request = new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' );
+		$exported_request->set_param( 'is_exported', true );
+
+		$exported_response = rest_get_server()->dispatch( $exported_request );
+		$this->assertSame( 200, $exported_response->get_status() );
+
+		$exported_ids = array_column( $exported_response->get_data()['rows'], 'id' );
+
+		// The two filters must be exact complements — no row in both, none in neither.
+		$this->assertContains( $exported->get_id(), $exported_ids );
+		$this->assertNotContains(
+			$failed_export->get_id(),
+			$exported_ids,
+			'#860: the empty-id row must not appear on BOTH sides of the filter.'
+		);
+		$this->assertNotContains( $never->get_id(), $exported_ids );
+	}
+
+	/**
 	 * Adds the ambient `woodev_test_shipping` fixture method to a real shipping zone
 	 * and returns its instance id.
 	 *

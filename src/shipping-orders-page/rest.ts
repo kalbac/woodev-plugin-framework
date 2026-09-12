@@ -92,6 +92,18 @@ export interface OrderRow {
 	type: ShippingType;
 	tracking: OrderRowTracking;
 	delivery_status: OrderRowDeliveryStatus;
+	/**
+	 * #824: whether the order has ever been exported to the carrier. Optional for the same
+	 * reason as {@link OrdersResponse.scope_counts} and {@link OrdersResponse.carrier_counts} —
+	 * a cached bundle can outlive a rollback, and «not stated» must not be rendered as `false`.
+	 */
+	is_exported?: boolean;
+	/**
+	 * #824: the row's action buttons, in server order. Optional for the same reason as
+	 * `is_exported` above — an older server sends neither field, and «not stated» renders
+	 * an empty cell, never an invented button.
+	 */
+	actions?: OrderRowAction[];
 }
 
 /**
@@ -110,6 +122,23 @@ export interface OrderRow {
 export interface OrdersScopeCounts {
 	all: number;
 	new: number;
+}
+
+/**
+ * One action offered on a row (#824), e.g. «Выгрузить» / «Обновить» / «Отменить» — or a
+ * carrier extra registered through the server-side filter. Only AVAILABLE actions are
+ * sent; there is no disabled state to render, so an action missing from this array is an
+ * action that does not exist for this row, never one the merchant cannot currently use.
+ */
+export interface OrderRowAction {
+	/** `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter. */
+	action: string;
+	/** Button text, already translated server-side. */
+	label: string;
+	/** Tooltip; `''` when there is none. */
+	title: string;
+	/** `true` => confirm before sending. */
+	destructive: boolean;
 }
 
 /** The full response envelope `Orders_Controller::get_items()` returns. */
@@ -314,6 +343,143 @@ export function fetchOrders( {
 
 	return apiFetch<OrdersResponse>( {
 		url: `${ restRoot }?${ params.toString() }`,
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/** `POST /shipping/orders/<id>/actions/<action>`'s success envelope (#824). */
+export interface OrderActionResult {
+	/** The freshly rebuilt row for this order — swap it in place, never refetch the page. */
+	row: OrderRow;
+	/** A Russian sentence to show the merchant. */
+	message: string;
+}
+
+/**
+ * Performs one row action (#824 — «Выгрузить» / «Обновить» / «Отменить», or a carrier
+ * extra). Same `bootstrap()`/`apiFetch` wiring as {@link fetchOrders}, so the nonce is
+ * handled the same way.
+ *
+ * A rejection carries the server's own Russian `message` (`apiFetch` rejects with
+ * `{ message?: string, code?: string }` on a REST error) — the caller must show it, never
+ * swallow it.
+ */
+export function performOrderAction( orderId: number, action: string ): Promise<OrderActionResult> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<OrderActionResult>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/**
+ * `POST /shipping/orders/bulk/<action>`'s success envelope (#874, brief §3) — HTTP 200
+ * even on a partial failure, since a bulk request routinely mixes orders the server's own
+ * eligibility gate accepts and rejects.
+ *
+ * `skipped` is `requested - eligible` and is explicitly NOT an error — the brief is emphatic
+ * about this, and neither this type nor the caller must treat it as one.
+ */
+export interface BulkActionResult {
+	action: string;
+	/** How many ids the caller sent. */
+	requested: number;
+	/** How many of them the server's own gate accepted. */
+	eligible: number;
+	/** `requested - eligible`. Not an error. */
+	skipped: number;
+	succeeded: number;
+	failed: number;
+	/** Freshly rebuilt rows, ONLY for orders that actually changed — swap these in place. */
+	rows: OrderRow[];
+	/**
+	 * Both sentences are built SERVER-side and already pluralised (the framework owns every
+	 * user-facing string on this route) — render them verbatim, never compose one from the
+	 * numeric fields above. Either may be absent.
+	 */
+	messages: { success?: string; error?: string };
+}
+
+/**
+ * Performs one bulk action (#874) over a set of order ids — the framework's own
+ * «Экспортировать» / «Обновить» / «Отменить», or a carrier extra the server-side filter
+ * declares. Same `bootstrap()`/`apiFetch` wiring as {@link performOrderAction}, with a JSON
+ * body rather than a path segment for the ids, matching this repo's own POST convention
+ * (`settings-page/rest.js`'s `saveTab()`, `setup-wizard/rest.js`'s `saveStep()`).
+ */
+export function performBulkOrderAction( action: string, ids: number[] ): Promise<BulkActionResult> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<BulkActionResult>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/bulk/${ action }`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { ids },
+	} );
+}
+
+/** `preview.billing` — the framework never sends the raw WC billing array, only what a shop owner reads. */
+export interface OrderPreviewBilling {
+	address: string;
+	email: string;
+	phone: string;
+}
+
+/** `preview.shipping` — same destination fields the row itself carries (`OrderRowShipping`), plus the raw address. */
+export interface OrderPreviewShipping {
+	address: string;
+	method_title: string;
+	destination_kind: string;
+	destination_text: string;
+}
+
+/** One line item. An absent `sku` is `''`, never a dash or the word "null" (#875). */
+export interface OrderPreviewItem {
+	name: string;
+	sku: string;
+	quantity: number;
+	formatted_total: string;
+}
+
+/**
+ * `GET /shipping/orders/<id>/preview`'s response (#875, brief §4) — WooCommerce's own order
+ * preview (`a.order-preview`) is the reference for the SHAPE (billing/shipping side by side,
+ * then items, then actions); the fields themselves are ours, and the operator was explicit
+ * that only what a shop owner actually needs goes in. `actions` is the SAME
+ * {@link OrderRowAction} shape a row carries, run through the same single-action path.
+ */
+export interface OrderPreview {
+	id: number;
+	order_number: string;
+	edit_url: string;
+	date_created: string | null;
+	status: OrderRowStatus;
+	carrier: OrderRowCarrier | null;
+	customer: OrderRowCustomer;
+	billing: OrderPreviewBilling;
+	shipping: OrderPreviewShipping;
+	payment: OrderRowPayment;
+	delivery_status: OrderRowDeliveryStatus;
+	tracking: OrderRowTracking;
+	items: OrderPreviewItem[];
+	/** `''` when the order carries no note — never rendered as a dash or "null". */
+	customer_note: string;
+	actions: OrderRowAction[];
+}
+
+/**
+ * Fetches one order's preview (#875). Fetched on the modal's OPEN, not with the table —
+ * the detail is only ever needed for one order at a time, and the row list already carries
+ * everything the table itself renders.
+ */
+export function fetchOrderPreview( orderId: number ): Promise<OrderPreview> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<OrderPreview>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/preview`,
 		method: 'GET',
 		headers: { 'X-WP-Nonce': nonce },
 	} );

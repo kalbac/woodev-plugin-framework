@@ -56,7 +56,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '4';
+		public const SEED_VERSION = '5';
 
 		/**
 		 * Must match the marker key {@see \Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()}
@@ -230,6 +230,46 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		}
 
 		/**
+		 * The payment methods seeded orders cycle through (card #876) — several DIFFERENT ones,
+		 * never one for all: a «Оплата» column fed by a single value is a different shape from a
+		 * real shop's and hid two defects on this page before anyone noticed the column was
+		 * uniform rather than merely repetitive. Pure data, no WordPress calls.
+		 *
+		 * Deliberately sized at 5 — every OTHER cycling field in this file already uses a
+		 * modulus of 2, 3, 4 or 6 (persona count); a 5th distinct modulus keeps this fact
+		 * independent of all of them, the same reasoning {@see self::demo_orders()} already
+		 * gives for `tracking`/`carrier_order_id`/`is_guest`/`has_pickup`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array{method:string, title:string}>
+		 */
+		public static function payment_method_pool(): array {
+			return [
+				[
+					'method' => 'bacs',
+					'title'  => 'Банковская карта',
+				],
+				[
+					'method' => 'cod',
+					'title'  => 'Наложенный платёж',
+				],
+				[
+					'method' => 'yookassa',
+					'title'  => 'ЮKassa',
+				],
+				[
+					'method' => 'sbp',
+					'title'  => 'СБП',
+				],
+				[
+					'method' => 'bank_transfer',
+					'title'  => 'Банковский перевод',
+				],
+			];
+		}
+
+		/**
 		 * The demo orders' raw definitions.
 		 *
 		 * The first three are the ones that carry MEANING and are kept verbatim: a
@@ -268,46 +308,49 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, customer_index:int, is_guest:bool, has_pickup:bool, qty:int}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, customer_index:int, is_guest:bool, has_pickup:bool, qty:int, payment_method_index:int}>
 		 */
 		public static function demo_orders(): array {
 			$orders = [
 				[
-					'status'            => 'processing',
-					'raw_status'        => 'ON_THE_WAY',
-					'tracking'          => 'TESTCARRIER-000123',
-					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000123',
-					'days_ago'          => 0,
-					'customer_index'    => 0,
-					'is_guest'          => true,
-					'has_pickup'        => false,
-					'qty'               => 1,
+					'status'               => 'processing',
+					'raw_status'           => 'ON_THE_WAY',
+					'tracking'              => 'TESTCARRIER-000123',
+					'carrier_order_id'      => 'TESTCARRIER-EXPORT-000123',
+					'days_ago'              => 0,
+					'customer_index'        => 0,
+					'is_guest'              => true,
+					'has_pickup'            => false,
+					'qty'                   => 1,
+					'payment_method_index'  => 0,
 				],
 				[
-					'status'            => 'processing',
-					'raw_status'        => 'ARRIVED_PVZ',
-					'tracking'          => null,
-					'carrier_order_id'  => 'TESTCARRIER-EXPORT-000124',
-					'days_ago'          => 0,
+					'status'               => 'processing',
+					'raw_status'           => 'ARRIVED_PVZ',
+					'tracking'              => null,
+					'carrier_order_id'      => 'TESTCARRIER-EXPORT-000124',
+					'days_ago'              => 0,
 					// A registered customer whose parcel arrived at the pickup point —
 					// «ARRIVED_PVZ» and `has_pickup` agree on purpose.
-					'customer_index'    => 1,
-					'is_guest'          => false,
-					'has_pickup'        => true,
-					'qty'               => 2,
+					'customer_index'        => 1,
+					'is_guest'              => false,
+					'has_pickup'            => true,
+					'qty'                   => 2,
+					'payment_method_index'  => 1,
 				],
 				[
-					'status'            => 'processing',
-					'raw_status'        => 'LOST_IN_TRANSIT',
-					'tracking'          => 'TESTCARRIER-000125',
+					'status'               => 'processing',
+					'raw_status'           => 'LOST_IN_TRANSIT',
+					'tracking'              => 'TESTCARRIER-000125',
 					// Deliberately NOT exported — «lost» does not imply the framework's
 					// own export marker was ever written; the two are independent facts.
-					'carrier_order_id'  => null,
-					'days_ago'          => 0,
-					'customer_index'    => 2,
-					'is_guest'          => true,
-					'has_pickup'        => false,
-					'qty'               => 1,
+					'carrier_order_id'      => null,
+					'days_ago'              => 0,
+					'customer_index'        => 2,
+					'is_guest'              => true,
+					'has_pickup'            => false,
+					'qty'                   => 1,
+					'payment_method_index'  => 2,
 				],
 			];
 
@@ -366,6 +409,9 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 					// Every fifth row shows a pickup point instead of a plain address.
 					'has_pickup'        => 0 === $index % 5,
 					'qty'               => 1 + ( $index % 3 ),
+					// Cycles through every payment method (#876) on its OWN modulus — 5,
+					// distinct from every other cycling field above.
+					'payment_method_index' => $index % count( self::payment_method_pool() ),
 				];
 			}
 
@@ -406,13 +452,17 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, customer_index:int, is_guest:bool, has_pickup:bool, qty:int} $definition
+		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, customer_index:int, is_guest:bool, has_pickup:bool, qty:int, payment_method_index:int} $definition
 		 *
 		 * @return void
 		 */
 		private static function seed_one( array $definition ): void {
 			$order = wc_create_order();
 			$order->set_status( $definition['status'] );
+
+			$payment = self::payment_method_pool()[ $definition['payment_method_index'] % count( self::payment_method_pool() ) ];
+			$order->set_payment_method( $payment['method'] );
+			$order->set_payment_method_title( $payment['title'] );
 
 			// Backdate, so the list has a real spread to sort and filter by. WooCommerce
 			// stamps `date_created` at creation, so it has to be set explicitly here.

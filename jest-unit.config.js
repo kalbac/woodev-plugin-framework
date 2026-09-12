@@ -17,4 +17,14 @@ const defaultConfig = require( '@wordpress/scripts/config/jest-unit.config.js' )
 module.exports = {
 	...defaultConfig,
 	roots: [ '<rootDir>/tests/js' ],
+	/**
+	 * jsdom gap-fillers — see `tests/js/jest.setup.js` for what and why. Appended to
+	 * whatever the preset already registers rather than replacing it: the wp-scripts
+	 * preset supplies `@wordpress/jest-console` and the DOM matchers through this same
+	 * key, and dropping those would quietly disable half the suite's assertions.
+	 */
+	setupFilesAfterEnv: [
+		...( defaultConfig.setupFilesAfterEnv || [] ),
+		'<rootDir>/tests/js/jest.setup.js',
+	],
 };

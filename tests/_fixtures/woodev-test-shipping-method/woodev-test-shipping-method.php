@@ -358,6 +358,12 @@ function woodev_test_shipping_method_plugin_init(): void {
 	// does anything, and only when the constant is truthy.
 	require_once __DIR__ . '/class-test-orders-seeder.php';
 
+	// Card #824: the fixture shipment handler — see that file's own docblock. Required
+	// unconditionally, same reasoning as the requires just above; registered against
+	// Orders_Registry inside init_test_shipping_orders_page() below, which already
+	// guards on the orders classes existing.
+	require_once __DIR__ . '/class-test-shipment-handler.php';
+
 	// Registers the fixture providers alongside the bundled DaData one — NEITHER made
 	// active by default (the store's `active_provider` setting still defaults to
 	// `dadata`), an operator opts in explicitly on the "Локация" settings page to see
@@ -833,7 +839,8 @@ function woodev_test_shipping_method_plugin_init(): void {
 			private function init_test_shipping_orders_page(): void {
 
 				if ( ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Provider' )
-					|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' ) ) {
+					|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' )
+					|| ! class_exists( '\Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler' ) ) {
 					return;
 				}
 
@@ -878,6 +885,27 @@ function woodev_test_shipping_method_plugin_init(): void {
 				);
 
 				\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
+
+				// Card #824: wires a real Abstract_Shipment_Handler behind this provider,
+				// so the row's «Выгрузить»/«Обновить»/«Отменить» buttons actually perform
+				// something instead of having no handler at all (Order_Actions::for_order()
+				// offers NO actions for a provider with none registered). Offline and
+				// deterministic — see Woodev_Test_Shipping_Api's own docblock for the
+				// empty-id (#860) trigger.
+				\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_shipment_handler(
+					'test_shipping',
+					new \Woodev_Test_Shipment_Handler(
+						new \Woodev_Test_Shipping_Api(),
+						new \Woodev\Framework\Shipping\Order\Shipping_Order_Handler(
+							[
+								'carrier_order_id' => '_woodev_test_shipping_carrier_order_id',
+								'status'            => '_woodev_test_shipping_status',
+							]
+						),
+						new \Woodev_Test_Shipment_Retry_Job_Handler(),
+						self::PLUGIN_ID
+					)
+				);
 			}
 
 			/**
