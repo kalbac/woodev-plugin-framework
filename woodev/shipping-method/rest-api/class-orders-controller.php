@@ -14,10 +14,15 @@
 
 namespace Woodev\Framework\Shipping\Rest_Api;
 
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 
@@ -62,18 +67,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private $row_builder;
 
 		/**
-		 * Constructor.
+		 * Action-set builder — also used by {@see self::perform_action()} to refuse
+		 * an action the client's button is stale about (card #824).
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Orders_Registry        $registry    orders registry.
-		 * @param Orders_Query|null      $query       scope-query builder; defaults to one built from $registry.
-		 * @param Order_Row_Builder|null $row_builder row builder; defaults to a new instance.
+		 * @var Order_Actions
 		 */
-		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null, ?Order_Row_Builder $row_builder = null ) {
-			$this->registry    = $registry;
-			$this->query       = $query ?? new Orders_Query( $registry );
-			$this->row_builder = $row_builder ?? new Order_Row_Builder();
+		private $order_actions;
+
+		/**
+		 * Constructor.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Added `$order_actions` (card #824).
+		 *
+		 * @param Orders_Registry        $registry      orders registry.
+		 * @param Orders_Query|null      $query         scope-query builder; defaults to one built from $registry.
+		 * @param Order_Row_Builder|null $row_builder   row builder; defaults to one built from `$order_actions`.
+		 * @param Order_Actions|null     $order_actions action-set builder; defaults to one built from $registry.
+		 */
+		public function __construct( Orders_Registry $registry, ?Orders_Query $query = null, ?Order_Row_Builder $row_builder = null, ?Order_Actions $order_actions = null ) {
+			$this->registry      = $registry;
+			$this->query         = $query ?? new Orders_Query( $registry );
+			$this->order_actions = $order_actions ?? new Order_Actions( $registry );
+			$this->row_builder   = $row_builder ?? new Order_Row_Builder( $this->order_actions );
 		}
 
 		/**
@@ -180,6 +198,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'permission_callback' => [ $this, 'get_items_permissions_check' ],
 				]
 			);
+
+			// Performs one row action — export/update/cancel (card #824). A write, so
+			// gated on `edit_shop_orders` rather than the (possibly weaker) page
+			// capability {@see self::get_items_permissions_check()} reuses.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/(?P<id>\d+)/actions/(?P<action>[a-z_]+)',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'perform_action' ],
+					'permission_callback' => [ $this, 'perform_action_permissions_check' ],
+					'args'                => [
+						'id'     => [
+							'type' => 'integer',
+						],
+						'action' => [
+							'type' => 'string',
+						],
+					],
+				]
+			);
 		}
 
 		/**
@@ -193,6 +232,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 */
 		public function get_items_permissions_check( $request ): bool {
 			return current_user_can( $this->registry->get_page_capability() );
+		}
+
+		/**
+		 * Permission gate for {@see self::perform_action()}: `edit_shop_orders`, the
+		 * WooCommerce order-edit capability — STRICTER than
+		 * {@see self::get_items_permissions_check()}'s page capability
+		 * ({@see Orders_Registry::get_page_capability()} resolves to
+		 * `manage_woocommerce`), because this route mutates an order at a carrier
+		 * rather than merely reading the page. Mirrors
+		 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::handle_order_action()}'s
+		 * own capability check.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return bool
+		 */
+		public function perform_action_permissions_check( $request ): bool {
+			return current_user_can( 'edit_shop_orders' );
 		}
 
 
@@ -566,6 +624,237 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			return null;
+		}
+
+		/**
+		 * Performs one order-row action — export/update/cancel (card #824).
+		 *
+		 * Never trusts the client's button: recomputes {@see Order_Actions::for_order()}
+		 * for THIS order right now and refuses an action outside that list — the
+		 * client's copy of the row can be stale the moment two requests race, or a
+		 * carrier's own gate (e.g. `supports_update()`) changed underneath it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `id` and `action` come from the route.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function perform_action( $request ) {
+			$order_id = absint( $request->get_param( 'id' ) );
+			$action   = (string) $request->get_param( 'action' );
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_order',
+					__( 'Заказ не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$provider = $this->resolve_matched_provider( $order );
+
+			if ( null === $provider ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_carrier',
+					__( 'Не удалось определить перевозчика для этого заказа.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+
+			if ( ! in_array( $action, $available, true ) ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_action_not_available',
+					__( 'Это действие недоступно для данного заказа.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+
+			$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+			if ( null === $handler ) {
+				// Cannot happen given `$available` is non-empty only when
+				// Order_Actions::for_order() itself resolved a handler — guarded
+				// anyway rather than trusting that invariant across the call above.
+				return new \WP_Error(
+					'woodev_shipping_orders_no_handler',
+					__( 'Для этого перевозчика не настроен обработчик отправлений.', 'woodev-plugin-framework' ),
+					[ 'status' => 500 ]
+				);
+			}
+
+			try {
+				$succeeded = $this->dispatch_action( $handler, $order, $action );
+			} catch ( \Throwable $exception ) {
+				$this->log_action_failure( $provider->get_id(), $action, $exception );
+
+				return $this->action_upstream_error();
+			}
+
+			if ( ! $succeeded ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_action_failed',
+					self::action_failure_message( $action ),
+					[ 'status' => 502 ]
+				);
+			}
+
+			return rest_ensure_response(
+				[
+					'row'     => $this->build_row( $order, $provider ),
+					'message' => self::action_success_message( $action ),
+				]
+			);
+		}
+
+		/**
+		 * Dispatches one action to the carrier's shipment handler.
+		 *
+		 * ⚠ `export()` returns `''` on failure AND on a carrier response with no id
+		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
+		 * return bool.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler handler resolved for the order's carrier.
+		 * @param \WC_Order                 $order   the order.
+		 * @param string                    $action  one of {@see Order_Actions}' action ids.
+		 * @return bool
+		 */
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action ): bool {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
+
+					return '' !== $handler->export( $order, $settlement, $settlement_provider );
+
+				case Order_Actions::CANCEL:
+					return $handler->cancel( $order );
+
+				case Order_Actions::UPDATE:
+					return $handler->update( $order );
+
+				default:
+					return false;
+			}
+		}
+
+		/**
+		 * Resolves the popular-settlements enrolment context for an order about to
+		 * be exported through this route — the settlement the customer picked at
+		 * checkout and the SAME provider that produced it (#488 slice 2).
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()}
+		 * exactly, but reads the framework's own shared singleton
+		 * ({@see Location_Provider_Registry::instance()}) directly rather than
+		 * depending on `Shipping_Admin_Order` — that class is PLUGIN-constructed
+		 * (each carrier plugin builds its own instance) and this REST controller has
+		 * no guaranteed access to one. `Location_Provider_Registry` and its
+		 * `Popular_Settlement_Store` are already framework-level singletons reused
+		 * this same way elsewhere (e.g. {@see Abstract_Shipment_Handler}'s own
+		 * constructor default), so this introduces no new coupling.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order about to be exported.
+		 * @return array{0: Location_Record|null, 1: Location_Provider|null}
+		 */
+		private function resolve_popular_settlement_context( \WC_Order $order ): array {
+			$settlement = Location_Provider_Registry::instance()->popular_settlement_store()->recall_candidate( $order );
+
+			if ( null === $settlement ) {
+				return [ null, null ];
+			}
+
+			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
+
+			return [ $settlement, $provider ];
+		}
+
+		/**
+		 * The Russian success sentence for one action.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action one of {@see Order_Actions}' action ids.
+		 * @return string
+		 */
+		private static function action_success_message( string $action ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					return __( 'Заказ выгружен перевозчику.', 'woodev-plugin-framework' );
+
+				case Order_Actions::CANCEL:
+					return __( 'Отправление отменено.', 'woodev-plugin-framework' );
+
+				case Order_Actions::UPDATE:
+					return __( 'Информация по заказу обновлена.', 'woodev-plugin-framework' );
+
+				default:
+					return __( 'Готово.', 'woodev-plugin-framework' );
+			}
+		}
+
+		/**
+		 * The Russian failure sentence for one action.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action one of {@see Order_Actions}' action ids.
+		 * @return string
+		 */
+		private static function action_failure_message( string $action ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					return __( 'Не удалось выгрузить заказ перевозчику.', 'woodev-plugin-framework' );
+
+				case Order_Actions::CANCEL:
+					return __( 'Не удалось отменить отправление.', 'woodev-plugin-framework' );
+
+				case Order_Actions::UPDATE:
+					return __( 'Не удалось обновить информацию по заказу.', 'woodev-plugin-framework' );
+
+				default:
+					return __( 'Действие не выполнено.', 'woodev-plugin-framework' );
+			}
+		}
+
+		/**
+		 * A generic 502 for an action that threw rather than returning false.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return \WP_Error
+		 */
+		private static function action_upstream_error(): \WP_Error {
+			return new \WP_Error(
+				'woodev_shipping_orders_action_error',
+				__( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' ),
+				[ 'status' => 502 ]
+			);
+		}
+
+		/**
+		 * Logs an action failure. The browser only ever sees a generic 502.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string     $provider_id carrier/tab id.
+		 * @param string     $action      one of {@see Order_Actions}' action ids.
+		 * @param \Throwable $exception   the caught failure.
+		 * @return void
+		 */
+		private static function log_action_failure( string $provider_id, string $action, \Throwable $exception ): void {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a carrier failure; the browser only ever sees a generic 502.
+				sprintf(
+					'[woodev] shipping order action "%s" (%s) failed: %s',
+					$action,
+					$provider_id,
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+				)
+			);
 		}
 	}
 

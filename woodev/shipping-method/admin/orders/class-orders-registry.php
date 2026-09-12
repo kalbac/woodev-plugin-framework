@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Settings\Settings_Page_Registry;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 
@@ -79,6 +80,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/** @var array<string, Orders_Provider> providers keyed by id. */
 		private $providers = [];
 
+		/**
+		 * Shipment handlers keyed by provider id (card #824) — the seam
+		 * {@see Order_Actions} and {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller}
+		 * use to perform an order's export/update/cancel.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var array<string, Abstract_Shipment_Handler>
+		 */
+		private $shipment_handlers = [];
+
 		/** @var bool whether the shared hooks were added. */
 		private $hooked = false;
 
@@ -134,6 +146,46 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			$this->add_hooks();
+		}
+
+		/**
+		 * Registers the shipment handler that performs a provider's actions (card
+		 * #824): export/update/cancel against the carrier's own API.
+		 *
+		 * Registering a handler for a provider id that has not (yet) called
+		 * {@see self::register_provider()} is allowed — the order in which a plugin
+		 * registers its provider and its handler is that plugin's business, not this
+		 * registry's. {@see self::get_shipment_handler()} simply returns null for an
+		 * id nothing was registered against.
+		 *
+		 * Keyed by provider id: registering a second handler under an id already in
+		 * use replaces the first (last write wins), the same rule
+		 * {@see self::register_provider()} applies to providers.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string                    $provider_id carrier/tab id.
+		 * @param Abstract_Shipment_Handler $handler     the carrier's shipment handler.
+		 * @return void
+		 */
+		public function register_shipment_handler( string $provider_id, Abstract_Shipment_Handler $handler ): void {
+			$this->shipment_handlers[ $provider_id ] = $handler;
+		}
+
+		/**
+		 * Returns the shipment handler registered for one provider, or null when
+		 * none was registered.
+		 *
+		 * A provider with no registered handler offers NO actions at all — see
+		 * {@see Order_Actions::for_order()}, which honours this null.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id carrier/tab id.
+		 * @return Abstract_Shipment_Handler|null
+		 */
+		public function get_shipment_handler( string $provider_id ): ?Abstract_Shipment_Handler {
+			return $this->shipment_handlers[ $provider_id ] ?? null;
 		}
 
 		/**
@@ -976,9 +1028,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
-			$this->providers = [];
-			$this->hooked    = false;
-			$this->plugin    = null;
+			$this->providers         = [];
+			$this->shipment_handlers = [];
+			$this->hooked            = false;
+			$this->plugin            = null;
 		}
 	}
 

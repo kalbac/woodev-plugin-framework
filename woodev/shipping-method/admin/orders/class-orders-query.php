@@ -801,19 +801,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 
 		/**
-		 * Builds one export-presence meta clause per provider (SP-10 #841) — the exact
-		 * same asymmetry as {@see self::pickup_point_meta_clauses()}. A provider with
-		 * no declared carrier-order-id key (`get_carrier_order_id_meta_key()` is null)
-		 * can never report `true` — the framework has no way to know whether such a
-		 * carrier's orders were exported, so it does not guess — and for `false` it
-		 * always counts as "not exported", its marker key standing in for "always
-		 * true": every one of its orders belongs in the "new" bucket by definition.
+		 * Builds one export-presence meta clause per provider (SP-10 #841; empty-id
+		 * fix #860). A provider with no declared carrier-order-id key
+		 * (`get_carrier_order_id_meta_key()` is null) can never report `true` — the
+		 * framework has no way to know whether such a carrier's orders were
+		 * exported, so it does not guess — and for `false` it always counts as "not
+		 * exported", its marker key standing in for "always true": every one of its
+		 * orders belongs in the "new" bucket by definition.
+		 *
+		 * ⚠ #860: "exported" is NOT merely "the key exists". {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
+		 * writes the carrier-order-id meta UNCONDITIONALLY, including an empty string
+		 * when the carrier response carried no id — so a FAILED export used to read
+		 * as exported and drop out of «Новые». The positive clause below now also
+		 * requires a NON-EMPTY value; the negative clause is its exact complement
+		 * (key absent OR key present-but-empty), so the two together account for
+		 * every order without a gap or an overlap.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #860: positive now also excludes an empty stored value;
+		 *              negative now also matches a present-but-empty value.
 		 *
 		 * @param Orders_Provider[] $providers   providers in scope.
 		 * @param bool              $is_exported true => the carrier-order-id meta must
-		 *                                       exist; false => it must not.
+		 *                                       exist and be non-empty; false => it
+		 *                                       must be absent or empty.
 		 * @return array<int,array<string,mixed>> one clause per participating provider.
 		 */
 		private function is_exported_meta_clauses( array $providers, bool $is_exported ): array {
@@ -834,11 +845,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				}
 
 				if ( $is_exported ) {
-					// `EXISTS` on a carrier's OWN carrier-order-id key already implies
-					// that carrier's order, so it needs no binding.
+					// `!=` against an INNER JOIN on this key excludes a row with no such
+					// meta at all, exactly like `NOT EXISTS` would — that is exactly
+					// right here (#860): "exported" means the key exists AND carries a
+					// non-empty value. `EXISTS` alone counted a failed export (an
+					// unconditionally-written EMPTY id) as exported, dropping it out of
+					// «Новые» forever.
 					$clauses[] = [
 						'key'     => $carrier_order_id_key,
-						'compare' => 'EXISTS',
+						'value'   => '',
+						'compare' => '!=',
 					];
 
 					continue;
@@ -848,6 +864,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				// reason as {@see self::pickup_point_meta_clauses()}'s negative case: OR-ed
 				// across providers, «carrier B's carrier-order-id key does not exist» is
 				// trivially true of every carrier A order.
+				//
+				// #860: "not exported" is now key-absent OR key-present-but-empty — the
+				// exact complement of the positive clause above.
 				$clauses[] = [
 					'relation' => 'AND',
 					[
@@ -855,8 +874,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 						'compare' => 'EXISTS',
 					],
 					[
-						'key'     => $carrier_order_id_key,
-						'compare' => 'NOT EXISTS',
+						'relation' => 'OR',
+						[
+							'key'     => $carrier_order_id_key,
+							'compare' => 'NOT EXISTS',
+						],
+						[
+							'key'     => $carrier_order_id_key,
+							'value'   => '',
+							'compare' => '=',
+						],
 					],
 				];
 			}

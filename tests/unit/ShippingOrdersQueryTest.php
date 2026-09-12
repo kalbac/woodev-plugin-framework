@@ -1448,7 +1448,13 @@ class ShippingOrdersQueryTest extends TestCase {
 
 	// ----- export-presence filter / "new orders" (SP-10 #841) -----
 
-	public function test_is_exported_true_builds_an_exists_clause(): void {
+	/**
+	 * #860: "exported" also requires a NON-EMPTY value — `!=` against an INNER JOIN
+	 * on this key excludes a row with no such meta at all, same as `NOT EXISTS`
+	 * would, which is exactly right: a FAILED export (an unconditionally-written
+	 * empty id) must not read as exported.
+	 */
+	public function test_is_exported_true_excludes_an_empty_stored_value(): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider(
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
@@ -1465,7 +1471,8 @@ class ShippingOrdersQueryTest extends TestCase {
 			[
 				[
 					'key'     => '_cdek_carrier_order_id',
-					'compare' => 'EXISTS',
+					'value'   => '',
+					'compare' => '!=',
 				],
 			],
 			$args['meta_query'][1]
@@ -1474,7 +1481,8 @@ class ShippingOrdersQueryTest extends TestCase {
 
 	/**
 	 * The NEGATIVE case is bound to the provider's own marker — see the aggregate
-	 * test below for why that binding is not decoration.
+	 * test below for why that binding is not decoration. #860: it now ALSO matches
+	 * a present-but-empty value, the exact complement of the positive clause above.
 	 */
 	public function test_is_exported_false_binds_not_exists_to_the_providers_own_marker(): void {
 		$registry = Orders_Registry::instance();
@@ -1498,8 +1506,16 @@ class ShippingOrdersQueryTest extends TestCase {
 						'compare' => 'EXISTS',
 					],
 					[
-						'key'     => '_cdek_carrier_order_id',
-						'compare' => 'NOT EXISTS',
+						'relation' => 'OR',
+						[
+							'key'     => '_cdek_carrier_order_id',
+							'compare' => 'NOT EXISTS',
+						],
+						[
+							'key'     => '_cdek_carrier_order_id',
+							'value'   => '',
+							'compare' => '=',
+						],
 					],
 				],
 			],
@@ -1536,14 +1552,18 @@ class ShippingOrdersQueryTest extends TestCase {
 			$branch = $exported_part[ $index ];
 
 			$this->assertSame( 'AND', $branch['relation'], 'each branch must bind marker AND carrier-order-id' );
+			$this->assertSame( 'EXISTS', $branch[0]['compare'] );
+			$this->assertMatchesRegularExpression( '/_marker$/', $branch[0]['key'], 'a branch that names no marker matches the other carrier\'s orders' );
 
-			$keys = [ $branch[0]['key'], $branch[1]['key'] ];
+			// #860: the carrier-order-id side is now an OR of "absent" and
+			// "present but empty" rather than a single NOT EXISTS clause.
+			$carrier_order_id_group = $branch[1];
 
-			$this->assertContains( 'NOT EXISTS', [ $branch[0]['compare'], $branch[1]['compare'] ] );
-			$this->assertNotEmpty(
-				preg_grep( '/_marker$/', $keys ),
-				'a NOT EXISTS branch that names no marker matches the other carrier\'s orders'
-			);
+			$this->assertSame( 'OR', $carrier_order_id_group['relation'] );
+			$this->assertSame( 'NOT EXISTS', $carrier_order_id_group[0]['compare'] );
+			$this->assertSame( '=', $carrier_order_id_group[1]['compare'] );
+			$this->assertSame( '', $carrier_order_id_group[1]['value'] );
+			$this->assertSame( $carrier_order_id_group[0]['key'], $carrier_order_id_group[1]['key'] );
 		}
 	}
 
@@ -1648,7 +1668,8 @@ class ShippingOrdersQueryTest extends TestCase {
 			[
 				[
 					'key'     => '_cdek_carrier_order_id',
-					'compare' => 'EXISTS',
+					'value'   => '',
+					'compare' => '!=',
 				],
 			],
 			$args[ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ]
