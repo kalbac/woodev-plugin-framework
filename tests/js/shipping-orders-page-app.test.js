@@ -956,6 +956,42 @@ describe( 'status cell', () => {
 	} );
 } );
 
+describe( 'payment cell', () => {
+	test( 'the formatted total carries its own no-wrap class so a thousands space cannot break the amount (#865)', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( {
+					payment: {
+						method_title: 'Картой',
+						formatted_total: '3 980,00 ₽',
+						needs_payment: false,
+					},
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		// Asserted on the RENDERED amount, not on the row payload: the defect this
+		// pins is that «3 980,00 ₽» broke across two lines, and only the rendered
+		// node carries the class that prevents it.
+		const amount = await screen.findByText( '3 980,00 ₽' );
+		expect( amount ).toHaveClass( 'woodev-orders-cell__meta', 'woodev-orders-amount' );
+	} );
+
+	test( 'the shipping line keeps the shared meta class WITHOUT the no-wrap one — an address must still wrap (#865)', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		const shippingLine = await screen.findByText( /СДЭК до ПВЗ/ );
+		expect( shippingLine ).toHaveClass( 'woodev-orders-cell__meta' );
+		expect( shippingLine ).not.toHaveClass( 'woodev-orders-amount' );
+	} );
+} );
+
 describe( 'tracking cell', () => {
 	test( 'a row with a tracking number renders a link to it', async () => {
 		getProviders.mockReturnValue( oneProvider() );
