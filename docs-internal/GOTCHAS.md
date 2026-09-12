@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 317 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 319 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -242,6 +242,7 @@
 - [build/css-enqueue-version] **enqueue the wp-scripts `style-index.css` with its OWN filemtime, not the JS bundle's asset-hash version.** → [wp-scripts-css-enqueue-version-by-mtime](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI
+- [admin-ui/tables] **A formatted price is TWO words to the browser — `wc_price()` separates thousands with a SPACE, so a narrow column breaks «3 980,00 ₽» across lines. Hid until the fixture had real totals.** → [a-formatted-price-is-two-words-and-wraps](gotchas/a-formatted-price-is-two-words-and-wraps.md) (s133)
 - [admin-ui/vendor-css] **Grepping a vendor stylesheet is an INCOMPLETE measurement — the `.order-status` rule copied that way missed `white-space: nowrap` and our label wrapped. Read `getComputedStyle()` off their real element.** → [a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement](gotchas/a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement.md) (s133)
 - [admin-ui/calendar] **`react-dates` renders `.CalendarMonth` at a FIXED 300px inside a 320px popover, so `padding: 16px` on the wrapper overflows it and the grid reads as slid right.** → [react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it](gotchas/react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it.md) (s132)
 - [admin-ui/notices] **A DELAYED admin notice renders into the HTML with `display:none` and is unhidden by inline jQuery — grepping the markup for its text proves nothing about whether anyone sees it, and the PHP suite cannot tell.** → [a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed](gotchas/a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed.md) (s105)
@@ -363,6 +364,7 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/parallel-agents] **An OOM-killed `check --wait` is indistinguishable from an empty timeout; the workers are usually ALIVE. Ask `worker-list`, never relaunch on the silence.** → [an-oom-killed-check-wait-reads-as-an-empty-timeout](gotchas/an-oom-killed-check-wait-reads-as-an-empty-timeout.md) (s133)
 - [tooling/orca] **`check --json` mixes one-line keepalives with a PRETTY-PRINTED delivery, so a line-by-line parser reports «nothing delivered» three waits running while the worker is fine.** → [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](gotchas/orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) (s132)
 - [tooling/orca] **`worker-start` without `--model` takes the COORDINATOR's model; the receipt says `model: null` on both sides and only the terminal's status line names it.** → [a-worker-started-without-model-inherits-the-coordinators-model](gotchas/a-worker-started-without-model-inherits-the-coordinators-model.md) (s132)
 - [tooling/orca] **`git worktree remove` on an Orca worktree deletes the PRIMARY checkout's `node_modules` — the share is a symlink and git walks into it. Remove them through Orca.** → [git-worktree-remove-empties-the-primary-checkouts-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkouts-node-modules.md) (s127)

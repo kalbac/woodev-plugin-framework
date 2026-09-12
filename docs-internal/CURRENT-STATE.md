@@ -6,11 +6,12 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-12 (s133).** ✅ **#858 and #859 both merged (`1d3f8e9`)** — the new-order badge count
-drops the moment an order is exported, and delivery statuses render as WooCommerce-coloured badges.
-The operator ACCEPTED the badges visually («выглядят хорошо») and asked for two follow-ups, now
-**#862**: status labels brought to roughly equal length (he picked the wording himself — the table is
-on the card) and the «Статус» column narrowed to the widest badge. Tree is back on `main`.
+**As of 2026-09-12 (s133).** ✅ **The orders table — item 1 of the operator's queue — is DONE and
+accepted.** Five PRs merged (#858 #859 #863 #864 #866), tree on `main` @ `6424c57`, no open PRs. The
+badge counter drops on export; statuses render as WooCommerce-toned badges with the carrier's word in
+a tooltip; labels are 6–13 chars so the badges no longer jump; seeded orders carry customers,
+addresses and real totals; money no longer wraps. **He accepted the badges on the rig** and closed
+the «Статус»-column question himself once measurement disproved it.
 
 ⚠ **Two ways a UI change passes every gate and is still wrong** (both cost s133 a lap): a vendor
 rule copied by GREP is incomplete — `.order-status` also carries `white-space: nowrap`, the badge
@@ -31,7 +32,7 @@ unknown period and the throw unmounts the whole wc-admin app (gotcha
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-Open on the page: **#824 #839 #842 #843 #856 #860 #861 #862** (#829 and #853 shipped). «New» is settled and shipped:
+Open on the page: **#824 #839 #842 #843 #856 #860 #867 #868**; shipped: #829 #853 #861 #862 #865. «New» is settled and shipped:
 `is_exported=false`, derived from `carrier_order_id` — every witness (the REST arg, the «Все /
 Новые» links, the carrier counts, the badge) reads it through the SAME `Orders_Query`, which is why
 their numbers agree by construction rather than by coincidence.
@@ -73,7 +74,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 **Baselines — jest re-measured 12.09.2026 (s133) in the PRIMARY checkout; the PHP numbers are
 s132's and #858 landed since — re-measure before quoting them:**
-unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1928** in **32** suites;
+unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1930** in **32** suites;
 **integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
 level 3 no errors; every `lint:*` OK; catalogue **820** entries, **429** translated. Nothing on
@@ -111,7 +112,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 12.09.2026 (s133); #853 and #829 closed, #860 #861 #862 filed** (`gh issue list --limit 300` and the board): Инбокс
+**Open cards — 58, measured 12.09.2026 (s133); five closed, six filed** (`gh issue list --limit 300` and the board): Инбокс
 EMPTY, 1 in «В работе» (the #820 umbrella). ⚠ **s127 recorded 53 — an undercount**, the very
 `--limit` trap its own handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
@@ -182,7 +183,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: осталось инкременты 3 (массовые действия) и 5 (редирект слагов) плюс #824; что уже в `main` — на доске, не здесь.** ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: остались инкременты 3 (массовые действия) и 5 (редирект слагов) плюс #824.** ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
 
 ✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
@@ -258,7 +259,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **317**.
+Gotchas: **319**.
 
 ## Program status (high level)
 
