@@ -92,6 +92,18 @@ export interface OrderRow {
 	type: ShippingType;
 	tracking: OrderRowTracking;
 	delivery_status: OrderRowDeliveryStatus;
+	/**
+	 * #824: whether the order has ever been exported to the carrier. Optional for the same
+	 * reason as {@link OrdersResponse.scope_counts} and {@link OrdersResponse.carrier_counts} —
+	 * a cached bundle can outlive a rollback, and «not stated» must not be rendered as `false`.
+	 */
+	is_exported?: boolean;
+	/**
+	 * #824: the row's action buttons, in server order. Optional for the same reason as
+	 * `is_exported` above — an older server sends neither field, and «not stated» renders
+	 * an empty cell, never an invented button.
+	 */
+	actions?: OrderRowAction[];
 }
 
 /**
@@ -110,6 +122,23 @@ export interface OrderRow {
 export interface OrdersScopeCounts {
 	all: number;
 	new: number;
+}
+
+/**
+ * One action offered on a row (#824), e.g. «Выгрузить» / «Обновить» / «Отменить» — or a
+ * carrier extra registered through the server-side filter. Only AVAILABLE actions are
+ * sent; there is no disabled state to render, so an action missing from this array is an
+ * action that does not exist for this row, never one the merchant cannot currently use.
+ */
+export interface OrderRowAction {
+	/** `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter. */
+	action: string;
+	/** Button text, already translated server-side. */
+	label: string;
+	/** Tooltip; `''` when there is none. */
+	title: string;
+	/** `true` => confirm before sending. */
+	destructive: boolean;
 }
 
 /** The full response envelope `Orders_Controller::get_items()` returns. */
@@ -315,6 +344,33 @@ export function fetchOrders( {
 	return apiFetch<OrdersResponse>( {
 		url: `${ restRoot }?${ params.toString() }`,
 		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
+/** `POST /shipping/orders/<id>/actions/<action>`'s success envelope (#824). */
+export interface OrderActionResult {
+	/** The freshly rebuilt row for this order — swap it in place, never refetch the page. */
+	row: OrderRow;
+	/** A Russian sentence to show the merchant. */
+	message: string;
+}
+
+/**
+ * Performs one row action (#824 — «Выгрузить» / «Обновить» / «Отменить», or a carrier
+ * extra). Same `bootstrap()`/`apiFetch` wiring as {@link fetchOrders}, so the nonce is
+ * handled the same way.
+ *
+ * A rejection carries the server's own Russian `message` (`apiFetch` rejects with
+ * `{ message?: string, code?: string }` on a REST error) — the caller must show it, never
+ * swallow it.
+ */
+export function performOrderAction( orderId: number, action: string ): Promise<OrderActionResult> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<OrderActionResult>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/actions/${ action }`,
+		method: 'POST',
 		headers: { 'X-WP-Nonce': nonce },
 	} );
 }

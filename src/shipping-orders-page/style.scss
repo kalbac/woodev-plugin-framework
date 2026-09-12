@@ -132,6 +132,26 @@
 	&--muted { background: #e5e5e5; color: #454545; } // WC `.order-status` base
 }
 
+/**
+ * The «Действие» cell's button row (#824). Its own class, never a positional selector —
+ * `TableCard` gives its cells no per-column class, and `:nth-child()` would shift the
+ * moment another column is added, which is exactly the trap #865's comment on
+ * `PaymentCell` already names.
+ */
+.woodev-orders-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wd.$gap-xs;
+
+	&__confirm {
+		display: inline-flex;
+		align-items: center;
+		gap: wd.$gap-xs;
+		white-space: nowrap;
+	}
+}
+
 .woodev-orders-badge {
 	display: inline-block;
 	margin-top: 4px;

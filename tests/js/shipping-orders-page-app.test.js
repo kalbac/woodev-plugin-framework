@@ -19,12 +19,21 @@
 import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
-import { fetchOrders, fetchSyncStatus, getProviders } from '../../src/shipping-orders-page/rest';
+import {
+	fetchOrders,
+	fetchSyncStatus,
+	getProviders,
+	performOrderAction,
+} from '../../src/shipping-orders-page/rest';
 
 jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	getProviders: jest.fn(),
 	fetchOrders: jest.fn(),
 	fetchSyncStatus: jest.fn(),
+	// #824 — one row action's REST call. Encodes a claim about the server contract
+	// (§2 of the brief): resolve with `{ row, message }`, reject with an object
+	// carrying `message`, exactly as `apiFetch` itself resolves/rejects.
+	performOrderAction: jest.fn(),
 	// #837 defect 4: the reachable-status list. Defaults to [] — the same
 	// «bootstrap did not say» answer the real accessor gives, which makes the
 	// filter offer every canonical state, so these tests keep asserting what
@@ -2083,5 +2092,254 @@ describe( 'the «Все / Новые» scope links (#841)', () => {
 		expect( screen.queryByRole( 'link', { name: 'Все (134)' } ) ).toBeNull();
 		// The row of filter controls survives, so the merchant can undo what broke it.
 		expect( screen.getByTestId( 'filter-picker-carrier' ) ).toBeInTheDocument();
+	} );
+} );
+
+/**
+ * The «Действие» column (#824) — a per-row button row driven by `row.actions`, a POST
+ * through `performOrderAction` (mocked here the same way `fetchOrders` is), in-flight
+ * state scoped per row, a success swap of that one row, and a failure that leaves the row
+ * untouched. Every assertion below is on RENDERED TEXT, not on props or `.value` — three
+ * separate sessions on this page shipped a visible defect past a green suite and five
+ * reviewers by asserting the value instead of what the cell draws (the brief's own
+ * warning, and the same rule `payment cell`/`status cell` above already follow).
+ */
+describe( 'the «Действие» column (#824)', () => {
+	/** One row with a single non-destructive «Выгрузить» action, overridable. */
+	function actionRow( overrides = {} ) {
+		return makeRow( {
+			actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ],
+			...overrides,
+		} );
+	}
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	test( 'renders no button at all when actions is absent entirely', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument() );
+
+		expect( screen.queryByRole( 'button', { name: 'Выгрузить' } ) ).toBeNull();
+	} );
+
+	test( 'renders no button at all when actions is an empty array', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow( { actions: [] } ) ] ) );
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument() );
+
+		expect( screen.queryByRole( 'button', { name: 'Выгрузить' } ) ).toBeNull();
+	} );
+
+	test( 'renders one action', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow() ] ) );
+
+		render( <App /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'renders three actions, in server order', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				actionRow( {
+					actions: [
+						{ action: 'export', label: 'Выгрузить', title: '', destructive: false },
+						{ action: 'update', label: 'Обновить', title: '', destructive: false },
+						{ action: 'cancel', label: 'Отменить', title: '', destructive: true },
+					],
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument() );
+
+		const labels = [ 'Выгрузить', 'Обновить', 'Отменить' ];
+		const buttons = screen
+			.getAllByRole( 'button' )
+			.filter( ( button ) => labels.includes( button.textContent ) );
+
+		expect( buttons.map( ( button ) => button.textContent ) ).toEqual( labels );
+	} );
+
+	test( 'a non-empty title wraps the button in a tooltip', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				actionRow( {
+					actions: [
+						{
+							action: 'export',
+							label: 'Выгрузить',
+							title: 'Отправить в СДЭК',
+							destructive: false,
+						},
+					],
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+
+		fireEvent.keyDown( document, { key: 'Tab' } );
+		act( () => {
+			button.focus();
+		} );
+
+		await waitFor( () => expect( screen.getByText( 'Отправить в СДЭК' ) ).toBeInTheDocument() );
+	} );
+
+	test( 'the in-flight state disables only its own row', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				actionRow( { id: 1, order_number: '1' } ),
+				actionRow( { id: 2, order_number: '2' } ),
+			] )
+		);
+
+		let resolveAction;
+		performOrderAction.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveAction = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		const buttons = await screen.findAllByRole( 'button', { name: 'Выгрузить' } );
+		expect( buttons ).toHaveLength( 2 );
+
+		fireEvent.click( buttons[ 0 ] );
+
+		await waitFor( () => expect( buttons[ 0 ] ).toBeDisabled() );
+		expect( buttons[ 1 ] ).not.toBeDisabled();
+
+		// Settle the pending call so it does not leak into the next test.
+		await act( async () => {
+			resolveAction( { row: actionRow( { id: 1, order_number: '1' } ), message: 'Готово.' } );
+		} );
+	} );
+
+	test( 'success swaps the row in place, without a refetch', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow() ] ) );
+		performOrderAction.mockResolvedValue( {
+			row: actionRow( { order_number: '99', actions: [] } ),
+			message: 'Заказ выгружен.',
+		} );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+
+		fireEvent.click( button );
+
+		await waitFor( () => expect( screen.getByText( 'Заказ 99' ) ).toBeInTheDocument() );
+		expect( screen.queryByText( 'Заказ 42' ) ).not.toBeInTheDocument();
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Заказ выгружен.' ).length ).toBeGreaterThan( 0 )
+		);
+		// Exactly one fetch — the initial load — proves the swap did not refetch the page.
+		expect( fetchOrders ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'failure renders the server message and leaves the old row untouched', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow() ] ) );
+		performOrderAction.mockRejectedValue( { message: 'СДЭК недоступен.' } );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+
+		fireEvent.click( button );
+
+		await waitFor( () =>
+			expect( screen.getAllByText( 'СДЭК недоступен.' ).length ).toBeGreaterThan( 0 )
+		);
+		expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a rejection with no message falls back to a generic Russian error', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow() ] ) );
+		performOrderAction.mockRejectedValue( {} );
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+
+		fireEvent.click( button );
+
+		await waitFor( () =>
+			expect(
+				screen.getAllByText( 'Не удалось выполнить действие.' ).length
+			).toBeGreaterThan( 0 )
+		);
+	} );
+
+	describe( 'the destructive confirm', () => {
+		function cancelRow( overrides = {} ) {
+			return actionRow( {
+				actions: [ { action: 'cancel', label: 'Отменить', title: '', destructive: true } ],
+				...overrides,
+			} );
+		}
+
+		test( 'the first click shows an inline confirm and never calls the API', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ cancelRow() ] ) );
+
+			render( <App /> );
+
+			const cancelButton = await screen.findByRole( 'button', { name: 'Отменить' } );
+
+			fireEvent.click( cancelButton );
+
+			expect( await screen.findByText( 'Отменить?' ) ).toBeInTheDocument();
+			expect( performOrderAction ).not.toHaveBeenCalled();
+		} );
+
+		test( 'confirming with «Да» calls the API and then swaps the row', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ cancelRow() ] ) );
+			performOrderAction.mockResolvedValue( {
+				row: cancelRow( { actions: [] } ),
+				message: 'Заказ отменён.',
+			} );
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Отменить' } ) );
+
+			const confirmButton = await screen.findByRole( 'button', { name: 'Да' } );
+
+			fireEvent.click( confirmButton );
+
+			expect( performOrderAction ).toHaveBeenCalledWith( 42, 'cancel' );
+			await waitFor( () =>
+				expect( screen.getAllByText( 'Заказ отменён.' ).length ).toBeGreaterThan( 0 )
+			);
+		} );
+
+		test( '«Нет» drops the confirm without ever calling the API', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ cancelRow() ] ) );
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Отменить' } ) );
+
+			const noButton = await screen.findByRole( 'button', { name: 'Нет' } );
+
+			fireEvent.click( noButton );
+
+			expect( screen.queryByText( 'Отменить?' ) ).not.toBeInTheDocument();
+			expect( await screen.findByRole( 'button', { name: 'Отменить' } ) ).toBeInTheDocument();
+			expect( performOrderAction ).not.toHaveBeenCalled();
+		} );
 	} );
 } );
