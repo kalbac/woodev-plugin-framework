@@ -3833,7 +3833,7 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:2
 #, js-format
 msgid "%s?"
-msgstr ""
+msgstr "%s?"
 
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Да"
