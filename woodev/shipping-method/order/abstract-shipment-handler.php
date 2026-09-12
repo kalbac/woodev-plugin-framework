@@ -291,7 +291,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * carrier) when the order has no stored carrier id, and false when the carrier
 		 * rejects the cancellation.
 		 *
+		 * On a SUCCESSFUL cancellation the stored carrier order id is cleared (written
+		 * back through the same order handler {@see self::export()} uses to set it),
+		 * before the `shipment_cancelled` action fires. The framework does not own any
+		 * carrier's status vocabulary, but it does own "is there a live carrier
+		 * shipment for this order" — and after an accepted cancellation the answer is
+		 * no. Clearing the id flips {@see \Woodev\Framework\Shipping\Order\Order_Actions::for_order()}'s
+		 * export-state gate back to "not exported": «Отменить»/«Обновить» disappear and
+		 * «Выгрузить» returns if the WC order status still allows it. A failed
+		 * cancellation (carrier rejects, or the API throws) leaves the stored id
+		 * untouched, so the button remains available for a retry.
+		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Round 2 (HIGH 1): clear the stored carrier order id on a
+		 *              successful cancel, so a merchant cannot send the same
+		 *              destructive carrier cancellation twice.
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
 		 * @return bool true when the carrier accepted the cancellation, false otherwise
@@ -321,13 +335,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				return false;
 			}
 
+			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, '' );
+
 			/**
 			 * Fires after a shipment is successfully cancelled with the carrier.
 			 *
 			 * @since 1.5.0
 			 *
 			 * @param \WC_Order $order            the cancelled order
-			 * @param string    $carrier_order_id the carrier-assigned order id that was cancelled
+			 * @param string    $carrier_order_id the carrier-assigned order id that WAS cancelled
+			 *                                    (the stored id has already been cleared by the time
+			 *                                    this fires; this argument still carries the value
+			 *                                    that was just cancelled, for subscribers that need it)
 			 */
 			do_action( $this->hook( 'shipment_cancelled' ), $order, $carrier_order_id );
 

@@ -2284,6 +2284,58 @@ describe( 'the «Действие» column (#824)', () => {
 		);
 	} );
 
+	/**
+	 * #824 round 2 (MEDIUM 4): a refetch that lands WHILE the POST is still in flight
+	 * must not be overwritten by the POST's own (by-then-stale) row. Sequence from the
+	 * brief: click «Выгрузить» on order 42, switch scope while the request is pending
+	 * (a real refetch, via the same `ScopeLinks` navigation `switching scope issues
+	 * exactly ONE fetch` above already exercises), the refetch lands first, THEN the
+	 * action resolves. The notice must still show — the action really did happen — but
+	 * the stale exported row must not be swapped into the now-current view.
+	 */
+	test( 'a refetch landing before the action resolves is not overwritten by the stale row', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ actionRow() ], { scope_counts: { all: 1, new: 1 } } ) );
+
+		let resolveAction;
+		performOrderAction.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveAction = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		const button = await screen.findByRole( 'button', { name: 'Выгрузить' } );
+
+		fireEvent.click( button );
+
+		const callsBefore = fetchOrders.mock.calls.length;
+
+		// A refetch lands FIRST — the merchant switched scope while the action was
+		// still in flight.
+		fireEvent.click( await screen.findByRole( 'link', { name: 'Новые (1)' } ) );
+
+		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( callsBefore + 1 ) );
+
+		// The action resolves AFTER the refetch, with a row that is now stale relative
+		// to the view on screen.
+		await act( async () => {
+			resolveAction( {
+				row: actionRow( { order_number: '99', actions: [] } ),
+				message: 'Заказ выгружен.',
+			} );
+		} );
+
+		// The action really did happen — the notice shows either way.
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Заказ выгружен.' ).length ).toBeGreaterThan( 0 )
+		);
+		// But the stale row was never swapped into the refetched table.
+		expect( screen.queryByText( 'Заказ 99' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument();
+	} );
+
 	describe( 'the destructive confirm', () => {
 		function cancelRow( overrides = {} ) {
 			return actionRow( {

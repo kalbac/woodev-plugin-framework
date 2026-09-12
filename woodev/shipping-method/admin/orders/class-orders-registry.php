@@ -124,9 +124,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * Keyed by id: registering a second provider under an id already in use replaces
 		 * the first (last write wins) rather than silently producing two tabs for the
-		 * same id.
+		 * same id. When it IS a replacement, any shipment handler previously registered
+		 * under that id (see {@see self::register_shipment_handler()}) belonged to the
+		 * PREVIOUS descriptor and is dropped along with it — otherwise a replacement
+		 * registered by a different carrier's plugin would expose action buttons that
+		 * still execute the old carrier's handler. A handler registered afterwards for
+		 * the new descriptor works normally; until then, that provider offers no
+		 * actions, which is the already-correct "no handler ⇒ no actions" behaviour. A
+		 * FIRST-time registration under an id never drops anything — a plugin is free to
+		 * call {@see self::register_shipment_handler()} before or after this method, and
+		 * that handler must survive.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (HIGH 2): drop the previous descriptor's shipment handler
+		 *              on replacement, so a replaced descriptor cannot keep executing the
+		 *              old carrier's export/update/cancel.
 		 *
 		 * @param Orders_Provider     $provider carrier descriptor.
 		 * @param \Woodev_Plugin|null $plugin  owning plugin, to source the shared framework
@@ -139,7 +151,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @return void
 		 */
 		public function register_provider( Orders_Provider $provider, $plugin = null ): void {
+			$is_replacement = isset( $this->providers[ $provider->get_id() ] );
+
 			$this->providers[ $provider->get_id() ] = $provider;
+
+			if ( $is_replacement ) {
+				unset( $this->shipment_handlers[ $provider->get_id() ] );
+			}
 
 			if ( null === $this->plugin && $plugin instanceof \Woodev_Plugin ) {
 				$this->plugin = $plugin;
