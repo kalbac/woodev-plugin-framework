@@ -51,7 +51,19 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	getReachableDeliveryStatuses: jest.fn( () => [] ),
 } ) );
 
+/**
+ * The headers `FakeTableCard` was last handed.
+ *
+ * ⚠ Test-only, and deliberately the ONE thing here asserted as a prop rather than as
+ * rendered output. `required` is a contract with `TableCard` itself — it decides which
+ * columns its «Columns:» menu offers — and a fake cannot render a decision the real
+ * component makes. Everything else in this suite still asserts on what the page draws.
+ */
+let lastHeaders = null;
+
 function FakeTableCard( { title, headers, rows, actions, isLoading, emptyMessage, summary, onPageChange } ) {
+	lastHeaders = headers;
+
 	return (
 		<div>
 			<h2>{ title }</h2>
@@ -2523,6 +2535,36 @@ describe( 'the cb column and bulk actions (#874)', () => {
 	} );
 
 	describe( 'the cb column', () => {
+		/**
+		 * `TableCard`'s own «Columns:» menu lists every header that is not `required`, using
+		 * the header's `label` as the caption. Ours IS the select-all `<CheckboxControl>`, so
+		 * an un-`required` `cb` put a live, caption-less checkbox inside that dropdown — the
+		 * operator caught it on the rig, 13.09.2026. A selection column is not something a
+		 * merchant hides, so `required` is both the fix and the truth.
+		 */
+		test( 'cb is required, so it never appears in the column-visibility menu', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+
+			render( <App /> );
+
+			await waitFor( () => expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument() );
+
+			const cb = lastHeaders.find( ( h ) => 'cb' === h.key );
+
+			expect( cb ).toBeDefined();
+			expect( cb.required ).toBe( true );
+
+			// And the columns a merchant MAY hide still can be — the fix must not make
+			// everything required.
+			expect( lastHeaders.filter( ( h ) => ! h.required ).map( ( h ) => h.key ) ).toEqual( [
+				'customer',
+				'shipping',
+				'payment',
+				'tracking',
+				'actions',
+			] );
+		} );
+
 		test( 'a row with no actions renders no checkbox at all', async () => {
 			fetchOrders.mockResolvedValue( resultOf( [ makeRow( { id: 1, order_number: '1' } ) ] ) );
 

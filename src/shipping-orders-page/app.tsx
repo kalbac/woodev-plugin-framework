@@ -1017,6 +1017,12 @@ function buildHeaders( {
 				/>
 			),
 			cellClassName: 'woodev-orders-cb-cell',
+			// ⚠ `required` keeps it OUT of `TableCard`'s column-visibility menu, and that is
+			// the only reason it is set — the selection column is not something a merchant
+			// hides. Without it the menu listed `cb` as a toggleable column whose "label" is
+			// this very `<CheckboxControl>`, so a live select-all checkbox was rendered inside
+			// the dropdown with no caption beside it (operator, rig, 13.09.2026).
+			required: true,
 		},
 		{ key: 'ID', label: __( 'Заказ', 'woodev-plugin-framework' ), isSortable: true, required: true },
 		{ key: 'date', label: __( 'Дата', 'woodev-plugin-framework' ), isSortable: true, required: true },
