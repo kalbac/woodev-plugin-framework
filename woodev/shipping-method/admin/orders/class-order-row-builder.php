@@ -118,6 +118,171 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		}
 
 		/**
+		 * Builds what a shop owner needs to see about one order WITHOUT opening it (SP-10 card
+		 * #875) — a deliberate selection, not a dump: billing/shipping blocks, the shipping
+		 * method, the item table and the same actions the row itself offers. WooCommerce's own
+		 * `a.order-preview` panel is the reference for what belongs here.
+		 *
+		 * Reuses {@see self::build_customer()}, {@see self::build_payment()},
+		 * {@see self::build_tracking()} and {@see self::resolve_delivery_status()} — the row and
+		 * the preview describe the same order, so those four groups are byte-for-byte the row's
+		 * own, not second copies.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order to preview.
+		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be
+		 *                                        resolved.
+		 * @return array<string,mixed>
+		 */
+		public function build_preview( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$status  = $order->get_status();
+			$created = $order->get_date_created();
+
+			$preview = [
+				'id'              => $order->get_id(),
+				'order_number'    => $order->get_order_number(),
+				'edit_url'        => $order->get_edit_order_url(),
+				'date_created'    => $created ? $created->date( \DATE_ATOM ) : null,
+				'status'          => [
+					'slug'  => $status,
+					'label' => wc_get_order_status_name( $status ),
+				],
+				'carrier'         => null !== $provider
+					? [
+						'id'    => $provider->get_id(),
+						'label' => $provider->get_label(),
+					]
+					: null,
+				'customer'        => $this->build_customer( $order ),
+				'billing'         => $this->build_preview_billing( $order ),
+				'shipping'        => $this->build_preview_shipping( $order, $provider ),
+				'payment'         => $this->build_payment( $order ),
+				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
+				'tracking'        => $this->build_tracking( $order, $provider ),
+				'items'           => $this->build_preview_items( $order ),
+				'customer_note'   => (string) $order->get_customer_note(),
+				'actions'         => $this->order_actions->for_order( $order, $provider ),
+			];
+
+			/**
+			 * Filters the fully-built order preview before it is returned.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string,mixed>  $preview  built preview.
+			 * @param \WC_Order            $order    the order the preview was built from.
+			 * @param Orders_Provider|null $provider the matched carrier, or null.
+			 */
+			$filtered = apply_filters( 'woodev_shipping_orders_preview', $preview, $order, $provider );
+
+			return is_array( $filtered ) ? $filtered : $preview;
+		}
+
+		/**
+		 * Builds the preview's `billing` field group.
+		 *
+		 * ⚠ HPOS-safe: the address comes from WooCommerce's own
+		 * `WC_Order::get_formatted_billing_address()`, never hand-assembled from
+		 * `get_post_meta()`. Returned as ONE string with real `\n` line breaks (via
+		 * {@see self::to_multiline_plain_text()}) rather than the method's own `<br/>`-joined
+		 * HTML — a REST row is JSON consumed by React, not PHP-rendered markup.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order.
+		 * @return array<string,mixed>
+		 */
+		private function build_preview_billing( \WC_Order $order ): array {
+			return [
+				'address' => self::to_multiline_plain_text( (string) $order->get_formatted_billing_address( '' ) ),
+				'email'   => $order->get_billing_email(),
+				'phone'   => $order->get_billing_phone(),
+			];
+		}
+
+		/**
+		 * Builds the preview's `shipping` field group: the formatted shipping address ALONGSIDE
+		 * (not instead of) the resolved destination {@see self::resolve_destination()} already
+		 * gives the row — a pickup point overrides the destination shown to the merchant, but the
+		 * address on file is still worth showing next to it.
+		 *
+		 * ⚠ HPOS-safe: `get_formatted_shipping_address()`, never hand-assembled.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    order.
+		 * @param Orders_Provider|null $provider matched carrier, or null.
+		 * @return array<string,mixed>
+		 */
+		private function build_preview_shipping( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$destination = $this->resolve_destination( $order, $provider );
+
+			return [
+				'address'          => self::to_multiline_plain_text( (string) $order->get_formatted_shipping_address( '' ) ),
+				'method_title'     => $order->get_shipping_method(),
+				'destination_kind' => $destination['kind'],
+				'destination_text' => $destination['text'],
+			];
+		}
+
+		/**
+		 * Builds the preview's `items` field group — one entry per product line item. Fee,
+		 * shipping and tax lines are not order CONTENTS a shop owner is asking about here, so
+		 * they are left out exactly as `WC_Order::get_items()`'s own default `'line_item'` type
+		 * filter already does.
+		 *
+		 * ⚠ A missing SKU renders as `null`, never `''` or `'0'` — the field is genuinely absent,
+		 * not empty text.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order.
+		 * @return array<int,array<string,mixed>>
+		 */
+		private function build_preview_items( \WC_Order $order ): array {
+			$items = [];
+
+			foreach ( $order->get_items() as $item ) {
+				if ( ! $item instanceof \WC_Order_Item_Product ) {
+					continue;
+				}
+
+				$product = $item->get_product();
+				$sku     = $product instanceof \WC_Product ? (string) $product->get_sku() : '';
+
+				$items[] = [
+					'name'            => $item->get_name(),
+					'sku'             => '' !== $sku ? $sku : null,
+					'quantity'        => (int) $item->get_quantity(),
+					'formatted_total' => self::to_plain_text( wc_price( $item->get_total() ) ),
+				];
+			}
+
+			return $items;
+		}
+
+		/**
+		 * Reduces a WooCommerce address string to plain text with real `\n` line breaks.
+		 *
+		 * `WC_Order::get_formatted_billing_address()` / `get_formatted_shipping_address()`
+		 * return HTML with `<br/>`-joined lines — correct for PHP-rendered admin markup, wrong
+		 * for a REST field a React panel prints as text (same reasoning as
+		 * {@see self::to_plain_text()}, which this extends). `<br>` variants are converted to
+		 * `\n` BEFORE the remaining tags are stripped, so the line breaks survive the strip.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $markup address markup, possibly carrying `<br>` line breaks.
+		 * @return string
+		 */
+		private static function to_multiline_plain_text( string $markup ): string {
+			$with_breaks = (string) preg_replace( '/<br\s*\/?>/i', "\n", $markup );
+
+			return trim( html_entity_decode( wp_strip_all_tags( $with_breaks ), ENT_QUOTES, 'UTF-8' ) );
+		}
+
+		/**
 		 * Whether an order has ever been exported to its carrier (card #860): the
 		 * provider's own `carrier_order_id` meta key is present AND non-empty.
 		 *

@@ -44,7 +44,7 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '3';
+		public const SEED_VERSION = '4';
 
 		/**
 		 * This carrier's marker meta key — the same one its `Orders_Provider`
@@ -217,6 +217,46 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		}
 
 		/**
+		 * The payment methods seeded orders cycle through (card #876) — several DIFFERENT ones,
+		 * never one for all: a «Оплата» column fed by a single value is a different shape from a
+		 * real shop's and hid two defects on this page before anyone noticed the column was
+		 * uniform rather than merely repetitive. Its own set, separate from
+		 * `Woodev_Test_Orders_Seeder::payment_method_pool()` — same "each fixture owns its own
+		 * demo data" reasoning as this file's own docblock. Pure data, no WordPress calls.
+		 *
+		 * Deliberately sized at 5 — every other cycling field in {@see self::demo_orders()} uses
+		 * a modulus of 2, 4, 6 or 8; a 5th distinct modulus keeps this fact independent of them.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int, array{method:string, title:string}>
+		 */
+		public static function payment_method_pool(): array {
+			return [
+				[
+					'method' => 'bacs',
+					'title'  => 'Банковская карта',
+				],
+				[
+					'method' => 'cod',
+					'title'  => 'Наложенный платёж',
+				],
+				[
+					'method' => 'yookassa',
+					'title'  => 'ЮKassa',
+				],
+				[
+					'method' => 'sbp',
+					'title'  => 'СБП',
+				],
+				[
+					'method' => 'bank_transfer',
+					'title'  => 'Банковский перевод',
+				],
+			];
+		}
+
+		/**
 		 * The demo orders' raw definitions, GENERATED rather than typed out — their
 		 * job is volume and spread, and thirty near-identical literals invite a
 		 * copy-paste defect in whichever one carries meaning.
@@ -241,7 +281,7 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string, customer_index:int, is_guest:bool, qty:int}>
+		 * @return array<int, array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string, customer_index:int, is_guest:bool, qty:int, payment_method_index:int}>
 		 */
 		public static function demo_orders(): array {
 			$raw_statuses  = [ 'NEW', 'ACCEPTED', 'IN_TRANSIT', 'READY', 'DELIVERED', 'RETURNED', 'CANCELLED', 'CUSTOMS_HOLD' ];
@@ -278,6 +318,8 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 					// other.
 					'is_guest'         => 0 !== $index % 4,
 					'qty'              => 1 + ( $index % 3 ),
+					// Cycles through every payment method (#876) on its OWN modulus.
+					'payment_method_index' => $index % count( self::payment_method_pool() ),
 				];
 			}
 
@@ -315,13 +357,17 @@ if ( ! class_exists( 'Woodev_Realistic_Orders_Seeder' ) ) {
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string, customer_index:int, is_guest:bool, qty:int} $definition
+		 * @param array{status:string, raw_status:string, tracking:?string, carrier_order_id:?string, days_ago:int, method_id:string, customer_index:int, is_guest:bool, qty:int, payment_method_index:int} $definition
 		 *
 		 * @return void
 		 */
 		private static function seed_one( array $definition ): void {
 			$order = wc_create_order();
 			$order->set_status( $definition['status'] );
+
+			$payment = self::payment_method_pool()[ $definition['payment_method_index'] % count( self::payment_method_pool() ) ];
+			$order->set_payment_method( $payment['method'] );
+			$order->set_payment_method_title( $payment['title'] );
 
 			// WooCommerce stamps `date_created` at creation, so a spread has to be
 			// set explicitly or every demo row shares today's date.

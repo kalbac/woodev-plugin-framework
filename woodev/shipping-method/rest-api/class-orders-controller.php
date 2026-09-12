@@ -77,6 +77,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private $order_actions;
 
 		/**
+		 * Maximum number of order ids one bulk request accepts (card #874). Rejected outright
+		 * with a clear `WP_Error` rather than silently truncated — a truncated batch would
+		 * perform the action on fewer orders than the merchant selected without saying so.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var int
+		 */
+		private const BULK_MAX_IDS = 100;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -94,15 +105,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$this->row_builder   = $row_builder ?? new Order_Row_Builder( $this->order_actions );
 		}
 
-		/**
-		 * Registers the `/shipping/orders` route.
-		 *
-		 * @internal
-		 *
-		 * @since 2.0.2
-		 *
-		 * @return void
-		 */
 		public function register_routes(): void {
 			register_rest_route(
 				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
@@ -219,6 +221,64 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					],
 				]
 			);
+
+			// Bulk action + preview routes (SP-10 increment 4, cards #874/#875).
+			$this->register_bulk_action_route();
+		}
+
+		/**
+		 * Registers the `/shipping/orders/bulk/{action}` route.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function register_bulk_action_route(): void {
+			// Performs one action across many orders in a single request (card #874) — one
+			// request rather than N so the client can show ONE aggregate result instead of N
+			// races toasts. Gated the same as the single-order write route.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/bulk/(?P<action>[a-z_]+)',
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'perform_bulk_action' ],
+					'permission_callback' => [ $this, 'perform_action_permissions_check' ],
+					'args'                => [
+						'action' => [
+							'type' => 'string',
+						],
+						'ids'    => [
+							'type'              => 'array',
+							'required'          => true,
+							'items'             => [
+								'type'    => 'integer',
+								'minimum' => 1,
+							],
+							'validate_callback' => [ __CLASS__, 'validate_bulk_ids' ],
+						],
+					],
+				]
+			);
+
+			// A read-only preview of one order for the panel a merchant opens without leaving
+			// the table (card #875) — same capability as the row list itself.
+			register_rest_route(
+				\Woodev_REST_V1_Registrar::ROUTE_NAMESPACE,
+				'/shipping/orders/(?P<id>\d+)/preview',
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_preview' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => [
+						'id' => [
+							'type' => 'integer',
+						],
+					],
+				]
+			);
 		}
 
 		/**
@@ -307,6 +367,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				sprintf( __( '%s is not a recognized delivery status.', 'woodev-plugin-framework' ), $param ),
 				[ 'status' => 400 ]
 			);
+		}
+
+		/**
+		 * REST `validate_callback` for `ids` on the bulk action route (card #874): rejects a
+		 * list longer than {@see self::BULK_MAX_IDS} with a clear error rather than silently
+		 * truncating it — a truncated batch would act on fewer orders than the merchant
+		 * selected without saying so. Per-item type/positivity is left to the `items` schema
+		 * declared alongside this callback.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed            $value   the request value.
+		 * @param \WP_REST_Request $request request.
+		 * @param string           $param   parameter name.
+		 * @return bool|\WP_Error
+		 */
+		public static function validate_bulk_ids( $value, $request, string $param ) {
+			if ( is_array( $value ) && count( $value ) > self::BULK_MAX_IDS ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_bulk_too_many_ids',
+					sprintf(
+						/* translators: %d: maximum number of order ids accepted per bulk request. */
+						__( 'За один раз можно обработать не более %d заказов.', 'woodev-plugin-framework' ),
+						self::BULK_MAX_IDS
+					),
+					[ 'status' => 400 ]
+				);
+			}
+
+			return true;
 		}
 
 		/**
@@ -713,6 +803,257 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'message' => self::action_success_message( $action ),
 				]
 			);
+		}
+
+		/**
+		 * Performs one action across many orders in a single request (card #874).
+		 *
+		 * **One request, not N** — N requests would produce N toasts, race the table's own
+		 * re-render, and cannot produce the aggregate sentence this route returns at all.
+		 *
+		 * For EACH id, in the order given: resolves the order and its provider, recomputes
+		 * {@see Order_Actions::for_order()} and checks the requested action is in it — never
+		 * trusting the client's selection, same as {@see self::perform_action()}. An order the
+		 * action does not apply to (unknown id, unresolvable carrier, action outside the
+		 * recomputed gate, no registered handler) is SKIPPED, not failed — the operator's own
+		 * rule: an inapplicable order is simply ignored for that action. Every ELIGIBLE order is
+		 * then dispatched through the same {@see self::dispatch_action()} path the single-order
+		 * route uses, so `export()` returning `''` (#860) counts as a failure there too, and an
+		 * exception is caught PER ORDER and counted as a failure rather than aborting the batch.
+		 *
+		 * Always a 200, even when every eligible order failed — a partial (or total) failure
+		 * among many orders is not a failed REQUEST.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `action` comes from the route, `ids` from
+		 *                                  the body.
+		 * @return \WP_REST_Response
+		 */
+		public function perform_bulk_action( $request ) {
+			$action = (string) $request->get_param( 'action' );
+			$ids    = (array) $request->get_param( 'ids' );
+
+			$eligible  = 0;
+			$succeeded = 0;
+			$failed    = 0;
+			$rows      = [];
+
+			foreach ( $ids as $id ) {
+				$order = wc_get_order( absint( $id ) );
+
+				if ( ! $order instanceof \WC_Order ) {
+					continue;
+				}
+
+				$provider = $this->resolve_matched_provider( $order );
+
+				if ( null === $provider ) {
+					continue;
+				}
+
+				$available = array_column( $this->order_actions->for_order( $order, $provider ), 'action' );
+
+				if ( ! in_array( $action, $available, true ) ) {
+					continue;
+				}
+
+				$handler = $this->registry->get_shipment_handler( $provider->get_id() );
+
+				if ( null === $handler ) {
+					// Cannot happen given `$available` is non-empty only when
+					// Order_Actions::for_order() itself resolved a handler — guarded anyway
+					// rather than trusting that invariant across the call above.
+					continue;
+				}
+
+				++$eligible;
+
+				try {
+					$succeeded_this_order = $this->dispatch_action( $handler, $order, $action, $provider );
+				} catch ( \Throwable $exception ) {
+					$this->log_action_failure( $provider->get_id(), $action, $exception );
+					$succeeded_this_order = false;
+				}
+
+				if ( $succeeded_this_order ) {
+					++$succeeded;
+					$rows[] = $this->build_row( self::reread_order( $order ), $provider );
+					continue;
+				}
+
+				++$failed;
+			}
+
+			return rest_ensure_response(
+				[
+					'action'    => $action,
+					'requested' => count( $ids ),
+					'eligible'  => $eligible,
+					'skipped'   => count( $ids ) - $eligible,
+					'succeeded' => $succeeded,
+					'failed'    => $failed,
+					'rows'      => $rows,
+					'messages'  => self::build_bulk_messages( $action, $eligible, $succeeded, $failed ),
+				]
+			);
+		}
+
+		/**
+		 * Builds the `messages` group of the bulk response.
+		 *
+		 * `success` is present only when `succeeded > 0`, `error` only when `failed > 0` — either
+		 * may be absent. When NOTHING among the requested ids was eligible, that general rule
+		 * would leave `messages` an empty object («Экспортировано 0 из 0» is never built), which
+		 * is honest but tells the merchant nothing about why; a single explanatory message is
+		 * returned instead.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action    the requested action id.
+		 * @param int    $eligible  orders that were actually attempted.
+		 * @param int    $succeeded of those, how many succeeded.
+		 * @param int    $failed    of those, how many failed.
+		 * @return array{success?:string,error?:string}
+		 */
+		private static function build_bulk_messages( string $action, int $eligible, int $succeeded, int $failed ): array {
+			if ( 0 === $eligible ) {
+				return [
+					'error' => __( 'Ни один из выбранных заказов не поддерживает это действие.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			$messages = [];
+
+			if ( $succeeded > 0 ) {
+				$messages['success'] = self::bulk_success_message( $action, $succeeded, $eligible );
+			}
+
+			if ( $failed > 0 ) {
+				$messages['error'] = self::bulk_failure_message( $action, $failed, $eligible );
+			}
+
+			return $messages;
+		}
+
+		/**
+		 * The Russian aggregate success sentence for one bulk action — the operator's own
+		 * wording, near-verbatim: «Экспортировано 3 из 5». **"из N" is the ELIGIBLE count**, not
+		 * the requested one — the sentence describes what was actually attempted.
+		 *
+		 * No countable noun appears here (unlike {@see self::bulk_failure_message()}), matching
+		 * the operator's own example exactly — so no `_n()` call is needed for this half.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action    the requested action id.
+		 * @param int    $succeeded orders successfully processed.
+		 * @param int    $eligible  orders actually attempted.
+		 * @return string
+		 */
+		private static function bulk_success_message( string $action, int $succeeded, int $eligible ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					$template = __( 'Экспортировано %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				case Order_Actions::CANCEL:
+					$template = __( 'Отменено %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				case Order_Actions::UPDATE:
+					$template = __( 'Обновлено %1$d из %2$d', 'woodev-plugin-framework' );
+					break;
+
+				default:
+					$template = __( 'Выполнено %1$d из %2$d', 'woodev-plugin-framework' );
+			}
+
+			return sprintf( $template, $succeeded, $eligible );
+		}
+
+		/**
+		 * The Russian aggregate failure sentence for one bulk action — the operator's own
+		 * wording, near-verbatim: «Не удалось экспортировать 2 заказа из 5».
+		 *
+		 * ⚠ Russian has three plural forms («1 заказ» / «2 заказа» / «5 заказов»), so the count
+		 * is threaded through `_n()` rather than hand-built — a hand-built string is wrong at 1,
+		 * 2 and 5 alike. `_n()`'s own untranslated fallback is binary (singular vs one plural),
+		 * exactly like every other `_n()` call already in this framework (e.g. `_n( 'Every %d
+		 * Minute', 'Every %d Minutes', … )`); the THIRD Russian form only renders once the
+		 * shipped `woodev-plugin-framework-ru_RU` catalogue carries an entry for this exact
+		 * singular/plural pair with all three `msgstr` forms — a translation-catalogue update
+		 * this task's scope (`languages/**` is not among the touched paths) does not cover.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action   the requested action id.
+		 * @param int    $failed   orders that failed.
+		 * @param int    $eligible orders actually attempted.
+		 * @return string
+		 */
+		private static function bulk_failure_message( string $action, int $failed, int $eligible ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					$template = _n(
+						'Не удалось экспортировать %1$d заказ из %2$d',
+						'Не удалось экспортировать %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				case Order_Actions::CANCEL:
+					$template = _n(
+						'Не удалось отменить %1$d заказ из %2$d',
+						'Не удалось отменить %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				case Order_Actions::UPDATE:
+					$template = _n(
+						'Не удалось обновить %1$d заказ из %2$d',
+						'Не удалось обновить %1$d заказов из %2$d',
+						$failed,
+						'woodev-plugin-framework'
+					);
+					break;
+
+				default:
+					$template = __( 'Не удалось выполнить действие для %1$d из %2$d', 'woodev-plugin-framework' );
+			}
+
+			return sprintf( $template, $failed, $eligible );
+		}
+
+		/**
+		 * Returns what a shop owner needs to see about one order without opening it (card #875).
+		 *
+		 * Same capability as the row list ({@see self::get_items_permissions_check()}) — this is
+		 * a read, not a write.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request; `id` comes from the route.
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function get_preview( $request ) {
+			$order_id = absint( $request->get_param( 'id' ) );
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order instanceof \WC_Order ) {
+				return new \WP_Error(
+					'woodev_shipping_orders_unknown_order',
+					__( 'Заказ не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			$provider = $this->resolve_matched_provider( $order );
+
+			return rest_ensure_response( $this->row_builder->build_preview( $order, $provider ) );
 		}
 
 		/**

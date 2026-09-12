@@ -147,4 +147,41 @@ class TestOrdersSeederVocabularyTest extends TestCase {
 
 		$this->assertCount( 2, $methods );
 	}
+
+	/**
+	 * #876: a «Оплата» column fed by a single payment method is a different shape from a real
+	 * shop's and hid two defects on this page before anyone noticed the column was uniform
+	 * rather than merely repetitive — so the seeded set must carry SEVERAL different ones.
+	 */
+	public function test_the_seeded_set_uses_several_different_payment_methods(): void {
+		$indexes = array_unique( array_column( \Woodev_Test_Orders_Seeder::demo_orders(), 'payment_method_index' ) );
+
+		$this->assertGreaterThan( 1, count( $indexes ), 'seeded orders must carry more than one payment method' );
+	}
+
+	/** Every declared `payment_method_index` must resolve to a real entry in the pool. */
+	public function test_every_demo_order_payment_method_index_resolves_to_a_declared_method(): void {
+		$pool = \Woodev_Test_Orders_Seeder::payment_method_pool();
+
+		foreach ( \Woodev_Test_Orders_Seeder::demo_orders() as $index => $definition ) {
+			$this->assertArrayHasKey( 'payment_method_index', $definition, sprintf( 'demo order #%d has no payment_method_index', $index ) );
+			$this->assertArrayHasKey( $definition['payment_method_index'] % count( $pool ), $pool );
+		}
+	}
+
+	/** The realistic fixture's own seeder gets the same #876 guard. */
+	public function test_the_realistic_set_also_uses_several_different_payment_methods(): void {
+		$indexes = array_unique( array_column( \Woodev_Realistic_Orders_Seeder::demo_orders(), 'payment_method_index' ) );
+
+		$this->assertGreaterThan( 1, count( $indexes ), 'realistic seeded orders must carry more than one payment method' );
+	}
+
+	public function test_every_realistic_demo_order_payment_method_index_resolves_to_a_declared_method(): void {
+		$pool = \Woodev_Realistic_Orders_Seeder::payment_method_pool();
+
+		foreach ( \Woodev_Realistic_Orders_Seeder::demo_orders() as $index => $definition ) {
+			$this->assertArrayHasKey( 'payment_method_index', $definition, sprintf( 'realistic demo order #%d has no payment_method_index', $index ) );
+			$this->assertArrayHasKey( $definition['payment_method_index'] % count( $pool ), $pool );
+		}
+	}
 }
