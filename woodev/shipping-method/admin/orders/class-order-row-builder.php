@@ -38,9 +38,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 	class Order_Row_Builder {
 
 		/**
+		 * Declares which of export/update/cancel are available on the row (card
+		 * #824). Defaults to one wired against the framework's shared registry
+		 * singleton — the same optional-dependency-defaults-to-a-singleton idiom
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler}'s own
+		 * constructor already uses for `$popular_settlement_store` — so an existing
+		 * `new Order_Row_Builder()` call site keeps compiling unchanged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Actions
+		 */
+		private Order_Actions $order_actions;
+
+		/**
+		 * Constructor.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Order_Actions|null $order_actions action-set builder; defaults to one
+		 *                                          wired against {@see Orders_Registry::instance()}.
+		 */
+		public function __construct( ?Order_Actions $order_actions = null ) {
+			$this->order_actions = $order_actions ?? new Order_Actions( Orders_Registry::instance() );
+		}
+
+		/**
 		 * Builds the full row for one order.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Added `is_exported` and `actions` (card #824).
 		 *
 		 * @param \WC_Order            $order    matched order.
 		 * @param Orders_Provider|null $provider the carrier this row belongs to, or null
@@ -72,6 +99,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'type'            => $this->resolve_type( $order, $provider ),
 				'tracking'        => $this->build_tracking( $order, $provider ),
 				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
+				'is_exported'     => self::is_exported( $order, $provider ),
+				'actions'         => $this->order_actions->for_order( $order, $provider ),
 			];
 
 			/**
@@ -86,6 +115,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 			$filtered = apply_filters( 'woodev_shipping_orders_row', $row, $order, $provider );
 
 			return is_array( $filtered ) ? $filtered : $row;
+		}
+
+		/**
+		 * Whether an order has ever been exported to its carrier (card #860): the
+		 * provider's own `carrier_order_id` meta key is present AND non-empty.
+		 *
+		 * Follows the same read pattern as {@see self::build_tracking()}. A provider
+		 * with no declared `carrier_order_id_meta_key` → false: the framework cannot
+		 * know, and does not guess (the same asymmetry
+		 * {@see Orders_Query::is_exported_meta_clauses()} documents).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    order.
+		 * @param Orders_Provider|null $provider matched carrier, or null.
+		 * @return bool
+		 */
+		private static function is_exported( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			if ( null === $provider || null === $provider->get_carrier_order_id_meta_key() ) {
+				return false;
+			}
+
+			return '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_carrier_order_id_meta_key() );
 		}
 
 		/**

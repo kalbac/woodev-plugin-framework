@@ -26,6 +26,7 @@ return [
 	'Woodev\\Framework\\Setup\\Setup_Wizard' => 'woodev/setup/class-setup-wizard.php',
 	'Woodev\\Framework\\Setup\\Step' => 'woodev/setup/class-step.php',
 	'Woodev\\Framework\\Setup\\Woocommerce_Setup_Wizard' => 'woodev/setup/class-woocommerce-setup-wizard.php',
+	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Actions' => 'woodev/shipping-method/admin/orders/class-order-actions.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Builder' => 'woodev/shipping-method/admin/orders/class-order-row-builder.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provider' => 'woodev/shipping-method/admin/orders/class-orders-provider.php',
 	'Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query' => 'woodev/shipping-method/admin/orders/class-orders-query.php',

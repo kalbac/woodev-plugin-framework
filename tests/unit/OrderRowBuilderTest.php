@@ -12,8 +12,11 @@ namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 require_once dirname( __DIR__, 2 ) . '/woodev/compatibility/class-plugin-compatibility.php';
@@ -28,6 +31,11 @@ class OrderRowBuilderTest extends TestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
+
+		// Order_Row_Builder's default constructor (card #824) wires an Order_Actions
+		// against this process-wide singleton; a handler another test forgot to clean
+		// up would otherwise leak into this file's rows.
+		Orders_Registry::instance()->reset_for_tests();
 
 		$this->meta = [];
 
@@ -59,6 +67,12 @@ class OrderRowBuilderTest extends TestCase {
 				return $this->meta[ $key ] ?? '';
 			}
 		);
+	}
+
+	protected function tearDown(): void {
+		Orders_Registry::instance()->reset_for_tests();
+
+		parent::tearDown();
 	}
 
 	/**
@@ -121,6 +135,7 @@ class OrderRowBuilderTest extends TestCase {
 			private $method;
 
 			public function __construct( $method ) {
+				parent::__construct();
 				$this->method = $method;
 			}
 
@@ -546,5 +561,83 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( '2026-09-07T12:00:00+00:00', $row['date_created'] );
 		$this->assertSame( [ 'slug' => 'processing', 'label' => 'Processing' ], $row['status'] );
 		$this->assertSame( [ 'id' => 'cdek', 'label' => 'СДЭК' ], $row['carrier'] );
+	}
+
+	// ----- is_exported / actions (card #824) -----
+
+	public function test_is_exported_false_when_provider_is_null(): void {
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), null );
+
+		$this->assertFalse( $row['is_exported'] );
+	}
+
+	public function test_is_exported_false_when_provider_has_no_carrier_order_id_meta_key(): void {
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $this->provider() );
+
+		$this->assertFalse( $row['is_exported'] );
+	}
+
+	/**
+	 * #860: an ABSENT meta key must read the same as a present-but-empty one — both
+	 * are "not exported".
+	 */
+	public function test_is_exported_false_when_meta_key_is_absent(): void {
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertFalse( $row['is_exported'] );
+	}
+
+	/**
+	 * #860: a stored EMPTY string (a failed export) must not count as exported.
+	 */
+	public function test_is_exported_false_when_meta_value_is_an_empty_string(): void {
+		$this->meta['_wc_edostavka_carrier_order_id'] = '';
+
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertFalse( $row['is_exported'] );
+	}
+
+	public function test_is_exported_true_when_meta_value_is_non_empty(): void {
+		$this->meta['_wc_edostavka_carrier_order_id'] = 'CARRIER-1';
+
+		$provider = $this->provider( [ 'carrier_order_id_meta_key' => '_wc_edostavka_carrier_order_id' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $provider );
+
+		$this->assertTrue( $row['is_exported'] );
+	}
+
+	public function test_actions_is_empty_when_provider_is_null(): void {
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), null );
+
+		$this->assertSame( [], $row['actions'] );
+	}
+
+	public function test_actions_is_empty_when_no_handler_is_registered(): void {
+		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $this->provider() );
+
+		$this->assertSame( [], $row['actions'] );
+	}
+
+	/**
+	 * Plumbing only — {@see \Woodev\Tests\Unit\ShippingOrderActionsTest} covers the
+	 * full gate; this proves the row actually carries `Order_Actions`' output rather
+	 * than a hardcoded shape.
+	 */
+	public function test_actions_reflects_order_actions_for_order(): void {
+		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+
+		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
+
+		$order = $this->make_order( [ 'get_status' => 'processing' ] );
+
+		$row = ( new Order_Row_Builder() )->build( $order, $this->provider() );
+
+		$this->assertSame( [ Order_Actions::EXPORT ], array_column( $row['actions'], 'action' ) );
 	}
 }

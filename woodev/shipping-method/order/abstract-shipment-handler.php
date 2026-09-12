@@ -335,6 +335,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		}
 
 		/**
+		 * Whether this carrier can refresh one order's state from its own API (card
+		 * #824). `false` by default — the framework has NO generic pull of a
+		 * carrier's state; that sync is SP-8 (spec §D4). A carrier overriding this to
+		 * `true` must also override {@see self::update()}; until it does, «Обновить»
+		 * is not offered at all rather than offered and dead
+		 * (see {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_order()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function supports_update(): bool {
+			return false;
+		}
+
+		/**
+		 * Pulls the carrier's current state for one order and syncs it locally.
+		 *
+		 * Inert by default — see {@see self::supports_update()}. An overriding
+		 * carrier is responsible for its OWN hooks around the refresh (this base
+		 * fires none): the framework has no generic "shipment updated" event to fire
+		 * on a sync it did not itself define.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to refresh.
+		 * @return bool true when the refresh succeeded, false otherwise.
+		 */
+		public function update( \WC_Order $order ): bool {
+			return false;
+		}
+
+		/**
 		 * Queues a failed export for out-of-band retry.
 		 *
 		 * The job is created in the exact shape {@see \Woodev_Background_Job_Handler}
