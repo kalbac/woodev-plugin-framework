@@ -136,17 +136,92 @@
 }
 
 /**
- * The bulk-action control (#874) — beside `SearchControl` in `TableCard`'s own `actions`
- * slot, which is already "above the table, beside the existing filters" (the brief's own
- * words) without a new region of the page to place.
+ * The bulk-action control (#874), grouped with its button and placed BEFORE the search
+ * field — operator's round-3 sketch: *«select + button должны быть grouped, у кнопки бордер
+ * радиус справа»*, and *«bulk action + button должно быть перед полем поиска»*.
+ *
+ * Same construction as the row action group: one outer frame, the two controls flush, a
+ * divider between, and the radius only on the group's ends. WordPress's own `SelectControl`
+ * and `Button` each draw their own border, so both are flattened here and the group draws
+ * the single one that remains.
  */
-.woodev-orders-bulk {
-	display: flex;
+/**
+ * The toolbar row `TableCard` renders for us: bulk group, then search.
+ *
+ * ⚠ On a NARROW screen the priority inverts — the operator asked for search first at full
+ * width, with the group beneath it. `order` does that without changing the DOM, so the
+ * desktop reading order (act on a selection, then narrow the list) and the mobile one
+ * (find something, then act) can differ without two markup paths.
+ */
+/**
+ * Our own toolbar row, handed to `TableCard` as ONE action so its slot cannot stretch the
+ * two controls independently (it does: both came back full-width and stacked).
+ *
+ * ⚠ On a NARROW screen the priority inverts — the operator asked for search first at full
+ * width, with the group beneath. `order` does that without a second markup path, so the
+ * desktop reading order (act on a selection, then narrow the list) and the mobile one (find
+ * something, then act) can differ while the DOM stays one shape.
+ */
+.woodev-orders__toolbar-row {
 	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
 	gap: wd.$gap-sm;
+	width: 100%;
+
+	.components-search-control {
+		flex: 1 1 240px;
+		min-width: 0;
+	}
+
+	.components-base-control {
+		margin-bottom: 0;
+	}
+
+	@media ( max-width: 782px ) {
+		.components-search-control {
+			flex-basis: 100%;
+			order: -1;
+		}
+	}
+}
+
+.woodev-orders-bulk {
+	align-items: stretch;
+	// ⚠ WooCommerce's own `.woocommerce-table__actions` grows its direct children, so
+	// without this the group took 1130px of a 1146px row and pushed the search field onto
+	// a second line — measured on the rig, not guessed. Size to content and let the search
+	// field be the one that stretches.
+	flex: 0 0 auto;
+	border: 1px solid wd.$border;
+	border-radius: wd.$radius-sm;
+	display: inline-flex;
+	flex-wrap: nowrap;
+	overflow: hidden;
+
+	.components-base-control,
+	.components-base-control__field {
+		margin-bottom: 0;
+	}
+
+	.components-input-control__backdrop,
+	.components-select-control__input {
+		border: 0 !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+	}
 
 	.components-select-control {
-		min-width: 200px;
+		min-width: 190px;
+	}
+
+	&__apply.components-button {
+		border-left: 1px solid wd.$border;
+		border-radius: 0;
+		// The select carries WP's own control height; match it so the group reads as one
+		// control rather than a button glued to a field.
+		height: auto;
+		white-space: nowrap;
 	}
 }
 
@@ -157,28 +232,54 @@
 }
 
 /**
- * The order preview modal (#875). Billing and shipping side by side, then the item table,
- * then the (text) actions — WooCommerce's own order-preview SHAPE, not its markup.
+ * The order preview modal (#875), recomposed in round 3.
+ *
+ * ⚠ **820px**, matching WooCommerce's own order preview — measured by the operator, not
+ * chosen here. Without it `Modal` grows to the viewport and the two columns stretch into
+ * unreadable 1400px lines, which was half of why the first version looked the way it did.
  */
 .woodev-orders-preview {
-	&__loading {
+	max-width: 820px;
+	width: calc( 100% - #{ wd.$gap-lg } );
+
+	// The summary line: what this page is actually about — the shipment's state, the carrier
+	// that holds it, and when the order came in.
+	&__summary {
+		align-items: center;
+		border-bottom: 1px solid wd.$border;
 		display: flex;
-		justify-content: center;
-		padding: wd.$gap-lg 0;
+		flex-wrap: wrap;
+		gap: wd.$gap-sm wd.$gap;
+		margin: 0 0 wd.$gap-lg;
+		padding-bottom: wd.$gap;
+	}
+
+	&__carrier {
+		font-weight: 600;
+	}
+
+	&__date {
+		color: wd.$muted;
+		margin-left: auto;
 	}
 
 	&__columns {
 		display: flex;
 		flex-wrap: wrap;
 		gap: wd.$gap-lg;
-		margin-bottom: wd.$gap;
+		margin-bottom: wd.$gap-lg;
+	}
 
+	&__column {
+		flex: 1 1 260px;
+		min-width: 0;
+
+		// Sentence case, not a tracked-out caps eyebrow — WooCommerce's own preview heads its
+		// blocks this way, and the caps version is the surest tell of a generated layout.
 		h3 {
-			margin: 0 0 wd.$gap-xs;
 			font-size: 13px;
-			text-transform: uppercase;
-			letter-spacing: 0.03em;
-			color: wd.$muted;
+			font-weight: 600;
+			margin: 0 0 wd.$gap-xs;
 		}
 
 		p {
@@ -186,35 +287,110 @@
 		}
 	}
 
-	&__column {
-		flex: 1 1 240px;
-		min-width: 0;
+	&__lead {
+		font-size: 14px;
+		font-weight: 500;
 	}
 
-	&__note {
-		padding: wd.$gap-sm;
-		background: wd.$surface;
-		border-radius: wd.$radius-sm;
-		margin-bottom: wd.$gap;
+	// ⚠ The address arrives from WooCommerce's own formatter WITH newlines. Render them.
+	// Collapsing them is what turned «Гражданский проспект, д. 47 … Санкт-Петербург 195279»
+	// into one unreadable run in the first version.
+	&__address {
+		color: wd.$muted;
+		margin-top: wd.$gap-xs !important;
+		white-space: pre-line;
+	}
+
+	&__label {
+		color: wd.$muted;
+		margin-right: wd.$gap-xs;
 	}
 
 	&__items {
-		width: 100%;
 		border-collapse: collapse;
-		margin-bottom: wd.$gap;
+		margin-bottom: wd.$gap-lg;
+		width: 100%;
 
+		th,
 		td {
-			padding: 6px 4px;
+			padding: 8px 4px;
+			text-align: left;
+			vertical-align: top;
+		}
+
+		thead th {
 			border-bottom: 1px solid wd.$border;
+			color: wd.$muted;
+			font-size: 12px;
+			font-weight: 400;
+		}
+
+		tbody td {
+			border-bottom: 1px solid wd.$border;
+		}
+
+		tfoot th,
+		tfoot td {
+			font-weight: 600;
+			padding-top: wd.$gap-sm;
 		}
 	}
 
-	&__actions {
+	&__item-name {
+		display: block;
+	}
+
+	&__item-qty {
+		text-align: right !important;
+		width: 5em;
+	}
+
+	&__item-total {
+		text-align: right !important;
+		white-space: nowrap;
+		width: 9em;
+	}
+
+	&__note {
+		background: wd.$surface;
+		border-radius: wd.$radius-sm;
+		margin-bottom: wd.$gap-lg;
+		padding: wd.$gap-sm wd.$gap;
+
+		h3 {
+			font-size: 13px;
+			font-weight: 600;
+			margin: 0 0 wd.$gap-xs;
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+
+	&__footer {
+		align-items: center;
+		border-top: 1px solid wd.$border;
+		display: flex;
+		flex-wrap: wrap;
+		gap: wd.$gap-sm;
+		justify-content: space-between;
+		padding-top: wd.$gap;
+	}
+
+	&__confirm {
+		margin: 0;
+		max-width: 46ch;
+	}
+
+	&__buttons {
 		display: flex;
 		flex-wrap: wrap;
 		gap: wd.$gap-xs;
+		margin-left: auto;
 	}
 }
+
 
 .woodev-orders-cell__meta {
 	display: block;

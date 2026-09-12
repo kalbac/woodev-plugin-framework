@@ -2913,7 +2913,13 @@ describe( 'the preview modal (#875)', () => {
 		getProviders.mockReturnValue( oneProvider() );
 	} );
 
-	test( 'the eye button opens the modal, which shows a spinner then the fetched data', async () => {
+	/**
+	 * The operator rejected the first behaviour on the rig: *«при клике сразу открывается
+	 * модалка маленького размера, крутится спиннер, данные получены — модалка становится
+	 * огромной»*. WooCommerce loads first and opens once: the spinner belongs to the EYE, and
+	 * no modal exists until the data does.
+	 */
+	test( 'the eye spins while loading and the modal opens already populated', async () => {
 		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
 		let resolvePreview;
 		fetchOrderPreview.mockReturnValue(
@@ -2924,23 +2930,46 @@ describe( 'the preview modal (#875)', () => {
 
 		render( <App /> );
 
-		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+		const eye = await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } );
+		fireEvent.click( eye );
 
 		expect( fetchOrderPreview ).toHaveBeenCalledWith( 42 );
-
-		const dialog = await screen.findByRole( 'dialog' );
-		// `Spinner` renders `role="presentation"` (not "status") — not a role query.
-		expect( dialog.querySelector( '.components-spinner' ) ).toBeInTheDocument();
+		// Busy on the icon itself, and NO modal yet — that is the whole point.
+		expect( eye ).toHaveClass( 'is-busy' );
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
 
 		await act( async () => {
 			resolvePreview( previewOf() );
 		} );
 
+		const dialog = await screen.findByRole( 'dialog' );
 		expect( within( dialog ).getByText( 'Иван Петров' ) ).toBeInTheDocument();
 		expect( within( dialog ).getByText( 'СДЭК до ПВЗ' ) ).toBeInTheDocument();
 		expect( within( dialog ).getByText( 'Товар А' ) ).toBeInTheDocument();
 		expect( within( dialog ).getByText( 'SKU-1' ) ).toBeInTheDocument();
 		expect( within( dialog ).getByText( '1 200 ₽' ) ).toBeInTheDocument();
+		expect( dialog.querySelector( '.components-spinner' ) ).not.toBeInTheDocument();
+	} );
+
+	/** «При повторном клике по глазу нового запроса уже нет» — the cache, from the same pass. */
+	test( 'reopening the same order makes no second request', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf() );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+		expect( await screen.findByRole( 'dialog' ) ).toBeInTheDocument();
+		expect( fetchOrderPreview ).toHaveBeenCalledTimes( 1 );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		// Straight back on screen, with no further fetch.
+		expect( await screen.findByRole( 'dialog' ) ).toBeInTheDocument();
+		expect( fetchOrderPreview ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	test( 'empty fields render as absent — never a dash or the word "null"', async () => {
@@ -3049,7 +3078,11 @@ describe( 'the preview modal (#875)', () => {
 		);
 	} );
 
-	test( 'a fetch failure shows the server message rather than an endless spinner', async () => {
+	/**
+	 * A failure no longer has a modal to live in — the modal only exists once data arrived.
+	 * The message goes where every other action's does: the inline notice and the toast.
+	 */
+	test( 'a fetch failure reports through the notice, and opens no modal', async () => {
 		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
 		fetchOrderPreview.mockRejectedValue( { message: 'Заказ не найден.' } );
 
@@ -3057,7 +3090,9 @@ describe( 'the preview modal (#875)', () => {
 
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
 
-		const dialog = await screen.findByRole( 'dialog' );
-		await waitFor( () => expect( within( dialog ).getByText( 'Заказ не найден.' ) ).toBeInTheDocument() );
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Заказ не найден.' ).length ).toBeGreaterThan( 0 )
+		);
+		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
 	} );
 } );

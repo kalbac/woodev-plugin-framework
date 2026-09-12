@@ -3889,3 +3889,135 @@ msgstr ""
 #, js-format
 msgid "Вы уверены, что хотите выполнить «%s» для этого заказа?"
 msgstr ""
+
+#. translators: %d: maximum number of order ids accepted per bulk request.
+#: shipping-method/rest-api/class-orders-controller.php:392
+#, php-format
+msgid "За один раз можно обработать не более %d заказов."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:922
+msgid "Ни один из выбранных заказов не поддерживает это действие."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:957
+#, php-format
+msgid "Экспортировано %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:961
+#, php-format
+msgid "Отменено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:965
+#, php-format
+msgid "Обновлено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:969
+#, php-format
+msgid "Выполнено %1$d из %2$d"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:998
+#, php-format
+msgid "Не удалось экспортировать %1$d заказ из %2$d"
+msgid_plural "Не удалось экспортировать %1$d заказов из %2$d"
+msgstr[0] ""
+msgstr[1] ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1007
+#, php-format
+msgid "Не удалось отменить %1$d заказ из %2$d"
+msgid_plural "Не удалось отменить %1$d заказов из %2$d"
+msgstr[0] ""
+msgstr[1] ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1016
+#, php-format
+msgid "Не удалось обновить %1$d заказ из %2$d"
+msgid_plural "Не удалось обновить %1$d заказов из %2$d"
+msgstr[0] ""
+msgstr[1] ""
+
+#: shipping-method/rest-api/class-orders-controller.php:1025
+#, php-format
+msgid "Не удалось выполнить действие для %1$d из %2$d"
+msgstr ""
+
+#. translators: %s: order number, e.g. "42".
+#: assets/build/shipping-orders-page/index.js:5
+#, js-format
+msgid "Выбрать заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Экспортировать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Массовые действия"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Применить действие"
+msgstr ""
+
+#. translators: 1: action label, e.g. "Отменить". 2: number of selected orders.
+#: assets/build/shipping-orders-page/index.js:6
+#, js-format
+msgid "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранного заказа?"
+msgid_plural "Вы уверены, что хотите выполнить «%1$s» для %2$d выбранных заказов?"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: order number, e.g. "42".
+#: assets/build/shipping-orders-page/index.js:7
+#, js-format
+msgid "Просмотреть заказ %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Не удалось загрузить заказ."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Просмотр заказа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Выбрать все заказы на странице"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Не удалось выполнить массовое действие."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:5
+msgid "Выберите действие"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Товар"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Кол-во"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Сумма"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Итого"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Комментарий покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Открыть заказ"
+msgstr ""

@@ -195,7 +195,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 */
 		private function build_preview_billing( \WC_Order $order ): array {
 			return [
-				'address' => self::to_multiline_plain_text( (string) $order->get_formatted_billing_address( '' ) ),
+				'address' => self::without_leading_name(
+					self::to_multiline_plain_text( (string) $order->get_formatted_billing_address( '' ) ),
+					$order->get_formatted_billing_full_name()
+				),
 				'email'   => $order->get_billing_email(),
 				'phone'   => $order->get_billing_phone(),
 			];
@@ -219,7 +222,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 			$destination = $this->resolve_destination( $order, $provider );
 
 			return [
-				'address'          => self::to_multiline_plain_text( (string) $order->get_formatted_shipping_address( '' ) ),
+				'address'          => self::without_leading_name(
+					self::to_multiline_plain_text( (string) $order->get_formatted_shipping_address( '' ) ),
+					$order->get_formatted_shipping_full_name()
+				),
 				'method_title'     => $order->get_shipping_method(),
 				'destination_kind' => $destination['kind'],
 				'destination_text' => $destination['text'],
@@ -280,6 +286,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 			$with_breaks = (string) preg_replace( '/<br\s*\/?>/i', "\n", $markup );
 
 			return trim( html_entity_decode( wp_strip_all_tags( $with_breaks ), ENT_QUOTES, 'UTF-8' ) );
+		}
+
+		/**
+		 * Drops a leading line that merely repeats a name the panel already shows.
+		 *
+		 * WooCommerce's address format opens with `{name}`, so a formatted address always
+		 * starts with the recipient — correct on an order screen that shows nothing else, and
+		 * a visible duplicate in the preview panel, where the customer's name is already the
+		 * heading of the block the address sits in. Caught on the rig, s134: «Александра
+		 * Константинова-Виноградова» appeared twice, two lines apart.
+		 *
+		 * Compares the WHOLE first line, trimmed — not a prefix match. A street that merely
+		 * begins with the customer's surname keeps its line.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $address plain-text address with `\n` line breaks.
+		 * @param string $name    the name already displayed beside it.
+		 * @return string
+		 */
+		private static function without_leading_name( string $address, string $name ): string {
+			$name = trim( $name );
+
+			if ( '' === $name || '' === $address ) {
+				return $address;
+			}
+
+			$lines = explode( "\n", $address );
+
+			if ( trim( (string) reset( $lines ) ) === $name ) {
+				array_shift( $lines );
+			}
+
+			return trim( implode( "\n", $lines ) );
 		}
 
 		/**

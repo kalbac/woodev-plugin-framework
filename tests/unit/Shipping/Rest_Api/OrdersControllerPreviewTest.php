@@ -120,6 +120,9 @@ final class OrdersControllerPreviewTest extends TestCase {
 				'get_status'                       => 'processing',
 				'get_date_created'                => null,
 				'get_formatted_billing_full_name' => 'Иван Иванов',
+				// Read by Order_Row_Builder::without_leading_name(): WooCommerce's address
+				// format opens with the recipient, and the preview shows the name already.
+				'get_formatted_shipping_full_name' => 'Иван Иванов',
 				'get_customer_id'                  => 0,
 				'get_billing_email'                => 'ivan@example.test',
 				'get_billing_phone'                => '+79991234567',
@@ -256,6 +259,7 @@ final class OrdersControllerPreviewTest extends TestCase {
 		$order->shouldReceive( 'get_status' )->andReturn( 'pending' );
 		$order->shouldReceive( 'get_date_created' )->andReturn( null );
 		$order->shouldReceive( 'get_formatted_billing_full_name' )->andReturn( '' );
+		$order->shouldReceive( 'get_formatted_shipping_full_name' )->andReturn( '' );
 		$order->shouldReceive( 'get_customer_id' )->andReturn( 0 );
 		$order->shouldReceive( 'get_billing_email' )->andReturn( '' );
 		$order->shouldReceive( 'get_billing_phone' )->andReturn( '' );

@@ -605,6 +605,25 @@ const BULK_ACTIONS: BulkAction[] = [
  * row, generalised to a COUNT rather than one order's carrier (a bulk request can span
  * several carriers at once, so naming one would misrepresent the rest).
  */
+/**
+ * The bulk destructive confirm's question.
+ *
+ * ⚠ `_n()` HERE IS SAFE, AND THE REASON IS NOT GENERAL — read before rewording. In JS the
+ * catalogue is never consulted at all: `wp_set_script_translations()` is called nowhere in
+ * this framework and there is no `make-json` step (measured, s134), so `@wordpress/i18n`'s
+ * `_n()` always falls back to its own BINARY rule — `1 === n ? single : plural`. Russian
+ * has three forms, so a JS plural is normally wrong at 2-4 and cannot be fixed by adding a
+ * catalogue entry, the way the PHP side's can.
+ *
+ * This particular phrasing survives that because of the preposition: «для» takes the
+ * genitive, and there both 2 and 5 inflect identically — «для 1 выбранного заказа», «для 2
+ * выбранных заказов», «для 5 выбранных заказов». Two forms genuinely cover it.
+ *
+ * Change the preposition or drop it and that stops being true silently — «экспортировано 2
+ * заказа» vs «5 заказов» needs three. If you reword, either keep a construction where the
+ * 2-4 form matches the 5+ form, or make the phrase count-neutral («Выбрано заказов: %d»).
+ * See gotcha `russian-source-i18n-plural-n`.
+ */
 function bulkConfirmQuestion( action: BulkAction, count: number ): string {
 	return sprintf(
 		/* translators: 1: action label, e.g. "Отменить". 2: number of selected orders. */
@@ -652,12 +671,15 @@ function BulkActionsBar( {
 				label={ __( 'Массовые действия', 'woodev-plugin-framework' ) }
 				value={ value }
 				options={ [
-					{ label: __( 'Массовые действия', 'woodev-plugin-framework' ), value: '' },
+					// The operator's own sketch labels the empty state «Выберите действие» —
+					// an instruction, not a repeat of the control's name.
+					{ label: __( 'Выберите действие', 'woodev-plugin-framework' ), value: '' },
 					...BULK_ACTIONS.map( ( a ) => ( { label: a.label, value: a.action } ) ),
 				] }
 				onChange={ onChange }
 			/>
 			<Button
+				className="woodev-orders-bulk__apply"
 				variant="secondary"
 				disabled={ ! value || 0 === selectedCount }
 				onClick={ onApply }
@@ -700,7 +722,15 @@ function BulkActionsBar( {
  * which only carry a tooltip because their `label` already doubles as the accessible name via
  * `aria-label`; this one needs its own since it sits next to plain link text).
  */
-function PreviewButton( { row, onOpen }: { row: OrderRow; onOpen: ( orderId: number ) => void } ) {
+function PreviewButton( {
+	row,
+	isLoading,
+	onOpen,
+}: {
+	row: OrderRow;
+	isLoading: boolean;
+	onOpen: ( orderId: number ) => void;
+} ) {
 	const name = sprintf(
 		/* translators: %s: order number, e.g. "42". */
 		__( 'Просмотреть заказ %s', 'woodev-plugin-framework' ),
@@ -714,6 +744,11 @@ function PreviewButton( { row, onOpen }: { row: OrderRow; onOpen: ( orderId: num
 				label={ name }
 				showTooltip={ false }
 				className="woodev-orders-preview-button"
+				// The spinner runs ON THE ICON while the preview loads, and the modal opens
+				// only once the data is in hand (operator, rig round 3) — WooCommerce's own
+				// behaviour. A second click needs no request at all.
+				isBusy={ isLoading }
+				disabled={ isLoading }
 				onClick={ () => onOpen( row.id ) }
 			/>
 		</Tooltip>
@@ -721,170 +756,216 @@ function PreviewButton( { row, onOpen }: { row: OrderRow; onOpen: ( orderId: num
 }
 
 /**
- * One preview line item's row (#875) — an absent `sku` renders NOTHING, never a dash or the
- * word "null" (the same rule {@link TrackingCell} already follows for a missing number).
+ * One line of the preview's item table (#875). An absent SKU renders NOTHING — never a dash
+ * or the word "null", the same rule {@link TrackingCell} follows for a missing number.
  */
 function PreviewItemRow( { item }: { item: { name: string; sku: string; quantity: number; formatted_total: string } } ) {
 	return (
 		<tr>
 			<td>
-				{ item.name }
+				<span className="woodev-orders-preview__item-name">{ item.name }</span>
 				{ item.sku && <span className="woodev-orders-cell__meta">{ item.sku }</span> }
 			</td>
-			<td>{ item.quantity }</td>
-			<td>{ item.formatted_total }</td>
+			<td className="woodev-orders-preview__item-qty">{ item.quantity }</td>
+			<td className="woodev-orders-preview__item-total">{ item.formatted_total }</td>
 		</tr>
 	);
 }
 
 /**
- * The order preview modal (#875) — fetched on OPEN, not with the table (`fetchOrderPreview()`
- * is only ever needed for one order at a time). Reference: WooCommerce's own order preview
- * (`a.order-preview`) for the SHAPE — billing and shipping side by side, then the item table,
- * then actions — but NOT a copy: the fields are ours, and the operator was explicit that only
- * what a shop owner actually needs goes in. Every empty field (`sku`, `customer_note`,
- * `tracking`, `carrier`) renders as ABSENT, never a dash or the word "null".
+ * The order preview (#875), recomposed after the operator's rig pass: the first version was
+ * a wall of unstyled paragraphs at full viewport width, and he asked for WooCommerce's own
+ * preview «только лучше».
  *
- * ⚠ Its action buttons carry TEXT, not icons — the operator's own distinction from the row's
- * icon buttons — and run through the exact same `onActionClick`/`onCancelConfirm`/
- * `rowState` this page's row actions already use, via {@link ActionableOrder}: a destructive
- * one confirms the same way, and a settled action (success or failure) closes this modal
- * rather than leaving it to show a now-stale preview.
+ * The brief pins the visual language — this must read as native WordPress admin — so nothing
+ * here invents a palette or a typeface. What it does instead is compose:
+ *
+ * 1. **The header answers THIS page's question first.** WooCommerce's preview leads with the
+ *    ORDER's status; this page exists for the SHIPMENT, so the delivery-status badge leads,
+ *    with the carrier beside it. It is the very same `StatusCell` the table renders, not a
+ *    second styling of the same idea.
+ * 2. **No tracked-out capital labels.** The previous version headed each column with grey
+ *    uppercase («ПОКУПАТЕЛЬ»). WooCommerce itself uses sentence-case bold, and a caps eyebrow
+ *    over every block is the surest tell of a template.
+ * 3. **A label only where the value is ambiguous.** A phone and an email announce themselves
+ *    by shape; a bare carrier code does not, so «Трек» is labelled and they are not.
+ * 4. **Money lives in the item table's foot**, beside the amounts it belongs with, rather than
+ *    as a third labelled block competing with the two that matter.
+ * 5. **The address is a real address.** It arrives with newlines and is now rendered with them
+ *    — the old version collapsed it into one unreadable run, which was most of why the modal
+ *    looked the way it did.
+ *
+ * ⚠ Takes a LOADED `preview` and never fetches. The fetch, its spinner (on the eye icon) and
+ * the cache all live on the page — see `onOpenPreview()`. A modal that fetched on mount had to
+ * mount first, which is exactly the small-then-huge flash the operator rejected.
  */
-function PreviewModal( {
-	orderId,
+function OrderPreviewModal( {
+	preview,
 	rowState,
 	onActionClick,
 	onCancelConfirm,
 	onClose,
 }: {
-	orderId: number;
+	preview: OrderPreview;
 	rowState?: RowActionState;
 	onActionClick: ( row: ActionableOrder, action: OrderRowAction ) => void;
 	onCancelConfirm: ( orderId: number ) => void;
 	onClose: () => void;
 } ) {
-	const [ preview, setPreview ] = useState<OrderPreview | null>( null );
-	const [ error, setError ] = useState( '' );
-
-	useEffect( () => {
-		let cancelled = false;
-
-		setPreview( null );
-		setError( '' );
-
-		fetchOrderPreview( orderId )
-			.then( ( res ) => {
-				if ( ! cancelled ) {
-					setPreview( res );
-				}
-			} )
-			.catch( ( err: { message?: string } ) => {
-				if ( ! cancelled ) {
-					setError(
-						( err && err.message ) ||
-							__( 'Не удалось загрузить заказ.', 'woodev-plugin-framework' )
-					);
-				}
-			} );
-
-		return () => {
-			cancelled = true;
-		};
-	}, [ orderId ] );
-
 	const confirmingAction = rowState?.confirmingAction ?? null;
-	const confirming =
-		preview && confirmingAction
-			? preview.actions.find( ( a ) => a.action === confirmingAction ) || null
-			: null;
+	const confirming = confirmingAction
+		? preview.actions.find( ( a ) => a.action === confirmingAction ) || null
+		: null;
+	const target: ActionableOrder = { id: preview.id, carrier: preview.carrier };
+	const date = formatOrderDate( preview.date_created );
 
 	return (
 		<Modal
-			title={
-				preview
-					? sprintf( __( 'Заказ %s', 'woodev-plugin-framework' ), preview.order_number )
-					: __( 'Просмотр заказа', 'woodev-plugin-framework' )
-			}
+			title={ sprintf(
+				/* translators: %s: order number, e.g. "301". */
+				__( 'Заказ %s', 'woodev-plugin-framework' ),
+				preview.order_number
+			) }
 			onRequestClose={ onClose }
 			className="woodev-orders-preview"
 		>
-			{ ! preview && ! error && (
-				<div className="woodev-orders-preview__loading">
-					<Spinner />
-				</div>
-			) }
-			{ error && (
-				<Notice status="error" isDismissible={ false }>
-					{ error }
-				</Notice>
-			) }
-			{ preview && (
-				<>
-					<div className="woodev-orders-preview__columns">
-						<div className="woodev-orders-preview__column">
-							<h3>{ __( 'Покупатель', 'woodev-plugin-framework' ) }</h3>
-							<p>{ preview.customer.name }</p>
-							{ preview.billing.email && <p>{ preview.billing.email }</p> }
-							{ preview.billing.phone && <p>{ preview.billing.phone }</p> }
-							{ preview.billing.address && <p>{ preview.billing.address }</p> }
-						</div>
-						<div className="woodev-orders-preview__column">
-							<h3>{ __( 'Доставка', 'woodev-plugin-framework' ) }</h3>
-							{ preview.carrier && <p>{ preview.carrier.label }</p> }
-							<p>{ preview.shipping.method_title }</p>
-							<p>{ preview.shipping.destination_text }</p>
-							{ preview.tracking.number && <p>{ preview.tracking.number }</p> }
-						</div>
-					</div>
-					{ preview.customer_note && (
-						<p className="woodev-orders-preview__note">{ preview.customer_note }</p>
+			<div className="woodev-orders-preview__summary">
+				<StatusCell deliveryStatus={ preview.delivery_status } />
+				{ preview.carrier && (
+					<span className="woodev-orders-preview__carrier">{ preview.carrier.label }</span>
+				) }
+				{ date.text && (
+					<span className="woodev-orders-preview__date" title={ date.title }>
+						{ date.text }
+					</span>
+				) }
+			</div>
+
+			<div className="woodev-orders-preview__columns">
+				<section className="woodev-orders-preview__column">
+					<h3>{ __( 'Покупатель', 'woodev-plugin-framework' ) }</h3>
+					<p className="woodev-orders-preview__lead">{ preview.customer.name }</p>
+					{ preview.billing.phone && (
+						<p>
+							<a href={ 'tel:' + preview.billing.phone }>{ preview.billing.phone }</a>
+						</p>
 					) }
-					<table className="woodev-orders-preview__items">
-						<tbody>
-							{ preview.items.map( ( item, index ) => (
-								<PreviewItemRow key={ index } item={ item } />
-							) ) }
-						</tbody>
-					</table>
+					{ preview.billing.email && (
+						<p>
+							<a href={ 'mailto:' + preview.billing.email }>{ preview.billing.email }</a>
+						</p>
+					) }
+					{ preview.billing.address && (
+						<p className="woodev-orders-preview__address">{ preview.billing.address }</p>
+					) }
+				</section>
+
+				<section className="woodev-orders-preview__column">
+					<h3>{ __( 'Доставка', 'woodev-plugin-framework' ) }</h3>
+					<p className="woodev-orders-preview__lead">{ preview.shipping.destination_text }</p>
+					{ preview.shipping.method_title && (
+						<p className="woodev-orders-cell__meta">{ preview.shipping.method_title }</p>
+					) }
+					{ preview.tracking.number && (
+						<p className="woodev-orders-preview__tracking">
+							<span className="woodev-orders-preview__label">
+								{ __( 'Трек', 'woodev-plugin-framework' ) }
+							</span>
+							{ preview.tracking.url ? (
+								<a href={ preview.tracking.url } target="_blank" rel="noreferrer">
+									{ preview.tracking.number }
+								</a>
+							) : (
+								<span>{ preview.tracking.number }</span>
+							) }
+						</p>
+					) }
+				</section>
+			</div>
+
+			{ preview.items.length > 0 && (
+				<table className="woodev-orders-preview__items">
+					<thead>
+						<tr>
+							<th scope="col">{ __( 'Товар', 'woodev-plugin-framework' ) }</th>
+							<th scope="col" className="woodev-orders-preview__item-qty">
+								{ __( 'Кол-во', 'woodev-plugin-framework' ) }
+							</th>
+							<th scope="col" className="woodev-orders-preview__item-total">
+								{ __( 'Сумма', 'woodev-plugin-framework' ) }
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{ preview.items.map( ( item, index ) => (
+							<PreviewItemRow key={ index } item={ item } />
+						) ) }
+					</tbody>
+					<tfoot>
+						<tr>
+							<th scope="row" colSpan={ 2 }>
+								{ preview.payment.method_title || __( 'Итого', 'woodev-plugin-framework' ) }
+							</th>
+							<td className="woodev-orders-preview__item-total">
+								{ preview.payment.formatted_total }
+								{ preview.payment.needs_payment && (
+									<span className="woodev-orders-badge woodev-orders-badge--warn">
+										{ __( 'Ожидает оплаты', 'woodev-plugin-framework' ) }
+									</span>
+								) }
+							</td>
+						</tr>
+					</tfoot>
+				</table>
+			) }
+
+			{ preview.customer_note && (
+				<section className="woodev-orders-preview__note">
+					<h3>{ __( 'Комментарий покупателя', 'woodev-plugin-framework' ) }</h3>
+					<p>{ preview.customer_note }</p>
+				</section>
+			) }
+
+			{ confirming ? (
+				<footer className="woodev-orders-preview__footer">
+					<p className="woodev-orders-preview__confirm">
+						{ confirmQuestion( confirming, target ) }
+					</p>
+					<div className="woodev-orders-preview__buttons">
+						<Button variant="tertiary" onClick={ () => onCancelConfirm( preview.id ) }>
+							{ __( 'Нет', 'woodev-plugin-framework' ) }
+						</Button>
+						<Button
+							variant="primary"
+							isDestructive={ confirming.destructive }
+							onClick={ () => onActionClick( target, confirming ) }
+						>
+							{ __( 'Да', 'woodev-plugin-framework' ) }
+						</Button>
+					</div>
+				</footer>
+			) : (
+				<footer className="woodev-orders-preview__footer">
+					<a className="woodev-orders-preview__edit" href={ preview.edit_url }>
+						{ __( 'Открыть заказ', 'woodev-plugin-framework' ) }
+					</a>
 					{ preview.actions.length > 0 && (
-						<div className="woodev-orders-preview__actions">
+						<div className="woodev-orders-preview__buttons">
 							{ preview.actions.map( ( action ) => (
 								<Button
 									key={ action.action }
-									variant="secondary"
+									variant={ action.destructive ? 'secondary' : 'primary' }
 									isDestructive={ action.destructive }
 									isBusy={ rowState?.pendingAction === action.action }
 									disabled={ isRowBusy( rowState ) }
-									onClick={ () =>
-										onActionClick( { id: preview.id, carrier: preview.carrier }, action )
-									}
+									onClick={ () => onActionClick( target, action ) }
 								>
 									{ action.label }
 								</Button>
 							) ) }
 						</div>
 					) }
-					{ confirming && (
-						<div className="woodev-orders-preview__confirm">
-							<p>{ confirmQuestion( confirming, { id: preview.id, carrier: preview.carrier } ) }</p>
-							<div className="woodev-orders-actions__confirm-buttons">
-								<Button variant="tertiary" onClick={ () => onCancelConfirm( preview.id ) }>
-									{ __( 'Нет', 'woodev-plugin-framework' ) }
-								</Button>
-								<Button
-									variant="primary"
-									isDestructive={ confirming.destructive }
-									onClick={ () =>
-										onActionClick( { id: preview.id, carrier: preview.carrier }, confirming )
-									}
-								>
-									{ __( 'Да', 'woodev-plugin-framework' ) }
-								</Button>
-							</div>
-						</div>
-					) }
-				</>
+				</footer>
 			) }
 		</Modal>
 	);
@@ -958,6 +1039,8 @@ interface OrderActionsCallbacks {
 	onToggleSelected: ( orderId: number, checked: boolean ) => void;
 	/** #875 — opens the preview modal for this row. */
 	onOpenPreview: ( orderId: number ) => void;
+	/** #875 — the order whose preview is being fetched right now, or null. */
+	previewLoadingId: number | null;
 }
 
 /** Builds one `TableCard` row from a REST row — display cell + raw sort value each. */
@@ -983,7 +1066,11 @@ function buildRow( row: OrderRow, actions: OrderActionsCallbacks ): WcTableRowCe
 					<a href={ row.edit_url }>
 						{ sprintf( __( 'Заказ %s', 'woodev-plugin-framework' ), row.order_number ) }
 					</a>
-					<PreviewButton row={ row } onOpen={ actions.onOpenPreview } />
+					<PreviewButton
+						row={ row }
+						isLoading={ actions.previewLoadingId === row.id }
+						onOpen={ actions.onOpenPreview }
+					/>
 				</>
 			),
 			value: row.id,
@@ -1340,6 +1427,21 @@ export default function OrdersPage() {
 	/** #875 — which order's preview `Modal` is open, or `null` for closed. */
 	const [ previewOrderId, setPreviewOrderId ] = useState<number | null>( null );
 	/**
+	 * #875 round 2 — previews already fetched, keyed by order id, and the id currently being
+	 * fetched (at most one: the merchant clicks one eye at a time).
+	 *
+	 * Operator, on the rig: *«при клике по глазу спиннер крутится на иконке, как только данные
+	 * получены — открывается модалка сразу уже с данными. При повторном клике нового запроса
+	 * уже нет»*. That is WooCommerce's own behaviour, and it is why the fetch lives HERE rather
+	 * than inside the modal: a modal that fetches on mount has to be mounted first, which is
+	 * exactly the small-then-huge flash he rejected.
+	 *
+	 * The cache is dropped whenever a row is rebuilt by an action, so a preview can never show
+	 * a state the action has already changed.
+	 */
+	const [ previewCache, setPreviewCache ] = useState<Record< number, OrderPreview >>( {} );
+	const [ previewLoadingId, setPreviewLoadingId ] = useState<number | null>( null );
+	/**
 	 * #824 round 2 — the native WP snackbar queue, the same mechanism the settings page
 	 * already uses (`src/settings-page/app.js`). Operator, on the rig: the inline notice
 	 * above the table *«просто не видно»*, and a toast is what the settings pages do.
@@ -1605,6 +1707,14 @@ export default function OrdersPage() {
 					return next;
 				} );
 				setPreviewOrderId( ( current ) => ( current === row.id ? null : current ) );
+				// A cached preview describes the order BEFORE the action; drop it, or a second
+				// click on the eye would reopen the stale one instantly (which is exactly what
+				// the cache makes possible).
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
 			} )
 			.catch( ( err: { message?: string } ) => {
 				const text =
@@ -1619,6 +1729,14 @@ export default function OrdersPage() {
 					return next;
 				} );
 				setPreviewOrderId( ( current ) => ( current === row.id ? null : current ) );
+				// A cached preview describes the order BEFORE the action; drop it, or a second
+				// click on the eye would reopen the stale one instantly (which is exactly what
+				// the cache makes possible).
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					delete next[ row.id ];
+					return next;
+				} );
 			} );
 	};
 
@@ -1664,6 +1782,14 @@ export default function OrdersPage() {
 				}
 
 				const changedIds = new Set( res.rows.map( ( r ) => r.id ) );
+
+				// Same reason as the single-action path: a cached preview of an order this
+				// bulk run changed is now stale, and the cache would serve it instantly.
+				setPreviewCache( ( current ) => {
+					const next = { ...current };
+					changedIds.forEach( ( id ) => delete next[ id ] );
+					return next;
+				} );
 
 				if ( fetchGeneration.current === generation ) {
 					setRows( ( current ) =>
@@ -1786,25 +1912,58 @@ export default function OrdersPage() {
 	};
 
 	/** #875 — the eye button opens the preview `Modal` for that order. */
-	const onOpenPreview = ( orderId: number ) => setPreviewOrderId( orderId );
+	const onOpenPreview = ( orderId: number ) => {
+		if ( previewCache[ orderId ] ) {
+			setPreviewOrderId( orderId );
+			return;
+		}
 
+		setPreviewLoadingId( orderId );
+
+		fetchOrderPreview( orderId )
+			.then( ( res ) => {
+				setPreviewCache( ( current ) => ( { ...current, [ orderId ]: res } ) );
+				setPreviewLoadingId( null );
+				setPreviewOrderId( orderId );
+			} )
+			.catch( ( err: { message?: string } ) => {
+				const text =
+					( err && err.message ) ||
+					__( 'Не удалось загрузить заказ.', 'woodev-plugin-framework' );
+
+				setPreviewLoadingId( null );
+				setActionNotice( { status: 'error', text } );
+				dispatch( noticesStore ).createErrorNotice( text, { type: 'snackbar' } );
+			} );
+	};
+
+	// ⚠ Bulk group FIRST, search second (operator, rig round 3). `TableCard` renders this
+	// array in order, so DOM order is the desktop order: the group sits at the left and the
+	// search field takes the rest of the row, ending at the right edge. On a narrow screen
+	// `style.scss` flips them — search full width on top, the group beneath — which is the
+	// opposite priority and the reason this is not just `flex-direction` on one breakpoint.
+	// ⚠ ONE element, not two. `TableCard` gives each entry of `actions` its own slot child,
+	// and WooCommerce's own `.woocommerce-table__actions` stretches those children to the
+	// full row — measured on the rig: both controls came back 1146px wide and stacked. Fighting
+	// that with specificity would be a bet on their internals; owning one wrapper and laying it
+	// out ourselves is not.
 	const actions = [
-		<SearchControl
-			key="search"
-			value={ searchInput }
-			placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
-			onChange={ setSearchInput }
-		/>,
-		<BulkActionsBar
-			key="bulk"
-			selectedCount={ selectedIds.size }
-			value={ bulkAction }
-			onChange={ setBulkAction }
-			onApply={ onBulkApply }
-			confirming={ bulkConfirming }
-			onConfirm={ onBulkConfirm }
-			onCancelConfirm={ () => setBulkConfirming( null ) }
-		/>,
+		<div className="woodev-orders__toolbar-row" key="toolbar">
+			<BulkActionsBar
+				selectedCount={ selectedIds.size }
+				value={ bulkAction }
+				onChange={ setBulkAction }
+				onApply={ onBulkApply }
+				confirming={ bulkConfirming }
+				onConfirm={ onBulkConfirm }
+				onCancelConfirm={ () => setBulkConfirming( null ) }
+			/>
+			<SearchControl
+				value={ searchInput }
+				placeholder={ __( 'Поиск по заказам…', 'woodev-plugin-framework' ) }
+				onChange={ setSearchInput }
+			/>
+		</div>,
 	];
 
 	// #835: carrier SCOPE and display MODE are two independent `FilterPicker`s
@@ -2082,6 +2241,7 @@ export default function OrdersPage() {
 									selected: selectedIds.has( row.id ),
 									onToggleSelected,
 									onOpenPreview,
+									previewLoadingId,
 								} )
 						  )
 				}
@@ -2103,10 +2263,11 @@ export default function OrdersPage() {
 				}
 			/>
 			<RoiPanel />
-			{ /* #875 — fetched fresh on open; see the component's own doc comment. */ }
-			{ null !== previewOrderId && (
-				<PreviewModal
-					orderId={ previewOrderId }
+			{ /* #875 — opened only once its data is in hand, from `previewCache`; see
+			     `onOpenPreview()` for the fetch, the icon spinner and the cache. */ }
+			{ null !== previewOrderId && previewCache[ previewOrderId ] && (
+				<OrderPreviewModal
+					preview={ previewCache[ previewOrderId ] }
 					rowState={ actionRowStates[ previewOrderId ] }
 					onActionClick={ onActionClick }
 					onCancelConfirm={ onCancelConfirm }
