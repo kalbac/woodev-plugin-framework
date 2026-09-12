@@ -3733,3 +3733,101 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:1
 msgid "Период заказов"
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:136
+msgid "Выгрузить"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:137
+msgid "Передать заказ перевозчику"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:145
+msgid "Обновить"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:146
+msgid "Запросить у перевозчика текущий статус заказа"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:154
+msgid "Отменить"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:155
+msgid "Отменить заказ у перевозчика"
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:650
+msgid "Заказ не найден."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:660
+msgid "Не удалось определить перевозчика для этого заказа."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:670
+msgid "Это действие недоступно для данного заказа."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:683
+msgid "Для этого перевозчика не настроен обработчик отправлений."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:787
+msgid "Заказ выгружен перевозчику."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:790
+msgid "Отправление отменено."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:793
+msgid "Информация по заказу обновлена."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:796
+msgid "Готово."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:811
+msgid "Не удалось выгрузить заказ перевозчику."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:814
+msgid "Не удалось отменить отправление."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:817
+msgid "Не удалось обновить информацию по заказу."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:820
+msgid "Действие не выполнено."
+msgstr ""
+
+#: shipping-method/rest-api/class-orders-controller.php:834
+msgid "Сервис перевозчика временно недоступен. Попробуйте повторить действие позже."
+msgstr ""
+
+#. translators: %s: the action's own label, e.g. "Отменить".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "%s?"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Да"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Нет"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Действие"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не удалось выполнить действие."
+msgstr ""

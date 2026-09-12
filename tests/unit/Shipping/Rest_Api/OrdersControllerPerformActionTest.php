@@ -134,6 +134,12 @@ final class OrdersControllerPerformActionTest extends TestCase {
 			$order->shouldReceive( $method )->andReturn( $value );
 		}
 
+		// Called by Orders_Controller::reread_order() after a successful action. Declared
+		// `byDefault()` so a test that cares CAN replace it with a precise expectation —
+		// a plain `shouldReceive()` here would match any argument first and silently
+		// absorb the call, leaving that test's `->once()->with( true )` never satisfied.
+		$order->shouldReceive( 'read_meta_data' )->byDefault();
+
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
 		return $order;
@@ -239,6 +245,34 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 		$this->assertIsArray( $result );
 		$this->assertTrue( $result['row']['is_exported'] );
+	}
+
+	/**
+	 * The row returned after a successful action must be built from RE-READ meta, not from
+	 * the `WC_Order` instance as it was before the carrier handler wrote to it.
+	 *
+	 * ⚠ This is a datastore-shaped defect, which is why it gets its own test rather than
+	 * riding along in the two above. `Woodev_Order_Compatibility::update_order_meta()`
+	 * branches: under HPOS it writes through `$order->update_meta_data()`, so the instance
+	 * is already current and the bug is INVISIBLE — including on the rig, which is HPOS.
+	 * On the legacy CPT store it calls `update_post_meta()` straight at the row, around
+	 * that instance, so without the re-read a just-exported order comes back with
+	 * `is_exported` false and the pre-action buttons, offering «Выгрузить» a second time.
+	 *
+	 * Asserting the call is the honest thing a unit test can assert here: the claim that
+	 * the re-read FIXES the staleness rests on reading `update_order_meta()`, and the
+	 * end-to-end proof is the integration run on the CPT store.
+	 */
+	public function test_a_successful_action_rereads_the_orders_meta_before_building_the_row(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'cancel' )->once()->andReturn( true );
+
+		$order = $this->order( 'processing' );
+		$order->shouldReceive( 'read_meta_data' )->once()->with( true );
+
+		$this->controller()->perform_action( $this->request( 123, Order_Actions::CANCEL ) );
 	}
 
 	public function test_a_failed_cancel_is_a_502(): void {

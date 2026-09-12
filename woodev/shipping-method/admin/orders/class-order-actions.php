@@ -131,15 +131,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$actions     = [];
 
 			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) ) {
-				$actions[] = self::build_action( self::EXPORT, __( 'Выгрузить', 'woodev-plugin-framework' ), '', false );
+				$actions[] = self::build_action(
+					self::EXPORT,
+					__( 'Выгрузить', 'woodev-plugin-framework' ),
+					__( 'Передать заказ перевозчику', 'woodev-plugin-framework' ),
+					false
+				);
 			}
 
 			if ( $is_exported && $handler->supports_update() ) {
-				$actions[] = self::build_action( self::UPDATE, __( 'Обновить', 'woodev-plugin-framework' ), '', false );
+				$actions[] = self::build_action(
+					self::UPDATE,
+					__( 'Обновить', 'woodev-plugin-framework' ),
+					__( 'Запросить у перевозчика текущий статус заказа', 'woodev-plugin-framework' ),
+					false
+				);
 			}
 
 			if ( $is_exported && ! in_array( self::resolve_canonical_status( $order, $provider ), self::CANCEL_RETIRED_STATUSES, true ) ) {
-				$actions[] = self::build_action( self::CANCEL, __( 'Отменить', 'woodev-plugin-framework' ), '', true );
+				$actions[] = self::build_action(
+					self::CANCEL,
+					__( 'Отменить', 'woodev-plugin-framework' ),
+					__( 'Отменить заказ у перевозчика', 'woodev-plugin-framework' ),
+					true
+				);
 			}
 
 			/**

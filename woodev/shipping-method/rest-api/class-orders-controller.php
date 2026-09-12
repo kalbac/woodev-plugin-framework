@@ -703,7 +703,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 
 			return rest_ensure_response(
 				[
-					'row'     => $this->build_row( $order, $provider ),
+					'row'     => $this->build_row( self::reread_order( $order ), $provider ),
 					'message' => self::action_success_message( $action ),
 				]
 			);
@@ -739,6 +739,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				default:
 					return false;
 			}
+		}
+
+		/**
+		 * Re-reads an order's meta after a carrier action wrote to it.
+		 *
+		 * ⚠ Not a defensive nicety — without it the response is WRONG on a legacy-CPT
+		 * shop, and right on an HPOS one, which is exactly why no unit test and no pass
+		 * on the (HPOS) rig can catch it. {@see \Woodev_Order_Compatibility::update_order_meta()}
+		 * branches on the datastore: under HPOS it calls `$order->update_meta_data()` +
+		 * `save_meta_data()`, so the in-memory object this method was handed is already
+		 * current; on the legacy CPT store it calls `update_post_meta()` straight against
+		 * the row, BYPASSING that object's meta cache. So after a successful export the
+		 * same `$order` instance still reports the OLD `carrier_order_id` — and the row
+		 * built from it would come back with `is_exported` false and the pre-action
+		 * button set, leaving «Выгрузить» on screen for an order that was just exported
+		 * and inviting the merchant to export it a second time.
+		 *
+		 * `read_meta_data( true )` forces a re-read past the cache, which is correct on
+		 * both stores: under HPOS it re-reads what was just saved, on the CPT store it
+		 * picks up the write that went around the object.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order a carrier action just wrote to.
+		 * @return \WC_Order the same instance, with its meta re-read from the store.
+		 */
+		private static function reread_order( \WC_Order $order ): \WC_Order {
+			$order->read_meta_data( true );
+
+			return $order;
 		}
 
 		/**
