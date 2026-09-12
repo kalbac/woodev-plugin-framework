@@ -116,7 +116,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 56, measured 13.09.2026 (s134):** Инбокс EMPTY, 1 in «В работе» (the #820 umbrella).
+**Open cards — 58, measured 13.09.2026 (s134):** Инбокс EMPTY, 1 in «В работе» (the #820 umbrella).
 ⚠ Count with `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an
 undercount from exactly that trap. **PRIORITY LIVES ON THE BOARD, not in this file** (operator,
 04.09.2026, #644 part 3): board №6, field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values
