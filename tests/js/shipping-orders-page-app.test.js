@@ -20,9 +20,11 @@ import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/shipping-orders-page/app';
 import {
+	fetchOrderPreview,
 	fetchOrders,
 	fetchSyncStatus,
 	getProviders,
+	performBulkOrderAction,
 	performOrderAction,
 } from '../../src/shipping-orders-page/rest';
 
@@ -34,6 +36,14 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 	// (§2 of the brief): resolve with `{ row, message }`, reject with an object
 	// carrying `message`, exactly as `apiFetch` itself resolves/rejects.
 	performOrderAction: jest.fn(),
+	// #874 — the bulk REST call. Encodes the brief's §3 contract: resolve with a
+	// `BulkActionResult` (requested/eligible/skipped/succeeded/failed/rows/messages),
+	// HTTP 200 even on a partial failure — a rejection here means the wire call itself
+	// failed, not that some orders were skipped.
+	performBulkOrderAction: jest.fn(),
+	// #875 — the preview REST call. Resolves with an `OrderPreview`, rejects with an
+	// object carrying `message`, same shape as every other route on this page.
+	fetchOrderPreview: jest.fn(),
 	// #837 defect 4: the reachable-status list. Defaults to [] — the same
 	// «bootstrap did not say» answer the real accessor gives, which makes the
 	// filter offer every canonical state, so these tests keep asserting what
@@ -2406,5 +2416,648 @@ describe( 'the «Действие» column (#824)', () => {
 			expect( await screen.findByRole( 'button', { name: 'Отменить' } ) ).toBeInTheDocument();
 			expect( performOrderAction ).not.toHaveBeenCalled();
 		} );
+	} );
+} );
+
+/**
+ * The busy row (#873) — a click drops the row to `opacity: 0.85` and runs an
+ * indeterminate bar along its bottom edge until the request settles. jsdom computes no
+ * layout and runs no animation (the brief's own warning), so these tests can only assert
+ * the row is MARKED busy — via `.woodev-orders-row-busy`, the seam `ActionsCell` renders
+ * for `style.scss`'s `:has()` rule to reach the ancestor `<tr>` — never how it looks. The
+ * coordinator verifies the visual on the rig.
+ */
+describe( 'the busy row (#873)', () => {
+	function busyRow( overrides = {} ) {
+		return makeRow( {
+			actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ],
+			...overrides,
+		} );
+	}
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	test( 'a row with no action in flight carries no busy marker', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ busyRow() ] ) );
+
+		const { container } = render( <App /> );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument() );
+
+		expect( container.querySelector( '.woodev-orders-row-busy' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'clicking the action marks the row busy, and success clears the mark', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ busyRow() ] ) );
+
+		let resolveAction;
+		performOrderAction.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolveAction = resolve;
+			} )
+		);
+
+		const { container } = render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () =>
+			expect( container.querySelector( '.woodev-orders-row-busy' ) ).toBeInTheDocument()
+		);
+
+		await act( async () => {
+			resolveAction( { row: busyRow( { actions: [] } ), message: 'Готово.' } );
+		} );
+
+		await waitFor( () =>
+			expect( container.querySelector( '.woodev-orders-row-busy' ) ).not.toBeInTheDocument()
+		);
+	} );
+
+	test( 'a failed action clears the busy mark too, not just a successful one', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ busyRow() ] ) );
+
+		let rejectAction;
+		performOrderAction.mockReturnValue(
+			new Promise( ( _resolve, reject ) => {
+				rejectAction = reject;
+			} )
+		);
+
+		const { container } = render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () =>
+			expect( container.querySelector( '.woodev-orders-row-busy' ) ).toBeInTheDocument()
+		);
+
+		await act( async () => {
+			rejectAction( { message: 'СДЭК недоступен.' } );
+		} );
+
+		await waitFor( () =>
+			expect( container.querySelector( '.woodev-orders-row-busy' ) ).not.toBeInTheDocument()
+		);
+	} );
+} );
+
+/**
+ * The `cb` column and bulk actions (#874). `apiFetch` never appears directly here —
+ * `performBulkOrderAction` is the seam, and its mocked shape below is an ASSERTION about
+ * the server contract in the brief's §3 (`BulkActionResult`): HTTP 200 even on a partial
+ * failure, `rows` carrying only orders that CHANGED, both `messages` fields optional.
+ */
+describe( 'the cb column and bulk actions (#874)', () => {
+	function checkableRow( overrides = {} ) {
+		return makeRow( {
+			actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ],
+			...overrides,
+		} );
+	}
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	describe( 'the cb column', () => {
+		test( 'a row with no actions renders no checkbox at all', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ makeRow( { id: 1, order_number: '1' } ) ] ) );
+
+			render( <App /> );
+
+			await waitFor( () => expect( screen.getByText( 'Заказ 1' ) ).toBeInTheDocument() );
+
+			expect( screen.queryByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) ).toBeNull();
+		} );
+
+		test( 'a row with actions renders its own checkbox, unchecked by default', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+
+			render( <App /> );
+
+			const checkbox = await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } );
+			expect( checkbox ).not.toBeChecked();
+		} );
+
+		test( 'the checkbox disables while its row has an action in flight', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+
+			let resolveAction;
+			performOrderAction.mockReturnValue(
+				new Promise( ( resolve ) => {
+					resolveAction = resolve;
+				} )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'button', { name: 'Выгрузить' } ) );
+
+			const checkbox = await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } );
+			await waitFor( () => expect( checkbox ).toBeDisabled() );
+
+			await act( async () => {
+				resolveAction( { row: checkableRow( { actions: [] } ), message: 'Готово.' } );
+			} );
+		} );
+
+		test( 'select-all covers only checkbox-bearing rows on the current page', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					checkableRow( { id: 1, order_number: '1' } ),
+					makeRow( { id: 2, order_number: '2' } ), // no actions — no checkbox
+					checkableRow( { id: 3, order_number: '3' } ),
+				] )
+			);
+
+			render( <App /> );
+
+			await waitFor( () => expect( screen.getByText( 'Заказ 1' ) ).toBeInTheDocument() );
+
+			const selectAll = screen.getByRole( 'checkbox', {
+				name: 'Выбрать все заказы на странице',
+			} );
+
+			fireEvent.click( selectAll );
+
+			expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) ).toBeChecked();
+			expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 3' } ) ).toBeChecked();
+			expect( screen.queryByRole( 'checkbox', { name: 'Выбрать заказ 2' } ) ).toBeNull();
+
+			// And toggling it off again clears exactly those two.
+			fireEvent.click( selectAll );
+
+			expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) ).not.toBeChecked();
+			expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 3' } ) ).not.toBeChecked();
+		} );
+	} );
+
+	describe( 'bulk actions', () => {
+		/** Picks the bulk action from the (visually hidden but accessible) picker. */
+		function pickBulkAction( label ) {
+			fireEvent.change( screen.getByLabelText( 'Массовые действия' ), {
+				target: { value: label },
+			} );
+		}
+
+		function bulkResult( overrides = {} ) {
+			return {
+				action: 'export',
+				requested: 1,
+				eligible: 1,
+				skipped: 0,
+				succeeded: 1,
+				failed: 0,
+				rows: [],
+				messages: {},
+				...overrides,
+			};
+		}
+
+		test( 'the request carries exactly the selected ids', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					checkableRow( { id: 1, order_number: '1' } ),
+					checkableRow( { id: 2, order_number: '2' } ),
+				] )
+			);
+			performBulkOrderAction.mockResolvedValue( bulkResult() );
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			await waitFor( () =>
+				expect( performBulkOrderAction ).toHaveBeenCalledWith( 'export', [ 1 ] )
+			);
+		} );
+
+		test( 'the apply button is disabled until both an action is chosen and something is selected', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+
+			render( <App /> );
+
+			await waitFor( () => expect( screen.getByText( 'Заказ 42' ) ).toBeInTheDocument() );
+
+			const apply = screen.getByRole( 'button', { name: 'Применить действие' } );
+			expect( apply ).toBeDisabled();
+
+			pickBulkAction( 'export' );
+			expect( apply ).toBeDisabled(); // still nothing selected
+
+			fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+			expect( apply ).not.toBeDisabled();
+		} );
+
+		test( 'both messages render — as a notice each — when both are present', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+			performBulkOrderAction.mockResolvedValue(
+				bulkResult( {
+					messages: {
+						success: 'Экспортировано 2 заказа.',
+						error: 'Пропущен 1 заказ: недоступен перевозчик.',
+					},
+				} )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			await waitFor( () =>
+				expect( screen.getAllByText( 'Экспортировано 2 заказа.' ).length ).toBeGreaterThan( 0 )
+			);
+			expect(
+				screen.getAllByText( 'Пропущен 1 заказ: недоступен перевозчик.' ).length
+			).toBeGreaterThan( 0 );
+		} );
+
+		test( 'only the one message present renders — never a composed second sentence', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+			performBulkOrderAction.mockResolvedValue(
+				bulkResult( { messages: { success: 'Обновлено 3 заказа.' } } )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			await waitFor( () =>
+				expect( screen.getAllByText( 'Обновлено 3 заказа.' ).length ).toBeGreaterThan( 0 )
+			);
+		} );
+
+		test( 'returned rows replace the old ones in place, without a refetch', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+			performBulkOrderAction.mockResolvedValue(
+				bulkResult( {
+					rows: [ checkableRow( { order_number: '99', actions: [] } ) ],
+					messages: { success: 'Готово.' },
+				} )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			await waitFor( () => expect( screen.getByText( 'Заказ 99' ) ).toBeInTheDocument() );
+			expect( screen.queryByText( 'Заказ 42' ) ).not.toBeInTheDocument();
+			expect( fetchOrders ).toHaveBeenCalledTimes( 1 );
+		} );
+
+		test( 'a changed order drops out of the selection; an untouched one stays selected', async () => {
+			fetchOrders.mockResolvedValue(
+				resultOf( [
+					checkableRow( { id: 1, order_number: '1' } ),
+					checkableRow( { id: 2, order_number: '2' } ),
+				] )
+			);
+			// Only order 1 actually changed — 2 was requested but skipped server-side.
+			performBulkOrderAction.mockResolvedValue(
+				bulkResult( {
+					requested: 2,
+					eligible: 1,
+					skipped: 1,
+					rows: [ checkableRow( { id: 1, order_number: '1', actions: [] } ) ],
+					messages: { success: 'Готово.' },
+				} )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) );
+			fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 2' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			await waitFor( () => expect( screen.getAllByText( 'Готово.' ).length ).toBeGreaterThan( 0 ) );
+
+			// Order 1 changed and dropped out of selection — its checkbox is gone (no actions
+			// left) so there is nothing left to assert unchecked; order 2's is still there
+			// and still checked.
+			expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 2' } ) ).toBeChecked();
+		} );
+
+		/**
+		 * Mirrors the single-action guard (#824 round 2, MEDIUM 4): a bulk response that
+		 * lands AFTER the merchant has already moved to a different page of a moving
+		 * dataset must not resurrect its rows into a view they no longer belong to. The
+		 * notice still shows — the action really did happen.
+		 */
+		test( 'a bulk response landing after a refetch does not resurrect rows', async () => {
+			fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ], { total: 40 } ) );
+			performBulkOrderAction.mockResolvedValue( bulkResult() ); // pending until we resolve below
+
+			let resolveBulk;
+			performBulkOrderAction.mockReturnValue(
+				new Promise( ( resolve ) => {
+					resolveBulk = resolve;
+				} )
+			);
+
+			render( <App /> );
+
+			fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+			pickBulkAction( 'export' );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+			const callsBefore = fetchOrders.mock.calls.length;
+
+			// A refetch lands first — the merchant paged away while the bulk request flew.
+			fetchOrders.mockResolvedValueOnce( resultOf( [ checkableRow( { id: 7, order_number: '7' } ) ] ) );
+			fireEvent.click( screen.getByText( 'Следующая страница' ) );
+
+			await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( callsBefore + 1 ) );
+			await waitFor( () => expect( screen.getByText( 'Заказ 7' ) ).toBeInTheDocument() );
+
+			await act( async () => {
+				resolveBulk(
+					bulkResult( {
+						rows: [ checkableRow( { order_number: '99', actions: [] } ) ],
+						messages: { success: 'Заказ выгружен.' },
+					} )
+				);
+			} );
+
+			await waitFor( () =>
+				expect( screen.getAllByText( 'Заказ выгружен.' ).length ).toBeGreaterThan( 0 )
+			);
+			expect( screen.queryByText( 'Заказ 99' ) ).not.toBeInTheDocument();
+			expect( screen.getByText( 'Заказ 7' ) ).toBeInTheDocument();
+		} );
+
+		describe( 'a destructive bulk pick', () => {
+			test( 'confirms first, naming the count, and never calls the API before confirming', async () => {
+				fetchOrders.mockResolvedValue(
+					resultOf( [
+						checkableRow( { id: 1, order_number: '1' } ),
+						checkableRow( { id: 2, order_number: '2' } ),
+					] )
+				);
+
+				render( <App /> );
+
+				fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 1' } ) );
+				fireEvent.click( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 2' } ) );
+				pickBulkAction( 'cancel' );
+				fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+				expect(
+					await screen.findByText(
+						'Вы уверены, что хотите выполнить «Отменить» для 2 выбранных заказов?'
+					)
+				).toBeInTheDocument();
+				expect( performBulkOrderAction ).not.toHaveBeenCalled();
+			} );
+
+			test( 'confirming with «Да» sends the request', async () => {
+				fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+				performBulkOrderAction.mockResolvedValue( bulkResult( { action: 'cancel' } ) );
+
+				render( <App /> );
+
+				fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+				pickBulkAction( 'cancel' );
+				fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+				fireEvent.click( await screen.findByRole( 'button', { name: 'Да' } ) );
+
+				await waitFor( () =>
+					expect( performBulkOrderAction ).toHaveBeenCalledWith( 'cancel', [ 42 ] )
+				);
+			} );
+
+			test( '«Нет» drops the confirm without ever calling the API', async () => {
+				fetchOrders.mockResolvedValue( resultOf( [ checkableRow() ] ) );
+
+				render( <App /> );
+
+				fireEvent.click( await screen.findByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) );
+				pickBulkAction( 'cancel' );
+				fireEvent.click( screen.getByRole( 'button', { name: 'Применить действие' } ) );
+
+				fireEvent.click( await screen.findByRole( 'button', { name: 'Нет' } ) );
+
+				expect(
+					screen.queryByText( /Вы уверены, что хотите выполнить «Отменить»/ )
+				).not.toBeInTheDocument();
+				expect( performBulkOrderAction ).not.toHaveBeenCalled();
+			} );
+		} );
+	} );
+} );
+
+/**
+ * The preview modal (#875) — opened by the eye button in the «Заказ» cell, fetched fresh
+ * on open. `screen.getByRole( 'dialog' )` scopes every query below to the modal, since a
+ * row's own icon action button can share the SAME accessible name as the modal's text one
+ * (e.g. both named "Выгрузить") while the row stays mounted behind the overlay.
+ */
+describe( 'the preview modal (#875)', () => {
+	function previewOf( overrides = {} ) {
+		return {
+			id: 42,
+			order_number: '42',
+			edit_url: 'https://example.test/wp-admin/post.php?post=42&action=edit',
+			date_created: new Date().toISOString(),
+			status: { slug: 'processing', label: 'Processing' },
+			carrier: { id: 'cdek', label: 'СДЭК' },
+			customer: {
+				name: 'Иван Петров',
+				email: 'ivan@example.test',
+				phone: '+79991234567',
+				user_id: 0,
+				user_edit_url: null,
+			},
+			billing: { address: 'ул. Ленина, 1', email: 'ivan@example.test', phone: '+79991234567' },
+			shipping: {
+				address: 'ул. Ленина, 1',
+				method_title: 'СДЭК до ПВЗ',
+				destination_kind: 'pickup',
+				destination_text: 'ул. Ленина, 1',
+			},
+			payment: { method_title: 'Картой', formatted_total: '2 400 ₽', needs_payment: false },
+			delivery_status: {
+				canonical: 'in_transit',
+				canonical_label: 'В пути',
+				raw: 'CDEK_ACCEPTED',
+				raw_label: 'Принят курьером',
+			},
+			tracking: { number: '10012345', url: 'https://cdek.ru/track/10012345' },
+			items: [ { name: 'Товар А', sku: 'SKU-1', quantity: 2, formatted_total: '1 200 ₽' } ],
+			customer_note: 'Позвонить за час до доставки.',
+			actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ],
+			...overrides,
+		};
+	}
+
+	function previewRow( overrides = {} ) {
+		return makeRow( {
+			actions: [ { action: 'export', label: 'Выгрузить', title: '', destructive: false } ],
+			...overrides,
+		} );
+	}
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	test( 'the eye button opens the modal, which shows a spinner then the fetched data', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		let resolvePreview;
+		fetchOrderPreview.mockReturnValue(
+			new Promise( ( resolve ) => {
+				resolvePreview = resolve;
+			} )
+		);
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		expect( fetchOrderPreview ).toHaveBeenCalledWith( 42 );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		// `Spinner` renders `role="presentation"` (not "status") — not a role query.
+		expect( dialog.querySelector( '.components-spinner' ) ).toBeInTheDocument();
+
+		await act( async () => {
+			resolvePreview( previewOf() );
+		} );
+
+		expect( within( dialog ).getByText( 'Иван Петров' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( 'СДЭК до ПВЗ' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( 'Товар А' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( 'SKU-1' ) ).toBeInTheDocument();
+		expect( within( dialog ).getByText( '1 200 ₽' ) ).toBeInTheDocument();
+	} );
+
+	test( 'empty fields render as absent — never a dash or the word "null"', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue(
+			previewOf( {
+				carrier: null,
+				tracking: { number: null, url: null },
+				customer_note: '',
+				items: [ { name: 'Товар Б', sku: '', quantity: 1, formatted_total: '500 ₽' } ],
+			} )
+		);
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		await waitFor( () => expect( within( dialog ).getByText( 'Товар Б' ) ).toBeInTheDocument() );
+
+		expect( within( dialog ).queryByText( 'СДЭК' ) ).not.toBeInTheDocument();
+		expect( within( dialog ).queryByText( '10012345' ) ).not.toBeInTheDocument();
+		expect( within( dialog ).queryByText( '—' ) ).not.toBeInTheDocument();
+		expect( within( dialog ).queryByText( /null/i ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'the action buttons carry TEXT, not icons, and route through the single-action path', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf() );
+		performOrderAction.mockResolvedValue( {
+			row: previewRow( { order_number: '99', actions: [] } ),
+			message: 'Заказ выгружен.',
+		} );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		const button = await within( dialog ).findByRole( 'button', { name: 'Выгрузить' } );
+
+		// TEXT, not an icon-only button — the operator's own distinction from the row's
+		// icon buttons, which carry an empty `textContent` (see the #824 tests above).
+		expect( button ).toHaveTextContent( 'Выгрузить' );
+
+		fireEvent.click( button );
+
+		expect( performOrderAction ).toHaveBeenCalledWith( 42, 'export' );
+		await waitFor( () =>
+			expect( screen.getAllByText( 'Заказ выгружен.' ).length ).toBeGreaterThan( 0 )
+		);
+	} );
+
+	test( 'a destructive action inside the modal confirms first, the same way a row button does', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue(
+			previewOf( { actions: [ { action: 'cancel', label: 'Отменить', title: '', destructive: true } ] } )
+		);
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Отменить' } ) );
+
+		expect(
+			within( dialog ).getByText( 'Вы уверены, что хотите отменить этот заказ в «СДЭК»?' )
+		).toBeInTheDocument();
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'a settled action closes the modal rather than leaving a stale preview', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf() );
+		performOrderAction.mockResolvedValue( {
+			row: previewRow( { order_number: '99', actions: [] } ),
+			message: 'Заказ выгружен.',
+		} );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
+	} );
+
+	test( 'a failed action closes the modal too, not just a successful one', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf() );
+		performOrderAction.mockRejectedValue( { message: 'СДЭК недоступен.' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Выгрузить' } ) );
+
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
+		await waitFor( () =>
+			expect( screen.getAllByText( 'СДЭК недоступен.' ).length ).toBeGreaterThan( 0 )
+		);
+	} );
+
+	test( 'a fetch failure shows the server message rather than an endless spinner', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockRejectedValue( { message: 'Заказ не найден.' } );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		await waitFor( () => expect( within( dialog ).getByText( 'Заказ не найден.' ) ).toBeInTheDocument() );
 	} );
 } );
