@@ -73,24 +73,50 @@
 	font-size: 12px;
 }
 
+/**
+ * The status badge (#829). Its geometry is WooCommerce's own `.order-status`
+ * rule — not eyeballed, and not copied out of their stylesheet either.
+ *
+ * ⚠ It was FIRST taken from a grep of `assets/css/admin.css` (the measurement
+ * on issue #829, 08.09.2026), and that reading was INCOMPLETE: it missed
+ * `white-space: nowrap`, and our two-word label «Готово к выдаче» then wrapped
+ * — turning a pill into a two-line block, because every wrapped line is
+ * `2.5em` tall. Re-measured on the rig by reading `getComputedStyle()` off a
+ * REAL `.order-status` element on WooCommerce's own orders screen (WC 11.1.0,
+ * 12.09.2026), which is what the values below now carry:
+ *
+ * - `white-space: nowrap` — the one the grep missed.
+ * - `padding: 0 13px` — WC has no padding on the element itself; it gets its
+ *   horizontal breathing room from an inner `<span>` with `margin: 0 13px`.
+ *   This markup has no inner span, so the same 13px is applied here directly.
+ * - `margin: -0.25em 0` — WC's own negative vertical margin (computed
+ *   `-3.25px` at their 13px font), so a `2.5em` line-height does not inflate
+ *   the table row it sits in.
+ *
+ * The five background/text pairs are WooCommerce's own order-status colours,
+ * one per tone — see `STATUS_TONE`'s docblock in `columns.ts` for which WC
+ * status each tone borrows from and why (the reasoning belongs there, next to
+ * the state->tone mapping it explains; this file only carries the resulting
+ * hex values, since WC itself expresses them as literal colours, not as named
+ * tokens we could reference).
+ */
 .woodev-orders-status {
 	display: inline-flex;
 	align-items: center;
-	gap: wd.$gap-xs;
+	margin: -0.25em 0;
+	padding: 0 13px;
+	line-height: 2.5em;
+	white-space: nowrap;
+	border-radius: 4px;
+	border-bottom: 1px solid rgba( 0, 0, 0, 0.05 );
 	font-weight: 500;
+	cursor: default;
 
-	&__dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: currentColor;
-	}
-
-	&--ok { color: wd.$ok-text; }
-	&--warn { color: wd.$warn; }
-	&--error { color: wd.$error-text; }
-	&--info { color: wd.$accent-strong; }
-	&--muted { color: wd.$muted; }
+	&--ok { background: #c8d7e1; color: #003d66; } // WC `.status-completed`
+	&--warn { background: #f8dda7; color: #573b00; } // WC `.status-on-hold`
+	&--error { background: #eba3a3; color: #570000; } // WC `.status-failed`
+	&--info { background: #c6e1c6; color: #2c4700; } // WC `.status-processing`
+	&--muted { background: #e5e5e5; color: #454545; } // WC `.order-status` base
 }
 
 .woodev-orders-badge {

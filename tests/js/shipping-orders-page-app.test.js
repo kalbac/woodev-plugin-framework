@@ -871,6 +871,89 @@ describe( 'status cell', () => {
 
 		await waitFor( () => expect( screen.getByText( 'Неизвестно' ) ).toBeInTheDocument() );
 	} );
+
+	test( 'renders one WooCommerce-toned badge carrying the canonical label, with no coloured dot and no second raw-label line (#829)', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( {
+					delivery_status: {
+						canonical: 'delivered',
+						canonical_label: 'Доставлено',
+						raw: 'DELIVERED',
+						raw_label: 'Доставлен',
+					},
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		const badge = await screen.findByText( 'Доставлено' );
+		expect( badge ).toHaveClass( 'woodev-orders-status', 'woodev-orders-status--ok' );
+		expect( badge.querySelector( '.woodev-orders-status__dot' ) ).toBeNull();
+		// The raw carrier word used to duplicate onto a visible second line —
+		// it must not render anywhere in the cell any more.
+		expect( screen.queryByText( 'Доставлен' ) ).not.toBeInTheDocument();
+	} );
+
+	test( 'the carrier word surfaces as a tooltip on the badge when raw_label carries something the canonical status lost', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( {
+					delivery_status: {
+						canonical: 'unknown',
+						canonical_label: 'Неизвестно',
+						raw: 'CUSTOMS_HOLD',
+						raw_label: 'Задержан на таможне',
+					},
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		const badge = await screen.findByText( 'Неизвестно' );
+		// `Tooltip` makes its anchor keyboard-focusable (tabIndex 0) — that is
+		// real rendered DOM state, not a prop we are trusting blindly.
+		expect( badge ).toHaveAttribute( 'tabindex', '0' );
+
+		// Force keyboard modality (Ariakit's own focus-visible heuristic —
+		// see node_modules/@ariakit/react-components/src/focusable/focusable.tsx)
+		// so the focus below is treated the same way a real Tab press is.
+		fireEvent.keyDown( document, { key: 'Tab' } );
+		act( () => {
+			badge.focus();
+		} );
+
+		await waitFor( () =>
+			expect( screen.getByText( 'Задержан на таможне' ) ).toBeInTheDocument()
+		);
+	} );
+
+	test( 'no tooltip at all when raw_label is empty — never an empty one', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( {
+					delivery_status: {
+						canonical: 'delivered',
+						canonical_label: 'Доставлено',
+						raw: null,
+						raw_label: null,
+					},
+				} ),
+			] )
+		);
+
+		render( <App /> );
+
+		const badge = await screen.findByText( 'Доставлено' );
+		// No Tooltip wrapper was rendered at all — the badge stays a plain,
+		// non-focusable span, not a focusable anchor with nothing to show.
+		expect( badge ).not.toHaveAttribute( 'tabindex' );
+	} );
 } );
 
 describe( 'tracking cell', () => {
