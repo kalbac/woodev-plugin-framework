@@ -6,24 +6,30 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-12 (s133).** ✅ **The orders table — item 1 of the operator's queue — is DONE and
-accepted.** Five PRs merged (#858 #859 #863 #864 #866), tree on `main` @ `6424c57`, no open PRs. The
-badge counter drops on export; statuses render as WooCommerce-toned badges with the carrier's word in
-a tooltip; labels are 6–13 chars so the badges no longer jump; seeded orders carry customers,
-addresses and real totals; money no longer wraps. **He accepted the badges on the rig** and closed
-the «Статус»-column question himself once measurement disproved it.
+**As of 2026-09-13 (s134).** ✅ **The orders table is FINISHED and accepted** — *«вот теперь всё
+супер»*. One PR (#870) over five rounds, tree on `main` @ `6a2a915`, no open PRs. The table now
+carries per-row actions (icon button group, colours and glyphs taken from his own shipped plugins), a
+`cb` column with bulk actions reporting successes and failures separately, an eye-button order
+preview at 820px, a busy-row indicator, and the payment method.
 
-⚠ **Two ways a UI change passes every gate and is still wrong** (both cost s133 a lap): a vendor
-rule copied by GREP is incomplete — `.order-status` also carries `white-space: nowrap`, the badge
-wrapped, and jsdom computes no layout so 1928 jest tests could not see it; and a worker's "build is
-green" is not "bundles are committed" — rebuild and commit them in the PRIMARY checkout. Gotchas
-`a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
-`local-npm-run-build-is-not-assets-parity-evidence`.
+⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
+incomplete; a worker's "build is green" is not "bundles are committed"; and a row rebuilt from the
+same `WC_Order` after an action is stale ONLY on the legacy CPT store — which a mocked test and an
+HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
+`local-npm-run-build-is-not-assets-parity-evidence`,
+`a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store`.
 
-⛔ **The operator reordered the work, 12.09.2026** — *«пока у нас не будет готов базовый минимум
-самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the working queue** (a release gate, not a
-task). Order: **(1) finish the orders table**; **(2) «Создать заказ»** (#710 — the brainstorm is HIS
-and he is holding it); **(3) the order metabox** (#856).
+⚠ **A probe whose selector matches nothing «passes»** — gotcha `a-probe-that-finds-nothing-passes`.
+
+⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
+базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»,
+condition on the card). Next: **docs audit first** (his instruction, s134), then **«Создать заказ»**
+(#710 — the brainstorm is HIS and he is holding it), then **the order metabox** (#856).
+
+✅ **CI first-try reliability is now enforced, not merely intended** (#871): `.githooks/pre-push`
+rebuilds the bundles and runs the catalogue gates by exit code in ~22 s, because a worker may not
+build bundles while `lint:i18n-sources`/`lint:i18n` read msgids out of the built one. Measured cause
+and the 95→73 % collapse: `sessions/s134.md`.
 
 ⚠ **«All time» is the ABSENCE of the date parameter, never a value** — `wc.date` throws on an
 unknown period and the throw unmounts the whole wc-admin app (gotcha
@@ -32,10 +38,10 @@ unknown period and the throw unmounts the whole wc-admin app (gotcha
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-Open on the page: **#824 #839 #842 #843 #856 #860 #867 #868**; shipped: #829 #853 #861 #862 #865. «New» is settled and shipped:
-`is_exported=false`, derived from `carrier_order_id` — every witness (the REST arg, the «Все /
-Новые» links, the carrier counts, the badge) reads it through the SAME `Orders_Query`, which is why
-their numbers agree by construction rather than by coincidence.
+«New» is settled and shipped: `is_exported=false`, derived from a NON-EMPTY `carrier_order_id`
+(#860) — every witness (the REST arg, the «Все / Новые» links, the carrier counts, the badge) reads
+it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
+coincidence. **What is still open on this page is on the board, not retyped here.**
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -61,7 +67,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (`npm run probe:signature`, #767, never a hand count), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786 and `sessions/s117.md`.
+⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (`npm run probe:signature`, #767), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786, `sessions/s117.md`.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
@@ -72,13 +78,11 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — jest re-measured 12.09.2026 (s133) in the PRIMARY checkout; the PHP numbers are
-s132's and #858 landed since — re-measure before quoting them:**
-unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1930** in **32** suites;
-**integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
-reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
-level 3 no errors; every `lint:*` OK; catalogue **820** entries, **429** translated. Nothing on
-this line is carried forward.
+**Baselines — all re-measured 13.09.2026 (s134) in the PRIMARY checkout on `main` `6a2a915`:**
+unit **3901 / 9929**, 1 skipped, sodium ON; jest **1973** in **32** suites; **integration 195 / 719**;
+`npm run build` produces zero git diff; phpcs clean **with the warning level ON**; phpstan level 3 no
+errors; every `lint:*` OK; catalogue **864** entries, **430** translated. ⚠ A number copied from a
+handoff is an INFERENCE — re-measure before quoting.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -112,14 +116,15 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 12.09.2026 (s133); five closed, six filed** (`gh issue list --limit 300` and the board): Инбокс
-EMPTY, 1 in «В работе» (the #820 umbrella). ⚠ **s127 recorded 53 — an undercount**, the very
-`--limit` trap its own handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
-#644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
-`Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
-with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
-#567 was moved AHEAD of the plugin by the same decision. Milestones: `v2.0 релиз` (#247 #285 #567) and `Пилот edostavka`. **Read the board, never a
-card list retyped here** — a retyped list is exactly what went stale and got #644 filed.
+**Open cards — 56, measured 13.09.2026 (s134):** Инбокс EMPTY, 1 in «В работе» (the #820 umbrella).
+⚠ Count with `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an
+undercount from exactly that trap. **PRIORITY LIVES ON THE BOARD, not in this file** (operator,
+04.09.2026, #644 part 3): board №6, field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values
+`Сейчас` `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2`, and every open card carries one.
+⚠ Read it with a milestone-aware reader — a naive one reports a milestone-carrying card as empty.
+**`V2 готов` = #786 works** (operator, 07.09.2026) — the gate #247/#285 wait on; #567 was moved
+AHEAD of the plugin by that same decision. **Read the board, never a card list retyped here** — a
+retyped list is what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
 way; `location.countries` stays a flat chain-wide union, never naively combined with it (#289, s110).
@@ -127,20 +132,22 @@ way; `location.countries` stays a flat chain-wide union, never naively combined 
 **#621 is held behind #639**, and its cheap fix is disproven: `get_order()` must preserve the
 caller's concrete order class or a `WC_Subscription` becomes a plain order (`sessions/s103.md`).
 
-**i18n — four rules, and they live in `AGENTS.md` → Conventions, not here.** The one that is not
-obvious from them: classify by the RENDER PATH, never by the file's directory (gotcha
-`classify-an-i18n-string-by-its-render-path-not-its-file-path`).
-**Принуждается ЧАСТИЧНО** (#771, s118): `lint:i18n` падает на английском msgid без перевода вне
-`scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
-собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
-ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
-✅ **Гейт отвечает и про КОД** (#791, #800): `lint:i18n-sources` гоняет `wp i18n make-pot` по `woodev/` и требует каждый msgid И в `.pot`, И в `.po`. ОДНОСТОРОННИЙ; wp-cli приколочен на 2.12.0. Готча `lint-i18n-answers-about-the-catalogue-not-the-code`.
-✅ **Каталог пересобирается ИЗ КОДА**: `make-pot` + `update-po` + `make-mo` — ⚠ `.mo` только в контейнере рига, и `update-po` сносит хвост `#~`. Готча `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`.
+**i18n — четыре правила живут в `AGENTS.md` → Conventions, не здесь.** Неочевидное из них:
+классифицировать по ПУТИ ОТРИСОВКИ, а не по каталогу файла (готча
+`classify-an-i18n-string-by-its-render-path-not-its-file-path`). ⚠ **Плюс: русский msgid во
+множественном числе обязан нести ВСЕ ТРИ формы `msgstr`, а в JS `_n()` не чинится вовсе** — готча
+`russian-source-i18n-plural-n`, переписана в s134 замером.
+**Принуждается ЧАСТИЧНО** (#771, #791, #800): `lint:i18n` падает на английском msgid без перевода
+вне `scripts/i18n-allowlist.json`, `lint:mo` — на отставшем `.mo`, `lint:i18n-sources` гоняет
+`make-pot` по `woodev/` и требует каждый msgid и в `.pot`, и в `.po` (ОДНОСТОРОННЕ; wp-cli
+приколочен на 2.12.0). ⚠ `.mo` собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига, а `update-po`
+сносит хвост `#~` — готчи `the-mo-is-reproducible-from-the-po`,
+`a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`,
+`lint-i18n-answers-about-the-catalogue-not-the-code`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
-(решение 05.09.2026, повторено 07.09). Перед релизом уже запланировано обновление каталога и проход
-по нему целиком, а строки до того момента ещё много раз изменятся — проверять их сейчас значит
-делать работу, которую придётся переделать. Код и каталог закрыты; карточка «Заморожено»
-с этим условием. «Алгоритм упаковки» к тому проходу уже достижим (#811). Не переоткрывать.
+(05.09.2026, повторено 07.09): перед релизом уже запланированы обновление каталога и проход по нему
+целиком, а строки до того ещё много раз изменятся. Код и каталог закрыты, карточка «Заморожено» с
+этим условием. Не переоткрывать.
 
 **Фичу метода доставки можно объявить ОБОИМИ способами** — `$this->supports` до `parent::__construct()` (#811) и `add_support()` после (#813); до s124 не работал ни один. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set`. Остаток — **#815**.
 
@@ -183,9 +190,9 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: остались инкременты 3 (массовые действия) и 5 (редирект слагов) плюс #824.** ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
+**SP-10: остался инкремент 5 (редирект старых слагов)** — инкремент 3 и #824 сделаны в s134. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
 
-✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
+✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
 
 **What closed when** is the handoff's carry-over section and the per-session files — not this file.
 

@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 319 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 321 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -55,6 +55,7 @@
 - [bootstrap/multiversion-early-class-guards] **Guard and source early support classes.** → [multiversion-early-class-guards](gotchas/multiversion-early-class-guards.md) (s4)
 
 ### [compat/*] — Backward compatibility, HPOS
+- [compat/hpos] **A row rebuilt from the same `WC_Order` after an action is stale ONLY on the legacy CPT store: `update_order_meta()` writes through the object under HPOS and AROUND it on CPT. A mocked test and an HPOS rig are both blind.** → [a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store](gotchas/a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store.md) (s134)
 - [compat/hpos-order-meta-safety] **Never use get_post_meta() on orders.** → [hpos-order-meta-safety](gotchas/hpos-order-meta-safety.md) (s2)
 
 ### [lifecycle/*] — Install/upgrade routines
@@ -138,6 +139,7 @@
 - [framework/wiring] **A feature built on both sides, with nothing calling it in the middle.** → [built-on-both-sides-with-no-caller-in-the-middle](gotchas/built-on-both-sides-with-no-caller-in-the-middle.md) (s56, extended s59)
 
 ### [testing/*] — Testing patterns
+- [testing/probes] **A probe whose selector matches nothing «passes» — «no bad entries» is vacuously true of no entries. Four attempts in a row went green over a page they never inspected, while the defect sat in a screenshot.** → [a-probe-that-finds-nothing-passes](gotchas/a-probe-that-finds-nothing-passes.md) (s134)
 - [testing/integration] **Two integration runs at once share ONE test database, so the loser reports YOUR code failing — 3 failures and 22 risky on a tree that is green alone. A private worktree copy does not isolate it.** → [two-concurrent-integration-runs-share-one-test-database](gotchas/two-concurrent-integration-runs-share-one-test-database.md) (s129)
 - [testing/integration] **A hung PHPUnit killed at the shell leaves its query RUNNING in MySQL, so the NEXT run hangs on `DROP TABLE wp_users`. Read `SHOW FULL PROCESSLIST` first.** → [killing-phpunit-leaves-its-mysql-query-running-and-holding-locks](gotchas/killing-phpunit-leaves-its-mysql-query-running-and-holding-locks.md) (s128)
 - [testing/environment-split] **`wc_get_orders()` DROPS `meta_query` on the legacy CPT datastore and still returns a successful, UNFILTERED result — a probe on the HPOS rig proves nothing about the CPT test env. Holds the ONE «matches nothing» mechanism.** → [wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore](gotchas/wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore.md) (s125)
