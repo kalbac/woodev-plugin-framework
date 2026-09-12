@@ -6,25 +6,27 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-11 (s130).** ✅ **#848 #851 #854 merged; tree on `main` @ `b1f9c77`, clean.**
-⚠ **PR #852 (the menu badge, #834) is OPEN, green and DELIBERATELY HELD** — it counts all-time
-(101) against the page's year default (83), and the operator has settled that those must agree.
-**#855 unblocks it and it will then agree without an edit to it.** Detail: `sessions/s130.md`.
+**As of 2026-09-12 (s132).** ✅ **#857 and #852 merged; tree on `main` @ `5cf8178`, clean, no open
+PRs.** The four numbers on the orders page AGREE, verified on the rig: «Всё время» is the page's
+default and gives 134 / 134 / 134 with 101 new, which is exactly what the menu badge shows; «С
+начала года» moves every one of them together to 110 / 110 / 110 and 83.
 
-⚠ **Four numbers on this page describe four different periods, and only one of them is new.**
-The carrier picker already said «Все перевозчики (134)» above a table of 110 rows on `main` — it
-counts all-time, the table counts the period. Operator, 11.09.2026: **the counts describe what is IN
-THE TABLE, and the default period widens to all time** (#855, «Сейчас»). Year was never chosen for
-its own sake — D11 took it because WooCommerce ships no wider preset.
+⛔ **The operator reordered the work, 12.09.2026** — *«пока у нас не будет готов базовый минимум
+самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the working queue** (a release gate, not a
+task). Order: **(1) finish the orders table**; **(2) «Создать заказ»** (#710 — the brainstorm is HIS
+and he is holding it); **(3) the order metabox** (#856).
+
+⚠ **«All time» is the ABSENCE of the date parameter, never a value** — `wc.date` throws on an
+unknown period and the throw unmounts the whole wc-admin app (gotcha
+`wc-date-throws-on-a-half-filled-custom-range`).
 
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-Open on the page: **#824 #829 #834 #839 #842 #843 #853 #855**. «New» is settled and shipped:
-`is_exported=false`, derived from `carrier_order_id` — the REST arg, the «Все / Новые» links and the
-badge all read it through the SAME `Orders_Query`, which is what makes their numbers agree by
-construction rather than by coincidence (verified end-to-end through the page's own REST route,
-s130: 101 = 101, breakdown 48 + 53).
+Open on the page: **#824 #829 #839 #842 #843 #853 #856**. «New» is settled and shipped:
+`is_exported=false`, derived from `carrier_order_id` — every witness (the REST arg, the «Все /
+Новые» links, the carrier counts, the badge) reads it through the SAME `Orders_Query`, which is why
+their numbers agree by construction rather than by coincidence.
 
 ⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
 `wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
@@ -51,7 +53,7 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost.** (1) Repointing at a v2 base costs **11 fatals and 8 unimplemented abstracts** — run `npm run probe:signature` (#767), never a hand count. (2) `Shipping_Method::calculate_shipping()` is **`final`**. (3) `register_shipping_methods()` is `final` and filters on `is_subclass_of( $class, Shipping_Method::class )`, dropping the rest **SILENTLY** — a method left on `WC_Shipping_Method` vanishes from checkout with no fatal and no log line.
+⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (`npm run probe:signature`, #767, never a hand count), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786 and `sessions/s117.md`.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
@@ -62,11 +64,11 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 11.09.2026 (s130) on MERGED `main` at `b1f9c77`:**
-unit **3786** / **9529**, 1 skipped, with sodium ON; jest **1885** in **31** suites;
+**Baselines — re-measured 12.09.2026 (s132) on MERGED `main` at `5cf8178`:**
+unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1924** in **32** suites;
 **integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
-level 3 no errors; every `lint:*` OK; catalogue **805** entries, **429** translated. Nothing on
+level 3 no errors; every `lint:*` OK; catalogue **820** entries, **429** translated. Nothing on
 this line is carried forward.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
@@ -83,15 +85,12 @@ command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows
 
 ✅ **`--order-by=reverse` GREEN and GATED IN CI** (#606).
 
-✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**,
-~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
-Detail: `wiki/rig-pickup-walkthrough.md`.
+✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**, ~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
 
-✅ **Integration is the COORDINATOR's job and is not optional.** A worktree cannot run it — and the
-reason is NOT «no wp-env»: the rig containers DO see worktrees (`.wp-env.json` maps the repo root and
-`.orca/` sits inside it), phpunit starts there and then dies resolving the fixtures, because
+✅ **Integration is the COORDINATOR's job and is not optional.** A worktree cannot run it, and the
+reason is NOT «no wp-env»: phpunit starts there and dies resolving fixtures, because
 `WOODEV_FRAMEWORK_DIR` points at the main checkout (measured s118). Run it on the branch **checked
-out in the main tree, inside the `tests-cli` container** — exact command in the gotcha named above. `wp i18n make-mo` on a worktree's `.po`, by contrast, works fine.
+out in the main tree, inside the `tests-cli` container** — exact command in the gotcha named above.
 jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
 `npm run test:js` is correct on its own (#188).
 
@@ -104,9 +103,9 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 59, measured 09.09.2026 TWICE** (`gh issue list --limit 300` and the board): Инбокс
-EMPTY, 2 in «В работе». ⚠ **s127 recorded 53 — an undercount**, the very `--limit` trap its own
-handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
+**Open cards — 57, measured 12.09.2026 TWICE** (`gh issue list --limit 300` and the board): Инбокс
+EMPTY, 1 in «В работе» (the #820 umbrella). ⚠ **s127 recorded 53 — an undercount**, the very
+`--limit` trap its own handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
 `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2` — every open card carries one, verified 07.09.2026 (s124)
 with the milestone-aware reader (a naive one reports a milestone-carrying card as empty). **`V2 готов` = #786 works** (operator, 07.09.2026) — that gate is what #247/#285 wait on, while
@@ -175,7 +174,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: в `main` инкременты 1, 2a, 2b, 6, 7, 8 (панель), фильтрация с правилами и ссылки области «Все / Новые» (#841).** Осталось: 3 (массовые действия), 4 (счётчик — код готов, PR #852 придержан за #855), 5 (редирект слагов), плюс #824 #829. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: в `main` инкременты 1, 2a, 2b, 4 (счётчик в меню, #834), 6, 7, 8 (панель), фильтрация с правилами, ссылки области «Все / Новые» (#841) и свой контрол «Период» со «Всё время» (#855).** Осталось: 3 (массовые действия), 5 (редирект слагов), плюс #824 #829 #853. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
 ✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
@@ -251,7 +250,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **310**.
+Gotchas: **316**.
 
 ## Program status (high level)
 

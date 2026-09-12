@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 310 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 316 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -84,6 +84,9 @@
 - [framework/contracts] **A cross-provider `within` is handed over as COMPONENTS, never as a key — no key translation layer is needed or wanted.** → [a-cross-provider-within-is-handed-over-as-components](gotchas/a-cross-provider-within-is-handed-over-as-components.md) (s76)
 
 ### [woocommerce/*] — WooCommerce-specific (session)
+- [woocommerce/segmented-selection] **WooCommerce draws that grid's divider by CHILD PARITY (`nth-child(2n)`), so ONE full-width cell inside the container shifts every following item and the borders land on the wrong sides. Geometry stays correct.** → [a-wide-cell-breaks-woocommerce-s-nth-child-grid-borders](gotchas/a-wide-cell-breaks-woocommerce-s-nth-child-grid-borders.md) (s132)
+- [woocommerce/date] **`wc.date` THROWS rather than degrades — `custom` with one date, or an unknown period — and the throw unmounts the whole wc-admin app. «All time» must be the ABSENCE of the parameter.** → [wc-date-throws-on-a-half-filled-custom-range](gotchas/wc-date-throws-on-a-half-filled-custom-range.md) (s132)
+- [woocommerce/menu] **`wc_admin_register_page()` never reads the `order` key its docblock advertises, and neighbouring entries pass NO `position` — place by the neighbour's SLUG.** → [wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position](gotchas/wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position.md) (s132)
 - [woocommerce/navigation] **`wc-admin` REWRITES `document.title` after it mounts, so a DOM read says the markup never leaked while the response body shows it did — ask the response, not the settled DOM, about anything the server rendered.** → [a-dom-read-cannot-answer-a-question-about-server-rendered-markup](gotchas/a-dom-read-cannot-answer-a-question-about-server-rendered-markup.md) (s130)
 - [woocommerce/navigation] **A sidebar link's `href` carries no query, and `wc-admin` re-adds the date params anyway (`getPersistedQuery()`) — so a probe using a full page load proves the OPPOSITE of what a click does.** → [wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry](gotchas/wc-admin-re-adds-the-date-params-a-menu-link-does-not-carry.md) (s129)
 - [woocommerce/navigation] **`addHistoryListener` fires BEFORE the real `pushState`, so `getQuery()` inside it reads the PREVIOUS URL and the page stays one navigation behind. Raise a flag; read the query in a later effect.** → [addhistorylistener-fires-before-the-url-changes](gotchas/addhistorylistener-fires-before-the-url-changes.md) (s128)
@@ -239,6 +242,7 @@
 - [build/css-enqueue-version] **enqueue the wp-scripts `style-index.css` with its OWN filemtime, not the JS bundle's asset-hash version.** → [wp-scripts-css-enqueue-version-by-mtime](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI
+- [admin-ui/calendar] **`react-dates` renders `.CalendarMonth` at a FIXED 300px inside a 320px popover, so `padding: 16px` on the wrapper overflows it and the grid reads as slid right.** → [react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it](gotchas/react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it.md) (s132)
 - [admin-ui/notices] **A DELAYED admin notice renders into the HTML with `display:none` and is unhidden by inline jQuery — grepping the markup for its text proves nothing about whether anyone sees it, and the PHP suite cannot tell.** → [a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed](gotchas/a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed.md) (s105)
 - [admin-ui/license-page] **the v2 license page only enqueues the React bundle CSS — server-rendered sections need their styles in style.scss.** → [license-page-css-bundle-only](gotchas/license-page-css-bundle-only.md) (s14)
 - [admin-ui/esc-url-raw-for-js] **Use `esc_url_raw` (not `esc_url`) for URLs handed to JS / REST.** → [esc-url-raw-for-js-consumed-urls](gotchas/esc-url-raw-for-js-consumed-urls.md) (s20)
@@ -358,6 +362,8 @@
 - [autodev/gate-fence] **autodev-loop gate/fence design pitfalls (per-value guards, fingerprint fence).** → [autodev-loop-gate-fence-pitfalls](gotchas/autodev-loop-gate-fence-pitfalls.md) (s33)
 
 ### [tooling/*] — Dev tooling, codex critic
+- [tooling/orca] **`check --json` mixes one-line keepalives with a PRETTY-PRINTED delivery, so a line-by-line parser reports «nothing delivered» three waits running while the worker is fine.** → [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](gotchas/orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) (s132)
+- [tooling/orca] **`worker-start` without `--model` takes the COORDINATOR's model; the receipt says `model: null` on both sides and only the terminal's status line names it.** → [a-worker-started-without-model-inherits-the-coordinators-model](gotchas/a-worker-started-without-model-inherits-the-coordinators-model.md) (s132)
 - [tooling/orca] **`git worktree remove` on an Orca worktree deletes the PRIMARY checkout's `node_modules` — the share is a symlink and git walks into it. Remove them through Orca.** → [git-worktree-remove-empties-the-primary-checkouts-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkouts-node-modules.md) (s127)
 - [tooling/orca] **A Run holds ONE active `check --wait`; a second returns `ok:false` with no `result`, which reads as "no worker finished".** → [one-check-wait-per-run-and-a-second-one-fails-invisibly](gotchas/one-check-wait-per-run-and-a-second-one-fails-invisibly.md) (s127)
 - [tooling/grep] **`grep --include` through `wp-env run` silently finds nothing, and WooCommerce is in `plugins/woocommerce.latest-stable`.** → [grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce](gotchas/grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce.md) (s126)

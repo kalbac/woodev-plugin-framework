@@ -64,6 +64,28 @@ If a page ever does need to ignore the persisted query, that is OUR code overrid
 behaviour — a deliberate divergence from every neighbouring `wc-admin` screen, and a decision for
 the operator (#838), not a bug fix.
 
+## s132: what `getPersistedQuery()` does NOT do
+
+Read straight out of the shipped bundle rather than inferred, because the s130 wording above
+(«re-adds the date params») invites the stronger reading that it can INVENT one:
+
+```js
+getPersistedQuery = ( query = getQuery() ) => {
+    const params = applyFilters( 'woocommerce_admin_persisted_queries',
+        [ 'period', 'compare', 'before', 'after', 'interval', 'type' ] );
+    return pick( query, params );
+};
+```
+
+It is a `pick`. It carries forward only the keys the CURRENT query already has, and it manufactures
+nothing — so **an absent `period` stays absent across navigation**, and a page whose default state
+is «no date filter» does not need sentinel dates to defend itself. That is what let #855 express
+«всё время» as the absence of the parameter rather than as a value (a value would have thrown; see
+its own gotcha).
+
+What it does do is carry an EXISTING period onto a link whose `href` has none — which is the s130
+finding above, and still true.
+
 ## Related
 
 - [addhistorylistener-fires-before-the-url-changes](addhistorylistener-fires-before-the-url-changes.md) — the other `wc-admin` navigation trap on this page; both are about trusting the URL at the wrong moment
