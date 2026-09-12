@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 316 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 317 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -242,6 +242,7 @@
 - [build/css-enqueue-version] **enqueue the wp-scripts `style-index.css` with its OWN filemtime, not the JS bundle's asset-hash version.** → [wp-scripts-css-enqueue-version-by-mtime](gotchas/wp-scripts-css-enqueue-version-by-mtime.md) (s31)
 
 ### [admin-ui/*] — Admin pages / React UI
+- [admin-ui/vendor-css] **Grepping a vendor stylesheet is an INCOMPLETE measurement — the `.order-status` rule copied that way missed `white-space: nowrap` and our label wrapped. Read `getComputedStyle()` off their real element.** → [a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement](gotchas/a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement.md) (s133)
 - [admin-ui/calendar] **`react-dates` renders `.CalendarMonth` at a FIXED 300px inside a 320px popover, so `padding: 16px` on the wrapper overflows it and the grid reads as slid right.** → [react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it](gotchas/react-dates-renders-a-fixed-300px-month-so-a-padded-wrapper-overflows-it.md) (s132)
 - [admin-ui/notices] **A DELAYED admin notice renders into the HTML with `display:none` and is unhidden by inline jQuery — grepping the markup for its text proves nothing about whether anyone sees it, and the PHP suite cannot tell.** → [a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed](gotchas/a-delayed-admin-notice-renders-hidden-and-may-never-be-revealed.md) (s105)
 - [admin-ui/license-page] **the v2 license page only enqueues the React bundle CSS — server-rendered sections need their styles in style.scss.** → [license-page-css-bundle-only](gotchas/license-page-css-bundle-only.md) (s14)

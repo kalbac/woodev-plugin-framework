@@ -55,3 +55,6 @@ Thumbs.db
 
 # Playwright e2e artifacts (traces, screenshots) — issue #723
 artifacts/
+
+# Playwright MCP probe output (screenshots, snapshots, console logs) — never committed
+.playwright-mcp/

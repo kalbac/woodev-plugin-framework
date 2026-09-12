@@ -75,6 +75,32 @@ rebuilding produced exactly the ten files CI had flagged.
   shared UI-kit modules imported by all five entry bundles, so a single-entry build
   (`npm run build:settings`) silently desyncs the other four.
 
+## The second failure mode: built, but never COMMITTED (s133)
+
+The variant above is "the worktree's build output is wrong". s133 hit the other one, and it looks
+identical from the outside: **a worker ran `npm run build`, the output was fine, and it simply never
+staged the result.** Its `worker_done` honestly listed `build` among its green gates — because
+building IS what it had been asked to verify — and `Assets build parity` went red anyway.
+
+The evidence was sitting in the worktree the whole time and only surfaced when removing it:
+
+```
+Failed to delete worktree at …/s133-829-badges.
+ M woodev/assets/build/shipping-orders-page/index.js
+ M woodev/assets/build/shipping-orders-page/style-index.css
+ …plus the seven CRLF-only files a fresh worktree always starts dirty with
+```
+
+Two consequences:
+
+- **A brief that says "run `npm run build`" is not enough** — a worker that touches `src/` must be
+  told the built bundles are COMMITTED artefacts, or told not to build at all and to leave the
+  rebuild to the coordinator in the primary checkout. The second is better, and it is what this
+  gotcha already recommends.
+- **`orca worktree rm` without `--force` is a useful audit.** It refuses on a dirty worktree and
+  prints exactly what was left behind — read that list before forcing it away, since it is the last
+  moment anyone can see what the worker did not commit.
+
 ## Related
 
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — the same symlink-resolution mechanism, one layer down: Composer bakes `$baseDir` and PHP resolves the link too

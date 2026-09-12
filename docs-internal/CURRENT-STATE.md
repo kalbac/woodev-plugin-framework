@@ -6,10 +6,18 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-12 (s132).** ✅ **#857 and #852 merged; tree on `main` @ `5cf8178`, clean, no open
-PRs.** The four numbers on the orders page AGREE, verified on the rig: «Всё время» is the page's
-default and gives 134 / 134 / 134 with 101 new, which is exactly what the menu badge shows; «С
-начала года» moves every one of them together to 110 / 110 / 110 and 83.
+**As of 2026-09-12 (s133).** ✅ **#858 merged (`829dc78`) — the new-order badge count now drops the
+moment an order is exported.** ⏳ **PR #859 (#829, status badges) is GREEN and CLEAN but deliberately
+NOT merged: it is UI and waits on the operator's visual acceptance.** The primary checkout is
+therefore parked on `feat/829-status-badges`, so the rig serves the badges — do not switch it back
+until that pass is over.
+
+⚠ **Two ways a UI change passes every gate and is still wrong** (both cost s133 a lap): a vendor
+rule copied by GREP is incomplete — `.order-status` also carries `white-space: nowrap`, the badge
+wrapped, and jsdom computes no layout so 1928 jest tests could not see it; and a worker's "build is
+green" is not "bundles are committed" — rebuild and commit them in the PRIMARY checkout. Gotchas
+`a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
+`local-npm-run-build-is-not-assets-parity-evidence`.
 
 ⛔ **The operator reordered the work, 12.09.2026** — *«пока у нас не будет готов базовый минимум
 самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the working queue** (a release gate, not a
@@ -23,7 +31,7 @@ unknown period and the throw unmounts the whole wc-admin app (gotcha
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-Open on the page: **#824 #829 #839 #842 #843 #853 #856**. «New» is settled and shipped:
+Open on the page: **#824 #839 #842 #843 #856 #860 #861** (#829 has an open PR; #853 shipped). «New» is settled and shipped:
 `is_exported=false`, derived from `carrier_order_id` — every witness (the REST arg, the «Все /
 Новые» links, the carrier counts, the badge) reads it through the SAME `Orders_Query`, which is why
 their numbers agree by construction rather than by coincidence.
@@ -48,8 +56,7 @@ AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-compon
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
 A NEW one on v2; post-mortem in `sessions/s116.md`. **New course: the framework is finished ON
 FIXTURES**; the shipping plugin is written later, from scratch, own repo, version **2.3.0.0** —
-✅ **SETTLED 06.09.2026:** nothing above **`2.2.5.5`** is installed anywhere and `2.3.2` was his own
-abandoned rewrite that never shipped, so the comparison that actually happens is
+✅ **SETTLED 06.09.2026:** nothing above **`2.2.5.5`** is installed anywhere, so
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
@@ -64,8 +71,9 @@ abandoned rewrite that never shipped, so the comparison that actually happens is
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — re-measured 12.09.2026 (s132) on MERGED `main` at `5cf8178`:**
-unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1924** in **32** suites;
+**Baselines — jest re-measured 12.09.2026 (s133) in the PRIMARY checkout; the PHP numbers are
+s132's and #858 landed since — re-measure before quoting them:**
+unit **3816** / **9612**, 1 skipped, with sodium ON; jest **1928** in **32** suites;
 **integration 194 / 711**; `npm run build` produces **zero git diff**, so the primary checkout
 reproduces the committed bundles exactly; phpcs clean — **with the warning level ON**; phpstan
 level 3 no errors; every `lint:*` OK; catalogue **820** entries, **429** translated. Nothing on
@@ -103,7 +111,7 @@ a region whose `key()` is not in the settlement's own `ancestors()` is refused. 
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 57, measured 12.09.2026 TWICE** (`gh issue list --limit 300` and the board): Инбокс
+**Open cards — 58, measured 12.09.2026 (s133); #853 closed, #860 and #861 filed** (`gh issue list --limit 300` and the board): Инбокс
 EMPTY, 1 in «В работе» (the #820 umbrella). ⚠ **s127 recorded 53 — an undercount**, the very
 `--limit` trap its own handoff warned about. **PRIORITY LIVES ON THE BOARD, not in this file** (operator, 04.09.2026,
 #644 part 3). Board №6 field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values: `Сейчас`
@@ -125,8 +133,8 @@ obvious from them: classify by the RENDER PATH, never by the file's directory (g
 `scripts/i18n-allowlist.json`, `lint:mo` — на `.mo`, отставшем от `.po`; оба в `ci.yml`. `.mo`
 собирается ТОЛЬКО `wp i18n make-mo` в контейнере рига — рукописный компилятор даёт другой файл и
 ломает инвариант готчи `the-mo-is-reproducible-from-the-po`.
-✅ **Гейт отвечает и про КОД, не только про каталог** (#791, #800). `lint:i18n` читает `.po`; рядом **`lint:i18n-sources`** гоняет `wp i18n make-pot` по `woodev/` и требует каждый извлечённый msgid И в `.pot`, И в `.po`. Гейт ОДНОСТОРОННИЙ; wp-cli приколочен на 2.12.0 и разыскивается сам (вплоть до `docker cp` из контейнера рига). Готча `lint-i18n-answers-about-the-catalogue-not-the-code`; подробности — `sessions/s121.md`, `sessions/s123.md`.
-✅ **Каталог пересобирается ИЗ КОДА**: `wp i18n make-pot` + `wp i18n update-po` (настоящий msgmerge, в 2.12.0 ЕСТЬ) + `wp i18n make-mo` — ⚠ `.mo` собирается ТОЛЬКО в контейнере рига, и `update-po` сносит весь хвост `#~`. Обе поправки в готче `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`; числа пересборок — в `sessions/s123.md` и `sessions/s125.md`.
+✅ **Гейт отвечает и про КОД** (#791, #800): `lint:i18n-sources` гоняет `wp i18n make-pot` по `woodev/` и требует каждый msgid И в `.pot`, И в `.po`. ОДНОСТОРОННИЙ; wp-cli приколочен на 2.12.0. Готча `lint-i18n-answers-about-the-catalogue-not-the-code`.
+✅ **Каталог пересобирается ИЗ КОДА**: `make-pot` + `update-po` + `make-mo` — ⚠ `.mo` только в контейнере рига, и `update-po` сносит хвост `#~`. Готча `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
 (решение 05.09.2026, повторено 07.09). Перед релизом уже запланировано обновление каталога и проход
 по нему целиком, а строки до того момента ещё много раз изменятся — проверять их сейчас значит
@@ -174,7 +182,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: в `main` инкременты 1, 2a, 2b, 4 (счётчик в меню, #834), 6, 7, 8 (панель), фильтрация с правилами, ссылки области «Все / Новые» (#841) и свой контрол «Период» со «Всё время» (#855).** Осталось: 3 (массовые действия), 5 (редирект слагов), плюс #824 #829 #853. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
+**SP-10: осталось инкременты 3 (массовые действия) и 5 (редирект слагов) плюс #824; что уже в `main` — на доске, не здесь.** ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён: 1 пункт из ~25, состояние комментарием на карточке.
 
 ✅ **На риге ДВА перевозчика, 134 заказа** (`WOODEV_TEST_SEED_ORDERS_DEMO`; было 71 — обе сеялки подняли `SEED_VERSION` в s129, и риг пересеялся). ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков.
 
@@ -250,7 +258,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **316**.
+Gotchas: **317**.
 
 ## Program status (high level)
 
