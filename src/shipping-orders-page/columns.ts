@@ -156,14 +156,14 @@ export function getStatusTone( canonical: string ): StatusTone {
  * own `TYPE_LABELS` already sets for the three delivery types.
  */
 export const DELIVERY_STATUS_LABELS: Record<DeliveryStatusCanonical, string> = {
-	pending: __( 'Ожидает отправки', 'woodev-plugin-framework' ),
-	created: __( 'Создано у перевозчика', 'woodev-plugin-framework' ),
+	pending: __( 'К отправке', 'woodev-plugin-framework' ),
+	created: __( 'Принято', 'woodev-plugin-framework' ),
 	in_transit: __( 'В пути', 'woodev-plugin-framework' ),
-	ready_for_pickup: __( 'Готово к выдаче', 'woodev-plugin-framework' ),
+	ready_for_pickup: __( 'К выдаче', 'woodev-plugin-framework' ),
 	delivered: __( 'Доставлено', 'woodev-plugin-framework' ),
-	returning: __( 'Возврат в пути', 'woodev-plugin-framework' ),
-	returned: __( 'Возвращено отправителю', 'woodev-plugin-framework' ),
-	failed: __( 'Не удалось доставить', 'woodev-plugin-framework' ),
+	returning: __( 'Возврат', 'woodev-plugin-framework' ),
+	returned: __( 'Возвращено', 'woodev-plugin-framework' ),
+	failed: __( 'Не доставлено', 'woodev-plugin-framework' ),
 	cancelled: __( 'Отменено', 'woodev-plugin-framework' ),
 	unknown: __( 'Неизвестно', 'woodev-plugin-framework' ),
 };

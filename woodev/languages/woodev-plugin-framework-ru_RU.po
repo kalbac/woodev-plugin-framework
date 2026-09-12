@@ -3417,11 +3417,11 @@ msgid "Неизвестный перевозчик."
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:88
-msgid "Ожидает отправки"
+msgid "К отправке"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:89
-msgid "Создано у перевозчика"
+msgid "Принято"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:90
@@ -3429,7 +3429,7 @@ msgid "В пути"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:91
-msgid "Готово к выдаче"
+msgid "К выдаче"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:92
@@ -3437,15 +3437,15 @@ msgid "Доставлено"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:93
-msgid "Возврат в пути"
+msgid "Возврат"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:94
-msgid "Возвращено отправителю"
+msgid "Возвращено"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:95
-msgid "Не удалось доставить"
+msgid "Не доставлено"
 msgstr ""
 
 #: shipping-method/order/class-delivery-status.php:96

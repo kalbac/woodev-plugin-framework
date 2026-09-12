@@ -415,7 +415,7 @@ describe( 'periodQuery (#855)', () => {
 } );
 
 describe( 'buildAdvancedFiltersConfig', () => {
-	const deliveryStatusLabels = { pending: 'Ожидает отправки', delivered: 'Доставлено' };
+	const deliveryStatusLabels = { pending: 'К отправке', delivered: 'Доставлено' };
 
 	test( 'always offers delivery status and tracking presence', () => {
 		const config = buildAdvancedFiltersConfig( deliveryStatusLabels );
@@ -452,7 +452,7 @@ describe( 'buildAdvancedFiltersConfig', () => {
 		const config = buildAdvancedFiltersConfig( deliveryStatusLabels );
 
 		expect( config.filters.delivery_status.input.options ).toEqual( [
-			{ value: 'pending', label: 'Ожидает отправки' },
+			{ value: 'pending', label: 'К отправке' },
 			{ value: 'delivered', label: 'Доставлено' },
 		] );
 	} );
@@ -460,7 +460,7 @@ describe( 'buildAdvancedFiltersConfig', () => {
 	/**
 	 * #837 defect 4. The list used to be every canonical state, and one of them was
 	 * unreachable on every shop measured — no carrier maps a raw status to `pending`,
-	 * so picking «Ожидает отправки» returned an empty table and read as a broken
+	 * so picking «К отправке» returned an empty table and read as a broken
 	 * filter. The server now derives what the shop can produce; this is the client
 	 * half of that contract.
 	 */
@@ -482,7 +482,7 @@ describe( 'buildAdvancedFiltersConfig', () => {
 		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, undefined, [] );
 
 		expect( config.filters.delivery_status.input.options ).toEqual( [
-			{ value: 'pending', label: 'Ожидает отправки' },
+			{ value: 'pending', label: 'К отправке' },
 			{ value: 'delivered', label: 'Доставлено' },
 		] );
 	} );
@@ -510,7 +510,7 @@ describe( 'buildAdvancedFiltersConfig', () => {
 	 * submits the option's TEXT (the Russian label) instead — which is exactly
 	 * what silently broke both the «Filter» button (`updateDisabled` stayed
 	 * `true`, per `getDefaultOptionValue()` reading `undefined`) and an
-	 * explicit pick (submitted `delivery_status_is=Ожидает отправки` and the
+	 * explicit pick (submitted `delivery_status_is=К отправке` and the
 	 * REST route answered `Invalid parameter(s)`). Worded so it fails for the
 	 * old `{ key, label }` shape: `option.value` must be a non-empty string.
 	 */
@@ -568,7 +568,7 @@ describe( 'advancedFiltersToggleQuery — the reset WooCommerce used to do for u
 } );
 
 describe( 'per-filter rules and the pickup-point filter (#836)', () => {
-	const deliveryStatusLabels = { pending: 'Ожидает отправки', in_transit: 'В пути' };
+	const deliveryStatusLabels = { pending: 'К отправке', in_transit: 'В пути' };
 
 	/**
 	 * The operator's complaint was that every filter had ONE fixed rule. Delivery status and

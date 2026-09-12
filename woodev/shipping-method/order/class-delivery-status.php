@@ -79,20 +79,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 		 * {@see self::UNKNOWN}). Count-neutral phrasing throughout — Russian is the source
 		 * language here and there is no `ru` catalogue, so `_n()` would come out wrong.
 		 *
+		 * Labels are kept to a roughly equal length (6-13 chars) so the status badge
+		 * column does not visually jump between rows (#862).
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return array<string,string>
 		 */
 		public static function labels(): array {
 			return [
-				self::PENDING          => __( 'Ожидает отправки', 'woodev-plugin-framework' ),
-				self::CREATED          => __( 'Создано у перевозчика', 'woodev-plugin-framework' ),
+				self::PENDING          => __( 'К отправке', 'woodev-plugin-framework' ),
+				self::CREATED          => __( 'Принято', 'woodev-plugin-framework' ),
 				self::IN_TRANSIT       => __( 'В пути', 'woodev-plugin-framework' ),
-				self::READY_FOR_PICKUP => __( 'Готово к выдаче', 'woodev-plugin-framework' ),
+				self::READY_FOR_PICKUP => __( 'К выдаче', 'woodev-plugin-framework' ),
 				self::DELIVERED        => __( 'Доставлено', 'woodev-plugin-framework' ),
-				self::RETURNING        => __( 'Возврат в пути', 'woodev-plugin-framework' ),
-				self::RETURNED         => __( 'Возвращено отправителю', 'woodev-plugin-framework' ),
-				self::FAILED           => __( 'Не удалось доставить', 'woodev-plugin-framework' ),
+				self::RETURNING        => __( 'Возврат', 'woodev-plugin-framework' ),
+				self::RETURNED         => __( 'Возвращено', 'woodev-plugin-framework' ),
+				self::FAILED           => __( 'Не доставлено', 'woodev-plugin-framework' ),
 				self::CANCELLED        => __( 'Отменено', 'woodev-plugin-framework' ),
 				self::UNKNOWN          => __( 'Неизвестно', 'woodev-plugin-framework' ),
 			];
