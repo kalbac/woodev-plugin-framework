@@ -204,6 +204,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * Adds the shared menu / enqueue / REST / CPT-query-translation hooks exactly once.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Also subscribes {@see self::flush_new_order_counts()} to the
+		 *              framework-wide `woodev_shipping_order_exported` action, so the
+		 *              cached badge count drops the moment any order is exported,
+		 *              rather than waiting out the TTL (#853).
 		 *
 		 * @return void
 		 */
@@ -217,6 +221,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 		}
 
@@ -436,12 +441,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/**
 		 * Drops the cached badge counts, so the next admin request recomputes them.
 		 *
-		 * ⚠ An extension seam with no caller inside the framework yet, and that is not an
-		 * argument against it. The natural consumer is the export path: the moment
-		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()}
-		 * writes a `carrier_order_id` an order stops being new, and the badge should say
-		 * so without waiting out the TTL. Wiring that call lives in the shipment handler
-		 * and is a change of its own.
+		 * Subscribed by {@see self::add_hooks()} to the framework-wide
+		 * `woodev_shipping_order_exported` action fired by
+		 * {@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler::export()} —
+		 * the moment an order's `carrier_order_id` is written it stops being new, and
+		 * the badge should say so without waiting out the TTL (#853).
 		 *
 		 * @since 2.0.2
 		 *

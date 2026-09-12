@@ -160,6 +160,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @since 2.0.2 Round 2 (MEDIUM 3): enrolment additionally requires a
 		 *              non-empty `$carrier_order_id` — a non-throwing response with
 		 *              no id is not evidence of a real export.
+		 * @since 2.0.2 Also fires the unprefixed, framework-wide
+		 *              `woodev_shipping_order_exported` action so framework code
+		 *              (e.g. {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry})
+		 *              can react without depending on `$hook_prefix` (#853).
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
@@ -194,12 +198,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			/**
 			 * Fires after an order is successfully exported to the carrier.
 			 *
+			 * This is the PLUGIN-facing extension point: its name carries the
+			 * plugin's own `$hook_prefix`, so a plugin subscribes to its own exports
+			 * only. Framework code that must react to every export regardless of
+			 * which plugin produced it uses `woodev_shipping_order_exported` below
+			 * instead.
+			 *
 			 * @since 1.5.0
 			 *
 			 * @param \WC_Order $order            the exported order
 			 * @param string    $carrier_order_id the carrier-assigned order id now stored on the order
 			 */
 			do_action( $this->hook( 'shipment_exported' ), $order, $carrier_order_id );
+
+			/**
+			 * Fires after ANY carrier's shipment export, framework-wide.
+			 *
+			 * Unlike the plugin-facing hook above, this action name never varies
+			 * with `$hook_prefix` — each plugin sets that independently, so the
+			 * framework cannot subscribe to a fixed hook built from it. This is the
+			 * framework's OWN internal notification (e.g.
+			 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::flush_new_order_counts()}
+			 * uses it to drop the cached "new orders" badge count). Fires
+			 * unconditionally, including when `$carrier_order_id` is empty — same as
+			 * the plugin-facing hook above.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param \WC_Order $order            the exported order
+			 * @param string    $carrier_order_id the carrier-assigned order id now stored on the order (may be empty)
+			 */
+			do_action( 'woodev_shipping_order_exported', $order, $carrier_order_id );
 
 			if ( '' !== $carrier_order_id ) {
 				$this->enroll_popular_settlement( $settlement, $provider );

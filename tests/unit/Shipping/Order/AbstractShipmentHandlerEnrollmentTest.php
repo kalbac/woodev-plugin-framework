@@ -87,6 +87,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping\Order {
 
+	use Brain\Monkey\Actions;
 	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
@@ -194,6 +195,89 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$order  = Mockery::mock( '\WC_Order' );
 			$result = $handler->export( $order, $record, $provider );
+
+			$this->assertSame( '', $result );
+		}
+
+		// -------------------------------------------------------------------
+		// #853: flush the "new orders" badge cache on export. The registry
+		// subscribes to a framework-wide, UNPREFIXED `woodev_shipping_order_exported`
+		// action (see Orders_Registry::add_hooks()/flush_new_order_counts()) rather
+		// than the plugin-prefixed `hook( 'shipment_exported' )` above, because
+		// `$hook_prefix` is a per-plugin constructor argument the framework cannot
+		// build a fixed hook name from.
+		// -------------------------------------------------------------------
+
+		public function test_export_fires_the_framework_wide_order_exported_action(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'enroll' )->once();
+
+			$handler                        = $this->handler( $store );
+			$handler->next_carrier_order_id = 'CARRIER-1';
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, 'CARRIER-1' );
+
+			$handler->export( $order, $record, $provider );
+		}
+
+		/**
+		 * The flush action must fire even when the carrier id is empty — same as
+		 * the plugin-prefixed `shipment_exported` hook it fires alongside (see the
+		 * MEDIUM 3 test above): the meta write itself is unconditional (verified in
+		 * test_export_writes_the_meta_even_when_the_carrier_id_is_empty() below), so
+		 * a stale badge count must not survive an export attempt just because the
+		 * carrier response happened to carry no id.
+		 */
+		public function test_export_fires_the_order_exported_action_even_when_the_carrier_id_is_empty(): void {
+			$provider = new \ShipmentHandlerEnrollment_Fixture_Provider();
+			$record   = $this->record();
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldNotReceive( 'enroll' );
+
+			$handler                        = $this->handler( $store );
+			$handler->next_carrier_order_id = '';
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			Actions\expectDone( 'woodev_shipping_order_exported' )->once()->with( $order, '' );
+
+			$handler->export( $order, $record, $provider );
+		}
+
+		/**
+		 * #853 measurement (required by the card): export() writes
+		 * `carrier_order_id` UNCONDITIONALLY at line 191 — the empty-id branch
+		 * (`'' !== $carrier_order_id`) is only checked AFTERWARDS, and only to gate
+		 * popular-settlement enrolment. This is the write-side half of the
+		 * empty-carrier-id defect chain; see OrderCompatibilityEmptyCarrierIdTest for
+		 * proof the underlying meta write actually persists an empty string in both
+		 * HPOS and legacy storage, and
+		 * ShippingOrdersQueryTest::test_is_exported_true_builds_an_exists_clause()
+		 * for proof the query then treats that row as "exported" (a pure key-EXISTS
+		 * test, not a value comparison).
+		 */
+		public function test_export_writes_the_meta_even_when_the_carrier_id_is_empty(): void {
+			$response = Mockery::mock( '\Woodev_API_Response' );
+			$api      = Mockery::mock( '\Woodev\Framework\Shipping\Api\Shipping_API' );
+			$api->shouldReceive( 'create_order' )->andReturn( $response );
+
+			$order_handler = Mockery::mock( Shipping_Order_Handler::class );
+			$order_handler->shouldReceive( 'set' )->once()->with( Mockery::type( '\WC_Order' ), 'carrier_order_id', '' );
+
+			$retry_handler = Mockery::mock( '\Woodev_Background_Job_Handler' );
+
+			$handler                        = new \Test_Shipment_Handler( $api, $order_handler, $retry_handler, 'test', null );
+			$handler->next_carrier_order_id = '';
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$result = $handler->export( $order );
 
 			$this->assertSame( '', $result );
 		}
