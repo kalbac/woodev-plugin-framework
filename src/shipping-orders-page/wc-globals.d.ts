@@ -18,11 +18,29 @@
 
 import type { ComponentType, ReactNode } from 'react';
 
+/**
+ * `TableHeader`, read from `packages/js/components/src/table/{types.ts,table.tsx}` in the
+ * `woocommerce/woocommerce` monorepo (trunk, fetched 13.09.2026 for #874/#875), not recalled:
+ *
+ * - `label?: React.ReactNode` — upstream's own type, and `table.tsx` renders it directly,
+ *   `<span aria-hidden={ Boolean( screenReaderLabel ) }>{ label }</span>` — a checkbox
+ *   passed as `label` renders for real. ⚠ Only omit `screenReaderLabel` when `label` is
+ *   itself an accessible control (our `cb` header): passing both would wrap the checkbox in
+ *   `aria-hidden="true"` and hide it from assistive tech entirely.
+ * - `cellClassName?: string` — an OPT-IN per-column class on the `<td>`
+ *   (`cellClasses = clsx( 'woocommerce-table__item', cellClassName, … )`), the seam #874's
+ *   `cb` column uses to size itself instead of `:nth-child()`.
+ * - The `<tr>` itself still gets NOTHING — `table.tsx`'s row map is
+ *   `<tr key={ getRowKey( row, i ) }>`, no class, no attribute, ever, `cellClassName`
+ *   included. That is why #873's busy-row marker cannot be a header/column concern at all
+ *   and has to reach the row through `:has()` — see `ActionsCell`'s own comment.
+ */
 export interface WcTableHeader {
 	key: string;
-	label: string;
+	label: ReactNode;
 	isSortable?: boolean;
 	required?: boolean;
+	cellClassName?: string;
 }
 
 export interface WcTableRowCell {

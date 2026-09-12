@@ -66,6 +66,156 @@
 	}
 }
 
+/**
+ * The `cb` column (#874) — sized like a native wp-list-table's own checkbox column
+ * (`.woodev-orders-table__cb` above is dead CSS from an earlier hand-rolled table this
+ * page no longer renders; this is `TableCard`'s own `cellClassName` seam instead, see
+ * `wc-globals.d.ts`'s doc comment on `WcTableHeader`).
+ */
+.woodev-orders-cb-cell {
+	width: 2.2em;
+
+	.components-checkbox-control__input-container {
+		margin: 0;
+	}
+}
+
+/**
+ * The busy-row indicator (#873) — operator: on click the whole row drops to `opacity:
+ * 0.85` and an indeterminate bar runs along its BOTTOM EDGE until the request settles.
+ *
+ * ⚠ The SEAM: `table.tsx` gives the `<tr>` itself no class or attribute at all, ever
+ * (`wc-globals.d.ts`'s doc comment on `WcTableHeader`, read off the real component, not
+ * recalled), and `:nth-child()` is ruled out by the brief. `ActionsCell` instead renders
+ * an otherwise-empty `.woodev-orders-row-busy` marker INSIDE the cell while the row is
+ * busy, and `:has()` reaches the ancestor `<tr>` from there — the one element this page
+ * can put where it needs it without a class the framework never gives it.
+ *
+ * ⚠ jsdom computes no layout and runs no animation (the brief's own warning) — jest can
+ * only assert the marker exists, nothing about how this actually looks. Verified on the
+ * rig, not here.
+ */
+.woodev-orders tr:has( .woodev-orders-row-busy ) {
+	position: relative;
+	opacity: 0.85;
+}
+
+// The marker itself IS the bar's track — a pseudo-element cannot itself carry a further
+// pseudo-element (`::after::after` matches nothing), so the moving highlight below is
+// this real element's own `::after`, not a second layer on the `<tr>`'s.
+.woodev-orders-row-busy {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2px;
+	overflow: hidden;
+	background: rgba( 0, 0, 0, 0.08 );
+
+	// The moving highlight — a sweep left to right and back, since there is no real
+	// progress fraction to report (the request is a black box until it settles), which is
+	// what "indeterminate" means here.
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		width: 40%;
+		background: wd.$accent;
+		animation: woodev-orders-row-busy-sweep 1.1s ease-in-out infinite;
+	}
+}
+
+@keyframes woodev-orders-row-busy-sweep {
+	0% {
+		transform: translateX( -100% );
+	}
+
+	100% {
+		transform: translateX( 250% );
+	}
+}
+
+/**
+ * The bulk-action control (#874) — beside `SearchControl` in `TableCard`'s own `actions`
+ * slot, which is already "above the table, beside the existing filters" (the brief's own
+ * words) without a new region of the page to place.
+ */
+.woodev-orders-bulk {
+	display: flex;
+	align-items: center;
+	gap: wd.$gap-sm;
+
+	.components-select-control {
+		min-width: 200px;
+	}
+}
+
+/** The eye button (#875), sitting right after the order link rather than crowding it. */
+.woodev-orders-preview-button {
+	margin-left: wd.$gap-xs;
+	vertical-align: middle;
+}
+
+/**
+ * The order preview modal (#875). Billing and shipping side by side, then the item table,
+ * then the (text) actions — WooCommerce's own order-preview SHAPE, not its markup.
+ */
+.woodev-orders-preview {
+	&__loading {
+		display: flex;
+		justify-content: center;
+		padding: wd.$gap-lg 0;
+	}
+
+	&__columns {
+		display: flex;
+		flex-wrap: wrap;
+		gap: wd.$gap-lg;
+		margin-bottom: wd.$gap;
+
+		h3 {
+			margin: 0 0 wd.$gap-xs;
+			font-size: 13px;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+			color: wd.$muted;
+		}
+
+		p {
+			margin: 0 0 4px;
+		}
+	}
+
+	&__column {
+		flex: 1 1 240px;
+		min-width: 0;
+	}
+
+	&__note {
+		padding: wd.$gap-sm;
+		background: wd.$surface;
+		border-radius: wd.$radius-sm;
+		margin-bottom: wd.$gap;
+	}
+
+	&__items {
+		width: 100%;
+		border-collapse: collapse;
+		margin-bottom: wd.$gap;
+
+		td {
+			padding: 6px 4px;
+			border-bottom: 1px solid wd.$border;
+		}
+	}
+
+	&__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: wd.$gap-xs;
+	}
+}
+
 .woodev-orders-cell__meta {
 	display: block;
 	margin-top: 2px;

@@ -375,6 +375,116 @@ export function performOrderAction( orderId: number, action: string ): Promise<O
 	} );
 }
 
+/**
+ * `POST /shipping/orders/bulk/<action>`'s success envelope (#874, brief §3) — HTTP 200
+ * even on a partial failure, since a bulk request routinely mixes orders the server's own
+ * eligibility gate accepts and rejects.
+ *
+ * `skipped` is `requested - eligible` and is explicitly NOT an error — the brief is emphatic
+ * about this, and neither this type nor the caller must treat it as one.
+ */
+export interface BulkActionResult {
+	action: string;
+	/** How many ids the caller sent. */
+	requested: number;
+	/** How many of them the server's own gate accepted. */
+	eligible: number;
+	/** `requested - eligible`. Not an error. */
+	skipped: number;
+	succeeded: number;
+	failed: number;
+	/** Freshly rebuilt rows, ONLY for orders that actually changed — swap these in place. */
+	rows: OrderRow[];
+	/**
+	 * Both sentences are built SERVER-side and already pluralised (the framework owns every
+	 * user-facing string on this route) — render them verbatim, never compose one from the
+	 * numeric fields above. Either may be absent.
+	 */
+	messages: { success?: string; error?: string };
+}
+
+/**
+ * Performs one bulk action (#874) over a set of order ids — the framework's own
+ * «Экспортировать» / «Обновить» / «Отменить», or a carrier extra the server-side filter
+ * declares. Same `bootstrap()`/`apiFetch` wiring as {@link performOrderAction}, with a JSON
+ * body rather than a path segment for the ids, matching this repo's own POST convention
+ * (`settings-page/rest.js`'s `saveTab()`, `setup-wizard/rest.js`'s `saveStep()`).
+ */
+export function performBulkOrderAction( action: string, ids: number[] ): Promise<BulkActionResult> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<BulkActionResult>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/bulk/${ action }`,
+		method: 'POST',
+		headers: { 'X-WP-Nonce': nonce },
+		data: { ids },
+	} );
+}
+
+/** `preview.billing` — the framework never sends the raw WC billing array, only what a shop owner reads. */
+export interface OrderPreviewBilling {
+	address: string;
+	email: string;
+	phone: string;
+}
+
+/** `preview.shipping` — same destination fields the row itself carries (`OrderRowShipping`), plus the raw address. */
+export interface OrderPreviewShipping {
+	address: string;
+	method_title: string;
+	destination_kind: string;
+	destination_text: string;
+}
+
+/** One line item. An absent `sku` is `''`, never a dash or the word "null" (#875). */
+export interface OrderPreviewItem {
+	name: string;
+	sku: string;
+	quantity: number;
+	formatted_total: string;
+}
+
+/**
+ * `GET /shipping/orders/<id>/preview`'s response (#875, brief §4) — WooCommerce's own order
+ * preview (`a.order-preview`) is the reference for the SHAPE (billing/shipping side by side,
+ * then items, then actions); the fields themselves are ours, and the operator was explicit
+ * that only what a shop owner actually needs goes in. `actions` is the SAME
+ * {@link OrderRowAction} shape a row carries, run through the same single-action path.
+ */
+export interface OrderPreview {
+	id: number;
+	order_number: string;
+	edit_url: string;
+	date_created: string | null;
+	status: OrderRowStatus;
+	carrier: OrderRowCarrier | null;
+	customer: OrderRowCustomer;
+	billing: OrderPreviewBilling;
+	shipping: OrderPreviewShipping;
+	payment: OrderRowPayment;
+	delivery_status: OrderRowDeliveryStatus;
+	tracking: OrderRowTracking;
+	items: OrderPreviewItem[];
+	/** `''` when the order carries no note — never rendered as a dash or "null". */
+	customer_note: string;
+	actions: OrderRowAction[];
+}
+
+/**
+ * Fetches one order's preview (#875). Fetched on the modal's OPEN, not with the table —
+ * the detail is only ever needed for one order at a time, and the row list already carries
+ * everything the table itself renders.
+ */
+export function fetchOrderPreview( orderId: number ): Promise<OrderPreview> {
+	const { restRoot = '', nonce = '' } = bootstrap();
+
+	return apiFetch<OrderPreview>( {
+		url: `${ restRoot.replace( /\/+$/, '' ) }/${ orderId }/preview`,
+		method: 'GET',
+		headers: { 'X-WP-Nonce': nonce },
+	} );
+}
+
 /** One entry of `GET /shipping/orders/sync-status`'s `carriers` array. */
 export interface SyncStatusCarrier {
 	id: string;
