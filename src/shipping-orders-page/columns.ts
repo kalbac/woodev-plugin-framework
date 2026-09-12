@@ -131,7 +131,7 @@ const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
 	failed: 'error',
 	cancelled: 'error',
 	unknown: 'muted',
-};;
+};
 
 /**
  * Returns the badge tone for a canonical delivery status. An unrecognized
