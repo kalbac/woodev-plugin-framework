@@ -22,9 +22,11 @@ HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incompl
 ⚠ **A probe whose selector matches nothing «passes»** — gotcha `a-probe-that-finds-nothing-passes`.
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
-базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»,
-condition on the card). The docs audit is done (s135); next **«Создать заказ»** (#710 — the brainstorm
-is HIS and he is holding it), then **the order metabox** (#856).
+базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
+✅ **The order metabox (#856) is BUILT and PARKED** on `kalbac/856-shipping-metabox` (PR **#891**,
+do not merge): the FRAMEWORK now builds it from `Orders_Provider`, rendering through the same
+`Order_Row_Builder::build()` the table and REST use, so the two shop-windows cannot drift. It waits
+on the operator's eye only. Next: **«Создать заказ»** (#710 — the brainstorm is HIS).
 
 ✅ **CI first-try reliability is now enforced, not merely intended** (#871): `.githooks/pre-push`
 rebuilds the bundles and runs the catalogue gates by exit code in ~22 s, because a worker may not
@@ -86,11 +88,9 @@ phpcs clean **with the warning level ON**; phpstan level 3 no errors; every `lin
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
-⚠ **Integration only runs INSIDE the container, and `composer test:integration` on the host cannot
-work at all** — no `WP_TESTS_DIR` there, so it dies with `Class "WP_UnitTestCase" not found` after a
-wall of stack frames, which reads like a bootstrap regression and is not one. The coordinator's
-command, and the `MSYS_NO_PATHCONV=1` that a bare `docker exec` needs on Windows, are in gotcha
-`wpenv-windows-gitbash-path-mangling`.
+⚠ **Integration only runs INSIDE the container**; `composer test:integration` on the host dies with
+`Class "WP_UnitTestCase" not found`, which reads like a bootstrap regression and is not one. The
+command is in gotcha `wpenv-windows-gitbash-path-mangling`.
 
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies printing `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
@@ -107,9 +107,9 @@ out in the main tree, inside the `tests-cli` container** — exact command in th
 jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so a bare
 `npm run test:js` is correct on its own (#188).
 
-⚠ **A gate number copied from a previous handoff is an INFERENCE — re-measure** (s93, s100, and
-s120 mistyped one about its own commit); and a green unit suite is not sufficient where our code
-meets someone else's contract (gotcha `a-mocked-provider-proves-the-mock-not-the-contract`).
+⚠ **A gate number copied from a handoff is an INFERENCE — re-measure** (s93, s100, s120); and a green
+unit suite is not sufficient where our code meets someone else's contract (gotcha
+`a-mocked-provider-proves-the-mock-not-the-contract`).
 
 **The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
 a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
@@ -170,8 +170,7 @@ deliberate hole and needs its own ruleset** —
 files**; why it cannot be revived from the CLI: gotcha
 `a-phpcs-rule-silenced-by-exclude-pattern-cannot-be-revived-from-the-cli`.
 
-⚠ **`AGENTS.md` and this file both run near their 28 KB gates** — any addition must displace
-something. That is the reading-budget gate working, not a defect.
+⚠ **`AGENTS.md` and this file both run near their 28 KB gates** — any addition must displace something.
 
 **The checkout invariants that survive their cards** — #708: `validate()` enforces a takeover
 field's `required` only when its condition owns the field AND WooCommerce rendered it. #707: ask
@@ -190,7 +189,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: остался инкремент 5 (редирект старых слагов)** — инкремент 3 и #824 сделаны в s134. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
+**SP-10: остался инкремент 5 (редирект старых слагов)**; метабокс #856 построен и запаркован. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
 
 ✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
 
