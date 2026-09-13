@@ -17,6 +17,7 @@
 - [rig/browser] **Playwright MCP does not fire WooCommerce's checkout submit; chrome-devtools MCP does.** → [playwright-mcp-does-not-fire-wc-checkout-ajax](../gotchas/playwright-mcp-does-not-fire-wc-checkout-ajax.md) (s44)
 - [rig/browser] **A cached asset under an unchanged `?ver=` reads as a feature that does not work — a hard reload is not enough.** → [a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature](../gotchas/a-cached-asset-under-an-unchanged-ver-reads-as-a-broken-feature.md) (s90)
 - [rig/browser] **The pickup modal sends NO `locality` unless the region and settlement AGREE — and the region select's values are UPPERCASE, so a title-case write renders it empty and drops the parameter silently.** → [the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field](../gotchas/the-pickup-modal-s-locality-comes-from-the-resolved-record-not-the-city-field.md) (s113)
+- [rig/wp-env] **`npx wp-env` is a STUB package on npm — it prints a hint, exits 0 and starts nothing, so the rig is simply absent and the error names docker instead. The real tool is `npx @wordpress/env`; this repo does not depend on it.** → [npx-wp-env-installs-a-stub-package-not-wordpress-env](../gotchas/npx-wp-env-installs-a-stub-package-not-wordpress-env.md) (s136)
 
 ## Related
 

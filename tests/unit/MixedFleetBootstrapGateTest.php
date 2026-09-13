@@ -165,7 +165,12 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		$base       = sys_get_temp_dir() . '/woodev_mf_' . uniqid( '', true );
 		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
 		mkdir( $plugin_dir, 0777, true );
-		$stub_file = $plugin_dir . '/bootstrap.php';
+		// On macOS sys_get_temp_dir() sits under /var, a symlink to /private/var, while
+		// ReflectionClass::getFileName() reports the RESOLVED path. The resolver compares the two
+		// as strings, so an unresolved WP_PLUGIN_DIR makes it return '' on that platform only.
+		$base       = realpath( $base );
+		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
+		$stub_file  = $plugin_dir . '/bootstrap.php';
 
 		$stub_source  = "<?php\n";
 		$stub_source .= 'class Woodev_Plugin_Bootstrap {' . "\n";
@@ -250,7 +255,12 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		$base       = sys_get_temp_dir() . '/woodev_mf_' . uniqid( '', true );
 		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
 		mkdir( $plugin_dir, 0777, true );
-		$stub_file = $plugin_dir . '/bootstrap.php';
+		// On macOS sys_get_temp_dir() sits under /var, a symlink to /private/var, while
+		// ReflectionClass::getFileName() reports the RESOLVED path. The resolver compares the two
+		// as strings, so an unresolved WP_PLUGIN_DIR makes it return '' on that platform only.
+		$base       = realpath( $base );
+		$plugin_dir = $base . '/legacy-woodev-plugin/woodev';
+		$stub_file  = $plugin_dir . '/bootstrap.php';
 
 		$stub_source  = "<?php\n";
 		$stub_source .= 'class Woodev_Plugin_Bootstrap {' . "\n";

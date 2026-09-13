@@ -9,4 +9,4 @@
 set -euo pipefail
 . "$( dirname "$0" )/lib.sh"
 [ $# -eq 1 ] || die 'usage: rig-container.sh <cli|tests-cli|wordpress|tests-wordpress|mysql|tests-mysql>'
-rig_container "$1" || die 'this project'"'"'s wp-env is not running — npx wp-env start'
+rig_container "$1" || die 'this project'"'"'s wp-env is not running — npx @wordpress/env start'

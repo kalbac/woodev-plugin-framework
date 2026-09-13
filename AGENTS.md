@@ -7,6 +7,9 @@
 
 ## ⚡ Session Start (mandatory — this is the CANONICAL list; CLAUDE.md and AGENT-RULES.md point here)
 
+0. **Sync first — the project runs from TWO machines** (desktop + laptop, one at a time).
+   `git fetch --all --prune`, compare the local branches with `origin`, pull. If the pull moved
+   `package-lock.json` or `composer.lock` → `npm ci` / `composer install`.
 1. **Read `docs-internal/next-session-prompt.md`** — the per-session handoff: what the last session
    left for you, its **carry-over commitments**, and known traps (~1 min). Format and gate:
    `DOCS-SCHEMA.md` → Handoff Format
@@ -29,6 +32,8 @@
 5. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
 6. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each worker of yours. A Codex critic that has already sent `worker_done` stays a LIVE terminal holding RAM, and RAM is the hard cap here (2–3 agents). s123 left one running; it was still there ~10 h later and the operator had to point it out. Check at session START too — a stray worker is not always yours.
 7. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
+8. **Push every branch that carries work** — git is how the other machine gets it; a local-only
+   branch simply does not travel.
 
 ---
 
@@ -224,7 +229,7 @@ npx markdownlint-cli2 "docs/**/*.md"  # lint public docs
   first push: `git config --global --get-regexp credential`. Do not hand-roll the helper — why,
   and the exact symptom: gotcha `git-credential-manager-hangs-silently-in-an-agent-session`.
 - Never run `npx jest` directly — it loses the wp-scripts jsdom environment (gotcha `npx-jest-bypasses-wp-scripts-jsdom`). `jest-unit.config.js` scopes `roots` to `tests/js`, so a bare `npm run test:js` no longer counts agent worktrees (gotcha `jest-scans-agent-worktrees-inside-the-repo`, fixed s107/#188)
-- Integration tests require `WP_TESTS_DIR` env var or `npx wp-env start`
+- Integration tests require `WP_TESTS_DIR` env var or `npx @wordpress/env start` (the bare `wp-env` is a stub package)
 - **Merge gate:** every CI job green individually (incl. `test-js` and `assets`), each with state CLEAN — not just "`composer check` passes". `main` has no required-check gate, so verify each job yourself before merging.
 
 ---
