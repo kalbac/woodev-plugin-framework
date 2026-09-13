@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Actions' ) ) :
 
 	/**
-	 * Declares the per-order action set — «Выгрузить» / «Обновить» / «Отменить» — ONCE
+	 * Declares the per-order action set — «Экспорт» / «Обновить» / «Отменить» — ONCE
 	 * (card #824), so the row column, bulk actions (SP-10 increment 3) and the order
 	 * metabox (#856) all read the same gate rather than each growing their own copy.
 	 *
@@ -139,8 +139,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) ) {
 				$actions[] = self::build_action(
 					self::EXPORT,
-					__( 'Выгрузить', 'woodev-plugin-framework' ),
-					__( 'Передать заказ перевозчику', 'woodev-plugin-framework' ),
+					__( 'Экспорт', 'woodev-plugin-framework' ),
+					__( 'Выгрузить заказ в систему перевозчика', 'woodev-plugin-framework' ),
 					false
 				);
 			}
@@ -175,6 +175,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$filtered = apply_filters( 'woodev_shipping_order_actions', $actions, $order, $provider );
 
 			return is_array( $filtered ) ? self::sanitize_actions( $filtered ) : $actions;
+		}
+
+		/**
+		 * Whether `$action` is currently offered on this order.
+		 *
+		 * Wraps the exact `array_column()`/`in_array()` shape {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_action()}
+		 * already applies to {@see self::for_order()}'s result, so a second caller — the
+		 * order-edit metabox ({@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::handle_order_action()})
+		 * — never trusts a posted action either. Both recompute the gate from the SAME
+		 * `for_order()` call; a stale client (a delivered order posting `cancel`, a
+		 * carrier whose `supports_update()` just turned false) is refused here exactly as
+		 * REST refuses it, not routed straight to the carrier handler (#856 round 2).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @param string               $action   the action id to check.
+		 * @return bool
+		 */
+		public function is_offered( \WC_Order $order, ?Orders_Provider $provider, string $action ): bool {
+			return in_array( $action, array_column( $this->for_order( $order, $provider ), 'action' ), true );
 		}
 
 		/**
