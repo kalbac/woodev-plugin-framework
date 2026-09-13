@@ -11,31 +11,30 @@
  * ```
  *
  * is the only reason enrolment into the popular-settlements list is reachable at
- * all: nothing in the framework constructs `Shipping_Admin_Order` — a carrier
- * plugin does, and a carrier plugin knows nothing about popular settlements, so
- * it never passes the sixth argument. Remove the default and the whole feature
- * switches off silently. That already happened TWICE during #488 slice 2 (rounds
- * 2 and 3), caught both times by a critic rather than by a test.
+ * all. Before card #856 that was true because a carrier plugin constructed this
+ * class directly and never passed a store (it knows nothing about popular
+ * settlements). After #856 the reason is different but the stakes are the same:
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::admin_order()}
+ * builds this class itself, as `new Shipping_Admin_Order( $this )` — a bare
+ * registry, no store — so the constructor's own default remains the ONLY thing
+ * that keeps enrolment reachable through the metabox path. Remove the default
+ * and the whole feature switches off silently, exactly as it already did TWICE
+ * during #488 slice 2 (rounds 2 and 3), caught both times by a critic rather than
+ * a test.
  *
  * The equivalent default on `Abstract_Shipment_Handler` IS pinned
  * ({@see \Woodev\Tests\Unit\Shipping\Order\AbstractShipmentHandlerEnrollmentTest::test_constructor_defaults_to_the_frameworks_shared_store_when_none_is_injected}).
  * This one was not, and it could not simply be added to
  * `ShippingAdminOrderPopularSettlementContextTest`: that file states in its own
- * header that it deliberately does NOT load `Shipping_Plugin`,
- * `Shipping_Order_Handler` or `Abstract_Shipment_Handler`, and reaches the class
- * through `newInstanceWithoutConstructor()` precisely to avoid them. A test that
- * must run the REAL constructor needs exactly those three, so forcing it in there
- * would break that file's stated design — it was tried and reverted.
+ * header that it deliberately does NOT run the real constructor, and reaches the
+ * class through `newInstanceWithoutConstructor()` precisely to avoid it. A test
+ * that must run the REAL constructor needs a different fixture.
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
 
 namespace {
 
-	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin-exception.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/class-plugin.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/class-woocommerce-plugin.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-plugin.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-locality-key.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-scope.php';
@@ -45,23 +44,15 @@ namespace {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-popular-settlement-store.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-customer-location-store.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-provider-registry.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/api/interface-shipping-api.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/class-shipping-order-handler.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-async-request.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/utilities/class-woodev-background-job-handler.php';
-	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/order/abstract-shipment-handler.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-registry.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/class-shipping-admin-order.php';
 }
 
 namespace Woodev\Tests\Unit\Shipping\Admin {
 
-	use Mockery;
 	use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 	use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 	use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
-	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-	use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
-	use Woodev\Framework\Shipping\Shipping_Plugin;
 	use Woodev\Tests\Unit\TestCase;
 
 	/**
@@ -86,24 +77,14 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		/**
 		 * Builds the class through its REAL constructor — the whole point of this
-		 * file. Only `get_id()` is exercised on the plugin (twice, for the column key
-		 * and the metabox id); the other three collaborators are stored untouched.
+		 * file — with no registry override (irrelevant to what this file proves)
+		 * and the given store.
 		 *
-		 * @param Popular_Settlement_Store|null $store The sixth constructor argument.
+		 * @param Popular_Settlement_Store|null $store The second constructor argument.
 		 * @return Shipping_Admin_Order
 		 */
 		private function admin_order( ?Popular_Settlement_Store $store ): Shipping_Admin_Order {
-			$plugin = Mockery::mock( Shipping_Plugin::class );
-			$plugin->shouldReceive( 'get_id' )->andReturn( 'test-carrier' );
-
-			return new Shipping_Admin_Order(
-				$plugin,
-				Mockery::mock( Shipping_Order_Handler::class ),
-				Mockery::mock( Abstract_Shipment_Handler::class ),
-				null,
-				[],
-				$store
-			);
+			return new Shipping_Admin_Order( null, $store );
 		}
 
 		/**
@@ -128,7 +109,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame(
 				Location_Provider_Registry::instance()->popular_settlement_store(),
 				$this->resolved_store( $admin_order ),
-				'Without this default, nothing ever supplies a store here — no carrier plugin knows about popular settlements — and enrolment switches off silently.'
+				'Without this default, Orders_Registry::admin_order() never supplies a store — it passes only itself — and enrolment switches off silently.'
 			);
 		}
 

@@ -102,6 +102,48 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Delivery_Status' ) )
 		}
 
 		/**
+		 * Returns the presentation tone for every canonical state, keyed by state.
+		 *
+		 * This is deliberately the PHP counterpart of the shipping orders page's
+		 * `DELIVERY_STATUS_TONES`: the order table and order-edit metabox use the
+		 * same compiled badge CSS. The JavaScript mirror gate compares both maps in
+		 * both directions, so neither surface can silently assign a different
+		 * meaning to a colour.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string,string>
+		 */
+		public static function tones(): array {
+			return [
+				self::PENDING          => 'warn',
+				self::CREATED          => 'warn',
+				self::IN_TRANSIT       => 'info',
+				self::READY_FOR_PICKUP => 'info',
+				self::DELIVERED        => 'ok',
+				self::RETURNING        => 'warn',
+				self::RETURNED         => 'error',
+				self::FAILED           => 'error',
+				self::CANCELLED        => 'error',
+				self::UNKNOWN          => 'muted',
+			];
+		}
+
+		/**
+		 * Returns one state's badge tone, falling back to the neutral unknown tone.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $state canonical state.
+		 * @return string badge tone.
+		 */
+		public static function tone( string $state ): string {
+			$tones = self::tones();
+
+			return $tones[ $state ] ?? $tones[ self::UNKNOWN ];
+		}
+
+		/**
 		 * Returns the nine canonical states, `unknown` excluded — the set a `status_map`
 		 * entry is allowed to name.
 		 *

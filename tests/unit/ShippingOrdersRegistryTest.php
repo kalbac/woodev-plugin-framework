@@ -15,6 +15,7 @@ use Mockery;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 
 class ShippingOrdersRegistryTest extends TestCase {
@@ -518,6 +519,59 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertTrue( $found, 'add_hooks() must subscribe flush_new_order_counts() to woodev_shipping_order_exported' );
 	}
 
+	/**
+	 * Card #856: the order-edit metabox is built by the FRAMEWORK the moment at
+	 * least one provider is registered — the same trigger that builds the
+	 * «Заказы доставки» page — never by a carrier plugin constructing
+	 * {@see Shipping_Admin_Order} itself.
+	 */
+	public function test_add_hooks_hooks_the_order_metabox_onto_add_meta_boxes(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'add_meta_boxes' === $call[0] && is_array( $call[1] ) && $call[1][0] instanceof Shipping_Admin_Order && 'add_meta_box' === $call[1][1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook the framework-built Shipping_Admin_Order::add_meta_box() onto add_meta_boxes' );
+	}
+
+	/**
+	 * Card #856: the metabox's action-button forms post to ONE framework-wide
+	 * admin-post handler, not a per-plugin action name — {@see Shipping_Admin_Order::ADMIN_POST_ACTION}
+	 * is a constant precisely so every registered carrier shares it.
+	 */
+	public function test_add_hooks_hooks_the_order_action_handler_onto_admin_post(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION === $call[0] && is_array( $call[1] ) && $call[1][0] instanceof Shipping_Admin_Order && 'handle_order_action' === $call[1][1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook Shipping_Admin_Order::handle_order_action() onto admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION );
+	}
+
 	public function test_enqueue_assets_does_nothing_off_the_wc_admin_screen(): void {
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
@@ -540,6 +594,28 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\expect( 'wp_add_inline_script' )->never();
 
 		$registry->enqueue_assets();
+	}
+
+	/** The metabox reuses the compiled table badge CSS only after its box registered. */
+	public function test_enqueue_metabox_style_reuses_the_orders_page_stylesheet(): void {
+		$plugin = \Mockery::mock( '\\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek' ), $plugin );
+
+		Functions\expect( 'wp_enqueue_style' )
+			->once()
+			->with(
+				'woodev-shipping-orders-page',
+				'https://example.test/vendor/woodev/framework/assets/build/shipping-orders-page/style-index.css',
+				[ 'wc-components' ],
+				'1.2.3'
+			);
+
+		$registry->enqueue_metabox_style();
 	}
 
 	/**

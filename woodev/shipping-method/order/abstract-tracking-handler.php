@@ -96,6 +96,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Ha
 		}
 
 		/**
+		 * The admin tracking-history display hook's full, namespaced name.
+		 *
+		 * {@see self::hook()} is protected, so this is the seam an outside caller
+		 * (the framework's own order metabox, card #856) uses to ask "did a plugin
+		 * subscribe to replace the default rendering?" via `has_action()` before
+		 * falling back to drawing the history itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		public function get_admin_display_hook(): string {
+			return $this->hook( 'tracking_admin_display' );
+		}
+
+		/**
 		 * Fires the admin display hook for a shipment's tracking history.
 		 *
 		 * Intended to be called from the plugin's order-admin screen. Subscribers

@@ -52,6 +52,7 @@ function woodev_realistic_shipping_plugin_loader_definition(): array {
 function woodev_realistic_shipping_plugin_init(): void {
 	$plugin_path = dirname( __FILE__ );
 
+	require_once $plugin_path . '/includes/class-realistic-tracking-handler.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-plugin.php';
 	require_once $plugin_path . '/includes/abstract-class-realistic-shipping-method.php';
 	require_once $plugin_path . '/includes/class-realistic-shipping-method.php';
@@ -103,4 +104,3 @@ if ( file_exists( $woodev_realistic_shipping_bootstrap_file ) ) {
 		);
 	}
 }
-

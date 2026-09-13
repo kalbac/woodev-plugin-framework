@@ -120,7 +120,7 @@ export type StatusTone = 'ok' | 'warn' | 'error' | 'info' | 'muted';
  * carries the WHICH-STATE-GETS-WHICH-TONE decision that both the badge and
  * (previously) the dot indicator drew from.
  */
-const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
+export const DELIVERY_STATUS_TONES: Record<DeliveryStatusCanonical, StatusTone> = {
 	pending: 'warn',
 	created: 'warn',
 	in_transit: 'info',
@@ -142,7 +142,7 @@ const STATUS_TONE: Record<DeliveryStatusCanonical, StatusTone> = {
  * whole point of this function, so its signature must not rule the case out.
  */
 export function getStatusTone( canonical: string ): StatusTone {
-	return STATUS_TONE[ canonical as DeliveryStatusCanonical ] || 'muted';
+	return DELIVERY_STATUS_TONES[ canonical as DeliveryStatusCanonical ] || 'muted';
 }
 
 /**

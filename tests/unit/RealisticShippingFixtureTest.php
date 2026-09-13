@@ -81,6 +81,12 @@ class RealisticShippingFixtureTest extends TestCase {
 				'both fixture shipping methods must be declared, or type resolves to unknown for whichever one is missing'
 			);
 
+			$tracking_handler = \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->get_tracking_handler( 'realistic' );
+			$this->assertInstanceOf( \Woodev_Realistic_Tracking_Handler::class, $tracking_handler );
+			$this->assertCount( 4, $tracking_handler->get_history( 'RL200100004' ) );
+			$this->assertSame( 'Отправление вручено получателю', $tracking_handler->get_history( 'RL200100004' )[3]['description'] );
+			$this->assertSame( [], $tracking_handler->get_history( '' ) );
+
 			// Reset so this process-wide registration does not leak into any other
 			// unit test that asserts on a CLEAN Orders_Registry singleton.
 			// remove_action()/remove_filter() are not among mock_wordpress_runtime_functions()'s

@@ -697,23 +697,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		}
 
 		/**
-		 * Resolves which registered carrier an aggregate row belongs to, by checking each
-		 * provider's marker meta key in turn (first match wins). Only needed for the
-		 * aggregate ('all') view — a single-carrier request already knows its provider.
+		 * Resolves which registered carrier an aggregate row belongs to.
+		 *
+		 * Delegates to {@see Orders_Registry::resolve_provider_for_order()} — the
+		 * single source for this lookup (card #856), also used by the order-edit
+		 * metabox, so the two surfaces can never drift the way #855 once did. Only
+		 * needed for the aggregate ('all') view — a single-carrier request already
+		 * knows its provider.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #856: delegates to {@see Orders_Registry::resolve_provider_for_order()}
+		 *              instead of walking the provider list itself.
 		 *
 		 * @param \WC_Order $order order to inspect.
 		 * @return Orders_Provider|null
 		 */
 		private function resolve_matched_provider( \WC_Order $order ): ?Orders_Provider {
-			foreach ( $this->registry->get_providers() as $provider ) {
-				if ( '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_marker_meta_key() ) ) {
-					return $provider;
-				}
-			}
-
-			return null;
+			return $this->registry->resolve_provider_for_order( $order );
 		}
 
 		/**

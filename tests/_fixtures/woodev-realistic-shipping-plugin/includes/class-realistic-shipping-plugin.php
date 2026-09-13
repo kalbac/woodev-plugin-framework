@@ -100,6 +100,10 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		);
 
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_provider( $provider, $this );
+		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_tracking_handler(
+			'realistic',
+			new Woodev_Realistic_Tracking_Handler()
+		);
 	}
 
 	/**
