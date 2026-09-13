@@ -117,6 +117,7 @@ which is the useful finding: the numbers in `CURRENT-STATE.md` are not platform-
 | integration (in `tests-cli`) | 195 / 719 | **195 / 719** — identical, ~2 min |
 | `npm run build` git diff | zero | **zero** — cross-platform build parity HOLDS |
 | phpcs (warning level on) / phpstan L3 / typecheck / `lint:*` | clean | **clean** |
+| `npm run test:e2e` (live rig, not CI) | 7 passed, ~2.5 min | **7 passed in 15.7 s** — an order of magnitude faster (Apple Silicon, native Chromium) |
 | rig after import | WP 7.1, WC 11.1.0, 301 orders | **WP 7.1, WC 11.1.0, 301 orders**, `/` 200, `/wp-admin/` 302 |
 
 ⚠ **Two tests had to be fixed before that identity held** — `MixedFleetBootstrapGateTest` built a
