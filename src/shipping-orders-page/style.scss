@@ -10,25 +10,6 @@
 @use '../components/wp-recolor';
 
 .woodev-orders {
-	&__toolbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: wd.$gap-lg;
-		margin: wd.$gap-lg 0;
-
-		.components-search-control {
-			max-width: 360px;
-			flex: 1 1 auto;
-		}
-	}
-
-	&__count {
-		color: wd.$muted;
-		font-size: 13px;
-		white-space: nowrap;
-	}
-
 	// The carrier `FilterPicker` sits ABOVE the card, the way «Аналитика → Заказы»
 	// puts its «Показать» filter above the report table (operator, 08.09.2026).
 	&__filters {
@@ -43,34 +24,10 @@
 	}
 }
 
-.woodev-orders-table {
-	th {
-		cursor: default;
-	}
-
-	th:nth-child(2),
-	th:nth-child(3) {
-		cursor: pointer;
-
-		&:hover {
-			color: wd.$accent-strong;
-		}
-	}
-
-	td {
-		vertical-align: top;
-	}
-
-	&__cb {
-		width: 2.2em;
-	}
-}
-
 /**
- * The `cb` column (#874) — sized like a native wp-list-table's own checkbox column
- * (`.woodev-orders-table__cb` above is dead CSS from an earlier hand-rolled table this
- * page no longer renders; this is `TableCard`'s own `cellClassName` seam instead, see
- * `wc-globals.d.ts`'s doc comment on `WcTableHeader`).
+ * The `cb` column (#874) — sized like a native wp-list-table's own checkbox column,
+ * through `TableCard`'s own `cellClassName` seam (see `wc-globals.d.ts`'s doc comment on
+ * `WcTableHeader`).
  */
 .woodev-orders-cb-cell {
 	width: 2.2em;
@@ -593,39 +550,6 @@
 	&--warn {
 		color: #8a6100;
 		background: rgba( 219, 166, 23, 0.15 );
-	}
-}
-
-.woodev-orders-pagination {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	gap: wd.$gap-xs;
-	margin: wd.$gap-lg 0;
-
-	button {
-		appearance: none;
-		border: 1px solid wd.$border;
-		background: #fff;
-		border-radius: wd.$radius-sm;
-		min-width: 2em;
-		padding: 4px 8px;
-		cursor: pointer;
-
-		&:disabled {
-			opacity: 0.4;
-			cursor: default;
-		}
-
-		&:hover:not( :disabled ) {
-			border-color: wd.$accent;
-		}
-	}
-
-	&__page.is-active {
-		background: wd.$accent;
-		border-color: wd.$accent;
-		color: #fff;
 	}
 }
 
