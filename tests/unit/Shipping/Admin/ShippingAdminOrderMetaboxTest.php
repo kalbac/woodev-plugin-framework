@@ -14,6 +14,16 @@
  *    renderer, when nothing hooked `{prefix}_tracking_admin_display` to
  *    replace it.
  *
+ * Round 2 (#856, critic DO NOT MERGE finding): `perform_action()` — the
+ * `handle_order_action()` sibling actually reached by a posted action, minus
+ * the trailing `wp_safe_redirect()` + `exit` that makes `handle_order_action()`
+ * itself unsafe to invoke from a unit test (same reasoning as
+ * ShippingAdminOrderPopularSettlementContextTest) — must refuse an action the
+ * shared {@see Order_Actions::for_order()} gate does not offer instead of
+ * dispatching it straight to the carrier handler, and must classify the
+ * handler's outcome (empty export id, thrown exception) as a failure instead
+ * of redirecting as though it succeeded.
+ *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
 
@@ -21,6 +31,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 	use Brain\Monkey\Functions;
 	use Mockery;
+	use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 	use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
@@ -31,6 +42,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-helper.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/api/class-api-base.php';
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order
@@ -39,6 +51,9 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 		/** @var array<string,mixed> post meta, keyed by meta key, for the active test. */
 		private $meta = [];
+
+		/** @var array<int,string> messages passed to `set_transient()`, once {@see self::capture_flashed_notices()} stubs it. */
+		private $flashed_notices = [];
 
 		protected function setUp(): void {
 			parent::setUp();
@@ -280,6 +295,138 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$html = ob_get_clean();
 
 			$this->assertStringContainsString( 'PLUGIN-REPLACED-HISTORY', $html );
+		}
+
+		// -----------------------------------------------------------------------
+		// perform_action() — round 2 (#856): never trusts the posted action, and
+		// classifies the handler's outcome instead of assuming success.
+		//
+		// Invoked via reflection, never through handle_order_action(): that public
+		// method ends in wp_safe_redirect()+exit (a real WP admin-post handler),
+		// which would kill the test process — the same reasoning
+		// ShippingAdminOrderPopularSettlementContextTest documents for
+		// resolve_popular_settlement_context().
+		// -----------------------------------------------------------------------
+
+		/**
+		 * Registers a fake shipment handler for 'cdek', so `Order_Actions::for_order()`
+		 * (and thus the gate `perform_action()` recomputes) gets past its own
+		 * "no handler registered" case.
+		 */
+		private function register_handler( bool $supports_update = false ): Abstract_Shipment_Handler {
+			$handler = Mockery::mock( Abstract_Shipment_Handler::class );
+			$handler->shouldReceive( 'supports_update' )->andReturn( $supports_update );
+
+			Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
+
+			return $handler;
+		}
+
+		/**
+		 * Invokes the private perform_action() — see the class docblock for why
+		 * this is reflection rather than a call through handle_order_action().
+		 */
+		private function invoke_perform_action( Shipping_Admin_Order $admin_order, Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): void {
+			$method = new \ReflectionMethod( Shipping_Admin_Order::class, 'perform_action' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$method->setAccessible( true );
+			}
+
+			$method->invoke( $admin_order, $handler, $order, $action, $provider );
+		}
+
+		/**
+		 * Stubs `get_current_user_id()` + `set_transient()`, so every flashed
+		 * message lands in {@see self::$flashed_notices} — an instance property
+		 * rather than a local, since a plain array returned by value would not
+		 * reflect calls the stubbed closure makes AFTER the return.
+		 */
+		private function capture_flashed_notices(): void {
+			$this->flashed_notices = [];
+
+			Functions\when( 'get_current_user_id' )->justReturn( 7 );
+			Functions\when( 'set_transient' )->alias(
+				function ( string $key, $value, int $expiration ): bool {
+					$this->flashed_notices[] = $value;
+					return true;
+				}
+			);
+		}
+
+		public function test_perform_action_refuses_an_action_the_shared_gate_does_not_offer(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+
+			// Never exported (no carrier_order_id meta) => for_order() offers only
+			// EXPORT, never CANCEL — the same gate REST's perform_action() recomputes.
+			$order = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			// The carrier handler must never be reached — no expectation is set on
+			// cancel(), so Mockery fails the test loudly if it is.
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider );
+
+			$this->assertNotEmpty( $this->flashed_notices, 'a refused action must flash a notice for the merchant' );
+			$this->assertStringContainsString( 'выгружен', $this->flashed_notices[0], 'the flashed reason must be Order_Actions::unavailable_reason()\'s own sentence' );
+		}
+
+		public function test_perform_action_reports_an_empty_export_result_as_a_failure_not_a_success(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'export' )->once()->andReturn( '' );
+
+			// Exportable status, not yet exported => EXPORT is offered.
+			$order = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::EXPORT, $provider );
+
+			$this->assertSame( [ 'Не удалось выгрузить заказ перевозчику.' ], $this->flashed_notices );
+		}
+
+		public function test_perform_action_catches_a_thrown_carrier_exception_and_flashes_a_notice_instead_of_a_fatal(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'cancel' )->once()->andThrow( new \RuntimeException( 'carrier gateway timed out' ) );
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => CANCEL is offered.
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			$logged = null;
+			Functions\expect( 'error_log' )->once()->with(
+				Mockery::on(
+					static function ( $message ) use ( &$logged ) {
+						$logged = $message;
+						return true;
+					}
+				)
+			);
+
+			// Must not throw out of perform_action() — the exception is caught.
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider );
+
+			$this->assertSame(
+				[ 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.' ],
+				$this->flashed_notices
+			);
+			$this->assertStringContainsString( 'carrier gateway timed out', $logged );
+		}
+
+		public function test_perform_action_happy_path_dispatches_and_flashes_nothing(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'cancel' )->once()->andReturn( true );
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => CANCEL is offered.
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			Functions\expect( 'set_transient' )->never();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::CANCEL, $provider );
 		}
 	}
 }

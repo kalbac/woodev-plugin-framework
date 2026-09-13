@@ -381,6 +381,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2 Card #856: also hooks the framework-built order metabox
 		 *              ({@see self::admin_order()}) onto `add_meta_boxes` and its
 		 *              action-button forms onto `admin_post_{@see Shipping_Admin_Order::ADMIN_POST_ACTION}`.
+		 * @since 2.0.2 Round 2 (#856): also hooks
+		 *              {@see Shipping_Admin_Order::render_action_notice()} onto
+		 *              `admin_notices`, so a refused/failed action flashed during
+		 *              `handle_order_action()`'s redirect is actually shown.
 		 *
 		 * @return void
 		 */
@@ -402,6 +406,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// not per carrier plugin construction.
 			add_action( 'add_meta_boxes', [ $this->admin_order(), 'add_meta_box' ], 10, 2 );
 			add_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order(), 'handle_order_action' ] );
+			add_action( 'admin_notices', [ $this->admin_order(), 'render_action_notice' ] );
 		}
 
 		/**
@@ -1147,6 +1152,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Card #856: also unhooks and drops the framework-built order metabox.
+		 * @since 2.0.2 Round 2 (#856): also unhooks {@see Shipping_Admin_Order::render_action_notice()}.
 		 *
 		 * @return void
 		 */
@@ -1159,6 +1165,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			if ( null !== $this->admin_order ) {
 				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], 10 );
 				remove_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order, 'handle_order_action' ] );
+				remove_action( 'admin_notices', [ $this->admin_order, 'render_action_notice' ] );
 			}
 
 			$this->providers         = [];

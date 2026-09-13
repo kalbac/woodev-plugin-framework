@@ -66,6 +66,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		/** @var string metabox id. */
 		const METABOX_ID = 'woodev_shipping_order';
 
+		/**
+		 * Transient key prefix a flashed action-refusal/failure notice is stored
+		 * under across the `handle_order_action()` redirect — one per user, so two
+		 * admins acting concurrently cannot clobber each other's notice. Mirrors
+		 * {@see \Woodev_Account_Connection}'s own `woodev_account_notice` flash
+		 * (that codebase's established mechanism for a message that must survive a
+		 * `wp_safe_redirect()`), read back by {@see self::render_action_notice()}.
+		 *
+		 * @since 2.0.2
+		 */
+		const NOTICE_TRANSIENT_KEY = 'woodev_shipping_order_action_notice_';
+
 		/** @var Orders_Registry registry this metabox resolves providers/handlers through */
 		private Orders_Registry $registry;
 
@@ -86,6 +98,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 		/** @var Order_Row_Builder|null lazily built; @see self::row_builder() */
 		private ?Order_Row_Builder $row_builder = null;
+
+		/** @var Order_Actions|null lazily built; @see self::order_actions() */
+		private ?Order_Actions $order_actions = null;
 
 		/**
 		 * Constructor.
@@ -125,6 +140,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			}
 
 			return $this->row_builder;
+		}
+
+		/**
+		 * The action-set gate, lazily built against {@see self::$registry} — the
+		 * exact same seam {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_action()}
+		 * recomputes an order's available actions from before performing one
+		 * (#856 round 2): `handle_order_action()` never trusts the posted action
+		 * either.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Order_Actions
+		 */
+		private function order_actions(): Order_Actions {
+			if ( null === $this->order_actions ) {
+				$this->order_actions = new Order_Actions( $this->registry );
+			}
+
+			return $this->order_actions;
 		}
 
 		/**
@@ -401,6 +435,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 *              performs export/update/cancel via the shared
 		 *              {@see Order_Actions} action ids instead of a hardcoded
 		 *              export/track/cancel trio.
+		 * @since 2.0.2 Round 2 (#856): refuses a posted action the shared
+		 *              {@see Order_Actions::for_order()} gate does not currently
+		 *              offer instead of dispatching it straight to the carrier
+		 *              handler, and flashes a notice on a refusal or a failure
+		 *              rather than redirecting as if the action succeeded.
 		 *
 		 * @return void
 		 */
@@ -433,17 +472,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		}
 
 		/**
-		 * Performs one action against the carrier's shipment handler.
-		 *
-		 * The metabox's sibling of {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()} —
-		 * same three verbs, same `default:` extension point, so a carrier plugin
-		 * that hooks `woodev_shipping_perform_order_action` for its own extra
+		 * Performs one action against the carrier's shipment handler — after
+		 * refusing it if the shared {@see Order_Actions::for_order()} gate does not
+		 * currently offer it, and classifying the outcome the same way
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::perform_action()}
+		 * does: an exception is caught and logged, a handler return that means
+		 * failure is reported as one, and only then is the switch below (the
+		 * metabox's sibling of {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()})
+		 * reached. Same three verbs, same `default:` extension point, so a carrier
+		 * plugin that hooks `woodev_shipping_perform_order_action` for its own extra
 		 * action (e.g. «Печать документа») works from EITHER surface without
 		 * change. Card #710 («Создать заказ») is explicitly out of scope here: if
 		 * it ever reaches the shared action set, its button flows through this
 		 * same `default:` branch unchanged, like any other carrier extra.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (#856): recomputes the gate via
+		 *              {@see Order_Actions::is_offered()} and refuses an action it
+		 *              does not list, catches a thrown carrier exception, and
+		 *              checks the handler's return instead of assuming success —
+		 *              flashing a notice {@see self::render_action_notice()} shows
+		 *              on the redirect for every one of those outcomes.
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
@@ -453,26 +502,179 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 */
 		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): void {
 
+			$order_actions = $this->order_actions();
+
+			if ( ! $order_actions->is_offered( $order, $provider, $action ) ) {
+				$this->flash_notice( $order_actions->unavailable_reason( $order, $provider, $action ) );
+
+				return;
+			}
+
+			try {
+				$succeeded = $this->dispatch_action( $handler, $order, $action, $provider );
+			} catch ( \Throwable $exception ) {
+				self::log_action_failure( $provider->get_id(), $action, $exception );
+
+				$this->flash_notice( self::upstream_error_message() );
+
+				return;
+			}
+
+			if ( ! $succeeded ) {
+				$this->flash_notice( self::action_failure_message( $action ) );
+			}
+		}
+
+		/**
+		 * Dispatches one action to the carrier's shipment handler, reporting whether
+		 * it succeeded — the metabox's sibling of
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}.
+		 *
+		 * ⚠ `export()` returns `''` on failure AND on a carrier response with no id
+		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
+		 * return bool.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
+		 * @param \WC_Order                 $order    the order.
+		 * @param string                    $action   one of {@see Order_Actions}' action ids.
+		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @return bool
+		 */
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): bool {
+
 			switch ( $action ) {
 				case Order_Actions::EXPORT:
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
 
-					$handler->export( $order, $settlement, $settlement_provider );
-					break;
+					return '' !== $handler->export( $order, $settlement, $settlement_provider );
 
 				case Order_Actions::CANCEL:
-					$handler->cancel( $order );
-					break;
+					return $handler->cancel( $order );
 
 				case Order_Actions::UPDATE:
-					$handler->update( $order );
-					break;
+					return $handler->update( $order );
 
 				default:
 					/** This filter is documented in class-orders-controller.php ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}). */
-					apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
-					break;
+					return (bool) apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
 			}
+		}
+
+		/**
+		 * Flashes a message {@see self::render_action_notice()} shows on the next
+		 * page load — the redirect back to the order-edit screen — keyed per user
+		 * so two admins acting concurrently cannot clobber each other's notice.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message already-translated notice text.
+		 * @return void
+		 */
+		private function flash_notice( string $message ): void {
+			set_transient( self::NOTICE_TRANSIENT_KEY . get_current_user_id(), $message, 60 );
+		}
+
+		/**
+		 * Renders a flashed action-refusal/failure notice, if one is waiting for the
+		 * current user. Hooked onto `admin_notices` by
+		 * {@see Orders_Registry::add_hooks()} — the same mechanism
+		 * {@see \Woodev_Account_Connection::render_connect_notice()} uses for a
+		 * message that must survive a `wp_safe_redirect()`. Single-use: read once,
+		 * deleted immediately, so it is a NONCE-free static read/clear rather than a
+		 * state change.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function render_action_notice(): void {
+
+			$key     = self::NOTICE_TRANSIENT_KEY . get_current_user_id();
+			$message = get_transient( $key );
+
+			if ( ! is_string( $message ) || '' === $message ) {
+				return;
+			}
+
+			delete_transient( $key );
+
+			printf(
+				'<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+				esc_html( $message )
+			);
+		}
+
+		/**
+		 * The Russian failure sentence for one action.
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::action_failure_message()}
+		 * text-for-text — same msgids, so this introduces no new translatable
+		 * string.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $action one of {@see Order_Actions}' action ids.
+		 * @return string
+		 */
+		private static function action_failure_message( string $action ): string {
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					return __( 'Не удалось выгрузить заказ перевозчику.', 'woodev-plugin-framework' );
+
+				case Order_Actions::CANCEL:
+					return __( 'Не удалось отменить отправление.', 'woodev-plugin-framework' );
+
+				case Order_Actions::UPDATE:
+					return __( 'Не удалось обновить информацию по заказу.', 'woodev-plugin-framework' );
+
+				default:
+					return __( 'Действие не выполнено.', 'woodev-plugin-framework' );
+			}
+		}
+
+		/**
+		 * The generic Russian sentence for an action that threw rather than
+		 * returning a failure.
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::action_upstream_error()}'s
+		 * message text-for-text — same msgid, so this introduces no new
+		 * translatable string. REST reports that same case as a 502; wp-admin has
+		 * no status code to report, so the equivalent here is the flashed notice.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private static function upstream_error_message(): string {
+			return __( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Logs an action failure. The merchant only ever sees the generic flashed
+		 * notice from {@see self::upstream_error_message()}.
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::log_action_failure()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string     $provider_id carrier/tab id.
+		 * @param string     $action      one of {@see Order_Actions}' action ids.
+		 * @param \Throwable $exception   the caught failure.
+		 * @return void
+		 */
+		private static function log_action_failure( string $provider_id, string $action, \Throwable $exception ): void {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a carrier failure; the merchant only ever sees a generic notice.
+				sprintf(
+					'[woodev] shipping order action "%s" (%s) failed: %s',
+					$action,
+					$provider_id,
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+				)
+			);
 		}
 
 		/**
