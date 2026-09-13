@@ -184,6 +184,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 
 			$registry = Mockery::mock( Orders_Registry::class );
 			$registry->shouldReceive( 'resolve_provider_for_order' )->once()->andReturn( $provider );
+			$registry->shouldReceive( 'enqueue_metabox_style' )->once();
 
 			$captured_title = null;
 			Functions\when( 'add_meta_box' )->alias(
@@ -233,7 +234,30 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringContainsString( 'ID заказа у перевозчика', $html );
 			$this->assertStringContainsString( 'CDEK-999', $html );
 			$this->assertStringNotContainsString( 'Трек-номер', $html, 'a field the carrier did not supply must be absent entirely' );
+			$this->assertStringNotContainsString( 'История доставки', $html, 'no tracking number must quietly omit the history section' );
 			$this->assertStringNotContainsString( '&ndash;', $html, 'KISS: an absent field is omitted, never rendered as a dash' );
+		}
+
+		public function test_render_metabox_renders_the_orders_page_status_badge_with_its_canonical_tone(): void {
+			$provider = $this->provider(
+				[
+					'status_meta_key' => '_wc_cdek_status',
+					'status_map'      => [ 'CDEK_DELIVERED' => 'delivered' ],
+				]
+			);
+			$order    = $this->make_order();
+
+			$this->meta = [
+				'_wc_cdek_order_id' => 'CDEK-999',
+				'_wc_cdek_status'   => 'CDEK_DELIVERED',
+			];
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			$this->assertStringContainsString( 'woodev-orders-status woodev-orders-status--ok', $html );
+			$this->assertStringContainsString( '>Доставлено</span>', $html );
 		}
 
 		public function test_render_metabox_renders_the_default_delivery_history_when_nothing_replaces_it(): void {

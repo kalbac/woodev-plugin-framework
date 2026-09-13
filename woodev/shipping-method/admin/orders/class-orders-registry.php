@@ -937,6 +937,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Enqueues the already-built shipping-orders badge stylesheet for an
+		 * order-edit metabox that was actually registered.
+		 *
+		 * Called only by {@see Shipping_Admin_Order::add_meta_box()} after it has
+		 * matched an order to a provider and registered the box. Reusing the shared
+		 * bundle CSS keeps its five badge tones identical to the orders table.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function enqueue_metabox_style(): void {
+			$plugin = $this->get_asset_plugin();
+
+			if ( ! $plugin ) {
+				return;
+			}
+
+			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
+			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $plugin->get_version();
+			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
+
+			wp_enqueue_style( 'woodev-shipping-orders-page', $build_url . '/style-index.css', [ 'wc-components' ], $style_version );
+		}
+
+		/**
 		 * Whether the current admin screen is a WooCommerce Admin (`wc-admin`) page.
 		 *
 		 * A protected, overridable seam, not a Brain-Monkey-stubbed function call:

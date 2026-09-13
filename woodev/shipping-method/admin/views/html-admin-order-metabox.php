@@ -18,7 +18,7 @@
  *
  * @var bool                                                        $is_exported       whether the order has been exported to the carrier
  * @var string                                                      $info_text         shown only when `$is_exported` is false
- * @var array<int, array{label: string, value: string, url: string|null}> $fields     non-empty display fields, shown only when `$is_exported` is true
+ * @var array<int, array{label: string, value: string, url: string|null, tone?:string}> $fields non-empty display fields, shown only when `$is_exported` is true
  * @var string                                                      $history_html      pre-rendered delivery-history markup ('' when there is none to show)
  * @var array<int, array{action: string, label: string, title: string, destructive: bool}> $actions the shared action set {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_order()} built for this order
  * @var string                                                      $admin_post_action forward-only admin-post action the button forms target
@@ -46,6 +46,8 @@ defined( 'ABSPATH' ) || exit;
 						<td>
 							<?php if ( null !== $field['url'] && '' !== $field['url'] ) : ?>
 								<a href="<?php echo esc_url( $field['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $field['value'] ); ?></a>
+							<?php elseif ( isset( $field['tone'] ) ) : ?>
+								<span class="woodev-orders-status woodev-orders-status--<?php echo esc_attr( $field['tone'] ); ?>"><?php echo esc_html( $field['value'] ); ?></span>
 							<?php else : ?>
 								<?php echo esc_html( $field['value'] ); ?>
 							<?php endif; ?>
