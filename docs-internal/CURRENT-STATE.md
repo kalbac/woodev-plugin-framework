@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-13 (s134).** ✅ **The orders table is FINISHED and accepted** — *«вот теперь всё
-супер»*. One PR (#870) over five rounds, tree on `main` @ `6a2a915`, no open PRs. The table now
-carries per-row actions (icon button group, colours and glyphs taken from his own shipped plugins), a
-`cb` column with bulk actions reporting successes and failures separately, an eye-button order
-preview at 820px, a busy-row indicator, and the payment method.
+**As of 2026-09-13 (s135).** ✅ **Docs audit done** (#879): gateways reconciled with the code, gotcha
+duplicates merged, and `GOTCHAS.md` is now a TOPIC MAP over `gotcha-index/{topic}.md` — session-start
+reading 175 → 86 KB. ✅ **Two machines** (Windows desktop + macOS laptop, one at a time): state travels
+by git + the gitignored `.machine-transfer/`; the first laptop session is #882. The orders table
+(s134, #870) stays finished and accepted.
 
 ⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
 incomplete; a worker's "build is green" is not "bundles are committed"; and a row rebuilt from the
@@ -23,8 +23,8 @@ HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incompl
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»,
-condition on the card). Next: **docs audit first** (his instruction, s134), then **«Создать заказ»**
-(#710 — the brainstorm is HIS and he is holding it), then **the order metabox** (#856).
+condition on the card). The docs audit is done (s135); next **«Создать заказ»** (#710 — the brainstorm
+is HIS and he is holding it), then **the order metabox** (#856).
 
 ✅ **CI first-try reliability is now enforced, not merely intended** (#871): `.githooks/pre-push`
 rebuilds the bundles and runs the catalogue gates by exit code in ~22 s, because a worker may not

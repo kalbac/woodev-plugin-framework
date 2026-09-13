@@ -1,5 +1,21 @@
 # gotcha: starting a Codex worker under Orca takes four steps — `worker-start --agent codex` alone lands in a shell
 
+> **Current recipe — measured s135 (Orca 1.4.200, codex-cli 0.153.4), three launches.** The s84 text
+> below is history. `worker-start --agent codex` now starts Codex itself; the start fails with
+> `state: failed, stage: dispatch_input, lastError: agent_prompt_blocked` because Codex opened a
+> DIALOG before its composer:
+>
+> - the **update prompt** (`Update available! … 1. Update now 2. Skip 3. Skip until next version`) →
+>   send ESC. Never Enter (= «Update now»). Typing `3` + Enter did NOT persist the skip: the next
+>   launch showed the prompt again.
+> - **«Hooks need review»** (`3 hooks are new or changed … 1. Review hooks 2. Trust all and continue
+>   3. Continue without trusting`) → send the digit `3` alone — a digit selects AND confirms, no Enter.
+>
+> Then re-dispatch into the SAME terminal:
+> `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree current`.
+> Retrying while a dialog is still on screen fails `agent_unconfigured` («not running a recognized
+> agent»). A plain `--retry-of` WITHOUT `--terminal` spawns a fresh terminal that hits the same dialog.
+
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
 
