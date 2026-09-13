@@ -97,6 +97,8 @@ darwin binaries in `node_modules`. After the first setup the only path is git.
 | PHPStan | needs `--memory-limit=4G`; parallel worker segfaults | 4G run clean, no segfault — measured s136 |
 | Temp dir | a real path | **`/var/…` is a symlink to `/private/var/…`** and PHP reflection reports the resolved form — measured s136 |
 | `orca` on PATH | works | `/usr/local/bin/orca` is a root-owned `lrwx------` symlink an agent's shell cannot read (`Unable to determine Orca.app path`) — call `/Applications/Orca.app/Contents/Resources/bin/orca` (measured s136) |
+| Docker engine | Docker Desktop, WSL2 backend (8 GB to the VM) | **OrbStack** (operator, 13.09.2026) |
+| Rig response time | **5–9 s to first byte, warm** — `/` 6.6 s, `/wp-admin/` 7–9 s, the orders page 5–6 s (measured s135, 13.09.2026). Cause: every rig file, WordPress core included (`~/.wp-env/<hash>/WordPress`), is a bind mount from the Windows filesystem into the WSL2 VM, and OPcache runs with `validate_timestamps=1`, so each request stats thousands of files across that bridge. Remedies, not applied: keep the project inside the WSL2 filesystem, or relax `opcache.revalidate_freq` (edits then show with a delay) | pages open in a fraction of a second (operator, 13.09.2026 — not yet timed by an agent) |
 | Agent concurrency cap | 3 (measured on 15.3 GB RAM) | unmeasured — start at 2–3 and re-measure (the laptop shows the same 15.66 GB to docker) |
 | `run-local-ci` (the global CI rehearsal tool) | does not run natively; WSL only | still unverified — not exercised in s136 |
 
@@ -107,7 +109,7 @@ lists them.
 ## Baselines on the laptop — MEASURED s136 (13.09.2026)
 
 Every gate was re-measured on the MacBook (PHP 8.5.7 Homebrew, sodium ON, node 22.22.3,
-docker 29.4.0 arm64, `rm -f .phpunit.result.cache` first). **All of them match the desktop exactly**,
+docker 29.4.0 arm64 — the laptop runs **OrbStack**, not Docker Desktop — `rm -f .phpunit.result.cache` first). **All of them match the desktop exactly**,
 which is the useful finding: the numbers in `CURRENT-STATE.md` are not platform-dependent.
 
 | Gate | Desktop (s134) | macOS laptop (s136) |

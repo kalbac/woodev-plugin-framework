@@ -329,6 +329,7 @@ that must never be missed.
   **Two carriers side by side** since s112 (#734/#735), the first on live Yandex by operator
   decision (#734).
 - **Two machines since s135** (Windows desktop + macOS laptop): [wiki/two-machine-setup.md](wiki/two-machine-setup.md).
+  ⏸ **Desktop rig STOPPED** 13.09.2026 (`wp-env stop`, volumes kept) — start it before use.
 - ⛔ **Never `docker volume prune` / `docker system prune --volumes` on this machine.** The
   operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
   while the stack is `Exited` — a prune wipes it. Inventory: [wiki/local-rig.md](wiki/local-rig.md).
