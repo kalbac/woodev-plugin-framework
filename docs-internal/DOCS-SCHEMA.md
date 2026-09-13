@@ -164,11 +164,15 @@ its entry count. It holds no entries itself, only the `## Archive` of resolved o
 - [topic/slug] one-sentence summary → [slug](../gotchas/slug.md) (s{N})
 ```
 
-Rules (all gate-checked except the last two):
-- Every gotcha file is linked from some topic index, and every topic index from the map
-- **Max 1 line** per entry, ≤ 400 characters — all detail goes in the individual file
-- A relative link to the detail file is required
-- `[topic/slug]` tag first — used for scanning; session number in parentheses at the end
+Gate-checked:
+- Every gotcha file is listed in exactly ONE topic index, and every topic index is linked from the map
+- The map row's `Entries` number equals the entries in that topic file
+- An entry starts with a `[topic/slug]` tag, is **one line** (no indented continuation), ≤ 400 characters, and links its detail file
+
+Manual (measured s135 and NOT gated, because the corpus does not hold them — 23 entries carry no session
+suffix, and 5 carry a tag from a neighbouring namespace, filed where a reader looks for them):
+- Session number in parentheses at the end
+- The tag's namespace matches the topic file
 - If superseded: `~~strikethrough~~` old, add new below
 
 A NEW topic gets its own `gotcha-index/{topic}.md` AND a row in the map. The file is named after the

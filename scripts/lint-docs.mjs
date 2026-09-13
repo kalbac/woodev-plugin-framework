@@ -175,13 +175,52 @@ if ( topicsAt === -1 ) {
 	const entries = [];
 	let indexBody = '';
 
+	// Map rows: | [`tag`](gotcha-index/file.md) | N | covers |
+	const declaredCount = new Map(
+		[ ...gotchas.matchAll( /^\|\s*\[[^\]]*\]\(gotcha-index\/([a-z0-9-]+\.md)\)\s*\|\s*(\d+)\s*\|/gm ) ].map(
+			( m ) => [ m[ 1 ], Number( m[ 2 ] ) ]
+		)
+	);
+	const listedIn = new Map();
+
 	for ( const f of topicFiles ) {
 		const text = read( join( topicDir, f ) );
 		indexBody += `\n${ text }`;
+		let afterEntry = false;
+		let count = 0;
+
 		for ( const l of text.split( '\n' ) ) {
 			if ( l.startsWith( '- [' ) && ! l.startsWith( '- [../' ) ) {
 				entries.push( { file: f, line: l } );
+				count++;
+				afterEntry = true;
+
+				// Tag shape (the critic's s135 finding: a malformed entry used to pass every predicate).
+				if ( ! /^- (~~)?\[[a-z0-9-]+\/[^\]]+\] /.test( l ) ) {
+					fail( `gotcha-index/${ f } entry does not start with a [topic/slug] tag: "${ l.slice( 0, 80 ) }…"` );
+				}
+				for ( const m of l.matchAll( /\(\.\.\/gotchas\/([a-z0-9-]+)\.md\)/g ) ) {
+					listedIn.set( m[ 1 ], [ ...( listedIn.get( m[ 1 ] ) || [] ), f ] );
+				}
+			} else if ( afterEntry && /^\s+\S/.test( l ) ) {
+				// "Max 1 line": an indented continuation is a second line the length check never sees.
+				fail( `gotcha-index/${ f } has a continuation line under an entry: "${ l.trim().slice( 0, 80 ) }…"` );
+			} else {
+				afterEntry = false;
 			}
+		}
+
+		if ( declaredCount.has( f ) && declaredCount.get( f ) !== count ) {
+			fail(
+				`GOTCHAS.md says gotcha-index/${ f } holds ${ declaredCount.get( f ) } entries, but it holds ${ count }. ` +
+					'The map count is read as fact — update the row with the entry.'
+			);
+		}
+	}
+
+	for ( const [ slug, where ] of listedIn ) {
+		if ( where.length > 1 ) {
+			fail( `gotchas/${ slug }.md is listed ${ where.length } times (${ where.join( ', ' ) }) — one entry per gotcha.` );
 		}
 	}
 

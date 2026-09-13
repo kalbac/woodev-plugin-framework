@@ -38,13 +38,13 @@ Full contract: `AGENT-RULES.md` → Rule 3. Decisions: `adr/001`, `adr/003`, `ad
 - `get_plugin_name()` — return the localized plugin name
 - `get_download_id()` — return the EDD/store download id
 
-The constructor auto-initialises all framework subsystems and registers WP hooks; plugins override
+The constructor auto-initialises the base subsystems and registers WP hooks (`Woocommerce_Plugin`'s constructor adds the WooCommerce-only ones, e.g. Blocks); plugins override
 the `init_*` methods to supply their own implementations. `__construct()` is an ordered list of
 `init_*_handler()`/`load_*` calls ending with `add_hooks()`, which wires only base-owned hooks.
 
 `VERSION` lives here — and **raising it on `main` publishes a release** (#285).
 
-## Subsystems (all initialised inside `Woodev_Plugin::__construct`)
+## Subsystems (base constructor, or the platform base that owns them)
 
 | Class | Purpose |
 |---|---|

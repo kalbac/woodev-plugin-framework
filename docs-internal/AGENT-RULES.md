@@ -130,7 +130,7 @@ No standalone functions outside bootstrap. Everything is a class method.
 - New code: `Woodev\Framework\*` namespace (PSR-4)
 
 ### Rule 2 — Subsystem Pattern
-All framework subsystems are initialized in `Woodev_Plugin::__construct()` via `init_*()` methods. Plugins override these to provide their own implementations.
+The base subsystems are initialized in `Woodev_Plugin::__construct()` via `init_*()` methods; a platform base adds its own in its constructor (`Woocommerce_Plugin` → Blocks). Plugins override these to provide their own implementations.
 
 | Subsystem | Init Method |
 |-----------|-------------|
