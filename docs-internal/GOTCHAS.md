@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 319 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 322 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -22,9 +22,9 @@
 | [`framework/*`](gotcha-index/framework.md) | 6 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 12 | Location provider layer |
-| [`rig/*`](gotcha-index/rig.md) | 14 | Local verification rig |
+| [`rig/*`](gotcha-index/rig.md) | 15 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
-| [`testing/*`](gotcha-index/testing.md) | 44 | Testing patterns |
+| [`testing/*`](gotcha-index/testing.md) | 45 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
 | [`testing/js`](gotcha-index/testing-js.md) | 8 | JavaScript testing pitfalls |
 | [`api/*`](gotcha-index/api.md) | 4 | API layer |
@@ -40,7 +40,7 @@
 | [`perf/*`](gotcha-index/perf.md) | 1 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 8 | Localization |
 | [`autodev/*`](gotcha-index/autodev.md) | 5 | Adversarial dev loop tooling |
-| [`tooling/*`](gotcha-index/tooling.md) | 59 | Dev tooling, codex critic |
+| [`tooling/*`](gotcha-index/tooling.md) | 60 | Dev tooling, codex critic |
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->

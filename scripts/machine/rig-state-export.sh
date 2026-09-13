@@ -11,7 +11,7 @@
 set -euo pipefail
 . "$( dirname "$0" )/lib.sh"
 
-CLI="$( rig_container cli )" || die 'the dev rig is not running — start it with: npx wp-env start'
+CLI="$( rig_container cli )" || die 'the dev rig is not running — start it with: npx @wordpress/env start'
 say "dev rig container: $CLI"
 
 mkdir -p "$TRANSFER/rig"

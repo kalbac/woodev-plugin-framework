@@ -23,14 +23,18 @@ say() {
 # Print the name of one of THIS project's wp-env containers: cli | tests-cli | wordpress |
 # tests-wordpress | mysql | tests-mysql.
 #
-# wp-env derives the container prefix from a hash of the project's ABSOLUTE path, so it differs
-# between machines (on the Windows desktop it is de59f74e…). Never hardcode it: find the cli
-# container that mounts this framework, and build the other names from its prefix. Another wp-env
-# project on the same machine (the licensing issuer) does not mount woodev-framework, so it is skipped.
+# wp-env derives the container prefix from the project's ABSOLUTE path, so it differs between
+# machines. It also CHANGED SHAPE between wp-env versions — a bare 32-char hash on the Windows
+# desktop (de59f74e…), `wp-env-<project-dir>-<8 hex>` on the laptop's 11.15.0 — so matching the old
+# shape found nothing and every rig script died with "wp-env is not running" (measured s136).
+# Never hardcode either: take any `*-cli-1` container, keep the one that MOUNTS this framework, and
+# build the other names from its prefix. Another wp-env project on the same machine (the licensing
+# issuer) does not mount woodev-framework, so it is skipped. `-tests-cli-1` is excluded by name —
+# it is a different role, not a different project.
 rig_container() {
 	local role="$1" c prefix=''
 
-	for c in $( docker ps --format '{{.Names}}' | grep -E '^[0-9a-f]{32}-cli-1$' ); do
+	for c in $( docker ps --format '{{.Names}}' | grep -E -- '-cli-1$' | grep -v -E -- '-tests-cli-1$' ); do
 		if docker exec "$c" test -f /var/www/html/woodev-framework/woodev/class-plugin.php 2> /dev/null; then
 			prefix="${c%-cli-1}"
 			break

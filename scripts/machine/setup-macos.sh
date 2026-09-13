@@ -62,16 +62,38 @@ fi
 php -r 'exit( version_compare( PHP_VERSION, "8.1", "<" ) ? 1 : 0 );' || die "PHP $( php -r 'echo PHP_VERSION;' ) is below 8.1"
 say "PHP $( php -r 'echo PHP_VERSION;' )"
 # The skipped-test baseline depends on sodium (gotcha the-skipped-count-is-dominated-by-whether-sodium-is-enabled).
-if php -m | grep -qi '^sodium$'; then say 'ext-sodium: on'; record sodium ok; else say '⚠ ext-sodium is OFF — the licensing tests will skip'; record sodium MISSING; fi
+# Ask PHP directly — `php -m | grep -q` is FLAKY under `set -o pipefail`: grep closes the pipe on the
+# match, php dies with 255, pipefail promotes it, and a present extension is reported MISSING. Measured
+# s136: six identical runs answered `255 255 0 0 0 0`, and two runs of this script disagreed about the
+# same machine (gotcha grep-q-under-pipefail-turns-a-successful-match-into-a-failed-pipeline).
+if php -r 'exit( extension_loaded( "sodium" ) ? 0 : 1 );'; then
+	say 'ext-sodium: on'
+	record sodium ok
+else
+	say '⚠ ext-sodium is OFF — the licensing tests will skip'
+	record sodium MISSING
+fi
 
 node -e 'process.exit( Number( process.versions.node.split( "." )[ 0 ] ) < 22 ? 1 : 0 )' || die "node $( node -v ) — the repo needs >= 22 (.nvmrc)"
 say "node $( node -v )"
 
 # lint:i18n-sources prefers a `wp` on PATH and pins wp-cli 2.12.0; a newer brew wp-cli would change what
 # the gate measures. Without one on PATH the gate copies the pinned phar out of the rig — which is right.
-if command -v wp > /dev/null && ! wp --version 2> /dev/null | grep -q '2.12.0'; then
-	say "⚠ wp-cli on PATH is $( wp --version ) — lint:i18n-sources pins 2.12.0; uninstall it (brew uninstall wp-cli) and let the gate use the rig's copy"
-	record wp-cli MISMATCH
+#
+# Capture the version instead of piping it into `grep -q`: grep closes the pipe on the first match,
+# wp-cli exits 255 on the broken pipe, and `set -o pipefail` then promotes that to the pipeline's
+# status — so a SUCCESSFUL match read as a failure and this warned about the very version it wanted
+# (measured on the laptop, s136). PHP 8.5 also prints deprecation notices on wp-cli's stdout, hence
+# the last line rather than the whole output.
+if command -v wp > /dev/null; then
+	wp_version="$( wp --version 2> /dev/null | tail -1 )"
+	case "$wp_version" in
+		*2.12.0*) say "wp-cli $wp_version" ;;
+		*)
+			say "⚠ wp-cli on PATH is '$wp_version' — lint:i18n-sources pins 2.12.0; uninstall it (brew uninstall wp-cli) and let the gate use the rig's copy"
+			record wp-cli MISMATCH
+			;;
+	esac
 fi
 
 docker info > /dev/null 2>&1 || die 'docker is not running — start Docker Desktop / OrbStack'
@@ -83,7 +105,9 @@ git config core.hooksPath .githooks
 # A copy from Windows carries core.fileMode=false, which hides a lost exec bit on a hook
 # (gotcha a-git-hook-committed-non-executable-is-silently-ignored-on-posix). macOS can see modes.
 git config core.fileMode true
-chmod +x .githooks/* scripts/machine/*.sh 2> /dev/null
+# lib.sh is SOURCED, never run — it is committed 100644, so chmod-ing it here dirties the tree the
+# moment fileMode=true starts reporting the bit (measured on the laptop, s136).
+chmod +x .githooks/* scripts/machine/rig-*.sh scripts/machine/setup-macos.sh 2> /dev/null
 git worktree prune
 say 'hooksPath=.githooks, fileMode=true, worktrees pruned'
 
@@ -149,7 +173,7 @@ if [ -f "$TRANSFER/rig/dev-db.sql" ]; then
 		record rig-import "$?"
 	fi
 else
-	npx wp-env start && record wp-env ok || record wp-env FAILED
+	npx @wordpress/env start && record wp-env ok || record wp-env FAILED
 fi
 
 # ---------------------------------------------------------------------------
@@ -183,7 +207,9 @@ cat << 'EOF'
 Not scriptable — do these by hand once (details: docs-internal/wiki/two-machine-setup.md):
   • Orca: add this folder as a repo; worktree base path is relative (.orca/worktrees) and carries over
   • Orca skills: orca skills install --skill orchestration --agent claude-code (and orca-cli, computer-use)
-  • Claude Code: check Serena and Context7 connect (/mcp); merge .machine-transfer/claude-global-instructions.md
-    into ~/.claude/CLAUDE.md as that file instructs — never overwrite
+  • Claude Code: check /mcp shows serena, context7 and supermemory. Serena is the official plugin at
+    USER scope and needs `uv`; MCP binds at SESSION START, so a server added now surfaces NEXT session
   • Codex: ~/.codex/config.toml model = "gpt-5.6-terra"
+  • If the bundle carried ~/.claude rules (.machine-transfer/claude-global-instructions.md), MERGE
+    them — never overwrite — then delete the bundle: it holds secrets and this repo is public
 EOF

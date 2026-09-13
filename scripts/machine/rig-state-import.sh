@@ -36,8 +36,8 @@ fi
 
 CLI="$( rig_container cli )" || {
 	say 'dev rig not running — starting it (first start downloads images; minutes)'
-	( cd "$ROOT" && npx wp-env start )
-	CLI="$( rig_container cli )" || die 'the rig did not come up — check docker and npx wp-env start output'
+	( cd "$ROOT" && npx @wordpress/env start )
+	CLI="$( rig_container cli )" || die 'the rig did not come up — check docker and npx @wordpress/env start output'
 }
 say "dev rig container: $CLI"
 
