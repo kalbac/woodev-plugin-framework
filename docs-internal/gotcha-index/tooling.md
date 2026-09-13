@@ -64,6 +64,7 @@
 - [tooling/windows] **GNU tar in Git Bash reads `D:/…` in `-C`/`-f` as a REMOTE host (`Cannot connect to D:`); `--force-local` is not portable to macOS — `cd` and redirect instead.** → [git-bash-tar-reads-a-drive-letter-as-a-remote-host](../gotchas/git-bash-tar-reads-a-drive-letter-as-a-remote-host.md) (s135)
 - [tooling/shell] **`grep -q` exits on the first match and closes the pipe; the producer dies (wp-cli: 255) and `set -o pipefail` reports the SUCCESSFUL match as a failed pipeline — the check warned about the exact version it wanted.** → [grep-q-under-pipefail-turns-a-successful-match-into-a-failed-pipeline](../gotchas/grep-q-under-pipefail-turns-a-successful-match-into-a-failed-pipeline.md) (s136)
 - [tooling/worktrees] **`/node_modules/` is a DIRECTORY pattern and does not ignore the SYMLINK a worktree gets, so `git add -A` there commits an absolute-path symlink — and macOS symlinks it too.** → [a-gitignore-directory-pattern-does-not-match-the-symlink-a-worktree-gets](../gotchas/a-gitignore-directory-pattern-does-not-match-the-symlink-a-worktree-gets.md) (s136)
+- [tooling/parallel-agents] **Codex's «Approaching rate limits» dialog fires MID-RUN and gets `worker_done` REJECTED; `terminal send` cannot clear it, but the whole report survives under `Original body:`.** → [codex-rate-limit-prompt-rejects-worker-done-but-the-body-survives](../gotchas/codex-rate-limit-prompt-rejects-worker-done-but-the-body-survives.md) (s136)
 
 ## Related
 
