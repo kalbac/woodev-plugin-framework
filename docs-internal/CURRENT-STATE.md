@@ -247,7 +247,7 @@ enabled, where the primary checkout reads **1** and any checkout without `plugin
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`; the old "66" was never a contract).
 Every other trap — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration
 flakiness, the three field modes and their Russian labels — is one line under the `[tooling/*]`,
-`[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start anyway.
+`[testing/*]` and `[rig/*]` topic indexes, mapped from `GOTCHAS.md`.
 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.

@@ -102,7 +102,7 @@ Property #3 says "delegate to a seam" — the seam's form varies, and all are va
 The invariant is constant: **the base never makes a domain decision it cannot make
 correctly.** (See the shipping rule: the framework packs, but never sums per-parcel
 prices — that is the carrier's tariff decision. Gotcha
-[[shipping-rate-no-parcel-sum]].)
+[shipping-rate-no-parcel-sum](../gotchas/shipping-rate-no-parcel-sum.md).)
 
 ## Conventions that make it read well
 
@@ -147,5 +147,5 @@ prices — that is the carrier's tariff decision. Gotcha
 - [ADR-006: Capability-Gated Feature Seam](../adr/006-capability-gated-feature-seam.md) — the decision
 - [v2 Extension-Point Pattern](v2-extension-point-pattern.md) — sibling pattern; hook ownership follows the class, no flavour flags on the base
 - `docs-internal/archive/platform-v2-s3-shipping-rate-packing-spec.md` — the shipping box-packing instance
-- [[shipping-rate-no-parcel-sum]] — the "base owns orchestration, not domain decisions" rule, in gotcha form
+- [shipping-rate-no-parcel-sum](../gotchas/shipping-rate-no-parcel-sum.md) — the "base owns orchestration, not domain decisions" rule, in gotcha form
 - Source exemplars: `woodev/payment-gateway/class-payment-gateway.php`, `class-payment-gateway-direct.php`, `class-payment-gateway-plugin.php`

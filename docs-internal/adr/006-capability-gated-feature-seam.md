@@ -80,4 +80,4 @@ Supporting conventions (normative for new code that adopts the pattern):
 - [wiki/capability-gated-feature-seam.md](../wiki/capability-gated-feature-seam.md) — the pattern, examples, conventions, boundaries
 - [ADR-005: Platform v2 Clean-Break Policy](005-platform-v2-clean-break-policy.md) — internal APIs (incl. these seams) are free to break on v2
 - `docs-internal/archive/platform-v2-s3-shipping-rate-packing-spec.md` — the s3 shipping instance that made the pattern concrete
-- [[shipping-rate-no-parcel-sum]] — the "base owns orchestration, not domain decisions" invariant in gotcha form
+- [shipping-rate-no-parcel-sum](../gotchas/shipping-rate-no-parcel-sum.md) — the "base owns orchestration, not domain decisions" invariant in gotcha form

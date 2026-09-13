@@ -159,7 +159,7 @@ Codex is launched through Orca (fact 3), never through `codex exec` — gotcha
 |---|---|
 | What did the last session leave me? | `docs-internal/next-session-prompt.md` |
 | What state is the project in? | `docs-internal/CURRENT-STATE.md` |
-| Has this trap been hit before? | `docs-internal/GOTCHAS.md` (index) → `gotchas/{slug}.md` |
+| Has this trap been hit before? | `docs-internal/GOTCHAS.md` (topic map) → `gotcha-index/{topic}.md` → `gotchas/{slug}.md` |
 | Where does this responsibility live? | `docs-internal/wiki/architecture.md` |
 | Why was it built this way? | `docs-internal/adr/` |
 | What may I break? | `docs-internal/adr/005-platform-v2-clean-break-policy.md` |

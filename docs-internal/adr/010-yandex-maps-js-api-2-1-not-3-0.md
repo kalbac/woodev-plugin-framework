@@ -88,7 +88,7 @@ re-litigated each time the style editor is noticed.
 
 ## Related
 
-- [[../archive/specs/2026-08-01-sp5-pickup-map-rework-design.md]] — the rework this decision belongs to
-- [[009-map-provider-seam-source-not-library.md]] — why the provider seam is "where does the map come
+- [2026-08-01-sp5-pickup-map-rework-design.md](../archive/specs/2026-08-01-sp5-pickup-map-rework-design.md) — the rework this decision belongs to
+- [009-map-provider-seam-source-not-library.md](009-map-provider-seam-source-not-library.md) — why the provider seam is "where does the map come
   from", not "which library draws it"
-- [[../gotchas/ymaps-camera-moves-are-async.md]]
+- [ymaps-camera-moves-are-async.md](../gotchas/ymaps-camera-moves-are-async.md)

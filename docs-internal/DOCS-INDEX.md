@@ -23,7 +23,7 @@ from it (s135 audit), so they were removed rather than re-synced.
 | `CURRENT-STATE.md` | Live status: phase/track state, open bugs, next actions — read every session start |
 | `SESSION-LOG.md` | Index of sessions — one line each, newest at top |
 | `sessions/sNN.md` | Per-session detail — the full write-up |
-| `GOTCHAS.md` | Topic-indexed cross-session gotchas (count → see `GOTCHAS.md` header) → `gotchas/{slug}.md` |
+| `GOTCHAS.md` | Topic map (count in its header) → `gotcha-index/{topic}.md` one-line indexes → `gotchas/{slug}.md` |
 | `AGENT-RULES.md` | Workflow + architecture rules (Rule 0 = clean-break policy / ADR-005) |
 | `DOCS-SCHEMA.md` | Doc format rules, lint checklist, compilation protocol |
 | `platform-v2-execution-protocol.md` | Operating rulebook + resume protocol + authority chain |

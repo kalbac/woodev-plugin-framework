@@ -69,9 +69,11 @@ const size = ( p ) => ( existsSync( p ) ? statSync( p ).size : 0 );
  *
  * At the whole-set rate, 176 KB is ~61 sessions of headroom.
  *
- * If this binds again, do not raise it a third time. The structural fix #554
- * also proposed: split GOTCHAS.md into per-tag indexes and read only the tag
- * map at session start.
+ * It bound again in s135 (175.3 of 176 KB, GOTCHAS.md 95.4 of 96), and the
+ * structural fix #554 proposed was taken instead of a third raise: GOTCHAS.md
+ * is now a TOPIC MAP, and the one-line entries live in gotcha-index/{topic}.md,
+ * opened per task. Its cap dropped from 96 KB to 16 KB accordingly; the sum is
+ * the operator's number and did not move.
  * ------------------------------------------------------------------ */
 
 const START_SET = [
@@ -79,7 +81,7 @@ const START_SET = [
 	[ 'CLAUDE.md', join( ROOT, 'CLAUDE.md' ), 12 * 1024 ],
 	[ 'docs-internal/next-session-prompt.md', join( INTERNAL, 'next-session-prompt.md' ), 16 * 1024 ],
 	[ 'docs-internal/CURRENT-STATE.md', join( INTERNAL, 'CURRENT-STATE.md' ), 28 * 1024 ],
-	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 96 * 1024 ],
+	[ 'docs-internal/GOTCHAS.md', join( INTERNAL, 'GOTCHAS.md' ), 16 * 1024 ],
 ];
 
 const BUDGET = 176 * 1024;
@@ -138,44 +140,68 @@ if ( /^##\s+.*(Урок сессии|Lessons? (from|learned))/im.test( currentSt
  * 3. GOTCHAS.md is an index: one line per entry, one file per gotcha.
  * ------------------------------------------------------------------ */
 
+// s135: GOTCHAS.md is a topic map; the entries live in gotcha-index/{topic}.md (see the budget
+// comment above). Every rule below that used to read one file now reads the set of topic indexes.
 const gotchas = read( join( INTERNAL, 'GOTCHAS.md' ) );
-const indexAt = gotchas.indexOf( '## Index' );
+const topicsAt = gotchas.indexOf( '## Topics' );
+const topicDir = join( INTERNAL, 'gotcha-index' );
 
-if ( indexAt === -1 ) {
-	fail( 'GOTCHAS.md has no "## Index" heading.' );
+if ( topicsAt === -1 ) {
+	fail( 'GOTCHAS.md has no "## Topics" heading — it is the topic map over gotcha-index/.' );
+} else if ( ! existsSync( topicDir ) ) {
+	fail( 'docs-internal/gotcha-index/ is missing — the topic indexes GOTCHAS.md maps.' );
 } else {
-	const headerLines = gotchas.slice( 0, indexAt ).split( '\n' ).length;
+	const headerLines = gotchas.slice( 0, topicsAt ).split( '\n' ).length;
 	if ( headerLines > 15 ) {
 		fail(
-			`GOTCHAS.md header is ${ headerLines } lines before "## Index" (max 15). ` +
-				`A changelog of what was added when belongs in SESSION-LOG.md, not above the index.`
+			`GOTCHAS.md header is ${ headerLines } lines before "## Topics" (max 15). ` +
+				`A changelog of what was added when belongs in SESSION-LOG.md, not above the map.`
 		);
 	}
 
-	// The Archive section holds resolved gotchas awaiting removal — they have no live detail file
-	// by design, so the index rules stop where it begins.
-	const archiveAt = gotchas.indexOf( '## Archive' );
-	const indexBody = gotchas.slice( indexAt, archiveAt === -1 ? undefined : archiveAt );
+	const topicFiles = readdirSync( topicDir ).filter( ( f ) => f.endsWith( '.md' ) );
+	const mapped = new Set(
+		[ ...gotchas.matchAll( /\(gotcha-index\/([a-z0-9-]+\.md)\)/g ) ].map( ( m ) => m[ 1 ] )
+	);
+
+	// A topic index the map does not name is as invisible as an unindexed gotcha.
+	for ( const f of topicFiles ) {
+		if ( ! mapped.has( f ) ) {
+			fail( `gotcha-index/${ f } is not linked from the GOTCHAS.md topic map.` );
+		}
+	}
 
 	const ENTRY_MAX = 400;
-	const entries = indexBody.split( '\n' ).filter( ( l ) => l.startsWith( '- [' ) );
+	const entries = [];
+	let indexBody = '';
 
-	const tooLong = entries.filter( ( l ) => l.length > ENTRY_MAX );
-	for ( const l of tooLong.slice( 0, 5 ) ) {
+	for ( const f of topicFiles ) {
+		const text = read( join( topicDir, f ) );
+		indexBody += `\n${ text }`;
+		for ( const l of text.split( '\n' ) ) {
+			if ( l.startsWith( '- [' ) && ! l.startsWith( '- [../' ) ) {
+				entries.push( { file: f, line: l } );
+			}
+		}
+	}
+
+	// Measured without the `../` the topic files add, so the split did not shorten the budget per entry.
+	const entryLength = ( e ) => e.line.split( '](../gotchas/' ).join( '](gotchas/' ).length;
+	const tooLong = entries.filter( ( e ) => entryLength( e ) > ENTRY_MAX );
+	for ( const e of tooLong.slice( 0, 5 ) ) {
 		fail(
-			`GOTCHAS.md entry is ${ l.length } chars (max ${ ENTRY_MAX }): "${ l.slice( 0, 80 ) }…". ` +
-				`The index carries a hook; the detail lives in the linked file.`
+			`gotcha-index/${ e.file } entry is ${ entryLength( e ) } chars (max ${ ENTRY_MAX }): ` +
+				`"${ e.line.slice( 0, 80 ) }…". The index carries a hook; the detail lives in the linked file.`
 		);
 	}
 	if ( tooLong.length > 5 ) {
-		fail( `…and ${ tooLong.length - 5 } more over-long GOTCHAS.md entries.` );
+		fail( `…and ${ tooLong.length - 5 } more over-long gotcha index entries.` );
 	}
 
 	// every entry resolves to a file, every file is indexed
 	const linked = new Set(
-		[ ...indexBody.matchAll( /\(gotchas\/([a-z0-9-]+)\.md\)/g ) ].map( ( m ) => m[ 1 ] )
+		[ ...indexBody.matchAll( /\(\.\.\/gotchas\/([a-z0-9-]+)\.md\)/g ) ].map( ( m ) => m[ 1 ] )
 	);
-	linked.delete( 'slug' ); // the format comment
 
 	const files = new Set(
 		readdirSync( join( INTERNAL, 'gotchas' ) )
@@ -185,19 +211,21 @@ if ( indexAt === -1 ) {
 
 	for ( const slug of linked ) {
 		if ( ! files.has( slug ) ) {
-			fail( `GOTCHAS.md links gotchas/${ slug }.md, which does not exist.` );
+			fail( `a gotcha index links gotchas/${ slug }.md, which does not exist.` );
 		}
 	}
 	for ( const slug of files ) {
 		if ( ! linked.has( slug ) ) {
-			fail( `gotchas/${ slug }.md is not listed in GOTCHAS.md — an unindexed gotcha is invisible.` );
+			fail(
+				`gotchas/${ slug }.md is not listed in any gotcha-index/{topic}.md — an unindexed gotcha is invisible.`
+			);
 		}
 	}
 
-	const entriesWithoutLink = entries.filter( ( l ) => ! /\(gotchas\/[a-z0-9-]+\.md\)/.test( l ) );
-	for ( const l of entriesWithoutLink ) {
+	const entriesWithoutLink = entries.filter( ( e ) => ! /\(\.\.\/gotchas\/[a-z0-9-]+\.md\)/.test( e.line ) );
+	for ( const e of entriesWithoutLink ) {
 		fail(
-			`GOTCHAS.md entry has no detail file: "${ l.slice( 0, 80 ) }…". ` +
+			`gotcha-index/${ e.file } entry has no detail file: "${ e.line.slice( 0, 80 ) }…". ` +
 				`Every gotcha is its own file — an index-only note has nowhere to grow.`
 		);
 	}
@@ -453,6 +481,17 @@ if ( ! existsSync( handoffPath ) ) {
 		const body = read( file )
 			.replace( /```[\s\S]*?```/g, '' )
 			.replace( /<!--[\s\S]*?-->/g, '' );
+
+		// s135: a `[[wikilink]]` is a link this gate cannot resolve, so a dead one passed silently —
+		// the audit found two in `## Related` sections, and dozens more that only happened to be
+		// alive. Inline code is stripped first so a document can still NAME the syntax.
+		const wikilink = /\[\[[^\]\n]+\]\]/.exec( body.replace( /`[^`\n]*`/g, '' ) );
+		if ( wikilink ) {
+			fail(
+				`${ relative( ROOT, file ).replace( /\\/g, '/' ) } uses a wikilink ${ wikilink[ 0 ] }. ` +
+					'The link gate cannot resolve that syntax — write a relative [text](path.md) link.'
+			);
+		}
 
 		for ( const m of body.matchAll( linkRe ) ) {
 			const raw = m[ 1 ];

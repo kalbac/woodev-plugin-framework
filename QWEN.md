@@ -16,7 +16,7 @@ Where to look things up:
 |---|---|
 | What did the last session leave? | `docs-internal/next-session-prompt.md` |
 | What state is the project in? | `docs-internal/CURRENT-STATE.md` |
-| Has this trap been hit before? | `docs-internal/GOTCHAS.md` |
+| Has this trap been hit before? | `docs-internal/GOTCHAS.md` (topic map) → `gotcha-index/{topic}.md` |
 | Where does a responsibility live? | `docs-internal/wiki/architecture.md` |
 | What may I break? | `docs-internal/adr/005-platform-v2-clean-break-policy.md` |
 | Workflow and architecture rules | `docs-internal/AGENT-RULES.md` |

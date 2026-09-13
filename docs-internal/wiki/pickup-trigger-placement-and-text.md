@@ -185,7 +185,7 @@ level.
 
 ## Related
 
-- [[../gotchas/two-hook-registrations-can-mean-two-options-not-two-outputs.md]] — how #274 item 3 misread the Yandex reference and shipped the double button
-- [[../gotchas/a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it.md]] — the other pickup seam where a framework/domain ownership line matters
-- [[capability-gated-feature-seam.md]] — the general shape of an optional, plugin-supplied behaviour
-- [[../GOTCHAS.md]] — `[shipping/pickup]` and `[shipping/checkout]` sections
+- [two-hook-registrations-can-mean-two-options-not-two-outputs.md](../gotchas/two-hook-registrations-can-mean-two-options-not-two-outputs.md) — how #274 item 3 misread the Yandex reference and shipped the double button
+- [a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it.md](../gotchas/a-capability-flag-that-removes-a-ui-layer-silences-every-branch-that-reported-through-it.md) — the other pickup seam where a framework/domain ownership line matters
+- [capability-gated-feature-seam.md](capability-gated-feature-seam.md) — the general shape of an optional, plugin-supplied behaviour
+- [gotcha-index/shipping-pickup.md](../gotcha-index/shipping-pickup.md) and [gotcha-index/shipping-checkout.md](../gotcha-index/shipping-checkout.md) — the two topic indexes

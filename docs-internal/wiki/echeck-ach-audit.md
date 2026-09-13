@@ -248,6 +248,6 @@ These stay because they're used by credit_card gateways too:
 ---
 
 ## Related
-- [[../FUTURE-BACKLOG.md]] — task #2 "Remove Unused US-Specific Payment Types"
-- [[../GOTCHAS.md]] — gotcha index
-- [[../gotchas/hpos-order-meta-safety.md]] — HPOS order meta safety
+- [FUTURE-BACKLOG.md](../FUTURE-BACKLOG.md) — task #2 "Remove Unused US-Specific Payment Types"
+- [GOTCHAS.md](../GOTCHAS.md) — gotcha index
+- [hpos-order-meta-safety.md](../gotchas/hpos-order-meta-safety.md) — HPOS order meta safety

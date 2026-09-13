@@ -53,6 +53,6 @@ These are documented limitations, not bugs: the flat grammar + scalar-list contr
 
 ## Related
 
-- [[../archive/specs/2026-07-05-conditional-fields-design.md]] — full design spec (§5 = the mirror contract)
-- [[005-platform-v2-clean-break-policy.md]] — installed-site data contracts (option keys) preserved; `show_if` adds no new stored data
-- [[../DOCS-INDEX.md]] — docs navigation
+- [2026-07-05-conditional-fields-design.md](../archive/specs/2026-07-05-conditional-fields-design.md) — full design spec (§5 = the mirror contract)
+- [005-platform-v2-clean-break-policy.md](005-platform-v2-clean-break-policy.md) — installed-site data contracts (option keys) preserved; `show_if` adds no new stored data
+- [DOCS-INDEX.md](../DOCS-INDEX.md) — docs navigation
