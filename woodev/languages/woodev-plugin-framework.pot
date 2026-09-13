@@ -4041,3 +4041,11 @@ msgstr ""
 #: shipping-method/admin/views/html-admin-order-metabox.php:83
 msgid "Вы уверены?"
 msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:142
+msgid "Экспорт"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:143
+msgid "Выгрузить заказ в систему перевозчика"
+msgstr ""

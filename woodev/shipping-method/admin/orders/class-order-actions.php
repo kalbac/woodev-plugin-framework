@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Actions' ) ) :
 
 	/**
-	 * Declares the per-order action set — «Выгрузить» / «Обновить» / «Отменить» — ONCE
+	 * Declares the per-order action set — «Экспорт» / «Обновить» / «Отменить» — ONCE
 	 * (card #824), so the row column, bulk actions (SP-10 increment 3) and the order
 	 * metabox (#856) all read the same gate rather than each growing their own copy.
 	 *
@@ -139,8 +139,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			if ( ! $is_exported && in_array( $order->get_status(), self::EXPORTABLE_STATUSES, true ) ) {
 				$actions[] = self::build_action(
 					self::EXPORT,
-					__( 'Выгрузить', 'woodev-plugin-framework' ),
-					__( 'Передать заказ перевозчику', 'woodev-plugin-framework' ),
+					__( 'Экспорт', 'woodev-plugin-framework' ),
+					__( 'Выгрузить заказ в систему перевозчика', 'woodev-plugin-framework' ),
 					false
 				);
 			}
