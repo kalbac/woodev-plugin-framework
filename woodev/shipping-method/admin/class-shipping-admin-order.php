@@ -2,28 +2,33 @@
 /**
  * Woodev Shipping Admin Order
  *
- * The order-screen admin surface for a shipping plugin (spec §4.4) — the shipping
- * counterpart of {@see \Woodev_Payment_Gateway_Admin_Order}. It adds an order-list
- * column and an order-edit metabox that DISPLAY the shipment's carrier order id,
- * tracking number and chosen pickup point — every value read through
- * {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler} so it routes to the
- * plugin's own installed-site order-meta keys (the framework hardcodes none) — and
- * exposes export / track / cancel actions wired to the carrier handlers
- * ({@see \Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler} for export/cancel,
- * {@see \Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler} for track).
+ * The order-edit admin metabox for a shipping plugin (spec §4.4), rehung onto the
+ * v2 {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Provider} contract (card
+ * #856): the FRAMEWORK builds and registers this — through
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::add_hooks()}, the
+ * same seam that builds the «Заказы доставки» page — the moment at least one
+ * provider is registered, exactly as {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::has_providers()}
+ * already gates the page. A carrier plugin supplies DATA only, through the
+ * provider contract (meta keys, status map, tracking template) plus the two
+ * handler registrations ({@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::register_shipment_handler()},
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::register_tracking_handler()})
+ * — it never constructs this class and never passes it a field list, a title or
+ * an admin-post action, unlike the v1 scheme this replaces.
  *
- * It introduces NO installed-site contract string. The order-list column key is a
- * neutral, plugin-namespaced UI handle (not a contract); whether an order belongs to
- * this plugin is decided by reading the order's chosen shipping-method id and matching
- * it against the ids the plugin itself registered ({@see Shipping_Plugin::get_shipping_method_ids()}) —
- * never against a hardcoded literal. The export/track/cancel buttons post to WP's own
- * `admin-post.php` under a forward-only, plugin-namespaced action; no front-end AJAX
- * action, admin page slug, option key, log-source name or order-meta key is added here.
+ * Which order gets a metabox, whether it reads as exported, which fields have a
+ * value and which action buttons are offered are all resolved through the exact
+ * same seams the orders page/REST surface already use —
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::resolve_provider_for_order()},
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder::build()} and
+ * {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_order()} — so the
+ * metabox can never disagree with the table about the same order (the defect
+ * class #855 already found once).
  *
- * Like every other S1 base class this lands unwired — the plugin instantiates it and
- * registers it as one of {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin}'s
- * handlers (which calls {@see self::register()} on `admin_init`); wiring is the
- * separate plugin-integration task.
+ * KISS (operator, #856): no field is mandatory. A value the carrier's provider
+ * does not supply for this order is simply not in the field list — never
+ * rendered as a placeholder or a dash (a dash belongs in the TABLE, where one
+ * column serves every row; the metabox is a list, and an absent field is just a
+ * shorter list).
  *
  * See docs-internal/platform-v2-s1-shipping-spec.md §4.4.
  *
@@ -32,13 +37,13 @@
 
 namespace Woodev\Framework\Shipping\Admin;
 
+use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
+use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
-use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
-use Woodev\Framework\Shipping\Order\Shipping_Order_Handler;
-use Woodev\Framework\Shipping\Exceptions\Shipping_Exception;
-use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -46,229 +51,96 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order' ) ) :
 
-	/**
-	 * Order-list column + order-edit metabox for a shipping plugin.
-	 *
-	 * A carrier constructs this with its plugin instance, the HPOS-safe order-meta
-	 * handler, the shipment handler (export/cancel) and, optionally, the tracking
-	 * handler (track). The displayed fields and the action wiring are carrier-neutral;
-	 * only the plugin-supplied order-meta map decides which real keys are read.
-	 *
-	 * @since 1.5.0
-	 */
 	class Shipping_Admin_Order {
 
-		/** @var Shipping_Plugin the plugin instance this admin surface belongs to */
-		private Shipping_Plugin $plugin;
+		/**
+		 * Admin-post action the metabox's action-button forms post to, and the
+		 * matching nonce action. Framework-wide (card #856) — no longer
+		 * per-plugin, since one instance of this class now serves every
+		 * registered carrier.
+		 *
+		 * @since 2.0.2
+		 */
+		const ADMIN_POST_ACTION = 'woodev_shipping_order_action';
 
-		/** @var Shipping_Order_Handler HPOS-safe accessor for the plugin's order-meta keys */
-		private Shipping_Order_Handler $order_handler;
+		/** @var string metabox id. */
+		const METABOX_ID = 'woodev_shipping_order';
 
-		/** @var Abstract_Shipment_Handler carrier shipment handler used by export/cancel */
-		private Abstract_Shipment_Handler $shipment_handler;
-
-		/** @var Abstract_Tracking_Handler|null carrier tracking handler used by track (optional) */
-		private ?Abstract_Tracking_Handler $tracking_handler;
+		/** @var Orders_Registry registry this metabox resolves providers/handlers through */
+		private Orders_Registry $registry;
 
 		/**
 		 * Popular-settlements store (#488) used to resolve the settlement + the
 		 * provider that produced it before the export action calls
-		 * {@see Abstract_Shipment_Handler::export()} — see {@see self::handle_order_action()}.
+		 * {@see Abstract_Shipment_Handler::export()} — see
+		 * {@see self::resolve_popular_settlement_context()}.
 		 *
-		 * Always non-null after construction (round 3, HIGH 1): a null/omitted
-		 * constructor argument defaults to the framework's shared instance
-		 * ({@see Location_Provider_Registry::popular_settlement_store()}) instead of
-		 * disabling enrolment — no production construction site in this repo ever
-		 * supplies a store, so an opt-in-only dependency left the feature
-		 * permanently unreachable. An explicit instance remains a genuine override
-		 * (tests, or a plugin that wants its own).
+		 * Always non-null after construction: a null/omitted constructor argument
+		 * defaults to the framework's shared instance
+		 * ({@see Location_Provider_Registry::popular_settlement_store()}) instead
+		 * of disabling enrolment.
 		 *
 		 * @var Popular_Settlement_Store
 		 */
 		private Popular_Settlement_Store $popular_settlement_store;
 
-		/** @var array<string, string> metabox fields to display: logical order-meta field => label */
-		private array $metabox_fields;
-
-		/** @var string logical order-meta field holding the tracking number passed to the tracking handler */
-		private string $tracking_field;
-
-		/** @var string order-list column key (a neutral plugin-namespaced UI handle, NOT a contract) */
-		private string $column_key;
-
-		/** @var string order-list column label */
-		private string $column_label;
-
-		/** @var string metabox id */
-		private string $metabox_id;
-
-		/** @var string metabox title */
-		private string $metabox_title;
-
-		/** @var string forward-only, plugin-namespaced admin-post action the metabox form posts to */
-		private string $admin_post_action;
-
-		/** @var string nonce action protecting the metabox form */
-		private string $nonce_action;
+		/** @var Order_Row_Builder|null lazily built; @see self::row_builder() */
+		private ?Order_Row_Builder $row_builder = null;
 
 		/**
 		 * Constructor.
 		 *
-		 * Stores the collaborators and resolves display/wiring defaults; it adds no
-		 * hooks — call {@see self::register()} (the {@see Shipping_Admin} bootstrap does
-		 * this on `admin_init`).
+		 * Stores the collaborators; it adds no hooks — {@see Orders_Registry::add_hooks()}
+		 * does that, on the same provider-registration trigger that builds the
+		 * «Заказы доставки» page.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Rehung onto the v2 contract (#856): the constructor no longer
+		 *              takes a plugin, an order handler, a shipment/tracking handler
+		 *              or a field/title/action-name override — every one of those is
+		 *              now resolved per-order through {@see Orders_Provider}.
 		 *
-		 * @param Shipping_Plugin                $plugin           the plugin instance
-		 * @param Shipping_Order_Handler         $order_handler    order-meta accessor keyed by the plugin's logical-field map
-		 * @param Abstract_Shipment_Handler      $shipment_handler shipment handler invoked by the export and cancel actions
-		 * @param Abstract_Tracking_Handler|null $tracking_handler         tracking handler invoked by the track action; null disables track
-		 * @param array<string, mixed>           $args {
-		 *   Optional display/wiring overrides.
-		 *
-		 *     @type array<string, string> $metabox_fields logical order-meta field => label to display in the metabox
-		 *     @type string                $tracking_field logical order-meta field holding the tracking number
-		 *     @type string                $column_key     order-list column key (neutral UI handle)
-		 *     @type string                $column_label   order-list column label
-		 *     @type string                $metabox_title  metabox title
-		 * }
-		 * @param Popular_Settlement_Store|null  $popular_settlement_store popular-settlements store (#488); null resolves the framework's shared instance
+		 * @param Orders_Registry|null          $registry                 registry providers/handlers are resolved through; null resolves the framework's singleton
+		 * @param Popular_Settlement_Store|null $popular_settlement_store popular-settlements store (#488); null resolves the framework's shared instance
 		 */
-		public function __construct( Shipping_Plugin $plugin, Shipping_Order_Handler $order_handler, Abstract_Shipment_Handler $shipment_handler, ?Abstract_Tracking_Handler $tracking_handler = null, array $args = [], ?Popular_Settlement_Store $popular_settlement_store = null ) {
+		public function __construct( ?Orders_Registry $registry = null, ?Popular_Settlement_Store $popular_settlement_store = null ) {
 
-			$this->plugin                   = $plugin;
-			$this->order_handler            = $order_handler;
-			$this->shipment_handler         = $shipment_handler;
-			$this->tracking_handler         = $tracking_handler;
+			$this->registry                 = $registry ?? Orders_Registry::instance();
 			$this->popular_settlement_store = $popular_settlement_store ?? Location_Provider_Registry::instance()->popular_settlement_store();
-
-			$this->metabox_fields = isset( $args['metabox_fields'] ) && is_array( $args['metabox_fields'] )
-				? $args['metabox_fields']
-				: [
-					'carrier_order_id' => __( 'Carrier order ID', 'woodev-plugin-framework' ),
-					'tracking_number'  => __( 'Tracking number', 'woodev-plugin-framework' ),
-					'pickup_point'     => __( 'Chosen pickup point', 'woodev-plugin-framework' ),
-				];
-
-			$this->tracking_field = isset( $args['tracking_field'] ) && is_string( $args['tracking_field'] )
-				? $args['tracking_field']
-				: 'tracking_number';
-
-			$this->column_key   = isset( $args['column_key'] ) && is_string( $args['column_key'] )
-				? $args['column_key']
-				: $plugin->get_id() . '_shipment';
-			$this->column_label = isset( $args['column_label'] ) && is_string( $args['column_label'] )
-				? $args['column_label']
-				: __( 'Shipment', 'woodev-plugin-framework' );
-
-			$this->metabox_id    = $plugin->get_id() . '_shipment';
-			$this->metabox_title = isset( $args['metabox_title'] ) && is_string( $args['metabox_title'] )
-				? $args['metabox_title']
-				: __( 'Shipment', 'woodev-plugin-framework' );
-
-			$this->admin_post_action = 'woodev_shipping_' . $plugin->get_id() . '_order_action';
-			$this->nonce_action      = $this->admin_post_action;
 		}
 
 		/**
-		 * Registers the order-screen hooks.
+		 * The row/action builder, lazily built against {@see self::$registry} — the
+		 * exact same seam {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller}
+		 * builds a row's `is_exported` and `actions` from (card #856): the metabox
+		 * and the table can never disagree about the same order.
 		 *
-		 * Wires the order-list column (legacy posts table and HPOS orders table), the
-		 * order-edit metabox and the metabox form's `admin-post.php` handler. Called by
-		 * the {@see Shipping_Admin} bootstrap on `admin_init`.
+		 * @since 2.0.2
 		 *
-		 * @internal
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return void
+		 * @return Order_Row_Builder
 		 */
-		public function register(): void {
-
-			// order-list column — legacy (posts table) and HPOS (orders table).
-			add_filter( 'manage_edit-shop_order_columns', [ $this, 'add_order_column' ] );
-			add_filter( 'manage_woocommerce_page_wc-orders_columns', [ $this, 'add_order_column' ] );
-			add_action( 'manage_shop_order_posts_custom_column', [ $this, 'render_order_column' ], 10, 2 );
-			add_action( 'manage_woocommerce_page_wc-orders_custom_column', [ $this, 'render_order_column' ], 10, 2 );
-
-			// order-edit metabox.
-			add_action( 'add_meta_boxes', [ $this, 'add_meta_box' ], 10, 2 );
-
-			// metabox action buttons (export / track / cancel) post here.
-			add_action( 'admin_post_' . $this->admin_post_action, [ $this, 'handle_order_action' ] );
-		}
-
-		/**
-		 * Adds the shipment column to an orders-table column set.
-		 *
-		 * @internal
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param array<string, string> $columns existing columns
-		 * @return array<string, string>
-		 */
-		public function add_order_column( array $columns ): array {
-
-			$columns[ $this->column_key ] = $this->column_label;
-
-			return $columns;
-		}
-
-		/**
-		 * Renders the shipment column cell for one order.
-		 *
-		 * Handles both the legacy posts table (second arg is a post id) and the HPOS
-		 * orders table (second arg is a {@see \WC_Order}); only renders for orders that
-		 * belong to this plugin.
-		 *
-		 * @internal
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param string        $column        current column key
-		 * @param int|\WC_Order $post_or_order order id (legacy) or order object (HPOS)
-		 * @return void
-		 */
-		public function render_order_column( string $column, $post_or_order ): void {
-
-			if ( $column !== $this->column_key ) {
-				return;
+		private function row_builder(): Order_Row_Builder {
+			if ( null === $this->row_builder ) {
+				$this->row_builder = new Order_Row_Builder( new Order_Actions( $this->registry ) );
 			}
 
-			$order = $this->resolve_order( $post_or_order );
-
-			if ( ! $order instanceof \WC_Order || ! $this->is_our_order( $order ) ) {
-				return;
-			}
-
-			$carrier_order_id = $this->get_field( $order, 'carrier_order_id' );
-			$tracking_number  = $this->get_field( $order, 'tracking_number' );
-
-			if ( '' === $carrier_order_id && '' === $tracking_number ) {
-				echo '&ndash;';
-				return;
-			}
-
-			if ( '' !== $carrier_order_id ) {
-				echo esc_html( $carrier_order_id );
-			}
-
-			if ( '' !== $tracking_number ) {
-				echo '<br /><small>' . esc_html( $tracking_number ) . '</small>';
-			}
+			return $this->row_builder;
 		}
 
 		/**
 		 * Registers the shipment metabox on the order-edit screen.
 		 *
-		 * Mounts on both the legacy (`shop_order`) and HPOS order screens, only when the
-		 * order belongs to this plugin.
+		 * Mounts on both the legacy (`shop_order`) and HPOS order screens, only when
+		 * the order matches a registered provider — resolved by
+		 * {@see Orders_Registry::resolve_provider_for_order()}, the same lookup the
+		 * orders page/REST surface use, never a hardcoded shipping-method-id check.
 		 *
 		 * @internal
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Matches by {@see Orders_Registry::resolve_provider_for_order()}
+		 *              against every registered provider (#856), replacing the v1
+		 *              single-plugin `is_our_order()` check.
 		 *
 		 * @param string                  $post_type     current screen post type / id
 		 * @param \WP_Post|\WC_Order|null $post_or_order current post or order object
@@ -278,112 +150,263 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 			$order = $this->resolve_order( $post_or_order );
 
-			if ( ! $order instanceof \WC_Order || ! $this->is_our_order( $order ) ) {
+			if ( ! $order instanceof \WC_Order ) {
 				return;
 			}
 
-			add_meta_box( $this->metabox_id, $this->metabox_title, [ $this, 'render_metabox' ], $post_type, 'side', 'default' );
+			$provider = $this->registry->resolve_provider_for_order( $order );
+
+			if ( null === $provider ) {
+				return;
+			}
+
+			add_meta_box(
+				self::METABOX_ID,
+				sprintf(
+					/* translators: %s: carrier label, e.g. "СДЭК" */
+					__( 'Информация %s', 'woodev-plugin-framework' ),
+					$provider->get_label()
+				),
+				function () use ( $order, $provider ) {
+					$this->render_metabox( $order, $provider );
+				},
+				$post_type,
+				'side',
+				'default'
+			);
 		}
 
 		/**
 		 * Renders the shipment metabox body.
 		 *
-		 * Prepares the display fields (read through the order handler) and the action
-		 * buttons, then includes the view.
+		 * Two states, both decided by the SAME `is_exported` {@see Order_Row_Builder::build()}
+		 * computes for the table/REST rows (card #856):
+		 *
+		 * - NOT exported: an informational text plus whatever action the shared
+		 *   {@see Order_Actions::for_order()} set offers (normally just export).
+		 * - Exported: the non-empty fields, the delivery history, and whatever
+		 *   actions that set offers (update/cancel/carrier extras).
+		 *
+		 * KISS (operator, #856): a field the provider does not supply for this
+		 * order is simply absent from `$fields` — never rendered as a dash.
 		 *
 		 * @internal
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 Rehung onto the v2 contract (#856): fields, state and actions
+		 *              all come from {@see Order_Row_Builder}/{@see Order_Actions}
+		 *              instead of a plugin-supplied field map and a hardcoded
+		 *              export/track/cancel trio.
 		 *
-		 * @param \WP_Post|\WC_Order $post_or_order current post or order object
+		 * @param \WC_Order       $order    the order being displayed
+		 * @param Orders_Provider $provider the matched carrier
 		 * @return void
 		 */
-		public function render_metabox( $post_or_order ): void {
+		public function render_metabox( \WC_Order $order, Orders_Provider $provider ): void {
 
-			$order = $this->resolve_order( $post_or_order );
+			$row = $this->row_builder()->build( $order, $provider );
 
-			if ( ! $order instanceof \WC_Order ) {
-				return;
-			}
+			$is_exported = ! empty( $row['is_exported'] );
+			$fields      = $is_exported ? $this->build_fields( $order, $provider, $row ) : [];
+			$actions     = is_array( $row['actions'] ?? null ) ? $row['actions'] : [];
 
-			$fields = [];
+			$info_text = $is_exported ? '' : sprintf(
+				/* translators: %s: carrier label, e.g. "СДЭК" */
+				__( 'Заказ ещё не передан перевозчику «%s».', 'woodev-plugin-framework' ),
+				$provider->get_label()
+			);
 
-			foreach ( $this->metabox_fields as $logical => $label ) {
-				$fields[] = [
-					'label' => (string) $label,
-					'value' => $this->get_field( $order, (string) $logical ),
-				];
-			}
+			$history_html = $is_exported
+				? $this->resolve_history_html( $order, $provider, $row['tracking']['number'] ?? null )
+				: '';
 
-			$actions = [
-				[
-					'key'   => 'export',
-					'label' => __( 'Export', 'woodev-plugin-framework' ),
-					'class' => 'button button-primary',
-				],
-				[
-					'key'   => 'track',
-					'label' => __( 'Track', 'woodev-plugin-framework' ),
-					'class' => 'button',
-				],
-				[
-					'key'   => 'cancel',
-					'label' => __( 'Cancel', 'woodev-plugin-framework' ),
-					'class' => 'button',
-				],
-			];
-
-			$admin_post_action = $this->admin_post_action;
-			$nonce_action      = $this->nonce_action;
+			$admin_post_action = self::ADMIN_POST_ACTION;
+			$nonce_action      = self::ADMIN_POST_ACTION;
 			$order_id          = $order->get_id();
 
-			include $this->plugin->get_shipping_framework_path() . '/admin/views/html-admin-order-metabox.php';
-
-			// Render the shipment's tracking history here -- the metabox is the correct
-			// OUTPUT context. (It must not be fired from handle_order_action(), which ends
-			// in wp_safe_redirect(): a display-hook subscriber echoing there would be
-			// discarded and risk "headers already sent".) Only when a tracking number
-			// exists, so unexported orders make no carrier API call.
-			if ( null !== $this->tracking_handler ) {
-
-				$tracking_number = (string) $this->get_field( $order, $this->tracking_field );
-
-				if ( '' !== $tracking_number ) {
-					$this->tracking_handler->display_admin( $order, $tracking_number );
-				}
-			}
+			include __DIR__ . '/views/html-admin-order-metabox.php';
 		}
 
 		/**
-		 * Handles an export / track / cancel submission from the metabox form.
+		 * Builds the metabox's field list for the EXPORTED state — every entry has
+		 * a non-empty value; an unsupplied field is never added (KISS, #856).
 		 *
-		 * Verifies the nonce and capability, then routes the requested action to the
-		 * carrier handlers — export/cancel to the shipment handler, track to the
-		 * tracking handler — and redirects back to the order-edit screen.
+		 * Reads the carrier order id directly (the row array carries only the
+		 * `is_exported` boolean derived from it, not the raw value); tracking and
+		 * the pickup point are read from the already-built row so this stays the
+		 * single source the table itself reads.
 		 *
-		 * The export action is the ONE real caller of
-		 * {@see Abstract_Shipment_Handler::export()} in this framework (round 2
-		 * critic finding, HIGH 2: the enrolment seam it takes optional params for was
-		 * otherwise unreachable — nothing in this repo ever supplied them). This
-		 * resolves the settlement the customer picked at checkout (stamped onto the
-		 * order by {@see Location_Provider_Registry::handle_checkout_order_processed_for_popular_settlements()})
-		 * and the SAME provider that produced it (round 3, HIGH 2 — see
-		 * {@see self::resolve_popular_settlement_context()}), and passes both
-		 * through — so a real export genuinely enrols, with no change required from
-		 * the carrier plugin wiring this class.
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    order.
+		 * @param Orders_Provider      $provider matched carrier.
+		 * @param array<string, mixed> $row      the row {@see Order_Row_Builder::build()} produced for this order.
+		 * @return array<int, array{label: string, value: string, url: string|null}>
+		 */
+		private function build_fields( \WC_Order $order, Orders_Provider $provider, array $row ): array {
+
+			$fields = [];
+
+			$carrier_order_id_key = $provider->get_carrier_order_id_meta_key();
+
+			if ( null !== $carrier_order_id_key ) {
+				$carrier_order_id = (string) \Woodev_Order_Compatibility::get_order_meta( $order, $carrier_order_id_key );
+
+				if ( '' !== $carrier_order_id ) {
+					$fields[] = [
+						'label' => __( 'ID заказа у перевозчика', 'woodev-plugin-framework' ),
+						'value' => $carrier_order_id,
+						'url'   => null,
+					];
+				}
+			}
+
+			$tracking_number = $row['tracking']['number'] ?? null;
+
+			if ( null !== $tracking_number && '' !== $tracking_number ) {
+				$fields[] = [
+					'label' => __( 'Трек-номер', 'woodev-plugin-framework' ),
+					'value' => (string) $tracking_number,
+					'url'   => isset( $row['tracking']['url'] ) ? (string) $row['tracking']['url'] : null,
+				];
+			}
+
+			$destination_kind = $row['shipping']['destination_kind'] ?? null;
+			$destination_text = $row['shipping']['destination_text'] ?? '';
+
+			if ( 'pickup' === $destination_kind && '' !== $destination_text ) {
+				$fields[] = [
+					'label' => __( 'Пункт выдачи', 'woodev-plugin-framework' ),
+					'value' => (string) $destination_text,
+					'url'   => null,
+				];
+			}
+
+			$status_raw = $row['delivery_status']['raw'] ?? null;
+
+			if ( null !== $status_raw && '' !== $status_raw ) {
+				$status_label = $row['delivery_status']['raw_label'] ?? $row['delivery_status']['canonical_label'] ?? $status_raw;
+
+				$fields[] = [
+					'label' => __( 'Статус доставки', 'woodev-plugin-framework' ),
+					'value' => (string) $status_label,
+					'url'   => null,
+				];
+			}
+
+			return $fields;
+		}
+
+		/**
+		 * Resolves the delivery-history markup for the metabox.
+		 *
+		 * The framework draws the history itself (card #856) — a carrier plugin no
+		 * longer has to subscribe to anything to get one — but the
+		 * `{prefix}_tracking_admin_display` hook survives ({@see Abstract_Tracking_Handler::get_admin_display_hook()})
+		 * so a plugin that wants to REPLACE the output still can: when something is
+		 * already hooked, this defers to it entirely instead of also drawing the
+		 * default, so the two never render side by side.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order       $order           order.
+		 * @param Orders_Provider $provider        matched carrier.
+		 * @param string|null     $tracking_number the order's tracking number, or null when none is set.
+		 * @return string
+		 */
+		private function resolve_history_html( \WC_Order $order, Orders_Provider $provider, ?string $tracking_number ): string {
+
+			if ( null === $tracking_number || '' === $tracking_number ) {
+				return '';
+			}
+
+			$tracking_handler = $this->registry->get_tracking_handler( $provider->get_id() );
+
+			if ( null === $tracking_handler ) {
+				return '';
+			}
+
+			ob_start();
+
+			if ( has_action( $tracking_handler->get_admin_display_hook() ) ) {
+				$tracking_handler->display_admin( $order, $tracking_number );
+			} else {
+				self::render_default_history( $tracking_handler->get_history( $tracking_number ) );
+			}
+
+			return (string) ob_get_clean();
+		}
+
+		/**
+		 * The framework's own default delivery-history rendering — used only when
+		 * nothing hooked `{prefix}_tracking_admin_display` to replace it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int, array{status: string, description: string, timestamp: int, location: string}> $history oldest-to-newest, as {@see Abstract_Tracking_Handler::get_history()} returns.
+		 * @return void
+		 */
+		private static function render_default_history( array $history ): void {
+
+			if ( [] === $history ) {
+				return;
+			}
+
+			echo '<ul class="woodev-shipping-order-history">';
+
+			foreach ( $history as $event ) {
+
+				$status      = isset( $event['status'] ) ? (string) $event['status'] : '';
+				$description = isset( $event['description'] ) ? (string) $event['description'] : '';
+				$timestamp   = isset( $event['timestamp'] ) ? (int) $event['timestamp'] : 0;
+				$location    = isset( $event['location'] ) ? (string) $event['location'] : '';
+				$text        = '' !== $description ? $description : $status;
+
+				if ( '' === $text ) {
+					continue;
+				}
+
+				echo '<li>';
+
+				if ( $timestamp > 0 ) {
+					echo '<strong>' . esc_html( wp_date( 'd.m.Y H:i', $timestamp ) ) . '</strong> ';
+				}
+
+				echo esc_html( $text );
+
+				if ( '' !== $location ) {
+					echo ' &mdash; ' . esc_html( $location );
+				}
+
+				echo '</li>';
+			}
+
+			echo '</ul>';
+		}
+
+		/**
+		 * Handles an export / update / cancel (or carrier-extra) submission from
+		 * the metabox's action-button forms.
+		 *
+		 * Resolves the order's provider the same way {@see self::add_meta_box()}
+		 * did — never trusting a posted provider id — and dispatches to
+		 * {@see self::perform_action()}, the metabox's sibling of
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}.
 		 *
 		 * @internal
 		 *
 		 * @since 1.5.0
-		 * @since 2.0.2 The export action resolves and passes the settlement/provider
-		 *              to {@see Abstract_Shipment_Handler::export()} (#488 slice 2,
-		 *              round 2, HIGH 2).
+		 * @since 2.0.2 Framework-wide handler (#856): resolves the provider via the
+		 *              registry instead of a single plugin's `is_our_order()`, and
+		 *              performs export/update/cancel via the shared
+		 *              {@see Order_Actions} action ids instead of a hardcoded
+		 *              export/track/cancel trio.
 		 *
 		 * @return void
 		 */
 		public function handle_order_action(): void {
 
-			check_admin_referer( $this->nonce_action );
+			check_admin_referer( self::ADMIN_POST_ACTION );
 
 			if ( ! current_user_can( 'edit_shop_orders' ) ) {
 				wp_die( esc_html__( 'You do not have permission to manage this shipment.', 'woodev-plugin-framework' ) );
@@ -392,26 +415,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
 			$action   = isset( $_POST['woodev_shipping_order_action'] ) ? sanitize_key( wp_unslash( $_POST['woodev_shipping_order_action'] ) ) : '';
 			$order    = wc_get_order( $order_id );
+			$provider = $order instanceof \WC_Order ? $this->registry->resolve_provider_for_order( $order ) : null;
 
-			if ( $order instanceof \WC_Order && $this->is_our_order( $order ) ) {
+			if ( $order instanceof \WC_Order && null !== $provider ) {
 
-				switch ( $action ) {
-					case 'export':
-						[ $settlement, $provider ] = $this->resolve_popular_settlement_context( $order );
+				$handler = $this->registry->get_shipment_handler( $provider->get_id() );
 
-						$this->shipment_handler->export( $order, $settlement, $provider );
-						break;
-					case 'cancel':
-						$this->shipment_handler->cancel( $order );
-						break;
-					case 'track':
-						// Tracking history is rendered on the order-edit screen by
-						// render_metabox() (the correct output context). This admin-post
-						// handler ends in wp_safe_redirect(), so it must NOT fire the
-						// display hook here (output would be discarded / "headers already
-						// sent"). Clicking Track simply reloads the order, re-rendering
-						// fresh tracking via the metabox.
-						break;
+				if ( null !== $handler ) {
+					$this->perform_action( $handler, $order, $action, $provider );
 				}
 			}
 
@@ -421,38 +432,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			exit;
 		}
 
+		/**
+		 * Performs one action against the carrier's shipment handler.
+		 *
+		 * The metabox's sibling of {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()} —
+		 * same three verbs, same `default:` extension point, so a carrier plugin
+		 * that hooks `woodev_shipping_perform_order_action` for its own extra
+		 * action (e.g. «Печать документа») works from EITHER surface without
+		 * change. Card #710 («Создать заказ») is explicitly out of scope here: if
+		 * it ever reaches the shared action set, its button flows through this
+		 * same `default:` branch unchanged, like any other carrier extra.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
+		 * @param \WC_Order                 $order    the order.
+		 * @param string                    $action   one of {@see Order_Actions}' action ids.
+		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @return void
+		 */
+		private function perform_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): void {
+
+			switch ( $action ) {
+				case Order_Actions::EXPORT:
+					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
+
+					$handler->export( $order, $settlement, $settlement_provider );
+					break;
+
+				case Order_Actions::CANCEL:
+					$handler->cancel( $order );
+					break;
+
+				case Order_Actions::UPDATE:
+					$handler->update( $order );
+					break;
+
+				default:
+					/** This filter is documented in class-orders-controller.php ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}). */
+					apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
+					break;
+			}
+		}
 
 		/**
 		 * Resolves the popular-settlements enrolment context for an order about to
 		 * be exported — the settlement the customer picked at checkout (via
-		 * {@see \Woodev\Framework\Shipping\Location\Popular_Settlement_Store::recall_candidate()})
-		 * and the SAME provider that produced it.
+		 * {@see Popular_Settlement_Store::recall_candidate()}) and the SAME
+		 * provider that produced it, looked up by the settlement's own
+		 * `provider_id()` via {@see Location_Provider_Registry::get_providers()}.
 		 *
-		 * Round 3 (HIGH 2): the provider is resolved by the settlement's OWN
-		 * `provider_id()` — stamped onto the record at checkout time and preserved
-		 * through the `recall_candidate()` round-trip, the same "a record travels
-		 * whole" discipline D1 already applies to `Location_Record` — via
-		 * {@see Location_Provider_Registry::get_providers()}, NOT by re-resolving
-		 * {@see Location_Provider_Registry::get_active_provider()}. The merchant can
-		 * change the active provider between checkout and export; re-resolving
-		 * "whichever provider is active now" could hand `enroll()` a provider that
-		 * disagrees with the record's own `provider_id()`, which `enroll()` rejects
-		 * with an `\InvalidArgumentException` — thrown AFTER the carrier order
-		 * already exists. Looking the provider up by the record's own id instead
-		 * makes that mismatch structurally impossible from this call site; the
-		 * `catch` in {@see Abstract_Shipment_Handler::enroll_popular_settlement()}
-		 * is the remaining defense-in-depth for every other path into `enroll()`.
-		 *
-		 * Extracted as its own seam (round 2, HIGH 2) so it is directly testable
-		 * without running {@see self::handle_order_action()} itself, which ends in
-		 * `exit` (unsafe to invoke from a unit test). Returns `[ null, null ]` when
-		 * no candidate was recalled, or when the provider that produced it is no
-		 * longer registered — the export action still runs, just without
-		 * enrolment.
+		 * Returns `[ null, null ]` when no candidate was recalled, or when the
+		 * provider that produced it is no longer registered — the export action
+		 * still runs, just without enrolment.
 		 *
 		 * @since 2.0.2
-		 * @since 2.0.2 Round 3 (HIGH 2): resolves the provider by the settlement's
-		 *              own `provider_id()` instead of the currently active provider.
 		 *
 		 * @param \WC_Order $order the order about to be exported
 		 *
@@ -468,55 +502,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
 
 			return [ $settlement, $provider ];
-		}
-
-		/**
-		 * Determines whether an order belongs to this plugin.
-		 *
-		 * Reads the order's chosen shipping-method id(s) and matches them against the
-		 * ids the plugin registered; it compares against no hardcoded literal.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param \WC_Order $order order to test
-		 * @return bool
-		 */
-		private function is_our_order( \WC_Order $order ): bool {
-
-			$method_ids = $this->plugin->get_shipping_method_ids();
-
-			if ( empty( $method_ids ) ) {
-				return false;
-			}
-
-			foreach ( $order->get_shipping_methods() as $item ) {
-
-				if ( $item instanceof \WC_Order_Item_Shipping && in_array( $item->get_method_id(), $method_ids, true ) ) {
-					return true;
-				}
-			}
-
-			return false;
-		}
-
-		/**
-		 * Reads a logical order-meta field, returning '' when the plugin does not map it.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @param \WC_Order $order   order to read from
-		 * @param string    $logical logical field name
-		 * @return string the stored value as a string, or '' when unmapped/empty
-		 */
-		private function get_field( \WC_Order $order, string $logical ): string {
-
-			try {
-				$value = $this->order_handler->get( $order, $logical );
-			} catch ( Shipping_Exception $exception ) {
-				return '';
-			}
-
-			return is_scalar( $value ) ? (string) $value : '';
 		}
 
 		/**
@@ -536,17 +521,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$order = wc_get_order( $value instanceof \WP_Post ? $value->ID : $value );
 
 			return $order instanceof \WC_Order ? $order : null;
-		}
-
-		/**
-		 * Gets the plugin instance this admin surface belongs to.
-		 *
-		 * @since 1.5.0
-		 *
-		 * @return Shipping_Plugin
-		 */
-		public function get_plugin(): Shipping_Plugin {
-			return $this->plugin;
 		}
 	}
 

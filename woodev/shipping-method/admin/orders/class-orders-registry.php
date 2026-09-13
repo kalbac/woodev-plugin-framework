@@ -10,7 +10,9 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Settings\Settings_Page_Registry;
+use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 
@@ -91,6 +93,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		private $shipment_handlers = [];
 
+		/**
+		 * Tracking handlers keyed by provider id (card #856) — the seam the
+		 * framework-built order metabox uses to render a shipment's delivery
+		 * history without a carrier plugin drawing anything itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var array<string, Abstract_Tracking_Handler>
+		 */
+		private $tracking_handlers = [];
+
+		/**
+		 * The framework-built order-edit metabox (card #856). Lazily created so a
+		 * registry that never gets a provider never builds one either.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Shipping_Admin_Order|null
+		 */
+		private $admin_order;
+
 		/** @var bool whether the shared hooks were added. */
 		private $hooked = false;
 
@@ -133,12 +156,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * actions, which is the already-correct "no handler ⇒ no actions" behaviour. A
 		 * FIRST-time registration under an id never drops anything — a plugin is free to
 		 * call {@see self::register_shipment_handler()} before or after this method, and
-		 * that handler must survive.
+		 * that handler must survive. The same drop-on-replacement applies to any
+		 * registered tracking handler (card #856).
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Round 2 (HIGH 2): drop the previous descriptor's shipment handler
 		 *              on replacement, so a replaced descriptor cannot keep executing the
 		 *              old carrier's export/update/cancel.
+		 * @since 2.0.2 Card #856: also drops the previous descriptor's tracking handler
+		 *              on replacement, for the same reason.
 		 *
 		 * @param Orders_Provider     $provider carrier descriptor.
 		 * @param \Woodev_Plugin|null $plugin  owning plugin, to source the shared framework
@@ -157,6 +183,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 			if ( $is_replacement ) {
 				unset( $this->shipment_handlers[ $provider->get_id() ] );
+				unset( $this->tracking_handlers[ $provider->get_id() ] );
 			}
 
 			if ( null === $this->plugin && $plugin instanceof \Woodev_Plugin ) {
@@ -207,6 +234,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Registers the tracking handler that renders a provider's delivery
+		 * history (card #856) on the framework-built order metabox.
+		 *
+		 * Optional: a provider with no registered tracking handler simply gets no
+		 * history section — the framework never guesses at one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string                    $provider_id carrier/tab id.
+		 * @param Abstract_Tracking_Handler $handler     the carrier's tracking handler.
+		 * @return void
+		 */
+		public function register_tracking_handler( string $provider_id, Abstract_Tracking_Handler $handler ): void {
+			$this->tracking_handlers[ $provider_id ] = $handler;
+		}
+
+		/**
+		 * Returns the tracking handler registered for one provider, or null when
+		 * none was registered.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $provider_id carrier/tab id.
+		 * @return Abstract_Tracking_Handler|null
+		 */
+		public function get_tracking_handler( string $provider_id ): ?Abstract_Tracking_Handler {
+			return $this->tracking_handlers[ $provider_id ] ?? null;
+		}
+
+		/**
 		 * Returns every registered provider, filterable (#{@see 'woodev_shipping_orders_providers'}).
 		 *
 		 * Always leave this extension point even with no consumer yet — a plugin composing
@@ -254,6 +311,49 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * Resolves which registered carrier an order belongs to, by checking each
+		 * provider's marker meta key in turn (first match wins).
+		 *
+		 * The single source for "which provider owns this order" (card #856): both
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller} (the «Заказы
+		 * доставки» table/REST surface) and {@see Shipping_Admin_Order} (the
+		 * order-edit metabox) call this instead of each walking the provider list
+		 * on its own — three independently-written copies of this lookup drifting
+		 * apart is exactly the defect class #855 already found once.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order to inspect.
+		 * @return Orders_Provider|null
+		 */
+		public function resolve_provider_for_order( \WC_Order $order ): ?Orders_Provider {
+			foreach ( $this->get_providers() as $provider ) {
+				if ( '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_marker_meta_key() ) ) {
+					return $provider;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * The framework-built order-edit metabox (card #856), created once and
+		 * reused so the hooks added in {@see self::add_hooks()} and removed in
+		 * {@see self::reset_for_tests()} refer to the same callable.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Shipping_Admin_Order
+		 */
+		private function admin_order(): Shipping_Admin_Order {
+			if ( null === $this->admin_order ) {
+				$this->admin_order = new Shipping_Admin_Order( $this );
+			}
+
+			return $this->admin_order;
+		}
+
+		/**
 		 * Returns the page/REST capability.
 		 *
 		 * Reuses {@see Settings_Page_Registry::resolve_capability()} rather than inventing a
@@ -278,6 +378,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              framework-wide `woodev_shipping_order_exported` action, so the
 		 *              cached badge count drops the moment any order is exported,
 		 *              rather than waiting out the TTL (#853).
+		 * @since 2.0.2 Card #856: also hooks the framework-built order metabox
+		 *              ({@see self::admin_order()}) onto `add_meta_boxes` and its
+		 *              action-button forms onto `admin_post_{@see Shipping_Admin_Order::ADMIN_POST_ACTION}`.
 		 *
 		 * @return void
 		 */
@@ -293,6 +396,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
+
+			// Card #856: the order-edit metabox is built by the FRAMEWORK the same way
+			// the «Заказы доставки» page is — the moment at least one provider exists,
+			// not per carrier plugin construction.
+			add_action( 'add_meta_boxes', [ $this->admin_order(), 'add_meta_box' ], 10, 2 );
+			add_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order(), 'handle_order_action' ] );
 		}
 
 		/**
@@ -1037,6 +1146,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #856: also unhooks and drops the framework-built order metabox.
 		 *
 		 * @return void
 		 */
@@ -1046,8 +1156,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
+			if ( null !== $this->admin_order ) {
+				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], 10 );
+				remove_action( 'admin_post_' . Shipping_Admin_Order::ADMIN_POST_ACTION, [ $this->admin_order, 'handle_order_action' ] );
+			}
+
 			$this->providers         = [];
 			$this->shipment_handlers = [];
+			$this->tracking_handlers = [];
+			$this->admin_order       = null;
 			$this->hooked            = false;
 			$this->plugin            = null;
 		}
