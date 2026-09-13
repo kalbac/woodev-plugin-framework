@@ -57,3 +57,7 @@ artifacts/
 
 # Playwright MCP probe output (screenshots, snapshots, console logs) — never committed
 .playwright-mcp/
+
+# Two-machine transfer bundle (scripts/machine/rig-state-export.sh). Holds the rig DB, the rig's
+# wp-config secrets and personal agent instructions — the repo is PUBLIC, this must never be committed.
+/.machine-transfer/

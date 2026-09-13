@@ -170,6 +170,8 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 
 ## 🛠 Dev environment
 
+**Two machines** — a Windows desktop and a macOS laptop, one at a time (s135). What travels by git, what by the gitignored `.machine-transfer/` bundle, and what differs per OS: `docs-internal/wiki/two-machine-setup.md`.
+
 ```bash
 # Install dependencies
 composer install

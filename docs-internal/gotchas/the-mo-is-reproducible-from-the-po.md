@@ -12,7 +12,7 @@ committed `.mo` byte for byte.
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -w /var/www/html/woodev-framework \
-  de59f74e6d3d19d18a7f7b6608fda7e7-cli-1 \
+  "$(scripts/machine/rig-container.sh cli)" \
   sh -c 'wp i18n make-mo woodev/languages/woodev-plugin-framework-ru_RU.po /tmp/mo-out;
          md5sum /tmp/mo-out/woodev-plugin-framework-ru_RU.mo woodev/languages/woodev-plugin-framework-ru_RU.mo'
 # 54d952df8bc6fd80efdbd1efaff3449a  /tmp/mo-out/...mo

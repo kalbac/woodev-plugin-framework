@@ -13,6 +13,7 @@ and provide reference material.
 - [Framework architecture — subsystems, base classes, seams](architecture.md) — the map of what lives where: subsystems, base classes and the seams a plugin extends. Extracted from `CLAUDE.md` in s86 when that file became a pure gateway; opened on demand, not at session start
 - [The local rig — how it got this way](local-rig.md) — why the rig's fixtures, options and the two location providers are set the way they are, and which container is which. Moved out of `CURRENT-STATE.md` in s91, which now keeps only the current values
 - [Orchestrating agents with Orca](orchestrating-agents-with-orca.md) — how multi-agent work is actually run here: worker Sonnet / critic Codex, worktree placement, the launch traps, and what of Orca we deliberately did not adopt
+- [Two machines — the Windows desktop and the macOS laptop](two-machine-setup.md) — what travels by git, what by the gitignored transfer bundle, what is reinstalled, and where the two platforms differ for an agent (s135)
 - [eCheck/ACH Audit — Removal Plan](echeck-ach-audit.md) — (historical audit — deprecation-cycle mitigations superseded by ADR-005; several phases since executed)
 
 

@@ -331,7 +331,7 @@ that must never be missed.
 - ✅ **At standard, re-verified 02.09.2026 (s112)** — modal, map, tiles and clustered Moscow points.
   **Two carriers side by side** since s112 (#734/#735), the first on live Yandex by operator
   decision (#734).
-- **Tree is on `main`** (verified 27.08.2026, s100); Orca worktrees removed.
+- **Two machines since s135** (Windows desktop + macOS laptop): [wiki/two-machine-setup.md](wiki/two-machine-setup.md).
 - ⛔ **Never `docker volume prune` / `docker system prune --volumes` on this machine.** The
   operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
   while the stack is `Exited` — a prune wipes it. Inventory: [wiki/local-rig.md](wiki/local-rig.md).

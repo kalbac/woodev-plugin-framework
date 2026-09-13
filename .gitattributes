@@ -19,6 +19,7 @@
 # the option. This box has `core.autocrlf=true`, so without this rule a FRESH checkout of a
 # hook lands as CRLF; `commit-msg` reads LF today only because it has not been re-checked-out
 # since it was written. `.gitattributes` pins itself for the same reason. Issue #802.
+*.sh text eol=lf
 .githooks/** text eol=lf
 .gitattributes text eol=lf
 

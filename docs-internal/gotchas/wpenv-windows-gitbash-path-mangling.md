@@ -52,7 +52,7 @@ That reads like a broken vendor install. It is the same conversion; prefix the c
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -e TEST_SUITE=integration \
-  de59f74e6d3d19d18a7f7b6608fda7e7-tests-cli-1 \
+  "$(scripts/machine/rig-container.sh tests-cli)" \
   php /var/www/html/woodev-framework/vendor/bin/phpunit \
     --configuration /var/www/html/woodev-framework/phpunit.xml \
     --testsuite=Integration --no-coverage
