@@ -41,7 +41,15 @@ final class Woodev_Realistic_Tracking_Handler extends \Woodev\Framework\Shipping
 		}
 
 		$index = $this->tracking_index( $tracking_number );
-		$time  = 1720000000 + ( $index % 120 ) * HOUR_IN_SECONDS;
+
+		// Anchored to NOW, not to a fixed epoch: a hardcoded base put every event in
+		// July 2024 while the seeded orders are dated 2026, so on the rig the history
+		// predated its own order by two years and read as broken. The SHAPE stays
+		// deterministic per tracking number — which history, how many events, and the
+		// offsets between them — only the anchor follows the clock, exactly as a real
+		// carrier's timestamps do. Events land inside the last few days and never in
+		// the future.
+		$time = time() - 3 * DAY_IN_SECONDS + ( $index % 24 ) * HOUR_IN_SECONDS;
 
 		if ( 0 === $index % 8 ) {
 			return [
