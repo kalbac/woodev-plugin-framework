@@ -89,7 +89,7 @@ darwin binaries in `node_modules`. After the first setup the only path is git.
 |---|---|---|
 | Shell the agent's Bash tool uses | Git Bash (MSYS) — rewrites `/var/...` args (`MSYS_NO_PATHCONV=1`), mangles Cyrillic in `curl` args, eats backslashes in heredocs | zsh/bash 3.2 — none of those; scripts in `scripts/machine/` avoid bash 4 features |
 | Line endings | `core.autocrlf=true` in the system gitconfig → CRLF in the working tree for `text=auto` files | LF; a copied tree is repaired by the setup script |
-| Orca `sharedDirectories` (`node_modules` in a worktree) | a directory **symlink** — `git worktree remove` can empty the primary checkout's `node_modules` | clone-**copied** (`orca.yaml`) — that trap does not exist; the build-parity caveat may not either (unmeasured) |
+| Orca `sharedDirectories` (`node_modules` in a worktree) | a directory **symlink** — `git worktree remove` can empty the primary checkout's `node_modules` | **also a symlink** (measured s136, Orca 1.4.200 — `orca.yaml` predicted a clone-copy and was WRONG): the same trap applies, the build-parity caveat applies, and it arrives UNTRACKED because `/node_modules/` is a directory pattern |
 | Codex's tool shell under Orca | WSL bash on a Windows path; an Orca worktree's absolute `gitdir` is unreadable to it | native — expected to read worktrees directly (unmeasured) |
 | Container prefix | `de59f74e…` (32 hex) | **different SHAPE, not just a different hash**: `wp-env-woodev-plugin-framework-5fd870b7` (wp-env 11.15.0) — measured s136. Always `rig-container.sh`; it now matches both |
 | Starting the rig | `npx wp-env start` resolves to an installed binary | **`npx @wordpress/env start`** — the bare `wp-env` is a different, stub package here (measured s136) |

@@ -7,7 +7,13 @@
 
 worktree:
   # Gitignored directories shared into every new worktree instead of being
-  # rebuilt there. Orca clone-copies them on macOS and symlinks them elsewhere.
+  # rebuilt there. Orca SYMLINKS them — measured on macOS with Orca 1.4.200 in s136
+  # (`ls -ld` on a fresh worktree's node_modules), correcting an earlier note here that
+  # claimed macOS clone-copies. Two consequences follow from it being a symlink on BOTH
+  # machines: a worktree build is never assets-parity evidence, and `git worktree remove`
+  # can empty the primary checkout — remove worktrees through Orca. It also arrives
+  # UNTRACKED, because `/node_modules/` below is a directory pattern that a symlink does
+  # not match; gotcha a-gitignore-directory-pattern-does-not-match-the-symlink-a-worktree-gets.
   #
   # Why node_modules: a fresh worktree otherwise arrives without it and cannot
   # run the JS gate until it installs 658 MB. In s83 that cost every worker a
