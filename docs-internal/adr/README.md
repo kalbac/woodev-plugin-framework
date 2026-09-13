@@ -24,26 +24,9 @@
 
 ## Template
 
-```markdown
-# ADR-{NNN}: {Title}
-
-**Status:** proposed | accepted | deprecated | superseded
-
-**Date:** YYYY-MM-DD
-
-## Context
-
-{What is the issue motivating this decision?}
-
-## Decision
-
-{What is the change we're proposing?}
-
-## Consequences
-
-{What becomes easier or harder as a result?}
-```
+The template is [../DOCS-SCHEMA.md](../DOCS-SCHEMA.md) → "ADR Format" — Context, Decision,
+Alternatives Considered, Consequences, Related. The shorter copy that stood here lacked the last two.
 
 ## Related
 
-- [[../DOCS-INDEX.md]] — docs navigation
+- [../DOCS-INDEX.md](../DOCS-INDEX.md) — docs navigation

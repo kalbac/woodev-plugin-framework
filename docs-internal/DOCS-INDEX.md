@@ -1,27 +1,17 @@
 # Docs Index — Woodev Plugin Framework
-> Navigation hub for AI agents. Read this FIRST in every new session. ~2 min read.
+> Navigation hub for AI agents — open it when you need to find a document, not at session start.
 > `docs-internal/` — internal technical documentation (not published).
 > Freshness: `git log -1 --format=%ad --date=short -- <file>`.
 
 ---
 
-## Session Start (for AI agents)
+## Session start and end
 
-> Canonical list: `AGENTS.md` → "Session Start". This checklist mirrors it — do not let them diverge.
-
-1. **Read `next-session-prompt.md`** — the prepared entry point for the next session.
-2. **Read `CURRENT-STATE.md`** — live status: phase/track state, open bugs, next actions.
-3. **Read `GOTCHAS.md`** — scan `[topic/*]` tags relevant to the current task.
-4. **Read task-specific docs** — pick from the tables below.
+**The checklists live in `AGENTS.md` → "Session Start" / "Session End" only** — it starts with
+`next-session-prompt.md`, not with this file. The mirrored copies that used to sit here had drifted
+from it (s135 audit), so they were removed rather than re-synced.
 
 (`platform-v2-program-tracker.md` is a **program-history snapshot**, not a session-start read.)
-
-## Session End
-
-1. Update `CURRENT-STATE.md` (lean — phase status, bugs, next actions).
-2. Write `sessions/sNN.md` (this is where detail lives), then add one index line to `SESSION-LOG.md` (newest on top).
-3. Compilation step — scan the new entry for gotchas → add to `GOTCHAS.md` + create `gotchas/{slug}.md`.
-4. See `DOCS-SCHEMA.md` for the full compilation protocol and format rules.
 
 ---
 
@@ -68,6 +58,7 @@
 | `specs/2026-08-21-settlement-search-design.md` | Settlement search replacing the preset list — decision 1 shipped in s109, the rest is NOT part of #437 | partial |
 | `specs/2026-08-24-popular-settlements-design.md` | Popular settlements — where the list lives and how it is scoped | ✅ |
 | `specs/2026-08-25-shipping-tools-section.md` | The «Инструменты» section of the «Доставка» tab | ✅ |
+| `specs/2026-09-07-sp10-orders-page-design.md` | SP-10 «Заказы доставки» — the orders page: columns, filters, actions left open by #694 | ✅ |
 
 | Plan | Implements |
 |------|------------|
@@ -86,9 +77,10 @@ That instruction is superseded — parallel work runs through Orca orchestration
 Shipped-work specs/plans are moved to `archive/specs/` and `archive/plans/`.
 
 ⚠ **`research/` and `reviews/` are NOT archived** — this line used to say they were, and it was wrong:
-`research/` holds 2 files and `reviews/` holds 10, several of them written in the last two weeks.
-`archive/` holds only the pre-s60 ones. `DOCS-SCHEMA.md` correctly lists both as live directories an
-agent writes to.
+both are live directories an agent writes to, and `archive/` holds only the pre-s60 ones. No file count
+here: the last two counts written into this line went stale. **The earlier docs audits live in
+`reviews/`** — `2026-08-29-docs-and-board-audit.md` (s104) and `2026-09-05-644-part1-contradiction-map.md`
+(s119); read them before starting another, so a fixed contradiction is not re-litigated.
 
 ## Architecture Decision Records
 
@@ -102,7 +94,7 @@ agent writes to.
 | File | Purpose |
 |------|---------|
 | `migration/edostavka-data-preservation-checklist.md` · `migration/yandex-...` | Per-plugin release-blocking data contracts (enforced at rewrite time) |
-| `wiki/` | Deep-dive topic references (capability-gated seam, echeck-ach audit, v2 extension point) |
+| `wiki/` | Deep-dive topic references — the full list with a line each is [wiki/README.md](wiki/README.md) |
 | `autodev-loop-runbook.md` | Autodev loop runbook — implemented (`tools/autodev/`, `.autodev/`), dormant since 2026-06-18 |
 
 ## Historical reference (kept in place — still cited by active docs)
@@ -130,5 +122,6 @@ Passed-gate audits, the completed platform-v2 program docs (plans/specs/prompts)
 - `wiki/orchestrating-agents-with-orca.md` — how multi-agent work is run here: worker Sonnet / critic Codex, worktree placement, what we did not adopt
 - `wiki/local-rig.md` — why the rig's fixtures and options are set the way they are (the pickup mu-plugin, the company field, the two location providers, the live-Yandex switch); moved here from `CURRENT-STATE.md` in s91
 - `AGENTS.md` — shared project rules (session start/end, coding principles)
-- `QWEN.md` — Qwen-specific agent instructions
+- `wiki/pickup-trigger-placement-and-text.md` — who decides where the checkout pickup button is drawn (the framework) and what it says (the carrier)
+- `QWEN.md` — the Qwen gateway; a pointer to `AGENTS.md`
 - `.ai/QUICK-REFERENCE.md` — shared project rules and conventions for all AI agents

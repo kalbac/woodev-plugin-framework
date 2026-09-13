@@ -189,11 +189,27 @@ Topic namespaces are **defined by the section headers of `GOTCHAS.md`** — the 
 - [link] — why related
 ```
 
-Rules:
-- Filename: kebab-case matching the `[topic/slug]` tag
-- Must have a `## Related` section with at least one cross-link
-- Code examples: show ❌ wrong and ✅ correct side by side
-- Session tag: when it was first discovered
+The block above is the **recommended** shape for a new file. What is REQUIRED is narrower:
+
+- Filename: kebab-case; the index line in `GOTCHAS.md` links it (gate-checked).
+- An H1 that names the trap.
+- A `## Related` section with at least one link — a relative markdown link (text in brackets, path in parentheses), never a
+  `[[wikilink]]` or a bare `[slug]`: the link gate cannot resolve either, so a dead one passes silently.
+- Where a fix is code, show ❌ wrong and ✅ correct side by side.
+
+⚠ **Measured s135, and why the header is not mandatory.** The `# Gotcha: [topic/slug]` H1 plus the
+`> Tags: … | Session: sN` line were written here as a rule, and the corpus ignored it: **about 40 of
+321** files carry that exact shape; most of the rest use a `**Namespace:** … / **Discovered:** sN`
+header, or none. The same thing happened to the wiki format (s119), and the same reasoning applies —
+a rule the corpus ignores eight times in ten misleads the one author who obeys it into believing
+theirs is the conforming file. Nothing reads the header mechanically, so rewriting ~280 files to
+match it buys no reader anything. Record the session somewhere in the file; either established header
+shape is fine.
+
+**Platform.** When a trap exists only on one OS, or its numbers were measured on one machine, say so
+in one line under the H1 — `> **Platform:** Windows only — …` / `> **Measured on:** …`. The project
+is worked on from a Windows desktop AND a macOS laptop (s135), and an unqualified Windows trap reads
+as a universal one.
 
 ---
 
@@ -226,16 +242,24 @@ Rules:
 - No "attempted", "tried to" language — only actual outcomes
 - Entries from before session numbering live in
   `sessions/platform-v2-daily-2026-05-28--06-08.md`; s6 and s20 never existed (the numbering
-  skipped them) — do not go looking for them
+  skipped them), and **s131 happened but left no file and no row** — a short Serena repair whose only
+  record is commit `ddb9756` and a paragraph in `sessions/s132.md`. Do not go looking for any of them
 
 ---
 
 ## CURRENT-STATE.md Format
 
-Fixed sections, always in this order:
-1. `## Phase Status` — table: Phase / Status / Notes
-2. `## Known Bugs (open)` — icons: `[⚠️]` open, `[✅]` fixed (remove after 2 sessions)
-3. `## Next Actions (priority order)` — numbered list, top = highest priority
+The sections as the file actually carries them (re-described s135 — this block used to prescribe a
+numbered, priority-ordered `## Next Actions` list the file dropped by operator decision #644, because
+**priority lives on board №6 in the «Приоритет» field**, not in prose):
+
+1. A lead block (`**As of DATE (sNN).**` + the few standing warnings that change between sessions)
+2. `## Contracts, traps and tooling — pointers only`
+3. `## Program status (high level)` — table: Stage / Status / Notes
+4. `## Phase Status (subsystems)` — a pointer to `wiki/architecture.md`
+5. `## Known Bugs / Open debt` — icons: `[⚠️]` open, `[✅]` fixed (remove after 2 sessions)
+6. `## Next Actions` — standing direction only; never a retyped card list
+7. `## Local rig`, `## Infrastructure Reference` — the values that change between sessions
 
 **Hard rule:** this file describes the CURRENT state and nothing else. No `Prior:` chain, no
 "lessons from session N" section, no history. A lesson is a gotcha (`gotchas/{slug}.md`) when it

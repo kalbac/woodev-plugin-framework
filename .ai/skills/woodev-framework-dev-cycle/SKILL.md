@@ -97,7 +97,7 @@ npx wp-env run cli "php -v"
 
 **Default URLs:**
 
-- Development: `http://localhost:8888` (admin: `admin`/`password`)
+- Development: `http://localhost:8973` (port from the gitignored `.wp-env.override.json`) (admin: `admin`/`password`)
 - Tests: `http://localhost:8889`
 
 ---

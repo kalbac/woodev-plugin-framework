@@ -210,8 +210,11 @@ Rules that ALL AI agents must follow. When you discover new important rules or c
 
 ### Knowledge Persistence
 
-- When you discover important project rules, conventions, or patterns during your work — **always document them here** in this section so all agents (Claude, Qwen, Cursor, etc.) share the same knowledge.
-- Do not add personal preferences or user-specific info here — only project-level rules and conventions.
+- **Do NOT record new rules here.** A rule goes where `AGENTS.md` and `docs-internal/DOCS-SCHEMA.md` →
+  "Sync Rule" put it: a workflow/architecture rule → `docs-internal/AGENT-RULES.md`, a trap →
+  `docs-internal/gotchas/` + `GOTCHAS.md`, a decision → `docs-internal/adr/`. This section used to say
+  "always document them here", which made this file a third copy that drifted (s135 audit).
+- Do not add personal preferences or user-specific info anywhere in the repo — it is public.
 
 ---
 

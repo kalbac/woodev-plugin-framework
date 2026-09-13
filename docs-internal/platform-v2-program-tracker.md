@@ -24,7 +24,7 @@ The active program since s32 is the **shipping SP-track (SP-1…SP-11)**:
 
 ## Genuinely-open tails (pointers, not tasks)
 
-- **#245** — production `WOODEV_LICENSE_AUTHORITY_PUBKEY` is still a placeholder in the envelope verifier (fail-closed until captured). **Release-blocking.**
+- ~~**#245**~~ — the production `WOODEV_LICENSE_AUTHORITY_PUBKEY` placeholder: **closed** (verified s135 with `gh issue view 245`).
 - ~~**#244**~~ — closed **not planned** (2026-08-10). Its premise ("2 unfinished S0/P4
   base-decomposition extractions, never executed") was wrong: `platform-v2-base-decomposition-subplan.md`
   Tasks 2/3 (`Plugin_Action_Links_Handler`, `API_Logger`) were marked **CANCELLED on
@@ -40,7 +40,7 @@ The active program since s32 is the **shipping SP-track (SP-1…SP-11)**:
   [gotchas/handler-extraction-must-preserve-override-chain.md](gotchas/handler-extraction-must-preserve-override-chain.md)
   for the full analysis. Kept instead: regression-pinning unit tests for both concerns on
   the (unmodified) base, and this correction.
-- **Payment-gateway trait extraction** — `class-payment-gateway.php` still ~3,542 lines; known debt per CLAUDE.md, no card.
+- **Payment-gateway trait extraction** — `class-payment-gateway.php` ~3.6k lines; card **#117**, scoped by the revision card **#639**.
 
 ## Decisions on record (unchanged)
 

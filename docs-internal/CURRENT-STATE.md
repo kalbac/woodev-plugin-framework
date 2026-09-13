@@ -266,7 +266,7 @@ there**, and remove the worktree through Orca.
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **319**.
+Gotchas: count in the `GOTCHAS.md` header.
 
 ## Program status (high level)
 
@@ -290,7 +290,7 @@ all but PHPStan and Documentation are browser-verified. The live PROGRAMME stage
 
 ## Known Bugs / Open debt
 
-- [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (→ board №6).
+- [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
 - [ℹ️] OB-7 moved to the board as **#809** (07.09.2026) — debt lives there, not here.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.

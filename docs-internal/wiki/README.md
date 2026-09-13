@@ -18,23 +18,10 @@ and provide reference material.
 
 ## Article Format
 
-```markdown
-# {Title}
-
-## Overview
-
-{What this article covers}
-
-## Details
-
-{In-depth explanation with code examples}
+See [../DOCS-SCHEMA.md](../DOCS-SCHEMA.md) → "Wiki Article Format": an H1 and a `## Related` section
+are the whole mandate. The Overview/Details template that stood here disagreed with the schema.
 
 ## Related
 
-- Links to related gotchas, ADRs, and other wiki articles
-```
-
-## Related
-
-- [[../GOTCHAS.md]] — gotcha index
-- [[../adr/README.md]] — architecture decisions
+- [../GOTCHAS.md](../GOTCHAS.md) — gotcha index
+- [../adr/README.md](../adr/README.md) — architecture decisions

@@ -41,14 +41,18 @@ Parallelism"; recipe and traps: `wiki/orchestrating-agents-with-orca.md`. Docs-o
 edits are still done directly, with no worker at all.
 
 ## 6. Review — two layers
+⚠ **Partly superseded (s135 audit).** The external layer no longer goes through the operator by hand:
+Codex runs as a critic (or a second worker) inside Orca — `CLAUDE.md` → Orca, `wiki/orchestrating-agents-with-orca.md`.
+The «nobody accepts their own work» rule is what survives; the packet mechanics below are history.
+
 - **Internal (Claude):** subagent-driven two-stage review per task; at phase gates run profile reviewers (`code-reviewer`, `silent-failure-hunter`, `type-design-analyzer`) on the gate's diff.
 - **External (Codex — was GPT-5.5 when this was written):** at **key gates** (S0: P2, P3, P4, P6; then each module's gate). I generate `docs-internal/reviews/<phase>-audit-packet.md` (diff range + plan section + invariants checklist + 3–5 pointed questions). Operator runs it through GPT-5.5 and returns findings. I process them via `superpowers:receiving-code-review` (verify skeptically; never implement blindly). **Second opinion:** I may request a GPT-5.5 packet for a contested design decision at any time (e.g. PVZ-map abstraction shape).
 
 ## 7. Gate model (between phases/stages)
-A gate passes only when: (1) `composer check` green; (2) the plan's exit-gate checklist ticked; (3) internal review clean; (4) at key gates — external audit findings resolved; (5) tracker + CURRENT-STATE updated. Then tag (stage gates) and proceed.
+A gate passes only when: (1) `composer check` green; (2) the plan's exit-gate checklist ticked; (3) internal review clean; (4) at key gates — external audit findings resolved; (5) `CURRENT-STATE.md` updated (the program tracker is a history snapshot since s60 and is no longer maintained). Then tag (stage gates) and proceed.
 
 ## 8. Definition of Done
-- **Task:** code + tests written, `composer check` green, reviewed, committed (Conventional Commit), tracker line updated.
+- **Task:** code + tests written, `composer check` green, reviewed, committed (Conventional Commit); the full Definition of Done is `AGENTS.md` → Definition of Done.
 - **Phase/Stage gate:** §7 satisfied.
 
 ## 9. Operator touchpoints (when I stop and ask)

@@ -128,7 +128,7 @@ woodev_framework/
 │   ├── compatibility/               # HPOS + WooCommerce compat
 │   ├── handlers/                    # Blocks + script handlers
 │   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
-│   ├── payment-gateway/             # Payment gateway base classes (~13.8k lines; main file ~3,542)
+│   ├── payment-gateway/             # Payment gateway base classes (~13.9k lines; main file ~3.6k)
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
 │   ├── shipping-method/             # Shipping plugin + method bases
@@ -288,7 +288,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 **Docs:**
 - Public docs (`docs/`) use `%%FRAMEWORK_VERSION%%` placeholder — never hardcode version
-- Internal docs (`docs-internal/`) — English only, no Russian
+- Internal docs (`docs-internal/`) — agent prose in English; quoted operator words, domain data and msgids keep their language (`DOCS-SCHEMA.md` → Language Rule)
 - Gotchas go in `docs-internal/gotchas/`, NOT in `docs/`
 
 ---
@@ -330,7 +330,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 Run review before committing when changes touch:
 - `woodev/class-plugin.php` or `woodev/bootstrap.php` (core architecture)
-- `woodev/payment-gateway/` (high complexity, ~3,542 lines in main file)
+- `woodev/payment-gateway/` (high complexity, ~3.6k lines in main file)
 - Public API surface (new/changed public methods, new classes)
 - Deprecation/removal of existing functionality
 - Changes spanning 3+ files

@@ -178,14 +178,18 @@ directory as `.orca/worktrees`, so every repo gets the same layout inside itself
 override is set to the same relative value so the two cannot drift:
 
 ```bash
-orca project setup-update --setup <repoId> \
-  --worktree-base-path D:/Projects/woodev_framework/orca/worktrees --json
+orca project setup-update --setup <repoId> --worktree-base-path .orca/worktrees --json
 ```
+
+Verified s135 with `orca repo list --json` → `"worktreeBasePath": ".orca/worktrees"` for this repo. The
+value is RELATIVE, so it carries to any machine; this example used to show an absolute `D:/…` path
+without the leading dot, which was never what was configured.
 
 Passing an empty string does NOT clear a per-repo override — set it to the value you want instead.
 
 **Why same-volume matters:** shared directories are materialised as symlinks on Windows, and
-directory symlinks across volumes need Developer Mode or elevation.
+directory symlinks across volumes need Developer Mode or elevation. On macOS Orca clone-copies them
+instead (`orca.yaml`), so neither the volume rule nor the symlink traps below apply there.
 
 **Why inside the repo is safe here — measured, not assumed.** Every gate is path-scoped, so none of
 them sees a worktree: phpcs reads `./woodev`, phpstan `paths: woodev`, phpunit `./tests/unit`. With
@@ -196,9 +200,10 @@ not one test double-counted. `/.orca/` is gitignored, and Serena honours that th
 rig container. WordPress will not load them as plugins — those come from explicit mappings — but
 each worktree's 76 MB `vendor` copy sits inside the project directory.
 
-**Still run jest as `npm run test:js -- --roots "<rootDir>/tests/js"`.** A bare `npx jest` would
-scan worktrees wherever they live, and it loses the wp-scripts jsdom environment regardless
-(gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`).
+**Run jest as a bare `npm run test:js`** — `jest-unit.config.js` scopes `roots` to `tests/js` since
+#188, so worktrees are not counted. Never `npx jest`: it scans worktrees wherever they live and loses
+the wp-scripts jsdom environment regardless (gotchas `jest-scans-agent-worktrees-inside-the-repo`,
+`npx-jest-bypasses-wp-scripts-jsdom`).
 
 ## A fresh worktree is gate-capable immediately
 
@@ -237,9 +242,10 @@ it live inside Orca. But the first `snapshot` of a WordPress admin page returned
 `runtime_unavailable` ("the Orca runtime closed the connection before responding"). The runtime
 recovered on its own and the two live workers were unaffected, so this is one data point, not a
 verdict on the feature — it was not investigated further, because debugging the browser while the
-same runtime carries running workers is the wrong trade. **Rig verification stays on
-chrome-devtools MCP against `:8973`.** Anyone who wants to revisit this should do it with no
-workers in flight.
+same runtime carries running workers is the wrong trade. **Rig verification is a Playwright probe
+that logs in by itself** (`admin`/`password`, `CURRENT-STATE.md` → the rig; `npm run test:e2e`) — this
+line used to name chrome-devtools MCP, which is no longer the path. Anyone who wants to revisit the
+Orca browser should do it with no workers in flight.
 
 **`orca-per-workspace-env` was checked against the three concrete pains named on #779, not against
 the feature's own pitch.** The bundled `orca-per-workspace-env` skill guide describes standing up a
@@ -272,9 +278,9 @@ project does not have.
 The s83 recipe above is still right. s84 ran twelve dispatches through it and found four things it
 did not say.
 
-**Codex is critic-only until 27.08.2026** (operator decision, 21.08.2026): s84 burned 45% of the
-weekly Codex allowance in one night by running it as worker, planner and critic simultaneously. The
-"use Codex proactively as a second worker" rule resumes after that date, under the caps below.
+*(History.)* **Codex was critic-only until 27.08.2026** (operator decision, 21.08.2026) after s84
+burned 45% of the weekly Codex allowance in one night; the restriction was lifted on 24.08.2026 and
+Codex is a full worker again — `CLAUDE.md` → Orca carries the live rule.
 
 **Cap rounds per card at two, three at the outside.** s84 put six worker rounds and six critic
 passes into #395 and still did not close it. The third REJECT is the signal to stop and hand the
@@ -288,6 +294,11 @@ of its own, so it is much heavier than a Claude one. Release AND close settled w
 next wave, not at the end — and note that `worker-release` refuses with
 `retained / user_takeover` for any terminal the coordinator wrote to, which is every Codex worker.
 Gotcha: `three-agents-is-the-concurrency-cap-on-this-machine`.
+
+> **Superseded s135 (Orca 1.4.200, codex 0.153) — the live recipe is `CLAUDE.md` → Orca, fact 3.**
+> `worker-start --agent codex` now launches Codex itself; what blocks it is a Codex DIALOG (update
+> prompt → ESC; «Hooks need review» → `3`), after which `worker-start --retry-of … --terminal …`
+> re-dispatches into the same terminal. The s84 paragraph below is kept as the history of why.
 
 **Launching Codex takes four steps.** `worker-start --agent codex` produced a bare PowerShell
 terminal three times out of four, and the injected brief was executed by the shell as a here-string
