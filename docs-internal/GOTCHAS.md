@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Index only.** 321 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
+> **Index only.** 318 atomic gotchas across 32 namespaces. Every entry is ONE line: a hook you can
 > recognise, and a link to the file that holds the detail. Never paste the detail here — a second
 > copy drifts from the first, and this file is read at the start of every session.
 > **Adding one:** create `gotchas/{slug}.md` (format: `DOCS-SCHEMA.md`), then add one line below
@@ -32,6 +32,7 @@
 - [php/updater-cache-source-stamp-not-key] **Isolating a cache by source without changing a frozen option key — stamp metadata inside the value.** → [updater-cache-source-stamp-not-key](gotchas/updater-cache-source-stamp-not-key.md) (s18)
 - [php/class-alias-phpstan-resolution] **class_alias() and PHPStan.** → [class-alias-phpstan-resolution](gotchas/class-alias-phpstan-resolution.md)
 - [php/stdlib] **Four PHP/WP stdlib behaviours that pass tests and fail in production — incl. `is_numeric()` accepting `0.5`/`+1`/`1e3`, after which `(int)` turns `0.5` into the deletion sentinel `0`.** → [php-stdlib-traps-that-survive-tests](gotchas/php-stdlib-traps-that-survive-tests.md) (s45, extended s108)
+- [php/php84-implicit-nullable-payment-handlers] **RESOLVED (kept as history — the file is still linked).** Payment handlers use explicit nullable parameters after `ef3d067`; `PaymentGatewayImplicitNullableTest` is the regression guard. → [php84-implicit-nullable-payment-handlers](gotchas/php84-implicit-nullable-payment-handlers.md)
 
 ### [settings-api/*] — Settings API
 - [settings-api/save-path] **Settings-API save path — validate enums by key-or-value, coerce numbers, sanitize HTML.** → [settings-api-control-save-path-pitfalls](gotchas/settings-api-control-save-path-pitfalls.md) (s31)
@@ -426,8 +427,6 @@
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
-
-- [php/php84-implicit-nullable-payment-handlers] **RESOLVED.** Payment handlers use explicit nullable parameters after `ef3d067`; `PaymentGatewayImplicitNullableTest` is the regression guard. → [php84-implicit-nullable-payment-handlers](gotchas/php84-implicit-nullable-payment-handlers.md)
 
 - [bootstrap/resolver-bootstrap-coupling] **RESOLVED.** `Framework_Resolver` no longer references
   `Woodev_Plugin_Bootstrap::instance()` at all — the notice renderers are injected
