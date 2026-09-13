@@ -1,5 +1,8 @@
 # gotcha: `orca worktree rm` refuses to delete a worktree because of the CRLF files it created itself
 
+> **RESOLVED s135.** The 14 CRLF-stored blobs behind this were renormalized to LF, so a worktree made from
+> a commit after that is born clean. Kept as history — and `git add -A` in a worktree is still a bad habit.
+
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s111 (2026-09-01)
 

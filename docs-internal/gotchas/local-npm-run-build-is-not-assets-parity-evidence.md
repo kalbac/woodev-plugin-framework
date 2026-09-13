@@ -90,7 +90,7 @@ The evidence was sitting in the worktree the whole time and only surfaced when r
 Failed to delete worktree at …/s133-829-badges.
  M woodev/assets/build/shipping-orders-page/index.js
  M woodev/assets/build/shipping-orders-page/style-index.css
- …plus the seven CRLF-only files a fresh worktree always starts dirty with
+ …plus the seven CRLF-only files a fresh worktree started dirty with until s135
 ```
 
 Two consequences:

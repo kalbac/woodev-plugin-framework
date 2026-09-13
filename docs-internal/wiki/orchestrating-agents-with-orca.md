@@ -357,7 +357,7 @@ about the CRLF churn left the seven dirty files unstaged.
 1. Serena `activate_project` on YOUR worktree — get it from `git rev-parse --show-toplevel`, then
    verify a `find_symbol` result reports a path under it.
 2. No install step. `vendor` and `node_modules` are already there.
-3. Never `git add -A` — this worktree starts dirty with seven CRLF-only files.
+3. Never `git add -A` — stage by name. (Worktrees were born dirty with seven CRLF-only files until s135 renormalized the blobs.)
 4. The machine is shared and low on memory; if a gate OOMs, say so and retry once — never report a
    gate green whose aggregate result you never saw, and never substitute `npx jest`.
 5. **The WORK is the deliverable; the lifecycle message is not a precondition for it.** If you

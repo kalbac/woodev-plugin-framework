@@ -53,7 +53,7 @@ brief. Acceptable only after the author's dispatch has reported `worker_done` �
 flight.
 
 ⚠ Either way, a critic that writes probes must revert them and prove it with `git status --porcelain`.
-Expect the seven CRLF-only files every fresh worktree is born with to show up there and not be its
+Expect (on a commit before s135) the seven CRLF-only files every fresh worktree was born with to show up there and not be its
 doing — see the Related link.
 
 ## Related

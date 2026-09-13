@@ -259,8 +259,8 @@ Nothing above `2.0.2` remains — #116(a) closed that in s111, and `SinceTagCeil
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
 worth carrying without opening it: a fresh worktree needs **no install step** but its `vendor` must
-be COPIED and never shared, and it starts dirty with seven CRLF-only files — **never `git add -A`
-there**, and remove the worktree through Orca.
+be COPIED and never shared; stage files by name, **never `git add -A`** there (the CRLF-dirty start
+ended in s135), and remove the worktree through Orca.
 
 **Building a rate? Read the two `[woocommerce/shipping]` gotchas from s117 first** — `add_rate()`
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets

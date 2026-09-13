@@ -1,5 +1,8 @@
 # gotcha: every fresh Orca worktree starts dirty with seven CRLF-only files — never `git add -A` there
 
+> **RESOLVED s135.** The 14 CRLF-stored blobs behind this were renormalized to LF, so a worktree made from
+> a commit after that is born clean. Kept as history — and `git add -A` in a worktree is still a bad habit.
+
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
 
