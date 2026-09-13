@@ -434,4 +434,25 @@ class ShippingOrderActionsTest extends TestCase {
 
 		$this->assertNotSame( '', $reason );
 	}
+
+	// ----- is_offered() (#856 round 2): the boolean gate wrap both the REST
+	// route and the order-edit metabox recompute before dispatching a posted
+	// action, so neither ever trusts the client's button. -----
+
+	public function test_is_offered_is_true_for_an_action_for_order_lists(): void {
+		$this->register_handler();
+
+		$this->assertTrue( $this->actions()->is_offered( $this->order( 'pending' ), $this->provider(), Order_Actions::EXPORT ) );
+	}
+
+	public function test_is_offered_is_false_for_an_action_for_order_does_not_list(): void {
+		$this->register_handler();
+
+		// Never exported => for_order() offers only EXPORT, never CANCEL.
+		$this->assertFalse( $this->actions()->is_offered( $this->order( 'pending' ), $this->provider(), Order_Actions::CANCEL ) );
+	}
+
+	public function test_is_offered_is_false_when_provider_is_null(): void {
+		$this->assertFalse( $this->actions()->is_offered( $this->order(), null, Order_Actions::EXPORT ) );
+	}
 }
