@@ -51,5 +51,5 @@ optional). Never construct a parallel store from the same config.
 
 ## Related
 
-- [[checkout-field-takeover-woocommerce-states]] — why the store exists and why raw DOM writes lose values
-- [[react-missing-key-state-bleed-across-tabs]] — the same class of bug in React: one logical thing, two instances
+- [checkout-field-takeover-woocommerce-states](checkout-field-takeover-woocommerce-states.md) — why the store exists and why raw DOM writes lose values
+- [react-missing-key-state-bleed-across-tabs](react-missing-key-state-bleed-across-tabs.md) — the same class of bug in React: one logical thing, two instances

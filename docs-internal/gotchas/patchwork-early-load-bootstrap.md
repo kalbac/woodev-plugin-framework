@@ -31,4 +31,4 @@ early as possible".)
 
 ## Related
 
-- [[brain-monkey-function-pollution]] — the sibling order-dependence trap.
+- [brain-monkey-function-pollution](brain-monkey-function-pollution.md) — the sibling order-dependence trap.

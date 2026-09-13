@@ -73,13 +73,13 @@ Asserting only "we passed a provider" passes on the broken version. Assert that 
 ## The wider lesson
 
 This is the second defect on this branch whose cause was "we handed a library a shape it does not
-read" — the first was [[ymaps-objectmanager-properties-are-plain]]. Neither throws. When a ymaps
+read" — the first was [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md). Neither throws. When a ymaps
 feature behaves like it was never configured, suspect the shape before suspecting the feature.
 
 ## Related
 
-- [[ymaps-objectmanager-properties-are-plain]] — the same class of silent shape mismatch
-- [[ymaps-html-icon-layout-needs-iconshape]] — found in the same session
-- [[ymaps-camera-moves-are-async]]
+- [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) — the same class of silent shape mismatch
+- [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — found in the same session
+- [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md)
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-6, and why the control
   is kept rather than replaced

@@ -24,4 +24,4 @@ This is the shape that makes a rig probe lie. A probe that flips an option with 
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the same family of "both halves are correct, the join is not"
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the same family of "both halves are correct, the join is not"

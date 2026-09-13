@@ -1,4 +1,5 @@
 # The local PHP is four minor versions above the CI floor, so a green local suite says nothing about 7.4
+> **Measured on:** the Windows desktop (PHP 8.5.1) — re-measure on other hardware.
 
 **Namespace:** `[testing/*]`
 **Found:** s98 (27.08.2026), on PR #563. **Recurred s105 (30.08.2026), on PR #661** — a different

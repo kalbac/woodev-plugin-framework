@@ -28,5 +28,5 @@ Now switching sub-tabs unmounts the old block and mounts a fresh one → `result
 Any component that holds **its own `useState`** and is swapped in/out of a **single tree slot** by a tab/router/conditional MUST carry a `key` that changes with the logical identity it represents. No `key` → React reuses the instance → state bleeds. This is invisible in tests that mount one section at a time; it only shows when a human switches tabs.
 
 ## Related
-- `[[classmap-autoload-breaks-class-exists-once-guard]]` — another "invisible in tests, only shows live" class of bug.
+- `[classmap-autoload-breaks-class-exists-once-guard](classmap-autoload-breaks-class-exists-once-guard.md)` — another "invisible in tests, only shows live" class of bug.
 - SP-2 connection block: `src/settings-page/app.js`, `connection-block.js`, `section-view.js`.

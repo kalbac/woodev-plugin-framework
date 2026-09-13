@@ -41,6 +41,6 @@ Both passed 200+ tests yet would have fataled in production.
 
 ## Related
 
-- [[wpenv-resolver-fixture-mapping]] — the integration-test analogue (fixture not mapped
+- [wpenv-resolver-fixture-mapping](wpenv-resolver-fixture-mapping.md) — the integration-test analogue (fixture not mapped
   at the bootstrap's load path).
 - Sibling lesson: the P2 pilot-gate hardening ("no Composer-autoload include-order masking").

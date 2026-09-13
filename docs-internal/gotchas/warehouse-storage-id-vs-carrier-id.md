@@ -44,5 +44,5 @@ data: writing a numeric row id into the carrier-id field overwrites the carrier'
 
 ## Related
 
-- [[dispatcher-files-unwired-in-includes]] — the controller was also unwired in production.
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — the controller was also unwired in production.
 - Resolved the deferred `s1-p4-rest-warehouses` escalation.

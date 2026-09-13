@@ -57,7 +57,7 @@ whether anyone reads it yet.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the adjacent family; this one relocates that
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the adjacent family; this one relocates that
   bug rather than repeating it
 - `woodev/shipping-method/assets/js/frontend/location-cascade.js`,
   `location-select-modes.js` → `buildSelectField()`

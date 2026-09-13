@@ -33,7 +33,7 @@ The Store API takes the same path via `ValidationUtils::format_state()`, so this
 
 ## Why the damage is not just shouting
 
-The stored value is still readable, so the defect hides. The real harm is on the NEXT render: `woocommerce_form_field()` decides the selected option with `selected( $value, $ckey )`, and the stored `МОСКОВСКАЯ ОБЛАСТЬ` no longer equals the registered key `Московская область` — so the select falls back to «Select an option…» and the customer's region silently disappears. Same family as the destructive-cascade class that [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] documents: the value is not rejected, it is quietly lost.
+The stored value is still readable, so the defect hides. The real harm is on the NEXT render: `woocommerce_form_field()` decides the selected option with `selected( $value, $ckey )`, and the stored `МОСКОВСКАЯ ОБЛАСТЬ` no longer equals the registered key `Московская область` — so the select falls back to «Select an option…» and the customer's region silently disappears. Same family as the destructive-cascade class that [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) documents: the value is not rejected, it is quietly lost.
 
 `get_formatted_address()` degrades the same way — `class-wc-countries.php:681` looks up `$this->states[$country][$state]` and falls back to the raw stored value, so a mismatched key prints the mangled form in orders and emails.
 
@@ -46,6 +46,6 @@ Whatever goes in the state VALUE persists into order data permanently, and order
 
 ## Related
 
-- [[array-cast-of-get-states-false-is-not-empty]] — the sibling trap in the same feature
-- [[checkout-field-takeover-woocommerce-states]]
-- [[an-empty-domain-key-is-not-a-key]]
+- [array-cast-of-get-states-false-is-not-empty](array-cast-of-get-states-false-is-not-empty.md) — the sibling trap in the same feature
+- [checkout-field-takeover-woocommerce-states](checkout-field-takeover-woocommerce-states.md)
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md)

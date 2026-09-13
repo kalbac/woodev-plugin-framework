@@ -44,6 +44,6 @@ decisions over it are D1/D2 in the location-provider spec.
 
 ## Related
 
-- [[../specs/2026-08-12-location-provider-design.md]] — D1 (own contract), D2 (per-country arbitration)
-- [[checkout-field-takeover-woocommerce-states.md]] — the region field's existing takeover seam
-- [[wc-does-not-save-the-address-until-every-required-text-field-is-filled.md]] — why selection is persisted by our own AJAX, not WC's serialization
+- [../specs/2026-08-12-location-provider-design.md](../specs/2026-08-12-location-provider-design.md) — D1 (own contract), D2 (per-country arbitration)
+- [checkout-field-takeover-woocommerce-states.md](checkout-field-takeover-woocommerce-states.md) — the region field's existing takeover seam
+- [wc-does-not-save-the-address-until-every-required-text-field-is-filled.md](wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) — why selection is persisted by our own AJAX, not WC's serialization

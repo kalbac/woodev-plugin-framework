@@ -43,6 +43,6 @@ server-side: `update_value()` returns early for a defined constant.)
 
 ## Related
 
-- [[mask-constant-backed-field-even-when-constant-undefined]] — the constant guard IS server-side.
+- [mask-constant-backed-field-even-when-constant-undefined](mask-constant-backed-field-even-when-constant-undefined.md) — the constant guard IS server-side.
 - SP-2-DEF (s41, PR #100): the wipe/clear affordance built on this fact.
 - SP-2 (s38, PR #94): masking + connection-test stored-secret merge.

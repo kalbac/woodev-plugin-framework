@@ -73,7 +73,7 @@ a real browser against a real map and watching every marker disappear.
 ## The wider lesson
 
 This is the third defect this session in the same family as
-[[ymaps-objectmanager-properties-are-plain]] and [[ymaps-control-options-must-be-nested]]: ymaps
+[ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) and [ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md): ymaps
 callback shapes are easy to get subtly wrong, and a plausible-looking test double reproduces the
 wrong shape just as easily as the right one. When a ymaps callback's arguments matter, check the
 library's actual behaviour — a live instance in a browser console, not memory or a doc skim — before
@@ -81,7 +81,7 @@ trusting a test written against an assumption.
 
 ## Related
 
-- [[ymaps-objectmanager-properties-are-plain]]
-- [[ymaps-control-options-must-be-nested]]
-- [[ymaps-html-icon-layout-needs-iconshape]]
+- [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md)
+- [ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md)
+- [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md)
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-8, D-10

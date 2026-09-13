@@ -1,4 +1,5 @@
 # [testing/integration] wp-env on Windows: Git-Bash mangles container paths (MSYS conversion)
+> **Platform:** Windows only — Git Bash/MSYS rewrites POSIX container paths before Docker receives them.
 
 > Namespace: `testing/*` — added session 9 (2026-06-11), extended s123 (`docker exec` + the
 > host-side `composer test:integration` dead end)
@@ -51,7 +52,7 @@ That reads like a broken vendor install. It is the same conversion; prefix the c
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -e TEST_SUITE=integration \
-  de59f74e6d3d19d18a7f7b6608fda7e7-tests-cli-1 \
+  "$(scripts/machine/rig-container.sh tests-cli)" \
   php /var/www/html/woodev-framework/vendor/bin/phpunit \
     --configuration /var/www/html/woodev-framework/phpunit.xml \
     --testsuite=Integration --no-coverage
@@ -73,4 +74,4 @@ coordinator's job and must not run from a worktree; this is the command it means
 
 ## Related
 
-- [[wpenv-resolver-fixture-mapping]] — the other wp-env setup trap.
+- [wpenv-resolver-fixture-mapping](wpenv-resolver-fixture-mapping.md) — the other wp-env setup trap.

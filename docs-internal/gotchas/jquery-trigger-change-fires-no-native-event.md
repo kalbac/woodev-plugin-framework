@@ -80,13 +80,13 @@ library's dispatch path.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the sibling failure mode: there the
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the sibling failure mode: there the
   wiring was missing, here it was present but deaf. Both are invisible to unit tests and both
   showed up on the first rig pass.
-- [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] — the other half of #271's
+- [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) — the other half of #271's
   session: WooCommerce's programmatic address-field churn arrives through this same jQuery path,
   which is why a destructive reaction must key off a transition rather than an event.
-- [[an-invented-fixture-tests-your-assumptions-not-the-carrier]] — same lesson at the data layer:
+- [an-invented-fixture-tests-your-assumptions-not-the-carrier](an-invented-fixture-tests-your-assumptions-not-the-carrier.md) — same lesson at the data layer:
   a fixture that differs from production in one dimension hides exactly the bug living there.
 - `pickup-mount.js`'s own file docblock records the mirror-image asymmetry for
   `updated_checkout` (a jQuery *custom* event, unobservable natively at all).

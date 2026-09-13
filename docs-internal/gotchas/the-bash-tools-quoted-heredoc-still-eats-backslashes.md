@@ -1,5 +1,6 @@
 # Gotcha: [tooling/windows] — The Bash tool's *quoted* heredoc still eats backslashes
 > Tags: tooling, windows, measurement | Session: s123
+> **Platform:** Windows only — the measured Bash-tool transport rewrites backslashes on this host.
 
 ## What happens
 

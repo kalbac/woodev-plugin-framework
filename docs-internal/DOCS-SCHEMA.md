@@ -67,7 +67,8 @@ All expected files in `docs-internal/`:
 | `CURRENT-STATE.md` | Phase status, bugs, next actions | Agent at session end |
 | `SESSION-LOG.md` | Index of sessions — one line each | Agent at session end |
 | `sessions/sNN.md` | The session's own write-up | Agent at session end |
-| `GOTCHAS.md` | Topic-indexed gotcha index | Agent (compilation step) |
+| `GOTCHAS.md` | Topic map over `gotcha-index/` | Agent (compilation step) |
+| `gotcha-index/{topic}.md` | One line per gotcha in a topic | Agent (compilation step) |
 | `next-session-prompt.md` | Per-session handoff — REPLACED at every session end | Agent writes |
 | `FUTURE-BACKLOG.md` | Deferred features and future work | FROZEN 2026-07-23 — do not append; backlog lives on GitHub board №6 (AGENTS.md → Backlog rule) |
 | `adr/README.md` | ADR index | Agent when creating new ADR |
@@ -95,7 +96,7 @@ cite it as one.**
 | `CLAUDE.md` | 12 KB |
 | `docs-internal/next-session-prompt.md` | 16 KB |
 | `docs-internal/CURRENT-STATE.md` | 28 KB |
-| `docs-internal/GOTCHAS.md` | 96 KB |
+| `docs-internal/GOTCHAS.md` | 16 KB (96 KB until the s135 split) |
 | **Sum — the binding limit** | **176 KB** |
 
 **The sanity check that sized it, and what is assumption in it.** A 200k-token context, of which
@@ -143,30 +144,44 @@ The last row is the point: a cap with 5.8 KB of slack on a file that cannot accu
 move. Raising the other four is the same defect #554 names — a red gate at session save, in the
 worst possible moment — caught at file scope instead of at the sum.
 
-**If it binds again, do not raise it a third time.** The structural fix is the one #554 also
-proposed: split `GOTCHAS.md` into per-tag indexes (`gotchas/INDEX-{tag}.md`), read only the tag map
-at session start, and open a tag under the task — which is what the protocol already tells you to do.
+**It bound again in s135 — 175.3 of 176 KB, `GOTCHAS.md` 95.4 of 96 — and the structural fix #554
+proposed was taken instead of a third raise.** `GOTCHAS.md` is now a topic map (~3.5 KB, capped at
+16 KB), and the one-line entries live in `gotcha-index/{topic}.md`, opened under the task. The
+session-start set dropped to ~86 KB. The per-file table above records the caps as they were at s96;
+the `GOTCHAS.md` cap is 16 KB since s135. The 176 KB sum is the operator's and did not move.
 
 ---
 
-## GOTCHAS.md Format
+## GOTCHAS.md Format — the topic map and its indexes
 
-One line per gotcha:
+**`GOTCHAS.md`** is a map: a header of at most 15 lines stating the gotcha count (gate-checked
+against the files), then `## Topics` — one table row per topic, linking `gotcha-index/{topic}.md`, with
+its entry count. It holds no entries itself, only the `## Archive` of resolved ones.
+
+**`gotcha-index/{topic}.md`** holds one line per gotcha:
 
 ```
-- [topic/slug] one-sentence summary → [gotchas/slug.md](gotchas/slug.md) (s{N})
+- [topic/slug] one-sentence summary → [slug](../gotchas/slug.md) (s{N})
 ```
 
-Rules:
-- `[topic/slug]` tag is **required** — used for topic scanning
-- **Max 1 line** per entry — all detail goes in the individual file
-- Relative link to the detail file is required
+Gate-checked:
+- Every gotcha file is listed in exactly ONE topic index, and every topic index is linked from the map
+- The map row's `Entries` number equals the entries in that topic file
+- An entry starts with a `[topic/slug]` tag, is **one line** (no indented continuation), ≤ 400 characters, and links its detail file
+
+Manual (measured s135 and NOT gated, because the corpus does not hold them — 23 entries carry no session
+suffix, and 5 carry a tag from a neighbouring namespace, filed where a reader looks for them):
 - Session number in parentheses at the end
+- The tag's namespace matches the topic file
 - If superseded: `~~strikethrough~~` old, add new below
+
+A NEW topic gets its own `gotcha-index/{topic}.md` AND a row in the map. The file is named after the
+namespace (`[shipping/pickup]` → `shipping-pickup.md`, `[tooling/*]` → `tooling.md`).
 
 ### Valid Topic Namespaces
 
-Topic namespaces are **defined by the section headers of `GOTCHAS.md`** — the index is the source of truth; do not maintain a second list here. (`[js/*]` was added in s59.)
+Topic namespaces are **defined by the map** — `GOTCHAS.md` → `## Topics` is the source of truth; do
+not maintain a second list here.
 
 ---
 
@@ -189,11 +204,27 @@ Topic namespaces are **defined by the section headers of `GOTCHAS.md`** — the 
 - [link] — why related
 ```
 
-Rules:
-- Filename: kebab-case matching the `[topic/slug]` tag
-- Must have a `## Related` section with at least one cross-link
-- Code examples: show ❌ wrong and ✅ correct side by side
-- Session tag: when it was first discovered
+The block above is the **recommended** shape for a new file. What is REQUIRED is narrower:
+
+- Filename: kebab-case; an index line in `gotcha-index/{topic}.md` links it (gate-checked).
+- An H1 that names the trap.
+- A `## Related` section with at least one link — a relative markdown link (text in brackets, path in parentheses), never a
+  `[[wikilink]]` or a bare `[slug]`: the link gate cannot resolve either, so a dead one passes silently.
+- Where a fix is code, show ❌ wrong and ✅ correct side by side.
+
+⚠ **Measured s135, and why the header is not mandatory.** The `# Gotcha: [topic/slug]` H1 plus the
+`> Tags: … | Session: sN` line were written here as a rule, and the corpus ignored it: **about 40 of
+321** files carry that exact shape; most of the rest use a `**Namespace:** … / **Discovered:** sN`
+header, or none. The same thing happened to the wiki format (s119), and the same reasoning applies —
+a rule the corpus ignores eight times in ten misleads the one author who obeys it into believing
+theirs is the conforming file. Nothing reads the header mechanically, so rewriting ~280 files to
+match it buys no reader anything. Record the session somewhere in the file; either established header
+shape is fine.
+
+**Platform.** When a trap exists only on one OS, or its numbers were measured on one machine, say so
+in one line under the H1 — `> **Platform:** Windows only — …` / `> **Measured on:** …`. The project
+is worked on from a Windows desktop AND a macOS laptop (s135), and an unqualified Windows trap reads
+as a universal one.
 
 ---
 
@@ -226,16 +257,24 @@ Rules:
 - No "attempted", "tried to" language — only actual outcomes
 - Entries from before session numbering live in
   `sessions/platform-v2-daily-2026-05-28--06-08.md`; s6 and s20 never existed (the numbering
-  skipped them) — do not go looking for them
+  skipped them), and **s131 happened but left no file and no row** — a short Serena repair whose only
+  record is commit `ddb9756` and a paragraph in `sessions/s132.md`. Do not go looking for any of them
 
 ---
 
 ## CURRENT-STATE.md Format
 
-Fixed sections, always in this order:
-1. `## Phase Status` — table: Phase / Status / Notes
-2. `## Known Bugs (open)` — icons: `[⚠️]` open, `[✅]` fixed (remove after 2 sessions)
-3. `## Next Actions (priority order)` — numbered list, top = highest priority
+The sections as the file actually carries them (re-described s135 — this block used to prescribe a
+numbered, priority-ordered `## Next Actions` list the file dropped by operator decision #644, because
+**priority lives on board №6 in the «Приоритет» field**, not in prose):
+
+1. A lead block (`**As of DATE (sNN).**` + the few standing warnings that change between sessions)
+2. `## Contracts, traps and tooling — pointers only`
+3. `## Program status (high level)` — table: Stage / Status / Notes
+4. `## Phase Status (subsystems)` — a pointer to `wiki/architecture.md`
+5. `## Known Bugs / Open debt` — icons: `[⚠️]` open, `[✅]` fixed (remove after 2 sessions)
+6. `## Next Actions` — standing direction only; never a retyped card list
+7. `## Local rig`, `## Infrastructure Reference` — the values that change between sessions
 
 **Hard rule:** this file describes the CURRENT state and nothing else. No `Prior:` chain, no
 "lessons from session N" section, no history. A lesson is a gotcha (`gotchas/{slug}.md`) when it
@@ -383,7 +422,7 @@ Not required, decided s119 after measuring the corpus against the older wording:
 Run at session end, **after** writing the session file, **before** committing:
 
 1. **Scan the new `sessions/sNN.md`** for unrecorded gotchas
-2. **For each unrecorded gotcha** — classify → dedup against `GOTCHAS.md` → create `gotchas/{slug}.md` → add index line
+2. **For each unrecorded gotcha** — classify → dedup against `gotcha-index/` → create `gotchas/{slug}.md` → add index line to its topic file
 3. **Wiki update** — if a pattern was clarified, update the relevant `wiki/{topic}.md`
 4. **Keep the gotcha count in the `GOTCHAS.md` header accurate** — the header is 8 lines and holds no changelog; what changed when belongs in `sessions/sNN.md`
 
@@ -393,7 +432,7 @@ Run at session end, **after** writing the session file, **before** committing:
 
 `CLAUDE.md`, `QWEN.md`, `AGENTS.md`, and `AGENT-RULES.md` must NOT duplicate information that lives in `docs-internal/` files:
 - **Sprint status** → only in `CURRENT-STATE.md`. Gateway files point to it.
-- **Gotcha details** → only in `gotchas/*.md`. Gateway files point to `GOTCHAS.md`.
+- **Gotcha details** → only in `gotchas/*.md`. Gateway files point to the `GOTCHAS.md` map.
 - **Architecture decisions** → only in `adr/*.md`.
 
 When editing any gateway file, ask: "does another gateway file need the same update?" If yes — the fact should live in `docs-internal/`.
@@ -423,7 +462,7 @@ name a document that is not written yet, say so in prose — do not link it.
 
 Before every commit touching docs:
 
-- [ ] Every new `GOTCHAS.md` entry has `[topic/slug]` prefix, 1-line summary, and link to detail file
+- [ ] Every new `gotcha-index/{topic}.md` entry has `[topic/slug]` prefix, 1-line summary, and link to detail file
 - [ ] Every new gotcha has a corresponding `gotchas/{slug}.md` detail file
 - [ ] Every gotcha detail file has a `## Related` section
 - [ ] Agent-facing PROSE in new/edited `docs-internal/*.md` is English; quotes of the operator, domain data and source strings keep their own language (see Language Rule)

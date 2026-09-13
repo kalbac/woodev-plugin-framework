@@ -35,6 +35,6 @@ MSYS_NO_PATHCONV=1 npx wp-env run tests-cli …
 
 ## Related
 
-- [[wpenv-windows-gitbash-path-mangling]] — why that local run needs `MSYS_NO_PATHCONV=1`.
-- [[wpenv-resolver-fixture-mapping]] — the other wp-env setup trap.
-- [[phpunit-defects-cache-hides-cross-test-session-leaks]] — the other way a local integration run disagrees with CI.
+- [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — why that local run needs `MSYS_NO_PATHCONV=1`.
+- [wpenv-resolver-fixture-mapping](wpenv-resolver-fixture-mapping.md) — the other wp-env setup trap.
+- [phpunit-defects-cache-hides-cross-test-session-leaks](phpunit-defects-cache-hides-cross-test-session-leaks.md) — the other way a local integration run disagrees with CI.

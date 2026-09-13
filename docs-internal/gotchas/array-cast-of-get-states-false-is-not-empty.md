@@ -49,5 +49,5 @@ The #294 region arbitration decides, per country, whether the location layer or 
 
 ## Related
 
-- [[checkout-field-takeover-woocommerce-states]] — the rule that a field mapping onto a WooCommerce concept is driven through native WC filters
-- [[wc-uppercases-the-posted-state-and-flips-the-map]] — the sibling trap in the same feature
+- [checkout-field-takeover-woocommerce-states](checkout-field-takeover-woocommerce-states.md) — the rule that a field mapping onto a WooCommerce concept is driven through native WC filters
+- [wc-uppercases-the-posted-state-and-flips-the-map](wc-uppercases-the-posted-state-and-flips-the-map.md) — the sibling trap in the same feature

@@ -48,7 +48,7 @@ That measurement was defeated by editing the decoy option. Two further things ma
 ## The measurement that actually works (s95, rig `:8973`, provider `test-cdek`)
 
 ```bash
-C=de59f74e6d3d19d18a7f7b6608fda7e7-cli-1
+C="$(scripts/machine/rig-container.sh cli)"
 # install a bad key where the fixture really reads it:
 docker exec $C wp option patch update woocommerce_woodev_test_shipping_method_settings cdek_client_id "BOGUS"
 docker exec $C wp transient delete woodev_test_cdek_token          # else a cached token hides it

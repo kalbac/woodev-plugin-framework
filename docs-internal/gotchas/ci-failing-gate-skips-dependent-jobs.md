@@ -31,5 +31,5 @@ without `setAccessible` on 7.4/8.0).
 
 ## Related
 
-- [[composer-audit-no-prod-deps]] — the specific gate-step failure here
-- [[reflection-setaccessible-version-guard]], [[brain-monkey-function-pollution]] — the masked Unit failures it revealed
+- [composer-audit-no-prod-deps](composer-audit-no-prod-deps.md) — the specific gate-step failure here
+- [reflection-setaccessible-version-guard](reflection-setaccessible-version-guard.md), [brain-monkey-function-pollution](brain-monkey-function-pollution.md) — the masked Unit failures it revealed

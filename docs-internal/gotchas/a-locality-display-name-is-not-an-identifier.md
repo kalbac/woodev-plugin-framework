@@ -30,10 +30,10 @@ The same reasoning applies to a merchant switching the store language, and to a 
 
 A display name is a VIEW of a locality, produced for a human in a particular language. Anything that has to MATCH — a carrier city dictionary, a session map key, a cache key, a comparison against a stored choice — uses the key. Anything shown to a customer uses the name.
 
-This is the same split the framework already enforces one layer down: [[an-empty-domain-key-is-not-a-key]] refuses a non-answer as a key, and [[derive-a-view-field-at-the-boundary-not-at-display-sites]] separates a view field from the value it derives from.
+This is the same split the framework already enforces one layer down: [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) refuses a non-answer as a key, and [derive-a-view-field-at-the-boundary-not-at-display-sites](derive-a-view-field-at-the-boundary-not-at-display-sites.md) separates a view field from the value it derives from.
 
 ## Related
 
-- [[an-empty-domain-key-is-not-a-key]]
-- [[derive-a-view-field-at-the-boundary-not-at-display-sites]]
-- [[built-on-both-sides-with-no-caller-in-the-middle]]
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md)
+- [derive-a-view-field-at-the-boundary-not-at-display-sites](derive-a-view-field-at-the-boundary-not-at-display-sites.md)
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md)

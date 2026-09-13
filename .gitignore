@@ -12,9 +12,8 @@ opencode.json
 # Internal docs — tracked in git (like woodev_theme docs/)
 # docs-internal/ — AI agent operational docs (CURRENT-STATE, SESSION-LOG, GOTCHAS, ADR, wiki)
 
-# The handoff itself is TRACKED again: the repo went PRIVATE on 25.08.2026, so the skill's
-# public-repo rule (woodev-docs-system → "The handoff" → Two hard conditions) no longer applies
-# here. Only the gate's generated snapshot stays out of git.
+# The handoff itself is TRACKED. The repo is PUBLIC (since 27.08.2026) — nothing personal or
+# secret may go into it. Only the gate's generated snapshot stays out of git.
 /docs-internal/next-session-prompt.md.prev
 
 # AI tools — do not ignore (reference files required)
@@ -37,8 +36,8 @@ opencode.json
 # preference, s83) and ignored here so git, and Serena via
 # ignore_all_files_in_gitignore, both skip them. Every quality gate is already
 # path-scoped (phpcs -> ./woodev, phpstan -> woodev, phpunit -> ./tests), so
-# nothing else needs excluding — but keep running jest with
-# --roots "<rootDir>/tests/js", never bare npx jest.
+# nothing else needs excluding. jest-unit.config.js scopes roots to tests/js, so a bare
+# `npm run test:js` is correct — never `npx jest`.
 /.orca/
 
 # Autodev loop — ephemeral scratch only (blackboard + queue + escalations stay tracked)
@@ -58,3 +57,7 @@ artifacts/
 
 # Playwright MCP probe output (screenshots, snapshots, console logs) — never committed
 .playwright-mcp/
+
+# Two-machine transfer bundle (scripts/machine/rig-state-export.sh). Holds the rig DB, the rig's
+# wp-config secrets and personal agent instructions — the repo is PUBLIC, this must never be committed.
+/.machine-transfer/

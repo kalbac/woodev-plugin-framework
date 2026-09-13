@@ -1,5 +1,8 @@
 # gotcha: every fresh Orca worktree starts dirty with seven CRLF-only files — never `git add -A` there
 
+> **RESOLVED s135.** The 14 CRLF-stored blobs behind this were renormalized to LF, so a worktree made from
+> a commit after that is born clean. Kept as history — and `git add -A` in a worktree is still a bad habit.
+
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
 
@@ -26,6 +29,11 @@ Git touches it
 ```
 
 The primary checkout is clean. Only worktrees show it.
+
+Today `git ls-files --eol` reports 14 CRLF-stored blobs. The seven paths above are the ones with
+the explicit `text eol=lf` attribute and therefore the ones that dirty a fresh checkout; the other
+seven have `text=auto` and do not. This is a blob-plus-`.gitattributes` mismatch, not an OS-specific
+failure.
 
 ## Why it matters
 
@@ -69,4 +77,5 @@ that work. `--force` is correct for THIS list and dangerous for any other.
 
 - [two-agents-one-file-is-the-orchestrator-s-bug](two-agents-one-file-is-the-orchestrator-s-bug.md) — the loss that made tree-mutating git commands a standing worry
 - [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) — the other line-ending trap in this repo, from the other direction
+- [git-add-all-sweeps-crlf-normalisation-in-a-fresh-worktree](git-add-all-sweeps-crlf-normalisation-in-a-fresh-worktree.md) — the distinct staging consequence of this pre-existing dirt
 - `../wiki/orchestrating-agents-with-orca.md` — the brief template these rules belong in

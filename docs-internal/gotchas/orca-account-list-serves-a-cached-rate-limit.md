@@ -58,6 +58,6 @@ tokens across its pair.
 
 ## Related
 
-- [[the-skipped-count-is-dominated-by-whether-sodium-is-enabled]] — the same shape: a measurement
+- [the-skipped-count-is-dominated-by-whether-sodium-is-enabled](the-skipped-count-is-dominated-by-whether-sodium-is-enabled.md) — the same shape: a measurement
   whose default reading answers a different question than the one asked.
 - `CLAUDE.md` → Orca — carries the measured luna/astra prices this gotcha's method produced.

@@ -1,5 +1,6 @@
 # Gotcha: [testing/measurement] — The SKIPPED count is dominated by ext-sodium, not by what the tree contains
 > Tags: testing, measurement, baselines, sodium | Session: s102
+> **Measured on:** the Windows desktop (PHP 8.5.1 with sodium disabled) — re-measure on other hardware.
 
 ## What happens
 

@@ -53,7 +53,7 @@ Three consequences worth carrying forward, all of them contract-level:
    plugin's `Selection_Scope` (`locality_for_point()`, `current_locality()`, `type_for_method()`),
    because three reference plugins use three incompatible locality dictionaries (ФИАС, `city_id`,
    `geo_id`). The framework never compares or normalizes those strings — see
-   [[an-empty-domain-key-is-not-a-key]] for the one thing it does refuse.
+   [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) for the one thing it does refuse.
 2. **Keying by locality is why a real carrier keeps its point on return.** Почта РФ's single slot
    with a ФИАС guard loses the point when the customer leaves a city and comes back; the map does
    not. The map is bounded by `DEFAULT_MAX_ENTRIES` with sequence-ordered eviction.
@@ -72,10 +72,10 @@ installed site at plugin-migration time.
 - Contract source of truth: `docs-internal/migration/yandex-data-preservation-checklist.md`
   ("Chosen-point session key" row)
 - `.autodev/INVARIANTS.md` — `order_session_meta` zone
-- [[an-empty-domain-key-is-not-a-key]] — the framework's one rule about these plugin-supplied
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) — the framework's one rule about these plugin-supplied
   keys: `''` is the seam failing to answer, not a key, and must be refused on read AND write.
-- [[guest-session-write-needs-the-cart-cookie]] — why this store needs no user-meta twin the way
+- [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md) — why this store needs no user-meta twin the way
   `WC_Edostavka_Customer_Location_Data` does: the guest-loses-the-write state is unreachable on
   the checkout.
-- [[custom-checkout-field-is-empty-on-reload-by-construction]] — the restore side of the same
+- [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md) — the restore side of the same
   mechanism (`woocommerce_checkout_get_value` → `Pickup_Handler::restore_selection()`).

@@ -5,8 +5,8 @@
 
 ## What happens
 
-`orca.yaml` shares `node_modules` into every worktree, and on Windows Orca materialises that share
-as a **directory symlink** back to the primary checkout:
+`orca.yaml` shares `node_modules` into every worktree. Orca clone-copies shared directories on
+macOS, but materialises this share as a **directory symlink** elsewhere, back to the primary checkout:
 
 ```text
 .orca/worktrees/woodev_framework/<name>/node_modules -> D:/Projects/woodev_framework/node_modules
@@ -22,6 +22,7 @@ git worktree remove --force .orca/worktrees/woodev_framework/fix-450-447-select2
 ```
 
 Both commands report success. Nothing warns. The damage is in a directory neither command names.
+The trap requires that symlink, so it does not occur on macOS where Orca clone-copies the directory.
 
 **The failure surfaces much later and points at the wrong thing.** The next worker to start reports
 that it cannot run the JS gate, and everything about the report says "broken worktree": its own

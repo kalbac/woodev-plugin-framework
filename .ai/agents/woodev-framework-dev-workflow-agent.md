@@ -22,7 +22,7 @@ npx wp-env destroy        # remove containers and volumes
 npx wp-env run tests-cli wp test    # run WP-CLI inside test container
 ```
 
-WordPress is available at `http://localhost:8888` (admin: `admin`/`password`).
+WordPress is available at `http://localhost:8973` (port from the gitignored `.wp-env.override.json`) (admin: `admin`/`password`).
 
 ### Prerequisites
 

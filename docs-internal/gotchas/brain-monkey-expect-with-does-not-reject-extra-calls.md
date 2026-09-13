@@ -69,7 +69,7 @@ same lesson from the other direction.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — s72 addendum: the caller exists and nothing
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — s72 addendum: the caller exists and nothing
   pins it; the suite passes with the one fix line reverted
-- [[mutation-sweep-branch-only-false-confidence]] — the other "a green run proves less than it looks"
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — the other "a green run proves less than it looks"
 - `tests/unit/Shipping/Checkout/CheckoutHandlerValidateTest.php`

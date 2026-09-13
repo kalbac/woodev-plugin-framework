@@ -53,6 +53,6 @@ about the string; the string is what should change.
 
 ## Related
 
-- [[settings-sensitive-secret-empty-skip-is-client-side]] — the other half of credential handling:
+- [settings-sensitive-secret-empty-skip-is-client-side](settings-sensitive-secret-empty-skip-is-client-side.md) — the other half of credential handling:
   how a sensitive setting behaves when left blank.
 - `docs-internal/GOTCHAS.md` → `[testing/*]`, `[build/*]`.

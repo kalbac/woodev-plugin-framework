@@ -4,28 +4,15 @@
 
 ---
 
-## Session Start Checklist
+## Session start and end
 
-> Canonical list: `AGENTS.md` → "Session Start". This checklist mirrors it — do not let them diverge.
+**The checklists live in `AGENTS.md` → "Session Start" / "Session End" and nowhere else.** This file
+used to carry mirrored copies "that must not diverge"; the s135 docs audit found both had diverged
+(the end list had lost two of the seven steps, the start list had gained a step the canonical one
+never had). A mirror is a second copy, and a second copy drifts — so there is none.
 
-1. Read `next-session-prompt.md` — per-session handoff: what the last session left, plus known traps
-2. Read `CURRENT-STATE.md` — phase status, bugs, next actions
-3. Read `GOTCHAS.md` — scan `[topic/*]` tags relevant to current task
-4. Area-specific docs as needed — relevant `adr/` and `wiki/` files (navigation hub: `DOCS-INDEX.md`)
-5. Load the relevant project skill from `.ai/skills/` when the task matches one: `woodev-framework-backend-dev`, `woodev-framework-code-review`, `woodev-framework-dev-cycle`, `woodev-framework-git`, `woodev-framework-markdown`
-
----
-
-## Session End Checklist
-
-> Canonical list: `AGENTS.md` → "Session End". This checklist mirrors it — do not let them diverge.
-
-1. Update `CURRENT-STATE.md` — phase status, bugs, next actions
-2. Write `sessions/sNN.md` — the session write-up, PHPStan result + commit hash; add one index line to `SESSION-LOG.md`
-3. Compilation step — scan the new session file for gotchas → `gotchas/{slug}.md` + one index line in `GOTCHAS.md`
-4. Audit the board — move the session's cards (`В работе` → `Готово`), file cards for anything unformalized (see `AGENTS.md` → "Backlog rule")
-5. Replace `next-session-prompt.md` with the handoff for the next session
-6. See `DOCS-SCHEMA.md` for full compilation protocol
+`.ai/skills/` holds task guides for agents that load skills from that directory. Claude Code does
+not: `.claude/skills` is not a working link to it.
 
 ---
 
@@ -109,7 +96,7 @@ starting a wave; any two that overlap get separate worktrees or a `--deps` chain
 know what another worker is editing — dispatching two into one tree and hoping is how s82 lost
 finished work (gotcha `two-agents-one-file-is-the-orchestrator-s-bug`).
 
-Jest caveat: run `npm run test:js`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Orca worktrees under `.orca/worktrees/` live inside the repo and are a full checkout, `tests/js/` included; `jest-unit.config.js` scopes `roots` to `<rootDir>/tests/js` so a bare run no longer counts them, but `npx jest` still loses the wp-scripts jsdom environment either way. And a fresh Orca worktree has **no `node_modules/`** until the worker runs `npm ci` — the repo has no Orca setup hook.
+Jest caveat: run `npm run test:js`, never `npx jest` (gotchas `jest-scans-agent-worktrees-inside-the-repo`, `npx-jest-bypasses-wp-scripts-jsdom`). Orca worktrees under `.orca/worktrees/` live inside the repo and are a full checkout, `tests/js/` included; `jest-unit.config.js` scopes `roots` to `<rootDir>/tests/js` so a bare run no longer counts them, but `npx jest` still loses the wp-scripts jsdom environment either way. A fresh Orca worktree needs **no install step**: `orca.yaml` shares `node_modules` and `.worktreeinclude` copies `vendor` (`CLAUDE.md` → Orca, fact 1).
 
 ### Conventional Commits (REQUIRED)
 All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
@@ -143,22 +130,30 @@ No standalone functions outside bootstrap. Everything is a class method.
 - New code: `Woodev\Framework\*` namespace (PSR-4)
 
 ### Rule 2 — Subsystem Pattern
-All framework subsystems are initialized in `Woodev_Plugin::__construct()` via `init_*()` methods. Plugins override these to provide their own implementations.
+The base subsystems are initialized in `Woodev_Plugin::__construct()` via `init_*()` methods; a platform base adds its own in its constructor (`Woocommerce_Plugin` → Blocks). Plugins override these to provide their own implementations.
 
 | Subsystem | Init Method |
 |-----------|-------------|
 | Dependencies | `init_dependencies()` |
 | Admin Message Handler | `init_admin_message_handler()` |
 | Admin Notice Handler | `init_admin_notice_handler()` |
-| License | `init_license()` |
-| Updater | `init_updater()` |
+| Settings page | `init_settings_page()` |
 | Hook Deprecator | `init_hook_deprecator()` |
 | Lifecycle | `init_lifecycle_handler()` |
+| Translations | `init_translation_handler()` |
+| Cron | `init_cron_handler()` |
 | REST API | `init_rest_api_handler()` |
-| Blocks Handler | `init_blocks_handler()` |
-| Setup Wizard | `init_setup_wizard()` |
-| Script Handler | `init_script_handler()` |
-| Admin Settings | `init_admin()` |
+| Blocks Handler | `init_blocks_handler()` — called by `Woocommerce_Plugin`'s constructor, not the base's |
+| Setup Wizard | `init_setup_wizard_handler()` |
+| Competitor detection | `init_competitor_handler()` |
+| License | `init_license_handler()` (the updater is built separately, `construct_updater()`) |
+
+Plus two hook callbacks a plugin overrides, which the constructor does NOT call:
+`init_plugin()` on `plugins_loaded` (15) and `init_admin()` on `admin_init` (0).
+
+⚠ Re-derived from `woodev/class-plugin.php` in s135: the previous table named `init_license()`,
+`init_updater()`, `init_setup_wizard()` and `init_script_handler()`, none of which exist. When this
+table and the file disagree, the file wins — list its `init_*` methods before trusting a row.
 
 ### Rule 3 — Bootstrap, plugin registration & multi-version (post-s27)
 `Woodev_Plugin_Bootstrap` (singleton) is the entry point. Never instantiate it directly — use the singleton accessor. `register_plugin()` is a **v1 tombstone only** (quarantines legacy callers; see `bootstrap.php`). v2 plugins register via **`Woodev_Loader::register( __FILE__, [...] )`** (or `register_loader_definition()` directly).
@@ -442,7 +437,7 @@ that file is what forced the split, and it is working as intended.
 | Layer | Tool | When |
 |-------|------|------|
 | Unit tests | Brain Monkey + Mockery | PHP logic without WP |
-| JS tests | jest — `npm run test:js` (800 tests; `jest-unit.config.js` scopes `roots`). **Never `npx jest`** — two recorded gotchas (`npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`) | React admin UI / JS logic |
+| JS tests | jest — `npm run test:js` (`jest-unit.config.js` scopes `roots`; the current count is a `CURRENT-STATE.md` baseline, not a number to copy here). **Never `npx jest`** — two recorded gotchas (`npx-jest-bypasses-wp-scripts-jsdom`, `jest-scans-agent-worktrees-inside-the-repo`) | React admin UI / JS logic |
 | Integration tests | `wp-env` + `WP_TESTS_DIR` | Full WP stack testing |
 | Static analysis | PHPStan (level 3, PHP 7.4+) | Every commit |
 | Code style | PHPCS (WordPress + PHPCompatibility) | Every commit |

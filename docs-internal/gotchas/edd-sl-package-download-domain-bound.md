@@ -34,6 +34,6 @@ Installs do not put the zip "in hand", so the connector bypasses EDD's per-file 
 
 ## Related
 
-- [[license-need-vs-required]] — server is the licensing authority, not the client
-- [[edd-sl-get-version-serialized-sections]] — the updater (`get_version`) payload shape
+- [license-need-vs-required](license-need-vs-required.md) — server is the licensing authority, not the client
+- [edd-sl-get-version-serialized-sections](edd-sl-get-version-serialized-sections.md) — the updater (`get_version`) payload shape
 - Spec: `docs-internal/archive/specs/2026-06-20-account-install-from-connector-design.md`

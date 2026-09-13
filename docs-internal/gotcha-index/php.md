@@ -1,0 +1,27 @@
+# Gotcha index — [php/*] PHP / WordPress patterns
+
+> One line per gotcha in this topic; the detail is in the linked file. Map of every topic:
+> [../GOTCHAS.md](../GOTCHAS.md). Format and the write protocol: `DOCS-SCHEMA.md` → "GOTCHAS.md Format".
+
+- [php/meta-query] **A `NOT IN` meta clause silently EXCLUDES every row that has no such meta at all - only `NOT EXISTS` makes WP_Meta_Query LEFT JOIN. The dropped rows are usually the majority case, and the query still succeeds.** → [a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all](../gotchas/a-not-in-meta-query-silently-drops-rows-that-have-no-meta-at-all.md) (s126)
+- [php/money] **A remaining-capacity bound computed as a raw float subtraction refuses the FINAL CENT: `10.00 - 9.99` is `0.00999999999999978`, so `0.01` compares as above it. Round numbers hide it — 100/60/40 is exact.** → [a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent](../gotchas/a-remaining-capacity-computed-as-a-raw-float-refuses-the-final-cent.md) (s120)
+- [php/inheritance] **A base constructor ASSIGNING a property its subclasses also set discards their answer silently — hidden because all four fixtures declared exactly what the overwrite restored. Neither documented way to declare a feature worked.** → [a-base-constructor-that-assigns-what-the-subclass-just-set](../gotchas/a-base-constructor-that-assigns-what-the-subclass-just-set.md) (s123, s124)
+- [php/inheritance] **Repointing a class at a stricter base fatals at DECLARATION — **11** times here, not the 7 a manual pass counted — while a mocked suite stays green. An OMITTED return type is a fatal; a `private` base method is not. Run `npm run probe:signature`.** → [a-stricter-base-class-fatals-on-signatures](../gotchas/a-stricter-base-class-fatals-on-signatures.md) (s115, corrected s117)
+- [php/namespaces] **Moving a class into a sub-namespace rebinds every UNQUALIFIED sibling reference in that file at once — no parse error, no PHPCS complaint, and seven targeted test files still green; the full suite dies at load.** → [moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings](../gotchas/moving-a-class-into-a-sub-namespace-breaks-its-unqualified-siblings.md) (s104)
+- [php/filter-returns] **A cast satisfies the type and breaks the behaviour: `absint()` on garbage is `0`, and `0` stops every background job on its first check; `(array) 'boom'` is `[ 'boom' ]`. Degrade to the PRE-FILTER value.** → [a-cast-is-not-a-degradation](../gotchas/a-cast-is-not-a-degradation.md) (s102)
+- [php/optional-ext] **A sanitiser that leans on an optional extension is not one — `mb_substr()` was silently masking a C1 gap, and `ext-mbstring` is not a declared requirement.** → [a-sanitiser-that-leans-on-an-optional-extension](../gotchas/a-sanitiser-that-leans-on-an-optional-extension.md) (s98)
+- [php/parse-str] **`parse_str()` LOSES information (arrays, key normalisation), so a subset match built on it silently widens into a false positive.** → [parse-str-loses-information-so-never-compare-queries-with-it](../gotchas/parse-str-loses-information-so-never-compare-queries-with-it.md) (s98)
+- [php/dependency-function-check-bug] **get_missing_php_functions() uses extension_loaded instead of function_exists.** → [dependency-function-check-bug](../gotchas/dependency-function-check-bug.md) (s2)
+- [php/namespace-migration-legacy-psr4] **Legacy Woodev_* vs PSR-4 Woodev\Framework\*.** → [namespace-migration-legacy-psr4](../gotchas/namespace-migration-legacy-psr4.md) (s2)
+- [php/gateway-type-methods-required] **Never blanket-ignore `Call to an undefined method` on a class hierarchy.** → [gateway-type-methods-required](../gotchas/gateway-type-methods-required.md) (s3; recurred 2026-05-31; re-audited 2026-06-01)
+- [php/blocks-handler-typed-property-trap] **Non-nullable typed return can TypeError for pure-WordPress plugin subclasses.** → [blocks-handler-typed-property-trap](../gotchas/blocks-handler-typed-property-trap.md)
+- [php/wc-compat] **`Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` unconditionally.** → [is-enhanced-admin-available-always-true](../gotchas/is-enhanced-admin-available-always-true.md) (s12)
+- [php/in-plugin-update-message-arg-shape] **`in_plugin_update_message-{$file}` — arg shape: `package`/`new_version` live on arg 2 (response), not arg 1.** → [in-plugin-update-message-arg-shape](../gotchas/in-plugin-update-message-arg-shape.md) (s18)
+- [php/updater-cache-source-stamp-not-key] **Isolating a cache by source without changing a frozen option key — stamp metadata inside the value.** → [updater-cache-source-stamp-not-key](../gotchas/updater-cache-source-stamp-not-key.md) (s18)
+- [php/class-alias-phpstan-resolution] **class_alias() and PHPStan.** → [class-alias-phpstan-resolution](../gotchas/class-alias-phpstan-resolution.md)
+- [php/stdlib] **Four PHP/WP stdlib behaviours that pass tests and fail in production — incl. `is_numeric()` accepting `0.5`/`+1`/`1e3`, after which `(int)` turns `0.5` into the deletion sentinel `0`.** → [php-stdlib-traps-that-survive-tests](../gotchas/php-stdlib-traps-that-survive-tests.md) (s45, extended s108)
+- [php/php84-implicit-nullable-payment-handlers] **RESOLVED (kept as history — the file is still linked).** Payment handlers use explicit nullable parameters after `ef3d067`; `PaymentGatewayImplicitNullableTest` is the regression guard. → [php84-implicit-nullable-payment-handlers](../gotchas/php84-implicit-nullable-payment-handlers.md)
+
+## Related
+
+- [../GOTCHAS.md](../GOTCHAS.md) — the topic map

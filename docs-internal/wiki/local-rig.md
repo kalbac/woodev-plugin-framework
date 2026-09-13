@@ -103,7 +103,7 @@ framework defect, not a rig one: card **#708**.
 
 ## The live-Yandex bulk switch on `:8973`
 
-- **dev `:8973` — LIVE YANDEX bulk ON.** `WOODEV_TEST_PICKUP_LIVE_YANDEX=1` wins over `WOODEV_TEST_PICKUP_LIVE_POCHTA=false` and `WOODEV_TEST_PICKUP_STRATEGY=viewport`; the rig serves 812 live Yandex points (Moscow). The DaData token and `clean_secret` are both configured. Fixture is active only when both live flags are false. `WOODEV_TEST_POCHTA_ACCOUNT_ID` / `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` (operator-supplied Отправка credentials — never committed) let `WOODEV_TEST_PICKUP_EMBEDDED=1` drive the live Почта widget; that switch is currently OFF.
+- **dev `:8973` — LIVE YANDEX bulk ON.** `WOODEV_TEST_PICKUP_LIVE_YANDEX=1` wins over `WOODEV_TEST_PICKUP_LIVE_POCHTA=false` and `WOODEV_TEST_PICKUP_STRATEGY=viewport`; the rig serves live Yandex points for Moscow (count it on the rig — this line said 812 while the carrier table below said ~300). The DaData token and `clean_secret` are both configured. Fixture is active only when both live flags are false. `WOODEV_TEST_POCHTA_ACCOUNT_ID` / `WOODEV_TEST_POCHTA_ACCOUNT_TYPE` (operator-supplied Отправка credentials — never committed) let `WOODEV_TEST_PICKUP_EMBEDDED=1` drive the live Почта widget; that switch is currently OFF.
 
 ## Why the location axes are set the way they are
 
@@ -176,7 +176,7 @@ simply not rendered, which looks like the feature is broken.
   `docker system prune --volumes` on this machine** — it would wipe `wordpress-test_db_data`. Clean
   docker only surgically: `docker builder prune`, `docker image prune` (dangling only), and orphans
   you have identified by name.
-- Project wp-env = `de59f74e…` (dev `:8973`, tests `:8974`); issuer = `c8ec47a5…` (`:8090`). Both KEEP.
+- Project wp-env = `de59f74e…` on the Windows desktop (dev `:8973`, tests `:8974`); issuer = `c8ec47a5…` (`:8090`). Both KEEP. ⚠ The prefix is a hash of the project's absolute path, so it is DIFFERENT on the macOS laptop — resolve it with `scripts/machine/rig-container.sh <role>`, never paste it.
 - ⚠ The two wp-env CLI containers are easy to confuse: `…-cli-1` is the DEV rig (`:8973`, carries the
   options), `…-tests-cli-1` is the test stack (`:8974`, deliberately option-free). Reading options
   from the wrong one returns "Does it exist?" for everything.
@@ -321,11 +321,11 @@ docker exec -i "$C" sh -c 'cat > /tmp/probe.php' < probe.php
 Gotcha: `docker-cp-into-the-wp-env-container-fails-pipe-the-probe-instead`.
 
 Integration tests run through the container, because `npx wp-env run` breaks on command parsing
-here:
+here (`MSYS_NO_PATHCONV=1` matters only in Git Bash on Windows; it is harmless on macOS):
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -w /var/www/html/woodev-framework -e TEST_SUITE=integration \
-  de59f74e6d3d19d18a7f7b6608fda7e7-tests-cli-1 \
+  "$(scripts/machine/rig-container.sh tests-cli)" \
   sh -c 'rm -f .phpunit.result.cache; vendor/bin/phpunit --testsuite=Integration'
 ```
 

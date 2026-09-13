@@ -68,5 +68,5 @@ keep reading the raw `license` so the anti-pirate invariant is unchanged.
 - `woodev/licensing/class-license-store.php` — `Woodev_License::get_display_status()` + `get()`
 - `woodev/licensing/class-plugin-license.php` — `get_state()`, `get_message_variant()`
 - `woodev/licensing/class-license-messages.php` — `build_message()`
-- [[license-need-vs-required]] — the other licensing presentation-vs-enforcement split
-- [[edd-sl-get-version-serialized-sections]] — another EDD SL wire-shape gotcha
+- [license-need-vs-required](license-need-vs-required.md) — the other licensing presentation-vs-enforcement split
+- [edd-sl-get-version-serialized-sections](edd-sl-get-version-serialized-sections.md) — another EDD SL wire-shape gotcha

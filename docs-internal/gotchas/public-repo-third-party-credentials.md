@@ -62,7 +62,7 @@ custom vendor token like this one would **still** not be caught. A CI secret sca
 
 ## Related
 
-- [[framework-classmap-autoload-vendored-boot]] — the other class of "works locally, breaks
+- [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the other class of "works locally, breaks
   where it actually ships"
-- [[jest-scans-agent-worktrees-inside-the-repo]] — also from s55: a check that reports
+- [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — also from s55: a check that reports
   success while measuring the wrong thing

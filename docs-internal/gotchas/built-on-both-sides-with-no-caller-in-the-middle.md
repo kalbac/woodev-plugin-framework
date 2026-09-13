@@ -178,8 +178,8 @@ the browser as an honest, unheeded signal.
 
 ## Related
 
-- [[dispatcher-files-unwired-in-includes]] — the PHP shape of the same thing: a class that exists,
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — the PHP shape of the same thing: a class that exists,
   is loaded by the test autoloader, and fatals in production because nothing requires it.
-- [[mutation-sweep-branch-only-false-confidence]] — another "green run proves less than it looks".
-- [[plain-object-is-not-an-insertion-ordered-map]] — the other s59 find; both came from an
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — another "green run proves less than it looks".
+- [plain-object-is-not-an-insertion-ordered-map](plain-object-is-not-an-insertion-ordered-map.md) — the other s59 find; both came from an
   adversarial pass rather than from the suite.

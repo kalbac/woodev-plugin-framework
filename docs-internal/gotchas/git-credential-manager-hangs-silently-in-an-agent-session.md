@@ -1,4 +1,5 @@
 # Gotcha: [tooling/git-credentials] — Git Credential Manager hangs an agent's `git push` silently
+> **Platform:** Windows only — Git for Windows' GUI Credential Manager cannot prompt an agent terminal.
 > Tags: tooling, git, agents | Session: s100
 
 ## What happens

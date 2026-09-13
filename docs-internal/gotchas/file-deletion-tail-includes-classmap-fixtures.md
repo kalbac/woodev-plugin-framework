@@ -46,6 +46,6 @@ keep firing. Tracked as issue #138 — decide whether `includes()` should exist 
 
 ## Related
 
-- [[framework-classmap-autoload-vendored-boot]] — the class map is the only resolver in production
-- [[dispatcher-files-unwired-in-includes]] — the inverse: a new file never wired in
-- [[box-packer-interface-unwired-in-includes]] — the same inverse, release-blocking, caught on a live boot
+- [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the class map is the only resolver in production
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — the inverse: a new file never wired in
+- [box-packer-interface-unwired-in-includes](box-packer-interface-unwired-in-includes.md) — the same inverse, release-blocking, caught on a live boot

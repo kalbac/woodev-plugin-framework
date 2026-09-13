@@ -81,7 +81,7 @@ two guards — making them one looks tidy and silently drops data.**
 
 ## Related
 
-- [[card-renders-from-a-snapshot-the-writers-never-touch]] — the defect whose fix introduced this
+- [card-renders-from-a-snapshot-the-writers-never-touch](card-renders-from-a-snapshot-the-writers-never-touch.md) — the defect whose fix introduced this
   one; same session, same file.
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the same family: correct pieces, wrong
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the same family: correct pieces, wrong
   seam.

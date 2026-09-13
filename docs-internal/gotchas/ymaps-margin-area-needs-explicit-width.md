@@ -89,13 +89,13 @@ invisible off a real rig.
 
 ## Related
 
-- [[ymaps-camera-moves-are-async]] — the promise this reservation feeds (`useMapMargin: true`)
+- [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md) — the promise this reservation feeds (`useMapMargin: true`)
   resolves correctly even when the margin itself is a no-op; the two bugs look identical from a
   passing test but are unrelated mechanisms.
-- [[ymaps-html-icon-layout-needs-iconshape]] — same family: an option shape ymaps silently
+- [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — same family: an option shape ymaps silently
   under-reads (or, here, under-declares) with no error, no warning, and no test that pinned the
   exact shape.
-- [[ymaps-copyright-pane-is-trapped-in-a-stacking-context]] — the follow-up (s51): fixing this
+- [ymaps-copyright-pane-is-trapped-in-a-stacking-context](ymaps-copyright-pane-is-trapped-in-a-stacking-context.md) — the follow-up (s51): fixing this
   file's `width` bug did NOT, as assumed here, pull the copyright strip out from under the sidebar.
   Margins move the camera only; the strip's visibility needed a separate fix.
 - `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` §6 — the spec paragraph that

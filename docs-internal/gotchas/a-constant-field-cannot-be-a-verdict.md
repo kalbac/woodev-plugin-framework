@@ -56,7 +56,7 @@ Corollaries worth keeping:
   else entirely; the name cannot tell you and the vendor's docs may not either.
 - **A written contract is not a measurement.** The wording that caused this was in our own issue,
   confidently phrased, and it propagated into code and a docblock before anything checked it.
-  Same family as [[an-invented-fixture-tests-your-assumptions-not-the-carrier]].
+  Same family as [an-invented-fixture-tests-your-assumptions-not-the-carrier](an-invented-fixture-tests-your-assumptions-not-the-carrier.md).
 - **When a domain expert says the behaviour is backwards, believe the direction first.** He was
   right about the direction before either of us knew the mechanism.
 - **Prefer the domain's own working implementation over an API field that looks convenient.** The
@@ -80,6 +80,6 @@ Corollaries worth keeping:
 
 ## Related
 
-- [[an-invented-fixture-tests-your-assumptions-not-the-carrier]] — the sibling from the session
+- [an-invented-fixture-tests-your-assumptions-not-the-carrier](an-invented-fixture-tests-your-assumptions-not-the-carrier.md) — the sibling from the session
   before: a recorded contract is not a recorded payload.
-- [[a-control-that-changes-the-subject-must-announce-it]] — the other half of the same report.
+- [a-control-that-changes-the-subject-must-announce-it](a-control-that-changes-the-subject-must-announce-it.md) — the other half of the same report.

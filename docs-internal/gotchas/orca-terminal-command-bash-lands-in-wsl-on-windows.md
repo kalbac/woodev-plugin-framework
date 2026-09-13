@@ -1,4 +1,5 @@
 # Gotcha: [tooling/orca] — `terminal create --command "bash"` lands in WSL, and everything then blames Orca
+> **Platform:** Windows only — `C:\Windows\System32\bash.exe` launches WSL instead of Git Bash.
 > Namespace: `tooling/orca` — added s97 (2026-08-27)
 
 ## What happens
@@ -55,9 +56,9 @@ gh pr diff <n> --repo <owner>/<repo>     # gh needs no local repo when given --r
 
 ## Related
 
-- [[codex-shell-sandbox-broken-windows]] — the neighbouring trap: Codex's own WSL shell hitting
+- [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — the neighbouring trap: Codex's own WSL shell hitting
   the same Windows-path wall from the other direction.
-- [[serena-activate-path-must-be-the-worker-s-worktree]] — the other way a worker silently ends up
+- [serena-activate-path-must-be-the-worker-s-worktree](serena-activate-path-must-be-the-worker-s-worktree.md) — the other way a worker silently ends up
   operating on a different checkout than you think.
-- [[starting-codex-under-orca-needs-four-steps-not-one]] — the launch-time dialogs that stall an
+- [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — the launch-time dialogs that stall an
   agent right after this step.

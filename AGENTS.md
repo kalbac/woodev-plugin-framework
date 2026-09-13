@@ -11,7 +11,7 @@
    left for you, its **carry-over commitments**, and known traps (~1 min). Format and gate:
    `DOCS-SCHEMA.md` → Handoff Format
 2. **Read `docs-internal/CURRENT-STATE.md`** — phase status, known bugs, next actions (~1 min)
-3. **Scan `docs-internal/GOTCHAS.md`** — one line per gotcha; scan `[topic/*]` tags relevant to your task (~1 min). Open `gotchas/{slug}.md` for the ones that apply.
+3. **Read `docs-internal/GOTCHAS.md`** — the topic map (~30 s). Open the `gotcha-index/{topic}.md` files your task touches — `[tooling/*]`, `[testing/*]` and `[rig/*]` almost always — then `gotchas/{slug}.md` for the ones that apply.
 4. **Area-specific docs as needed** — relevant `docs-internal/adr/` and `docs-internal/wiki/` files (navigation hub: `docs-internal/DOCS-INDEX.md`)
 
 ---
@@ -22,7 +22,7 @@
 2. Write `docs-internal/sessions/sNN.md` — the session's own file: what was done, key decisions, test counts, commit hash. Then add ONE line for it to `docs-internal/SESSION-LOG.md`, which is only an index
 3. **⚙️ Compilation step** — for each new gotcha discovered this session:
    - Create `docs-internal/gotchas/{slug}.md` (root cause + ❌ wrong / ✅ correct code + Related links)
-   - Add index line to `docs-internal/GOTCHAS.md` under the correct `[topic/*]` section
+   - Add ONE index line to the right `docs-internal/gotcha-index/{topic}.md` (a new topic also gets a row in the `GOTCHAS.md` map)
    - Update `docs-internal/wiki/*.md` if a pattern was clarified
    - Read `docs-internal/DOCS-SCHEMA.md` for exact format rules
 4. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
@@ -74,7 +74,7 @@ rule and the deploy trigger: `docs-internal/DOCS-SCHEMA.md` → "Public docs".
 - `CURRENT-STATE.md` — phase status, known bugs, next actions
 - `SESSION-LOG.md` — index of sessions, one line each (newest at top)
 - `sessions/sNN.md` — the per-session detail
-- `GOTCHAS.md` — gotcha index → `gotchas/{slug}.md` atomic detail files
+- `GOTCHAS.md` — topic map → `gotcha-index/{topic}.md` → `gotchas/{slug}.md` atomic detail files
 - `AGENT-RULES.md` — workflow + architecture rules for AI agents
 - `DOCS-INDEX.md` — navigation hub for all internal docs
 - `DOCS-SCHEMA.md` — doc format and lint rules
@@ -105,9 +105,10 @@ woodev_framework/
 │   └── overrides/home.html, assets/stylesheets/extra.css
 ├── docs-internal/                   # Internal docs → AI agents only
 │   ├── next-session-prompt.md       # Per-session handoff — every session starts here
-│   ├── CURRENT-STATE.md, SESSION-LOG.md (index), GOTCHAS.md (index)
+│   ├── CURRENT-STATE.md, SESSION-LOG.md (index), GOTCHAS.md (topic map)
 │   ├── sessions/                     # Per-session detail files
 │   ├── AGENT-RULES.md, DOCS-INDEX.md, DOCS-SCHEMA.md, FUTURE-BACKLOG.md (frozen)
+│   ├── gotcha-index/                # One-line gotcha indexes, one file per topic (mapped by GOTCHAS.md)
 │   ├── gotchas/                     # Atomic gotcha detail files
 │   ├── adr/                         # Architecture Decision Records
 │   ├── wiki/                        # Compiled topic references
@@ -128,7 +129,7 @@ woodev_framework/
 │   ├── compatibility/               # HPOS + WooCommerce compat
 │   ├── handlers/                    # Blocks + script handlers
 │   ├── licensing/                   # License key + EDD store integration (incl. updater/ — plugin update mechanism)
-│   ├── payment-gateway/             # Payment gateway base classes (~13.8k lines; main file ~3,542)
+│   ├── payment-gateway/             # Payment gateway base classes (~13.9k lines; main file ~3.6k)
 │   ├── rest-api/                    # REST API routes
 │   ├── settings-api/                # Typed settings framework
 │   ├── shipping-method/             # Shipping plugin + method bases
@@ -168,6 +169,8 @@ CI workflows: `ci.yml` (jobs: `unit-tests`, `test-js` — jest, added s55 PR #18
 ---
 
 ## 🛠 Dev environment
+
+**Two machines** — a Windows desktop and a macOS laptop, one at a time (s135). What travels by git, what by the gitignored `.machine-transfer/` bundle, and what differs per OS: `docs-internal/wiki/two-machine-setup.md`.
 
 ```bash
 # Install dependencies
@@ -255,7 +258,7 @@ A task is DONE only when:
 
 ## ⚠️ Critical gotchas — quick reference
 
-Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GOTCHAS.md` index for your topic.
+Full details + code examples in `docs-internal/gotchas/`. Open your topic from the `docs-internal/GOTCHAS.md` map.
 
 **Naming:** `woodev` (single d), `Woodev` prefix — `wooddev` is always wrong.
 
@@ -288,7 +291,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 **Docs:**
 - Public docs (`docs/`) use `%%FRAMEWORK_VERSION%%` placeholder — never hardcode version
-- Internal docs (`docs-internal/`) — English only, no Russian
+- Internal docs (`docs-internal/`) — agent prose in English; quoted operator words, domain data and msgids keep their language (`DOCS-SCHEMA.md` → Language Rule)
 - Gotchas go in `docs-internal/gotchas/`, NOT in `docs/`
 
 ---
@@ -330,7 +333,7 @@ Full details + code examples in `docs-internal/gotchas/`. Scan `docs-internal/GO
 
 Run review before committing when changes touch:
 - `woodev/class-plugin.php` or `woodev/bootstrap.php` (core architecture)
-- `woodev/payment-gateway/` (high complexity, ~3,542 lines in main file)
+- `woodev/payment-gateway/` (high complexity, ~3.6k lines in main file)
 - Public API surface (new/changed public methods, new classes)
 - Deprecation/removal of existing functionality
 - Changes spanning 3+ files
@@ -345,9 +348,9 @@ Run review before committing when changes touch:
 
 **How (mandatory steps):**
 1. **Qualify** — non-obvious + can cause bug + contradicts assumptions? If no → skip
-2. **Dedup** — scan `docs-internal/GOTCHAS.md` for existing entries on the same topic
+2. **Dedup** — grep `docs-internal/gotcha-index/` for existing entries on the same topic — a trap can sit under a neighbouring tag
 3. **If similar exists** → read the detail file, determine which fact is correct, UPDATE the existing file. Never create a second file on the same topic
-4. **If new** → create `docs-internal/gotchas/{slug}.md` (format in `docs-internal/DOCS-SCHEMA.md`) + add index line to `docs-internal/GOTCHAS.md`
+4. **If new** → create `docs-internal/gotchas/{slug}.md` (format in `docs-internal/DOCS-SCHEMA.md`) + add one index line to `docs-internal/gotcha-index/{topic}.md`
 5. **Cross-link** — add `## Related` section in the new file
 
 **Full protocol with examples:** `docs-internal/DOCS-SCHEMA.md` → "Gotcha write protocol"

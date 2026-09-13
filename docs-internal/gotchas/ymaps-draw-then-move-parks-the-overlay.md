@@ -18,7 +18,7 @@ Internally it resolves the bounds against the projection and only THEN calls `ma
 measured on the rig at ~35-50 ms after the `setBounds()` call:
 
 ```
-t+0   setPoints() → map.setBounds([[55.6,37.35],[55.9,37.85]], {duration:400})
+t+0   setPoints() → map.setBounds([ [55.6, 37.35], [55.9, 37.85] ], {duration:400})
 t+2   restoreSelection() → focusGroup() → map.setCenter([55.7602,37.6055], 18, {duration:200})
 t+16  ↑ that move COMPLETES — the camera is on the point, data-state="active" is written
 t+41  ← setBounds' OWN internal setCenter([55.7503,37.6], 10) finally begins
@@ -72,6 +72,6 @@ flight; the camera move before the draw — and that is what the regression test
 
 ## Related
 
-- [[ymaps-camera-moves-are-async]] — the original async lesson this extends
-- [[focusgroup-only-moved-for-clustered-points]] — same method, same "only a browser could see it"
-- [[ymaps-objectmanager-properties-are-plain]] — the other ObjectManager-shape trap
+- [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md) — the original async lesson this extends
+- [focusgroup-only-moved-for-clustered-points](focusgroup-only-moved-for-clustered-points.md) — same method, same "only a browser could see it"
+- [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) — the other ObjectManager-shape trap

@@ -39,5 +39,5 @@ if ( $constant_managed ) { $entry['constant_managed'] = true; $entry['constant_n
 Masking a secret is decided by **declared intent** (`sensitive` flag OR `constant_name` present), never by the runtime presence of the backing value. "Is the value currently sourced from a constant?" and "must this never be emitted?" are two different questions — don't conflate them.
 
 ## Related
-- `[[settings-api-control-save-path-pitfalls]]` — the other class of "validation/secret path looked fine but leaked".
+- `[settings-api-control-save-path-pitfalls](settings-api-control-save-path-pitfalls.md)` — the other class of "validation/secret path looked fine but leaked".
 - SP-2: `woodev/settings-page/class-field-schema.php`.

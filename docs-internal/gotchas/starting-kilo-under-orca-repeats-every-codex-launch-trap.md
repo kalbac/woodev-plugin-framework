@@ -95,9 +95,9 @@ into the primary checkout.
 
 ## Related
 
-- [[starting-codex-under-orca-needs-four-steps-not-one]] — the same launch-dialog trap for Codex;
+- [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — the same launch-dialog trap for Codex;
   kilo proves it is a class, not a Codex quirk.
-- [[dispatch-inject-reports-failure-after-succeeding]] — where `agent_prompt_stalled` is defined:
+- [dispatch-inject-reports-failure-after-succeeding](dispatch-inject-reports-failure-after-succeeding.md) — where `agent_prompt_stalled` is defined:
   the brief sits unsubmitted and needs an Enter, not a retry.
-- [[orca-terminal-command-bash-lands-in-wsl-on-windows]] — the placement mistake that makes all of
+- [orca-terminal-command-bash-lands-in-wsl-on-windows](orca-terminal-command-bash-lands-in-wsl-on-windows.md) — the placement mistake that makes all of
   the above look like an authentication problem instead.

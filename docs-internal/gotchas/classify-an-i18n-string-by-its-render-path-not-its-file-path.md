@@ -25,7 +25,7 @@ The four shapes that broke the path heuristic on #567, each verified at its sink
 | 42 | `Checkout_Field_Settings`, `Location_Settings`, `Pickup_Map_Settings` `::register_settings()` | `'name'` on `register_setting()` and `'tooltip'` on `register_control()` — admin labels |
 | 11 | `Setting::get_validation_error()` | reaches `Abstract_Settings::validate_values()` → `Woodev_REST_API_Settings_Page::save()` — the React settings screen |
 | 22 | `Pickup_Controller` / `Location_Controller` error texts | never rendered: `pickup-mount.js` maps `reason.code` to an i18n string from `get_js_config()`, and its docblock says so outright |
-| 2 | `class-pickup-handler.php:1524,1527` | the map's accent-colour setting, in a file whose other 49 strings are the checkout map |
+| 2 | `Pickup_Handler::get_map_settings()` (`class-pickup-handler.php:1648,1651`) | the map's accent-colour setting, in a file whose other strings are the checkout map |
 
 The REST row is the sharpest one: a controller that serves the checkout is not the same thing as a
 controller whose TEXT reaches the checkout. `location-cascade.js` renders `body.message` verbatim in

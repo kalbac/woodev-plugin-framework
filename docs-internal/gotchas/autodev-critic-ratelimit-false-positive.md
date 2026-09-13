@@ -50,7 +50,7 @@ result, a real exit code) over keyword-sniffing the whole transcript. The same s
 before via a different root cause (a rate-limited critic counted as task failures → false poison).
 
 ## Related
-- [[autodev-attempt-refund-symmetry]] — the earlier critic-429 issue (refund on external pause); this
+- [autodev-attempt-refund-symmetry](autodev-attempt-refund-symmetry.md) — the earlier critic-429 issue (refund on external pause); this
   is the *adjacent* bug where a NON-rate-limited critic was mislabeled as rate-limited.
 - `tools/autodev/invoke-critic.ps1` — the fixed decision flow.
 - `tools/autodev/_common.ps1` → `Test-RateLimited` — requires `ExitCode -ne 0` AND a keyword.

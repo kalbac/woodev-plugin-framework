@@ -6,20 +6,20 @@
 ## What happened
 
 A worker changed two shared files under `src/components/`, rebuilt in its worktree, and committed
-all five bundles. Its critic then ran the check independently and wrote:
+all six bundles. Its critic then ran the check independently and wrote:
 
 > Ran `npm run build` myself after `generate-class-map.php`:
 > `git status --short -- woodev/assets/build/` came back EMPTY — my fresh rebuild reproduced the
-> author's committed bundles byte-for-byte across all 5 entries. So the build IS reproducible.
+> author's committed bundles byte-for-byte across all 6 entries. So the build IS reproducible.
 
 CI disagreed. The `Assets build parity` job on PR #422 failed on exactly ten files — `index.js`
-and `index.asset.php` for all five entries. Two agents had measured parity locally and both were
+and `index.asset.php` for the five entries that existed then. Two agents had measured parity locally and both were
 wrong.
 
 ## Root cause: webpack resolves the shared `node_modules` symlink out of the project
 
-`orca.yaml` shares `node_modules` by **symlink** so a fresh worktree can run the JS gate without a
-658 MB install. Webpack resolves that symlink to its real path, so from inside a worktree every
+`orca.yaml` clone-copies shared directories on macOS but shares `node_modules` by **symlink**
+elsewhere, so a fresh non-macOS worktree can run the JS gate without a 658 MB install. Webpack resolves that symlink to its real path, so from inside such a worktree every
 module request is emitted relative to a directory *outside* the project:
 
 ```text
@@ -55,7 +55,9 @@ rebuilding produced exactly the ten files CI had flagged.
 
 ## ✅ Correct
 
-- **Build generated bundles only in the primary checkout.** If a worker in a worktree changed
+- **Build generated bundles only in the primary checkout.** This remains the project policy; on macOS,
+  first compare a disposable worktree build with the primary checkout before attributing a parity
+  difference to symlink resolution. If a worker in a worktree changed
   anything under `src/`, the coordinator rebuilds:
 
   ```bash
@@ -72,8 +74,8 @@ rebuilding produced exactly the ten files CI had flagged.
 - **A local `npm run build` is never parity evidence.** Say "CI will decide", and treat the
   `Assets build parity` job as the only authority.
 - Always run the **full** `npm run build`. `control-field.js` and `location-picker-field.js` are
-  shared UI-kit modules imported by all five entry bundles, so a single-entry build
-  (`npm run build:settings`) silently desyncs the other four.
+  shared UI-kit modules imported by all six entry bundles, so a single-entry build
+  (`npm run build:settings`) silently desyncs the other five.
 
 ## The second failure mode: built, but never COMMITTED (s133)
 
@@ -88,7 +90,7 @@ The evidence was sitting in the worktree the whole time and only surfaced when r
 Failed to delete worktree at …/s133-829-badges.
  M woodev/assets/build/shipping-orders-page/index.js
  M woodev/assets/build/shipping-orders-page/style-index.css
- …plus the seven CRLF-only files a fresh worktree always starts dirty with
+ …plus the seven CRLF-only files a fresh worktree started dirty with until s135
 ```
 
 Two consequences:

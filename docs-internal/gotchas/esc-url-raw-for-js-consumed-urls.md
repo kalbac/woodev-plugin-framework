@@ -41,4 +41,4 @@ via `RawHTML`/`wp_kses_post`) still use `esc_url` — there the `&#038;` is corr
 
 - `woodev/licensing/class-license-messages.php` — `get_link_helper( …, $raw )`, `get_renewal_url()`
 - `woodev/admin/class-admin-pages.php` — `window.woodevLicenses` JSON bootstrap (consumes `renewal_url`)
-- [[license-page-css-bundle-only]] — other license-page rendering gotchas
+- [license-page-css-bundle-only](license-page-css-bundle-only.md) — other license-page rendering gotchas

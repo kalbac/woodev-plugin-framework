@@ -58,4 +58,4 @@ plugins follow WP convention).
 - `docs-internal/archive/reviews/ob3-plugin-updater-review-2026-06-14.md` — F8.
 - `woodev/licensing/updater/class-plugin-updater.php` `show_update_notification()`.
 - `woodev/licensing/class-plugin-license.php` `plugin_row_license_missing()` + `extract_update_field()`.
-- [[updater-cache-source-stamp-not-key]] — sibling OB-3 Step 4 finding (F10).
+- [updater-cache-source-stamp-not-key](updater-cache-source-stamp-not-key.md) — sibling OB-3 Step 4 finding (F10).

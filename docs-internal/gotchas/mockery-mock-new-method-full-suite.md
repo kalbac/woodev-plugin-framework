@@ -28,5 +28,5 @@ The task that added the REST wiring ran only its **targeted integration test** (
 
 ## Related
 
-- [[../SESSION-LOG.md]] — s40 (both the crash-on-unregistered-id and this mock regression were caught by review/final-check, not CI-first)
-- [[phpunit-multiple-file-args.md]] — another "your green run didn't actually run everything" trap
+- [../SESSION-LOG.md](../SESSION-LOG.md) — s40 (both the crash-on-unregistered-id and this mock regression were caught by review/final-check, not CI-first)
+- [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — another "your green run didn't actually run everything" trap

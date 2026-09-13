@@ -55,5 +55,5 @@ Two further rules learned the same way:
 
 ## Related
 
-- [[phpcs-does-not-enforce-line-length]] — the other "green means nothing" trap from the same branch
-- [[phpunit-multiple-file-args]] — a third way a passing run can be lying to you
+- [phpcs-does-not-enforce-line-length](phpcs-does-not-enforce-line-length.md) — the other "green means nothing" trap from the same branch
+- [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — a third way a passing run can be lying to you

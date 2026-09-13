@@ -68,6 +68,6 @@ suspected gate is already open proves nothing about the gate** — vary the cond
 code that would implement it.
 
 ## Related
-- [[guest-session-write-needs-the-cart-cookie]] — the other half of "the session write you think
+- [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md) — the other half of "the session write you think
   happened may not have"
-- [[custom-checkout-field-is-empty-on-reload-by-construction]]
+- [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md)

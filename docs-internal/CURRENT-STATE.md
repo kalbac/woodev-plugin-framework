@@ -6,11 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-13 (s134).** ✅ **The orders table is FINISHED and accepted** — *«вот теперь всё
-супер»*. One PR (#870) over five rounds, tree on `main` @ `6a2a915`, no open PRs. The table now
-carries per-row actions (icon button group, colours and glyphs taken from his own shipped plugins), a
-`cb` column with bulk actions reporting successes and failures separately, an eye-button order
-preview at 820px, a busy-row indicator, and the payment method.
+**As of 2026-09-13 (s135).** ✅ **Docs audit done** (#879): gateways reconciled with the code, gotcha
+duplicates merged, and `GOTCHAS.md` is now a TOPIC MAP over `gotcha-index/{topic}.md` — session-start
+reading 175 → 86 KB. ✅ **Two machines** (Windows desktop + macOS laptop, one at a time): state travels
+by git + the gitignored `.machine-transfer/`; the first laptop session is #882. The orders table
+(s134, #870) stays finished and accepted.
 
 ⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
 incomplete; a worker's "build is green" is not "bundles are committed"; and a row rebuilt from the
@@ -23,8 +23,8 @@ HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incompl
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»,
-condition on the card). Next: **docs audit first** (his instruction, s134), then **«Создать заказ»**
-(#710 — the brainstorm is HIS and he is holding it), then **the order metabox** (#856).
+condition on the card). The docs audit is done (s135); next **«Создать заказ»** (#710 — the brainstorm
+is HIS and he is holding it), then **the order metabox** (#856).
 
 ✅ **CI first-try reliability is now enforced, not merely intended** (#871): `.githooks/pre-push`
 rebuilds the bundles and runs the catalogue gates by exit code in ~22 s, because a worker may not
@@ -247,7 +247,7 @@ enabled, where the primary checkout reads **1** and any checkout without `plugin
 `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`; the old "66" was never a contract).
 Every other trap — worktrees, jest/PowerShell, Codex under Orca, stacked-PR merges, integration
 flakiness, the three field modes and their Russian labels — is one line under the `[tooling/*]`,
-`[testing/*]` and `[rig/*]` tags of `GOTCHAS.md`, which is read at session start anyway.
+`[testing/*]` and `[rig/*]` topic indexes, mapped from `GOTCHAS.md`.
 
 ⚠ Before probing `test-cdek` credentials, read gotcha
 `the-cdek-fixture-credentials-are-not-the-option-they-look-like` — the obvious option is a decoy.
@@ -259,14 +259,14 @@ Nothing above `2.0.2` remains — #116(a) closed that in s111, and `SinceTagCeil
 **Agents and Orca — the recipes, the caps and the launch traps are
 [wiki/orchestrating-agents-with-orca.md](wiki/orchestrating-agents-with-orca.md).** The two facts
 worth carrying without opening it: a fresh worktree needs **no install step** but its `vendor` must
-be COPIED and never shared, and it starts dirty with seven CRLF-only files — **never `git add -A`
-there**, and remove the worktree through Orca.
+be COPIED and never shared; stage files by name, **never `git add -A`** there (the CRLF-dirty start
+ended in s135), and remove the worktree through Orca.
 
 **Building a rate? Read the two `[woocommerce/shipping]` gotchas from s117 first** — `add_rate()`
 silently ignores `description`/`delivery_time`, and stringifying a numeric cost lets
 `wc_format_decimal()` turn `1.0e20` into `1.02`.
 
-Gotchas: **319**.
+Gotchas: count in the `GOTCHAS.md` header.
 
 ## Program status (high level)
 
@@ -290,7 +290,7 @@ all but PHPStan and Documentation are browser-verified. The live PROGRAMME stage
 
 ## Known Bugs / Open debt
 
-- [⚠️] `class-payment-gateway.php` ~3,542 lines — trait-extraction candidate (→ board №6).
+- [⚠️] `class-payment-gateway.php` ~3.6k lines — trait-extraction candidate (#117).
 - **B-2 loader-protocol forward-tolerance:** the resolver loads framework classes from the **highest registered copy for the whole fleet**; `backwards_compatible` deactivates-with-notice any plugin below that copy's min. Rules → `AGENT-RULES.md` Rule 3.
 - [ℹ️] OB-7 moved to the board as **#809** (07.09.2026) — debt lives there, not here.
 - All earlier release-blocker findings are RESOLVED (2026-06-01 audit) — see `SESSION-LOG.md` + git history.
@@ -331,7 +331,7 @@ that must never be missed.
 - ✅ **At standard, re-verified 02.09.2026 (s112)** — modal, map, tiles and clustered Moscow points.
   **Two carriers side by side** since s112 (#734/#735), the first on live Yandex by operator
   decision (#734).
-- **Tree is on `main`** (verified 27.08.2026, s100); Orca worktrees removed.
+- **Two machines since s135** (Windows desktop + macOS laptop): [wiki/two-machine-setup.md](wiki/two-machine-setup.md).
 - ⛔ **Never `docker volume prune` / `docker system prune --volumes` on this machine.** The
   operator's `wordpress-test` stack holds ALL real plugins in one env and its volume sits unattached
   while the stack is `Exited` — a prune wipes it. Inventory: [wiki/local-rig.md](wiki/local-rig.md).

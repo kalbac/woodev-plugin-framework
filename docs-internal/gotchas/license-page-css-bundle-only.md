@@ -42,7 +42,7 @@ the content has no admin gutter and sits flush against the menu.
 
 ## Related
 
-- [[build-artifacts-eol-lf-windows-parity]] — rebuilding the bundle on Windows
+- [build-artifacts-eol-lf-windows-parity](build-artifacts-eol-lf-windows-parity.md) — rebuilding the bundle on Windows
 - `woodev/admin/class-admin-pages.php` → `license_page()` / `load_licenses_page_scripts()`
 - `src/license-page/style.scss` (source) → `woodev/assets/build/license-page/style-index.css` (built)
 - `woodev/admin/pages/views/html-settings-section.php` (the server-rendered section)

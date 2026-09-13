@@ -13,25 +13,25 @@ behavior:
 
 - `Woodev_Payment_Gateway_Plugin::plugin_action_links()`
   (`woodev/payment-gateway/class-payment-gateway-plugin.php:318`) overrides
-  `Woodev_Plugin::plugin_action_links()` (`woodev/class-plugin.php:860`) and calls
+  `Woodev_Plugin::plugin_action_links()` and calls
   `parent::plugin_action_links( $actions )` to compose the base links with its own
   per-gateway links. If the filter callback registered at
-  `woodev/class-plugin.php:415` were bound to a new `Plugin_Action_Links_Handler`
+  `Woodev_Plugin::plugin_action_links()` were bound to a new `Plugin_Action_Links_Handler`
   instance instead of the plugin, the override would never fire — WordPress calls the
   handler's method directly, bypassing `$this` entirely. The gateway would lose its
   per-gateway configure links, silently.
 - `Woodev_Payment_Gateway_Plugin::add_api_request_logging()`
-  (`class-payment-gateway-plugin.php:937`) no-ops the base's registration
-  (`woodev/class-plugin.php:894`, called from `add_hooks()` at `:424`) on purpose, so
+  (`class-payment-gateway-plugin.php:937`) no-ops the base's `Woodev_Plugin::add_api_request_logging()`
+  registration, called from `add_hooks()`, on purpose, so
   gateways can log per-gateway via their own `Woodev_Payment_Gateway` listener instead
   (separate log files per gateway). If an `API_Logger` handler registered its action
   unconditionally in its own constructor — like `Cron_Handler` does — every live
   payment plugin would double-log: once through the handler, once through the
   gateway's own listener.
 - Two more `Woodev_Plugin` methods are called directly, outside the hook path entirely:
-  `log_api_request()` (`class-plugin.php:916`) by
+  `Woodev_Plugin::log_api_request()` by
   `Woodev_Licensing_API::broadcast_request()` (`woodev/licensing/api/class-licensing-api.php:43`),
-  and `get_api_log_message()` (`class-plugin.php:932`) by
+  and `Woodev_Plugin::get_api_log_message()` by
   `Woodev_Payment_Gateway::log_api_request()` via `$this->get_plugin()->get_api_log_message()`
   (`woodev/payment-gateway/class-payment-gateway.php:3533,3537`). Deleting either method
   in favor of a handler-only implementation breaks these call sites, which never go
@@ -91,7 +91,7 @@ scaffolding D-3 already ruled out.** Measure the base's line count before and af
 the extraction doesn't shrink it, it hasn't paid for itself.
 
 ## Related
-- [[dispatcher-files-unwired-in-includes]] — another "the general pattern isn't safe for
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — another "the general pattern isn't safe for
   every case" framework-internals trap
 - `docs-internal/archive/platform-v2-base-decomposition-subplan.md` — Tasks 2/3, the
   original CANCELLED analysis this confirms

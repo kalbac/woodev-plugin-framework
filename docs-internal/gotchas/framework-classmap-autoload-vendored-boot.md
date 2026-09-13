@@ -4,7 +4,7 @@
 
 ## The trap
 
-Since s27 the framework has a **hand-written runtime autoloader** (`Woodev_Framework_Autoloader`, `woodev/class-framework-autoloader.php`) — **no Composer in shipped plugins** (see [[feedback_no_composer_in_shipped_plugins]]). It resolves classes via a **generated map**, `woodev/class-map.php`, produced by `php bin/generate-class-map.php`.
+Since s27 the framework has a **hand-written runtime autoloader** (`Woodev_Framework_Autoloader`, `woodev/class-framework-autoloader.php`) — **no Composer in shipped plugins** (see feedback_no_composer_in_shipped_plugins). It resolves classes via a **generated map**, `woodev/class-map.php`, produced by `php bin/generate-class-map.php`.
 
 In **tests**, Composer's classmap autoloader is present, so any framework class resolves regardless of whether it is in `woodev/class-map.php`. In a **real vendored boot** (a plugin shipping the framework), there is NO Composer — only this autoloader + the explicit `includes()` require-chains. So a class that is missing from (or stale in) `class-map.php` and not eagerly required by `includes()` will **fail to load → "class not found" fatal / WSOD on first boot**. Same failure class as `box-packer-interface-unwired-in-includes`.
 
@@ -29,6 +29,6 @@ Two standing rules keep this true (see `AGENT-RULES.md` Rule 3): (1) every loade
 
 ## Related
 
-- [[feedback_no_composer_in_shipped_plugins]]
+- feedback_no_composer_in_shipped_plugins
 - Spec: `docs-internal/archive/specs/2026-06-21-plugin-type-autoloader-design.md`
 - Sibling WSOD gotcha: `box-packer-interface-unwired-in-includes.md`

@@ -1,5 +1,6 @@
 # Gotcha: [tooling/git] — `git push` hangs forever and prints NOTHING under Git Credential Manager
 > Tags: tooling, git, windows, headless | Session: s97
+> **Platform:** Windows only — Git Credential Manager waits for an unavailable GUI prompt.
 
 ## What happens
 

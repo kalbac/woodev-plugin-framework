@@ -1,5 +1,6 @@
 # Gotcha: [tooling/phpstan] — A migrating plugin's PHPStan takes 35 minutes on Windows and 84 seconds in the container
 > Tags: tooling, phpstan, windows, docker, migration | Session: s116
+> **Platform:** Windows only — the measured slow path is the Windows host filesystem and memory profile.
 
 ## What happens
 
