@@ -9,13 +9,15 @@
 **As of 2026-09-13 (s136).** ✅ **The laptop is LIVE** (#882): `setup-macos.sh` ran end to end after
 five defects in it were fixed, every gate matches the desktop, and the rig imported byte-identical
 (WP 7.1, WC 11.1.0, 301 orders). **Routine sync is git ONLY**; the rig bundle carries hand-made rig
-state and nothing else — `wiki/two-machine-setup.md`. ✅ Docs audit done in s135 (#879): `GOTCHAS.md`
-is a TOPIC MAP, session-start reading 175 → 86 KB. The orders table (s134, #870) stays accepted.
+state and nothing else — `wiki/two-machine-setup.md`. ✅ **The order metabox is MERGED and ACCEPTED**
+(#856, #890): the framework builds it from `Orders_Provider`, rendering through the same
+`Order_Row_Builder::build()` the table and REST use. ✅ Docs audit done in s135 (#879). The orders
+table (s134, #870) stays accepted.
 
 ⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
-incomplete; a worker's "build is green" is not "bundles are committed"; and a row rebuilt from the
-same `WC_Order` after an action is stale ONLY on the legacy CPT store — which a mocked test and an
-HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
+incomplete; a worker's "build is green" is not "bundles are committed"; a row rebuilt from the same
+`WC_Order` after an action is stale ONLY on the legacy CPT store. Gotchas
+`a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
 `local-npm-run-build-is-not-assets-parity-evidence`,
 `a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store`.
 
@@ -23,15 +25,11 @@ HPOS rig are both blind to. Gotchas `a-grep-of-a-vendor-stylesheet-is-an-incompl
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-✅ **The order metabox (#856) is BUILT and PARKED** on `kalbac/856-shipping-metabox` (PR **#891**,
-do not merge): the FRAMEWORK now builds it from `Orders_Provider`, rendering through the same
-`Order_Row_Builder::build()` the table and REST use, so the two shop-windows cannot drift. It waits
-on the operator's eye only. Next: **«Создать заказ»** (#710 — the brainstorm is HIS).
+Next: **«Создать заказ»** (#710 — the brainstorm is HIS), then SP-10 increment 5.
 
-✅ **CI first-try reliability is now enforced, not merely intended** (#871): `.githooks/pre-push`
-rebuilds the bundles and runs the catalogue gates by exit code in ~22 s, because a worker may not
-build bundles while `lint:i18n-sources`/`lint:i18n` read msgids out of the built one. Measured cause
-and the 95→73 % collapse: `sessions/s134.md`.
+✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
+runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
+`lint:i18n-sources`/`lint:i18n` read msgids out of the built one. Cause: `sessions/s134.md`.
 
 ⚠ **«All time» is the ABSENCE of the date parameter, never a value** — `wc.date` throws on an
 unknown period and the throw unmounts the whole wc-admin app (gotcha
@@ -58,8 +56,9 @@ AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-compon
 `addhistorylistener-fires-before-the-url-changes`).
 
 ⚠ **Do NOT ask the operator to log into the rig — a Playwright probe logs in itself**
-(`admin`/`password`; s127, s128). For numbers without a browser use `wp eval` in the container, but
-**only the browser catches a client defect**: s128 had a green REST half whose table never updated.
+(`admin`/`password`). For numbers without a browser use `wp eval` in the container, but **only the
+browser catches a client defect** (s128). ⛔ **And no screenshots for him** — UI acceptance is
+«готово, смотри риг»; artifacts live in temp and are deleted (operator, 13.09.2026).
 ⚠ The rig runs **`WPLANG=en_US`** — English chrome is the LOCALE, not a defect.
 
 ⛔ **THE PILOT IS STOPPED (operator, 05.09.2026).** s116 refactored the old plugin instead of WRITING
@@ -73,8 +72,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
-фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null. Субсистемы с
-**0** незащищённых вызовов остаются опциональными.
+фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
@@ -189,7 +187,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: остался инкремент 5 (редирект старых слагов)**; метабокс #856 построен и запаркован. ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
+**SP-10: остался инкремент 5 (редирект старых слагов)**; метабокс #856 принят и смержен. ⚠ Набор действий объявлен ОДИН раз (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
 
 ✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
 
