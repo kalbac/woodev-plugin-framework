@@ -4043,3 +4043,23 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:8
 msgid "Открыть заказ"
 msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:167
+msgid "Информация %s"
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:215
+msgid "Заказ ещё не передан перевозчику «%s»."
+msgstr ""
+
+#: shipping-method/admin/class-shipping-admin-order.php:257
+msgid "ID заказа у перевозчика"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php:60
+msgid "История доставки"
+msgstr ""
+
+#: shipping-method/admin/views/html-admin-order-metabox.php:83
+msgid "Вы уверены?"
+msgstr ""
