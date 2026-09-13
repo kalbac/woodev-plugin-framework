@@ -15,7 +15,7 @@ user actually created.
 Measured (#339): `pickup-mount.js` writes a selected pickup point's address into the shared
 WooCommerce address fields. `location-cascade.js` owns those fields. The carrier answers
 «Москва» in Cyrillic while the provider had said «Moscow» (the account locale transliterates
-— see [[a-locality-display-name-is-not-an-identifier]]), so the cascade dropped the
+— see [a-locality-display-name-is-not-an-identifier](a-locality-display-name-is-not-an-identifier.md)), so the cascade dropped the
 settlement record and the next address search left **without `within`**, country-wide,
 although the customer had picked the city.
 
@@ -78,7 +78,7 @@ Rig-verified in one run (#339): announced write → record survives, next search
 
 ## Related
 
-- [[a-locality-display-name-is-not-an-identifier]] — why the two spellings differ at all.
-- [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] — the same family: WooCommerce's own programmatic `change` events.
-- [[a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout]] — publish cross-module state through a channel you own; this event is one.
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — a seam needs both halves wired AND a test that proves the wiring.
+- [a-locality-display-name-is-not-an-identifier](a-locality-display-name-is-not-an-identifier.md) — why the two spellings differ at all.
+- [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) — the same family: WooCommerce's own programmatic `change` events.
+- [a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout](a-dom-attribute-is-the-wrong-seam-on-a-woocommerce-checkout.md) — publish cross-module state through a channel you own; this event is one.
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — a seam needs both halves wired AND a test that proves the wiring.

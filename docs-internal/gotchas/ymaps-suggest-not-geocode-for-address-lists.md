@@ -45,7 +45,7 @@ items shaped like:
 street) and still carries the country. The reference's displayed string is `value` with the leading
 `Россия, Москва, ` (country/locality) prefix trimmed off; the FULL `value` — untrimmed — is what must
 be kept for the follow-up `geocode()` call, because trimming it there breaks resolution for addresses
-outside the loaded area (see [[bounding-the-address-resolve-breaks-the-normal-case]]).
+outside the loaded area (see [bounding-the-address-resolve-breaks-the-normal-case](bounding-the-address-resolve-breaks-the-normal-case.md)).
 
 `suggest()` also honours `boundedBy`/`strictBounds`, verified live — same as `geocode()`.
 
@@ -70,7 +70,7 @@ mock that returns whatever the code expects cannot disagree with the code.
 
 ## Related
 
-- [[bounding-the-address-resolve-breaks-the-normal-case]] — why `value` must stay untrimmed and why the
+- [bounding-the-address-resolve-breaks-the-normal-case](bounding-the-address-resolve-breaks-the-normal-case.md) — why `value` must stay untrimmed and why the
   *third* Yandex call in this same feature must NOT be bounded the same way as this one
-- [[ymaps-html-icon-layout-needs-iconshape]] — same family: an ymaps API shape nothing but a live query reveals
-- [[ymaps-locale-region-drives-units]] — another case of an ymaps parameter with undocumented reach
+- [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — same family: an ymaps API shape nothing but a live query reveals
+- [ymaps-locale-region-drives-units](ymaps-locale-region-drives-units.md) — another case of an ymaps parameter with undocumented reach

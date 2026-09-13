@@ -55,12 +55,12 @@ symbol at class-definition time belongs after the bootstrap has run.** `implemen
 and typed constant/property defaults are all resolved when the class is *declared*, not when it
 is instantiated, so moving the `new` later does not help. Only moving the `class` keyword does.
 
-Note this is the mirror image of [[framework-classmap-autoload-vendored-boot]]: there the class
+Note this is the mirror image of [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md): there the class
 map was incomplete, here it is complete but not yet installed. Both surface as "class not found"
 on a real vendored boot and are invisible under Composer's autoloader in unit tests.
 
 ## Related
 
-- [[framework-classmap-autoload-vendored-boot]] — the other half: a class missing from the generated map
-- [[classmap-autoload-breaks-class-exists-once-guard]] — another way the runtime autoloader defeats an assumption
-- [[wpenv-resolver-fixture-mapping]] — how fixtures get their bundled framework copy in the first place
+- [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the other half: a class missing from the generated map
+- [classmap-autoload-breaks-class-exists-once-guard](classmap-autoload-breaks-class-exists-once-guard.md) — another way the runtime autoloader defeats an assumption
+- [wpenv-resolver-fixture-mapping](wpenv-resolver-fixture-mapping.md) — how fixtures get their bundled framework copy in the first place

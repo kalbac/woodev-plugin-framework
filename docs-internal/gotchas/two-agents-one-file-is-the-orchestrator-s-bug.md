@@ -74,9 +74,9 @@ Two lessons, both worth more than the embarrassment:
 
 ## Related
 
-- [[git-checkout-destroys-uncommitted-mutation-revert]] — the same command, the same class of loss,
+- [git-checkout-destroys-uncommitted-mutation-revert](git-checkout-destroys-uncommitted-mutation-revert.md) — the same command, the same class of loss,
   found in s52. That entry blames the command; this one blames the dispatch that made two agents
   reach for the same file.
-- [[rig-serves-the-working-tree-branch-switch-reverts-fixes]] — the other reason a shared working
+- [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — the other reason a shared working
   tree serializes work.
-- [[codex-shell-sandbox-broken-windows]] — how the Codex channel is driven.
+- [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — how the Codex channel is driven.

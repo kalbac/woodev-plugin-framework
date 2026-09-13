@@ -38,5 +38,5 @@ a matching `classic-cart` (id 14). Sanity check after loading:
   it takes 15–120 s, which is the rig being slow, not a hang.
 
 ## Related
-- [[rig-serves-the-working-tree-branch-switch-reverts-fixes]]
-- [[wpenv-resolves-environment-from-cwd]]
+- [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md)
+- [wpenv-resolves-environment-from-cwd](wpenv-resolves-environment-from-cwd.md)

@@ -22,7 +22,7 @@ So neither "never call it" (breaks 7.4/8.0) nor "always call it" (breaks 8.5) is
 CI matrix is 7.4–8.3 but `composer.json` allows `php <9.0`, so 8.5 matters.
 
 This surfaced 26 errors only after the Unit job was unblocked (it had never run on CI — see
-[[ci-failing-gate-skips-dependent-jobs]]). It passed on 8.1–8.3, failed on 7.4/8.0.
+[ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md)). It passed on 8.1–8.3, failed on 7.4/8.0.
 
 ## Fix — version-guard every call
 
@@ -69,5 +69,5 @@ Two things worth keeping from the recurrence:
 
 ## Related
 
-- [[brain-monkey-function-pollution]], [[ci-failing-gate-skips-dependent-jobs]] — the other masked Unit failures
-- [[php84-implicit-nullable-payment-handlers]] — another PHP-version-specific test trap
+- [brain-monkey-function-pollution](brain-monkey-function-pollution.md), [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — the other masked Unit failures
+- [php84-implicit-nullable-payment-handlers](php84-implicit-nullable-payment-handlers.md) — another PHP-version-specific test trap

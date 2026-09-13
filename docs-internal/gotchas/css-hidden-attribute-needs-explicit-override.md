@@ -61,7 +61,7 @@ which is written first — placing it before the base rule here is for readabili
 jsdom does not compute the cascade the way a real browser does for this purpose, and every existing
 test in this file asserts the `hidden` **DOM property**, which is exactly what `setBusy()` sets
 correctly. The break is entirely in computed style, which only a real browser shows — same class of
-invisible-to-jsdom defect as [[modal-backdrop-opacity-dims-the-whole-dialog]].
+invisible-to-jsdom defect as [modal-backdrop-opacity-dims-the-whole-dialog](modal-backdrop-opacity-dims-the-whole-dialog.md).
 
 ## The wider lesson
 
@@ -73,7 +73,7 @@ search results dropdown) does not have this problem, because that class rule is 
 
 ## Related
 
-- [[modal-backdrop-opacity-dims-the-whole-dialog]] — same session, same "invisible to jsdom, visible
+- [modal-backdrop-opacity-dims-the-whole-dialog](modal-backdrop-opacity-dims-the-whole-dialog.md) — same session, same "invisible to jsdom, visible
   in a real browser" root class of defect
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-4 (busy overlay),
   V-5 (message card)

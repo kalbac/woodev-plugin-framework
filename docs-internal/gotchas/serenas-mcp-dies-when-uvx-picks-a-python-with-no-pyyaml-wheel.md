@@ -1,5 +1,6 @@
 # Gotcha: [tooling/serena] — Serena's MCP dies with `CONNECTION_CLOSED` when `uvx` picks a Python that has no `pyyaml` wheel
 > Tags: tooling, serena, mcp, windows | Session: s131
+> **Platform:** Windows only — the measured missing-wheel fallback requires the Windows compiler toolchain.
 
 ## What happens
 

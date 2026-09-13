@@ -101,8 +101,8 @@ reading the rule. In this file, treat `display` on any element inside `.woodev-p
 ## Related
 
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-14
-- [[mobile-inline-min-width-and-floating-control-stacking]] — same session, same "only a live
+- [mobile-inline-min-width-and-floating-control-stacking](mobile-inline-min-width-and-floating-control-stacking.md) — same session, same "only a live
   browser check surfaces this" verification lesson, different cause
-- [[css-hidden-attribute-needs-explicit-override]] — the s50 root cause this addendum's symptom
+- [css-hidden-attribute-needs-explicit-override](css-hidden-attribute-needs-explicit-override.md) — the s50 root cause this addendum's symptom
   is actually a variant of: an author `display` rule beating the `[hidden]` UA rule, except this
   time the author rule carries `!important` too

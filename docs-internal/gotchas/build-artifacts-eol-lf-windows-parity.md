@@ -38,6 +38,6 @@ change touches only `style-index.css` + `style-index-rtl.css`.
 
 ## Related
 
-- [[license-page-css-bundle-only]] — what belongs in `style.scss`
+- [license-page-css-bundle-only](license-page-css-bundle-only.md) — what belongs in `style.scss`
 - `.github/workflows/ci.yml` → "Assets build parity" job
 - `package.json` → `build` script; ADR-007 (committed build artifacts + CI parity)

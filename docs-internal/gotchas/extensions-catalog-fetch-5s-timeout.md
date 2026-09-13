@@ -39,4 +39,4 @@ add_filter( 'http_request_timeout', static fn() => 40 );
 
 ## Related
 
-- [[wp-safe-remote-request-local-rig]] — other rig transport traps (SSRF host/port allowances)
+- [wp-safe-remote-request-local-rig](wp-safe-remote-request-local-rig.md) — other rig transport traps (SSRF host/port allowances)

@@ -140,14 +140,14 @@ because the empty field was assumed to be a display fault.
 
 ## Related
 
-- [[jquery-trigger-change-fires-no-native-event]] — the other half of the two-event-worlds
+- [jquery-trigger-change-fires-no-native-event](jquery-trigger-change-fires-no-native-event.md) — the other half of the two-event-worlds
   problem: there a real pick was invisible to a native listener; here a programmatic write is
   invisible to the widget. Same seam, opposite direction.
-- [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] — why the namespaced
+- [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) — why the namespaced
   trigger is load-bearing rather than a nicety: an un-namespaced `change` reaches the destructive
   gate.
-- [[wc-uppercases-the-posted-state-and-flips-the-map]] — why a `related-list` region's
+- [wc-uppercases-the-posted-state-and-flips-the-map](wc-uppercases-the-posted-state-and-flips-the-map.md) — why a `related-list` region's
   `<option>` value is `wc_strtoupper( trim( label ) )` and therefore never matches this layer's
   own bare-name value vocabulary.
-- [[a-locality-display-name-is-not-an-identifier]] — the same two-value-spaces disease at the
+- [a-locality-display-name-is-not-an-identifier](a-locality-display-name-is-not-an-identifier.md) — the same two-value-spaces disease at the
   record level.

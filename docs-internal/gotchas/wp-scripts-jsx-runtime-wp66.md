@@ -46,5 +46,5 @@ must NOT contain `react-jsx-runtime` while the framework's minimum WP is < 6.6.
 
 ## Related
 
-- [[../adr/007-react-admin-stack-wordpress-scripts.md]] — the React baseline decision
+- [../adr/007-react-admin-stack-wordpress-scripts.md](../adr/007-react-admin-stack-wordpress-scripts.md) — the React baseline decision
 - [russian-source-i18n-plural-n.md](russian-source-i18n-plural-n.md) — the other UI-layer i18n trap from the same feature family

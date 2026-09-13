@@ -60,5 +60,5 @@ cart/checkout, the session is correct and a dual store is over-engineering: it w
 per-order choice outlive the order.
 
 ## Related
-- [[custom-checkout-field-is-empty-on-reload-by-construction]]
+- [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md)
 - `docs-internal/specs/2026-08-11-sp5-pickup-selection-persistence-design.md` §2

@@ -67,9 +67,9 @@ outcome.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — same shape of blindness in the wiring
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — same shape of blindness in the wiring
   direction: everything present, nothing connected.
-- [[jquery-trigger-change-fires-no-native-event]] — also from s66: a listener that exists and
+- [jquery-trigger-change-fires-no-native-event](jquery-trigger-change-fires-no-native-event.md) — also from s66: a listener that exists and
   never runs. Both are "the code is there" failures.
 - `docs-internal/specs/2026-08-10-embedded-map-provider-adapter-seam.md` — where `ownsChrome` and
   D-3 are defined.

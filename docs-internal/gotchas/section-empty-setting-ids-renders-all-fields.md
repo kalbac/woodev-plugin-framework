@@ -70,7 +70,7 @@ them apart. Check every intermediate caller that forwards a "may be empty" list 
 "empty = all" API before assuming the emptiness means what the caller intended.
 
 ## Related
-- [[mask-constant-backed-field-even-when-constant-undefined]] — same family: a masking/filtering
+- [mask-constant-backed-field-even-when-constant-undefined](mask-constant-backed-field-even-when-constant-undefined.md) — same family: a masking/filtering
   decision computed one field too early, before the caller that actually knows the answer.
 - SP-2 / Task 4: `woodev/settings-page/class-settings-page-registry.php` (`build_sections()`),
   `woodev/settings-page/class-field-schema.php` (`from_handler()`), `woodev/settings-api/abstract-class-settings.php` (`get_settings()`).

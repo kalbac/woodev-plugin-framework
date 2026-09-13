@@ -1,4 +1,5 @@
 # gotcha: three agents is the real concurrency cap here — past it, gates fail in ways that look like code bugs
+> **Measured on:** the Windows desktop (15.3 GB RAM) — re-measure on other hardware.
 
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)

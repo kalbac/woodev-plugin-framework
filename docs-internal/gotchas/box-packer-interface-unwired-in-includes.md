@@ -33,11 +33,11 @@ the bare `includes()` chain.
 When adding a class that `implements`/`extends` another framework type, ensure
 the parent's file is `require_once`'d **before** it in the correct `includes()`
 (dependency order). Never rely on the classmap to prove load order — it masks
-production fatals. Same class of bug as [[dispatcher-files-unwired-in-includes]].
+production fatals. Same class of bug as [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md).
 
 Fixed: added `require_once .../interfaces/interface-packer-item-with-product.php`
 right after `interface-packer-item.php` (parent before child) — `36209ee`, 2.0.1.
 
 ## Related
-- [[dispatcher-files-unwired-in-includes]] — same "classmap masks unwired includes()" trap
-- [[class-alias-phpstan-resolution]] — another classmap-vs-runtime divergence
+- [dispatcher-files-unwired-in-includes](dispatcher-files-unwired-in-includes.md) — same "classmap masks unwired includes()" trap
+- [class-alias-phpstan-resolution](class-alias-phpstan-resolution.md) — another classmap-vs-runtime divergence

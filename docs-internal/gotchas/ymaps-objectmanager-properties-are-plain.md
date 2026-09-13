@@ -67,7 +67,7 @@ fixtures key-for-key with what PHP really emits.
 
 ## Related
 
-- [[modal-backdrop-opacity-dims-the-whole-dialog]] — the other s48/s49 defect only a browser could see
-- [[ymaps-camera-moves-are-async]] — the other ymaps async/state trap on this feature
-- [[mutation-sweep-branch-only-false-confidence]] — green coverage that proves less than it looks
+- [modal-backdrop-opacity-dims-the-whole-dialog](modal-backdrop-opacity-dims-the-whole-dialog.md) — the other s48/s49 defect only a browser could see
+- [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md) — the other ymaps async/state trap on this feature
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — green coverage that proves less than it looks
 - Issue #158 — the rig fixture still cannot exercise the type filter, tab bar or clusters

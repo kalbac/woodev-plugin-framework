@@ -38,7 +38,7 @@ gh pr comment <old-PR-number> --body "Closed automatically when the base branch 
 files the upstream PR (#363) already merged — e.g. a whole 170-line file the squash commit already
 put in `main` — as if newly added again.
 
-## Root cause (same root cause as [[git-squash-onto-stale-origin-main-diverge]])
+## Root cause (same root cause as [git-squash-onto-stale-origin-main-diverge](git-squash-onto-stale-origin-main-diverge.md))
 
 A squash merge creates a **new** commit object; the branch's original, pre-squash commits are never
 an ancestor of it. `git diff A...B` computes from `merge-base(A,B)`, which — because the squash commit
@@ -121,7 +121,7 @@ Merging in order, the first two went through untouched. The moment `#462` landed
 `#464` flipped to `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING` — its branch still carried the
 rig MERGE commits for `#461` and `#462`, and the three-way merge against a `main` that now held the
 same content under new SHAs could not be computed. And per Symptom 3's sibling gotcha
-[[pr-conflict-skips-pull-request-ci]], a `CONFLICTING` PR runs no `pull_request` CI at all.
+[pr-conflict-skips-pull-request-ci](pr-conflict-skips-pull-request-ci.md), a `CONFLICTING` PR runs no `pull_request` CI at all.
 
 **The fix is a rebase that drops the rig commits, not a merge:**
 
@@ -169,7 +169,7 @@ the downstream PR to `main` while it is still open, and only then delete the bra
 
 ## Related
 
-- [[git-squash-onto-stale-origin-main-diverge]] — the same squash-merge-breaks-ancestry root cause,
+- [git-squash-onto-stale-origin-main-diverge](git-squash-onto-stale-origin-main-diverge.md) — the same squash-merge-breaks-ancestry root cause,
   a different symptom (local `main` diverging from `origin/main`, not a diff-stat artefact).
 - Merge protocol: verify each CI job green + state CLEAN before `--squash --delete-branch`, never
   `--auto` (AGENT-RULES / global feedback patterns) — for a stacked PR, "each CI job" means the LOCAL

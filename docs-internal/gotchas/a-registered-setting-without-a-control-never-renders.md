@@ -74,6 +74,6 @@ for the first. A label is the most natural thing to grep for and the least relia
 
 ## Related
 
-- [[a-plausible-inference-written-as-fact-is-the-dangerous-one]] — the failure mode this is an instance of
-- [[section-empty-setting-ids-renders-all-fields]] — the other direction: declaring NO setting ids renders everything
-- [[woodev-setting-get-value-is-cached-not-a-live-option-read]] — the same class of "registered ≠ what you think" in the read path
+- a-plausible-inference-written-as-fact-is-the-dangerous-one — the failure mode this is an instance of
+- [section-empty-setting-ids-renders-all-fields](section-empty-setting-ids-renders-all-fields.md) — the other direction: declaring NO setting ids renders everything
+- [woodev-setting-get-value-is-cached-not-a-live-option-read](woodev-setting-get-value-is-cached-not-a-live-option-read.md) — the same class of "registered ≠ what you think" in the read path

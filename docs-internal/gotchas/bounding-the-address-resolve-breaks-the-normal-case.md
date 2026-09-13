@@ -14,7 +14,7 @@ The pickup search feature reaches Yandex three separate times:
 
 The first two are correctly bounded to the loaded pickup-point area (`strictBounds: true`) — that's
 what stops a Moscow buyer from being offered a same-named street in Tolyatti (see
-[[ymaps-control-options-must-be-nested]] for the sibling bug on the search control's own geocoder).
+[ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md) for the sibling bug on the search control's own geocoder).
 
 ## The mistake
 
@@ -38,7 +38,7 @@ react, as if the click never registered.
 
 **Bound the calls that OFFER candidates. Do not bound the call that RESOLVES an already-chosen one.**
 By the time `resolveAddress()` runs, there is nothing left to disambiguate — the picked string already
-carries its own country/locality prefix (see [[ymaps-suggest-not-geocode-for-address-lists]] for why
+carries its own country/locality prefix (see [ymaps-suggest-not-geocode-for-address-lists](ymaps-suggest-not-geocode-for-address-lists.md) for why
 that untrimmed `value` string matters here specifically). Bounding it doesn't narrow an ambiguous
 choice; it just makes correct, already-made choices fail whenever the customer's address falls outside
 the point coverage — which, again, is the normal case for this feature, not an edge case.
@@ -64,9 +64,9 @@ real debugging time here to tell "the map isn't updating" apart from "the click 
 
 ## Related
 
-- [[ymaps-suggest-not-geocode-for-address-lists]] — the sibling fix in the same feature: which call to
+- [ymaps-suggest-not-geocode-for-address-lists](ymaps-suggest-not-geocode-for-address-lists.md) — the sibling fix in the same feature: which call to
   use, and which field of its result carries the string this file's `resolveAddress()` consumes
-- [[ymaps-control-options-must-be-nested]] — the OTHER bounded-geocoder bug in this feature (the search
+- [ymaps-control-options-must-be-nested](ymaps-control-options-must-be-nested.md) — the OTHER bounded-geocoder bug in this feature (the search
   control's own default geocoder, unbounded in the opposite direction — worldwide instead of over-narrowed)
-- [[ymaps-camera-moves-are-async]] — same feature area, same "a dropped/mishandled async step produces
+- [ymaps-camera-moves-are-async](ymaps-camera-moves-are-async.md) — same feature area, same "a dropped/mishandled async step produces
   total silence, not an error" shape

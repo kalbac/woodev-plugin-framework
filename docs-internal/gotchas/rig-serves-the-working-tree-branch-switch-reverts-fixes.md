@@ -91,7 +91,7 @@ MSYS_NO_PATHCONV=1 npx wp-env run cli wp config list --fields=name,value | grep 
 ```
 
 `MSYS_NO_PATHCONV=1` is required under Git-Bash — MSYS otherwise mangles the container paths, see
-[[wpenv-windows-gitbash-path-mangling]]. And wp-env resolves the environment from the CURRENT
+[wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md). And wp-env resolves the environment from the CURRENT
 WORKING DIRECTORY: run this from the repo root — from a subdirectory it fails with
 "Environment not initialized" (observed s60).
 
@@ -146,6 +146,6 @@ is not the explanation, the branch is.
 
 ## Related
 
-- [[jest-scans-agent-worktrees-inside-the-repo]] — the same family: local state that silently
+- [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — the same family: local state that silently
   makes a measurement about something other than what you think you are measuring.
-- [[playwright-mcp-does-not-fire-wc-checkout-ajax]] — rig observations need their harness named.
+- [playwright-mcp-does-not-fire-wc-checkout-ajax](playwright-mcp-does-not-fire-wc-checkout-ajax.md) — rig observations need their harness named.

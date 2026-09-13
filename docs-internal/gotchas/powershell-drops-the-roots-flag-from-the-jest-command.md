@@ -1,11 +1,12 @@
 # PowerShell drops `--roots` from the documented jest command
+> **Platform:** Windows only — PowerShell's npm argument forwarding drops the flag.
 
 **Namespace:** `[testing/js]`
 **Found:** s73 (14.08.2026).
 
 **Update (s107, #188):** a bare `npm run test:js` no longer needs `--roots` at all —
 `jest-unit.config.js` now scopes it by default (see
-[[jest-scans-agent-worktrees-inside-the-repo]]). The trap below still applies whenever a
+[jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md)). The trap below still applies whenever a
 flag IS passed to an npm script through PowerShell, `--roots` or otherwise.
 
 ## The trap
@@ -57,7 +58,7 @@ agent worktrees inside the repo (see the two gotchas below).
 
 ## Related
 
-- [[npx-jest-bypasses-wp-scripts-jsdom]] — why the wrapper exists in the first place
-- [[jest-scans-agent-worktrees-inside-the-repo]] — the other reason the roots restriction matters
-- [[wpenv-windows-gitbash-path-mangling]] — the mirror-image trap: wp-env needs PowerShell, because Git Bash mangles container paths
-- [[../GOTCHAS.md]] — `[testing/js]`
+- [npx-jest-bypasses-wp-scripts-jsdom](npx-jest-bypasses-wp-scripts-jsdom.md) — why the wrapper exists in the first place
+- [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — the other reason the roots restriction matters
+- [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — the mirror-image trap: wp-env needs PowerShell, because Git Bash mangles container paths
+- [../GOTCHAS.md](../GOTCHAS.md) — `[testing/js]`

@@ -1,4 +1,5 @@
 # [tooling/phpstan-windows-segfault] PHPStan crashes with exit `-1073741819` on Windows — environmental, not a code error
+> **Platform:** Windows only — the measured native worker crash is a Windows access violation.
 
 > Namespace: `[tooling/*]` · Added s28 (2026-06-21)
 
@@ -73,6 +74,6 @@ one is a local resource setting and the fix is a flag, not a shrug.
 
 ## Related
 
-- [[framework-classmap-autoload-vendored-boot]] — the s27/s28 autoloader work that PHPStan analyses
-- [[codex-shell-sandbox-broken-windows]] — another Windows-only tooling crash on this box
-- [[serena-replace-content-eol-flip]] — Windows-only tooling gotcha
+- [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — the s27/s28 autoloader work that PHPStan analyses
+- [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — another Windows-only tooling crash on this box
+- [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) — Windows-only tooling gotcha

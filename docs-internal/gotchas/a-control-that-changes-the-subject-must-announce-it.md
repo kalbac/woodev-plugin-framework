@@ -35,7 +35,7 @@ take it.
 
 The tab clause was never true. This is the second time in three sessions that a **confident
 docblock describing an arrangement the code does not have** marked the exact spot of a wiring
-hole — see [[built-on-both-sides-with-no-caller-in-the-middle]], where the tell was the same
+hole — see [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md), where the tell was the same
 shape.
 
 The comment is not lying on purpose. It describes the design as intended, and the wiring for one
@@ -83,7 +83,7 @@ check each one actually does. The one that doesn't is the bug.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — same family, same tell.
-- [[card-renders-from-a-snapshot-the-writers-never-touch]] — the other "correct halves, wrong
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — same family, same tell.
+- [card-renders-from-a-snapshot-the-writers-never-touch](card-renders-from-a-snapshot-the-writers-never-touch.md) — the other "correct halves, wrong
   seam" defect in this subsystem.
-- [[a-constant-field-cannot-be-a-verdict]] — the other half of the same operator report.
+- [a-constant-field-cannot-be-a-verdict](a-constant-field-cannot-be-a-verdict.md) — the other half of the same operator report.

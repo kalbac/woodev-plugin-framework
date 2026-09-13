@@ -59,8 +59,8 @@ that actually broke.
 
 ## Related
 
-- [[phpunit-multiple-file-args]] — another way a passing local run can misrepresent CI
-- [[guest-session-write-needs-the-cart-cookie]] — the same `WC()->session` guest-write mechanism,
+- [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — another way a passing local run can misrepresent CI
+- [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md) — the same `WC()->session` guest-write mechanism,
   a different failure mode (the write silently not happening at all)
-- [[rig-serves-the-working-tree-branch-switch-reverts-fixes]] — a different "local environment
+- [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — a different "local environment
   quietly disagrees with what's being reviewed" trap on this same branch

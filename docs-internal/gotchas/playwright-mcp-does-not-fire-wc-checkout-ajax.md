@@ -66,6 +66,6 @@ specifics from that run:
 
 ## Related
 
-- [[checkout-field-takeover-woocommerce-states]] — the redesign this run verified end to end
-- [[wp-safe-remote-request-local-rig]] — other local rig traps
-- [[wpenv-windows-gitbash-path-mangling]] — `MSYS_NO_PATHCONV=1` when driving wp-env/docker from Git Bash
+- [checkout-field-takeover-woocommerce-states](checkout-field-takeover-woocommerce-states.md) — the redesign this run verified end to end
+- [wp-safe-remote-request-local-rig](wp-safe-remote-request-local-rig.md) — other local rig traps
+- [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — `MSYS_NO_PATHCONV=1` when driving wp-env/docker from Git Bash

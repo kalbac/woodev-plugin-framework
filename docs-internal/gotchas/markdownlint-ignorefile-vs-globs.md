@@ -47,4 +47,4 @@ satisfy a linter — exclude/disable instead.
 
 ## Related
 
-- [[ci-failing-gate-skips-dependent-jobs]] — other PR #20 CI root causes
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — other PR #20 CI root causes

@@ -66,6 +66,6 @@ instances are a mutation that never applied, and a gate measured where it could 
 
 ## Related
 
-- [[a-mutation-you-did-not-confirm-applied-proves-nothing]] — same rule, mutation-testing shape
-- [[measure-a-gate-where-the-gate-can-actually-fire]] — same rule, precondition shape
-- [[perl-multiline-mutation-silently-misses-crlf-files]] — a silent no-op that read as evidence
+- [a-mutation-you-did-not-confirm-applied-proves-nothing](a-mutation-you-did-not-confirm-applied-proves-nothing.md) — same rule, mutation-testing shape
+- [measure-a-gate-where-the-gate-can-actually-fire](measure-a-gate-where-the-gate-can-actually-fire.md) — same rule, precondition shape
+- [perl-multiline-mutation-silently-misses-crlf-files](perl-multiline-mutation-silently-misses-crlf-files.md) — a silent no-op that read as evidence

@@ -114,7 +114,7 @@ against the suite CI actually runs before believing a green.
 
 ## Related
 
-- [[integration-test-global-admin-hooks-output-and-submenu-accumulation]] — the other
+- [integration-test-global-admin-hooks-output-and-submenu-accumulation](integration-test-global-admin-hooks-output-and-submenu-accumulation.md) — the other
   `WP_UnitTestCase` state-leak family: globals that accumulate rather than get restored.
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the `wp_login` callback this reset can now
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the `wp_login` callback this reset can now
   remove is the same one that spent PR-A with zero callers.

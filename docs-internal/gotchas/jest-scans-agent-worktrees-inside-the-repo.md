@@ -87,6 +87,6 @@ used to, walks the filesystem instead of reading `.gitignore`.
 
 ## Related
 
-- [[npx-jest-bypasses-wp-scripts-jsdom]] — the other way a jest TOTAL lies in this repo
-- [[jest-toequal-empty-array-ignores-undefined]] — a third case of a green run proving less than it appears
-- [[mutation-sweep-branch-only-false-confidence]] — on what a passing suite does not prove
+- [npx-jest-bypasses-wp-scripts-jsdom](npx-jest-bypasses-wp-scripts-jsdom.md) — the other way a jest TOTAL lies in this repo
+- [jest-toequal-empty-array-ignores-undefined](jest-toequal-empty-array-ignores-undefined.md) — a third case of a green run proving less than it appears
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — on what a passing suite does not prove

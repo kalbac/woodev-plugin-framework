@@ -24,7 +24,7 @@ operator decisions that are all "commit anyway".
 ## What the critic gets RIGHT (do not touch)
 
 In the SAME batch the critic correctly caught real bugs with the same confidence: contract-string
-derivation (ajax action / admin slug — see [[contract-string-not-derivable]]), a POST-shape
+derivation (ajax action / admin slug — see [contract-string-not-derivable](contract-string-not-derivable.md)), a POST-shape
 mismatch vs shipped JS, and a background-job payload misuse. Those findings are exactly why the
 adversarial critic exists. Any recalibration must be SURGICAL: stop scoring (1) and (2) as
 `broken`; keep everything else.
@@ -42,6 +42,6 @@ Until then: triage these `broken`-on-additive escalations by reading the diff �
 findings are (1) and (2) and there is zero installed-site string, override + commit.
 
 ## Related
-- [[contract-string-not-derivable]] — the critic's CORRECT findings in the same batch
-- [[autodev-attempt-refund-symmetry]] — the earlier (infra) critic-vs-conductor issue
+- [contract-string-not-derivable](contract-string-not-derivable.md) — the critic's CORRECT findings in the same batch
+- [autodev-attempt-refund-symmetry](autodev-attempt-refund-symmetry.md) — the earlier (infra) critic-vs-conductor issue
 - `.autodev/escalations/_outbox.md` — the 2026-06-06 batch resolutions (tracking/webhook = override)

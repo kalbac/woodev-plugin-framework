@@ -1,4 +1,4 @@
-# Gotcha: [testing/js] — `npm run test:js` is a fifth of the `JS Tests` job, and the gate it omits is the one that fails a brand-new page
+# Gotcha: [testing/js] — `npm run test:js` is one seventh of the `JS Tests` job, and the gate it omits is the one that fails a brand-new page
 
 > Tags: testing, js, ci, typescript | Session: s125
 
@@ -16,22 +16,24 @@ TypeScript-by-default gate: 4 problem(s)
 ## Why
 
 `npm run test:js` is `wp-scripts test-unit-js` and nothing else. The CI job called `JS Tests` runs
-**five** commands in order (`.github/workflows/ci.yml`):
+**seven** commands in order (`.github/workflows/ci.yml`):
 
 ```bash
 npm run lint:ts-baseline    # TypeScript-by-default for new files under src/ (#542)
 npm run typecheck           # tsc --noEmit
 npm run lint:phone-masks    # generated table is current (#503)
 npm run lint:imask          # vendored IMask matches package.json (#704)
+npm run lint:i18n           # Russian catalogue has no untranslated English msgid (#771)
+npm run lint:mo             # compiled .mo is current relative to the .po (#771)
 npm run test:js             # ← the only one people run locally
 ```
 
-Four of the five are about **generated artefacts and conventions**, not about tests, and they are
+Six of the seven are about **generated artefacts and conventions**, not about tests, and they are
 exactly the ones a local `test:js` cannot speak for.
 
 ## Correct
 
-Any brief or checklist that says "run the JS gate" must name all five, and a new file under `src/`
+Any brief or checklist that says "run the JS gate" must name all seven, and a new file under `src/`
 is **TypeScript** — `.ts`, or `.tsx` where there is JSX.
 
 ⚠ **`scripts/ts-baseline.txt` is NOT the escape hatch.** It lists grandfathered `.js` files awaiting

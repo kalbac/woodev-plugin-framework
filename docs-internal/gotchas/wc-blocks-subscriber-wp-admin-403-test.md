@@ -33,5 +33,5 @@ unless you notice the URL changed to `/?page_id=…` (My Account).
 
 ## Related
 
-- [[wp-safe-remote-request-local-rig]] — other two-stack rig traps.
+- [wp-safe-remote-request-local-rig](wp-safe-remote-request-local-rig.md) — other two-stack rig traps.
 - `woodev/licensing/updater/class-plugin-updater.php` — `show_changelog()` (OB-3 F9).

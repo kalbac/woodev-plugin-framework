@@ -58,7 +58,7 @@ beats a fast one that fills the merchant's options table.
 
 ## Related
 
-- [[a-per-cycle-memo-is-not-in-flight-deduplication]] — the other cache-shaped defect in this
+- [a-per-cycle-memo-is-not-in-flight-deduplication](a-per-cycle-memo-is-not-in-flight-deduplication.md) — the other cache-shaped defect in this
   subsystem: one map doing two jobs with two different lifetimes.
-- [[an-invented-fixture-tests-your-assumptions-not-the-carrier]] — the same session's lesson about
+- [an-invented-fixture-tests-your-assumptions-not-the-carrier](an-invented-fixture-tests-your-assumptions-not-the-carrier.md) — the same session's lesson about
   copying a shape without its preconditions.

@@ -18,7 +18,7 @@ The same tree, run correctly, is **631 passed, 631 total, 8 suites**.
 ## Root cause
 
 This project's own `jest-unit.config.js` (added s107, #188, to scope `roots` — see
-[[jest-scans-agent-worktrees-inside-the-repo]]) is a `wp-scripts`-specific filename, not
+[jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md)) is a `wp-scripts`-specific filename, not
 one plain `jest` auto-discovers (`jest.config.js`/`.json` or a `jest` key in
 `package.json` — neither exists here). JS tests run through `@wordpress/scripts`:
 
@@ -79,14 +79,14 @@ failed to load, which is an environment problem, not a regression.
 
 ## Related
 
-- [[phpunit-multiple-file-args]] — the same family on the PHP side: an invocation that
+- [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — the same family on the PHP side: an invocation that
   silently runs less than you think while looking like it ran everything.
-- [[mutation-sweep-branch-only-false-confidence]] — on what a green (or red) run does not prove.
-- [[wp-scripts-jsx-runtime-wp66]] — another behaviour owned by `@wordpress/scripts` rather
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — on what a green (or red) run does not prove.
+- [wp-scripts-jsx-runtime-wp66](wp-scripts-jsx-runtime-wp66.md) — another behaviour owned by `@wordpress/scripts` rather
   than by this repo's own config.
-- [[git-checkout-destroys-uncommitted-mutation-revert]] — the OTHER way a JS run reads as "I
+- [git-checkout-destroys-uncommitted-mutation-revert](git-checkout-destroys-uncommitted-mutation-revert.md) — the OTHER way a JS run reads as "I
   broke everything" while the code is fine; same session. Here the total does NOT drop, which
   is what tells the two apart.
-- [[jest-toequal-empty-array-ignores-undefined]] — the opposite failure shape, same session: a
+- [jest-toequal-empty-array-ignores-undefined](jest-toequal-empty-array-ignores-undefined.md) — the opposite failure shape, same session: a
   bad invocation makes tests look broken when they are not; this one makes a broken guard look
   covered when it is not.

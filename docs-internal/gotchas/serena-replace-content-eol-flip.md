@@ -1,4 +1,5 @@
 # Serena `replace_content`/`replace_symbol_body` rewrites the whole file as CRLF on Windows
+> **Platform:** Windows only — the measured Serena writer emits CRLF on this host.
 
 **Topic:** `[tooling/*]` · **Discovered:** s25 (2026-06-20) · **Confirmed for `replace_symbol_body`:** #244 (2026-08-10)
 
@@ -73,5 +74,5 @@ so LF — then re-run phpcs before changing a single character of whitespace.
 
 ## Related
 
-- [[build-artifacts-eol-lf-windows-parity]] — the `.gitattributes eol=lf` pin for build assets
-- [[serena-index-vs-git-worktree]] — other Serena-on-Windows caveat
+- [build-artifacts-eol-lf-windows-parity](build-artifacts-eol-lf-windows-parity.md) — the `.gitattributes eol=lf` pin for build assets
+- [serena-index-vs-git-worktree](serena-index-vs-git-worktree.md) — other Serena-on-Windows caveat

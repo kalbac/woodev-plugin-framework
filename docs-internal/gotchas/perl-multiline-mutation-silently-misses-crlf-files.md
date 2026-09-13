@@ -47,7 +47,7 @@ i/lf    w/lf    attr/text eol=lf        woodev/class-lifecycle.php
 disk.
 
 So a file only becomes CRLF here after a **tool flips it**, and there is a known one:
-[[serena-replace-content-eol-flip]] rewrites an entire file as CRLF on every
+[serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) rewrites an entire file as CRLF on every
 `replace_content` / `replace_symbol_body`. That is also where the `warning: CRLF will be replaced
 by LF` lines come from — they are not routine, they are a **symptom that Serena touched the file**,
 and they name exactly which files have been flipped.

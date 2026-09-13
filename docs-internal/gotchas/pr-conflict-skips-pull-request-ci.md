@@ -37,5 +37,5 @@ like CI "passed" because the one check present was green.
 
 ## Related
 
-- [[ci-failing-gate-skips-dependent-jobs]] — sibling "skipped ≠ failed, looks green" trap,
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — sibling "skipped ≠ failed, looks green" trap,
   but caused by a `needs:` gate rather than a merge conflict.

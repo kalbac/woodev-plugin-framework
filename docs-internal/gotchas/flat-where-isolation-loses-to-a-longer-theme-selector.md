@@ -10,7 +10,7 @@ The style-isolation contract this repo uses (`pickup.css`, `woodev-modal.css`) w
 decoration without a specificity war, and our real component rules (one class, `(0,1,0)`) still beat a
 theme's bare element selectors (`(0,0,1)`).
 
-The sibling gotcha [[hostile-theme-button-display-none-needs-important]] documents the case where a
+The sibling gotcha [hostile-theme-button-display-none-needs-important](hostile-theme-button-display-none-needs-important.md) documents the case where a
 theme shouts — `button { display: none !important }` — and concludes that `display` on a control
 gets `!important`, because nothing but `!important` beats `!important`.
 
@@ -79,7 +79,7 @@ individual ones, so a flaky per-probe setup cannot leave a gap in the conclusion
 
 ## Related
 
-- [[hostile-theme-button-display-none-needs-important]] — the `!important`-vs-`!important` case; this
+- [hostile-theme-button-display-none-needs-important](hostile-theme-button-display-none-needs-important.md) — the `!important`-vs-`!important` case; this
   file is its third sibling: specificity-vs-specificity
-- [[css-hidden-attribute-needs-explicit-override]]
-- [[mobile-inline-min-width-and-floating-control-stacking]] — same "only a live browser surfaces it"
+- [css-hidden-attribute-needs-explicit-override](css-hidden-attribute-needs-explicit-override.md)
+- [mobile-inline-min-width-and-floating-control-stacking](mobile-inline-min-width-and-floating-control-stacking.md) — same "only a live browser surfaces it"

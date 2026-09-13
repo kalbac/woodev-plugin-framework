@@ -33,9 +33,9 @@ falsifiable; "green" is not.
 **And treat the primary checkout as shared infrastructure.** Before creating a wave of worktrees:
 
 ```bash
-git -C D:/Projects/woodev_framework rev-parse --abbrev-ref HEAD   # should be main
-git -C D:/Projects/woodev_framework log --oneline origin/main..HEAD   # should be empty
-git -C D:/Projects/woodev_framework log --oneline HEAD..origin/main   # ← must ALSO be empty
+git -C "$(git rev-parse --show-toplevel)" rev-parse --abbrev-ref HEAD   # should be main
+git -C "$(git rev-parse --show-toplevel)" log --oneline origin/main..HEAD   # should be empty
+git -C "$(git rev-parse --show-toplevel)" log --oneline HEAD..origin/main   # ← must ALSO be empty
 ```
 
 The third command is the one that catches this. If the primary is behind, merge `origin/main` into

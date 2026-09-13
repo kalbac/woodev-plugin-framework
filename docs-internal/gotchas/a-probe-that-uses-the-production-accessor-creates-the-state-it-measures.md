@@ -46,9 +46,9 @@ perturbed identically.
 
 ## Related
 
-- [[the-integration-suite-has-a-wc-session-a-rest-request-does-not]] — the sibling trap: the
+- [the-integration-suite-has-a-wc-session-a-rest-request-does-not](the-integration-suite-has-a-wc-session-a-rest-request-does-not.md) — the sibling trap: the
   measurement CONTEXT, not the measuring call, is what differed there
-- [[woodev-setting-get-value-is-cached-not-a-live-option-read]] — an accessor that reports the
+- [woodev-setting-get-value-is-cached-not-a-live-option-read](woodev-setting-get-value-is-cached-not-a-live-option-read.md) — an accessor that reports the
   configuration a rig probe was trying to leave
-- [[a-mutation-you-did-not-confirm-applied-proves-nothing]] — the other "your evidence is not
+- [a-mutation-you-did-not-confirm-applied-proves-nothing](a-mutation-you-did-not-confirm-applied-proves-nothing.md) — the other "your evidence is not
   what you think it is" rule

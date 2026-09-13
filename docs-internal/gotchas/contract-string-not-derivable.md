@@ -44,9 +44,9 @@ task touching `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, or `cron
 The GPT-5.5 critic flagged all three with high confidence (0.96–0.98) by cross-referencing the
 derived value against the INVARIANTS exact_strings. This is the critic working as designed — do
 NOT recalibrate it away from these findings (contrast: the critic's *over-flagging* of new
-additive hooks / unwired classes — see [[autodev-critic-overflag]] — which IS miscalibration).
+additive hooks / unwired classes — see [autodev-critic-overflag](autodev-critic-overflag.md) — which IS miscalibration).
 
 ## Related
 - `.autodev/INVARIANTS.md` — `ajax_actions`, `admin_page_slugs`, `rest`, `log_source`, `cron`, `order_session_meta` exact_strings
-- [[session-key-vs-order-meta-prefix]] — the order-handler instance of the same root
-- [[autodev-critic-overflag]] — the critic's *real* miscalibration (distinct from this, which it gets right)
+- [session-key-vs-order-meta-prefix](session-key-vs-order-meta-prefix.md) — the order-handler instance of the same root
+- [autodev-critic-overflag](autodev-critic-overflag.md) — the critic's *real* miscalibration (distinct from this, which it gets right)

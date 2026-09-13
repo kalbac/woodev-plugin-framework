@@ -40,5 +40,5 @@ signed, server-to-server routes (`request_token` / `access_token` / `me` /
 
 ## Related
 
-- [[rest-cookie-nonce-auth-semantics]] — the underlying REST cookie-nonce rule.
-- [[wp-nonce-url-esc-html-breaks-js-urls]] — the other s24 rig bug (sibling).
+- [rest-cookie-nonce-auth-semantics](rest-cookie-nonce-auth-semantics.md) — the underlying REST cookie-nonce rule.
+- [wp-nonce-url-esc-html-breaks-js-urls](wp-nonce-url-esc-html-breaks-js-urls.md) — the other s24 rig bug (sibling).

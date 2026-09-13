@@ -46,4 +46,4 @@ Two-part pattern:
 
 - `woodev/rest-api/controllers/class-rest-api-extensions.php` — `normalize_product()` (forward-compatible reads)
 - `docs-internal/archive/specs/2026-06-18-plugins-page-ob7-redesign-design.md` §8a — the store-side dependency
-- [[edd-sl-get-version-serialized-sections]] — another EDD wire-shape gotcha
+- [edd-sl-get-version-serialized-sections](edd-sl-get-version-serialized-sections.md) — another EDD wire-shape gotcha

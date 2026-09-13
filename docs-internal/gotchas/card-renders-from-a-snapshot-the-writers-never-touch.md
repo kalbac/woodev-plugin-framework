@@ -109,10 +109,10 @@ from field B, where B was assigned from A at some earlier time.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the s56 sibling: also a defect *between*
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the s56 sibling: also a defect *between*
   two individually-correct halves, also invisible to unit tests of either half.
-- [[a-per-cycle-memo-is-not-in-flight-deduplication]] — found while fixing this one.
-- [[rig-serves-the-working-tree-branch-switch-reverts-fixes]] — how the rig was driven for the
+- [a-per-cycle-memo-is-not-in-flight-deduplication](a-per-cycle-memo-is-not-in-flight-deduplication.md) — found while fixing this one.
+- [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — how the rig was driven for the
   measurement above.
-- [[ymaps-draw-then-move-parks-the-overlay]] — the other class of bug where the card/marker state
+- [ymaps-draw-then-move-parks-the-overlay](ymaps-draw-then-move-parks-the-overlay.md) — the other class of bug where the card/marker state
   and the visible reality disagree.
