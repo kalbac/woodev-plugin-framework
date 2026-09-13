@@ -596,6 +596,28 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$registry->enqueue_assets();
 	}
 
+	/** The metabox reuses the compiled table badge CSS only after its box registered. */
+	public function test_enqueue_metabox_style_reuses_the_orders_page_stylesheet(): void {
+		$plugin = \Mockery::mock( '\\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek' ), $plugin );
+
+		Functions\expect( 'wp_enqueue_style' )
+			->once()
+			->with(
+				'woodev-shipping-orders-page',
+				'https://example.test/vendor/woodev/framework/assets/build/shipping-orders-page/style-index.css',
+				[ 'wc-components' ],
+				'1.2.3'
+			);
+
+		$registry->enqueue_metabox_style();
+	}
+
 	/**
 	 * A non-`Woodev_Plugin` second argument (a caller mistake) must be ignored
 	 * rather than accepted and blown up on later — `enqueue_assets()` still finds

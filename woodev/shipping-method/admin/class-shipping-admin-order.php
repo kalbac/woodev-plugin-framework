@@ -44,6 +44,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -208,6 +209,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				'side',
 				'default'
 			);
+
+			// This is the exact point at which the metabox becomes real. The registry
+			// sources the already-built shared badge stylesheet from the active
+			// framework copy, so it never loads on an order-edit screen without ours.
+			$this->registry->enqueue_metabox_style();
 		}
 
 		/**
@@ -275,7 +281,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * @param \WC_Order            $order    order.
 		 * @param Orders_Provider      $provider matched carrier.
 		 * @param array<string, mixed> $row      the row {@see Order_Row_Builder::build()} produced for this order.
-		 * @return array<int, array{label: string, value: string, url: string|null}>
+		 * @return array<int, array{label: string, value: string, url: string|null, tone?:string}>
 		 */
 		private function build_fields( \WC_Order $order, Orders_Provider $provider, array $row ): array {
 
@@ -316,15 +322,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				];
 			}
 
-			$status_raw = $row['delivery_status']['raw'] ?? null;
+			$status_label = $row['delivery_status']['canonical_label'] ?? '';
 
-			if ( null !== $status_raw && '' !== $status_raw ) {
-				$status_label = $row['delivery_status']['raw_label'] ?? $row['delivery_status']['canonical_label'] ?? $status_raw;
+			if ( '' !== $status_label ) {
 
 				$fields[] = [
 					'label' => __( 'Статус доставки', 'woodev-plugin-framework' ),
 					'value' => (string) $status_label,
 					'url'   => null,
+					'tone'  => Delivery_Status::tone( (string) ( $row['delivery_status']['canonical'] ?? '' ) ),
 				];
 			}
 

@@ -28,7 +28,10 @@
 const { readFileSync } = require( 'node:fs' );
 const path = require( 'node:path' );
 
-import { DELIVERY_STATUS_LABELS } from '../../src/shipping-orders-page/columns';
+import {
+	DELIVERY_STATUS_LABELS,
+	DELIVERY_STATUS_TONES,
+} from '../../src/shipping-orders-page/columns';
 
 const PHP_PATH = path.resolve(
 	__dirname,
@@ -75,6 +78,33 @@ function readPhpDeliveryStatusLabels() {
 	return labels;
 }
 
+/** Reads `Delivery_Status::tones()`'s canonical-state -> CSS-tone map. */
+function readPhpDeliveryStatusTones() {
+	const php = readFileSync( PHP_PATH, 'utf8' );
+	const constants = new Map();
+	for ( const m of php.matchAll( /const\s+([A-Z_]+)\s*=\s*'([^']*)';/g ) ) {
+		constants.set( m[ 1 ], m[ 2 ] );
+	}
+
+	const methodMatch = php.match(
+		/public static function tones\(\):\s*array\s*\{\s*return\s*\[([\s\S]*?)\];\s*\}/
+	);
+	if ( ! methodMatch ) {
+		throw new Error( `Could not find Delivery_Status::tones() in ${ PHP_PATH }.` );
+	}
+
+	const tones = {};
+	for ( const m of methodMatch[ 1 ].matchAll( /self::([A-Z_]+)\s*=>\s*'([^']*)',/g ) ) {
+		const [ , constName, tone ] = m;
+		if ( ! constants.has( constName ) ) {
+			throw new Error( `tones() references unknown self::${ constName }.` );
+		}
+		tones[ constants.get( constName ) ] = tone;
+	}
+
+	return tones;
+}
+
 describe( 'DELIVERY_STATUS_LABELS mirrors Delivery_Status::labels() (#867)', () => {
 	test( 'every canonical state\'s label matches the PHP source byte-for-byte', () => {
 		const phpLabels = readPhpDeliveryStatusLabels();
@@ -84,5 +114,12 @@ describe( 'DELIVERY_STATUS_LABELS mirrors Delivery_Status::labels() (#867)', () 
 		expect( Object.keys( phpLabels ).length ).toBeGreaterThan( 0 );
 
 		expect( DELIVERY_STATUS_LABELS ).toEqual( phpLabels );
+	} );
+
+	test( 'every canonical state\'s tone matches the PHP source in both directions', () => {
+		const phpTones = readPhpDeliveryStatusTones();
+
+		expect( Object.keys( phpTones ).length ).toBeGreaterThan( 0 );
+		expect( DELIVERY_STATUS_TONES ).toEqual( phpTones );
 	} );
 } );
