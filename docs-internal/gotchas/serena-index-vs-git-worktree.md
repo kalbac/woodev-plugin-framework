@@ -1,56 +1,23 @@
-# [tooling/serena-index-vs-worktree] Serena MCP index is bound to the main working tree — agents editing in a git worktree must NOT navigate via Serena
+# Serena navigation once read the main checkout from a worker worktree; activate the worker path instead
 
-**Discovered:** 2026-06-11 (s7, Fable orchestrator running workers in an isolated worktree while a parallel session owned the main tree)
+**Namespace:** `[tooling/serena]` · **Discovered:** s7 (2026-06-11) · **Status:** historical failure
 
-## Root cause
+## What failed
 
-The Serena MCP project index points at `D:\Projects\woodev_framework` — the **main
-working tree**, on whatever branch IT currently has checked out. A worker operating in a
-separate `git worktree` (e.g. `woodev_framework-wt-orch` on a branch off `main`) that
-calls `find_symbol`/`read_file` via Serena reads **another branch's code** (possibly with
-a parallel session's uncommitted edits) — silently wrong line numbers, missing/extra
-symbols, edits proposed against phantom code.
+Early Serena sessions used one index bound to the main checkout. A worker in another worktree could
+therefore receive symbols and paths from the main branch rather than the branch it was editing. The
+failure was real: line numbers, symbols, and any proposed edits could describe a different revision.
 
-## ❌ Wrong
+## Current rule
 
-```text
-Worker cwd = D:\projects\woodev_framework-wt-orch (branch feat/x off main)
--> mcp serena find_symbol "Woodev_Plugin/load_updater"   # reads feat/s3-licensing-ui tree!
-```
+This is no longer a reason to avoid Serena. A worker activates Serena on **its own worktree path**
+and verifies that a `find_symbol` result points inside that path before navigating or editing. This
+keeps the semantic navigation contract while ensuring the indexed revision is the worker's revision.
 
-## ✅ Correct
-
-- Workers in a worktree use **Grep/Read on paths under the worktree root** (the
-  AGENTS.md "always Serena for PHP" rule explicitly yields here — state the deviation in
-  the worker prompt).
-- Alternatively activate a separate Serena project on the worktree path — only worth it
-  for long-lived worktrees (fresh indexing cost).
-- The conductor's `invoke-worker.ps1` prompt says "Use Serena for all PHP reads" while
-  spawning workers in per-task worktrees — same hazard; follow-up: make that prompt
-  worktree-aware.
-
-## s72 addendum — "the contents are identical anyway" expires at the branch's first commit
-
-Observed 2026-08-14 across five subagent worktrees. The orchestrator's briefs said: *"use Serena
-read-only against the main tree — file contents are identical to your base commit."* That is true
-**only until the worker commits**, and it is false for every follow-up round on the same branch.
-
-The second-round worker on PR #315 hit it: the main tree sat on `main`, its branch carried the PR's
-commit, so Serena would have shown it the *pre-PR* version of the two files it had to edit. It
-correctly deviated to `Read`/`Edit` on worktree paths and said so in its report — which is what the
-rule above already licenses.
-
-Two corrections to the brief template:
-
-1. Say **"Serena reads the MAIN tree, which is on `main`"**, not "contents are identical". The first
-   is always true; the second is a fact with a short shelf life.
-2. **Fix-up rounds are the dangerous case**, not first-round work. The branch has commits by then,
-   and the files under repair are exactly the ones that differ. Write the deviation into the brief
-   for any round after the first, rather than leaving the worker to notice.
-
-Serena stays mandatory for *navigation* — `find_referencing_symbols` across the repo is still right,
-because call sites you are checking generally do live on `main`.
+If activation cannot succeed, report the missing Serena capability under the standing workflow; do
+not claim that Grep/Read is the preferred route for PHP work.
 
 ## Related
-- [autodev loop] `tools/autodev/invoke-worker.ps1` — worker prompt
-- [gotchas/russian-source-i18n-plural-n.md](russian-source-i18n-plural-n.md) — same session
+
+- [serena-activate-path-must-be-the-worker-s-worktree](serena-activate-path-must-be-the-worker-s-worktree.md) — the current activation and verification rule
+- [serena-replace-content-eol-flip](serena-replace-content-eol-flip.md) — a separate Windows-specific write hazard

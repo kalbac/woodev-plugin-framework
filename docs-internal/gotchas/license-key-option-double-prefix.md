@@ -35,4 +35,4 @@ it empty.
   to change on installed sites; leave it unless forced.
 
 ## Related
-- [[license-need-vs-required]] — other licensing option/flag subtleties
+- [license-need-vs-required](license-need-vs-required.md) — other licensing option/flag subtleties

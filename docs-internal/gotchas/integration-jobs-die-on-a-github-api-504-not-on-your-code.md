@@ -82,7 +82,7 @@ Do NOT read the "Environment not initialized" line as a config problem in `.wp-e
 
 ## Related
 
-- [[pr-conflict-skips-pull-request-ci]] — the other way a job can be absent rather than failing:
+- [pr-conflict-skips-pull-request-ci](pr-conflict-skips-pull-request-ci.md) — the other way a job can be absent rather than failing:
   a `CONFLICTING` PR never triggers `pull_request` workflows at all.
-- [[ci-failing-gate-skips-dependent-jobs]] — "skipped ≠ failed, looks green", the same family of
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — "skipped ≠ failed, looks green", the same family of
   trap read from the opposite end.

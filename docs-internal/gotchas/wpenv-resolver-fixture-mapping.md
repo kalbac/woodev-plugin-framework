@@ -94,4 +94,4 @@ break — did not materialise, but it was the right thing to check first.
 
 ## Related
 
-- [[ci-failing-gate-skips-dependent-jobs]] — other PR #20 CI root causes
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — other PR #20 CI root causes

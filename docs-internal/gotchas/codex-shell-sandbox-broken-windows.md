@@ -1,4 +1,5 @@
 # gotcha: codex's shell works — run it from an Orca terminal, not `codex exec -s read-only`
+> **Platform:** Windows only — the affected sandbox process cannot launch the Store-installed PowerShell.
 
 > **✅ SOLVED (s82, 2026-08-20). Everything below this box is HISTORY.** Codex is fully usable on
 > this machine: real shell, real file reads, no fabrication. The inline bundle, the canary line and
@@ -337,6 +338,6 @@ partially: nothing in it is evidence.
 
 ## Related
 
-- [[autodev-critic-ratelimit-false-positive]] — the other codex-critic transport gotcha
+- [autodev-critic-ratelimit-false-positive](autodev-critic-ratelimit-false-positive.md) — the other codex-critic transport gotcha
 - `tools/autodev/invoke-critic.ps1` — the autodev loop's codex-critic wrapper (uses the
   same `-s read-only` path; would hit this same wall on this box if it spawned shell)

@@ -60,6 +60,6 @@ Green jest on presentation code proves the DOM, never the pixels.
 
 ## Related
 
-- [[wp-scripts-css-enqueue-version-by-mtime]] — the other stylesheet trap on this feature
-- [[playwright-mcp-does-not-fire-wc-checkout-ajax]] — use chrome-devtools MCP for rig checks
+- [wp-scripts-css-enqueue-version-by-mtime](wp-scripts-css-enqueue-version-by-mtime.md) — the other stylesheet trap on this feature
+- [playwright-mcp-does-not-fire-wc-checkout-ajax](playwright-mcp-does-not-fire-wc-checkout-ajax.md) — use chrome-devtools MCP for rig checks
 - `docs-internal/archive/specs/2026-08-01-sp5-pickup-map-rework-design.md` — D-13, the generic modal

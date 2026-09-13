@@ -38,4 +38,4 @@ $best_volume = PHP_FLOAT_MAX;
 
 ## Related
 
-- [[virtual-box-rsort-axis-alignment]] — the other S2-P2 critic catch, same function
+- [virtual-box-rsort-axis-alignment](virtual-box-rsort-axis-alignment.md) — the other S2-P2 critic catch, same function

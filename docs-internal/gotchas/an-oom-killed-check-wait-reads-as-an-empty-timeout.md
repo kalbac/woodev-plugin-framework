@@ -1,4 +1,5 @@
 # Gotcha: [tooling/parallel-agents] — An OOM-killed `check --wait` is indistinguishable from an empty timeout, and re-launching on that reading puts two workers in one tree
+> **Measured on:** the Windows desktop (15.3 GB RAM) — re-measure on other hardware.
 
 > Tags: orca, orchestration, memory, tooling, coordinator | Session: s133
 

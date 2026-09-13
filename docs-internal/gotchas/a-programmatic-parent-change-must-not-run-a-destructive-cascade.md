@@ -107,17 +107,17 @@ screen now show. Full reasoning: `location-cascade.js`'s `sendForget()` docblock
 
 ## Related
 
-- [[checkout-field-takeover-woocommerce-states]] — the takeover's own value-preservation guards
+- [checkout-field-takeover-woocommerce-states](checkout-field-takeover-woocommerce-states.md) — the takeover's own value-preservation guards
   (`re-add value as option`, the `updated_checkout` safety net). They were never reached here: the
   cascade had already emptied both the DOM and the store before the takeover ran.
-- [[custom-checkout-field-is-empty-on-reload-by-construction]] — the *other* reason a checkout
+- [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md) — the *other* reason a checkout
   field is empty after a reload. That one is by construction and has no bug to find; this one is a
   real defect, and the two look identical from the browser. Distinguish them by reading the
   rendered `value` **attribute**: present means the server knows the value and the client is
   losing it.
-- [[wc-does-not-save-the-address-until-every-required-text-field-is-filled]] — the same
+- [wc-does-not-save-the-address-until-every-required-text-field-is-filled](wc-does-not-save-the-address-until-every-required-text-field-is-filled.md) — the same
   `update_checkout` path from the other side: when the client gate is *closed* nothing persists at
   all. Both must be understood to reason about what the checkout actually stores.
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — the class of defect that only a real page
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — the class of defect that only a real page
   reveals; this adapter had **no** jest coverage at all until #272, which is why a load-time
   regression could live in it indefinitely.

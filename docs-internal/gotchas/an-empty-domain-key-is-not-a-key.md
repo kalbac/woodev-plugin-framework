@@ -51,6 +51,6 @@ directly into storage is never recalled". Only that one fails when the guard is 
 read side alone.
 
 ## Related
-- [[derive-a-view-field-at-the-boundary-not-at-display-sites]] — the sibling rule about where a
+- [derive-a-view-field-at-the-boundary-not-at-display-sites](derive-a-view-field-at-the-boundary-not-at-display-sites.md) — the sibling rule about where a
   derived value is produced; this one is about what counts as a value at all
-- [[custom-checkout-field-is-empty-on-reload-by-construction]]
+- [custom-checkout-field-is-empty-on-reload-by-construction](custom-checkout-field-is-empty-on-reload-by-construction.md)

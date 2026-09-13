@@ -41,8 +41,8 @@ a passing run signals the gap — `toEqual` does not warn, and the array in ques
 "empty" by every ordinary reading a person gives it while skimming assertions. The tell is
 narrow and easy to miss entirely: the test only reveals itself under a **deliberate
 mutation** of the guard it is supposed to protect (see
-[[git-checkout-destroys-uncommitted-mutation-revert]] and
-[[mutation-sweep-branch-only-false-confidence]] on why that check has to actually be run, not
+[git-checkout-destroys-uncommitted-mutation-revert](git-checkout-destroys-uncommitted-mutation-revert.md) and
+[mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) on why that check has to actually be run, not
 assumed). A normal green run — the only kind most changes ever get — gives zero signal that
 the assertion is hollow.
 
@@ -79,11 +79,11 @@ a call happened with an `undefined` argument.
 
 ## Related
 
-- [[npx-jest-bypasses-wp-scripts-jsdom]] — same session, same file, the other way a JS test
+- [npx-jest-bypasses-wp-scripts-jsdom](npx-jest-bypasses-wp-scripts-jsdom.md) — same session, same file, the other way a JS test
   run can look right and be wrong; that one is about the invocation, this one about the
   assertion.
-- [[mutation-sweep-branch-only-false-confidence]] — the PHP-side lesson that a green suite
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — the PHP-side lesson that a green suite
   does not prove coverage; this is the JS-side instance, found by exactly the deliberate
   mutation that lesson recommends.
-- [[git-checkout-destroys-uncommitted-mutation-revert]] — the safe way to run that mutation
+- [git-checkout-destroys-uncommitted-mutation-revert](git-checkout-destroys-uncommitted-mutation-revert.md) — the safe way to run that mutation
   check without losing the real work.

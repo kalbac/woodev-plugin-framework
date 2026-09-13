@@ -1,7 +1,7 @@
 # ymaps' copyright strip ignores `margin.addArea()` and sits in a stacking context the sidebar's z-index can't reach
 
 **Namespace:** `[shipping/pickup]` · **Discovered:** s51 (2026-08-05), rig-verifying that the
-[[ymaps-margin-area-needs-explicit-width]] fix actually restored the copyright strip's visibility.
+[ymaps-margin-area-needs-explicit-width](ymaps-margin-area-needs-explicit-width.md) fix actually restored the copyright strip's visibility.
 
 ## What happened
 
@@ -35,7 +35,7 @@ context; the copyright pane's 5002 never gets compared against the sidebar's 2 a
 
 The sidebar panel stops 32px short of the map's bottom edge, leaving the strip visible full-width in
 the gap. Holds at ≤500px viewport widths too (checked on the same rig pass as the mobile fixes in
-[[mobile-inline-min-width-and-floating-control-stacking]]).
+[mobile-inline-min-width-and-floating-control-stacking](mobile-inline-min-width-and-floating-control-stacking.md)).
 
 ## The alternative, not shipped
 
@@ -44,11 +44,11 @@ that would require raising the stacking of an ymaps-owned element — which mean
 name carries the loaded API version (`ymaps-2-1-79-…`), something `pickup.css` deliberately never does
 anywhere else in this feature (a version bump silently breaks the selector, with no warning). Cheap to
 write once, expensive to own across every future ymaps update. Was tracked as issue #168 — closed in
-s54 (floating sidebar card; see the [[hostile-theme-button-display-none-needs-important]] s54 addendum).
+s54 (floating sidebar card; see the [hostile-theme-button-display-none-needs-important](hostile-theme-button-display-none-needs-important.md) s54 addendum).
 
 ## Related
 
-- [[ymaps-margin-area-needs-explicit-width]] — the reservation bug this file's investigation started
+- [ymaps-margin-area-needs-explicit-width](ymaps-margin-area-needs-explicit-width.md) — the reservation bug this file's investigation started
   from; that fix was necessary but not sufficient for the copyright strip specifically
-- [[ymaps-html-icon-layout-anchors-at-its-top-left]] — same session, same shape: an ymaps-owned element
+- [ymaps-html-icon-layout-anchors-at-its-top-left](ymaps-html-icon-layout-anchors-at-its-top-left.md) — same session, same shape: an ymaps-owned element
   positions itself by rules the framework's CSS/JS does not control and can only work around

@@ -27,7 +27,6 @@
 - [php/namespace-migration-legacy-psr4] **Legacy Woodev_* vs PSR-4 Woodev\Framework\*.** → [namespace-migration-legacy-psr4](gotchas/namespace-migration-legacy-psr4.md) (s2)
 - [php/gateway-type-methods-required] **Never blanket-ignore `Call to an undefined method` on a class hierarchy.** → [gateway-type-methods-required](gotchas/gateway-type-methods-required.md) (s3; recurred 2026-05-31; re-audited 2026-06-01)
 - [php/blocks-handler-typed-property-trap] **Non-nullable typed return can TypeError for pure-WordPress plugin subclasses.** → [blocks-handler-typed-property-trap](gotchas/blocks-handler-typed-property-trap.md)
-- [php/php84-implicit-nullable-payment-handlers] **Legacy payment handler files use implicit-nullable parameters; PHP 8.4+ deprecates them.** → [php84-implicit-nullable-payment-handlers](gotchas/php84-implicit-nullable-payment-handlers.md)
 - [php/wc-compat] **`Woodev_Plugin_Compatibility::is_enhanced_admin_available()` returns `true` unconditionally.** → [is-enhanced-admin-available-always-true](gotchas/is-enhanced-admin-available-always-true.md) (s12)
 - [php/in-plugin-update-message-arg-shape] **`in_plugin_update_message-{$file}` — arg shape: `package`/`new_version` live on arg 2 (response), not arg 1.** → [in-plugin-update-message-arg-shape](gotchas/in-plugin-update-message-arg-shape.md) (s18)
 - [php/updater-cache-source-stamp-not-key] **Isolating a cache by source without changing a frozen option key — stamp metadata inside the value.** → [updater-cache-source-stamp-not-key](gotchas/updater-cache-source-stamp-not-key.md) (s18)
@@ -166,7 +165,6 @@
 - [testing/unit] **Reflection `setAccessible()` — required on PHP < 8.1, deprecated on 8.5; guard it.** → [reflection-setaccessible-version-guard](gotchas/reflection-setaccessible-version-guard.md)
 - [testing/unit] **A test proving a credential does NOT leak will fail the credential scanner if its placeholder looks real.** → [a-no-leak-test-needs-a-low-entropy-placeholder](gotchas/a-no-leak-test-needs-a-low-entropy-placeholder.md) (s68)
 - [testing/integration] **WP REST cookie-nonce auth semantics — what `rest_cookie_check_errors()` actually does.** → [rest-cookie-nonce-auth-semantics](gotchas/rest-cookie-nonce-auth-semantics.md) (s8)
-- [testing/unit] **PHPUnit silently runs ONLY the first file argument when given several.** → [phpunit-multiple-file-args](gotchas/phpunit-multiple-file-args.md) (s9)
 - [testing/integration] **wp-env on Windows: Git-Bash mangles container paths (MSYS conversion).** → [wpenv-windows-gitbash-path-mangling](gotchas/wpenv-windows-gitbash-path-mangling.md) (s9)
 - [testing/integration] **wp-env resolves its environment from the current working directory.** → [wpenv-resolves-environment-from-cwd](gotchas/wpenv-resolves-environment-from-cwd.md) (s60)
 - [testing/unit] **Patchwork redefinable internals need an EARLY load in bootstrap — Brain Monkey's lazy load misses suite-build-time source files.** → [patchwork-early-load-bootstrap](gotchas/patchwork-early-load-bootstrap.md) (s9)
@@ -369,10 +367,8 @@
 - [tooling/parallel-agents] **An OOM-killed `check --wait` is indistinguishable from an empty timeout; the workers are usually ALIVE. Ask `worker-list`, never relaunch on the silence.** → [an-oom-killed-check-wait-reads-as-an-empty-timeout](gotchas/an-oom-killed-check-wait-reads-as-an-empty-timeout.md) (s133)
 - [tooling/orca] **`check --json` mixes one-line keepalives with a PRETTY-PRINTED delivery, so a line-by-line parser reports «nothing delivered» three waits running while the worker is fine.** → [orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty](gotchas/orca-check-json-is-pretty-printed-so-a-line-parser-reads-it-as-empty.md) (s132)
 - [tooling/orca] **`worker-start` without `--model` takes the COORDINATOR's model; the receipt says `model: null` on both sides and only the terminal's status line names it.** → [a-worker-started-without-model-inherits-the-coordinators-model](gotchas/a-worker-started-without-model-inherits-the-coordinators-model.md) (s132)
-- [tooling/orca] **`git worktree remove` on an Orca worktree deletes the PRIMARY checkout's `node_modules` — the share is a symlink and git walks into it. Remove them through Orca.** → [git-worktree-remove-empties-the-primary-checkouts-node-modules](gotchas/git-worktree-remove-empties-the-primary-checkouts-node-modules.md) (s127)
 - [tooling/orca] **A Run holds ONE active `check --wait`; a second returns `ok:false` with no `result`, which reads as "no worker finished".** → [one-check-wait-per-run-and-a-second-one-fails-invisibly](gotchas/one-check-wait-per-run-and-a-second-one-fails-invisibly.md) (s127)
 - [tooling/grep] **`grep --include` through `wp-env run` silently finds nothing, and WooCommerce is in `plugins/woocommerce.latest-stable`.** → [grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce](gotchas/grep-through-wp-env-run-loses-the-include-glob-and-the-wc-directory-is-not-called-woocommerce.md) (s126)
-- [tooling/git] **A fresh worktree of this repo is born DIRTY on four JS files (CRLF blobs vs a new `.gitattributes`), `git checkout --` will not clear it, and it frames whatever formatter ran last. A throwaway `worktree add --detach HEAD` settles it in seconds.** → [a-fresh-worktree-is-born-dirty-on-four-js-files](gotchas/a-fresh-worktree-is-born-dirty-on-four-js-files.md) (s125)
 - [tooling/docs-gate] **A docs gate checks what is LINKED, never what is LISTED — three indexes were missing entries for files that exist (ADR-011, three wiki articles, ten specs) in a green tree, and prose cross-references are invisible to it too.** → [a-docs-gate-checks-links-not-listings](gotchas/a-docs-gate-checks-links-not-listings.md) (s119)
 - [tooling/git] **A hook committed `100644` is silently IGNORED by POSIX git, and Windows `core.fileMode=false` hides it — `chmod +x` never reaches the index. `commit-msg` had been inert on Linux since s81.** → [a-git-hook-committed-non-executable-is-silently-ignored-on-posix](gotchas/a-git-hook-committed-non-executable-is-silently-ignored-on-posix.md) (s122)
 - [tooling/orca] **`orca account list` serves a CACHED rate limit — read straight after a run it reports the state BEFORE it, and made astra look 9x CHEAPER than it is. Check `updatedAt`; the authoritative figure is in Codex's own rollout.** → [orca-account-list-serves-a-cached-rate-limit](gotchas/orca-account-list-serves-a-cached-rate-limit.md) (s122)
@@ -430,6 +426,8 @@
 
 ## Archive (resolved gotchas)
 <!-- Resolved gotchas move here; keep for 2 sessions then remove -->
+
+- [php/php84-implicit-nullable-payment-handlers] **RESOLVED.** Payment handlers use explicit nullable parameters after `ef3d067`; `PaymentGatewayImplicitNullableTest` is the regression guard. → [php84-implicit-nullable-payment-handlers](gotchas/php84-implicit-nullable-payment-handlers.md)
 
 - [bootstrap/resolver-bootstrap-coupling] **RESOLVED.** `Framework_Resolver` no longer references
   `Woodev_Plugin_Bootstrap::instance()` at all — the notice renderers are injected

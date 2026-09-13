@@ -39,8 +39,8 @@ $registry->register_page();
 
 ## Related
 
-- [[settings-api-control-save-path-pitfalls]] — the SP-1 settings handler save path this page reuses.
-- [[phpstan-windows-parallel-worker-segfault]] — the other "CI is the real gate, not local" case.
+- [settings-api-control-save-path-pitfalls](settings-api-control-save-path-pitfalls.md) — the SP-1 settings handler save path this page reuses.
+- [phpstan-windows-parallel-worker-segfault](phpstan-windows-parallel-worker-segfault.md) — the other "CI is the real gate, not local" case.
 
 ## Addendum — s68 (2026-08-12): `init` belongs on the same list, and the replacement is a BETTER test
 

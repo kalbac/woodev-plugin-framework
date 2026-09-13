@@ -1,5 +1,6 @@
 # Gotcha: [tooling/orca] — A worker handed a survey task will fan out to background forks, straight past the machine's agent cap
 > Tags: orca, orchestration, concurrency, subagents, memory | Session: s104
+> **Measured on:** the Windows desktop (15.3 GB RAM) — re-measure on other hardware.
 
 ## What happens
 

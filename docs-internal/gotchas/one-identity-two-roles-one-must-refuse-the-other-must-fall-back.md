@@ -52,8 +52,8 @@ addresses by the settlement).
 
 ## Related
 
-- [[a-derived-ancestor-is-not-the-one-the-customer-picked]] — why the settlement cannot simply
+- [a-derived-ancestor-is-not-the-one-the-customer-picked](a-derived-ancestor-is-not-the-one-the-customer-picked.md) — why the settlement cannot simply
   be derived when it is missing
-- [[an-empty-domain-key-is-not-a-key]] — the refusal half of the rule
-- [[session-key-vs-order-meta-prefix]] — the other "one value, two contracts" split in this
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) — the refusal half of the rule
+- [session-key-vs-order-meta-prefix](session-key-vs-order-meta-prefix.md) — the other "one value, two contracts" split in this
   subsystem

@@ -21,4 +21,4 @@ Do NOT rsort. Each axis-assignment candidate already guarantees `box_axis ≥ ma
 
 ## Related
 
-- [[virtual-box-null-best-inf-overflow]] — the other S2-P2 critic catch, same function
+- [virtual-box-null-best-inf-overflow](virtual-box-null-best-inf-overflow.md) — the other S2-P2 critic catch, same function

@@ -29,7 +29,7 @@ different install hash and fails with:
 1. **Always run `wp-env` commands from the repo root** (`D:\Projects\woodev_framework`). A `cd`
    left over from earlier shell work is enough to break them.
 2. Combine with `MSYS_NO_PATHCONV=1` for any command carrying container paths — see
-   [[wpenv-windows-gitbash-path-mangling]].
+   [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md).
 3. Related fact observed s60: constants written with `wp config set` live in the container's
    `wp-config.php` and **survive `npx wp-env start` restarts** — the rig can carry state that no
    `.wp-env*.json` file declares. When auditing rig state, trust `wp config list` (from the root),
@@ -37,5 +37,5 @@ different install hash and fails with:
 
 ## Related
 
-- [[wpenv-windows-gitbash-path-mangling]] — the other way the same command family fails on this box
-- [[rig-serves-the-working-tree-branch-switch-reverts-fixes]] — name branch + constants before asking anyone to look
+- [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — the other way the same command family fails on this box
+- [rig-serves-the-working-tree-branch-switch-reverts-fixes](rig-serves-the-working-tree-branch-switch-reverts-fixes.md) — name branch + constants before asking anyone to look

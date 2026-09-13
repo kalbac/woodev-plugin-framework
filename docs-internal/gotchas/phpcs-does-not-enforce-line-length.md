@@ -1,111 +1,40 @@
-# `composer phpcs` sees NO warning-level sniff at all — line length is only the most visible one
+# `composer phpcs` enforces warning sniffs; LineLength is deliberately excluded and needs its own measurement
 
-**Namespace:** `[tooling/phpcs]` · **Discovered:** s45 (2026-07-31) · **Scope measured:** s109 (31.08.2026)
+**Namespace:** `[tooling/phpcs]` · **Discovered:** s45 (2026-07-31) · **Updated:** #139, s110
 
-## The trap
+## History
 
-`AGENTS.md` and `CLAUDE.md` both state a 120-character line limit. `composer phpcs` reports
-`clean`. Both statements are true at the same time, and the limit is being violated.
+Before #139, `phpcs.xml` set `warning-severity` to `0`, so all warning-level sniffs were silent.
+That was fixed in s110: `phpcs.xml` now sets `warning-severity` to `1`, and new violations from the
+remaining warning-level sniffs fail `composer phpcs`. The old count of 1,786 violations across 19
+sniffs is historical evidence for that decision, not a claim about today's gate.
 
-`phpcs.xml` sets:
+## The live exception
 
-```xml
-warning-severity 0
-absoluteLineLimit 0
+`Generic.Files.LineLength` is deliberately excluded from the main ruleset. The repository already
+contains more than a thousand long lines, so failing normal CI on the soft 120-column target is not
+currently useful. This exclusion cannot be reversed with a command-line severity flag.
+
+Measure the live exception with the dedicated ruleset instead:
+
+```bash
+vendor/bin/phpcs --standard=phpcs-line-length.xml --report=summary ./woodev
 ```
 
-`Generic.Files.LineLength` emits a **warning**, not an error, and warnings are suppressed at
-severity 0 — so an over-length line is detected, downgraded, and silently dropped. `absoluteLineLimit
-0` disables the hard-error tier entirely. On top of that the ruleset scans only `./woodev` and
-excludes `*/tests/*`, so no test file is ever linted at all.
-
-Across SP-5 this produced over-length lines in nearly every task — one at 172 chars, one at 144 —
-in files phpcs had just declared clean. Every one was caught by measuring manually.
-
-## Why it matters beyond tidiness
-
-"`composer phpcs` clean" is quoted in this project as evidence in task reports and reviews. For line
-length it is **not evidence of anything**. Treating it as such means the convention exists only on
-paper, and a reviewer who trusts the report will not check.
+`phpcs-line-length.xml` expands tabs to four columns, scans `woodev/`, and uses a 120-column soft
+limit with no hard limit. Test files remain outside that measurement and need a separate check when
+their line length matters.
 
 ## ❌ Wrong
 
-> `composer phpcs`: clean, no violations. Line lengths fine.
+> `composer phpcs`: clean, therefore every line is within 120 columns.
 
 ## ✅ Correct
 
-Measure separately, with tabs expanded to 4 (the file uses tabs; a raw `length()` under-counts):
-
-```bash
-awk '{ gsub(/\t/,"    "); if (length($0)>120) print FILENAME":"FNR" ("length($0)")" }' <files>
-```
-
-Do this for **test files too** — they are outside phpcs entirely, so nothing else will.
-
-The real fix is tracked as issue #139: either raise `warning-severity` and set `absoluteLineLimit`
-so CI enforces it, or write down that the limit is a manual check and put it in the review
-checklist. Until one of those lands, a clean phpcs run says nothing about line length.
-
-## The scope is the whole warning level, not one metric (measured s109)
-
-`warning-severity 0` is a GLOBAL argument (`phpcs.xml:76`), not a property of the line-length rule.
-Every warning-level sniff in the ruleset is silenced by it. Measured across `woodev/` on
-31.08.2026 with `--warning-severity=1 --error-severity=0`:
-
-**1786 violations from 19 sniffs**, none of which `composer phpcs` reports today.
-
-| sniff | count |
-|---|---|
-| `Generic.Files.LineLength.TooLong` | 1393 (137 files) |
-| `Generic.Formatting.MultipleStatementAlignment.*` | 54 |
-| `WordPress.WP.Capabilities.Undetermined` | 17 |
-| `WordPress.WP.AlternativeFunctions.parse_url_parse_url` | 5 |
-| `Generic.CodeAnalysis.ForLoopWithTestFunctionCall` | 3 |
-| `WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode` | 3 |
-| `WordPress.Security.SafeRedirect.wp_redirect_wp_redirect` | 1 |
-| `WordPress.WP.CronInterval.ChangeDetected` | 1 |
-| reserved-keyword parameter names, `rand`, `error_log` | 6 |
-
-One of them is a **security** sniff. So "phpcs clean" is not merely weak evidence about line
-length — it is silent about an entire severity tier, including checks nobody would knowingly
-disable. `phpcbf` can fix 356 of these automatically; line length is NOT among them.
-
-## ⚠ How to probe this WITHOUT fooling yourself
-
-A long **comment** made of one unbreakable word reports nothing even at `--warning-severity=1`, and
-that looks like proof the rule is broken in some other way. It is not: `LineLengthSniff.php:155-176`
-deliberately skips a comment-only line whose first non-breaking word already exceeds the limit —
-otherwise a long URL in a comment could never be written at all.
-
-❌ A probe that proves nothing:
-
-```php
-<?php
-// xxxxxxxx…140 x's, no spaces…xxxxxxxx
-```
-
-✅ A probe that works — real code, with spaces to break on:
-
-```php
-<?php
-class Woodev_Probe_Long_Line {
-	public function run(): string {
-		$value = 'aaaa' . 'bbbb' . /* … out past 120 columns … */ . 'oooo';
-		return $value;
-	}
-}
-```
-
-```
-vendor/bin/phpcs probe.php                       → . 1 / 1 (100%)   silent
-vendor/bin/phpcs --warning-severity=1 probe.php  → 4 | WARNING | Line exceeds 120 characters;
-                                                      contains 150 characters
-```
-
-Put the probe in the **scratchpad** and copy it in, never author it inside the repo.
-
+Report `composer phpcs` as evidence for its active rules, and report the dedicated line-length
+measurement separately. Do not revive the obsolete claim that all warning-tier sniffs are silent.
 
 ## Related
 
-- [[mutation-sweep-branch-only-false-confidence]] — the other "green means nothing" trap from the same branch
-- [[phpunit-multiple-file-args]] — a passing PHPUnit run that never executed the file you cared about
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — another green result that proves less than it appears to
+- [phpunit-takes-one-path-and-silently-ignores-the-rest](phpunit-takes-one-path-and-silently-ignores-the-rest.md) — a passing test command that may not run the intended files

@@ -1,4 +1,5 @@
 # Gotcha: [tooling/parallel-agents] — Codex's tool shell is NOT fixed: measure which one it got before diagnosing anything else, because every symptom below is downstream of that one variable
+> **Platform:** Windows only — a WSL tool shell cannot resolve a worktree's Windows `gitdir` path.
 > Tags: tooling, orca, codex, git, wsl | Session: s107, corrected by measurement s108
 
 ## ⚠ Read this first — s108 falsified the premise this gotcha was built on

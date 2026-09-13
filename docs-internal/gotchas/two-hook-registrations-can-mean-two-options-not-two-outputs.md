@@ -81,7 +81,7 @@ the `woodev_pickup_slot_placements` filter keeps the both-at-once configuration 
 
 ## Related
 
-- [[../wiki/pickup-trigger-placement-and-text.md]] — the resulting contract: framework owns WHERE, plugin owns the TEXT
-- [[a-constant-field-cannot-be-a-verdict.md]] — the same family: a card stated a fact about a third-party contract, the fact was recorded correctly, and the mapping built on it was still wrong
-- [[an-invented-fixture-tests-your-assumptions-not-the-carrier.md]] — a recorded CONTRACT is not a recorded PAYLOAD
-- [[../GOTCHAS.md]] — `[shipping/pickup]`
+- [../wiki/pickup-trigger-placement-and-text.md](../wiki/pickup-trigger-placement-and-text.md) — the resulting contract: framework owns WHERE, plugin owns the TEXT
+- [a-constant-field-cannot-be-a-verdict.md](a-constant-field-cannot-be-a-verdict.md) — the same family: a card stated a fact about a third-party contract, the fact was recorded correctly, and the mapping built on it was still wrong
+- [an-invented-fixture-tests-your-assumptions-not-the-carrier.md](an-invented-fixture-tests-your-assumptions-not-the-carrier.md) — a recorded CONTRACT is not a recorded PAYLOAD
+- [../GOTCHAS.md](../GOTCHAS.md) — `[shipping/pickup]`

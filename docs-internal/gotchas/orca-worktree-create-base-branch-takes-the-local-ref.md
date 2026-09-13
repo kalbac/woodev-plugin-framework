@@ -57,7 +57,7 @@ would not catch a stale `CURRENT-STATE.md` body.
 
 ## Related
 
-- [[a-stale-primary-checkout-degrades-every-worktree-made-from-it]] — the sibling: there the primary
+- [a-stale-primary-checkout-degrades-every-worktree-made-from-it](a-stale-primary-checkout-degrades-every-worktree-made-from-it.md) — the sibling: there the primary
   checkout's own working copy is behind, so `.worktreeinclude` copies the wrong files. Same family:
   **a worktree is only as current as what it was made from, and nothing says so out loud.**
-- [[git-worktree-remove-empties-the-primary-checkout-s-node-modules]] — remove them through Orca.
+- [git-worktree-remove-empties-the-primary-checkout-s-node-modules](git-worktree-remove-empties-the-primary-checkout-s-node-modules.md) — remove them through Orca.

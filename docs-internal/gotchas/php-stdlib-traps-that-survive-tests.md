@@ -90,6 +90,6 @@ and the sentinel collide silently.
 
 ## Related
 
-- [[mutation-sweep-branch-only-false-confidence]] — all three of these die to a value mutant and survive a branch mutant
-- [[format-validator-null-strlen-deprecation]] — another null-reaching-a-scalar-API bug in this codebase
-- [[a-cast-is-not-a-degradation]] — the same collision from the other side: a cast that satisfies the type and destroys the meaning
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — all three of these die to a value mutant and survive a branch mutant
+- [format-validator-null-strlen-deprecation](format-validator-null-strlen-deprecation.md) — another null-reaching-a-scalar-API bug in this codebase
+- [a-cast-is-not-a-degradation](a-cast-is-not-a-degradation.md) — the same collision from the other side: a cast that satisfies the type and destroys the meaning

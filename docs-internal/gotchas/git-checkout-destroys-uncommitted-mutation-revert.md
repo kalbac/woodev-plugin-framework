@@ -68,7 +68,7 @@ If a mutation genuinely must happen before a commit, copy the file out first
 
 ## Related
 
-- [[npx-jest-bypasses-wp-scripts-jsdom]] — the other way a JS run reads as "I broke everything" when
+- [npx-jest-bypasses-wp-scripts-jsdom](npx-jest-bypasses-wp-scripts-jsdom.md) — the other way a JS run reads as "I broke everything" when
   the code is fine; same session, and the two failure shapes are easy to confuse.
 - Session protocol: run `npm run test:js` (never `npx jest`) to confirm the restored state is green
   again before continuing.

@@ -40,8 +40,8 @@ deps it audits *nothing* and Composer treats "nothing to audit" as an error, not
 
 - For a package with an empty (or `php`-only) `require`, audit the lock file (`--locked`) or
   all installed deps (`composer audit`), not `--no-dev`.
-- This step is identical on `main`; it had been failing there too (see [[ci-failing-gate-skips-dependent-jobs]]).
+- This step is identical on `main`; it had been failing there too (see [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md)).
 
 ## Related
 
-- [[ci-failing-gate-skips-dependent-jobs]] — this failure gated/skipped the Unit Tests matrix
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — this failure gated/skipped the Unit Tests matrix

@@ -1,5 +1,6 @@
 # Gotcha: [tooling/windows] — Git Bash mangles Cyrillic in curl arguments, and the API blames you
 > Tags: windows, msys, probes, encoding | Session: s76
+> **Platform:** Windows only — Git Bash/MSYS argument encoding corrupts Cyrillic before the request is sent.
 
 ## What happens
 

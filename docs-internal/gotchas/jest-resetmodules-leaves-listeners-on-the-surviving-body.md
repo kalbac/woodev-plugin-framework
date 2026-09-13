@@ -71,10 +71,10 @@ is not evidence of anything.
 
 ## Related
 
-- [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] — the gate this trap framed
+- [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) — the gate this trap framed
   for a crime it did not commit.
-- [[hook-snapshot-restore-defeats-an-identity-based-reset]] — the PHP-side twin, discovered the
+- [hook-snapshot-restore-defeats-an-identity-based-reset](hook-snapshot-restore-defeats-an-identity-based-reset.md) — the PHP-side twin, discovered the
   same session: a reset that looks complete while the surrounding harness quietly restores what it
   erased.
-- [[jest-scans-agent-worktrees-inside-the-repo]] — the other "green alone, different in the full
+- [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — the other "green alone, different in the full
   run" jest trap.

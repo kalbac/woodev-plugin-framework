@@ -67,7 +67,7 @@ If `hidden` is not in that condition, hidden fields get labels.
 
 ## Related
 
-- [[a-locality-display-name-is-not-an-identifier]] — the other "this string is for humans, that one
+- [a-locality-display-name-is-not-an-identifier](a-locality-display-name-is-not-an-identifier.md) — the other "this string is for humans, that one
   is not" confusion in the same layer
 - `woodev/shipping-method/checkout/class-checkout-handler.php` → `inject()`, `message_label()`
 - `woodev/shipping-method/checkout/presets/class-pickup-field.php` → `create()` seeds `error_label`

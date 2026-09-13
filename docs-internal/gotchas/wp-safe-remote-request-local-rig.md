@@ -47,5 +47,5 @@ the issuer's `Push_Delivery::is_safe_target()` under `wp_get_environment_type()
 stand host.
 
 ## Related
-- [[wpenv-windows-gitbash-path-mangling]] — other wp-env-on-Windows gotchas
-- [[wpenv-resolver-fixture-mapping]] — wp-env framework mapping
+- [wpenv-windows-gitbash-path-mangling](wpenv-windows-gitbash-path-mangling.md) — other wp-env-on-Windows gotchas
+- [wpenv-resolver-fixture-mapping](wpenv-resolver-fixture-mapping.md) — wp-env framework mapping

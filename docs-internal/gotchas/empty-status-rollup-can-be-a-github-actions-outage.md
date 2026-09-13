@@ -63,7 +63,7 @@ commit (a `synchronize` event) produced nothing either. Two failed re-triggers r
 
 ## Related
 
-- [[pr-conflict-skips-pull-request-ci]] — the other way a PR ends up with no `pull_request` CI;
+- [pr-conflict-skips-pull-request-ci](pr-conflict-skips-pull-request-ci.md) — the other way a PR ends up with no `pull_request` CI;
   there the tell is `DIRTY`/`CONFLICTING`, here it is a `CLEAN` PR with nothing running.
-- [[ci-failing-gate-skips-dependent-jobs]] — third member of the family: skipped ≠ failed, and
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — third member of the family: skipped ≠ failed, and
   the absence of a job is never evidence of its success.

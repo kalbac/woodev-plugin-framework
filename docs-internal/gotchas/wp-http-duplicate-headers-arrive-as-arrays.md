@@ -54,7 +54,7 @@ array, and stopped there. The container was right; the values were never looked 
 
 ## Related
 
-- [[array-cast-of-get-states-false-is-not-empty]] — the other "the type is not what the docblock says"
+- [array-cast-of-get-states-false-is-not-empty](array-cast-of-get-states-false-is-not-empty.md) — the other "the type is not what the docblock says"
   finding in this codebase
 - `woodev/api/class-api-base.php` → `handle_response()`, `mask_secret_headers()`,
   `get_sanitized_response_headers()`

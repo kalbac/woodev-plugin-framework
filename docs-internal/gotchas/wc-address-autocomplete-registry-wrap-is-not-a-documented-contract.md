@@ -2,7 +2,7 @@
 
 **Session:** s69 (12.08.2026, location-provider Task 12) · **Context:** per-country arbitration
 against WC Address Autocomplete (spec D2), building on the s67 measurement in gotcha
-[[wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md]].
+[wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md](wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md).
 
 ## The trap
 
@@ -35,12 +35,12 @@ clone.canSearch = function( country ) { /* ... */ };  // THROWS
 `provider` is `Object.freeze()`d by WC's own registration code
 (`address-autocomplete-common.js`), so `provider.canSearch` is a non-writable, non-configurable
 **inherited** property once `clone`'s prototype is `provider`. Plain assignment goes through
-`[[Set]]`, and `[[Set]]` walks the prototype chain: finding a non-writable data property up the
+``Set``, and ``Set`` walks the prototype chain: finding a non-writable data property up the
 chain rejects the write — in strict mode (this file is `'use strict'`) that is a `TypeError`,
 thrown from inside the very `Object.keys(registry).forEach()` loop that is supposed to suppress
 WC's autocomplete, i.e. exactly the country-change handler a real customer's `change` event would
 run. The fix is `Object.defineProperty()`, which installs a fresh **own** property on `clone` and
-bypasses `[[Set]]` entirely — legal regardless of what the prototype's descriptor says:
+bypasses ``Set`` entirely — legal regardless of what the prototype's descriptor says:
 
 ```js
 Object.defineProperty( clone, 'canSearch', {
@@ -96,7 +96,7 @@ the specific nested reference out into its own variable before the mutating call
 
 ## Related
 
-- [[wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md]] — the s67 measurement
+- [wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md](wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md) — the s67 measurement
   this Task builds on (registry shape, why `canSearch` needs no per-field/region context, the
   documented server-side full kill)
 - `docs-internal/specs/2026-08-12-location-provider-design.md` — D2 (per-country suppression),

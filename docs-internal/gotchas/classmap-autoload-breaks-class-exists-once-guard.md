@@ -76,6 +76,6 @@ fleet, so the init still happens exactly once across all active plugins.
 
 ## Related
 
-- [[framework-classmap-autoload-vendored-boot]] — class-map completeness on a real vendored boot (s27).
-- [[integration-test-global-admin-hooks-output-and-submenu-accumulation]] — testing admin menu registration without firing broad global hooks (s34).
+- [framework-classmap-autoload-vendored-boot](framework-classmap-autoload-vendored-boot.md) — class-map completeness on a real vendored boot (s27).
+- [integration-test-global-admin-hooks-output-and-submenu-accumulation](integration-test-global-admin-hooks-output-and-submenu-accumulation.md) — testing admin menu registration without firing broad global hooks (s34).
 - Regression test: `tests/integration/AdminMenuTest.php`.

@@ -45,9 +45,9 @@ One green check is not a green PR.
 
 ## Related
 
-- [[pr-conflict-skips-pull-request-ci]] — same symptom, a cause you CAN diagnose: a conflicting
+- [pr-conflict-skips-pull-request-ci](pr-conflict-skips-pull-request-ci.md) — same symptom, a cause you CAN diagnose: a conflicting
   PR has no computable merge commit, so `pull_request` workflows are skipped. Check
   `mergeable`/`mergeStateStatus` first; if it is `CLEAN`, you are in THIS gotcha instead.
-- [[ci-failing-gate-skips-dependent-jobs]] — third member of the "skipped ≠ failed, looks green"
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — third member of the "skipped ≠ failed, looks green"
   family, caused by a `needs:` gate.
-- [[empty-status-rollup-can-be-a-github-actions-outage]] — when the rollup is empty rather than short.
+- [empty-status-rollup-can-be-a-github-actions-outage](empty-status-rollup-can-be-a-github-actions-outage.md) — when the rollup is empty rather than short.

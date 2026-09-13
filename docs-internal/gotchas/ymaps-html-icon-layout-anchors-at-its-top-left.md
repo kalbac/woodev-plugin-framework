@@ -7,7 +7,7 @@ the very top of the icon").
 
 ## What happened
 
-[[ymaps-html-icon-layout-needs-iconshape]] (s50) fixed markers having *no* clickable area at all. This
+[ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) (s50) fixed markers having *no* clickable area at all. This
 is its sequel: once `iconShape` existed, the clickable rectangle and the drawn artwork turned out to be
 two different rectangles, overlapping only in one corner.
 
@@ -78,6 +78,6 @@ same click opened the card, and exactly one marker took `data-state="active"`.
 
 ## Related
 
-- [[ymaps-html-icon-layout-needs-iconshape]] — the prerequisite bug: no hit area at all before this one existed
-- [[ymaps-margin-area-needs-explicit-width]] — same family: an ymaps option shape that silently isn't what a spec assumed, caught only by rig measurement
+- [ymaps-html-icon-layout-needs-iconshape](ymaps-html-icon-layout-needs-iconshape.md) — the prerequisite bug: no hit area at all before this one existed
+- [ymaps-margin-area-needs-explicit-width](ymaps-margin-area-needs-explicit-width.md) — same family: an ymaps option shape that silently isn't what a spec assumed, caught only by rig measurement
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — V-9

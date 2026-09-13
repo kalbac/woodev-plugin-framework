@@ -107,8 +107,8 @@ measured, which is why it is a card and not part of the #466 fix.
 
 ## Related
 
-- [[a-select-value-write-with-no-matching-option-submits-nothing]] — the value-space disease this
+- [a-select-value-write-with-no-matching-option-submits-nothing](a-select-value-write-with-no-matching-option-submits-nothing.md) — the value-space disease this
   adapter can feed into, from the other end.
-- [[a-programmatic-parent-change-must-not-run-a-destructive-cascade]] — the earlier defect in this
+- [a-programmatic-parent-change-must-not-run-a-destructive-cascade](a-programmatic-parent-change-must-not-run-a-destructive-cascade.md) — the earlier defect in this
   same file, also caused by it acting on an event that was not about the customer.
-- [[rig-checkout-url-is-the-block-checkout]] — none of this exists on `/checkout/`.
+- [rig-checkout-url-is-the-block-checkout](rig-checkout-url-is-the-block-checkout.md) — none of this exists on `/checkout/`.

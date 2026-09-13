@@ -67,5 +67,5 @@ a domain filter that ALLOWS a framework-refused point must fire. One alone passe
 reading the wrong verdict.
 
 ## Related
-- [[built-on-both-sides-with-no-caller-in-the-middle]]
-- [[an-empty-domain-key-is-not-a-key]]
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md)
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md)

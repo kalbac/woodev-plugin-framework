@@ -82,8 +82,8 @@ until one is taken.
 
 ## Related
 
-- [[ymaps-objectmanager-properties-are-plain]] — the s49 sibling, where a fixture poorer than
+- [ymaps-objectmanager-properties-are-plain](ymaps-objectmanager-properties-are-plain.md) — the s49 sibling, where a fixture poorer than
   production hid two of four map defects. This one is the same lesson for a fixture that is not
   poorer, merely *invented*.
-- [[public-repo-third-party-credentials]] — why the capture goes in but the credential does not.
-- [[card-renders-from-a-snapshot-the-writers-never-touch]] — the other s57 gotcha.
+- [public-repo-third-party-credentials](public-repo-third-party-credentials.md) — why the capture goes in but the credential does not.
+- [card-renders-from-a-snapshot-the-writers-never-touch](card-renders-from-a-snapshot-the-writers-never-touch.md) — the other s57 gotcha.

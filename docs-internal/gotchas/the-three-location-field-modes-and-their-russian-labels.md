@@ -53,6 +53,6 @@ exactly that reason.
 
 ## Related
 
-- [[a-level-served-can-come-from-the-fallback-not-the-active-provider]] — the other place where
+- [a-level-served-can-come-from-the-fallback-not-the-active-provider](a-level-served-can-come-from-the-fallback-not-the-active-provider.md) — the other place where
   "which provider answers this" is not what the settings screen suggests.
 - `../specs/2026-08-21-settlement-search-design.md` — why the settlement axis loses the preset list.

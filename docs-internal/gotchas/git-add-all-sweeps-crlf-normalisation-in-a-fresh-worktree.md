@@ -32,5 +32,6 @@ If it already landed: `git reset --soft HEAD~1`, `git restore --staged <the swep
 
 ## Related
 
-- [[build-artifacts-eol-lf-windows-parity]] — the `.gitattributes` rule that makes this normalisation happen at all
-- [[jest-scans-agent-worktrees-inside-the-repo]] — the other reason agent worktrees belong OUTSIDE the repository
+- [an-orca-worktree-starts-dirty-with-crlf-churn](an-orca-worktree-starts-dirty-with-crlf-churn.md) — the pre-existing worktree dirt that this staging mistake sweeps into a commit
+- [build-artifacts-eol-lf-windows-parity](build-artifacts-eol-lf-windows-parity.md) — the `.gitattributes` rule that makes this normalisation happen at all
+- [jest-scans-agent-worktrees-inside-the-repo](jest-scans-agent-worktrees-inside-the-repo.md) — the other reason agent worktrees belong OUTSIDE the repository

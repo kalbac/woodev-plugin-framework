@@ -113,7 +113,7 @@ exactly that state while feeling like the opposite.
 
 ## Related
 
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — why mutation-checking is used here at all
-- [[mutation-sweep-branch-only-false-confidence]] — the other way a mutation sweep overstates
-- [[advancing-the-whole-interval-does-not-pin-a-delay]] — a test that passes against a neighbouring value
-- [[../GOTCHAS.md]] — `[testing/*]`
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — why mutation-checking is used here at all
+- [mutation-sweep-branch-only-false-confidence](mutation-sweep-branch-only-false-confidence.md) — the other way a mutation sweep overstates
+- [advancing-the-whole-interval-does-not-pin-a-delay](advancing-the-whole-interval-does-not-pin-a-delay.md) — a test that passes against a neighbouring value
+- [../GOTCHAS.md](../GOTCHAS.md) — `[testing/*]`

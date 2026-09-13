@@ -104,6 +104,6 @@ touching a line of source.
 
 ## Related
 
-- [[ci-failing-gate-skips-dependent-jobs]] — this was one of the masked Unit failures
-- [[reflection-setaccessible-version-guard]] — another masked Unit failure (PHP-version-specific)
-- [[the-local-php-is-four-versions-above-the-ci-floor]] — the other "green here, red on CI", by version rather than by order
+- [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — this was one of the masked Unit failures
+- [reflection-setaccessible-version-guard](reflection-setaccessible-version-guard.md) — another masked Unit failure (PHP-version-specific)
+- [the-local-php-is-four-versions-above-the-ci-floor](the-local-php-is-four-versions-above-the-ci-floor.md) — the other "green here, red on CI", by version rather than by order

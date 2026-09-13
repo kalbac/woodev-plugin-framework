@@ -1,4 +1,5 @@
 # Gotcha: [php/php84-implicit-nullable-payment-handlers] — Legacy payment handler files use implicit-nullable parameters; PHP 8.4+ deprecates them
+> **RESOLVED (ef3d067).** Kept as history — the regression test is the guard now.
 > Tags: php, php84, deprecation, payment-gateway, handler-files
 > Discovered: 2026-06-01 (independent audit)
 > Resolved: 2026-06-02 (commit `ef3d067` — H1)

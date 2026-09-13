@@ -82,7 +82,7 @@ only one of them can fail this way.
 
 ## Related
 
-- [[guest-session-write-needs-the-cart-cookie]] — the other half: even with a session, a guest write only persists once the cart cookie exists
-- [[built-on-both-sides-with-no-caller-in-the-middle]] — how the bridge came to be wired at two of the three call sites that need it
-- [[phpunit-defects-cache-hides-cross-test-session-leaks]] — the same file's other environment-shaped trap
-- [[../GOTCHAS.md]] — `[testing/integration]`
+- [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md) — the other half: even with a session, a guest write only persists once the cart cookie exists
+- [built-on-both-sides-with-no-caller-in-the-middle](built-on-both-sides-with-no-caller-in-the-middle.md) — how the bridge came to be wired at two of the three call sites that need it
+- [phpunit-defects-cache-hides-cross-test-session-leaks](phpunit-defects-cache-hides-cross-test-session-leaks.md) — the same file's other environment-shaped trap
+- [../GOTCHAS.md](../GOTCHAS.md) — `[testing/integration]`

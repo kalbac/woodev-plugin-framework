@@ -57,6 +57,6 @@ A 3-round adversarial loop: Claude gap-analysis + an independent Codex (GPT-5.5)
 self-tests as first written. Re-critic on your own fixes earns its keep.
 
 ## Related
-- [[codex-shell-sandbox-broken-windows]] — run the Codex critic via inline-bundle on this box.
+- [codex-shell-sandbox-broken-windows](codex-shell-sandbox-broken-windows.md) — run the Codex critic via inline-bundle on this box.
 - `tools/autodev/gate.ps1` (`-SelfTest`), `tools/autodev/conductor.ps1` (`-SelfTest`) — the guards.
 - `docs-internal/autodev-loop-runbook.md` — the loop design.

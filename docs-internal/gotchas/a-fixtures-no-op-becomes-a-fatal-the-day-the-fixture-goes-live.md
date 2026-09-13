@@ -16,7 +16,7 @@ about the no-op changed — but it now had a caller:
 
 ```
 Call to a member function add_admin_notice() on null
-  woodev/shipping-method/class-shipping-plugin.php:606
+  Shipping_Plugin::add_delayed_admin_notices()
 #1 Shipping_Plugin->add_delayed_admin_notices('')      ← hooked on admin_footer
 #4 wp-admin/admin-footer.php(78): do_action('admin_footer')
 ```

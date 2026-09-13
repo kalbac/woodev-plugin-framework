@@ -63,6 +63,6 @@ page load, the server restored it; if it appears only later, some JS put it ther
 distinction is what makes the verification a positive artifact rather than a timing guess.
 
 ## Related
-- [[an-empty-domain-key-is-not-a-key]]
-- [[guest-session-write-needs-the-cart-cookie]]
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md)
+- [guest-session-write-needs-the-cart-cookie](guest-session-write-needs-the-cart-cookie.md)
 - `docs-internal/specs/2026-08-11-sp5-pickup-selection-persistence-design.md`

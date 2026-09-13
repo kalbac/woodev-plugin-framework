@@ -1,4 +1,5 @@
 # A `grep --include` through `wp-env run` finds nothing, and WooCommerce is not in `plugins/woocommerce`
+> **Platform:** The glob-mangling half is Windows-only — Git Bash/MSYS rewrites it; the WooCommerce directory name is host-independent.
 
 > Namespace: `tooling/*` — added session 126 (2026-09-08).
 

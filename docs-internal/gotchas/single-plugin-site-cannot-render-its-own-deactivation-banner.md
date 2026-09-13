@@ -29,5 +29,5 @@ to serve the violator case only — the reason it was rejected the first time.
 
 ## Related
 
-- [[license-need-vs-required]] — the licence state this path acts on.
+- [license-need-vs-required](license-need-vs-required.md) — the licence state this path acts on.
 - Session detail: `sessions/s12.md`.

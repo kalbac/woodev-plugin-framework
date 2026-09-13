@@ -1,7 +1,7 @@
 # `wp_nonce_url()` HTML-encodes `&` → breaks a URL consumed by JS/JSON
 
 > Namespace: `[admin-ui/*]` · Discovered: s24 (2026-06-19), rig-debugged. Specialization
-> of [[esc-url-raw-for-js-consumed-urls]].
+> of [esc-url-raw-for-js-consumed-urls](esc-url-raw-for-js-consumed-urls.md).
 
 ## Problem
 
@@ -48,5 +48,5 @@ attribute back to `&` when it reads the form field.)
 
 ## Related
 
-- [[esc-url-raw-for-js-consumed-urls]] — the general rule (this is the `wp_nonce_url` case).
-- [[rest-endpoint-not-for-browser-cookie-auth]] — the other s24 rig bug (sibling).
+- [esc-url-raw-for-js-consumed-urls](esc-url-raw-for-js-consumed-urls.md) — the general rule (this is the `wp_nonce_url` case).
+- [rest-endpoint-not-for-browser-cookie-auth](rest-endpoint-not-for-browser-cookie-auth.md) — the other s24 rig bug (sibling).

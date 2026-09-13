@@ -64,7 +64,7 @@ hierarchy; probe a node with siblings at two levels before trusting one.
 
 ## Related
 
-- [[a-locality-display-name-is-not-an-identifier]] — why the name cannot be matched instead
-- [[an-empty-domain-key-is-not-a-key]] — the sentinel this rule degrades to
-- [[session-key-vs-order-meta-prefix]] — the `(locality, type)` map this key feeds
+- [a-locality-display-name-is-not-an-identifier](a-locality-display-name-is-not-an-identifier.md) — why the name cannot be matched instead
+- [an-empty-domain-key-is-not-a-key](an-empty-domain-key-is-not-a-key.md) — the sentinel this rule degrades to
+- [session-key-vs-order-meta-prefix](session-key-vs-order-meta-prefix.md) — the `(locality, type)` map this key feeds
 - `docs-internal/specs/2026-08-15-location-chain-design.md` — the design it produced (#334, #330)

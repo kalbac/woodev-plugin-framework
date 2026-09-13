@@ -61,5 +61,5 @@ the content behind it happens to be correct once revealed.
 ## Related
 
 - `docs-internal/archive/specs/2026-08-03-sp5-pickup-map-visual-rework-design.md` — D-6, V-6
-- [[focusgroup-only-moved-for-clustered-points]] — same session, same "the state a spec promises was
+- [focusgroup-only-moved-for-clustered-points](focusgroup-only-moved-for-clustered-points.md) — same session, same "the state a spec promises was
   never actually driven by any code path" shape of bug

@@ -1,4 +1,5 @@
 # gotcha: a hook committed `100644` is silently ignored by POSIX git — and `core.fileMode=false` hides it on Windows
+> **Platform:** The silent detection half is Windows-only — `core.fileMode=false` hides executable-bit drift; POSIX enforcement applies on all POSIX hosts.
 
 **Namespace:** `[tooling/*]`
 **Discovered:** s122 (2026-09-06), by a Codex critic on PR #806
@@ -54,7 +55,7 @@ wsl.exe -- bash -c 'git clone -q --depth 1 --branch <branch> <url> /tmp/c && sta
 
 ## Related
 
-- [[the-mo-is-reproducible-from-the-po]] — same family: an artifact that looks right locally
+- [the-mo-is-reproducible-from-the-po](the-mo-is-reproducible-from-the-po.md) — same family: an artifact that looks right locally
   and is wrong in the tree everyone else receives.
 - `.gitattributes` pins `.githooks/**` to LF for the sibling defect — a CRLF hook runs on
   git-bash and dies under WSL with `set: Illegal option -`.
