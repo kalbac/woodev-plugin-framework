@@ -15,8 +15,8 @@ symbolically — faster and more accurate than a raw file read.
 1. Verify at session start that Serena's tools are present (including deferred ones).
 2. If they are missing — **report to the operator before any PHP work**. Do not silently fall back
    to `Read`; that is how sessions s45–s59 drifted.
-3. Activate by **path**, not by name: `activate_project` with `D:/Projects/woodev_framework`.
-   **That path is right only for a session working in the main tree.** A worker running in its own
+3. Activate by **path**, not by name: `activate_project` with `git rev-parse --show-toplevel`
+   (`D:/Projects/woodev_framework` on the Windows desktop; the Mac has its own). A worker in its own
    worktree must activate on ITS OWN path, and verify it took by checking that a `find_symbol`
    result reports a path under that worktree — otherwise its Serena edits land in the main tree
    while its git work happens in the worktree, and the work splits silently across two checkouts
