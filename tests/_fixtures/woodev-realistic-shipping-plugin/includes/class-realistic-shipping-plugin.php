@@ -96,6 +96,9 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'tracking_url_template'     => 'https://realistic.example.test/track/{tracking}',
 				'pickup_point_meta_key'     => '_woodev_realistic_pickup_point',
 				'carrier_order_id_meta_key' => '_woodev_realistic_carrier_order_id',
+				// A v1-style orders-page slug nothing registers — its URL redirects to the
+				// framework page with this carrier preselected (SP-10 increment 5, #820).
+				'legacy_page_slug'          => 'wc_realistic_shipping_orders',
 			]
 		);
 
