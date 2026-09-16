@@ -34,12 +34,15 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\stubs( [ 'add_action', 'remove_action', 'add_filter', 'remove_filter', 'apply_filters' ] );
 
 		$this->fake_transients = [];
+		$_GET                  = [];
 
 		Orders_Registry::instance()->reset_for_tests();
 	}
 
 	protected function tearDown(): void {
 		Orders_Registry::instance()->reset_for_tests();
+
+		$_GET = [];
 
 		parent::tearDown();
 	}
@@ -1426,5 +1429,209 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->move_menu_item_after_orders();
 
 		$this->assertSame( [], $submenu );
+	}
+
+	// -----------------------------------------------------------------------
+	// maybe_redirect_legacy_page() / resolve_legacy_redirect_url() — card #820,
+	// increment 5.
+	//
+	// The public method ends in `wp_safe_redirect()` + `exit`, which would kill the
+	// PHPUnit process (same reasoning ShippingAdminOrderMetaboxTest documents for
+	// Shipping_Admin_Order::handle_order_action()), so it is never invoked directly.
+	// Only the private pure lookup behind it, resolve_legacy_redirect_url(), is
+	// exercised, via reflection — it returns the exact string the public method
+	// would hand to wp_safe_redirect(), so the assertions below still pin the real
+	// redirect target.
+	// -----------------------------------------------------------------------
+
+	private function legacy_provider( string $id, ?string $legacy_slug ): Orders_Provider {
+		return Orders_Provider::create(
+			$id,
+			$id,
+			'_marker_' . $id,
+			[ $id ],
+			[ 'legacy_page_slug' => $legacy_slug ]
+		);
+	}
+
+	private function stubLegacyRedirectEnvironment( bool $doing_ajax = false, bool $user_can = true ): void {
+		Functions\when( 'wp_doing_ajax' )->justReturn( $doing_ajax );
+		Functions\when( 'current_user_can' )->justReturn( $user_can );
+		Functions\when( 'wp_unslash' )->returnArg();
+		Functions\when( 'admin_url' )->alias(
+			static function ( string $path = '' ): string {
+				return 'https://example.test/wp-admin/' . $path;
+			}
+		);
+	}
+
+	private function resolveLegacyRedirect(): ?string {
+		$method = new \ReflectionMethod( Orders_Registry::class, 'resolve_legacy_redirect_url' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return $method->invoke( Orders_Registry::instance() );
+	}
+
+	public function test_add_hooks_hooks_the_legacy_redirect_onto_admin_page_access_denied_not_admin_init(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found_on_access_denied = false;
+		$found_on_admin_init    = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_page_access_denied' === $call[0] && [ $registry, 'maybe_redirect_legacy_page' ] === $call[1] ) {
+				$found_on_access_denied = true;
+			}
+			if ( 'admin_init' === $call[0] && is_array( $call[1] ) && ( $call[1][1] ?? null ) === 'maybe_redirect_legacy_page' ) {
+				$found_on_admin_init = true;
+			}
+		}
+
+		$this->assertTrue( $found_on_access_denied, 'add_hooks() must hook maybe_redirect_legacy_page() onto admin_page_access_denied' );
+		$this->assertFalse( $found_on_admin_init, 'the legacy redirect must never be hooked onto admin_init — see the method docblock for why' );
+	}
+
+	/**
+	 * Control for every negative below: an exact whole-value match redirects to the
+	 * exact expected URL, `carrier=<id>` included.
+	 */
+	public function test_an_exact_legacy_slug_redirects_to_the_new_page_with_the_carrier_preselected(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page'] = 'wc_cdek_orders';
+
+		$this->assertSame(
+			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
+			$this->resolveLegacyRedirect()
+		);
+	}
+
+	public function test_a_legacy_request_with_extra_query_args_still_redirects_dropping_the_extras(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page']   = 'wc_cdek_orders';
+		$_GET['paged']  = '2';
+		$_GET['status'] = 'processing';
+
+		$this->assertSame(
+			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
+			$this->resolveLegacyRedirect()
+		);
+	}
+
+	/**
+	 * #396's bug (see Settings_Page_Registry::maybe_redirect_legacy()'s docblock):
+	 * a request `page` that is only a PREFIX of a declared slug must never match.
+	 * Deliberately breaking the matcher to a prefix check
+	 * ( `0 === strpos( $legacy_slug, $requested_page )` ) makes this go RED —
+	 * confirmed by hand while writing this test, proving the exact-match assertion
+	 * is load-bearing rather than vacuous.
+	 */
+	public function test_a_request_page_that_is_only_a_prefix_of_a_declared_slug_does_not_match(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders_v2' ) );
+
+		$_GET['page'] = 'wc_cdek_orders';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	/**
+	 * The other half of #396: a request `page` that is a SUPERSTRING of a declared
+	 * slug must not match either — a `substr`/`strpos`-based matcher going the other
+	 * direction would still pass this without the exact-match check.
+	 */
+	public function test_a_request_page_that_is_only_a_superstring_of_a_declared_slug_does_not_match(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page'] = 'wc_cdek_orders_v2';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	public function test_a_provider_with_no_declared_legacy_slug_never_matches_even_an_empty_page(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
+
+		$_GET['page'] = '';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	public function test_a_declared_legacy_slug_of_empty_string_never_matches_even_an_empty_page(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', '' ) );
+
+		$_GET['page'] = '';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	/**
+	 * Loop guard: `wc-admin` is the destination page's OWN `page` value, so a
+	 * provider declaring it as its legacy slug must never match — matching it would
+	 * redirect the destination to itself.
+	 */
+	public function test_a_declared_legacy_slug_of_wc_admin_never_matches(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc-admin' ) );
+
+		$_GET['page'] = 'wc-admin';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	public function test_a_user_without_the_page_capability_gets_no_redirect(): void {
+		$this->stubLegacyRedirectEnvironment( false, false );
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page'] = 'wc_cdek_orders';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	public function test_with_two_providers_the_matching_ones_id_is_used(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'edostavka', 'wc_edostavka_orders' ) );
+
+		$_GET['page'] = 'wc_edostavka_orders';
+
+		$this->assertSame(
+			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=edostavka',
+			$this->resolveLegacyRedirect()
+		);
+	}
+
+	public function test_an_ajax_request_gets_no_redirect(): void {
+		$this->stubLegacyRedirectEnvironment( true );
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page'] = 'wc_cdek_orders';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
 }

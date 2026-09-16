@@ -26,8 +26,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 	 * {@see \Woodev\Framework\Shipping\Order\Shipping_Order_Handler::resolve()} and
 	 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin::get_page_slug()}. `id`,
 	 * `label`, `marker_meta_key` and `method_ids` are required; every other field is
-	 * optional and carries a documented meaning for its absence. `legacy_page_slug` is
-	 * accepted and stored now but not consumed until increment 5.
+	 * optional and carries a documented meaning for its absence. `legacy_page_slug`, if
+	 * declared, is consumed by {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::maybe_redirect_legacy_page()}
+	 * (increment 5, #820).
 	 *
 	 * @since 2.0.2
 	 */
@@ -157,8 +158,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $carrier_order_id_meta_key;
 
 		/**
-		 * Legacy v1 orders-page slug, for the future redirect. Accepted, not yet
-		 * consumed (increment 5).
+		 * Legacy v1 orders-page slug, consumed by
+		 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::maybe_redirect_legacy_page()}
+		 * (increment 5, #820) to redirect a merchant's bookmark to the new page.
 		 *
 		 * @since 2.0.2
 		 *
@@ -430,7 +432,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		/**
 		 * Returns the legacy v1 orders-page slug, or null when not declared.
 		 *
-		 * Not yet consumed — stored for increment 5.
+		 * Consumed by {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::maybe_redirect_legacy_page()}
+		 * (increment 5, #820).
 		 *
 		 * @since 2.0.2
 		 *

@@ -343,7 +343,10 @@ correction unchanged — which is the argument for having built them first.
    settled by measurement first.
 3. **Bulk actions** (D5).
 4. **Menu counter and tab counts** (D6).
-5. **Legacy slug redirect** (D1) — now targeting `page=wc-admin&path=/woodev-shipping-orders`.
+5. ✅ **Legacy slug redirect** (D1) — targets `page=wc-admin&path=/woodev-shipping-orders&carrier=<id>`.
+   Hooked onto `admin_page_access_denied`, not `admin_init`: a v1 slug no v2 plugin registers any
+   more never reaches `admin_init` — WP core denies access and `wp_die()`s with a 403 first, in
+   `wp-admin/includes/menu.php`, before `admin.php` gets to its own `do_action( 'admin_init' )`.
 
 #710 (the «Создать заказ» modal) stays outside this spec — it needs the operator's brainstorm by his
 own instruction.
