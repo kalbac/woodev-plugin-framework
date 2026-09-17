@@ -178,7 +178,6 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			self::$registered_instances[ $download_id ] = $this;
 		}
 
-
 		/**
 		 * Whether a download id denotes a real EDD store product (§9.3 predicate).
 		 *
