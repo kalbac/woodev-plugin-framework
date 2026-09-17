@@ -350,36 +350,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * Registers shipping methods with WooCommerce.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 #842: the class-list resolution (filter, non-array fallback,
+		 *              validation) moved into {@see self::get_valid_shipping_method_classes()},
+		 *              shared with {@see self::get_declared_shipping_method_ids()}; this
+		 *              method's own behaviour — same filter, same fallback, same
+		 *              validation, same actions, same order — is unchanged.
 		 *
 		 * @param array $methods existing methods
 		 * @return array
 		 */
 		final public function register_shipping_methods( array $methods ): array {
 
-			/**
-			 * Filters the shipping method classes before registration.
-			 *
-			 * A return that is not an array is discarded and the plugin's own
-			 * class list is used instead. A non-array value here does not fatal —
-			 * `foreach` on it is a silent no-op — but it makes every shipping
-			 * method vanish from checkout with nothing in the logs, which is worse.
-			 *
-			 * @since 1.5.0
-			 * @since 2.0.2 A non-array return is discarded; the plugin's own class
-			 *              list is used instead of trusting the return's type.
-			 *
-			 * @param array $method_classes shipping method class names
-			 * @param Shipping_Plugin $plugin plugin instance
-			 */
-			$filtered_classes = apply_filters( 'woodev_shipping_plugin_method_classes', $this->get_shipping_method_classes(), $this );
-
-			$classes = is_array( $filtered_classes ) ? $filtered_classes : $this->get_shipping_method_classes();
-
-			foreach ( $classes as $class ) {
-
-				if ( ! $this->is_valid_shipping_method_class( $class ) ) {
-					continue;
-				}
+			foreach ( $this->get_valid_shipping_method_classes() as $class ) {
 
 				$method_id = $class::get_method_id();
 
@@ -428,6 +410,76 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			$filtered_methods = apply_filters( 'woodev_shipping_plugin_registered_methods', $methods, $this );
 
 			return is_array( $filtered_methods ) ? $filtered_methods : $methods;
+		}
+
+		/**
+		 * Resolves this plugin's own valid shipping method classes: the
+		 * `woodev_shipping_plugin_method_classes`-filtered class list (falling back
+		 * to the unfiltered {@see self::get_shipping_method_classes()} for a
+		 * non-array return), restricted to {@see self::is_valid_shipping_method_class()}.
+		 *
+		 * Shared by {@see self::register_shipping_methods()} and
+		 * {@see self::get_declared_shipping_method_ids()} so the two can never drift.
+		 *
+		 * @since 2.0.2 #842
+		 *
+		 * @return class-string<Shipping_Method>[]
+		 */
+		private function get_valid_shipping_method_classes(): array {
+
+			/**
+			 * Filters the shipping method classes before registration.
+			 *
+			 * A return that is not an array is discarded and the plugin's own
+			 * class list is used instead. A non-array value here does not fatal —
+			 * `foreach` on it is a silent no-op — but it makes every shipping
+			 * method vanish from checkout with nothing in the logs, which is worse.
+			 *
+			 * @since 1.5.0
+			 * @since 2.0.2 A non-array return is discarded; the plugin's own class
+			 *              list is used instead of trusting the return's type.
+			 *
+			 * @param array $method_classes shipping method class names
+			 * @param Shipping_Plugin $plugin plugin instance
+			 */
+			$filtered_classes = apply_filters( 'woodev_shipping_plugin_method_classes', $this->get_shipping_method_classes(), $this );
+
+			$classes = is_array( $filtered_classes ) ? $filtered_classes : $this->get_shipping_method_classes();
+
+			return array_values( array_filter( $classes, [ $this, 'is_valid_shipping_method_class' ] ) );
+		}
+
+		/**
+		 * Returns the shipping method ids this plugin DECLARES, derived statically
+		 * via `Shipping_Method::get_method_id()` — no shipping method is constructed.
+		 *
+		 * This is the side-effect-free counterpart to {@see self::get_shipping_method_ids()},
+		 * which only reflects `add_shipping_method()` calls made from
+		 * {@see self::register_shipping_methods()}, and which WooCommerce runs on its
+		 * own schedule (see that method's docblock) — reaching it early means
+		 * constructing every shipping method now. This method never does that;
+		 * it is the authoritative source for
+		 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::check_method_ids_contract()}
+		 * (card #842).
+		 *
+		 * Applies the `woodev_shipping_plugin_method_classes` filter a SECOND time
+		 * (once here, once whenever `register_shipping_methods()` itself runs) —
+		 * acceptable because the filter is a pure list transform with no side
+		 * effects of its own.
+		 *
+		 * @since 2.0.2 #842
+		 *
+		 * @return string[] shipping method id strings
+		 */
+		public function get_declared_shipping_method_ids(): array {
+
+			$ids = [];
+
+			foreach ( $this->get_valid_shipping_method_classes() as $class ) {
+				$ids[] = $class::get_method_id();
+			}
+
+			return $ids;
 		}
 
 		/**

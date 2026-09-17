@@ -59,22 +59,45 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
-	 * A `Shipping_Plugin` double reporting the given ids as its OWN registered
-	 * shipping methods (card #842) — mocking the abstract class directly rather than
+	 * Every plugin-side id this file's tests need, mapped to a real (throwing-
+	 * constructor) `Shipping_Method` class — see `OrdersGateShippingMethodFixture.php`.
+	 *
+	 * @var array<string,class-string>
+	 */
+	private const GATE_METHOD_CLASSES = [
+		'cdek_courier' => Woodev_Test_Cdek_Courier_Method::class,
+		'cdek_pickup'  => Woodev_Test_Cdek_Pickup_Method::class,
+	];
+
+	/**
+	 * A REAL `Shipping_Plugin` double declaring the given ids as its OWN shipping
+	 * methods (card #842, round 2) — mocking the abstract class directly rather than
 	 * `\Woodev_Plugin` (used elsewhere in this file for the asset-plugin tests) because
 	 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::check_method_ids_contract()}
 	 * only records a provider's owner when it IS one; a plain `\Woodev_Plugin` has no
-	 * `get_shipping_method_ids()` to compare against. `register_shipping_methods()` is
-	 * `final` on the real class, so Mockery leaves it unstubbed rather than failing to
-	 * override it — irrelevant here since no test calls it.
+	 * `get_declared_shipping_method_ids()` to compare against.
 	 *
-	 * @return \Woodev\Framework\Shipping\Shipping_Plugin
+	 * Unlike round 1, this is NOT a mock of the method under test:
+	 * `get_declared_shipping_method_ids()` is the real, inherited implementation,
+	 * resolving `Shipping_Plugin::get_shipping_method_classes()` — set here — exactly
+	 * as `register_shipping_methods()` itself would. Each class's constructor THROWS,
+	 * so a passing gate test also proves the gate constructs nothing.
+	 *
+	 * @param array<int,string> $method_ids ids the plugin declares; must be keys of
+	 *                                       {@see self::GATE_METHOD_CLASSES}.
+	 * @return Woodev_Test_Shipping_Plugin_For_Orders_Gate
 	 */
-	private function shipping_plugin_double( array $method_ids ) {
-		$plugin = \Mockery::mock( '\Woodev\Framework\Shipping\Shipping_Plugin' );
-		$plugin->shouldReceive( 'get_shipping_method_ids' )->andReturn( $method_ids );
+	private function shipping_plugin_double( array $method_ids ): Woodev_Test_Shipping_Plugin_For_Orders_Gate {
+		require_once __DIR__ . '/OrdersGateShippingMethodFixture.php';
 
-		return $plugin;
+		$classes = array_map(
+			static function ( string $id ): string {
+				return self::GATE_METHOD_CLASSES[ $id ];
+			},
+			$method_ids
+		);
+
+		return new Woodev_Test_Shipping_Plugin_For_Orders_Gate( $classes );
 	}
 
 	/**
@@ -518,6 +541,33 @@ class ShippingOrdersRegistryTest extends TestCase {
 		}
 
 		$this->assertTrue( $found, 'add_hooks() must hook enqueue_assets() onto admin_enqueue_scripts' );
+	}
+
+	/**
+	 * Card #842: `check_method_ids_contract()` must run at `admin_menu` priority
+	 * 41 — right after {@see Orders_Registry::register_page()}'s 40 — so both
+	 * sides of the comparison (the provider and the plugin's own declared class
+	 * list) are registered by the time it runs.
+	 */
+	public function test_add_hooks_hooks_the_method_ids_contract_onto_admin_menu_at_priority_41(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_menu' === $call[0] && [ $registry, 'check_method_ids_contract' ] === $call[1] && 41 === $call[2] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook check_method_ids_contract() onto admin_menu at priority 41' );
 	}
 
 	/**

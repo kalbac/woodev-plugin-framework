@@ -137,7 +137,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * Unlike {@see self::$plugin} (any ONE plugin, for the shared asset path), this
 		 * is EVERY provider's own owner, because the contract check is per carrier. Only
 		 * a `Shipping_Plugin` instance is recorded — a plain `\Woodev_Plugin` has no
-		 * `get_shipping_method_ids()` to compare against, so there is nothing to check.
+		 * `get_declared_shipping_method_ids()` to compare against, so there is nothing
+		 * to check.
 		 * Dropped on replacement exactly like {@see self::$shipment_handlers} and
 		 * {@see self::$tracking_handlers}, for the same reason: a replacement descriptor
 		 * registered by a different carrier's plugin must not be checked against the
@@ -491,40 +492,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * placed with the undeclared one. Nothing checked this before card #842.
 		 *
 		 * Compares, per provider that has a recorded owning `Shipping_Plugin`
-		 * ({@see self::$provider_plugins}), that plugin's OWN registered shipping method
-		 * ids against the provider's declared `method_ids`. Missing ids — a method the
+		 * ({@see self::$provider_plugins}), that plugin's own DECLARED shipping
+		 * method ids ({@see Shipping_Plugin::get_declared_shipping_method_ids()})
+		 * against the provider's declared `method_ids`. Missing ids — a method the
 		 * plugin ships but the provider does not name — are reported once per provider
 		 * via `_doing_it_wrong()`. The REVERSE is not checked: a provider may legitimately
 		 * name an id from elsewhere (a shared or third-party method), so an extra
 		 * declared id is not an error. A provider with no recorded plugin is skipped —
 		 * there is nothing to compare it against.
 		 *
-		 * TIMING (measured against both fixture plugins and this class's own hooks,
-		 * because the two sides complete at different, unsynchronised moments):
-		 * `register_provider()` runs synchronously from each fixture's own constructor
-		 * (`Woodev_Realistic_Shipping_Plugin::init_realistic_orders_page()` and
-		 * `Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()`, both
-		 * called right after `parent::__construct()`), i.e. at `plugins_loaded` — always
-		 * well before `admin_menu`. A plugin's OWN registered shipping method ids, by
-		 * contrast, populate `Shipping_Plugin::$methods` only when WooCommerce applies
-		 * the `woocommerce_shipping_methods` filter (`Shipping_Plugin::add_hooks()` only
-		 * REGISTERS that filter callback during construction; `register_shipping_methods()`
-		 * itself, which actually calls `add_shipping_method()`, runs later, whenever
-		 * `WC_Shipping::load_shipping_methods()` first fires) — the framework's own #599
-		 * filter audit ties that only to "every cart/checkout calculation", not to any
-		 * admin hook, so it is NOT guaranteed complete by `admin_menu` on its own. This
-		 * method therefore forces it: calling `WC()->shipping()->get_shipping_methods()`
-		 * makes WooCommerce load (and cache) every registered shipping method NOW if it
-		 * has not already, exactly the same call this framework already makes from other
-		 * admin-safe contexts ({@see \Woodev\Framework\Shipping\Checkout\Checkout_Config::pickup_method_ids()}
-		 * — `WC()->shipping()` is a lazy singleton independent of request type, not
-		 * gated by `is_request( 'frontend' )`). With that forced, hooking at `admin_menu`
-		 * priority 41 — right after {@see self::register_page()}'s 40 — makes both sides
-		 * complete, admin-only, once per request: `admin_menu` never fires on the front
-		 * end, in a REST request, or in AJAX (none of those bootstrap wp-admin's menu),
-		 * so this gate naturally never runs there either.
-		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (#842, critic MAJOR): `get_declared_shipping_method_ids()`
+		 *              replaces the round-1 `WC()->shipping()->get_shipping_methods()` +
+		 *              `get_shipping_method_ids()` pair. That pair forced WooCommerce
+		 *              to construct EVERY registered shipping method (constructor side
+		 *              effects: `set_shipping_method()`, admin hook registration) on
+		 *              every admin request under `WP_DEBUG` — merely to read ids that
+		 *              the plugin already knows statically. Nothing here constructs a
+		 *              shipping method or touches WooCommerce; the timing measurement
+		 *              in the round-1 docblock (why `admin_menu` priority 41 is the
+		 *              right hook — both `register_provider()` and the plugin's own
+		 *              class list are complete by then) still holds, since neither side
+		 *              of this comparison depends on WooCommerce's own shipping-method
+		 *              load order any more.
 		 *
 		 * @internal Hooked on `admin_menu`, priority 41; not for direct calls.
 		 *
@@ -539,17 +529,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return;
 			}
 
-			if ( function_exists( 'WC' ) && method_exists( WC(), 'shipping' ) && WC()->shipping() ) {
-				WC()->shipping()->get_shipping_methods();
-			}
-
 			foreach ( $this->provider_plugins as $provider_id => $plugin ) {
 				if ( ! isset( $this->providers[ $provider_id ] ) ) {
 					continue;
 				}
 
 				$declared_ids   = $this->providers[ $provider_id ]->get_method_ids();
-				$registered_ids = $plugin->get_shipping_method_ids();
+				$registered_ids = $plugin->get_declared_shipping_method_ids();
 				$missing_ids    = array_diff( $registered_ids, $declared_ids );
 
 				if ( empty( $missing_ids ) ) {
