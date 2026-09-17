@@ -268,6 +268,156 @@ final class LoaderDormantNoticeTest extends TestCase {
 	}
 
 	/**
+	 * The resolver must keep naming the legacy plugin when its plugins directory is not symlinked.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_conflicting_plugin_name_resolves_non_symlinked_plugins_directory(): void {
+		$base        = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
+		$plugins_dir = $base . '/plugins';
+		$plugin_dir  = $plugins_dir . '/legacy-woodev-plugin/woodev';
+		$stub_file   = $plugin_dir . '/bootstrap.php';
+
+		mkdir( $plugin_dir, 0777, true );
+		file_put_contents( $stub_file, $this->legacy_bootstrap_stub_source() );
+
+		try {
+			require $stub_file;
+			define( 'WP_PLUGIN_DIR', $plugins_dir );
+			$this->stub_conflicting_plugin_lookup();
+
+			$this->assertSame( 'Legacy Woodev Plugin', $this->resolve_conflicting_plugin_name() );
+		} finally {
+			$this->remove_legacy_bootstrap_fixture( $stub_file, $plugin_dir, dirname( $plugin_dir ), $plugins_dir, $base );
+		}
+	}
+
+	/**
+	 * The resolver must resolve both paths before it compares a symlinked plugins directory.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_conflicting_plugin_name_resolves_symlinked_plugins_directory(): void {
+		$base         = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
+		$plugins_dir  = $base . '/plugins';
+		$plugins_link = $base . '/plugins-link';
+		$plugin_dir   = $plugins_dir . '/legacy-woodev-plugin/woodev';
+		$stub_file    = $plugin_dir . '/bootstrap.php';
+
+		mkdir( $plugin_dir, 0777, true );
+		$this->assertTrue( symlink( $plugins_dir, $plugins_link ), 'The regression fixture must create a real plugins-directory symlink.' );
+		file_put_contents( $stub_file, $this->legacy_bootstrap_stub_source() );
+
+		try {
+			require $stub_file;
+			define( 'WP_PLUGIN_DIR', $plugins_link );
+			$this->stub_conflicting_plugin_lookup();
+
+			$this->assertSame( 'Legacy Woodev Plugin', $this->resolve_conflicting_plugin_name() );
+		} finally {
+			if ( is_link( $plugins_link ) ) {
+				unlink( $plugins_link );
+			}
+			$this->remove_legacy_bootstrap_fixture( $stub_file, $plugin_dir, dirname( $plugin_dir ), $plugins_dir, $base );
+		}
+	}
+
+	/**
+	 * The resolver must not guess an owner for a bootstrap outside a symlinked plugins directory.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_conflicting_plugin_name_rejects_file_outside_symlinked_plugins_directory(): void {
+		$base         = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
+		$plugins_dir  = $base . '/plugins';
+		$plugins_link = $base . '/plugins-link';
+		$plugin_dir   = $base . '/outside/legacy-woodev-plugin/woodev';
+		$stub_file    = $plugin_dir . '/bootstrap.php';
+
+		mkdir( $plugins_dir, 0777, true );
+		mkdir( $plugin_dir, 0777, true );
+		$this->assertTrue( symlink( $plugins_dir, $plugins_link ), 'The negative-control fixture must create a real plugins-directory symlink.' );
+		file_put_contents( $stub_file, $this->legacy_bootstrap_stub_source() );
+
+		try {
+			require $stub_file;
+			define( 'WP_PLUGIN_DIR', $plugins_link );
+			$this->stub_conflicting_plugin_lookup();
+
+			$this->assertSame( '', $this->resolve_conflicting_plugin_name() );
+		} finally {
+			if ( is_link( $plugins_link ) ) {
+				unlink( $plugins_link );
+			}
+			$this->remove_legacy_bootstrap_fixture( $stub_file, $plugin_dir, dirname( $plugin_dir ), $plugins_dir, $base . '/outside', $base );
+		}
+	}
+
+	/**
+	 * Stubs the legacy bootstrap class source so reflection reports a file path.
+	 *
+	 * @return string PHP source for the legacy bootstrap stub.
+	 */
+	private function legacy_bootstrap_stub_source(): string {
+		return "<?php\n"
+			. 'class Woodev_Plugin_Bootstrap {' . "\n"
+			. "\tprivate static \$instance;\n"
+			. "\tpublic static function instance() { return self::\$instance ??= new self(); }\n"
+			. "\tpublic function register_plugin( ...\$args ) {}\n"
+			. "}\n";
+	}
+
+	/**
+	 * Stubs the WordPress helpers used by the conflicting-plugin resolver.
+	 *
+	 * @return void
+	 */
+	private function stub_conflicting_plugin_lookup(): void {
+		Functions\when( 'wp_normalize_path' )->alias(
+			static function ( string $path ): string {
+				return str_replace( '\\', '/', $path );
+			}
+		);
+		Functions\when( 'get_plugins' )->justReturn(
+			[ 'legacy-woodev-plugin/legacy-woodev-plugin.php' => [ 'Name' => 'Legacy Woodev Plugin' ] ]
+		);
+	}
+
+	/**
+	 * Invokes the private resolver directly so the regression test covers the production loader.
+	 *
+	 * @return string Conflicting plugin display name, or '' when it cannot be resolved.
+	 */
+	private function resolve_conflicting_plugin_name(): string {
+		$reflection = new ReflectionClass( \Woodev_Loader::class );
+		$method     = $reflection->getMethod( 'resolve_conflicting_plugin_name' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		return (string) $method->invoke( null );
+	}
+
+	/**
+	 * Removes the temporary file and empty directories created for a legacy bootstrap fixture.
+	 *
+	 * @param string ...$paths File then directories, ordered from most nested to outermost.
+	 * @return void
+	 */
+	private function remove_legacy_bootstrap_fixture( string ...$paths ): void {
+		foreach ( $paths as $path ) {
+			if ( is_file( $path ) ) {
+				unlink( $path );
+			} elseif ( is_dir( $path ) ) {
+				rmdir( $path );
+			}
+		}
+	}
+
+	/**
 	 * Resets the real Woodev_Plugin_Bootstrap singleton via reflection, if the real class is loaded.
 	 *
 	 * @return void
