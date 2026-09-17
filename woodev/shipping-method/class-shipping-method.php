@@ -978,10 +978,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @since 1.5.0
 		 * @since 2.0.2 Rebuilds the settings form when the feature is one that shapes it, so a
 		 *              declaration made after construction reaches the merchant's screen (#813).
+		 * @since 2.0.2 #815: reports a call made while `$this->id` is still empty via
+		 *              `_doing_it_wrong()`, naming the correct order. The action below still
+		 *              fires under the empty id either way — that stays the current contract,
+		 *              queuing it was rejected on the card as a behaviour change no one asked for.
 		 *
 		 * @param string|string[] $feature the feature name or names supported by this shipping method
 		 */
 		public function add_support( $feature ) {
+
+			/*
+			 * `$this->id` is assigned by `Shipping_Method::__construct()`, not by this method, so
+			 * a subclass calling `add_support()` from its OWN constructor before chaining to
+			 * `parent::__construct()` runs this with `get_id()` still `''`. The action below then
+			 * fires as `woodev_shipping_method__supports_<feature>` — a name with no id segment,
+			 * shared by every shipping method that declares a feature in this order (#815).
+			 *
+			 * Both documented orders are unaffected: `add_support()` after `parent::__construct()`
+			 * runs with the id already set, and `$this->supports = [ ... ]` before the constructor
+			 * never reaches this method at all.
+			 */
+			if ( '' === $this->get_id() && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+
+				_doing_it_wrong(
+					self::class . '::add_support',
+					sprintf(
+						'%s called add_support() before $this->id was set, so the action below fires ' .
+						'as "woodev_shipping_method__supports_*" -- a name with no id segment, shared ' .
+						'by every shipping method declaring a feature in this order. Call add_support() ' .
+						'after parent::__construct(), or set $this->supports = [ ... ] before it instead.',
+						esc_html( get_class( $this ) )
+					),
+					'2.0.2'
+				);
+			}
 
 			if ( ! is_array( $feature ) ) {
 				$feature = [ $feature ];
@@ -1036,8 +1066,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			 * has already built the form once". A subclass calling `add_support()` BEFORE
 			 * `parent::__construct()` therefore skips the rebuild and is unaffected — the
 			 * constructor is about to build the form with the feature already declared. (That
-			 * ordering has its own wart: `get_id()` is still empty up there, so the action above
-			 * fires under a nameless hook. It is not the documented path and is not fixed here.)
+			 * ordering has its own wart, reported above rather than fixed here: `get_id()` is
+			 * still empty up there, so the action fires under a nameless hook. #815.)
 			 *
 			 * `init_form_fields()` builds from scratch, so re-running it is idempotent; it
 			 * re-applies the `woodev_shipping_method_{id}_form_fields` filter, which is fine for
