@@ -385,6 +385,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              {@see Shipping_Admin_Order::render_action_notice()} onto
 		 *              `admin_notices`, so a refused/failed action flashed during
 		 *              `handle_order_action()`'s redirect is actually shown.
+		 * @since 2.0.2 Increment 5 (#820): also hooks {@see self::maybe_redirect_legacy_page()}
+		 *              onto `admin_page_access_denied` — see that method's docblock for
+		 *              why that hook, and not `admin_init`.
 		 *
 		 * @return void
 		 */
@@ -399,6 +402,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
+			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
 
 			// Card #856: the order-edit metabox is built by the FRAMEWORK the same way
@@ -472,6 +476,113 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'path'       => '/' . self::PAGE_SLUG,
 				'capability' => $this->get_page_capability(),
 			];
+		}
+
+		/**
+		 * Redirects a carrier's legacy v1 orders-page slug to the new page, that
+		 * carrier preselected (SP-10 spec D1 last paragraph, card #820).
+		 *
+		 * ⚠ Hooked onto `admin_page_access_denied`, NOT `admin_init` — measured against
+		 * WordPress core (`wp-admin/admin.php`, `wp-admin/includes/menu.php`,
+		 * `wp-admin/includes/plugin.php`). A v1 slug no v2 plugin registers any more never
+		 * reaches `admin_init` in the first place: `admin.php` requires `wp-admin/menu.php`
+		 * before its own `do_action( 'admin_init' )` call, and `menu.php` calls
+		 * `user_can_access_admin_page()`, which returns `false` the moment
+		 * `$_registered_pages[ $hookname ]` is unset — exactly the case for an orphaned
+		 * legacy slug — firing `admin_page_access_denied` and `wp_die()`-ing with a 403
+		 * before `admin_init` is ever reached. {@see Settings_Page_Registry::maybe_redirect_legacy()}
+		 * gets away with `admin_init` only because ITS legacy page (`wc-settings`) still
+		 * exists, so WordPress never denies access to it.
+		 *
+		 * A v1 plugin still active that still registers the legacy slug itself is the
+		 * one case this method never sees: core finds `$_registered_pages[ $hookname ]`
+		 * set, `user_can_access_admin_page()` does not deny, `admin_page_access_denied`
+		 * never fires, and the merchant stays on the v1 plugin's own page. That is
+		 * intended — the framework redirects an ORPHANED legacy slug, it does not hijack
+		 * a page that still genuinely exists.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function maybe_redirect_legacy_page(): void {
+			$target = $this->resolve_legacy_redirect_url();
+
+			if ( null === $target ) {
+				return;
+			}
+
+			wp_safe_redirect( $target );
+			exit;
+		}
+
+		/**
+		 * Pure lookup behind {@see self::maybe_redirect_legacy_page()}, split out so it
+		 * is reachable from a unit test without invoking the `exit` that follows it —
+		 * the same seam {@see Shipping_Admin_Order::handle_order_action()} already uses
+		 * for its own redirect-then-exit (its testable logic lives in the private
+		 * `perform_action()`, never invoked through the `exit`-ending public method).
+		 *
+		 * MATCHES THE WHOLE `page` VALUE, NEVER A SUBSTRING — see
+		 * {@see Settings_Page_Registry::maybe_redirect_legacy()}'s docblock for the #396
+		 * history of exactly this bug (`shipping` matching `shipping-pro`, a log-file URL
+		 * hijacked because it merely contained a slug).
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (#820): reads `global $plugin_page` instead of the raw
+		 *              `$_GET['page']` — `wp-admin/admin.php` sets `$plugin_page` to
+		 *              `plugin_basename( wp_unslash( $_GET['page'] ) )` and
+		 *              `user_can_access_admin_page()` denies on THAT value, not the raw
+		 *              query string. A slash-padded `page` such as
+		 *              `%2Fwc_realistic_shipping_orders%2F` normalises to the plain slug
+		 *              in `$plugin_page`, so comparing against it (rather than the raw
+		 *              value) is what makes that request redirect instead of 403ing.
+		 *              Falls back to computing the same `plugin_basename()` value from
+		 *              `$_GET['page']` only when `$plugin_page` is not a string — i.e.
+		 *              this method is reached outside `admin.php`'s normal flow.
+		 *
+		 * @return string|null the redirect target, or null when nothing matched.
+		 */
+		private function resolve_legacy_redirect_url(): ?string {
+			if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+				return null;
+			}
+
+			if ( ! current_user_can( $this->get_page_capability() ) ) {
+				return null;
+			}
+
+			global $plugin_page;
+
+			if ( is_string( $plugin_page ) ) {
+				$requested_page = $plugin_page;
+			} else {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only URL routing, no state change.
+				$requested_page = isset( $_GET['page'] ) ? wp_unslash( $_GET['page'] ) : '';
+				$requested_page = is_string( $requested_page ) ? plugin_basename( $requested_page ) : '';
+			}
+
+			foreach ( $this->get_providers() as $provider ) {
+				$legacy_slug = $provider->get_legacy_page_slug();
+
+				// Skip undeclared slugs, and the destination's OWN `page` value — a slug
+				// equal to it would loop the moment it matched.
+				if ( null === $legacy_slug || '' === $legacy_slug || 'wc-admin' === $legacy_slug ) {
+					continue;
+				}
+
+				if ( $legacy_slug !== $requested_page ) {
+					continue;
+				}
+
+				return admin_url(
+					'admin.php?page=wc-admin&path=' . rawurlencode( '/' . self::PAGE_SLUG ) . '&carrier=' . rawurlencode( $provider->get_id() )
+				);
+			}
+
+			return null;
 		}
 
 		/**
@@ -1181,6 +1292,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2
 		 * @since 2.0.2 Card #856: also unhooks and drops the framework-built order metabox.
 		 * @since 2.0.2 Round 2 (#856): also unhooks {@see Shipping_Admin_Order::render_action_notice()}.
+		 * @since 2.0.2 Increment 5 (#820): also unhooks {@see self::maybe_redirect_legacy_page()}.
 		 *
 		 * @return void
 		 */
@@ -1188,6 +1300,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
 			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
+			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
 
 			if ( null !== $this->admin_order ) {
