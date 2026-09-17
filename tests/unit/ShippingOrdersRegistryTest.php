@@ -53,6 +53,53 @@ class ShippingOrdersRegistryTest extends TestCase {
 		return Orders_Provider::create( $id, $label, $marker, [ $id ] );
 	}
 
+	/** Like {@see self::provider()}, but with a caller-chosen `method_ids` list (card #842). */
+	private function provider_with_method_ids( string $id, array $method_ids ): Orders_Provider {
+		return Orders_Provider::create( $id, $id, '_marker_' . $id, $method_ids );
+	}
+
+	/**
+	 * Every plugin-side id this file's tests need, mapped to a real (throwing-
+	 * constructor) `Shipping_Method` class — see `OrdersGateShippingMethodFixture.php`.
+	 *
+	 * @var array<string,class-string>
+	 */
+	private const GATE_METHOD_CLASSES = [
+		'cdek_courier' => Woodev_Test_Cdek_Courier_Method::class,
+		'cdek_pickup'  => Woodev_Test_Cdek_Pickup_Method::class,
+	];
+
+	/**
+	 * A REAL `Shipping_Plugin` double declaring the given ids as its OWN shipping
+	 * methods (card #842, round 2) — mocking the abstract class directly rather than
+	 * `\Woodev_Plugin` (used elsewhere in this file for the asset-plugin tests) because
+	 * {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::check_method_ids_contract()}
+	 * only records a provider's owner when it IS one; a plain `\Woodev_Plugin` has no
+	 * `get_declared_shipping_method_ids()` to compare against.
+	 *
+	 * Unlike round 1, this is NOT a mock of the method under test:
+	 * `get_declared_shipping_method_ids()` is the real, inherited implementation,
+	 * resolving `Shipping_Plugin::get_shipping_method_classes()` — set here — exactly
+	 * as `register_shipping_methods()` itself would. Each class's constructor THROWS,
+	 * so a passing gate test also proves the gate constructs nothing.
+	 *
+	 * @param array<int,string> $method_ids ids the plugin declares; must be keys of
+	 *                                       {@see self::GATE_METHOD_CLASSES}.
+	 * @return Woodev_Test_Shipping_Plugin_For_Orders_Gate
+	 */
+	private function shipping_plugin_double( array $method_ids ): Woodev_Test_Shipping_Plugin_For_Orders_Gate {
+		require_once __DIR__ . '/OrdersGateShippingMethodFixture.php';
+
+		$classes = array_map(
+			static function ( string $id ): string {
+				return self::GATE_METHOD_CLASSES[ $id ];
+			},
+			$method_ids
+		);
+
+		return new Woodev_Test_Shipping_Plugin_For_Orders_Gate( $classes );
+	}
+
 	/**
 	 * Calls the private list builder. Private on purpose — it is an implementation
 	 * detail of the inlined bootstrap, not API — but the RULE it encodes (#837 defect
@@ -497,6 +544,33 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * Card #842: `check_method_ids_contract()` must run at `admin_menu` priority
+	 * 41 — right after {@see Orders_Registry::register_page()}'s 40 — so both
+	 * sides of the comparison (the provider and the plugin's own declared class
+	 * list) are registered by the time it runs.
+	 */
+	public function test_add_hooks_hooks_the_method_ids_contract_onto_admin_menu_at_priority_41(): void {
+		$calls = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$found = false;
+		foreach ( $calls as $call ) {
+			if ( 'admin_menu' === $call[0] && [ $registry, 'check_method_ids_contract' ] === $call[1] && 41 === $call[2] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'add_hooks() must hook check_method_ids_contract() onto admin_menu at priority 41' );
+	}
+
+	/**
 	 * #853: the badge cache must flush itself the moment ANY order is
 	 * exported, via the framework-wide `woodev_shipping_order_exported` action
 	 * fired by Abstract_Shipment_Handler::export() — not a plugin-prefixed hook,
@@ -635,6 +709,138 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\expect( 'wp_enqueue_script' )->never();
 
 		$registry->enqueue_assets();
+	}
+
+	/**
+	 * Card #842: a carrier that ships a method its provider does not declare must
+	 * report it once via `_doing_it_wrong()`, naming both the missing id(s) and the
+	 * declared list, under `WP_DEBUG`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_method_ids_contract_reports_a_missing_id_once(): void {
+		define( 'WP_DEBUG', true );
+
+		$registry = Orders_Registry::instance();
+		$plugin   = $this->shipping_plugin_double( [ 'cdek_courier', 'cdek_pickup' ] );
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ), $plugin );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				Orders_Provider::class . '::create',
+				Mockery::on(
+					static function ( $message ) {
+						return is_string( $message )
+							&& false !== strpos( $message, 'cdek' )
+							&& false !== strpos( $message, 'cdek_pickup' );
+					}
+				),
+				'2.0.2'
+			);
+
+		$registry->check_method_ids_contract();
+	}
+
+	/**
+	 * Control: a provider declaring every id its plugin registers must report nothing.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_method_ids_contract_reports_nothing_for_a_complete_declaration(): void {
+		$this->assertCompleteContractReportsNothing( [ 'cdek_courier', 'cdek_pickup' ], [ 'cdek_courier', 'cdek_pickup' ] );
+	}
+
+	/**
+	 * A provider naming an id its plugin does NOT register is not an error — a
+	 * provider may legitimately declare an id from elsewhere.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_method_ids_contract_reports_nothing_for_an_extra_declared_id(): void {
+		$this->assertCompleteContractReportsNothing( [ 'cdek_courier' ], [ 'cdek_courier', 'cdek_pickup_from_elsewhere' ] );
+	}
+
+	/**
+	 * A provider registered without a plugin has nothing to compare against, so it
+	 * must never be reported, even with an incomplete-looking declaration and
+	 * WP_DEBUG on.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_method_ids_contract_reports_nothing_without_a_plugin(): void {
+		define( 'WP_DEBUG', true );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ) );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_method_ids_contract();
+	}
+
+	/**
+	 * Registering a replacement descriptor under the same id drops the PREVIOUS
+	 * plugin, exactly like {@see self::$shipment_handlers}/{@see self::$tracking_handlers}
+	 * — a replacement with no plugin of its own must not still be checked against the
+	 * old owner's registered methods.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_check_method_ids_contract_replacement_drops_the_old_owner(): void {
+		define( 'WP_DEBUG', true );
+
+		$registry     = Orders_Registry::instance();
+		$first_plugin = $this->shipping_plugin_double( [ 'cdek_courier', 'cdek_pickup' ] );
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ), $first_plugin );
+
+		// Replacement: no plugin of its own — the old (incomplete-vs-its-plugin)
+		// registration must not leak into this one.
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ) );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_method_ids_contract();
+	}
+
+	/**
+	 * The whole gate is WP_DEBUG-only — an otherwise-reportable missing id must
+	 * produce nothing when WP_DEBUG is off (the suite's default: this test defines
+	 * nothing and runs in the shared process).
+	 */
+	public function test_check_method_ids_contract_reports_nothing_when_wp_debug_is_off(): void {
+		$this->assertFalse( defined( 'WP_DEBUG' ) && WP_DEBUG, 'WP_DEBUG must be off for this test to be meaningful' );
+
+		$registry = Orders_Registry::instance();
+		$plugin   = $this->shipping_plugin_double( [ 'cdek_courier', 'cdek_pickup' ] );
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', [ 'cdek_courier' ] ), $plugin );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_method_ids_contract();
+	}
+
+	/**
+	 * Shared assertion for the two "declaration is fine" controls above. Both callers
+	 * carry their OWN `@runInSeparateProcess` — required on the test method itself,
+	 * not this private helper, for the annotation to take effect — since defining
+	 * WP_DEBUG here must not leak into the rest of the suite.
+	 */
+	private function assertCompleteContractReportsNothing( array $registered_ids, array $declared_ids ): void {
+		define( 'WP_DEBUG', true );
+
+		$registry = Orders_Registry::instance();
+		$plugin   = $this->shipping_plugin_double( $registered_ids );
+		$registry->register_provider( $this->provider_with_method_ids( 'cdek', $declared_ids ), $plugin );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		$registry->check_method_ids_contract();
 	}
 
 	public function test_enqueue_assets_enqueues_the_bundle_and_inlines_the_provider_list(): void {

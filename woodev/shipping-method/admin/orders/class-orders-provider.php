@@ -340,6 +340,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		/**
 		 * Returns the WC shipping method ids, in declaration order.
 		 *
+		 * CONTRACT (card #842): a carrier that ships more than one method — commonly a
+		 * courier AND a pickup method — must name EVERY one of its owning plugin's
+		 * registered shipping method ids here. {@see Order_Row_Builder::resolve_type()}
+		 * is the only consumer, and tries these ids in order to find the order's
+		 * shipping line; an id the plugin ships but this list omits makes that method
+		 * silently report `unknown` for every order placed with it, with no error and no
+		 * log line. When the owning plugin is a `Shipping_Plugin`,
+		 * {@see Orders_Registry::check_method_ids_contract()} gates this under
+		 * `WP_DEBUG` — the reverse (naming an id from elsewhere) is not an error.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return string[]

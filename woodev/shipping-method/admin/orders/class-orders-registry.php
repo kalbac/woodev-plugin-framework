@@ -15,6 +15,7 @@ use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
+use Woodev\Framework\Shipping\Shipping_Plugin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -128,6 +129,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		private $plugin;
 
 		/**
+		 * The `Shipping_Plugin` that registered each provider, keyed by provider id —
+		 * the seam {@see self::check_method_ids_contract()} uses to compare a carrier's
+		 * declared {@see Orders_Provider::get_method_ids()} against the shipping methods
+		 * its own plugin actually registered (card #842).
+		 *
+		 * Unlike {@see self::$plugin} (any ONE plugin, for the shared asset path), this
+		 * is EVERY provider's own owner, because the contract check is per carrier. Only
+		 * a `Shipping_Plugin` instance is recorded — a plain `\Woodev_Plugin` has no
+		 * `get_declared_shipping_method_ids()` to compare against, so there is nothing
+		 * to check.
+		 * Dropped on replacement exactly like {@see self::$shipment_handlers} and
+		 * {@see self::$tracking_handlers}, for the same reason: a replacement descriptor
+		 * registered by a different carrier's plugin must not be checked against the
+		 * PREVIOUS carrier's shipping methods.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var array<string, Shipping_Plugin>
+		 */
+		private $provider_plugins = [];
+
+		/**
 		 * Returns the singleton.
 		 *
 		 * @since 2.0.2
@@ -157,7 +180,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * FIRST-time registration under an id never drops anything — a plugin is free to
 		 * call {@see self::register_shipment_handler()} before or after this method, and
 		 * that handler must survive. The same drop-on-replacement applies to any
-		 * registered tracking handler (card #856).
+		 * registered tracking handler (card #856), and to the owning plugin recorded for
+		 * the method-ids contract check (card #842, {@see self::$provider_plugins}).
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Round 2 (HIGH 2): drop the previous descriptor's shipment handler
@@ -165,6 +189,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              old carrier's export/update/cancel.
 		 * @since 2.0.2 Card #856: also drops the previous descriptor's tracking handler
 		 *              on replacement, for the same reason.
+		 * @since 2.0.2 Card #842: also records `$plugin` (when it is a `Shipping_Plugin`)
+		 *              per provider id, dropped on replacement like the two handlers
+		 *              above, so {@see self::check_method_ids_contract()} can compare a
+		 *              carrier's declared `method_ids` against its OWN plugin's
+		 *              registered shipping methods.
 		 *
 		 * @param Orders_Provider     $provider carrier descriptor.
 		 * @param \Woodev_Plugin|null $plugin  owning plugin, to source the shared framework
@@ -174,6 +203,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *                                     the same assumption {@see Settings_Page_Registry::get_asset_plugin()}
 		 *                                     already makes. The first plugin passed wins;
 		 *                                     later calls (with or without one) do not replace it.
+		 *                                     When it is also a `Shipping_Plugin`, it is
+		 *                                     additionally recorded per-provider for the
+		 *                                     method-ids contract check (card #842).
 		 * @return void
 		 */
 		public function register_provider( Orders_Provider $provider, $plugin = null ): void {
@@ -184,6 +216,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			if ( $is_replacement ) {
 				unset( $this->shipment_handlers[ $provider->get_id() ] );
 				unset( $this->tracking_handlers[ $provider->get_id() ] );
+				unset( $this->provider_plugins[ $provider->get_id() ] );
+			}
+
+			if ( $plugin instanceof Shipping_Plugin ) {
+				$this->provider_plugins[ $provider->get_id() ] = $plugin;
 			}
 
 			if ( null === $this->plugin && $plugin instanceof \Woodev_Plugin ) {
@@ -388,6 +425,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2 Increment 5 (#820): also hooks {@see self::maybe_redirect_legacy_page()}
 		 *              onto `admin_page_access_denied` — see that method's docblock for
 		 *              why that hook, and not `admin_init`.
+		 * @since 2.0.2 Card #842: also hooks {@see self::check_method_ids_contract()} onto
+		 *              `admin_menu`, priority 41 — right after {@see self::register_page()}
+		 *              (priority 40) — see that method's own docblock for the timing this
+		 *              was measured against.
 		 *
 		 * @return void
 		 */
@@ -398,6 +439,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->hooked = true;
 
 			add_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			add_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
 			add_action( 'admin_menu', [ $this, 'move_menu_item_after_orders' ], 99 );
 			add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
@@ -440,6 +482,77 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			wc_admin_register_page( $this->build_page_args() );
+		}
+
+		/**
+		 * WP_DEBUG-only contract gate (card #842): a carrier that ships BOTH a courier
+		 * AND a pickup shipping method must declare BOTH ids in its
+		 * {@see Orders_Provider::get_method_ids()}, or {@see Order_Row_Builder::resolve_type()}
+		 * — the ONLY consumer of that list — silently reports `unknown` for every order
+		 * placed with the undeclared one. Nothing checked this before card #842.
+		 *
+		 * Compares, per provider that has a recorded owning `Shipping_Plugin`
+		 * ({@see self::$provider_plugins}), that plugin's own DECLARED shipping
+		 * method ids ({@see Shipping_Plugin::get_declared_shipping_method_ids()})
+		 * against the provider's declared `method_ids`. Missing ids — a method the
+		 * plugin ships but the provider does not name — are reported once per provider
+		 * via `_doing_it_wrong()`. The REVERSE is not checked: a provider may legitimately
+		 * name an id from elsewhere (a shared or third-party method), so an extra
+		 * declared id is not an error. A provider with no recorded plugin is skipped —
+		 * there is nothing to compare it against.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (#842, critic MAJOR): `get_declared_shipping_method_ids()`
+		 *              replaces the round-1 `WC()->shipping()->get_shipping_methods()` +
+		 *              `get_shipping_method_ids()` pair. That pair forced WooCommerce
+		 *              to construct EVERY registered shipping method (constructor side
+		 *              effects: `set_shipping_method()`, admin hook registration) on
+		 *              every admin request under `WP_DEBUG` — merely to read ids that
+		 *              the plugin already knows statically. Nothing here constructs a
+		 *              shipping method or touches WooCommerce; the timing measurement
+		 *              in the round-1 docblock (why `admin_menu` priority 41 is the
+		 *              right hook — both `register_provider()` and the plugin's own
+		 *              class list are complete by then) still holds, since neither side
+		 *              of this comparison depends on WooCommerce's own shipping-method
+		 *              load order any more.
+		 *
+		 * @internal Hooked on `admin_menu`, priority 41; not for direct calls.
+		 *
+		 * @return void
+		 */
+		public function check_method_ids_contract(): void {
+			if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			if ( empty( $this->provider_plugins ) ) {
+				return;
+			}
+
+			foreach ( $this->provider_plugins as $provider_id => $plugin ) {
+				if ( ! isset( $this->providers[ $provider_id ] ) ) {
+					continue;
+				}
+
+				$declared_ids   = $this->providers[ $provider_id ]->get_method_ids();
+				$registered_ids = $plugin->get_declared_shipping_method_ids();
+				$missing_ids    = array_diff( $registered_ids, $declared_ids );
+
+				if ( empty( $missing_ids ) ) {
+					continue;
+				}
+
+				_doing_it_wrong(
+					Orders_Provider::class . '::create',
+					sprintf(
+						'Carrier "%1$s" registers shipping method(s) "%2$s" with its plugin but does not declare them in its Orders_Provider method_ids (currently: "%3$s"); Order_Row_Builder::resolve_type() will silently report the order type as "unknown" for orders placed with the missing method(s).',
+						esc_html( $provider_id ),
+						esc_html( implode( '", "', $missing_ids ) ),
+						esc_html( implode( '", "', $declared_ids ) )
+					),
+					'2.0.2'
+				);
+			}
 		}
 
 		/**
@@ -1293,11 +1406,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * @since 2.0.2 Card #856: also unhooks and drops the framework-built order metabox.
 		 * @since 2.0.2 Round 2 (#856): also unhooks {@see Shipping_Admin_Order::render_action_notice()}.
 		 * @since 2.0.2 Increment 5 (#820): also unhooks {@see self::maybe_redirect_legacy_page()}.
+		 * @since 2.0.2 Card #842: also unhooks {@see self::check_method_ids_contract()} and
+		 *              drops {@see self::$provider_plugins}.
 		 *
 		 * @return void
 		 */
 		public function reset_for_tests(): void {
 			remove_action( 'admin_menu', [ $this, 'register_page' ], 40 );
+			remove_action( 'admin_menu', [ $this, 'check_method_ids_contract' ], 41 );
 			remove_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
@@ -1312,6 +1428,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->providers         = [];
 			$this->shipment_handlers = [];
 			$this->tracking_handlers = [];
+			$this->provider_plugins  = [];
 			$this->admin_order       = null;
 			$this->hooked            = false;
 			$this->plugin            = null;
