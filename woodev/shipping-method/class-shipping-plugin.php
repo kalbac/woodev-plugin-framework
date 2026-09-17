@@ -1133,12 +1133,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		/**
 		 * Adds the given $shipping_method to the internal shipping methods store
 		 *
-		 * @param string          $shipping_method_id  the shipping method identifier
-		 * @param  Shipping_Method $shipping_method the shipping method object instance
+		 * A shipping method constructed before its id went through
+		 * {@see self::add_shipping_method()} (a test, or any caller that builds a
+		 * `Shipping_Method` outside the normal `register_shipping_methods()` flow) used to
+		 * leave a HALF-ENTRY behind — only `shipping_method` set, no `class_name` — because
+		 * this method blindly wrote into `$this->methods[ $shipping_method_id ]` regardless
+		 * of whether that id already existed. {@see self::get_shipping_method_class_names()}
+		 * then read the missing key unguarded (warning + `null` in the result).
+		 *
+		 * Fixed at this end (the writer), not the reader: for an id with no entry yet, the
+		 * class name is read straight off the instance via `get_class()`, so the record this
+		 * creates is complete from the start. For an id `add_shipping_method()` already
+		 * registered, this keeps its existing `class_name` and only (re)sets the cached
+		 * instance, same as before.
 		 *
 		 * @since 1.5.0
+		 * @since 2.0.2 #818: fills `class_name` from `get_class( $shipping_method )` when the
+		 *              id has no entry yet, instead of leaving one with no `class_name`.
+		 *
+		 * @param string          $shipping_method_id  the shipping method identifier
+		 * @param  Shipping_Method $shipping_method the shipping method object instance
 		 */
 		public function set_shipping_method( string $shipping_method_id, Shipping_Method $shipping_method ) {
+
+			if ( ! isset( $this->methods[ $shipping_method_id ]['class_name'] ) ) {
+				$this->methods[ $shipping_method_id ]['class_name'] = get_class( $shipping_method );
+			}
+
 			$this->methods[ $shipping_method_id ]['shipping_method'] = $shipping_method;
 		}
 
