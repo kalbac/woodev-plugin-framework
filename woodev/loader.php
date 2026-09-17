@@ -227,6 +227,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #885: resolves symlinked plugin directories before comparing paths.
+		 * @since 2.0.2 #900: uses WordPress's symlink map for individually symlinked plugins.
 		 *
 		 * @return string Conflicting plugin display name, or '' if undeterminable.
 		 */
@@ -250,11 +251,18 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 			$framework_file = wp_normalize_path( realpath( $framework_file ) ?: $framework_file );
 			$plugins_dir    = wp_normalize_path( realpath( $plugins_dir ) ?: $plugins_dir );
 
-			if ( 0 !== strpos( $framework_file, $plugins_dir . '/' ) ) {
+			if ( 0 === strpos( $framework_file, $plugins_dir . '/' ) ) {
+				$relative = ltrim( substr( $framework_file, strlen( $plugins_dir ) ), '/' );
+			} elseif ( function_exists( 'plugin_basename' ) ) {
+				$relative = plugin_basename( $framework_file );
+			} else {
 				return '';
 			}
 
-			$relative = ltrim( substr( $framework_file, strlen( $plugins_dir ) ), '/' );
+			if ( $framework_file === $relative || '/' . $relative === $framework_file || 0 === strpos( $relative, '/' ) || false === strpos( $relative, '/' ) ) {
+				return '';
+			}
+
 			$slug     = strstr( $relative . '/', '/', true );
 
 			if ( ! is_string( $slug ) || '' === $slug ) {
