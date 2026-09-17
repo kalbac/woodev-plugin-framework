@@ -138,6 +138,12 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * of the SAME plugin id (e.g. a reload) is not a collision.
 		 *
 		 * @since 2.0.0
+		 * @since 2.0.2 #905: a download id that has no store product (see
+		 *              self::has_store_product()) is never flagged ambiguous and never
+		 *              logged, even when two plugins share it: there is nothing to
+		 *              license, so it is not a §9.3 collision. Registration itself is
+		 *              unchanged — the first registration still wins and is still
+		 *              returned by get_registered_instance()/get_registered_instances().
 		 *
 		 * @return void
 		 */
@@ -151,7 +157,7 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				$existing_id = $existing->plugin->get_id();
 				$this_id     = $this->plugin->get_id();
 
-				if ( $existing_id !== $this_id && ! isset( self::$ambiguous_download_ids[ $download_id ] ) ) {
+				if ( $existing_id !== $this_id && self::has_store_product( $download_id ) && ! isset( self::$ambiguous_download_ids[ $download_id ] ) ) {
 
 					self::$ambiguous_download_ids[ $download_id ] = true;
 
@@ -170,6 +176,30 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 			}
 
 			self::$registered_instances[ $download_id ] = $this;
+		}
+
+		/**
+		 * Whether a download id denotes a real EDD store product (§9.3 predicate).
+		 *
+		 * `0`, `''`, and negative ids mean "this plugin has no store product" —
+		 * there is nothing to license, so such an id is never a §9.3 collision and
+		 * the command dispatcher never routes a signed command to it. Shared by
+		 * register_instance() and Woodev_License_Command_Dispatcher::handle_envelope()
+		 * so the two cannot drift (#905 round 2: the dispatcher used to trust that
+		 * "the server never signs for id 0" instead of enforcing it).
+		 *
+		 * @since 2.0.2 #905
+		 *
+		 * @param mixed $download_id The download id — get_download_id() is untyped in
+		 *                           the abstract, and a command payload's plugin_id
+		 *                           arrives as a string.
+		 *
+		 * @return bool
+		 */
+		public static function has_store_product( $download_id ): bool {
+			$id = (string) $download_id;
+
+			return is_numeric( $id ) && (int) $id > 0;
 		}
 
 		private function includes() {

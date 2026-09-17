@@ -255,6 +255,11 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 		 * mirror spec, not here.
 		 *
 		 * @since 2.0.0
+		 * @since 2.0.2 #905: step 9 rejects a plugin_id with no store product (see
+		 *              Woodev_Plugins_License::has_store_product()) as unknown_plugin
+		 *              BEFORE the registry lookup, regardless of how many plugins are
+		 *              registered at that id — "the server never signs for such an id"
+		 *              is not assumed, it is enforced here.
 		 *
 		 * @param array<string, mixed>             $envelope  The decoded envelope.
 		 * @param string                           $transport The delivery transport ('inbound'|'pull').
@@ -305,8 +310,16 @@ if ( ! class_exists( 'Woodev_License_Command_Dispatcher' ) ) :
 				return self::reject( 'site_mismatch' );
 			}
 
-			// Step 9: plugin lookup (absent OR ambiguous → unknown_plugin, no info leak).
+			// Step 9: plugin lookup (no store product, absent, OR ambiguous →
+			// unknown_plugin, no info leak). #905 round 2: a plugin_id with no store
+			// product (see Woodev_Plugins_License::has_store_product()) is rejected
+			// BEFORE the registry lookup — the server is never assumed to withhold a
+			// signature for such an id, that is enforced here.
 			$plugin_id = (string) ( $payload['plugin_id'] ?? '' );
+
+			if ( ! Woodev_Plugins_License::has_store_product( $plugin_id ) ) {
+				return self::reject( 'unknown_plugin' );
+			}
 
 			if ( Woodev_Plugins_License::is_download_id_ambiguous( $plugin_id ) ) {
 				return self::reject( 'unknown_plugin' );

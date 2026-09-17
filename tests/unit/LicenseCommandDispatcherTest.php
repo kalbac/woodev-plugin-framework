@@ -734,6 +734,63 @@ class LicenseCommandDispatcherTest extends TestCase {
 	}
 
 	/**
+	 * Step 9 (#905 round 2): a plugin_id with no store product is rejected
+	 * unknown_plugin BEFORE the registry lookup — regardless of how many plugins
+	 * are registered at that id. "The server never signs for such an id" is not
+	 * assumed; it is enforced here. Covers `0`, `''`, and a negative id, and both
+	 * the ONE-engine and TWO-engine (collision) registration shapes.
+	 *
+	 * @dataProvider no_store_product_plugin_id_provider
+	 *
+	 * @param mixed $download_id            The download id with no store product.
+	 * @param bool  $register_second_engine Whether to also register a SECOND
+	 *                                      engine at the same id (the tightened
+	 *                                      behavior: still rejected even with
+	 *                                      only one).
+	 * @return void
+	 */
+	public function test_no_store_product_plugin_id_rejected_unknown_plugin( $download_id, bool $register_second_engine ): void {
+		Functions\expect( 'error_log' )->never();
+
+		$key = (string) $download_id;
+
+		$this->invoke_register_instance( $this->make_engine_with_plugin( 'plugin_a', $download_id ) );
+
+		if ( $register_second_engine ) {
+			$this->invoke_register_instance( $this->make_engine_with_plugin( 'plugin_b', $download_id ) );
+		}
+
+		// Registered but NOT ambiguous — has_store_product() gates step 9 before
+		// the ambiguity check even runs.
+		$this->assertFalse( \Woodev_Plugins_License::is_download_id_ambiguous( $key ) );
+
+		$this->expect_no_side_effects();
+
+		$result = Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload( array( 'plugin_id' => $key ) ) ),
+			'inbound'
+		);
+
+		$this->assertSame( 'unknown_plugin', $result['reason'] );
+		$this->assertSame( 404, $result['http'] );
+	}
+
+	/**
+	 * Download ids with no store product, crossed with one-engine / two-engine
+	 * (collision) registration shapes.
+	 *
+	 * @return array<string, array{0: mixed, 1: bool}>
+	 */
+	public function no_store_product_plugin_id_provider(): array {
+		return array(
+			'zero, two engines (collision shape)' => array( 0, true ),
+			'zero, one engine'                    => array( 0, false ),
+			'empty, two engines'                  => array( '', true ),
+			'negative, two engines'                => array( -5, true ),
+		);
+	}
+
+	/**
 	 * Step 10: a skewed issued_at (more than CLOCK_SKEW in the future) → invalid_window.
 	 *
 	 * @return void
@@ -1204,6 +1261,49 @@ class LicenseCommandDispatcherTest extends TestCase {
 		$this->assertFalse( \Woodev_Plugins_License::is_download_id_ambiguous( '216' ) );
 	}
 
+	/**
+	 * A download id with no store product (`0`, `''`, a negative id) is never a
+	 * §9.3 collision, even when two DIFFERENT plugins share it: nothing to
+	 * license, so no error_log and no ambiguity flag. The first registration
+	 * still wins (#905).
+	 *
+	 * Control: the POSITIVE-id case above (test_duplicate_download_id_first_wins_flagged_and_rejected)
+	 * still logs once and is still flagged ambiguous — this fix is scoped to
+	 * non-positive/empty ids only.
+	 *
+	 * @dataProvider no_store_product_download_id_provider
+	 *
+	 * @param mixed $download_id A download id with no store product.
+	 * @return void
+	 */
+	public function test_duplicate_download_id_with_no_store_product_is_not_a_collision( $download_id ): void {
+		Functions\expect( 'error_log' )->never();
+
+		$key = (string) $download_id;
+
+		$first  = $this->make_engine_with_plugin( 'plugin_a', $download_id );
+		$second = $this->make_engine_with_plugin( 'plugin_b', $download_id );
+
+		$this->invoke_register_instance( $first );
+		$this->invoke_register_instance( $second );
+
+		$this->assertSame( $first, \Woodev_Plugins_License::get_registered_instance( $key ), 'The FIRST registration is still kept.' );
+		$this->assertFalse( \Woodev_Plugins_License::is_download_id_ambiguous( $key ) );
+	}
+
+	/**
+	 * Download ids with no store product: `0`, `''`, and negative ids.
+	 *
+	 * @return array<string, array{0: mixed}>
+	 */
+	public function no_store_product_download_id_provider(): array {
+		return array(
+			'zero'     => array( 0 ),
+			'empty'    => array( '' ),
+			'negative' => array( -5 ),
+		);
+	}
+
 	/* ----------------------------------------------------------------------- *
 	 * Weekly cron prune — once per request
 	 * ----------------------------------------------------------------------- */
@@ -1303,10 +1403,10 @@ class LicenseCommandDispatcherTest extends TestCase {
 	 * Builds a real (constructor-bypassed) license engine carrying a plugin double.
 	 *
 	 * @param string $plugin_id   The plugin id (get_id()).
-	 * @param int    $download_id The EDD download id.
+	 * @param mixed  $download_id The EDD download id (get_download_id() is untyped in the abstract).
 	 * @return \Woodev_Plugins_License
 	 */
-	private function make_engine_with_plugin( string $plugin_id, int $download_id ): \Woodev_Plugins_License {
+	private function make_engine_with_plugin( string $plugin_id, $download_id ): \Woodev_Plugins_License {
 		$plugin = Mockery::mock( \Woodev_Plugin::class );
 		$plugin->shouldReceive( 'get_id' )->andReturn( $plugin_id );
 		$plugin->shouldReceive( 'get_download_id' )->andReturn( $download_id );

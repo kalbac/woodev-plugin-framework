@@ -804,6 +804,49 @@ class LicensePureOperationsTest extends TestCase {
 	}
 
 	/**
+	 * has_store_product() (#905 round 2) — the single shared predicate that
+	 * decides whether a download id denotes a real EDD store product. Pinned
+	 * against the critic's probe values so register_instance() and the command
+	 * dispatcher's step 9 stay identical without drifting apart.
+	 *
+	 * @dataProvider has_store_product_provider
+	 *
+	 * @param mixed $download_id The id under test.
+	 * @param bool  $expected    Expected has_store_product() result.
+	 * @return void
+	 */
+	public function test_has_store_product( $download_id, bool $expected ): void {
+		$this->assertSame( $expected, \Woodev_Plugins_License::has_store_product( $download_id ) );
+	}
+
+	/**
+	 * has_store_product() probes.
+	 *
+	 * @return array<string, array{0: mixed, 1: bool}>
+	 */
+	public function has_store_product_provider(): array {
+		return [
+			// No store product.
+			'zero (int)'          => [ 0, false ],
+			'zero (string)'       => [ '0', false ],
+			'empty string'        => [ '', false ],
+			'negative (int)'      => [ -5, false ],
+			'negative (string)'   => [ '-5', false ],
+			'fractional'          => [ '0.5', false ],
+			'leading-zero digits' => [ '00', false ],
+			'negative zero'       => [ '-0', false ],
+			'hex literal'         => [ '0x1A', false ],
+			'non-numeric'         => [ 'abc', false ],
+			// Real store product.
+			'positive (int)'      => [ 216, true ],
+			'positive (string)'   => [ '216', true ],
+			'leading space'       => [ ' 1', true ],
+			'leading plus'        => [ '+1', true ],
+			'exponent notation'   => [ '1e3', true ],
+		];
+	}
+
+	/**
 	 * N2 — the real constructor records the instance into the static registry
 	 * keyed by the (string) download id. Exercised via a full construction with a
 	 * Woodev_Plugin mock + Brain Monkey stubs for the WP surface the constructor
