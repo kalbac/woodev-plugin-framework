@@ -225,7 +225,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * copy. Returns '' when the owner cannot be determined; the caller then falls back to
 		 * generic, still-truthful wording rather than printing a path or a guess.
 		 *
-		 * @since 2.0.2
+		 * @since 2.0.2 #885: Resolve symlinked plugin directories before comparing paths.
 		 *
 		 * @return string Conflicting plugin display name, or '' if undeterminable.
 		 */
@@ -246,8 +246,8 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 				return '';
 			}
 
-			$framework_file = wp_normalize_path( $framework_file );
-			$plugins_dir    = wp_normalize_path( $plugins_dir );
+			$framework_file = wp_normalize_path( realpath( $framework_file ) ?: $framework_file );
+			$plugins_dir    = wp_normalize_path( realpath( $plugins_dir ) ?: $plugins_dir );
 
 			if ( 0 !== strpos( $framework_file, $plugins_dir . '/' ) ) {
 				return '';
