@@ -734,6 +734,63 @@ class LicenseCommandDispatcherTest extends TestCase {
 	}
 
 	/**
+	 * Step 9 (#905 round 2): a plugin_id with no store product is rejected
+	 * unknown_plugin BEFORE the registry lookup — regardless of how many plugins
+	 * are registered at that id. "The server never signs for such an id" is not
+	 * assumed; it is enforced here. Covers `0`, `''`, and a negative id, and both
+	 * the ONE-engine and TWO-engine (collision) registration shapes.
+	 *
+	 * @dataProvider no_store_product_plugin_id_provider
+	 *
+	 * @param mixed $download_id            The download id with no store product.
+	 * @param bool  $register_second_engine Whether to also register a SECOND
+	 *                                      engine at the same id (the tightened
+	 *                                      behavior: still rejected even with
+	 *                                      only one).
+	 * @return void
+	 */
+	public function test_no_store_product_plugin_id_rejected_unknown_plugin( $download_id, bool $register_second_engine ): void {
+		Functions\expect( 'error_log' )->never();
+
+		$key = (string) $download_id;
+
+		$this->invoke_register_instance( $this->make_engine_with_plugin( 'plugin_a', $download_id ) );
+
+		if ( $register_second_engine ) {
+			$this->invoke_register_instance( $this->make_engine_with_plugin( 'plugin_b', $download_id ) );
+		}
+
+		// Registered but NOT ambiguous — has_store_product() gates step 9 before
+		// the ambiguity check even runs.
+		$this->assertFalse( \Woodev_Plugins_License::is_download_id_ambiguous( $key ) );
+
+		$this->expect_no_side_effects();
+
+		$result = Probe_Command_Dispatcher::handle_envelope(
+			$this->sign( $this->valid_payload( array( 'plugin_id' => $key ) ) ),
+			'inbound'
+		);
+
+		$this->assertSame( 'unknown_plugin', $result['reason'] );
+		$this->assertSame( 404, $result['http'] );
+	}
+
+	/**
+	 * Download ids with no store product, crossed with one-engine / two-engine
+	 * (collision) registration shapes.
+	 *
+	 * @return array<string, array{0: mixed, 1: bool}>
+	 */
+	public function no_store_product_plugin_id_provider(): array {
+		return array(
+			'zero, two engines (collision shape)' => array( 0, true ),
+			'zero, one engine'                    => array( 0, false ),
+			'empty, two engines'                  => array( '', true ),
+			'negative, two engines'                => array( -5, true ),
+		);
+	}
+
+	/**
 	 * Step 10: a skewed issued_at (more than CLOCK_SKEW in the future) → invalid_window.
 	 *
 	 * @return void
