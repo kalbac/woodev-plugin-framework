@@ -35,6 +35,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->fake_transients = [];
 		$_GET                  = [];
+		unset( $GLOBALS['plugin_page'] );
 
 		Orders_Registry::instance()->reset_for_tests();
 	}
@@ -43,6 +44,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->reset_for_tests();
 
 		$_GET = [];
+		unset( $GLOBALS['plugin_page'] );
 
 		parent::tearDown();
 	}
@@ -1503,14 +1505,16 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 	/**
 	 * Control for every negative below: an exact whole-value match redirects to the
-	 * exact expected URL, `carrier=<id>` included.
+	 * exact expected URL, `carrier=<id>` included. Drives `$plugin_page`, not raw
+	 * `$_GET['page']` — round 2 (#820): that global is the exact value
+	 * `wp-admin/admin.php` sets and the one `resolve_legacy_redirect_url()` reads.
 	 */
 	public function test_an_exact_legacy_slug_redirects_to_the_new_page_with_the_carrier_preselected(): void {
 		$this->stubLegacyRedirectEnvironment();
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 
-		$_GET['page'] = 'wc_cdek_orders';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
 
 		$this->assertSame(
 			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
@@ -1523,9 +1527,9 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 
-		$_GET['page']   = 'wc_cdek_orders';
-		$_GET['paged']  = '2';
-		$_GET['status'] = 'processing';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
+		$_GET['paged']          = '2';
+		$_GET['status']         = 'processing';
 
 		$this->assertSame(
 			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
@@ -1546,7 +1550,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders_v2' ) );
 
-		$_GET['page'] = 'wc_cdek_orders';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1561,7 +1565,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 
-		$_GET['page'] = 'wc_cdek_orders_v2';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders_v2';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1571,7 +1575,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->provider( 'cdek' ) );
 
-		$_GET['page'] = '';
+		$GLOBALS['plugin_page'] = '';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1581,7 +1585,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', '' ) );
 
-		$_GET['page'] = '';
+		$GLOBALS['plugin_page'] = '';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1596,7 +1600,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc-admin' ) );
 
-		$_GET['page'] = 'wc-admin';
+		$GLOBALS['plugin_page'] = 'wc-admin';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1606,7 +1610,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 
-		$_GET['page'] = 'wc_cdek_orders';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
 	}
@@ -1617,7 +1621,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'edostavka', 'wc_edostavka_orders' ) );
 
-		$_GET['page'] = 'wc_edostavka_orders';
+		$GLOBALS['plugin_page'] = 'wc_edostavka_orders';
 
 		$this->assertSame(
 			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=edostavka',
@@ -1630,8 +1634,99 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
 
-		$_GET['page'] = 'wc_cdek_orders';
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
 
 		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	/**
+	 * Round 2 (#820) finding 1: a slash-padded raw `$_GET['page']` — the shape
+	 * `wp-admin/admin.php` would unslash from a query string like
+	 * `?page=%2Fwc_cdek_orders%2F` — normalises to the plain declared slug via the
+	 * fallback's own `plugin_basename()` call, and still redirects. The fallback
+	 * only runs because `$plugin_page` itself is unset here (this method reached
+	 * outside `admin.php`'s normal flow); {@see self::stubLegacyRedirectEnvironment()}
+	 * does not stub `plugin_basename()`, so it is stubbed here to mirror what WP core
+	 * actually does with a value that carries no plugin-directory prefix: trim the
+	 * slashes.
+	 */
+	public function test_a_slash_padded_get_page_normalises_to_the_declared_slug_via_the_fallback_and_redirects(): void {
+		$this->stubLegacyRedirectEnvironment();
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return trim( $file, '/' );
+			}
+		);
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$_GET['page'] = '/wc_cdek_orders/';
+
+		$this->assertSame(
+			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
+			$this->resolveLegacyRedirect()
+		);
+	}
+
+	/**
+	 * Round 2 (#820) finding 1, the other direction: `resolve_legacy_redirect_url()`
+	 * must read `global $plugin_page`, never raw `$_GET['page']`, once core HAS set
+	 * that global — `$plugin_page` is the exact value `user_can_access_admin_page()`
+	 * denied on, so a `$_GET['page']` that happens to match a declared slug must not
+	 * cause a redirect when `$plugin_page` disagrees.
+	 */
+	public function test_a_plugin_page_global_that_differs_from_the_declared_slug_does_not_match_even_when_get_page_does(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$GLOBALS['plugin_page'] = 'something-else';
+		$_GET['page']           = 'wc_cdek_orders';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	/**
+	 * Round 2 (#820) finding 2: no other test in this file reaches the
+	 * `REST_REQUEST` half of the guard, because a defined constant cannot be
+	 * undefined for a later test — this is the only test that defines it, run
+	 * isolated so the definition cannot leak into the rest of the suite.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_rest_request_gets_no_redirect(): void {
+		define( 'REST_REQUEST', true );
+
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
+
+		$this->assertNull( $this->resolveLegacyRedirect() );
+	}
+
+	/**
+	 * Positive control for the test above, run in the identical shape minus the
+	 * `REST_REQUEST` definition, so a defect that broke
+	 * `resolve_legacy_redirect_url()` generally — not just its `REST_REQUEST`
+	 * branch — would fail this control too, rather than the test above passing
+	 * vacuously.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_rest_request_guard_control_without_the_constant_still_redirects(): void {
+		$this->stubLegacyRedirectEnvironment();
+
+		Orders_Registry::instance()->register_provider( $this->legacy_provider( 'cdek', 'wc_cdek_orders' ) );
+
+		$GLOBALS['plugin_page'] = 'wc_cdek_orders';
+
+		$this->assertSame(
+			'https://example.test/wp-admin/admin.php?page=wc-admin&path=%2Fwoodev-shipping-orders&carrier=cdek',
+			$this->resolveLegacyRedirect()
+		);
 	}
 }

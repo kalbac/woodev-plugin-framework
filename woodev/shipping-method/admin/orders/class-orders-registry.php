@@ -494,6 +494,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * gets away with `admin_init` only because ITS legacy page (`wc-settings`) still
 		 * exists, so WordPress never denies access to it.
 		 *
+		 * A v1 plugin still active that still registers the legacy slug itself is the
+		 * one case this method never sees: core finds `$_registered_pages[ $hookname ]`
+		 * set, `user_can_access_admin_page()` does not deny, `admin_page_access_denied`
+		 * never fires, and the merchant stays on the v1 plugin's own page. That is
+		 * intended — the framework redirects an ORPHANED legacy slug, it does not hijack
+		 * a page that still genuinely exists.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -524,6 +531,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * hijacked because it merely contained a slug).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (#820): reads `global $plugin_page` instead of the raw
+		 *              `$_GET['page']` — `wp-admin/admin.php` sets `$plugin_page` to
+		 *              `plugin_basename( wp_unslash( $_GET['page'] ) )` and
+		 *              `user_can_access_admin_page()` denies on THAT value, not the raw
+		 *              query string. A slash-padded `page` such as
+		 *              `%2Fwc_realistic_shipping_orders%2F` normalises to the plain slug
+		 *              in `$plugin_page`, so comparing against it (rather than the raw
+		 *              value) is what makes that request redirect instead of 403ing.
+		 *              Falls back to computing the same `plugin_basename()` value from
+		 *              `$_GET['page']` only when `$plugin_page` is not a string — i.e.
+		 *              this method is reached outside `admin.php`'s normal flow.
 		 *
 		 * @return string|null the redirect target, or null when nothing matched.
 		 */
@@ -536,9 +554,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return null;
 			}
 
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only URL routing, no state change.
-			$requested_page = isset( $_GET['page'] ) ? wp_unslash( $_GET['page'] ) : '';
-			$requested_page = is_string( $requested_page ) ? $requested_page : '';
+			global $plugin_page;
+
+			if ( is_string( $plugin_page ) ) {
+				$requested_page = $plugin_page;
+			} else {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only URL routing, no state change.
+				$requested_page = isset( $_GET['page'] ) ? wp_unslash( $_GET['page'] ) : '';
+				$requested_page = is_string( $requested_page ) ? plugin_basename( $requested_page ) : '';
+			}
 
 			foreach ( $this->get_providers() as $provider ) {
 				$legacy_slug = $provider->get_legacy_page_slug();
