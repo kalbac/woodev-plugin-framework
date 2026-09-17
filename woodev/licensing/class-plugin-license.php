@@ -138,6 +138,13 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * of the SAME plugin id (e.g. a reload) is not a collision.
 		 *
 		 * @since 2.0.0
+		 * @since 2.0.2 #905: a download id that has no store product — `0`, `''`, or a
+		 *              negative id (`get_download_id()` is untyped in the abstract) — is
+		 *              never flagged ambiguous and never logged, even when two plugins
+		 *              share it: there is nothing to license, so it is not a §9.3
+		 *              collision. Registration itself is unchanged — the first
+		 *              registration still wins and is still returned by
+		 *              get_registered_instance()/get_registered_instances().
 		 *
 		 * @return void
 		 */
@@ -151,7 +158,10 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 				$existing_id = $existing->plugin->get_id();
 				$this_id     = $this->plugin->get_id();
 
-				if ( $existing_id !== $this_id && ! isset( self::$ambiguous_download_ids[ $download_id ] ) ) {
+				// No store product at this id ('0', '', negative) → not a §9.3 collision.
+				$has_store_product = is_numeric( $download_id ) && (int) $download_id > 0;
+
+				if ( $existing_id !== $this_id && $has_store_product && ! isset( self::$ambiguous_download_ids[ $download_id ] ) ) {
 
 					self::$ambiguous_download_ids[ $download_id ] = true;
 
