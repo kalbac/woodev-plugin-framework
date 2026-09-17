@@ -1153,6 +1153,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 *
 		 * @param string          $shipping_method_id  the shipping method identifier
 		 * @param  Shipping_Method $shipping_method the shipping method object instance
+		 * @return void
 		 */
 		public function set_shipping_method( string $shipping_method_id, Shipping_Method $shipping_method ) {
 
