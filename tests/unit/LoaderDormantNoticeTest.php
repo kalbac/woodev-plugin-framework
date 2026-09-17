@@ -331,7 +331,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_resolve_conflicting_plugin_name_resolves_individually_symlinked_plugin_directory(): void {
-		$base             = realpath( sys_get_temp_dir() ) . '/woodev_loader_' . uniqid( '', true );
+		$base             = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
 		$plugins_dir      = $base . '/plugins';
 		$plugin_link      = $plugins_dir . '/legacy-woodev-plugin';
 		$real_plugin_dir  = $base . '/outside/legacy-woodev-plugin';
@@ -349,7 +349,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 			$this->stub_conflicting_plugin_lookup();
 
 			global $wp_plugin_paths;
-			$wp_plugin_paths = [ $plugin_link => $real_plugin_dir ];
+			$wp_plugin_paths = [ $plugin_link => realpath( $real_plugin_dir ) ];
 
 			$this->assertSame( 'Legacy Woodev Plugin', $this->resolve_conflicting_plugin_name() );
 		} finally {
@@ -364,13 +364,57 @@ final class LoaderDormantNoticeTest extends TestCase {
 	}
 
 	/**
+	 * The resolver must keep WordPress's raw plugins-dir path when root and plugin symlinks stack.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_conflicting_plugin_name_resolves_stacked_plugins_and_individual_symlinks(): void {
+		$base            = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
+		$plugins_dir     = $base . '/plugins';
+		$plugins_link    = $base . '/plugins-link';
+		$plugin_link     = $plugins_link . '/legacy-woodev-plugin';
+		$real_plugin_dir = $base . '/outside/legacy-woodev-plugin';
+		$framework_dir   = $real_plugin_dir . '/woodev';
+		$stub_file       = $framework_dir . '/bootstrap.php';
+
+		mkdir( $plugins_dir, 0777, true );
+		mkdir( $framework_dir, 0777, true );
+		$this->assertTrue( symlink( $plugins_dir, $plugins_link ), 'The regression fixture must create a real plugins-directory symlink.' );
+		$this->assertTrue( symlink( $real_plugin_dir, $plugin_link ), 'The regression fixture must create a real individual-plugin symlink beneath the plugins-directory symlink.' );
+		file_put_contents( $stub_file, $this->legacy_bootstrap_stub_source() );
+
+		try {
+			require $stub_file;
+			define( 'WP_PLUGIN_DIR', $plugins_link );
+			$this->stub_conflicting_plugin_lookup();
+
+			global $wp_plugin_paths;
+			$wp_plugin_paths = [ $plugin_link => realpath( $real_plugin_dir ) ];
+
+			$this->assertSame( 'Legacy Woodev Plugin', $this->resolve_conflicting_plugin_name() );
+		} finally {
+			global $wp_plugin_paths;
+			$wp_plugin_paths = [];
+
+			if ( is_link( $plugin_link ) ) {
+				unlink( $plugin_link );
+			}
+			if ( is_link( $plugins_link ) ) {
+				unlink( $plugins_link );
+			}
+			$this->remove_legacy_bootstrap_fixture( $stub_file, $framework_dir, $real_plugin_dir, dirname( $real_plugin_dir ), $plugins_dir, $base );
+		}
+	}
+
+	/**
 	 * The resolver must not use a plugin-path mapping whose real directory does not own the bootstrap.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
 	public function test_resolve_conflicting_plugin_name_rejects_individual_plugin_mapping_pointing_elsewhere(): void {
-		$base                = realpath( sys_get_temp_dir() ) . '/woodev_loader_' . uniqid( '', true );
+		$base                = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
 		$plugins_dir         = $base . '/plugins';
 		$plugin_link         = $plugins_dir . '/legacy-woodev-plugin';
 		$real_plugin_dir     = $base . '/outside/legacy-woodev-plugin';
@@ -390,7 +434,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 			$this->stub_conflicting_plugin_lookup();
 
 			global $wp_plugin_paths;
-			$wp_plugin_paths = [ $plugin_link => $unrelated_plugin_dir ];
+			$wp_plugin_paths = [ $plugin_link => realpath( $unrelated_plugin_dir ) ];
 
 			$this->assertSame( '', $this->resolve_conflicting_plugin_name() );
 		} finally {
@@ -426,6 +470,9 @@ final class LoaderDormantNoticeTest extends TestCase {
 			require $stub_file;
 			define( 'WP_PLUGIN_DIR', $plugins_link );
 			$this->stub_conflicting_plugin_lookup();
+			Functions\when( 'get_plugins' )->justReturn(
+				[ ltrim( wp_normalize_path( realpath( $stub_file ) ), '/' ) => [ 'Name' => 'Wrong Plugin' ] ]
+			);
 
 			$this->assertSame( '', $this->resolve_conflicting_plugin_name() );
 		} finally {
@@ -433,6 +480,33 @@ final class LoaderDormantNoticeTest extends TestCase {
 				unlink( $plugins_link );
 			}
 			$this->remove_legacy_bootstrap_fixture( $stub_file, $plugin_dir, dirname( $plugin_dir ), $plugins_dir, $base . '/outside', $base );
+		}
+	}
+
+	/**
+	 * The resolver must require a directory boundary rather than matching a shared path prefix.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_resolve_conflicting_plugin_name_rejects_a_plugins_directory_prefix_match(): void {
+		$base        = sys_get_temp_dir() . '/woodev_loader_' . uniqid( '', true );
+		$plugins_dir = $base . '/dev/foo';
+		$plugin_dir  = $base . '/dev/foo-pro/legacy-woodev-plugin/woodev';
+		$stub_file   = $plugin_dir . '/bootstrap.php';
+
+		mkdir( $plugins_dir, 0777, true );
+		mkdir( $plugin_dir, 0777, true );
+		file_put_contents( $stub_file, $this->legacy_bootstrap_stub_source() );
+
+		try {
+			require $stub_file;
+			define( 'WP_PLUGIN_DIR', $plugins_dir );
+			$this->stub_conflicting_plugin_lookup();
+
+			$this->assertSame( '', $this->resolve_conflicting_plugin_name() );
+		} finally {
+			$this->remove_legacy_bootstrap_fixture( $stub_file, $plugin_dir, dirname( $plugin_dir ), dirname( dirname( $plugin_dir ) ), $plugins_dir, dirname( $plugins_dir ), $base );
 		}
 	}
 
@@ -456,9 +530,36 @@ final class LoaderDormantNoticeTest extends TestCase {
 	 * @return void
 	 */
 	private function stub_conflicting_plugin_lookup(): void {
+		global $wp_plugin_paths;
+		$wp_plugin_paths = [];
+
+		if ( ! defined( 'WPMU_PLUGIN_DIR' ) ) {
+			define( 'WPMU_PLUGIN_DIR', dirname( WP_PLUGIN_DIR ) . '/mu-plugins' );
+		}
+
 		Functions\when( 'wp_normalize_path' )->alias(
 			static function ( string $path ): string {
 				return str_replace( '\\', '/', $path );
+			}
+		);
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				global $wp_plugin_paths;
+
+				$file = wp_normalize_path( $file );
+				arsort( $wp_plugin_paths );
+
+				foreach ( $wp_plugin_paths as $dir => $realdir ) {
+					if ( 0 === strpos( $file, $realdir ) ) {
+						$file = $dir . substr( $file, strlen( $realdir ) );
+					}
+				}
+
+				$plugin_dir    = wp_normalize_path( WP_PLUGIN_DIR );
+				$mu_plugin_dir = wp_normalize_path( WPMU_PLUGIN_DIR );
+				$file          = preg_replace( '#^' . preg_quote( $plugin_dir, '#' ) . '/|^' . preg_quote( $mu_plugin_dir, '#' ) . '/#', '', $file );
+
+				return trim( $file, '/' );
 			}
 		);
 		Functions\when( 'get_plugins' )->justReturn(

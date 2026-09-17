@@ -227,7 +227,7 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #885: resolves symlinked plugin directories before comparing paths.
-		 * @since 2.0.2 #900: maps individually symlinked plugin paths before comparing paths.
+		 * @since 2.0.2 #900: uses WordPress's symlink map for individually symlinked plugins.
 		 *
 		 * @return string Conflicting plugin display name, or '' if undeterminable.
 		 */
@@ -251,34 +251,18 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 			$framework_file = wp_normalize_path( realpath( $framework_file ) ?: $framework_file );
 			$plugins_dir    = wp_normalize_path( realpath( $plugins_dir ) ?: $plugins_dir );
 
-			if ( 0 !== strpos( $framework_file, $plugins_dir . '/' ) ) {
-				global $wp_plugin_paths;
-
-				if ( is_array( $wp_plugin_paths ) ) {
-					$plugin_paths = $wp_plugin_paths;
-					arsort( $plugin_paths );
-
-					foreach ( $plugin_paths as $plugin_path => $plugin_realpath ) {
-						if ( ! is_string( $plugin_path ) || ! is_string( $plugin_realpath ) ) {
-							continue;
-						}
-
-						$plugin_path     = wp_normalize_path( $plugin_path );
-						$plugin_realpath = wp_normalize_path( $plugin_realpath );
-
-						if ( 0 === strpos( $framework_file, $plugin_realpath . '/' ) ) {
-							$framework_file = $plugin_path . substr( $framework_file, strlen( $plugin_realpath ) );
-							break;
-						}
-					}
-				}
-			}
-
-			if ( 0 !== strpos( $framework_file, $plugins_dir . '/' ) ) {
+			if ( 0 === strpos( $framework_file, $plugins_dir . '/' ) ) {
+				$relative = ltrim( substr( $framework_file, strlen( $plugins_dir ) ), '/' );
+			} elseif ( function_exists( 'plugin_basename' ) ) {
+				$relative = plugin_basename( $framework_file );
+			} else {
 				return '';
 			}
 
-			$relative = ltrim( substr( $framework_file, strlen( $plugins_dir ) ), '/' );
+			if ( $framework_file === $relative || '/' . $relative === $framework_file || 0 === strpos( $relative, '/' ) || false === strpos( $relative, '/' ) ) {
+				return '';
+			}
+
 			$slug     = strstr( $relative . '/', '/', true );
 
 			if ( ! is_string( $slug ) || '' === $slug ) {
