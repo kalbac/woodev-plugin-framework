@@ -6,13 +6,11 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-13 (s136).** ✅ **The laptop is LIVE** (#882): `setup-macos.sh` ran end to end after
-five defects in it were fixed, every gate matches the desktop, and the rig imported byte-identical
-(WP 7.1, WC 11.1.0, 301 orders). **Routine sync is git ONLY**; the rig bundle carries hand-made rig
-state and nothing else — `wiki/two-machine-setup.md`. ✅ **The order metabox is MERGED and ACCEPTED**
-(#856, #890): the framework builds it from `Orders_Provider`, rendering through the same
-`Order_Row_Builder::build()` the table and REST use. ✅ Docs audit done in s135 (#879). The orders
-table (s134, #870) stays accepted.
+**As of 2026-09-17 (s137).** ✅ **SP-10 is COMPLETE** (#820 closed): increment 5 — a carrier's
+legacy v1 orders-page slug redirects to the framework page with that carrier preselected — merged
+and accepted on the rig (#899). s137 also landed #885 #818 #815 #842 #900 #905 (`sessions/s137.md`).
+✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
+metabox (#856) and the orders table (#870) stay accepted.
 
 ⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
 incomplete; a worker's "build is green" is not "bundles are committed"; a row rebuilt from the same
@@ -25,7 +23,7 @@ incomplete; a worker's "build is green" is not "bundles are committed"; a row re
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: **«Создать заказ»** (#710 — the brainstorm is HIS), then SP-10 increment 5.
+Next: **«Создать заказ»** (#710 — the brainstorm is HIS); SP-10 itself is done.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
@@ -78,11 +76,10 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — measured on BOTH machines, 13.09.2026, and IDENTICAL** (desktop s134 `6a2a915`;
-macOS laptop s136 — so these numbers are not platform-dependent): unit **3901 / 9929**, 1 skipped,
-sodium ON; jest **1973** in **32** suites; **integration 195 / 719**; `npm run build` zero git diff;
-phpcs clean **with the warning level ON**; phpstan level 3 no errors; every `lint:*` OK; catalogue
-**864** entries, **430** translated. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
+**Baselines — macOS laptop, 17.09.2026, `main` `60fdbea` (s137)** (the two machines matched to
+the digit in s136, so these are not platform-dependent): unit **3981 / 10089**, 1 skipped, sodium
+ON; jest **1975** in **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build`
+zero git diff; phpcs clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -187,7 +184,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10: остался инкремент 5 (редирект старых слагов)**; метабокс #856 принят и смержен. ⚠ Набор действий объявлен ОДИН раз (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
+**SP-10 завершён** (#820 закрыта, s137): старый слаг перенаправляется хуком `admin_page_access_denied`, не `admin_init` — готча `admin-init-never-fires-for-an-unregistered-admin-page-slug`; метабокс #856 принят и смержен. ⚠ Набор действий объявлен ОДИН раз (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
 
 ✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
 
