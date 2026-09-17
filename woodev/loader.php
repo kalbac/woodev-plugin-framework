@@ -225,7 +225,8 @@ if ( ! class_exists( 'Woodev_Loader', false ) ) :
 		 * copy. Returns '' when the owner cannot be determined; the caller then falls back to
 		 * generic, still-truthful wording rather than printing a path or a guess.
 		 *
-		 * @since 2.0.2 #885: Resolve symlinked plugin directories before comparing paths.
+		 * @since 2.0.2
+		 * @since 2.0.2 #885: resolves symlinked plugin directories before comparing paths.
 		 *
 		 * @return string Conflicting plugin display name, or '' if undeterminable.
 		 */
