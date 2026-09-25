@@ -46,6 +46,18 @@ Class "WP_UnitTestCase" not found
 
 That failure is loud, so it costs minutes rather than trust — unlike the silent one above.
 
+⚠ **s138: where it actually bites is the TASK SPEC.** A coordinator wrote
+`php -d extension=sodium ./vendor/bin/phpunit -c phpunit.xml` into the acceptance block of two
+briefs. Both workers hit `WP_UnitTestCase not found`; one reported it as a gate failure it then had
+to explain away, the other silently substituted the right command — and a silent substitution means
+the coordinator never learns the brief is wrong. A verification command in a brief is copy-pasted by
+every worker who reads it, so it must name the suite:
+
+```bash
+rm -f .phpunit.result.cache
+php -d extension=sodium ./vendor/bin/phpunit --testsuite=Unit
+```
+
 ## Read the count, not the colour
 
 The check that would have caught this immediately is comparing the reported `Tests: N` against the
