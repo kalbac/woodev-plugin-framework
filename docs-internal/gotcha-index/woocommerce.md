@@ -26,6 +26,7 @@
 - [woocommerce/address-autocomplete] **WC Address Autocomplete hosts ONLY address_1, flattens identity, and clears what a provider omits.** → [wc-address-autocomplete-hosts-only-address1-and-flattens-identity](../gotchas/wc-address-autocomplete-hosts-only-address1-and-flattens-identity.md) (s67)
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](../gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
+- [woocommerce/meta-query-joins] **On HPOS every leaf meta clause is its own join; `WP_Meta_Query` on CPT shares an alias between POSITIVE `OR` siblings — and the CPT wall is the PLANNER, not the count.** → [on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases](../gotchas/on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases.md) (s138)
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
