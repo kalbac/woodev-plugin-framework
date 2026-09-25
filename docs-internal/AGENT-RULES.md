@@ -11,8 +11,9 @@ used to carry mirrored copies "that must not diverge"; the s135 docs audit found
 (the end list had lost two of the seven steps, the start list had gained a step the canonical one
 never had). A mirror is a second copy, and a second copy drifts — so there is none.
 
-`.ai/skills/` holds task guides for agents that load skills from that directory. Claude Code does
-not: `.claude/skills` is not a working link to it.
+`.ai/skills/` holds task guides an agent reads on request. **Nothing loads them automatically**, and
+since s138 (#880) there are no reference files pretending otherwise — the five that existed were
+ordinary files containing a path, not symlinks, and linked nothing on any OS.
 
 ---
 

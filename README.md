@@ -190,17 +190,18 @@ files alongside any `src/` changes.
 
 ## AI Development Tools
 
-The project uses a unified system of agents and skills for AI-assisted development. All files are stored in `.ai/` — this is the single source of truth. Tools connect via reference files:
+Agent and skill documents live in `.ai/` (`.ai/agents/`, `.ai/skills/`, `.ai/QUICK-REFERENCE.md`).
+They are **plain documents an agent reads on request — no tool loads them automatically.**
 
-| Tool | Reference File | Points To |
-|------|----------------|-----------|
-| Claude Code | `.claude/skills` | `.ai/skills/` |
-| Claude Code | `.claude/agents` | `.ai/agents/` |
-| Codex | `.codex/skills` | `.ai/skills/` |
-| Qwen Code | `.qwen/skills` | `.ai/skills/` |
-| Cursor | `.cursor/rules/skills.mdc` | `.ai/skills/` |
+Five reference files used to claim otherwise (`.claude/skills`, `.claude/agents`, `.codex/skills`,
+`.qwen/skills`, `.cursor/rules/skills.mdc`), each committed as an ordinary file containing a relative
+path instead of being a symlink. None of them linked anything on any OS, and the table that described
+them was wrong for as long as it existed. They were removed in s138 (#880) rather than turned into
+real symlinks: nothing had depended on them for half a year, and activating five agent documents
+whose text nobody has reviewed since would add risk, not capability.
 
-To update skills or agents, edit files in `.ai/` — changes are automatically picked up by all tools.
+What an agent actually reads is in the entry points: `CLAUDE.md` (Claude Code), `AGENTS.md` (every
+other agent), `QWEN.md`, and `docs-internal/` for the operational detail.
 
 ## Key Concepts
 
