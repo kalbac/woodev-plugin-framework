@@ -104,11 +104,33 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * which shape {@see Orders_Query::combine_meta_queries()} returned: a
 	 * single unwrapped part, or the `relation => AND` wrapper around several.
 	 *
+	 * The PRESENCE of a `relation` key does not tell the two apart: an
+	 * unwrapped single part can carry its own top-level `relation` too — a
+	 * status filter with several participating providers is itself
+	 * `[ 'relation' => 'OR', ... ]` once the marker-key scope part has been
+	 * dropped (#839 step 2), and branching on `array_key_exists( 'relation',
+	 * … )` alone then shreds that OR-group into fake top-level parts. What IS
+	 * unambiguous is the wrapper's own shape: {@see
+	 * Orders_Query::combine_meta_queries()} only ever builds it as
+	 * `array_merge( [ 'relation' => 'AND' ], $parts )` with the marker-key
+	 * scope part ALWAYS first — {@see Orders_Query::build_args()} pushes it
+	 * onto `$meta_query_parts` before any filter part is added. So the
+	 * wrapper is recognised by its known first child being byte-equal to the
+	 * scope part built from the SAME marker keys — never by matching the
+	 * scope's shape against every child, which is what misreads a filter
+	 * part that happens to equal the scope on its own (see
+	 * {@see self::meta_query_filter_part()}), and never by an AND-group that
+	 * is itself one provider's OWN filter clause — {@see
+	 * Orders_Query::delivery_status_meta_clauses()} builds
+	 * `AND( marker EXISTS, OR( … ) )` per provider, which never has 'relation'
+	 * at the OUTER level once it is the sole remaining part.
+	 *
 	 * @param array<int|string, mixed> $meta_query
+	 * @param array<int|string, mixed> $scope the marker-key scope part built from the SAME marker keys ({@see Orders_Query::meta_query_for_keys()}), used to recognise the wrapper by its known first child.
 	 * @return array<int, array<int|string, mixed>>
 	 */
-	private function meta_query_top_level_parts( array $meta_query ): array {
-		if ( array_key_exists( 'relation', $meta_query ) ) {
+	private function meta_query_top_level_parts( array $meta_query, array $scope ): array {
+		if ( 'AND' === ( $meta_query['relation'] ?? null ) && ( $meta_query[0] ?? null ) === $scope ) {
 			unset( $meta_query['relation'] );
 
 			return array_values( $meta_query );
@@ -121,32 +143,23 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * Returns the single FILTER part of a combined `meta_query` built from the
 	 * marker-key SCOPE part plus exactly one active filter — every call site in
 	 * this file that reaches for a specific filter part combines just those
-	 * two. The scope part is located by its own identity — byte-equal to
-	 * {@see Orders_Query::meta_query_for_keys()} for the marker keys in scope
-	 * for the request — never by position, which moves once the scope part is
-	 * dropped (#839 step 2). Exactly ONE matching occurrence is removed, so a
-	 * filter part that is itself byte-identical to the scope (e.g. a
-	 * status-less provider's own marker clause standing in for "always true")
-	 * is not mistaken for a second scope and dropped along with it. Also
-	 * copes with the scope part being absent altogether: the sole remaining
-	 * part is then the filter part.
+	 * two. Located by ROLE via {@see self::meta_query_top_level_parts()}: the
+	 * scope, when present, is always the first of exactly two top-level parts
+	 * (never found by matching its shape against the filter's own content,
+	 * which breaks the moment a filter part is itself shaped like the scope —
+	 * see that method's docblock), so the filter is whichever part is NOT the
+	 * scope by position — the second of two, or the sole part when the scope
+	 * was dropped (#839 step 2).
 	 *
 	 * @param array<int|string, mixed> $meta_query
 	 * @param string[]                 $scope_marker_keys marker keys of the providers in scope for the request.
 	 * @return array<int|string, mixed>
 	 */
 	private function meta_query_filter_part( array $meta_query, array $scope_marker_keys ): array {
-		$parts = $this->meta_query_top_level_parts( $meta_query );
 		$scope = Orders_Query::meta_query_for_keys( $scope_marker_keys );
+		$parts = $this->meta_query_top_level_parts( $meta_query, $scope );
 
-		foreach ( $parts as $index => $part ) {
-			if ( $part === $scope ) {
-				unset( $parts[ $index ] );
-				break;
-			}
-		}
-
-		return array_values( $parts )[0];
+		return 1 === count( $parts ) ? $parts[0] : $parts[1];
 	}
 
 	// ----- HPOS: real meta_query -----
