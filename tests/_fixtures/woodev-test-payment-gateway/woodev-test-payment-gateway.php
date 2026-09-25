@@ -207,7 +207,7 @@ function woodev_test_payment_gateway_plugin_init(): void {
 			}
 
 			public function get_download_id(): int {
-				return 0;
+				return 9002;
 			}
 
 			public function get_documentation_url(): string {
