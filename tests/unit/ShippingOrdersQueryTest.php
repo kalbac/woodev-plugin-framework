@@ -159,6 +159,12 @@ class ShippingOrdersQueryTest extends TestCase {
 		$scope = Orders_Query::meta_query_for_keys( $scope_marker_keys );
 		$parts = $this->meta_query_top_level_parts( $meta_query, $scope );
 
+		self::assertLessThanOrEqual(
+			2,
+			count( $parts ),
+			'This helper resolves the scope plus exactly ONE filter part. A query combining two filters needs a helper that names WHICH filter it wants, or this silently returns the first of them.'
+		);
+
 		return 1 === count( $parts ) ? $parts[0] : $parts[1];
 	}
 

@@ -12,9 +12,11 @@
  *
  * This file proves something that survives BOTH #839 step 2 and #919's subquery
  * rewrite: the emitted `meta_query` (on both datastores) against a predicate written
- * straight from the carrier definitions and the order's own meta, never from
- * {@see Orders_Query} itself. If a future rewrite changes which rows the filter
- * selects, this is the file that turns red.
+ * straight from the carrier definitions and the order's own meta, never derived from
+ * {@see Orders_Query}'s OUTPUT. One reading is adopted from that class's documented
+ * invariant rather than derived mechanically, and it is named where it is taken — see
+ * {@see self::provider_satisfies_delivery_status()}. If a future rewrite changes which
+ * rows the filter selects, this is the file that turns red.
  *
  * The oracle implements WP_Meta_Query / MySQL leaf semantics, including the trap that
  * `NOT IN` does NOT match a row that has no such meta row at all (gotcha
@@ -159,6 +161,14 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	 * a status value present while that same carrier's marker is absent. Those
 	 * physically impossible rows are exactly where an unstated assumption in the
 	 * builder would first show up, so excluding them would defeat the point.
+	 *
+	 * ⚠ "Every possible order" is bounded by the shape of this map: one VALUE per meta
+	 * key, so it cannot express an order carrying two postmeta rows under the SAME key.
+	 * Under SQL such an order satisfies `IN known` and `NOT IN known` at once, and this
+	 * oracle's spec has no reading for it. It does not weaken what this file proves —
+	 * the redundancy #839 step 2 relies on is structural, every accepted disjunct
+	 * implying its own carrier's marker — but do not read the enumeration as literally
+	 * exhaustive over all database states.
 	 *
 	 * Mirrors the research harness's `universe()` exactly.
 	 *
