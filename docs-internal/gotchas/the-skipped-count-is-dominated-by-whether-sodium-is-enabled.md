@@ -1,6 +1,7 @@
 # Gotcha: [testing/measurement] — The SKIPPED count is dominated by ext-sodium, not by what the tree contains
 > Tags: testing, measurement, baselines, sodium | Session: s102
-> **Measured on:** the Windows desktop (PHP 8.5.1 with sodium disabled) — re-measure on other hardware.
+> **Measured on:** the Windows desktop (PHP 8.5.1 with sodium disabled) — re-measured on the macOS
+> laptop in s138, where the answer is different: see "macOS: the flag is redundant AND noisy" below.
 
 ## What happens
 
@@ -75,6 +76,49 @@ a machine change nobody else has.
 
 With sodium on, the numbers are legible again: **1 in the primary, 6 anywhere `plugins-reference` is
 absent**, and any other value is a real signal.
+
+## macOS (s138, 26.09.2026): the flag is redundant AND its warning lies
+
+The laptop's Homebrew PHP **8.5.7 has sodium compiled in**, so the whole premise above does not hold
+here:
+
+```
+$ php -m | grep sodium
+sodium
+$ php vendor/bin/phpunit --testsuite=Unit            # no flag
+Tests: 4082, Assertions: 10225, Skipped: 1
+$ php -d extension=sodium vendor/bin/phpunit --testsuite=Unit
+Tests: 4082, Assertions: 10225, Skipped: 1           # identical
+```
+
+**And the flag now prints a warning that says the opposite of the truth:**
+
+```
+Warning: PHP Startup: Unable to load dynamic library 'sodium'
+  (tried: /opt/homebrew/lib/php/pecl/20250925/sodium (no such file), ... .so (no such file))
+```
+
+Homebrew's PHP was upgraded, the pecl directory for the new API version (`20250925`) holds no
+`sodium.so`, and `-d extension=sodium` therefore asks for a dynamic module that is not there — while
+the built-in one is already loaded. `extension_loaded('sodium')` still returns true, and SKIPPED is
+still 1. An agent that reads that warning and concludes "sodium is off, so the skipped count is
+meaningless" has it exactly backwards.
+
+**So, per machine:**
+
+| Machine | `php -m` has sodium | `-d extension=sodium` | SKIPPED in the primary |
+|---|---|---|---|
+| Windows desktop (8.5.1) | no | **required** | 1 with the flag, 67 without |
+| macOS laptop (8.5.7) | **yes** | redundant, prints a false warning | **1 either way** |
+
+The rule that survives both is the one about what the NUMBER means, not about the flag: **1 in the
+primary checkout, 6 wherever `plugins-reference/` is absent, anything else is a real signal.** Check
+`php -m | grep sodium` before deciding whether the flag is needed at all, and never treat its warning
+as evidence about the extension's state.
+
+⚠ Keeping `-d extension=sodium` in a brief is still correct — it is harmless on macOS and necessary
+on the desktop — but the brief should say the warning is expected there, or the worker reports it as a
+gate failure.
 
 ## Related
 
