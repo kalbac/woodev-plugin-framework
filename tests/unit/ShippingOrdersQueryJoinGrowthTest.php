@@ -155,18 +155,30 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	}
 
 	/**
-	 * The measured budget. `M` carriers own a usable status map, `B` own no status
-	 * concept, and `N = M + B`:
+	 * The measured budget, RE-PINNED for the #839 step 2 marker-scope collapse. `M`
+	 * carriers own a usable status map, `B` own no status concept, and `N = M + B`:
 	 *
 	 *     no filter                         N
-	 *     delivery_status=unknown           4M + 2B
-	 *     delivery_status=<canonical>       N + M          (N + 1 when M is 0)
-	 *     delivery_status_not=<canonical>   4M + 2B
-	 *     delivery_status_not=unknown       N + M          (N + 1 when M is 0)
+	 *     delivery_status=unknown           3M + B          (was 4M + 2B)
+	 *     delivery_status=<canonical>       N + M           (1 when M is 0; was N + 1)
+	 *     delivery_status_not=<canonical>   3M + B          (was 4M + 2B)
+	 *     delivery_status_not=unknown       N + M           (1 when M is 0; was N + 1)
 	 *
-	 * The scope contributes `N`, and it is the term that pays for the marker join a
-	 * second time: every clause the negative filters build already binds its own
-	 * provider's marker. #839 is about whether that term can go.
+	 * The marker-key scope part used to contribute `N` on top of every filter's own
+	 * cost, paying for the marker join a second time whenever every clause the filter
+	 * built already bound its own provider's marker. #839 step 2 drops the scope part
+	 * entirely in exactly that case, so `delivery_status=unknown` and
+	 * `delivery_status_not=<canonical>` lose the `N` term outright, and their per-carrier
+	 * cost falls from four leaves to three (the marker join that used to come from the
+	 * scope AND from the binding now comes from the binding alone).
+	 *
+	 * The scope still stays, unchanged, for `delivery_status=<canonical>` and
+	 * `delivery_status_not=unknown`: both are built from a bare `IN` on a provider's own
+	 * status key, which does not bind its own provider's marker, so the scope is not a
+	 * duplicate there — EXCEPT when no carrier participates at all (`M` is 0), where the
+	 * clause set is empty and collapses to the shared
+	 * {@see Orders_Query::NO_MATCH_META_QUERY} sentinel regardless, scope included: one
+	 * leaf, not `N + 1`.
 	 *
 	 * @return array<string,array{0:int,1:int,2:array<string,mixed>,3:int}>
 	 */
@@ -218,12 +230,18 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 			case 'delivery_status=unknown':
 			case 'delivery_status_not=in_transit':
-				return ( 4 * $mapped ) + ( 2 * $bare );
+				// #839 step 2: every clause binds its own provider's marker, so the
+				// scope is a pure duplicate and is dropped outright.
+				return ( 3 * $mapped ) + $bare;
 
 			case 'delivery_status=in_transit':
 			case 'delivery_status_not=unknown':
-				// No carrier can report it => the NO_MATCH sentinel, one leaf.
-				return 0 === $mapped ? $scope + 1 : $scope + $mapped;
+				// No carrier can report it => the NO_MATCH sentinel, one leaf, and the
+				// scope collapses along with it (#839 step 2 drops a scope that is
+				// redundant for ANY reason, not only the bound-clause one). Otherwise
+				// the scope stays: a bare `IN` on a provider's own status key does not
+				// bind its own provider's marker.
+				return 0 === $mapped ? 1 : $scope + $mapped;
 		}
 
 		throw new \LogicException( "no budget for {$request_label}" );
@@ -247,24 +265,26 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	 * The anchored number, kept as its own test because it is the one that was observed
 	 * in the wild rather than derived: four carriers, two with a status map and two
 	 * without, `delivery_status=unknown`. s128 saw TWELVE `LEFT JOIN wp_postmeta` on the
-	 * legacy CPT datastore and MySQL sat in `Sending data` for over four minutes.
+	 * legacy CPT datastore and MySQL sat in `Sending data` for over four minutes; #839
+	 * step 2 dropped the duplicate marker-scope join, re-measured at EIGHT (never run on
+	 * a real CPT install — see the class docblock's standing warning).
 	 */
-	public function test_the_s128_fixture_that_wedged_mysql_still_costs_twelve_joins(): void {
+	public function test_the_s128_fixture_that_wedged_mysql_now_costs_eight_joins(): void {
 		$this->assertSame(
-			12,
+			8,
 			$this->leaves_for( 2, 2, [ 'delivery_status' => Delivery_Status::UNKNOWN ] ),
-			'This is the exact query that hung the integration suite in s128. If the number went DOWN, '
-			. 'that is the #839 fix and this test should record the new one; if it went UP, stop.'
+			'This is the exact query that hung the integration suite in s128, re-measured after the #839 step 2 '
+			. 'scope collapse (was twelve). If the number moved again, say so in the change and re-measure.'
 		);
 	}
 
 	/**
-	 * Growth is linear, and the per-carrier slope is what matters: at four joins per
-	 * carrier the `unknown` filter is already past what MySQL will plan sanely, so the
-	 * slope is the thing a change has to move. Asserted as a slope rather than as a
-	 * list of totals so it keeps meaning if the constant term ever changes.
+	 * Growth is linear, and the per-carrier slope is what matters: at three joins per
+	 * carrier the `unknown` filter is still the one to watch, so the slope is the thing
+	 * a change has to move. Asserted as a slope rather than as a list of totals so it
+	 * keeps meaning if the constant term ever changes.
 	 */
-	public function test_the_unknown_filter_costs_exactly_four_joins_per_mapped_carrier(): void {
+	public function test_the_unknown_filter_costs_exactly_three_joins_per_mapped_carrier(): void {
 		$slopes = [];
 
 		for ( $n = 1; $n <= 6; $n++ ) {
@@ -273,10 +293,11 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 		foreach ( range( 2, 6 ) as $n ) {
 			$this->assertSame(
-				4,
+				3,
 				$slopes[ $n ] - $slopes[ $n - 1 ],
-				"Each additional carrier with a status map costs four more joins (at N={$n}). "
-				. 'Two of the four are the marker, joined once by the scope and once by the binding (#839).'
+				"Each additional carrier with a status map costs three more joins (at N={$n}). "
+				. 'That is the marker, joined once by the binding, plus the two status joins (#839 step 2 '
+				. 'dropped the scope\'s own duplicate marker join).'
 			);
 		}
 	}
@@ -286,35 +307,37 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	 * pinned separately because it reaches it through the other branch of the builder
 	 * and could drift on its own.
 	 */
-	public function test_the_is_not_filter_costs_exactly_four_joins_per_mapped_carrier(): void {
+	public function test_the_is_not_filter_costs_exactly_three_joins_per_mapped_carrier(): void {
 		$previous = $this->leaves_for( 1, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
 
 		foreach ( range( 2, 6 ) as $n ) {
 			$current = $this->leaves_for( $n, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
 
-			$this->assertSame( 4, $current - $previous, "`is not` grew by something other than four at N={$n} (#839)." );
+			$this->assertSame( 3, $current - $previous, "`is not` grew by something other than three at N={$n} (#839 step 2)." );
 
 			$previous = $current;
 		}
 	}
 
 	/**
-	 * A carrier with NO status concept still costs TWO joins under `unknown` — its
-	 * marker in the scope, and its marker again standing in for "always unknown". That
-	 * is the cheapest possible carrier and it is still paying the marker twice, which
-	 * is the clearest statement of what #839 is about.
+	 * A carrier with NO status concept now costs exactly ONE join under `unknown` — the
+	 * same as without any status filter at all. Before #839 step 2 it paid for its
+	 * marker twice (its marker in the scope, and its marker again standing in for
+	 * "always unknown"); the scope collapse (#839 step 2) removes that duplicate
+	 * entirely for this filter, which is the clearest statement of what the step bought.
 	 */
-	public function test_a_carrier_with_no_status_concept_still_pays_for_its_marker_twice(): void {
+	public function test_a_carrier_with_no_status_concept_now_pays_for_its_marker_once(): void {
 		$this->assertSame(
-			2,
+			1,
 			$this->leaves_for( 0, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] ),
-			'One carrier with no status concept: the scope joins its marker and the filter joins it again.'
+			'One carrier with no status concept: its own marker EXISTS clause stands in for "always unknown", '
+			. 'and the scope is redundant, so it costs the same as no filter at all (#839 step 2).'
 		);
 
 		$this->assertSame(
 			1,
 			$this->leaves_for( 0, 1, [] ),
-			'Without a status filter the same carrier costs ONE join, which is the duplicate made visible.'
+			'Without a status filter the same carrier still costs ONE join — the duplicate is gone, not just hidden.'
 		);
 	}
 
@@ -330,15 +353,21 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'meta_query', $args, 'The CPT path must never emit meta_query.' );
 
-		$parts = [
-			Orders_Query::meta_query_for_keys( (array) ( $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ?? [] ) ),
-			Orders_Query::meta_query_for_clauses( (array) $args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] ),
-		];
+		// #839 step 2: the scope var is omitted on the CPT path too when it is
+		// redundant, so there may be no QUERY_VAR_MARKER_KEYS part to combine at all.
+		$parts = [];
+
+		if ( array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $args ) ) {
+			$parts[] = Orders_Query::meta_query_for_keys( (array) $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+		}
+
+		$parts[] = Orders_Query::meta_query_for_clauses( (array) $args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] );
 
 		$this->assertSame(
-			12,
+			8,
 			$this->leaf_count( Orders_Query::combine_meta_queries( $parts ) ),
-			'The legacy CPT translation must cost what HPOS costs — s128 measured twelve joins on exactly this fixture.'
+			'The legacy CPT translation must cost what HPOS costs — re-measured at eight joins on the s128 '
+			. 'fixture after the #839 step 2 scope collapse (was twelve).'
 		);
 	}
 }
