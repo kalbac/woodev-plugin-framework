@@ -6,33 +6,41 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-25 (s138).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-26 (s139).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
 
-✅ **No fixture returns `download_id = 0` any more** (#910) — the five that did return `9001`-`9005`,
-so `LicenseCommandEndpointTest` drives the real signed-envelope route, not a reflected `'9999'`; the
-rig's registry shows none of them ambiguous. The admin license REST route refuses an ambiguous id like
-the command dispatcher does (#907), but **NOT** an id without a store product — registration retains
-such an engine, and the divergence is in `resolve_license()`'s docblock.
+✅ **Fixtures carry real download ids `9001`-`9005`** (#910), so `LicenseCommandEndpointTest` drives
+the real signed-envelope route. The admin license REST route refuses an ambiguous id (#907) but
+**NOT** an id without a store product — registration retains such an engine, deliberately; the
+divergence is stated in `resolve_license()`'s docblock.
 
-⚠ **The aggregate delivery-status filter's join cost is MEASURED** (#839; harness, proof and tables:
-`research/2026-09-25-839-join-growth-evidence/`). `M` carriers with a status map, `B` without: no
-filter `N`; `delivery_status=unknown` and `delivery_status_not=<canonical>` **`4M + 2B`**; positive
-`N + participants`. Four carriers (2+2) on `unknown` = **12** joins, exactly what hung MySQL in s128.
-**The duplicate marker join is the `N` term.** The collapse to `3M + B` is proven by exhaustive row
-enumeration and PARKED on `kalbac/s138-card-839-scope-collapse` — it moves a `meta_query` part from
-`[1]` to `[0]` and eight tests address parts POSITIONALLY (#918); **#919, the subquery seam, is where
-~95 % of the cost is** against the collapse's 25 %.
+✅ **#839 CLOSED (s139).** Negative delivery-status filters cost **`3M + B`** joins, was `4M + 2B`
+(`M` mapped carriers, `B` bare); s128's fixture 12 → 8. Positive column unchanged **except M = 0,
+which collapses onto the NO_MATCH sentinel** (`N + 1` → `1`; both match nothing). ⚠ The remaining
+~95 % is **#919's subquery**, required on BOTH datastores. ⚠ **The CPT wall is the PLANNER, not the
+join count** — 12 joins on `wp_postmeta` never finish, 8 on `wc_orders_meta` take 4 ms. Harness,
+tables and the structural redundancy proof: `research/2026-09-25-839-join-growth-evidence/`.
 
-⚠ **Three ways a UI change passes every gate and is still wrong** — a GREP'd vendor rule, a green
-build that committed no bundles, a row rebuilt after an action (legacy CPT only): gotchas
-`a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
-`local-npm-run-build-is-not-assets-parity-evidence`,
-`a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store`.
+✅ **The equivalence proof is a COMMITTED TEST** — `ShippingOrdersQueryRowSemanticsTest`: the emitted
+`meta_query` against an oracle taken from the SPECIFICATION, not from `Orders_Query`'s output; 3
+fixtures × 5 filters × **both datastores**, 16/64/128 enumerated orders. **This is the instrument
+#919 proves itself with**, and mutation testing showed it reddens on both #837 defects and on
+over-collapsing (`sessions/s139.md`). ⚠ Its one adopted reading is **#924**: positive `IN` branches
+are not bound to their carrier's marker.
 
-⚠ **A probe whose selector matches nothing «passes»** — gotcha `a-probe-that-finds-nothing-passes`.
+⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a
+single unwrapped part** — prove such a helper against BOTH shapes (gotcha
+`a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`).
+
+⛔ **Codex under Orca on this Mac 401s on every request and still reads `live`** — a silent loss of a
+worker or a critic, burning a whole `check --wait`. **#926**; until then the critic gate needs a
+Claude model of a different size.
+
+⚠ **Four ways a UI change passes every gate and is still wrong** — a GREP'd vendor rule, a green
+build that committed no bundles, a row rebuilt after an action (legacy CPT only), a probe whose
+selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topic indexes.
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
@@ -42,10 +50,6 @@ Next: **«Создать заказ»** (#710 — the brainstorm is HIS); SP-10 
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
 `lint:i18n-sources`/`lint:i18n` read msgids out of the built one. Cause: `sessions/s134.md`.
 
-⚠ **«All time» is the ABSENCE of the date parameter, never a value** — `wc.date` throws on an
-unknown period and the throw unmounts the whole wc-admin app (gotcha
-`wc-date-throws-on-a-half-filled-custom-range`).
-
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
@@ -54,17 +58,9 @@ forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-o
 it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
 coincidence. **What is still open on this page is on the board, not retyped here.**
 
-⚠ **The orders page lives under the WooCommerce menu, inside WooCommerce's own React app** —
-`wc_admin_register_page()` + `TableCard`, at `admin.php?page=wc-admin&path=/woodev-shipping-orders`.
-It highlights its parent menu item **client-side**, from the `wpOpenMenu` property its
-`woocommerce_admin_pages_list` entry declares — WordPress never sees `path`. Design: §D1, §D7.
-
-⚠ **Route B covers `@woocommerce/{navigation,date,currency}` too** — absent from `node_modules`
-AND `package-lock.json`, so the page reads `window.wc.*` and declares `wc-components` /
-`wc-navigation` / `wc-admin-app` / `wc-date` / `wc-currency` by hand — **never `wc-settings`**
-(gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`). Every filter is
-**URL-driven**, and the query is read in a LATER effect, never inside the history listener (gotcha
-`addhistorylistener-fires-before-the-url-changes`).
+⚠ **The orders page's own contract facts live in [wiki/architecture.md](wiki/architecture.md)** —
+where it is mounted, how it highlights its menu item, which `window.wc.*` handles it declares by hand
+and why every filter is URL-driven. They are reference: true regardless of which card is open.
 
 ⚠ **Do NOT ask the operator to log into the rig — a Playwright probe logs in itself**
 (`admin`/`password`). For numbers without a browser use `wp eval` in the container, but **only the
@@ -79,7 +75,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (#767), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786.
+⚠ **Three facts decide that plugin's cost when it IS written** — on #786, with #767's measurement.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
@@ -89,8 +85,8 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — macOS laptop, 25.09.2026 (s138)** (the two machines matched to the digit in s136, so
-these are not platform-dependent): unit **4082 / 10225**, 1 skipped, sodium ON; jest **1975** in
+**Baselines — macOS laptop, 26.09.2026 (s139)** (the two machines matched to the digit in s136, so
+these are not platform-dependent): unit **4112 / 12357**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
 
@@ -122,7 +118,8 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 59, measured 25.09.2026 (s138):** Инбокс EMPTY. ⚠ Count with
+**Open cards — 58, measured 26.09.2026 (s139):** Инбокс holds **#926** (Codex 401), waiting on him.
+⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
 THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
@@ -193,7 +190,7 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-⚠ **Набор действий объявлен ОДИН раз** (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`.
+⚠ Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). Где объявлен набор действий и как ставится пункт меню — [wiki/architecture.md](wiki/architecture.md).
 
 ✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
 

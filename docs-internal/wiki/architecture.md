@@ -264,6 +264,27 @@ only when its condition owns the field AND WooCommerce rendered it (#708); ask
 that IS its own region publishes no ancestors (#707); `is_pickup_shipping()` is the single source
 for the other three declarations, resolved LAZILY (#709).
 
+## Shipping orders page — the contract facts that outlive their cards
+
+Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless of which card is open.
+
+- **It lives under the WooCommerce menu, inside WooCommerce's own React app** —
+  `wc_admin_register_page()` + `TableCard`, at
+  `admin.php?page=wc-admin&path=/woodev-shipping-orders`. It highlights its parent menu item
+  **client-side**, from the `wpOpenMenu` property its `woocommerce_admin_pages_list` entry declares —
+  WordPress never sees `path`. Design: §D1, §D7. The menu item is placed AFTER «Orders» by reordering
+  `$submenu` on the neighbour's slug, never by position (gotcha
+  `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`).
+- **Route B covers `@woocommerce/{navigation,date,currency}` too** — they are absent from
+  `node_modules` AND `package-lock.json`, so the page reads `window.wc.*` and declares
+  `wc-components` / `wc-navigation` / `wc-admin-app` / `wc-date` / `wc-currency` by hand — **never
+  `wc-settings`** (gotcha `declaring-wc-settings-as-a-script-dependency-silently-drops-the-bundle`).
+- **Every filter is URL-driven**, and the query is read in a LATER effect, never inside the history
+  listener (gotcha `addhistorylistener-fires-before-the-url-changes`). «All time» is the ABSENCE of
+  the date parameter, never a value (gotcha `wc-date-throws-on-a-half-filled-custom-range`).
+- **The action set is declared ONCE** (`Order_Actions::for_order()`) and serves TWO surfaces — the
+  table column and the metabox; a label or tooltip is edited only there.
+
 ## Subsystem phase status
 
 > Moved out of `CURRENT-STATE.md` in s119 (#778) — a matrix that changes once every several
