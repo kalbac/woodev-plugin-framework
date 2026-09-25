@@ -1043,7 +1043,7 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 * @inheritDoc
 			 */
 			public function get_download_id(): int {
-				return 0;
+				return 9005;
 			}
 
 			/**

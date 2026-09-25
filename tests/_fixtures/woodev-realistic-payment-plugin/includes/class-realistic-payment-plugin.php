@@ -134,7 +134,7 @@ final class Woodev_Realistic_Payment_Plugin extends \Woodev_Payment_Gateway_Plug
 	 * @return int
 	 */
 	public function get_download_id(): int {
-		return 0;
+		return 9003;
 	}
 
 	/**

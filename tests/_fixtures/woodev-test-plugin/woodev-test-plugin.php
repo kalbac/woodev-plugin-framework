@@ -380,7 +380,7 @@ function woodev_test_plugin_init() {
 		}
 
 		public function get_download_id(): int {
-			return 0;
+			return 9001;
 		}
 
 		/**

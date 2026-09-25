@@ -30,17 +30,28 @@
  *   before the stub injection and restored verbatim in tearDown, so the test
  *   leaves the registry exactly as found.
  *
- * PLUGIN ID = '9999' (unique test-only id, disambiguation):
- *   The wp-env test environment loads all three test fixtures
- *   (woodev-test-plugin, woodev-test-payment-gateway, woodev-test-shipping-method),
- *   all of which return get_download_id() = 0. Three registrations for the same
- *   download_id flag it as AMBIGUOUS in Woodev_Plugins_License, causing the
- *   dispatcher to reject with unknown_plugin (§9.3). To avoid this, we inject a
- *   synthetic engine for download_id '9999' via reflection into the static registry,
- *   and sign envelopes with plugin_id: '9999'. This is a pure in-memory seam with no
- *   side effects: the synthetic instance is never activated, and the registry is
- *   cleaned up in tearDown(). This approach exercises the full 200-executed path with
- *   an unambiguous id while keeping all other fixture plugins intact.
+ * PLUGIN ID = '9001' (woodev-test-plugin's real download id, #910):
+ *   Before #910, all fixtures loaded by tests/bootstrap.php's `muplugins_loaded`
+ *   callback (woodev-test-plugin, woodev-test-payment-gateway,
+ *   woodev-test-shipping-method, woodev-realistic-shipping-plugin) returned
+ *   get_download_id() = 0, so a real signed command could never target one
+ *   unambiguously — has_store_product( '0' ) is false (§9.3), and the dispatcher
+ *   rejects such an id as unknown_plugin before the registry lookup even runs
+ *   (#905 round 2). This test used to work around that by injecting a synthetic
+ *   engine for a fake plugin_id '9999' via reflection.
+ *   #910 gave the five fixture plugins distinct, unambiguous positive download
+ *   ids, so that workaround is gone: woodev-test-plugin now carries 9001, and,
+ *   because Woodev_Plugin::__construct() unconditionally builds its license
+ *   engine via init_license_handler() (woodev/class-plugin.php), that engine is
+ *   REAL and already self-registered in Woodev_Plugins_License's static registry
+ *   by the time this test runs — woodev_test_plugin() is instantiated from
+ *   tests/bootstrap.php's `muplugins_loaded` callback, long before any test
+ *   class exists. Signing envelopes with plugin_id: '9001' therefore exercises
+ *   the actual production route (real signed envelope -> dispatcher -> the real,
+ *   bootstrap-registered engine of an actual fixture plugin) with no injection
+ *   seam at all. The `deactivate_plugin` command handler is still swapped for a
+ *   stub (see COMMAND REGISTRATION above) so the test never deactivates the real
+ *   fixture plugin — that is a deliberate, unrelated seam and stays.
  *
  * SITE BINDING:
  *   The wp-env test environment sets WP_TESTS_DOMAIN = 'example.org'. home_url()
@@ -71,14 +82,12 @@ class LicenseCommandEndpointTest extends TestCase {
 	private const ROUTE = '/woodev/v1/license-command';
 
 	/**
-	 * The synthetic plugin_id used in all signed envelopes.
-	 *
-	 * Must be unique across all loaded test fixtures (all of which use '0') to
-	 * avoid the §9.3 ambiguous-download-id flag. See class docblock.
+	 * The plugin_id used in all signed envelopes: woodev-test-plugin's real,
+	 * unique download id (#910). See class docblock.
 	 *
 	 * @var string
 	 */
-	private const PLUGIN_ID = '9999';
+	private const PLUGIN_ID = '9001';
 
 	/**
 	 * Fixture keypair seed (0x01 × 32). Matches the s8-p1 published test vector.
@@ -181,12 +190,10 @@ class LicenseCommandEndpointTest extends TestCase {
 		};
 		$this->set_dispatcher_commands( $stubbed );
 
-		// Inject a synthetic engine for the test plugin_id '9999' into the static
-		// registry via reflection. This sidesteps the §9.3 ambiguous-id problem
-		// caused by all three wp-env fixtures sharing download_id = 0. The engine
-		// is a real Woodev_Plugins_License mock backed by the loaded test plugin
-		// instance, so the dispatcher can resolve it and hand it to the stub handler.
-		$this->inject_synthetic_engine( self::PLUGIN_ID );
+		// No engine injection needed (#910): woodev-test-plugin's real license
+		// engine, carrying download id 9001, is already registered in
+		// Woodev_Plugins_License's static registry from tests/bootstrap.php's
+		// `muplugins_loaded` callback. See class docblock.
 
 		// Derive the normalized site URL for envelope construction. The test env
 		// sets WP_TESTS_DOMAIN = 'example.org'; home_url() = 'http://example.org'.
@@ -197,9 +204,8 @@ class LicenseCommandEndpointTest extends TestCase {
 	}
 
 	/**
-	 * Restores the exact pre-test global state: removes ONLY our pubkey filter,
-	 * restores the dispatcher command registry from the snapshot, and removes
-	 * the synthetic engine.
+	 * Restores the exact pre-test global state: removes ONLY our pubkey filter
+	 * and restores the dispatcher command registry from the snapshot.
 	 *
 	 * @return void
 	 */
@@ -214,7 +220,6 @@ class LicenseCommandEndpointTest extends TestCase {
 			$this->snapshot_taken = false;
 		}
 
-		$this->remove_synthetic_engine( self::PLUGIN_ID );
 		parent::tearDown();
 	}
 
@@ -243,8 +248,8 @@ class LicenseCommandEndpointTest extends TestCase {
 	 * ----------------------------------------------------------------------- */
 
 	/**
-	 * A fixture-signed valid envelope for the synthetic plugin_id dispatches to the
-	 * stub command and returns 200 { status: 'executed' }.
+	 * A fixture-signed valid envelope for woodev-test-plugin's real plugin_id
+	 * dispatches to the stub command and returns 200 { status: 'executed' }.
 	 *
 	 * @return void
 	 */
@@ -414,9 +419,8 @@ class LicenseCommandEndpointTest extends TestCase {
 	/**
 	 * Builds a valid v1 payload bound to the test environment.
 	 *
-	 * Uses the synthetic plugin_id '9999' (injected via reflection to avoid the
-	 * §9.3 ambiguous-id collision from all fixture plugins sharing download_id = 0)
-	 * and the normalised site URL from home_url().
+	 * Uses woodev-test-plugin's real download id (see PLUGIN_ID and the class
+	 * docblock) and the normalised site URL from home_url().
 	 *
 	 * @param string               $nonce     32 lowercase hex characters.
 	 * @param array<string, mixed> $overrides Fields to override.
@@ -474,61 +478,6 @@ class LicenseCommandEndpointTest extends TestCase {
 		$request->set_header( 'Content-Type', 'application/json' );
 
 		return rest_get_server()->dispatch( $request );
-	}
-
-	/**
-	 * Injects a minimal Woodev_Plugins_License stand-in for the given plugin_id
-	 * into the static registry via reflection.
-	 *
-	 * The synthetic instance is backed by the real test plugin's Woodev_Plugin
-	 * object so that $engine->plugin, $engine->get_state(), etc. work if called.
-	 * Registered with the download_id key so the dispatcher can resolve it.
-	 *
-	 * @param string $plugin_id The download id key to register under.
-	 * @return void
-	 */
-	private function inject_synthetic_engine( string $plugin_id ): void {
-		// Use the test plugin instance as the backing plugin object.
-		$test_plugin = woodev_test_plugin();
-
-		// Build a minimal license engine via newInstanceWithoutConstructor() so we
-		// don't trigger real HTTP calls or WP option writes. We only need the engine
-		// to exist in the registry — the stub command handler ignores it.
-		$ref_class = new \ReflectionClass( \Woodev_Plugins_License::class );
-		$engine    = $ref_class->newInstanceWithoutConstructor();
-
-		// Wire the plugin property so any engine method that dereferences it works.
-		$plugin_prop = $ref_class->getProperty( 'plugin' );
-		if ( PHP_VERSION_ID < 80100 ) {
-			$plugin_prop->setAccessible( true );
-		}
-		$plugin_prop->setValue( $engine, $test_plugin );
-
-		// Inject into the static registry.
-		$instances_prop = $ref_class->getProperty( 'registered_instances' );
-		if ( PHP_VERSION_ID < 80100 ) {
-			$instances_prop->setAccessible( true );
-		}
-		$registry               = (array) $instances_prop->getValue();
-		$registry[ $plugin_id ] = $engine;
-		$instances_prop->setValue( null, $registry );
-	}
-
-	/**
-	 * Removes the synthetic engine from the registry after each test.
-	 *
-	 * @param string $plugin_id The download id key to remove.
-	 * @return void
-	 */
-	private function remove_synthetic_engine( string $plugin_id ): void {
-		$ref_class      = new \ReflectionClass( \Woodev_Plugins_License::class );
-		$instances_prop = $ref_class->getProperty( 'registered_instances' );
-		if ( PHP_VERSION_ID < 80100 ) {
-			$instances_prop->setAccessible( true );
-		}
-		$registry = (array) $instances_prop->getValue();
-		unset( $registry[ $plugin_id ] );
-		$instances_prop->setValue( null, $registry );
 	}
 
 	/**
