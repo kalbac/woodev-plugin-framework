@@ -199,17 +199,17 @@ gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
 **Operator decisions still shaping the work:**
 
-- *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382, 05.09.2026) — он РАЗОВЫЙ
-  (15 минут, привязан к `state` + `user_id`); долгоживущий `access_token_secret` идёт POST'ом. PKCE
-  рассмотрен и отклонён. Разбор — на карточке.
+- *Легаси-CPT датастор ОСТАЁТСЯ поддержанным* (#839, 26.09.2026) — «ещё много сайтов
+  сидят на нём». HPOS-only отклонён, значит **#919 обязан работать на ОБОИХ хранилищах.**
+
+- *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382) — он РАЗОВЫЙ (15 минут,
+  привязан к `state` + `user_id`); долгоживущий `access_token_secret` идёт POST'ом, PKCE отклонён.
 
 - *Настройки плагина по умолчанию — на `Woodev → Настройки`; вкладка WooCommerce «Интеграции»
-  НЕ отменена и используется при необходимости* (#777, 05.09.2026). Швы, контракт хранилища и
-  запрет выдумывать границу за него — `AGENT-RULES.md` Rule 8.
+  НЕ отменена и используется при необходимости* (#777) — швы и границы: `AGENT-RULES.md` Rule 8.
 
 - *We offer narrowing, we never force it; the merchant's only switch is the region field itself*
-  (#437). Surviving rules from #531/#542: `guard_custom_settlement()` below, and the `src/`
-  TypeScript row in `AGENTS.md`.
+  (#437).
 
 **FIRST vendored runtime JS in the framework: IMask, pinned, for the checkout phone mask.** Its
 country table is GENERATED (`npm run generate:phone-masks`, `lint:phone-masks` fails when stale);
