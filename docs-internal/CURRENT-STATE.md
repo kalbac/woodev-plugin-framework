@@ -6,15 +6,28 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-17 (s137).** ✅ **SP-10 is COMPLETE** (#820 closed): increment 5 — a carrier's
-legacy v1 orders-page slug redirects to the framework page with that carrier preselected — merged
-and accepted on the rig (#899). s137 also landed #885 #818 #815 #842 #900 #905 (`sessions/s137.md`).
+**As of 2026-09-25 (s138).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
 
-⚠ **Three ways a UI change passes every gate and is still wrong:** a vendor rule copied by GREP is
-incomplete; a worker's "build is green" is not "bundles are committed"; a row rebuilt from the same
-`WC_Order` after an action is stale ONLY on the legacy CPT store. Gotchas
+✅ **No fixture returns `download_id = 0` any more** (#910) — the five that did return `9001`-`9005`,
+so `LicenseCommandEndpointTest` drives the real signed-envelope route, not a reflected `'9999'`; the
+rig's registry shows none of them ambiguous. The admin license REST route refuses an ambiguous id like
+the command dispatcher does (#907), but **NOT** an id without a store product — registration retains
+such an engine, and the divergence is in `resolve_license()`'s docblock.
+
+⚠ **The aggregate delivery-status filter's join cost is MEASURED** (#839; harness, proof and tables:
+`research/2026-09-25-839-join-growth-evidence/`). `M` carriers with a status map, `B` without: no
+filter `N`; `delivery_status=unknown` and `delivery_status_not=<canonical>` **`4M + 2B`**; positive
+`N + participants`. Four carriers (2+2) on `unknown` = **12** joins, exactly what hung MySQL in s128.
+**The duplicate marker join is the `N` term.** The collapse to `3M + B` is proven by exhaustive row
+enumeration and PARKED on `kalbac/s138-card-839-scope-collapse` — it moves a `meta_query` part from
+`[1]` to `[0]` and eight tests address parts POSITIONALLY (#918); **#919, the subquery seam, is where
+~95 % of the cost is** against the collapse's 25 %.
+
+⚠ **Three ways a UI change passes every gate and is still wrong** — a GREP'd vendor rule, a green
+build that committed no bundles, a row rebuilt after an action (legacy CPT only): gotchas
 `a-grep-of-a-vendor-stylesheet-is-an-incomplete-measurement`,
 `local-npm-run-build-is-not-assets-parity-evidence`,
 `a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store`.
@@ -66,7 +79,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 `version_compare('2.3.0.0','2.2.5.5')` = GREATER and the update reaches every site. `#762` and
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
-⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (`npm run probe:signature`, #767), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786, `sessions/s117.md`.
+⚠ **When that plugin IS written, three facts decide the cost** — 11 fatals + 8 unimplemented abstracts on repointing (#767), `calculate_shipping()` is `final`, and `register_shipping_methods()` drops a non-subclass **SILENTLY**. Detail: #786.
 
 ✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
 уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
@@ -74,12 +87,12 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
-✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed. The old block's symptom (every job failing in two seconds with no log, reading as a red build): **#583** + gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
+✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — macOS laptop, 17.09.2026, `main` `60fdbea` (s137)** (the two machines matched to
-the digit in s136, so these are not platform-dependent): unit **3981 / 10089**, 1 skipped, sodium
-ON; jest **1975** in **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build`
-zero git diff; phpcs clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
+**Baselines — macOS laptop, 25.09.2026 (s138)** (the two machines matched to the digit in s136, so
+these are not platform-dependent): unit **4082 / 10225**, 1 skipped, sodium ON; jest **1975** in
+**33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
+clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -90,8 +103,6 @@ command is in gotcha `wpenv-windows-gitbash-path-mangling`.
 ⚠ **`phpstan` locally needs `--memory-limit=4G`** — at 2G the parallel worker dies printing `Found 1 error` + "result is incomplete", which reads like a real failure. CI stays green at 2G. Gotcha `phpstan-windows-parallel-worker-segfault`.
 
 ⚠ **Measure with `php -d extension=sodium`, or SKIPPED is meaningless** — 1 in the primary, 6 without `plugins-reference/`. Gotcha `the-skipped-count-is-dominated-by-whether-sodium-is-enabled`.
-
-✅ **`--order-by=reverse` GREEN and GATED IN CI** (#606).
 
 ✅ **`npm run test:e2e` — 7 Playwright tests against the LIVE RIG `:8973`, NOT in CI (#723)**, ~2.5 min. ⚠ Tests the WORKING TREE the rig serves, and does NOT replace his own pass.
 
@@ -106,23 +117,22 @@ jest runs from bash, never `npx jest`; `jest-unit.config.js` scopes `roots`, so 
 unit suite is not sufficient where our code meets someone else's contract (gotcha
 `a-mocked-provider-proves-the-mock-not-the-contract`).
 
-**The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552);
-a region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
+**The settlement search is scoped by the region even when it came from the DEFAULT** (#551/#552) — a
+region whose `key()` is not in the settlement's own `ancestors()` is refused. ⚠ **Ask
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 13.09.2026 (s134):** Инбокс EMPTY, 1 in «В работе» (the #820 umbrella).
-⚠ Count with `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an
-undercount from exactly that trap. **PRIORITY LIVES ON THE BOARD, not in this file** (operator,
-04.09.2026, #644 part 3): board №6, field «Приоритет» (`PVTSSF_lAHOAIbGB84BeLaozhhRouo`), six values
-`Сейчас` `Следом` `Потом` `Ждёт оператора` `Заморожено` `После v2`, and every open card carries one.
-⚠ Read it with a milestone-aware reader — a naive one reports a milestone-carrying card as empty.
+**Open cards — 59, measured 25.09.2026 (s138):** Инбокс EMPTY. ⚠ Count with
+`gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
+exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
+THE BOARD, not in this file** (operator, 04.09.2026, #644 part 3); its field and option ids are in
+`AGENTS.md` → Backlog rule, and every open card carries one.
 **`V2 готов` = #786 works** (operator, 07.09.2026) — the gate #247/#285 wait on; #567 was moved
 AHEAD of the plugin by that same decision. **Read the board, never a card list retyped here** — a
 retyped list is what went stale and got #644 filed.
 
 **`location.levels` is a per-country matrix** (`levels[country][level]`) and the client reads it that
-way; `location.countries` stays a flat chain-wide union, never naively combined with it (#289, s110).
+way; `location.countries` stays a flat chain-wide union, never naively combined with it (#289).
 
 **#621 is held behind #639**, and its cheap fix is disproven: `get_order()` must preserve the
 caller's concrete order class or a `WC_Subscription` becomes a plain order (`sessions/s103.md`).
@@ -140,11 +150,10 @@ caller's concrete order class or a `WC_Subscription` becomes a plain order (`ses
 `a-po-merge-that-drops-obsolete-entries-still-looks-well-formed`,
 `lint-i18n-answers-about-the-catalogue-not-the-code`.
 ⛔ **Остаток #567 — визуальный проход по переводам — ГЕЙТОВАН РЕЛИЗОМ, не ответом оператора**
-(05.09.2026, повторено 07.09): перед релизом уже запланированы обновление каталога и проход по нему
-целиком, а строки до того ещё много раз изменятся. Код и каталог закрыты, карточка «Заморожено» с
-этим условием. Не переоткрывать.
+(05.09.2026, повторено 07.09): перед релизом каталог всё равно проходят целиком, а строки до того ещё
+изменятся. Код и каталог закрыты, карточка «Заморожено» с этим условием. Не переоткрывать.
 
-**Фичу метода доставки можно объявить ОБОИМИ способами** — `$this->supports` до `parent::__construct()` (#811) и `add_support()` после (#813); до s124 не работал ни один. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set`. Остаток — **#815**.
+**Фичу метода доставки можно объявить ОБОИМИ способами** — `$this->supports` до `parent::__construct()` (#811) и `add_support()` после (#813); до s124 не работал ни один. Готча `a-base-constructor-that-assigns-what-the-subclass-just-set`.
 
 **`Shipping_Plugin::includes()` АВТОРИТЕТЕН — [ADR-012](adr/012-shipping-includes-stays-authoritative.md)** (#138, s118).
 Новый класс под `woodev/shipping-method/**` дописывается в него, иначе падает
@@ -184,11 +193,9 @@ NEVER disables that button itself. Settings section «Форма заказа»,
 PICKS and asks `release.isStale()`; the busy token is the WRONG key for that question. Full detail:
 gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 
-**SP-10 завершён** (#820 закрыта, s137): старый слаг перенаправляется хуком `admin_page_access_denied`, не `admin_init` — готча `admin-init-never-fires-for-an-unregistered-admin-page-slug`; метабокс #856 принят и смержен. ⚠ Набор действий объявлен ОДИН раз (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`. **Брейншторм #114 отложен оператором** (s125), не отменён.
+⚠ **Набор действий объявлен ОДИН раз** (`Order_Actions::for_order()`) и обслуживает ДВЕ витрины — колонку таблицы и метабокс; подпись/тултип правятся только там. Кнопка экспорта — «Экспорт» (оператор, 13.09.2026, #890). ⚠ Пункт меню ставится ПОСЛЕ «Orders» перестановкой `$submenu` по слагу соседа, не позицией — готча `wc-admin-register-page-ignores-order-and-its-neighbours-declare-no-position`.
 
 ✅ **На риге ДВА перевозчика, ~294 заказа.** ⚠ **Агрегат с ОДНИМ источником — не малое N, а другая форма:** это скрывало два дефекта подряд (s127, s128). Любой тест на агрегат регистрирует минимум двух перевозчиков. ⚠ Сеялки ДОБАВЛЯЮТ, а не досевают (#868): каждая новая колонка вскрывает, что старые строки её не несут — так было с покупателем (#861) и с методом оплаты (#876).
-
-**What closed when** is the handoff's carry-over section and the per-session files — not this file.
 
 **Operator decisions still shaping the work:**
 
