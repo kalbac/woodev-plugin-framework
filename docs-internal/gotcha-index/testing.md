@@ -52,3 +52,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [testing/meta-query-parts] **A `relation` key does NOT tell the `AND` wrapper from a single unwrapped part that carries its own relation — prove a role-based helper against BOTH shapes.** → [a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part](../gotchas/a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part.md) (s139)

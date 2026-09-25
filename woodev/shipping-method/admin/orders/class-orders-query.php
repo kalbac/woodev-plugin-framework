@@ -262,8 +262,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$providers
 			);
 
-			$meta_query_parts = [ self::meta_query_for_keys( $keys ) ];
-
 			// `delivery_status` ('is') and `delivery_status_not` ('is not', #836) are mutually
 			// exclusive from the UI's own rule picker; if a caller somehow sends both, 'is'
 			// wins — there is exactly one status_clauses part either way.
@@ -276,6 +274,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status, false );
 			} elseif ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid_delivery_statuses, true ) ) {
 				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status_not, true );
+			}
+
+			/*
+			 * #839: the marker-key SCOPE part is a pure duplicate — and not a cheap one —
+			 * whenever every clause the delivery-status filter built ALREADY binds the row to
+			 * one provider's own marker key, so in that case it is dropped.
+			 *
+			 * The saving is one `LEFT JOIN` per registered carrier, and it is the expensive
+			 * half that qualifies. Measured with no pathological query executed (#839): leaf
+			 * clauses counted off the built tree, turned into SQL by the real `WP_Meta_Query`
+			 * for the legacy CPT path and captured on HPOS through
+			 * `woocommerce_orders_table_query_clauses`. With M carriers owning a usable status
+			 * map and B owning no status concept at all:
+			 *
+			 *     delivery_status=unknown           4M + 2B  ->  3M + B
+			 *     delivery_status_not=<canonical>   4M + 2B  ->  3M + B
+			 *
+			 * The s128 fixture is the worked example — four carriers, two of each kind:
+			 * TWELVE joins, exactly the twelve `LEFT JOIN wp_postmeta` that sat in
+			 * `Sending data` for over four minutes, down to EIGHT.
+			 *
+			 * ⚠ Why a structural test and not «the filter is a negative one»: the answer must
+			 * be read off the clauses that were actually built, or it drifts the first time
+			 * {@see self::delivery_status_meta_clauses()} grows a branch — which is how #837
+			 * defect 2 happened. {@see self::clauses_bind_their_own_provider()} therefore
+			 * inspects the clauses, and says no for the positive `IN` shapes, which carry no
+			 * marker: for those the scope STAYS. They are cheap anyway (`M + B + participants`
+			 * joins, never the `4M` that wedged MySQL), and dropping it there would NOT be
+			 * equivalent — enumerating every possible order over two and three carriers showed
+			 * the unbound `IN` shapes then additionally match an order carrying a carrier's
+			 * status meta WITHOUT that carrier's marker, while the bound shapes matched
+			 * identically on every one of those rows.
+			 *
+			 * ⚠ And the scope always stays when there is no status filter at all: nothing else
+			 * then constrains the rows to registered carriers, and dropping it would return
+			 * the whole table.
+			 */
+			$scope_is_redundant = null !== $status_clauses
+				&& $this->clauses_bind_their_own_provider( $status_clauses, $keys );
+
+			$meta_query_parts = [];
+
+			if ( ! $scope_is_redundant ) {
+				$meta_query_parts[] = self::meta_query_for_keys( $keys );
 			}
 
 			if ( null !== $status_clauses ) {
@@ -308,7 +350,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				// part instead; Orders_Registry::translate_marker_keys_query_var() rebuilds
 				// and combines them through the SAME self::combine_meta_queries(), so the two
 				// datastore paths cannot silently diverge on what any of these filters mean.
-				$args[ self::QUERY_VAR_MARKER_KEYS ] = $keys;
+				// #839: the scope var is omitted on exactly the same condition as the HPOS part
+				// above, and the decision is made HERE rather than in
+				// Orders_Registry::translate_marker_keys_query_var() so both datastore paths
+				// drop the same duplicate join from the SAME decision instead of each deciding
+				// for itself — the reason every other part of this shape is shared too.
+				if ( ! $scope_is_redundant ) {
+					$args[ self::QUERY_VAR_MARKER_KEYS ] = $keys;
+				}
 
 				if ( null !== $status_clauses ) {
 					$args[ self::QUERY_VAR_STATUS_CLAUSES ] = $status_clauses;
@@ -458,6 +507,92 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			}
 
 			return array_values( $this->registry->get_providers() );
+		}
+
+		/**
+		 * Whether EVERY clause in a set already constrains the row to one provider's own
+		 * marker key — the condition under which the marker-key scope part
+		 * ({@see self::meta_query_for_keys()}) is a pure duplicate and can be dropped,
+		 * saving one `LEFT JOIN` per registered carrier (#839).
+		 *
+		 * Read off the built clauses on purpose, rather than inferred from which filter
+		 * was requested: {@see self::delivery_status_meta_clauses()} emits five different
+		 * shapes already and #837 defect 2 was exactly a rule that stopped matching the
+		 * clauses it described. A new branch there cannot silently lose the scope here.
+		 *
+		 * Two shapes qualify, and they are the two the negative filters produce:
+		 *
+		 *   - a bare `[ 'key' => <a marker key>, 'compare' => 'EXISTS' ]` — the provider
+		 *     that is ALWAYS unknown, or never maps to the negated state;
+		 *   - an `AND` group with such a clause among its own direct children — the
+		 *     `AND( marker EXISTS, OR( status NOT EXISTS, status NOT IN … ) )` pair.
+		 *
+		 * A positive `IN` on a provider's status key does NOT qualify. It implies that
+		 * provider's order only if a carrier never writes another's meta, and that is an
+		 * assumption about installed data, not something this clause states — so the
+		 * scope stays and nothing rests on it.
+		 *
+		 * An empty set qualifies trivially: it becomes {@see self::NO_MATCH_META_QUERY},
+		 * which matches nothing with or without the scope AND-ed to it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,array<string,mixed>> $clauses     clauses as built for one filter.
+		 * @param string[]                       $marker_keys marker keys of the providers in scope.
+		 * @return bool
+		 */
+		private function clauses_bind_their_own_provider( array $clauses, array $marker_keys ): bool {
+			foreach ( $clauses as $clause ) {
+				if ( ! is_array( $clause ) ) {
+					return false;
+				}
+
+				if ( isset( $clause['key'] ) ) {
+					if ( ! self::is_marker_exists_clause( $clause, $marker_keys ) ) {
+						return false;
+					}
+
+					continue;
+				}
+
+				if ( 'AND' !== strtoupper( (string) ( $clause['relation'] ?? '' ) ) ) {
+					return false;
+				}
+
+				$bound = false;
+
+				foreach ( $clause as $key => $child ) {
+					if ( 'relation' === $key || ! is_array( $child ) ) {
+						continue;
+					}
+
+					if ( self::is_marker_exists_clause( $child, $marker_keys ) ) {
+						$bound = true;
+						break;
+					}
+				}
+
+				if ( ! $bound ) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
+		 * Whether one clause is exactly «this provider's marker key exists» (#839).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $clause      a single first-order clause.
+		 * @param string[]            $marker_keys marker keys of the providers in scope.
+		 * @return bool
+		 */
+		private static function is_marker_exists_clause( array $clause, array $marker_keys ): bool {
+			return isset( $clause['key'] )
+				&& 'EXISTS' === strtoupper( (string) ( $clause['compare'] ?? '' ) )
+				&& in_array( $clause['key'], $marker_keys, true );
 		}
 
 		/**
