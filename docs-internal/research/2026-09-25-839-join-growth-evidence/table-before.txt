@@ -1,0 +1,35 @@
+
+### ALL carriers HAVE a status map
+
+| N | no filter | delivery_status=unknown | delivery_status=in_transit | delivery_status_not=in_transit | delivery_status_not=unknown |
+|---|---|---|---|---|---|
+| 1 (map=1, bare=0) | 1 / 1 | 4 / 4 | 2 / 2 | 4 / 4 | 2 / 2 |
+| 2 (map=2, bare=0) | 2 / 2 | 8 / 8 | 4 / 3 | 8 / 8 | 4 / 3 |
+| 3 (map=3, bare=0) | 3 / 3 | 12 / 12 | 6 / 4 | 12 / 12 | 6 / 4 |
+| 4 (map=4, bare=0) | 4 / 4 | 16 / 16 | 8 / 5 | 16 / 16 | 8 / 5 |
+| 5 (map=5, bare=0) | 5 / 5 | 20 / 20 | 10 / 6 | 20 / 20 | 10 / 6 |
+| 6 (map=6, bare=0) | 6 / 6 | 24 / 24 | 12 / 7 | 24 / 24 | 12 / 7 |
+
+### NO carrier has a status map
+
+| N | no filter | delivery_status=unknown | delivery_status=in_transit | delivery_status_not=in_transit | delivery_status_not=unknown |
+|---|---|---|---|---|---|
+| 1 (map=0, bare=1) | 1 / 1 | 2 / 2 | 2 / 2 | 2 / 2 | 2 / 2 |
+| 2 (map=0, bare=2) | 2 / 2 | 4 / 4 | 3 / 3 | 4 / 4 | 3 / 3 |
+| 3 (map=0, bare=3) | 3 / 3 | 6 / 6 | 4 / 4 | 6 / 6 | 4 / 4 |
+| 4 (map=0, bare=4) | 4 / 4 | 8 / 8 | 5 / 5 | 8 / 8 | 5 / 5 |
+| 5 (map=0, bare=5) | 5 / 5 | 10 / 10 | 6 / 6 | 10 / 10 | 6 / 6 |
+| 6 (map=0, bare=6) | 6 / 6 | 12 / 12 | 7 / 7 | 12 / 12 | 7 / 7 |
+
+### HALF and HALF (the s128 fixture)
+
+| N | no filter | delivery_status=unknown | delivery_status=in_transit | delivery_status_not=in_transit | delivery_status_not=unknown |
+|---|---|---|---|---|---|
+| 1 (map=0, bare=1) | 1 / 1 | 2 / 2 | 2 / 2 | 2 / 2 | 2 / 2 |
+| 2 (map=1, bare=1) | 2 / 2 | 6 / 6 | 3 / 3 | 6 / 6 | 3 / 3 |
+| 3 (map=1, bare=2) | 3 / 3 | 8 / 8 | 4 / 4 | 8 / 8 | 4 / 4 |
+| 4 (map=2, bare=2) | 4 / 4 | 12 / 12 | 6 / 5 | 12 / 12 | 6 / 5 |
+| 5 (map=2, bare=3) | 5 / 5 | 14 / 14 | 7 / 6 | 14 / 14 | 7 / 6 |
+| 6 (map=3, bare=3) | 6 / 6 | 18 / 18 | 9 / 7 | 18 / 18 | 9 / 7 |
+
+Cells are `leaf clauses / real JOINs emitted by WP_Meta_Query`.
