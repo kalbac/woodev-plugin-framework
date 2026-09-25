@@ -822,6 +822,17 @@ class LicensePureOperationsTest extends TestCase {
 	/**
 	 * has_store_product() probes.
 	 *
+	 * The trailing-space case pins a measured PHP-version divergence rather than
+	 * a fixed expectation: `is_numeric( '1 ' )` returns `false` on PHP 7.4 (a
+	 * trailing-whitespace numeric string is not accepted below PHP 8.0) and
+	 * `true` on PHP 8.0+ (accepted since RFC saner-numeric-strings). `composer.json`
+	 * supports 7.4, so `has_store_product()` genuinely diverges at the version
+	 * floor. Practically harmless — such an id never matches a registry key
+	 * (§9.3) either way, see #912 — but the divergence itself must stay pinned,
+	 * not silently drift.
+	 *
+	 * @since 2.0.2 #912
+	 *
 	 * @return array<string, array{0: mixed, 1: bool}>
 	 */
 	public function has_store_product_provider(): array {
@@ -843,6 +854,8 @@ class LicensePureOperationsTest extends TestCase {
 			'leading space'       => [ ' 1', true ],
 			'leading plus'        => [ '+1', true ],
 			'exponent notation'   => [ '1e3', true ],
+			// PHP-version-dependent: see the method docblock above.
+			'trailing space'      => [ '1 ', PHP_VERSION_ID >= 80000 ],
 		];
 	}
 
