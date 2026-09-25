@@ -380,7 +380,7 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	 * @return int
 	 */
 	public function get_download_id(): int {
-		return 0;
+		return 9004;
 	}
 
 	/**

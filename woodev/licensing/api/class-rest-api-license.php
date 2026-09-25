@@ -285,13 +285,29 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 		/**
 		 * Resolves the license engine for a plugin_id from the static registry.
 		 *
+		 * Unlike signed license commands, this authenticated local route may serve a
+		 * registered plugin that has no store product: registration deliberately retains
+		 * such an engine, so has_store_product() is NOT applied here (#907).
+		 *
 		 * @since 2.0.0
+		 * @since 2.0.2 #907 An ambiguous download id is rejected, matching the §9.3 rule
+		 *                   the signed command endpoint applies.
 		 *
 		 * @param string $plugin_id The EDD download id from the route.
 		 *
-		 * @return Woodev_Plugins_License|WP_Error The engine, or a 404 WP_Error when unknown.
+		 * @return Woodev_Plugins_License|WP_Error The engine, or a 404 WP_Error when the id is
+		 *                                         unknown or ambiguous.
 		 */
 		private function resolve_license( string $plugin_id ) {
+
+			// #907: reject an ambiguous download id — §9.3 parity with signed commands.
+			if ( Woodev_Plugins_License::is_download_id_ambiguous( $plugin_id ) ) {
+				return new WP_Error(
+					'woodev_license_unknown_plugin',
+					esc_html__( 'Плагин с указанным идентификатором не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
 
 			$engine = Woodev_Plugins_License::get_registered_instance( $plugin_id );
 
