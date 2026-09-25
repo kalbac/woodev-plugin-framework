@@ -293,6 +293,17 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 		 */
 		private function resolve_license( string $plugin_id ) {
 
+			// #907: Unlike signed commands, this authenticated local route may serve a
+			// registered plugin without a store product. Do not apply
+			// has_store_product() here; registration deliberately retains that engine.
+			if ( Woodev_Plugins_License::is_download_id_ambiguous( $plugin_id ) ) {
+				return new WP_Error(
+					'woodev_license_unknown_plugin',
+					esc_html__( 'Плагин с указанным идентификатором не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
 			$engine = Woodev_Plugins_License::get_registered_instance( $plugin_id );
 
 			if ( null === $engine ) {

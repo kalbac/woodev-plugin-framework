@@ -412,6 +412,75 @@ class LicenseRestControllerTest extends TestCase {
 		$this->assertNotSame( '', $result->message );
 	}
 
+	/**
+	 * All four handlers reject an ambiguous download id before they can call the
+	 * first registered engine, matching the command endpoint's §9.3 rule.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @dataProvider ambiguous_plugin_id_handler_provider
+	 *
+	 * @param string               $handler Route handler method.
+	 * @param array<string, mixed> $params  Request parameters.
+	 *
+	 * @return void
+	 */
+	public function test_ambiguous_plugin_id_returns_404_wp_error_for_every_handler( string $handler, array $params ): void {
+		$engine = $this->make_engine_mock();
+		$engine->shouldNotReceive( 'get_state' );
+		$engine->shouldNotReceive( 'activate' );
+		$engine->shouldNotReceive( 'deactivate' );
+		$engine->shouldNotReceive( 'set_beta_enabled' );
+		$this->seed_license_registry( '216', $engine );
+		$this->seed_ambiguous_download_id( '216' );
+
+		$controller = new \Woodev_REST_API_License();
+		$result     = $controller->$handler( $this->make_request( $params ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_license_unknown_plugin', $result->code );
+		$this->assertSame( 404, $result->data['status'] );
+	}
+
+	/**
+	 * Request shapes for every handler that resolves a license engine.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}>
+	 */
+	public function ambiguous_plugin_id_handler_provider(): array {
+		return [
+			'get'        => [ 'get_item', [ 'plugin_id' => '216' ] ],
+			'verify'     => [ 'verify_item', [ 'plugin_id' => '216', 'license_key' => 'KEY-123' ] ],
+			'deactivate' => [ 'deactivate_item', [ 'plugin_id' => '216' ] ],
+			'beta'       => [ 'set_beta', [ 'plugin_id' => '216', 'enabled' => true ] ],
+		];
+	}
+
+	/**
+	 * A registered id without an EDD store product stays available to the local
+	 * admin route, unlike a signed remote command (#907).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return void
+	 */
+	public function test_registered_plugin_without_store_product_remains_available(): void {
+		$state = [ 'plugin_id' => '0', 'status' => '' ];
+
+		$engine = $this->make_engine_mock();
+		$engine->shouldReceive( 'get_state' )->once()->andReturn( $state );
+		$this->seed_license_registry( '0', $engine );
+
+		Functions\when( 'rest_ensure_response' )->returnArg();
+
+		$controller = new \Woodev_REST_API_License();
+		$result     = $controller->get_item( $this->make_request( [ 'plugin_id' => '0' ] ) );
+
+		$this->assertSame( $state, $result );
+	}
+
 	/* ----------------------------------------------------------------------- *
 	 * Happy paths — each handler calls the matching pure op once and returns state
 	 * ----------------------------------------------------------------------- */
@@ -840,16 +909,32 @@ class LicenseRestControllerTest extends TestCase {
 	}
 
 	/**
-	 * Empties the Woodev_Plugins_License static registry.
+	 * Empties the Woodev_Plugins_License static registry and ambiguity flags.
 	 *
 	 * @return void
 	 */
 	private function reset_license_registry(): void {
-		$property = new \ReflectionProperty( \Woodev_Plugins_License::class, 'registered_instances' );
+		foreach ( [ 'registered_instances' => [], 'ambiguous_download_ids' => [] ] as $name => $value ) {
+			$property = new \ReflectionProperty( \Woodev_Plugins_License::class, $name );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$property->setValue( null, $value );
+		}
+	}
+
+	/**
+	 * Marks a download id as ambiguous in the static registry.
+	 *
+	 * @param string $plugin_id Download id key.
+	 * @return void
+	 */
+	private function seed_ambiguous_download_id( string $plugin_id ): void {
+		$property = new \ReflectionProperty( \Woodev_Plugins_License::class, 'ambiguous_download_ids' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$property->setAccessible( true );
 		}
-		$property->setValue( null, array() );
+		$property->setValue( null, [ $plugin_id => true ] );
 	}
 }
 
