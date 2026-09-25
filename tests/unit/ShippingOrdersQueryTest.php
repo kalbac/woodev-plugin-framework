@@ -99,6 +99,56 @@ class ShippingOrdersQueryTest extends TestCase {
 		};
 	}
 
+	/**
+	 * Splits a combined `meta_query` into its top-level parts, regardless of
+	 * which shape {@see Orders_Query::combine_meta_queries()} returned: a
+	 * single unwrapped part, or the `relation => AND` wrapper around several.
+	 *
+	 * @param array<int|string, mixed> $meta_query
+	 * @return array<int, array<int|string, mixed>>
+	 */
+	private function meta_query_top_level_parts( array $meta_query ): array {
+		if ( array_key_exists( 'relation', $meta_query ) ) {
+			unset( $meta_query['relation'] );
+
+			return array_values( $meta_query );
+		}
+
+		return [ $meta_query ];
+	}
+
+	/**
+	 * Returns the single FILTER part of a combined `meta_query` built from the
+	 * marker-key SCOPE part plus exactly one active filter — every call site in
+	 * this file that reaches for a specific filter part combines just those
+	 * two. The scope part is located by its own identity — byte-equal to
+	 * {@see Orders_Query::meta_query_for_keys()} for the marker keys in scope
+	 * for the request — never by position, which moves once the scope part is
+	 * dropped (#839 step 2). Exactly ONE matching occurrence is removed, so a
+	 * filter part that is itself byte-identical to the scope (e.g. a
+	 * status-less provider's own marker clause standing in for "always true")
+	 * is not mistaken for a second scope and dropped along with it. Also
+	 * copes with the scope part being absent altogether: the sole remaining
+	 * part is then the filter part.
+	 *
+	 * @param array<int|string, mixed> $meta_query
+	 * @param string[]                 $scope_marker_keys marker keys of the providers in scope for the request.
+	 * @return array<int|string, mixed>
+	 */
+	private function meta_query_filter_part( array $meta_query, array $scope_marker_keys ): array {
+		$parts = $this->meta_query_top_level_parts( $meta_query );
+		$scope = Orders_Query::meta_query_for_keys( $scope_marker_keys );
+
+		foreach ( $parts as $index => $part ) {
+			if ( $part === $scope ) {
+				unset( $parts[ $index ] );
+				break;
+			}
+		}
+
+		return array_values( $parts )[0];
+	}
+
 	// ----- HPOS: real meta_query -----
 
 	public function test_hpos_single_carrier_builds_one_exists_clause(): void {
@@ -534,13 +584,15 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
+		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+
 		$this->assertSame(
 			[
 				'key'     => '_cdek_status',
 				'value'   => [ 'CDEK_DONE' ],
 				'compare' => 'IN',
 			],
-			$args['meta_query'][1][0]
+			$status_part[0]
 		);
 		$this->assertSame(
 			[
@@ -548,9 +600,9 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'YAN_DONE' ],
 				'compare' => 'IN',
 			],
-			$args['meta_query'][1][1]
+			$status_part[1]
 		);
-		$this->assertSame( 'OR', $args['meta_query'][1]['relation'] );
+		$this->assertSame( 'OR', $status_part['relation'] );
 	}
 
 	/**
@@ -573,7 +625,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_novendor_marker',
 				'compare' => 'EXISTS',
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_novendor_marker' ] )[0]
 		);
 	}
 
@@ -627,7 +679,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -659,7 +711,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			[ 'delivery_status' => Delivery_Status::UNKNOWN ]
 		);
 
-		$status_part = $args['meta_query'][1];
+		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $status_part['relation'] );
 
@@ -695,7 +747,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
 	}
 
 	public function test_delivery_status_unrecognized_value_is_ignored_entirely(): void {
@@ -769,7 +821,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -804,7 +856,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -836,7 +888,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$tracking_part = $args['meta_query'][1];
+		$tracking_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $tracking_part['relation'] );
 
@@ -871,7 +923,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -896,7 +948,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -998,7 +1050,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1021,7 +1073,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			[ 'delivery_status_not' => Delivery_Status::DELIVERED ]
 		);
 
-		$status_part = $args['meta_query'][1];
+		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $status_part['relation'] );
 
@@ -1059,7 +1111,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_cdek_marker',
 				'compare' => 'EXISTS',
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1083,7 +1135,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_novendor_marker',
 				'compare' => 'EXISTS',
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_novendor_marker' ] )[0]
 		);
 	}
 
@@ -1118,7 +1170,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'CDEK_ACCEPTED', 'CDEK_DONE' ],
 				'compare' => 'IN',
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1143,7 +1195,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'CDEK_ACCEPTED' ],
 				'compare' => 'IN',
 			],
-			$args['meta_query'][1][0]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1261,7 +1313,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1296,7 +1348,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1321,7 +1373,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$pickup_part = $args['meta_query'][1];
+		$pickup_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $pickup_part['relation'] );
 
@@ -1354,7 +1406,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -1379,7 +1431,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1475,7 +1527,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => '!=',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1519,7 +1571,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1544,7 +1596,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$exported_part = $args['meta_query'][1];
+		$exported_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $exported_part['relation'] );
 
@@ -1582,7 +1634,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'][1] );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -1608,7 +1660,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query'][1]
+			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
 		);
 	}
 
