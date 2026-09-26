@@ -75,6 +75,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		 * @return array<string,mixed>
 		 */
 		public function build( \WC_Order $order, ?Orders_Provider $provider ): array {
+			// #928: the one place every returned order passes through (REST table, metabox);
+			// a no-op unless WP_DEBUG is on.
+			Orders_Registry::instance()->report_multiple_markers( $order );
+
 			$status  = $order->get_status();
 			$created = $order->get_date_created();
 

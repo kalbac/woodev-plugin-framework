@@ -151,6 +151,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		private $provider_plugins = [];
 
 		/**
+		 * Order ids already reported by {@see self::report_multiple_markers()} this request (#928).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var array<int, true>
+		 */
+		private $multi_marker_reported = [];
+
+		/**
 		 * Returns the singleton.
 		 *
 		 * @since 2.0.2
@@ -371,6 +380,61 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			return null;
+		}
+
+		/**
+		 * WP_DEBUG-only invariant guard (#928): an order carries the marker meta of AT MOST ONE
+		 * registered carrier.
+		 *
+		 * Operator decision 26.09.2026 (YAGNI): multi-carrier delivery does not exist, so the
+		 * delivery-status filter ({@see Orders_Query::delivery_status_meta_clauses()}) is only
+		 * defined for orders with at most one marker. NOTHING enforces that — a carrier plugin can
+		 * still write a marker per shipping package — so this reports the first order that breaks it
+		 * via `_doing_it_wrong()` instead of letting the filter silently drop it.
+		 *
+		 * Reads the marker keys from the order object the caller already loaded, so it costs no
+		 * extra query, and does nothing at all unless `WP_DEBUG` is on. Reports each order once per
+		 * request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order order to inspect.
+		 * @return void
+		 */
+		public function report_multiple_markers( \WC_Order $order ): void {
+			if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+				return;
+			}
+
+			$order_id = (int) $order->get_id();
+
+			if ( isset( $this->multi_marker_reported[ $order_id ] ) ) {
+				return;
+			}
+
+			$matched_ids = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				if ( '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_marker_meta_key() ) ) {
+					$matched_ids[] = $provider->get_id();
+				}
+			}
+
+			if ( count( $matched_ids ) < 2 ) {
+				return;
+			}
+
+			$this->multi_marker_reported[ $order_id ] = true;
+
+			_doing_it_wrong(
+				Orders_Query::class . '::delivery_status_meta_clauses',
+				sprintf(
+					'Order %1$d carries the marker meta of more than one registered carrier ("%2$s"); the delivery-status filter assumes at most one marker per order (operator decision 26.09.2026, #928), so this order may be dropped or misclassified by it.',
+					$order_id,
+					esc_html( implode( '", "', $matched_ids ) )
+				),
+				'2.0.2'
+			);
 		}
 
 		/**
@@ -1432,6 +1496,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$this->admin_order       = null;
 			$this->hooked            = false;
 			$this->plugin            = null;
+
+			$this->multi_marker_reported = [];
 		}
 	}
 

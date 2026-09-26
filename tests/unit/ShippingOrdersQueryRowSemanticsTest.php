@@ -170,7 +170,17 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	 * implying its own carrier's marker — but do not read the enumeration as literally
 	 * exhaustive over all database states.
 	 *
-	 * Mirrors the research harness's `universe()` exactly.
+	 * ⚠ NARROWED (operator decision 26.09.2026, YAGNI; #928): the universe holds only orders
+	 * carrying AT MOST ONE registered carrier's marker (zero or one). Multi-carrier delivery
+	 * does not exist in this product, so an order with two markers is outside the filter's
+	 * contract — the cheaper negative-filter form #928 introduces is correct only under that
+	 * rule, and the rows it would disagree on are dropped here EXPLICITLY, not left to
+	 * fail. The rule itself is not enforced by the data layer; under `WP_DEBUG`
+	 * {@see Orders_Registry::report_multiple_markers()} reports a violating order. The
+	 * narrowing is pinned by an assertion in the test, so it cannot silently regress.
+	 *
+	 * Otherwise mirrors the research harness's `universe()` (which still enumerates the
+	 * multi-marker rows).
 	 *
 	 * @since 2.0.2
 	 *
@@ -207,7 +217,24 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			$rows = $next;
 		}
 
-		return $rows;
+		$marker_keys = [];
+
+		for ( $i = 1; $i <= $mapped; $i++ ) {
+			$marker_keys[] = "_m{$i}_marker";
+		}
+
+		for ( $i = 1; $i <= $bare; $i++ ) {
+			$marker_keys[] = "_b{$i}_marker";
+		}
+
+		return array_values(
+			array_filter(
+				$rows,
+				static function ( array $meta ) use ( $marker_keys ): bool {
+					return count( array_intersect_key( $meta, array_flip( $marker_keys ) ) ) <= 1;
+				}
+			)
+		);
 	}
 
 	/**
@@ -405,7 +432,8 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	}
 
 	/**
-	 * Fixture x filter x datastore combinations. Three fixtures (16 / 64 / 128 orders),
+	 * Fixture x filter x datastore combinations. Three fixtures (12 / 48 / 64 orders after the 26.09.2026
+	 * single-marker narrowing, was 16 / 64 / 128),
 	 * five filters, two datastores — the same three fixtures the research harness used
 	 * for card #839.
 	 *
@@ -461,7 +489,7 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 	/**
 	 * Builds the tree and the universe ONCE per (fixture, filter, datastore), then
-	 * loops the ~16-128 rows against both — not the reverse, so the ~208 orders x 5
+	 * loops the 12-64 rows against both — not the reverse, so the 124 orders x 5
 	 * filters x 2 datastores this file covers stays a few seconds, not a rebuild per
 	 * row.
 	 *
@@ -485,6 +513,27 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 		$tree = $this->built_tree( $registry, $request, $is_hpos );
 		$rows = $this->universe( $mapped, $bare );
+
+		// Operator decision 26.09.2026 (YAGNI) + #928: the checked universe must hold no order
+		// with two markers. Measured against the registered providers, not against
+		// universe()'s own bookkeeping, so a change to either side turns this red.
+		$this->assertNotEmpty( $rows, 'The narrowed universe must not be empty.' );
+
+		foreach ( $rows as $meta ) {
+			$markers = 0;
+
+			foreach ( $providers as $provider ) {
+				if ( array_key_exists( $provider->get_marker_meta_key(), $meta ) ) {
+					++$markers;
+				}
+			}
+
+			$this->assertLessThanOrEqual(
+				1,
+				$markers,
+				sprintf( 'Multi-marker order in the gate universe (operator decision 26.09.2026, #928): %s', (string) json_encode( $meta ) )
+			);
+		}
 
 		foreach ( $rows as $meta ) {
 			$expected = $this->oracle_matches( $providers, $meta, $canonical, $negate );
