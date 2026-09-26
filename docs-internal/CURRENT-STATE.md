@@ -17,30 +17,30 @@ the real signed-envelope route. The admin license REST route refuses an ambiguou
 divergence is stated in `resolve_license()`'s docblock.
 
 ✅ **#839 CLOSED (s139).** Negative delivery-status filters cost **`3M + B`** joins, was `4M + 2B`
-(`M` mapped carriers, `B` bare); s128's fixture 12 → 8. Positive column unchanged **except M = 0,
-which collapses onto the NO_MATCH sentinel** (`N + 1` → `1`; both match nothing). ⚠ **The CPT wall is the PLANNER, not the
+(`M` mapped, `B` bare); s128's fixture 12 → 8. Positive column unchanged **except M = 0** (collapses
+onto the NO_MATCH sentinel, `N + 1` → `1`; both match nothing). ⚠ **The CPT wall is the PLANNER, not the
 join count** — 12 joins on `wp_postmeta` never finish, 8 on `wc_orders_meta` take 4 ms, and `3M + B`
-reaches that same 12 at **M = 4**, so the current shape has NO proven headroom. Harness, tables and
-the structural redundancy proof: `research/2026-09-25-839-join-growth-evidence/`.
+reaches that same 12 at **M = 4**: no proven headroom. Harness and proof:
+`research/2026-09-25-839-join-growth-evidence/`.
 
-⛔ **#919 CLOSED as not viable by measurement, re-scoped onto #928.** Cost was never the obstacle; the
-QUANTIFIER is — the filter is an existential over the providers PRESENT on an order, one global
-set-subtraction is not, so the rewrite is strictly narrower and silently drops unknown orders. It
-diverges exactly on multi-marker orders, which the shipped plugins DO produce (`edostavka` writes its
-marker per package, `yandex` on export without requiring exclusivity). Three prohibitions bind any
-future attempt: no subquery reaches either datastore through the supported surface, so a raw SQL hook is
-required, and **that blinds `ShippingOrdersQueryRowSemanticsTest`**, which walks a `meta_query` tree.
-Note and replayable probe: `research/2026-09-26-919-subquery-seam/`.
+⛔ **#919 CLOSED as not viable by measurement → #928, which the operator then UNBLOCKED.** The
+obstacle was never cost but the QUANTIFIER: the filter is an existential over the providers PRESENT on
+an order, a global set-subtraction is not, so the rewrite is strictly narrower and diverges exactly on
+multi-marker orders. **He declared those unreachable in practice (YAGNI, 26.09.2026)**, so the cheap
+form is viable again — for every order this system really has. ⚠ The measurement is NOT disproven, only
+declared unreachable, and the code does not enforce the rule. Two prohibitions still bind #928: no
+subquery reaches either datastore through the supported surface (so either a raw SQL hook, or two
+queries feeding `exclude`), and a raw hook **blinds `ShippingOrdersQueryRowSemanticsTest`**, which walks
+a `meta_query` tree. Note and replayable probe: `research/2026-09-26-919-subquery-seam/`.
 
 ✅ **The equivalence proof is a COMMITTED TEST** — `ShippingOrdersQueryRowSemanticsTest`: the emitted
 `meta_query` against a SPECIFICATION oracle, 3 fixtures × 5 filters × **both datastores**, 16/64/128
-enumerated orders. Mutation-tested: it reddens on both #837 defects and on over-collapsing
-(`sessions/s139.md`). ⚠ Its one adopted reading is **#924**: positive `IN` branches are not bound to
-their carrier's marker. ⚠ A raw-SQL filter would make it blind — see #928.
+enumerated orders; mutation-tested (`sessions/s139.md`). ⚠ Its adopted reading is **#924**, a raw-SQL
+filter would blind it (#928), and **it still enumerates multi-marker orders — narrowing that universe to
+match his YAGNI rule is part of #928**, not a silent edit.
 
-⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a
-single unwrapped part** — prove such a helper against BOTH shapes (gotcha
-`a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`).
+⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
+unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
 
 ⛔ **Codex under Orca on this Mac 401s on every request and still reads `live`** — a silent loss of a
 worker or a critic, burning a whole `check --wait`. **#926**; until then the critic gate needs a
@@ -61,11 +61,6 @@ runs the catalogue gates by exit code in ~22 s — a worker may not build bundle
 ⚠ **Two integration runs at once share ONE test database**; the loser reports YOUR code failing —
 forbid the suite in every brief (gotcha `two-concurrent-integration-runs-share-one-test-database`).
 
-«New» is settled and shipped: `is_exported=false`, derived from a NON-EMPTY `carrier_order_id`
-(#860) — every witness (the REST arg, the «Все / Новые» links, the carrier counts, the badge) reads
-it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
-coincidence. **What is still open on this page is on the board, not retyped here.**
-
 ⚠ **The orders page's own contract facts live in [wiki/architecture.md](wiki/architecture.md)** —
 where it is mounted, how it highlights its menu item, which `window.wc.*` handles it declares by hand
 and why every filter is URL-driven. They are reference: true regardless of which card is open.
@@ -84,10 +79,6 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 `edostavka#3/#4/#5` are FROZEN; migration branches parked, `origin/master` (`34d21af`) intact.
 
 ⚠ **Three facts decide that plugin's cost when it IS written** — on #786, with #767's measurement.
-
-✅ **Три субсистемы имеют ПРИНУДИТЕЛЬНЫЙ контракт сборки** (#758/#759): не построивший обработчик
-уведомлений, лицензию или жизненный цикл подкласс получает `_doing_it_wrong()` под `WP_DEBUG`, а
-фреймворк строит дефолт — их разыменовывают **17 / 13 / 2** раза без проверки на null.
 
 ⚠ **`test-cdek` is a client of the LIVE CDEK contour, not a dictionary** — a grep over it says nothing about which cities it knows (`sessions/s113.md`).
 
@@ -126,7 +117,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 26.09.2026 (s139):** Инбокс holds **#926** (Codex 401), waiting on him.
+**Open cards — 59, measured 26.09.2026 (s139):** Инбокс holds **#926** (Codex 401), waiting on him.
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
@@ -205,7 +196,13 @@ gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 **Operator decisions still shaping the work:**
 
 - *Легаси-CPT датастор ОСТАЁТСЯ поддержанным* (#839, 26.09.2026) — «ещё много сайтов
-  сидят на нём». HPOS-only отклонён, значит **#919 обязан работать на ОБОИХ хранилищах.**
+  сидят на нём». HPOS-only отклонён, значит **#928 обязан работать на ОБОИХ хранилищах.**
+
+- *У заказа НЕ БОЛЬШЕ ОДНОГО маркера перевозчика — YAGNI* (26.09.2026): «на практике нет; для этого
+  нужна реализация мультидоставки, которой у нас нет». Это **разблокировало дешёвую форму #928**, решило
+  **#924** («оставить инвариант и записать»), закрыло **#929**. ⚠ Код его НЕ обеспечивает (`edostavka`
+  пишет маркер на каждый пакет), поэтому на #928 сторож `_doing_it_wrong()` под `WP_DEBUG` — он один
+  делает YAGNI безопасным.
 
 - *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382) — он РАЗОВЫЙ (15 минут,
   привязан к `state` + `user_id`); долгоживущий `access_token_secret` идёт POST'ом, PKCE отклонён.

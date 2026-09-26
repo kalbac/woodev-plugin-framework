@@ -462,6 +462,22 @@ that was handy.
 
 ## Traps
 
+### Added in s139 (moved out of the handoff, which is size-gated)
+
+- **Codex под Orca на маке отдаёт `ok: true`, читается `live` и не делает НИЧЕГО.** `401 Unauthorized:
+  Incorrect API key provided: sk-svcac…` виден ТОЛЬКО в буфере терминала; `stage` остаётся
+  `input_accepted`, транскрипт содержит одну впрыснутую преамбулу, а `check --wait` сжигает весь
+  таймаут (15 минут, измерено). `projection.liveness` — это PTY, а не агент. Карточка — **#926**;
+  до починки читай БУФЕР после старта, а не `stage`. Мёртвый диспатч снимается `worker-stop`
+  (положительная улика: 401 на экране плюс пустой транскрипт), Task переиспользуется через
+  `--retry-of`.
+- **`orchestration check` повторяет СТАРЕЙШУЮ неподтверждённую доставку.** Хартбиты надо ack'ать,
+  иначе `worker_done` не всплывёт и опрос выглядит как молчащий воркер. А тело отчёта с
+  literal-переводами строк делает `check --json` невалидным JSON — парсить с `strict=False`.
+- **`orca worktree rm` СОХРАНЯЕТ ветку воркера** — ответ содержит `preservedBranch` с её именем и
+  head. Удалять отдельно, сверив, что содержимое уже в `main` (после squash-мержа ветка читается
+  «впереди», поэтому сверяй изменённые пути, а не число коммитов).
+
 - **`terminal wait --for tui-idle` lies.** It counts an open dialog as idle. Check the
   `satisfied` field and read the buffer before sending with `--enter`, or the prompt answers a
   Codex update dialog instead of the task (this already happened once, s82).

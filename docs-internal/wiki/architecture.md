@@ -264,6 +264,15 @@ only when its condition owns the field AND WooCommerce rendered it (#708); ask
 that IS its own region publishes no ancestors (#707); `is_pickup_shipping()` is the single source
 for the other three declarations, resolved LAZILY (#709).
 
+## Three subsystems carry an ENFORCED construction contract
+
+Moved here from `CURRENT-STATE.md` in s139 — it is a framework guarantee, not session state.
+
+A subclass that did not build its notices handler, its licence or its lifecycle gets
+`_doing_it_wrong()` under `WP_DEBUG` and the framework builds a default instead (#758/#759). The reason
+it is enforced rather than documented: those three are dereferenced **17 / 13 / 2** times without a null
+check.
+
 ## Shipping orders page — the contract facts that outlive their cards
 
 Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless of which card is open.
@@ -284,6 +293,10 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   the date parameter, never a value (gotcha `wc-date-throws-on-a-half-filled-custom-range`).
 - **The action set is declared ONCE** (`Order_Actions::for_order()`) and serves TWO surfaces — the
   table column and the metabox; a label or tooltip is edited only there.
+- **«New» is `is_exported=false`, derived from a NON-EMPTY `carrier_order_id`** (#860, settled and
+  shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
+  it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
+  coincidence. Moved here from `CURRENT-STATE.md` in s139.
 
 ## Subsystem phase status
 
