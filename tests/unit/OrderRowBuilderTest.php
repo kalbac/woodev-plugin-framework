@@ -640,4 +640,174 @@ class OrderRowBuilderTest extends TestCase {
 
 		$this->assertSame( [ Order_Actions::EXPORT ], array_column( $row['actions'], 'action' ) );
 	}
+
+	// ----- multi-marker guard (#928) -----
+
+	/**
+	 * Registers two carriers and returns an order whose meta ROWS are the given map.
+	 *
+	 * The guard reads through the order object (`WC_Data::meta_exists()`, the same on the CPT
+	 * and HPOS datastores), so the rows live on the order double and `get_post_meta()` is
+	 * deliberately left empty: a guard that peeked at post meta would see nothing here.
+	 *
+	 * @param array<string,string> $markers marker meta key => stored value (may be '').
+	 */
+	private function order_carrying_markers( array $markers ): \WC_Order {
+		Functions\stubs( [ 'add_action', 'add_filter', 'remove_action', 'remove_filter' ] );
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ] ) );
+		$registry->register_provider( Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ] ) );
+
+		$order = $this->make_order( [ 'get_id' => 4242 ] );
+		$order->shouldReceive( 'meta_exists' )->andReturnUsing(
+			static function ( $key = '' ) use ( $markers ): bool {
+				return array_key_exists( $key, $markers );
+			}
+		);
+		// Serve the stored VALUES from the same map, so a guard that reads values through
+		// the order sees the '' and stays silent — which is what the empty-value test catches.
+		$order->shouldReceive( 'get_meta' )->andReturnUsing(
+			static function ( $key = '' ) use ( $markers ) {
+				return $markers[ $key ] ?? '';
+			}
+		);
+
+		return $order;
+	}
+
+	/**
+	 * Two registered carriers' markers on one order is reported once, naming the order,
+	 * both provider ids and the #928 assumption, under `WP_DEBUG`.
+	 *
+	 * WP_DEBUG cannot be un-defined once set, so this runs isolated (same discipline as
+	 * ShippingOrdersRegistryTest's WP_DEBUG-dependent tests).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_build_reports_an_order_carrying_two_carriers_markers_under_wp_debug(): void {
+		define( 'WP_DEBUG', true );
+
+		$order = $this->order_carrying_markers( [ '_cdek_marker' => '1', '_yandex_marker' => '1' ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				Mockery::type( 'string' ),
+				Mockery::on(
+					static function ( $message ) {
+						return is_string( $message )
+							&& false !== strpos( $message, '4242' )
+							&& false !== strpos( $message, 'cdek' )
+							&& false !== strpos( $message, 'yandex' )
+							&& false !== strpos( $message, '#928' );
+					}
+				),
+				'2.0.2'
+			);
+
+		$builder = new Order_Row_Builder();
+		$builder->build( $order, null );
+		// The same order again in the same request must not report twice.
+		$builder->build( $order, null );
+	}
+
+	/**
+	 * Presence semantics: the query's `EXISTS` clauses count a marker by its meta ROW, so a
+	 * second marker stored with an EMPTY value still breaks the filter and must be reported.
+	 * A value-based guard read `''` as "no marker" and stayed silent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_build_reports_a_second_marker_stored_with_an_empty_value(): void {
+		define( 'WP_DEBUG', true );
+
+		$order = $this->order_carrying_markers( [ '_cdek_marker' => 'CDEK-1', '_yandex_marker' => '' ] );
+
+		Functions\expect( '_doing_it_wrong' )
+			->once()
+			->with(
+				Mockery::type( 'string' ),
+				Mockery::on(
+					static function ( $message ) {
+						return is_string( $message )
+							&& false !== strpos( $message, 'cdek' )
+							&& false !== strpos( $message, 'yandex' );
+					}
+				),
+				'2.0.2'
+			);
+
+		( new Order_Row_Builder() )->build( $order, null );
+	}
+
+	/**
+	 * The HPOS storage shape: the meta lives ONLY on the order object and `get_post_meta()`
+	 * returns nothing for it. The guard must still see both markers.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_build_reads_markers_through_the_order_object_not_post_meta(): void {
+		define( 'WP_DEBUG', true );
+
+		$order = $this->order_carrying_markers( [ '_cdek_marker' => '1', '_yandex_marker' => '1' ] );
+
+		$this->assertSame( [], $this->meta, 'the CPT post-meta source must be empty for this test to prove anything' );
+
+		Functions\expect( '_doing_it_wrong' )->once();
+
+		( new Order_Row_Builder() )->build( $order, null );
+	}
+
+	/**
+	 * The guard runs through the registry the builder is given, not the singleton.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_build_reports_through_the_injected_registry(): void {
+		define( 'WP_DEBUG', true );
+
+		Functions\stubs( [ 'add_action', 'add_filter', 'remove_action', 'remove_filter' ] );
+
+		$order = $this->make_order( [ 'get_id' => 4242 ] );
+
+		$registry = Mockery::mock( Orders_Registry::class );
+		$registry->shouldReceive( 'report_multiple_markers' )->once()->with( $order );
+
+		( new Order_Row_Builder( new Order_Actions( $registry ), $registry ) )->build( $order, null );
+	}
+
+	/**
+	 * Control: the ordinary one-marker order is silent even under `WP_DEBUG`.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_build_is_silent_for_a_single_marker_order_under_wp_debug(): void {
+		define( 'WP_DEBUG', true );
+
+		$order = $this->order_carrying_markers( [ '_cdek_marker' => '1' ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		( new Order_Row_Builder() )->build( $order, null );
+	}
+
+	/**
+	 * The guard is `WP_DEBUG`-only: a two-marker order produces nothing when it is off
+	 * (the suite's default — this test defines nothing and runs in the shared process).
+	 */
+	public function test_build_is_silent_for_a_two_marker_order_when_wp_debug_is_off(): void {
+		$this->assertFalse( defined( 'WP_DEBUG' ) && WP_DEBUG, 'WP_DEBUG must be off for this test to be meaningful' );
+
+		$order = $this->order_carrying_markers( [ '_cdek_marker' => '1', '_yandex_marker' => '1' ] );
+
+		Functions\expect( '_doing_it_wrong' )->never();
+
+		( new Order_Row_Builder() )->build( $order, null );
+	}
 }

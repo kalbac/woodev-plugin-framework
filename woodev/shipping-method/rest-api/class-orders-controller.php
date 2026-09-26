@@ -102,7 +102,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$this->registry      = $registry;
 			$this->query         = $query ?? new Orders_Query( $registry );
 			$this->order_actions = $order_actions ?? new Order_Actions( $registry );
-			$this->row_builder   = $row_builder ?? new Order_Row_Builder( $this->order_actions );
+			$this->row_builder   = $row_builder ?? new Order_Row_Builder( $this->order_actions, $registry );
 		}
 
 		public function register_routes(): void {
