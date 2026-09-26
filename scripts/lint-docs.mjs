@@ -298,6 +298,24 @@ if ( existsSync( sessionLogPath ) && size( sessionLogPath ) > SESSION_LOG_MAX ) 
 	);
 }
 
+// A row is an index LINE, not the session's summary paragraph (#930): the 48 KB gate above fired
+// every ten sessions because rows had grown to 1-9 K characters each, and it fired at session END,
+// where the trimming was least careful. Capping the row catches the drift in the session that
+// writes it. Archives are exempt — they keep the rows exactly as they were written.
+const SESSION_ROW_MAX = 600;
+
+if ( existsSync( sessionLogPath ) ) {
+	for ( const row of read( sessionLogPath ).split( '\n' ) ) {
+		const id = row.match( /^- \*\*\[(s\d+)\]/ );
+		if ( id && [ ...row ].length > SESSION_ROW_MAX ) {
+			fail(
+				`SESSION-LOG.md row ${ id[ 1 ] } is ${ [ ...row ].length } characters, over ${ SESSION_ROW_MAX }. ` +
+					`A row is one index line; the summary paragraph belongs in sessions/${ id[ 1 ] }.md.`
+			);
+		}
+	}
+}
+
 const sessionsDir = join( INTERNAL, 'sessions' );
 if ( existsSync( sessionsDir ) ) {
 	const sessionFiles = readdirSync( sessionsDir ).filter( ( f ) => /^s\d+\.md$/.test( f ) );

@@ -628,6 +628,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * already uses. "Is not unknown" (negating the `unknown` canonical itself) is the
 		 * mirror image: a definite known status, i.e. the plain `IN $known` clause.
 		 *
+		 * ⚠ Two invariants this filter stands on and does NOT enforce (#924; operator
+		 * decision 26.09.2026). Change either and this method is wrong without a test failing:
+		 *
+		 * 1. A carrier writes only ITS OWN status meta. The positive `IN` clauses are left
+		 *    unbound to the marker on purpose (binding costs a join per participating
+		 *    provider); an order carrying carrier A's marker and carrier B's status meta
+		 *    would match B's filter. The negative forms ARE bound, because there the
+		 *    unbound OR matched the whole table (#837 defect 2).
+		 * 2. An order carries AT MOST ONE carrier marker — none occurs in practice: that would take
+		 *    multi-carrier delivery, which does not exist (YAGNI). The shapes
+		 *    built here stay correct on a multi-marker order; a cheaper negative form
+		 *    that subtracts one set of orders is equivalent ONLY under this rule
+		 *    (#919 measured the divergence, #928 builds on the rule). Nothing prevents
+		 *    such an order today: `edostavka` writes a marker per package.
+		 *
+		 * Gotcha: `the-orders-filter-stands-on-two-unenforced-carrier-invariants`.
+		 *
 		 * @since 2.0.2
 		 *
 		 * @param Orders_Provider[] $providers providers in scope.

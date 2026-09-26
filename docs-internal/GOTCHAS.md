@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 330 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 331 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -36,7 +36,7 @@
 | [`box-packer/*`](gotcha-index/box-packer.md) | 2 | Box-packer algorithm (S2) |
 | [`shipping/checkout`](gotcha-index/shipping-checkout.md) | 17 | Checkout field layer (§8) |
 | [`shipping/pickup`](gotcha-index/shipping-pickup.md) | 26 | Pickup point picker / ymaps |
-| [`shipping/*`](gotcha-index/shipping.md) | 5 | Shipping module (S1) |
+| [`shipping/*`](gotcha-index/shipping.md) | 6 | Shipping module (S1) |
 | [`perf/*`](gotcha-index/perf.md) | 1 | Payload size and wire cost |
 | [`i18n/*`](gotcha-index/i18n.md) | 8 | Localization |
 | [`autodev/*`](gotcha-index/autodev.md) | 5 | Adversarial dev loop tooling |
