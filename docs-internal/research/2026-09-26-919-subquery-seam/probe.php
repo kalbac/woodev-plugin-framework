@@ -131,7 +131,7 @@ function matches( array $tree, array $meta ): bool {
  * the plain `delivery_status=<canonical>` clause — class-orders-query.php's
  * `delivery_status_meta_clauses()`, the un-negated specific-canonical branch).
  */
-function mapped_ids_meta_query( Orders_Registry $registry ): array {
+function mapped_ids_meta_query( Orders_Registry $registry, bool $bind_to_own_marker = false ): array {
 	$clauses = [ 'relation' => 'OR' ];
 	foreach ( $registry->get_providers() as $provider ) {
 		$status_key = $provider->get_status_meta_key();
@@ -147,7 +147,19 @@ function mapped_ids_meta_query( Orders_Registry $registry ): array {
 		if ( [] === $known ) {
 			continue;
 		}
-		$clauses[] = [ 'key' => $status_key, 'value' => $known, 'compare' => 'IN' ];
+		$leaf = [ 'key' => $status_key, 'value' => $known, 'compare' => 'IN' ];
+
+		// UNBOUND is cheap only because it leans on the invariant #924 is about: a carrier
+		// never writes another carrier's status meta. BOUND is what card #919 requirement 1
+		// demands, and it costs more, because each carrier then needs its marker row AND its
+		// status row joined simultaneously — an AND cannot share one alias the way an OR can.
+		$clauses[] = $bind_to_own_marker
+			? [
+				'relation' => 'AND',
+				[ 'key' => $provider->get_marker_meta_key(), 'compare' => 'EXISTS' ],
+				$leaf,
+			]
+			: $leaf;
 	}
 	return $clauses;
 }
@@ -160,7 +172,7 @@ function mapped_ids_meta_query( Orders_Registry $registry ): array {
  * FULL_SCOPE (any registered marker present) AND NOT (any provider's OWN status
  * is a KNOWN one).
  */
-function proposed_new_matches_unknown( array $providers, array $meta ): bool {
+function proposed_new_matches_unknown( array $providers, array $meta, bool $bind_to_own_marker = false ): bool {
 	$in_scope = false;
 	foreach ( $providers as $provider ) {
 		if ( array_key_exists( $provider->get_marker_meta_key(), $meta ) ) {
@@ -177,6 +189,16 @@ function proposed_new_matches_unknown( array $providers, array $meta ): bool {
 		if ( null === $status_key || ! array_key_exists( $status_key, $meta ) ) {
 			continue;
 		}
+
+		// Card #919 requirement 1 demands the exclusion set stay bound to its own carrier's
+		// marker STRUCTURALLY. The UNBOUND reading is what the card's prose literally
+		// describes; the BOUND one is what a competent implementer would build. Both are
+		// measured, because "the card was killed by a straw man" is the first objection a
+		// reader should be able to check rather than take on trust.
+		if ( $bind_to_own_marker && ! array_key_exists( $provider->get_marker_meta_key(), $meta ) ) {
+			continue;
+		}
+
 		$inverted = Delivery_Status::invert_status_map( $provider->get_status_map() );
 		$known    = [];
 		foreach ( $inverted as $raw_values_for_state ) {
@@ -225,22 +247,27 @@ foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
 		if ( $a !== $b ) {
 			if ( $a && ! $b ) { $only_old[] = $row; }
 			if ( $b && ! $a ) { $only_new[] = $row; }
-			if ( $markers_present > 1 ) {
-				$multi_marker_mismatches[] = $row;
-			} else {
-				// Classify what is left: is it the physically impossible shape — a status
-				// value on a provider's own key while that provider's marker is ABSENT?
-				// If every non-multi-marker mismatch is that shape, the divergence is
-				// CONDITIONAL on multi-marker orders rather than unconditional, which is
-				// the difference between re-scoping this card and killing the idea outright.
-				foreach ( $providers as $p ) {
-					$status_key = $p->get_status_meta_key();
+			// Classify ORPHAN FIRST, then multi-marker. A row carrying a status value on a
+			// provider's own key while that provider's marker is ABSENT is physically
+			// impossible for a carrier plugin to produce, and it stays impossible however
+			// many OTHER markers it carries — so counting such a row as "multi-marker"
+			// inflates the realistic-failure count. Measured: doing it the other way round
+			// reports 44 multi-marker rows in the 3-carrier fixture where only 36 are pure.
+			$has_orphan_status = false;
 
-					if ( $status_key && array_key_exists( $status_key, $row ) && ! array_key_exists( $p->get_marker_meta_key(), $row ) ) {
-						$orphan_only_mismatches[] = $row;
-						break;
-					}
+			foreach ( $providers as $p ) {
+				$status_key = $p->get_status_meta_key();
+
+				if ( $status_key && array_key_exists( $status_key, $row ) && ! array_key_exists( $p->get_marker_meta_key(), $row ) ) {
+					$has_orphan_status = true;
+					break;
 				}
+			}
+
+			if ( $has_orphan_status ) {
+				$orphan_only_mismatches[] = $row;
+			} elseif ( $markers_present > 1 ) {
+				$multi_marker_mismatches[] = $row;
 			}
 		}
 	}
@@ -248,7 +275,7 @@ foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
 	$mismatches = count( $only_old ) + count( $only_new );
 
 	printf(
-		"%-32s universe=%-4d old-only=%-3d new-only=%-3d  %s  (multi-marker: %d, orphan-status: %d, unexplained: %d)\n",
+		"%-32s universe=%-4d old-only=%-3d new-only=%-3d  %s  (pure multi-marker: %d, orphan-status: %d, unexplained: %d)\n",
 		$label,
 		count( $rows ),
 		count( $only_old ),
@@ -268,15 +295,76 @@ foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
 	}
 }
 
+echo "\n=== Q4b: the FAIR model — exclusion set bound to its own marker (card #919 requirement 1) ===\n";
+echo "If the divergence were only an artefact of an unbound exclusion set, this run would come back\n";
+echo "IDENTICAL. It does not: the orphan-status class disappears and every remaining mismatch is a\n";
+echo "genuine multi-marker order, which is the case the shipped carrier plugins CAN produce.\n\n";
+
+foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
+	$registry  = registry_of( $mapped, $bare );
+	$providers = array_values( $registry->get_providers() );
+	$old_tree  = ( new Probe_Query( $registry, true ) )->build_args( [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['meta_query'];
+
+	$only_old = [];
+	$only_new = [];
+	$multi    = 0;
+
+	foreach ( universe( $mapped, $bare ) as $row ) {
+		$a = matches( $old_tree, $row );
+		$b = proposed_new_matches_unknown( $providers, $row, true );
+
+		if ( $a === $b ) {
+			continue;
+		}
+
+		if ( $a ) {
+			$only_old[] = $row;
+		} else {
+			$only_new[] = $row;
+		}
+
+		$markers_present = 0;
+
+		foreach ( $providers as $p ) {
+			if ( array_key_exists( $p->get_marker_meta_key(), $row ) ) {
+				++$markers_present;
+			}
+		}
+
+		if ( $markers_present > 1 ) {
+			++$multi;
+		}
+	}
+
+	printf(
+		"%-32s old-only=%-3d new-only=%-3d  multi-marker=%-3d single-marker=%d  %s\n",
+		$label,
+		count( $only_old ),
+		count( $only_new ),
+		$multi,
+		count( $only_old ) + count( $only_new ) - $multi,
+		( [] === $only_old && [] === $only_new ) ? 'IDENTICAL' : 'DIFFERS'
+	);
+}
+
 echo "\n=== Q3: cost of the 'mapped ids' precomputation query (leaf clauses / real JOINs) ===\n";
-echo "No marker binding needed in this query at all — see mapped_ids_meta_query() docblock.\n\n";
-echo "| M (mapped carriers) | leaves | JOINs (legacy CPT / real WP_Meta_Query) |\n";
-echo "|---|---|---|\n";
+echo "Both readings are measured: UNBOUND leans on #924's unwritten invariant, BOUND is what card\n";
+echo "requirement 1 actually demands. Quoting only the unbound figure understates the idea's cost.\n\n";
+echo "| M (mapped carriers) | leaves | JOINs unbound | JOINs BOUND to own marker |\n";
+echo "|---|---|---|---|\n";
 for ( $m = 1; $m <= 6; $m++ ) {
 	$registry = registry_of( $m, 0 );
-	$mq       = mapped_ids_meta_query( $registry );
-	$j        = join_sql( $mq );
-	printf( "| %d | %d | %d (left=%d inner=%d) |\n", $m, leaf_count( $mq ), $j['total'], $j['left'], $j['inner'] );
+	$unbound  = mapped_ids_meta_query( $registry );
+	$bound    = mapped_ids_meta_query( $registry, true );
+	$ju       = join_sql( $unbound );
+	$jb       = join_sql( $bound );
+	printf(
+		"| %d | %d | %d (left=%d inner=%d) | %d (left=%d inner=%d) |\n",
+		$m,
+		leaf_count( $unbound ),
+		$ju['total'], $ju['left'], $ju['inner'],
+		$jb['total'], $jb['left'], $jb['inner']
+	);
 }
 
 echo "\nFor comparison, the s139 (post-#839-step-2) cost of the SAME filter, 3M+B:\n";

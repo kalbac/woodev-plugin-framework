@@ -12,23 +12,33 @@ per-provider `OR`, independent of *how* it is wired (SQL-level subquery, or the 
 arg): both realizations collapse an **existential** predicate ("at least one of this order's present
 providers reports unknown/not-X") into a **single global set membership test**, and those two are only
 the same when an order carries at most one registered carrier's marker. Enumeration
-([Q4](#q4-does-the-structural-redundancy-argument-survive)) finds real mismatches — including ones
-that are not exotic combinations the enumeration merely happens to cover, but the documented,
-supported case of **split-shipment orders carrying more than one carrier's marker**
-(`class-checkout-field-policy.php:590-593`; `Orders_Registry::resolve_provider_for_order()` already
-silently picks "whichever registered provider's marker it finds first" rather than asserting
-uniqueness, which is itself a sign multi-marker orders are anticipated, not excluded by design).
-**The one thing that would change this**: proof that no order can ever carry more than one registered
-carrier's marker in this system (a business-rule guarantee, not a code fact) — see
-[What was not settled](#what-was-not-settled).
+([Q4](#q4-does-the-structural-redundancy-argument-survive)) finds real mismatches, and they are not
+artefacts of a straw-man reading: with the exclusion set **bound to its own carrier's marker**, which
+is what card #919 requirement 1 demands and what a competent implementer would build, the divergence
+does not go away — it sharpens, to **2 / 8 / 36 mismatches** across the three fixtures, every one of
+them a **multi-marker order** ([Q4b](#q4b-the-fair-model), replayable from `probe.php`).
 
-Card #919 should be **closed as "not viable as specified"** and re-scoped, if there is still appetite
-for it, around a form that preserves the existential per-provider structure (see
-[What would settle it](#what-was-not-settled)) — or simply left alone: the *current* s139 shape
-(`3M + B` joins) is not the wall #839 found. The wall was `4M + 2B` at `M = 4` on the legacy CPT
-planner; `3M + B` at realistic carrier counts (the fixture in #839's own README: 6 mapped carriers →
-18 joins) has not been shown to hit it, and #839's own field measurement (2 real carriers, HPOS, 71
-orders) put the negative filter at 106 ms — slow relative to its siblings, not wedged.
+**Multi-marker orders are physically producible by the shipped carrier plugins**, not a theoretical
+enumeration axis: `edostavka` writes its marker on `checkout_create_order` **per shipping package**
+(`class-wc-edostavka-checkout.php:930`), and `yandex` writes its marker from `set_state_status()` on
+export, gated only on the order HAVING a Yandex shipping item, never on it being the only one
+(`class-order.php:100`, reached from `export_order()` at `:302-315`). A cart that splits into two
+packages — CDEK plus Yandex — therefore gets one marker at checkout and the other on export, with no
+exotic input. Consistently, `Orders_Registry::resolve_provider_for_order()`
+(`class-orders-registry.php:365-373`) picks whichever marker it finds first rather than asserting
+uniqueness.
+
+**The one thing that would change this**: proof that no order can ever carry more than one registered
+carrier's marker. Given those per-package write paths that would have to be a business-rule decision,
+not a code fact — see [What was not settled](#what-was-not-settled).
+
+Card #919 should be **closed as "not viable as specified" and re-scoped** around a form that preserves
+the existential per-provider structure. ⚠ **Re-scoped, not abandoned:** the current `3M + B` shape is
+NOT known to be safe. The s128 wall was **12 joins at 2 mapped + 2 bare carriers** (`4·2 + 2·2`) — not
+"`M = 4`" — and `3M + B` reaches that same 12 at `M = 4, B = 0`, with the README's own six-carrier row
+at 18. "`3M + B` has not been shown to hit the wall" is true only because nothing past the s128 fixture
+was ever executed. What IS measured is #839's field figure — 2 real carriers, HPOS, 71 orders, 106 ms
+for the negative filter: slow relative to its siblings, not wedged.
 
 ## Q1 — can the exclusion be expressed through the existing query-args surface at all?
 
@@ -43,9 +53,13 @@ orders) put the negative filter at 106 ms — slow relative to its siblings, not
 - HPOS's `field_query` (`OrdersTableFieldQuery.php`) does exactly the same thing for its own `IN`/
   `NOT IN` (`:286-298`, same `$wpdb->prepare()` per-element pattern), and additionally: every atomic
   clause must resolve to a known **order-table column** through
-  `OrdersTableQuery::get_field_mapping_info()` (`:130-134`) — it cannot reference `wp_postmeta` at
-  all, so it is unusable for a meta-based predicate regardless of the subquery question, and it has no
-  CPT equivalent, which the card's own constraint (both datastores) rules out on its own.
+  `OrdersTableQuery::get_field_mapping_info()` (`:130-134`) — so it cannot address order META at all,
+  only order-table columns, which makes it unusable for a meta-based predicate regardless of the
+  subquery question; and it has no CPT equivalent, which the card's own both-datastores constraint
+  rules out on its own.
+- HPOS meta itself is reached through `OrdersTableMetaQuery.php` (`:539-623`) against `wc_orders_meta`,
+  not `wp_postmeta` — and that class prepares every value the same per-element way, so the conclusion
+  holds on that path too.
 
 So `meta_query`/`field_query` are dead ends for a literal `NOT IN (SELECT …)`, exactly as the task
 brief's trap anticipated.
@@ -110,24 +124,33 @@ real `WP_Meta_Query` against a stub `$wpdb`):
 binding is needed for this specific query) costs **exactly 1 `JOIN`, for any `M` from 1 to 6** — an
 `INNER JOIN`, not `LEFT`, because nothing in it is `NOT EXISTS`/`NOT IN`-shaped:
 
-| M (mapped carriers) | leaves | JOINs |
-|---|---|---|
-| 1 | 1 | 1 |
-| 2 | 2 | 1 |
-| 3 | 3 | 1 |
-| 4 | 4 | 1 |
-| 5 | 5 | 1 |
-| 6 | 6 | 1 |
+| M (mapped carriers) | leaves | JOINs, unbound | JOINs, BOUND to own marker |
+|---|---|---|---|
+| 1 | 1 | 1 | 2 |
+| 2 | 2 | 1 | 4 |
+| 3 | 3 | 1 | 6 |
+| 4 | 4 | 1 | 8 |
+| 5 | 5 | 1 | 10 |
+| 6 | 6 | 1 | 12 |
+
+All INNER, none LEFT — nothing in this query is `NOT EXISTS`/`NOT IN`-shaped.
 
 (WP_Meta_Query reuses one alias across top-level `OR`-related clauses, since an `OR` needs only one
 matching row per order, unlike `AND`, which needs one joined row instance per condition that must
 hold simultaneously — the same reason the *positive* `delivery_status=<canonical>` clauses in the
 current code are already cheap, per #839's own table: `N + participants`, not `4M`.)
 
-Compared against the **current, s139-shape** cost of the same filter (`3M + B`, `B = 0` in this
-fixture): `M=4` is 12 joins today vs. the 1-join precompute step. So **if** the semantics could be
-made to work (they cannot, as specified — see Q4), the join-count saving the card promised is real
-and even understates itself slightly (1, not "~1").
+⚠ **That 1 join is the UNBOUND precompute** — the set "some mapped carrier reports a known status",
+with no marker binding. It is cheap precisely because it leans on the same unwritten invariant #924 is
+about (a carrier never writes another carrier's status meta). **Bound to its own marker**, as card
+requirement 1 and #924 would both demand, the precompute costs **`2M` INNER joins** (measured:
+2 / 4 / 6 / 8 / 10 / 12 for `M = 1…6`) — because each carrier then needs its marker row AND its status
+row joined simultaneously, which an `OR` cannot share.
+
+So the honest comparison against the **current, s139-shape** `3M + B` is `2M` INNER versus `3M + B`
+LEFT, not "1 versus 12". Still a real saving, and INNER joins with a `meta_key` predicate are a far
+better shape for the planner than un-selective `LEFT JOIN`s — but the card's headline "~1" understates
+the cost of the only version of the idea that respects its own requirement 1.
 
 **Whether it is genuinely cheap on the legacy CPT planner, or just moves the wall**: the precompute
 query is **not a dependent/correlated subquery** — it is one flat, non-correlated `SELECT` against
@@ -155,19 +178,23 @@ implicitly assumes cannot happen).
 
 Result, all three of the fixtures #839/s139 already established as the reference set:
 
-| fixture | universe | mismatches | multi-marker | orphan-status | unexplained |
+| fixture | universe | mismatches | pure multi-marker | orphan-status | unexplained |
 |---|---|---|---|---|---|
 | 2 carriers (1 mapped, 1 bare) | 16 | 4 | 2 | 2 | **0** |
 | 2 carriers (both mapped) | 64 | 16 | 8 | 8 | **0** |
-| 3 carriers (2 mapped, 1 bare) | 128 | 64 | 44 | 20 | **0** |
+| 3 carriers (2 mapped, 1 bare) | 128 | 64 | 24 | 40 | **0** |
 
-⚠ **The last three columns are the point, and they were added when the coordinator re-ran the probe
-and asked the obvious sceptical question: if only SOME mismatches are multi-marker, the rest would make
-the rewrite wrong unconditionally, and the card would be dead rather than re-scopable.** The probe now
-classifies every mismatch, and `unexplained` is **0** in all three fixtures: each one is either
-multi-marker, or an "orphan status" — a status value on a provider's own key while that provider's
-marker is ABSENT, which is physically impossible for a carrier plugin to produce and is the same shape
-class #924 is about. So the divergence really is CONDITIONAL on multi-marker orders, and nothing else.
+⚠ **The last three columns are the point, and they exist because the coordinator re-ran the probe and
+asked the obvious sceptical question: if only SOME mismatches are multi-marker, the rest would make the
+rewrite wrong unconditionally, and the card would be dead rather than re-scopable.** The probe now
+classifies every mismatch and `unexplained` is **0** in all three fixtures: each is either a
+multi-marker order, or an "orphan status" — a status value on a provider's own key while that
+provider's marker is ABSENT, which no carrier plugin can produce, and which is the same shape class
+#924 is about.
+
+The classification tests **orphan first, then multi-marker**, deliberately: a row that is both is still
+impossible, so counting it as multi-marker would inflate the realistic-failure count. Doing it the
+other way round reports 44 multi-marker rows in the 3-carrier fixture where only 24 are pure.
 
 Every mismatch is `old-matched, new-did-not` (`new-only` is **0** everywhere) — the rewrite makes the
 filter **strictly too narrow**, silently dropping orders that genuinely are "unknown." A concrete
@@ -199,18 +226,55 @@ binding matched the whole table) — is exactly the trap this rewrite falls into
 here it is not a missing marker BINDING, it is the wrong BOOLEAN COMBINATOR (a single global set
 membership test standing in for a per-provider existential) that erases the OR structure #837 required.
 
+## Q4b — the fair model
+
+The objection to answer before anything else: was the card killed by a straw man? `probe.php`'s first
+model builds the exclusion set WITHOUT binding each status to its own carrier's marker, while card #919
+requirement 1 explicitly demands that binding. So the probe measures the bound model too, and it does
+not rescue the idea — it sharpens the finding:
+
+| fixture | mismatches | multi-marker | single-marker |
+|---|---|---|---|
+| 2 carriers (1 mapped, 1 bare) | 2 | 2 | **0** |
+| 2 carriers (both mapped) | 8 | 8 | **0** |
+| 3 carriers (2 mapped, 1 bare) | 36 | 36 | **0** |
+
+`new-only` is 0 here too. With the binding in place the orphan-status class disappears entirely and
+**every** remaining mismatch is a genuine multi-marker order — the case the shipped carrier plugins can
+produce. The divergence is therefore exactly and only the multi-marker case, under the reading the card
+itself asks for.
+
+This section and the bound cost column in [Q3](#q3--what-does-it-actually-cost) were added after review:
+the reviewer built the bound variant independently, and folding it into the committed probe is what keeps
+it a proof rather than a claim — the same rule that put `equivalence.php`'s successor into the test suite
+in s139. Its numbers reproduce the reviewer's run exactly.
+
 ## What was not settled
 
 - **Whether an order can, in real installed data, ever carry more than one REGISTERED carrier's
-  marker at once.** This is what the recommendation would flip on. The evidence found
-  (`class-checkout-field-policy.php`'s split-shipment note, `resolve_provider_for_order()`'s
-  first-wins behavior) is suggestive, not dispositive — it shows the codebase *anticipates* the
-  possibility, not that it has been observed in production data. Settling it needs either an
-  operator/product answer ("can two of our shipped carrier plugins both claim the same order?") or a
-  query against a real install's `wp_postmeta`/`wc_orders_meta` counting orders with more than one
-  registered marker key present — deliberately NOT run in this session (no database was touched, per
-  the task's safety rule, and the only real installs available are the shared test databases this
-  session was told to leave alone).
+  marker at once.** This is what the recommendation would flip on, and the distinction matters:
+  *producible* is settled, *observed* is not.
+
+  **Producible — settled, by reading the two shipped plugins' write paths** (review found these; they
+  are stronger than this note's first citations, which only showed the codebase anticipating the
+  possibility):
+  - `edostavka` writes its marker on `checkout_create_order` **per shipping package**
+    (`class-wc-edostavka-checkout.php:930`);
+  - `yandex` writes its marker from `set_state_status()` on export, gated only on the order HAVING a
+    Yandex shipping item — never on it being the only one (`class-order.php:100`, reached from
+    `export_order()` at `:302-315`).
+
+  A cart splitting into two packages therefore produces a two-marker order with no exotic input. The
+  framework itself writes no marker at all (nothing in `woodev/**` writes a `marker_meta_key`; the rig
+  fixtures only seed one in tests), so this question can only ever be answered by the plugins and by a
+  policy, not by framework code.
+
+  **Observed — not settled.** Nobody has counted such orders in a real install. Settling it needs
+  either a product answer ("can two of our carrier plugins both claim one order?" — given the
+  per-package write paths, that has to be a business rule) or one count query against a real install's
+  `wp_postmeta` / `wc_orders_meta` for orders carrying two or more registered marker keys.
+  Deliberately NOT run here: no database was touched, and the only real databases reachable are shared
+  ones this session was told to leave alone.
 - **Whether the legacy-CPT planner actually handles the 1-join "mapped ids" precompute query well at
   realistic table sizes.** Reasoned as safe (flat, non-correlated, `meta_key`-predicated `OR`), not
   measured against a real `wp_postmeta` table. Settling it needs `EXPLAIN` against a sized, disposable
