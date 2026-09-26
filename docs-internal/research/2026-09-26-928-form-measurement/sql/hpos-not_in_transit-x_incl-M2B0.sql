@@ -1,0 +1,3 @@
+SELECT wp_wc_orders.id FROM wp_wc_orders  WHERE 1=1 AND (wp_wc_orders.id IN (11,17,19,20,21,… 750 ids)) AND (wp_wc_orders.status IN ('wc-pending','wc-processing','wc-on-hold','wc-completed','wc-refunded','wc-checkout-draft')) AND (wp_wc_orders.type IN ('shop_order','shop_order_refund'))  ORDER BY wp_wc_orders.date_created_gmt DESC LIMIT 0, 20
+
+SELECT COUNT(*) FROM wp_wc_orders  WHERE 1=1 AND (wp_wc_orders.id IN (11,17,19,20,21,… 750 ids)) AND (wp_wc_orders.status IN ('wc-pending','wc-processing','wc-on-hold','wc-completed','wc-refunded','wc-checkout-draft')) AND (wp_wc_orders.type IN ('shop_order','shop_order_refund'))
