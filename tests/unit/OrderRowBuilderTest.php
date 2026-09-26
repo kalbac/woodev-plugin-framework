@@ -665,6 +665,13 @@ class OrderRowBuilderTest extends TestCase {
 				return array_key_exists( $key, $markers );
 			}
 		);
+		// Serve the stored VALUES from the same map, so a guard that reads values through
+		// the order sees the '' and stays silent — which is what the empty-value test catches.
+		$order->shouldReceive( 'get_meta' )->andReturnUsing(
+			static function ( $key = '' ) use ( $markers ) {
+				return $markers[ $key ] ?? '';
+			}
+		);
 
 		return $order;
 	}
