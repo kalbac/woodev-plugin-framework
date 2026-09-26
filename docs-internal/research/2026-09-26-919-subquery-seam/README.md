@@ -155,14 +155,23 @@ implicitly assumes cannot happen).
 
 Result, all three of the fixtures #839/s139 already established as the reference set:
 
-| fixture | universe | mismatches | of which multi-marker |
-|---|---|---|---|
-| 2 carriers (1 mapped, 1 bare) | 16 | 4 | 2 |
-| 2 carriers (both mapped) | 64 | 16 | 8 |
-| 3 carriers (2 mapped, 1 bare) | 128 | 64 | 44 |
+| fixture | universe | mismatches | multi-marker | orphan-status | unexplained |
+|---|---|---|---|---|---|
+| 2 carriers (1 mapped, 1 bare) | 16 | 4 | 2 | 2 | **0** |
+| 2 carriers (both mapped) | 64 | 16 | 8 | 8 | **0** |
+| 3 carriers (2 mapped, 1 bare) | 128 | 64 | 44 | 20 | **0** |
 
-Every mismatch is `old-matched, new-did-not` — the rewrite makes the filter **too narrow**, silently
-dropping orders that genuinely are "unknown." A concrete failing row (2-mapped-carriers fixture):
+⚠ **The last three columns are the point, and they were added when the coordinator re-ran the probe
+and asked the obvious sceptical question: if only SOME mismatches are multi-marker, the rest would make
+the rewrite wrong unconditionally, and the card would be dead rather than re-scopable.** The probe now
+classifies every mismatch, and `unexplained` is **0** in all three fixtures: each one is either
+multi-marker, or an "orphan status" — a status value on a provider's own key while that provider's
+marker is ABSENT, which is physically impossible for a carrier plugin to produce and is the same shape
+class #924 is about. So the divergence really is CONDITIONAL on multi-marker orders, and nothing else.
+
+Every mismatch is `old-matched, new-did-not` (`new-only` is **0** everywhere) — the rewrite makes the
+filter **strictly too narrow**, silently dropping orders that genuinely are "unknown." A concrete
+failing row (2-mapped-carriers fixture):
 
 ```json
 {"_m1_marker":"1","_m2_marker":"1","_m2_status":"M2_GO"}

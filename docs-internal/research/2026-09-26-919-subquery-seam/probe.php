@@ -209,6 +209,7 @@ foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
 	$only_old = [];
 	$only_new = [];
 	$multi_marker_mismatches = [];
+	$orphan_only_mismatches  = [];
 
 	foreach ( $rows as $row ) {
 		$markers_present = 0;
@@ -226,22 +227,44 @@ foreach ( $fixtures as $label => [ $mapped, $bare ] ) {
 			if ( $b && ! $a ) { $only_new[] = $row; }
 			if ( $markers_present > 1 ) {
 				$multi_marker_mismatches[] = $row;
+			} else {
+				// Classify what is left: is it the physically impossible shape — a status
+				// value on a provider's own key while that provider's marker is ABSENT?
+				// If every non-multi-marker mismatch is that shape, the divergence is
+				// CONDITIONAL on multi-marker orders rather than unconditional, which is
+				// the difference between re-scoping this card and killing the idea outright.
+				foreach ( $providers as $p ) {
+					$status_key = $p->get_status_meta_key();
+
+					if ( $status_key && array_key_exists( $status_key, $row ) && ! array_key_exists( $p->get_marker_meta_key(), $row ) ) {
+						$orphan_only_mismatches[] = $row;
+						break;
+					}
+				}
 			}
 		}
 	}
 
+	$mismatches = count( $only_old ) + count( $only_new );
+
 	printf(
-		"%-32s universe=%-4d old-only=%-3d new-only=%-3d  %s  (of which multi-marker: %d)\n",
+		"%-32s universe=%-4d old-only=%-3d new-only=%-3d  %s  (multi-marker: %d, orphan-status: %d, unexplained: %d)\n",
 		$label,
 		count( $rows ),
 		count( $only_old ),
 		count( $only_new ),
 		( [] === $only_old && [] === $only_new ) ? 'IDENTICAL' : 'DIFFERS',
-		count( $multi_marker_mismatches )
+		count( $multi_marker_mismatches ),
+		count( $orphan_only_mismatches ),
+		$mismatches - count( $multi_marker_mismatches ) - count( $orphan_only_mismatches )
 	);
 
 	foreach ( array_slice( $multi_marker_mismatches, 0, 2 ) as $r ) {
 		echo '    multi-marker mismatch, old matched but new did not: ' . json_encode( $r ) . "\n";
+	}
+
+	foreach ( array_slice( $orphan_only_mismatches, 0, 2 ) as $r ) {
+		echo '    orphan-status mismatch (a status with no marker of its own — physically impossible): ' . json_encode( $r ) . "\n";
 	}
 }
 
