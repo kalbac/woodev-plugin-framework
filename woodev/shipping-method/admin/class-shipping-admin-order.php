@@ -137,7 +137,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 */
 		private function row_builder(): Order_Row_Builder {
 			if ( null === $this->row_builder ) {
-				$this->row_builder = new Order_Row_Builder( new Order_Actions( $this->registry ) );
+				$this->row_builder = new Order_Row_Builder( new Order_Actions( $this->registry ), $this->registry );
 			}
 
 			return $this->row_builder;

@@ -392,9 +392,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * still write a marker per shipping package — so this reports the first order that breaks it
 		 * via `_doing_it_wrong()` instead of letting the filter silently drop it.
 		 *
-		 * Reads the marker keys from the order object the caller already loaded, so it costs no
-		 * extra query, and does nothing at all unless `WP_DEBUG` is on. Reports each order once per
-		 * request.
+		 * A marker counts by PRESENCE of its meta row (`WC_Data::meta_exists()`, the same rule the
+		 * query's `EXISTS` clauses use), not by a non-empty value. It reads the order object the
+		 * caller already loaded — on both datastores — so it costs no extra query, and does nothing
+		 * at all unless `WP_DEBUG` is on. Reports each order once per request. Two providers that
+		 * share one marker key both match it and are reported too.
 		 *
 		 * @since 2.0.2
 		 *
@@ -415,7 +417,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			$matched_ids = [];
 
 			foreach ( $this->get_providers() as $provider ) {
-				if ( '' !== (string) \Woodev_Order_Compatibility::get_order_meta( $order, $provider->get_marker_meta_key() ) ) {
+				if ( $order->meta_exists( $provider->get_marker_meta_key() ) ) {
 					$matched_ids[] = $provider->get_id();
 				}
 			}
@@ -429,8 +431,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			_doing_it_wrong(
 				Orders_Query::class . '::delivery_status_meta_clauses',
 				sprintf(
-					'Order %1$d carries the marker meta of more than one registered carrier ("%2$s"); the delivery-status filter assumes at most one marker per order (operator decision 26.09.2026, #928), so this order may be dropped or misclassified by it.',
+					'Order %1$d carries the marker meta of %2$d registered providers (ids: "%3$s"); the delivery-status filter assumes at most one marker per order (operator decision 26.09.2026, #928), so this order may be dropped or misclassified by it.',
 					$order_id,
+					count( $matched_ids ),
 					esc_html( implode( '", "', $matched_ids ) )
 				),
 				'2.0.2'

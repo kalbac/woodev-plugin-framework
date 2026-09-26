@@ -173,9 +173,11 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	 * ⚠ NARROWED (operator decision 26.09.2026, YAGNI; #928): the universe holds only orders
 	 * carrying AT MOST ONE registered carrier's marker (zero or one). Multi-carrier delivery
 	 * does not exist in this product, so an order with two markers is outside the filter's
-	 * contract — the cheaper negative-filter form #928 introduces is correct only under that
-	 * rule, and the rows it would disagree on are dropped here EXPLICITLY, not left to
-	 * fail. The rule itself is not enforced by the data layer; under `WP_DEBUG`
+	 * contract. The narrowing is made AHEAD of the cheaper negative-filter form #928 may
+	 * introduce — that form does not exist yet and would be correct only under this rule;
+	 * the query as it stands is correct on multi-marker orders too. The multi-marker rows
+	 * are dropped here EXPLICITLY, so the gate does not have to change when that form
+	 * lands. The rule itself is not enforced by the data layer; under `WP_DEBUG`
 	 * {@see Orders_Registry::report_multiple_markers()} reports a violating order. The
 	 * narrowing is pinned by an assertion in the test, so it cannot silently regress.
 	 *

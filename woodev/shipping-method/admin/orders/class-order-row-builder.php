@@ -52,15 +52,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		private Order_Actions $order_actions;
 
 		/**
+		 * Registry the multi-marker guard (#928) runs through — the one this builder's
+		 * collaborators were given, so an injected registry is honoured end to end.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Orders_Registry
+		 */
+		private Orders_Registry $registry;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param Order_Actions|null $order_actions action-set builder; defaults to one
-		 *                                          wired against {@see Orders_Registry::instance()}.
+		 * @param Order_Actions|null   $order_actions action-set builder; defaults to one
+		 *                                            wired against `$registry`.
+		 * @param Orders_Registry|null $registry      registry; defaults to the singleton.
 		 */
-		public function __construct( ?Order_Actions $order_actions = null ) {
-			$this->order_actions = $order_actions ?? new Order_Actions( Orders_Registry::instance() );
+		public function __construct( ?Order_Actions $order_actions = null, ?Orders_Registry $registry = null ) {
+			$this->registry      = $registry ?? Orders_Registry::instance();
+			$this->order_actions = $order_actions ?? new Order_Actions( $this->registry );
 		}
 
 		/**
@@ -77,7 +89,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 		public function build( \WC_Order $order, ?Orders_Provider $provider ): array {
 			// #928: the one place every returned order passes through (REST table, metabox);
 			// a no-op unless WP_DEBUG is on.
-			Orders_Registry::instance()->report_multiple_markers( $order );
+			$this->registry->report_multiple_markers( $order );
 
 			$status  = $order->get_status();
 			$created = $order->get_date_created();
