@@ -18,17 +18,25 @@ divergence is stated in `resolve_license()`'s docblock.
 
 ✅ **#839 CLOSED (s139).** Negative delivery-status filters cost **`3M + B`** joins, was `4M + 2B`
 (`M` mapped carriers, `B` bare); s128's fixture 12 → 8. Positive column unchanged **except M = 0,
-which collapses onto the NO_MATCH sentinel** (`N + 1` → `1`; both match nothing). ⚠ The remaining
-~95 % is **#919's subquery**, required on BOTH datastores. ⚠ **The CPT wall is the PLANNER, not the
-join count** — 12 joins on `wp_postmeta` never finish, 8 on `wc_orders_meta` take 4 ms. Harness,
-tables and the structural redundancy proof: `research/2026-09-25-839-join-growth-evidence/`.
+which collapses onto the NO_MATCH sentinel** (`N + 1` → `1`; both match nothing). ⚠ **The CPT wall is the PLANNER, not the
+join count** — 12 joins on `wp_postmeta` never finish, 8 on `wc_orders_meta` take 4 ms, and `3M + B`
+reaches that same 12 at **M = 4**, so the current shape has NO proven headroom. Harness, tables and
+the structural redundancy proof: `research/2026-09-25-839-join-growth-evidence/`.
+
+⛔ **#919 CLOSED as not viable by measurement, re-scoped onto #928.** Cost was never the obstacle; the
+QUANTIFIER is — the filter is an existential over the providers PRESENT on an order, one global
+set-subtraction is not, so the rewrite is strictly narrower and silently drops unknown orders. It
+diverges exactly on multi-marker orders, which the shipped plugins DO produce (`edostavka` writes its
+marker per package, `yandex` on export without requiring exclusivity). Three prohibitions bind any
+future attempt: no subquery reaches either datastore through the supported surface, so a raw SQL hook is
+required, and **that blinds `ShippingOrdersQueryRowSemanticsTest`**, which walks a `meta_query` tree.
+Note and replayable probe: `research/2026-09-26-919-subquery-seam/`.
 
 ✅ **The equivalence proof is a COMMITTED TEST** — `ShippingOrdersQueryRowSemanticsTest`: the emitted
-`meta_query` against an oracle taken from the SPECIFICATION, not from `Orders_Query`'s output; 3
-fixtures × 5 filters × **both datastores**, 16/64/128 enumerated orders. **This is the instrument
-#919 proves itself with**, and mutation testing showed it reddens on both #837 defects and on
-over-collapsing (`sessions/s139.md`). ⚠ Its one adopted reading is **#924**: positive `IN` branches
-are not bound to their carrier's marker.
+`meta_query` against a SPECIFICATION oracle, 3 fixtures × 5 filters × **both datastores**, 16/64/128
+enumerated orders. Mutation-tested: it reddens on both #837 defects and on over-collapsing
+(`sessions/s139.md`). ⚠ Its one adopted reading is **#924**: positive `IN` branches are not bound to
+their carrier's marker. ⚠ A raw-SQL filter would make it blind — see #928.
 
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a
 single unwrapped part** — prove such a helper against BOTH shapes (gotcha
