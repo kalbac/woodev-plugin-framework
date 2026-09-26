@@ -28,7 +28,10 @@ The deciding measurement is not the form of the negation at all — it is the **
 
 (The `current`, `H` and `X-excl` rows above are `*`-inferred cells: each contains the scope joins,
 and the scope-only cell measured `> 30 s`. The three forms were also run directly wherever the scope
-alone finished.)
+alone finished.) ⚠ This table runs at 20 unrelated meta rows per order, about 3× the rig's real
+density (6.38 rows/order, 301 HPOS orders, measured read-only by the critic). At rig density the
+defensible anchor is the **unfiltered page at 4 carriers: 11.7 s per 10 000 orders** (5.9 s page + 5.8 s
+count; CPT 11.4 s) — reproduced independently, see [Independent verification](#independent-verification-s140-critic).
 
 `WP_Meta_Query` gives every OR-ed marker key its own **un-predicated** `JOIN` on the meta table
 (`ON post_id = ID`, the `meta_key` test sits in `WHERE`), so an order with `d` meta rows costs `~d^N`
@@ -56,6 +59,33 @@ linearly with the store. Extrapolated, not measured beyond 100 k: ~3 M carrier o
 16 MB default `max_allowed_packet`. Two hazards belong in the card: an **empty** id list fails **open**
 on both datastores (see below), and an id query that ever gets slow is paid on every page load, not
 once per filter change — cache nothing here without deciding invalidation.
+
+## Independent verification (s140 critic)
+
+An independent critic (Opus, not the author) re-ran the decisive cells in its own throwaway database
+and checked the mechanism in source. Verdicts: **mechanism CONFIRMED, X-incl ≡ H-full CONFIRMED at
+10 k, source answers CONFIRMED** (seven citations spot-checked against WooCommerce 11.1.0).
+
+- **The per-key join comes from the builders, not from the capture.** `class-wp-meta-query.php:609-611`
+  emits `EXISTS` as `INNER JOIN … ON (id = post_id)` with `meta_key` in `WHERE`; OR-siblings share an
+  alias only for `=`/`IN`/`LIKE`-type compares (`:848`), and `EXISTS` is not among them. HPOS
+  `OrdersTableMetaQuery.php:436` does the same (allow-list `:491-492`). `meta_query_for_keys()` emits
+  one `EXISTS` per key.
+- **The synthetic DDL is byte-identical** to `SHOW CREATE TABLE` of the four real rig tables.
+- **The `d^N` law, measured directly** on 10 k orders at 6.8 rows/order: 4 un-predicated joins
+  5 678 ms, 2 joins 110 ms, 1 join with the key in `ON` 10.7 ms — the 51× step matches 6.8² ≈ 46.
+  This is why the live rig (2 carriers) and #839 (71 orders) never stalled: `N = 2`.
+- **Equivalence per ROW, not only per count:** 800 orders, `M2:B1`, filters `unknown`,
+  `not_in_transit`, `not_delivered`, both datastores — the full un-LIMITed id sets of `current`,
+  `h_full` and `x_incl` are identical in 6/6 cases.
+- ⚠ **Scope of #928 is wider than the negation.** Every path that carries `meta_query_for_keys()` hits
+  the wall at N ≥ 4: the unfiltered aggregate page, the positive filters and the new-orders badge.
+  The id-query spec must be derived from the same registry source `build_args()` scopes by (this
+  probe's `run.php` lists the marker keys by hand — production must not).
+- Real stores are likely WORSE than modelled: a CPT store keeps addresses and totals in postmeta
+  (typically 30–60 rows/order), and real carrier orders carry 3–5 carrier rows, not 1–2.
+- WooCommerce 11.1's `OrdersTableStatusUnionQuery` rewrite cannot apply to any form here (it needs a
+  type/status-only `WHERE`, no join, ≥ 500 k orders), so the captured SQL is what executes.
 
 ## What was measured
 
@@ -102,7 +132,10 @@ once per filter change — cache nothing here without deciding invalidation.
 Every form was compared with its neighbours by the `found`/`total` it returned: **198 cells checked, 0
 mismatches** (`agree` in `results/*.jsonl`; in cells where `current` timed out the reference is the first
 form that finished). That is a row-COUNT check on single-marker data, not a per-row proof — see the last
-section for what still needs one.
+section for what still needs one. ⚠ Only **20** of the 198 compare against the real `current` form (all
+at 1 000 orders, `M2:B0`, no bare carrier); the other 178 compare this note's own hand-written forms with
+each other (132 against `h_full`, 46 against `h_notin`). The critic's row-level check below closes the
+gap for `M2:B1` on single-marker data.
 
 ### Results — 100 000 orders (page 1 + total; `M:B` carriers; `*` = inferred: the scope alone already timed out at a smaller point)
 
@@ -256,7 +289,9 @@ Rig sources: `plugins/woocommerce.latest-stable` = WooCommerce **11.1.0**; WordP
 - **The aggregate count the page shows** is `Orders_Query::get_results(…)->total`
   (`woodev/shipping-method/admin/orders/class-orders-registry.php:971-987`; the docblock at
   `:1032-1042` states the contract). The menu badge uses `is_exported=false`, not a negative status
-  filter, so it is untouched; the page's own total under `delivery_status_not` flows through the same
+  filter, so #928's negation change does not touch it — ⚠ but it still carries the marker-scope
+  `meta_query` (`class-orders-registry.php:972/986`), so it hits the same N ≥ 4 wall as the unfiltered
+  page; the page's own total under `delivery_status_not` flows through the same
   `->total`, which is what the `found` comparison above exercised on both datastores.
 - ⚠ **Empty list fails OPEN on both datastores.** HPOS treats `[]` as "argument not set"
   (`OrdersTableQuery.php:27` `SKIPPED_VALUES`, `:1443-1445` `arg_isset`); `WP_Query` tests
