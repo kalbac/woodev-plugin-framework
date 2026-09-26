@@ -22,8 +22,9 @@ turned out to be the first invariant, not a defect (#924).
    multi-marker order anyway; what depends on the rule is a cheaper negative form that subtracts ONE
    set of orders. That form is an existential over the providers present on the order only when
    there is one — #919 measured 4/16/64 divergences over 16/64/128-order universes, every one of
-   them multi-marker. And the rule is NOT true of the code: `edostavka` writes a marker per package,
-   `yandex` on export — `file:line` on #928.
+   them multi-marker. And the rule is NOT true of the code: `edostavka` writes a marker per package
+   (`class-wc-edostavka-checkout.php:930`), `yandex` on export, gating only on its own shipping being
+   present (`class-order.php:100`) — measured in #919's research note, carried on #928.
 
 ## Fix
 

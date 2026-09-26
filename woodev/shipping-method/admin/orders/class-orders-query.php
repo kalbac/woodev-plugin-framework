@@ -636,12 +636,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *    provider); an order carrying carrier A's marker and carrier B's status meta
 		 *    would match B's filter. The negative forms ARE bound, because there the
 		 *    unbound OR matched the whole table (#837 defect 2).
-		 * 2. An order carries AT MOST ONE carrier marker — none occurs in practice: that would take
-		 *    multi-carrier delivery, which does not exist (YAGNI). The shapes
+		 * 2. An order carries AT MOST ONE carrier marker — a product rule (YAGNI: there is no
+		 *    multi-carrier delivery), NOT a property of the data: `edostavka` already
+		 *    writes a marker per package, so such orders can exist. The shapes
 		 *    built here stay correct on a multi-marker order; a cheaper negative form
 		 *    that subtracts one set of orders is equivalent ONLY under this rule
-		 *    (#919 measured the divergence, #928 builds on the rule). Nothing prevents
-		 *    such an order today: `edostavka` writes a marker per package.
+		 *    (#919 measured the divergence, #928 builds on the rule).
 		 *
 		 * Gotcha: `the-orders-filter-stands-on-two-unenforced-carrier-invariants`.
 		 *
