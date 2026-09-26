@@ -251,7 +251,9 @@ The detail goes in `sessions/s{N}.md`:
 
 Rules:
 - 10–90 lines per session file (guideline — match the session's actual weight)
-- Index row and file H1 carry the same summary; the row never grows past one line
+- Index row and file H1 carry the same summary; the row never grows past one line of **600
+  characters** — `lint:docs` fails a longer one (#930). The paragraph belongs in the session file;
+  decades whose rows outgrew that live in `archive/session-log-sNN0-sNN9.md`
 - Date in ISO format: `YYYY-MM-DD`; new rows at the **top** of the index
 - Include PHPStan result + commit hash in the session file
 - No "attempted", "tried to" language — only actual outcomes
