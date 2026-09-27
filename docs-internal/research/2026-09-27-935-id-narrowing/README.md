@@ -9,15 +9,6 @@
 
 ## Decision
 
-**Neither candidate is built.** The default, unfiltered view — the one every visit pays for — is improved by
-neither, and the one view candidate A does speed up (a narrow period) needs a row-count probe to avoid regressing
-wider periods, which is more machinery than a card that was filed as "not a blocker" earns.
-
-| candidate | verdict | why (numbers below) |
-|---|---|---|
-| **A** push order status + `date_created` into the id query | **not built** | Unconditional push makes the default view **slower** (+26 % HPOS / +16 % CPT at 100 k) and any period wider than a few % of the store slower too. Status alone buys nothing. Only a *narrow period* wins (458 → 22 ms HPOS, 324 → ~67 ms CPT at 100 k) — and only with a probe that falls back to today's form when the window is wide. |
-| **B** carrier counts as ONE `GROUP BY` | **not built** | Unfiltered, HPOS: one statement costs 294 ms against ≈ 185 ms for the N calls it replaces (**slower**). CPT: ≈ 268 ms against ≈ 470 ms (**−200 ms of a 929 ms page load, < 2×**). And it would need WooCommerce's exact status / date semantics re-implemented inside a hand-written count, and cannot serve a search. (In a 1-week period on HPOS it wins, 146 → 4 ms — the same narrow-window niche as A'.) |
-
 **Threshold used.** A candidate is built only if, on one page load (rows + N carrier counts + scope count) at the
 brief's **10 k-order** scale, it is **≥ 2× faster and ≥ 50 ms faster** in the views it targets on **both**
 datastores, **and** no measured view — the unfiltered default included — gets more than 10 % slower. 50 ms is
@@ -26,6 +17,15 @@ clause is there because the unfiltered view is the one every visit pays. 100 k o
 check, not the bar. The threshold was fixed with the 10 k table in hand — it is a judgement call, and the
 100 k numbers are here so it can be moved: candidate A' (narrow period only, behind a probe) **would** clear a
 100 k bar for the period view (−440 ms HPOS, −260 ms CPT) and still fail the no-regression clause without the probe.
+
+**Neither candidate is built.** The default, unfiltered view — the one every visit pays for — is improved by
+neither, and the one view candidate A does speed up (a narrow period) needs a row-count probe to avoid regressing
+wider periods, which is more machinery than a card that was filed as "not a blocker" earns.
+
+| candidate | verdict | why (numbers below) |
+|---|---|---|
+| **A** push order status + `date_created` into the id query | **not built** | Unconditional push makes the default view **slower** (+26 % HPOS / +16 % CPT at 100 k) and any period wider than a few % of the store slower too. Status alone buys nothing. Only a *narrow period* wins (458 → 22 ms HPOS, 324 → ~67 ms CPT at 100 k) — and only with a probe that falls back to today's form when the window is wide. |
+| **B** carrier counts as ONE `GROUP BY` | **not built** | Unfiltered, HPOS at 100 k: one statement costs 287–315 ms against ≈ 190 ms for the N calls it replaces (**slower**), and at 10 k it is a tie-to-slower (19.6–22.9 vs ≈ 18 ms). CPT at 100 k: 226–232 ms against ≈ 463 ms (**−230 ms of a 899 ms page load, ≈ 1.35× on the page**; 2.0× on the count part alone, but ≈ 25 ms at 10 k). It would need WooCommerce's exact status / date semantics re-implemented inside a hand-written count, and cannot serve a search. (In a 1-week period on HPOS it wins, ≈ 127 → 3.6 ms — the same narrow-window niche as A'; on CPT it is *slower*, 181–191 vs ≈ 104 ms.) |
 
 Candidate A' at the 10 k scale: 41.7 → 4.5 ms (HPOS, 9×, −37 ms) and 31 → 11 ms (CPT, 3×, −20 ms) per page
 load, for a narrow-period request only — under the 50 ms bar on both.
@@ -53,7 +53,7 @@ load, for a narrow-period request only — under the 50 ms bar on both.
   (`class-orders-registry.php` ~1039–1053: aggregate + N). With N = 4 that is **6 resolver calls per page load, 5 for the badge**.
 - **Equivalence in every cell.** For each scenario the `found` total and an md5 of the first page's ids from the
   narrowed forms are compared with today's, and so are the six `found` values of a whole page load: **0 disagreements
-  across the four result files** (`agree` in `results/*.jsonl`). Candidate B's per-carrier counts equal the N calls' `found` in every cell.
+  across the five result files** (`agree` in `results/*.jsonl`). Candidate B's per-carrier counts equal the N calls' `found` in every cell.
 
 ### The forms
 
@@ -138,20 +138,30 @@ pushed form is up to +36 % (HPOS) / +32 % (CPT) slower than not narrowing. A saf
 
 ### Candidate B — carrier counts in one statement
 
-| | one `GROUP BY` | the N calls it replaces (derived) | verdict |
+Raw rows: `results/r1-10k.jsonl` (10 k) and `results/r4-100k-b.jsonl` (100 k). **The 100 k rows were re-measured in the
+fix round (27.09.2026) — the first pass' B timings were never committed to `results/`; the numbers below are read
+straight from `r4-100k-b.jsonl` (`php summarize.php results/r4-100k-b.jsonl` prints them, derived column included)
+and replace the earlier prose figures (294 / 268 / 3.8 / 234 ms).** `b_exists` / `b_join` are the two SQL shapes of
+the same statement.
+
+| | one `GROUP BY` (`b_exists` / `b_join`) | the N calls it replaces (derived) | verdict |
 |---|---|---|---|
-| HPOS 10 k, no filter | 19.6 ms | ≈ 18 ms | tie |
-| HPOS 100 k, no filter | **294 ms** | ≈ 185 ms | **slower** |
-| CPT 100 k, no filter | 268 ms | ≈ 470 ms | −200 ms of 929 (−22 %) |
-| HPOS 100 k, 1-week period | 3.8 ms | ≈ 145 ms | wins — a narrow window only, the same story as A' |
-| CPT 100 k, 1-week period | 234 ms | ≈ 110 ms | **slower** (the date is not used on `posts`) |
+| HPOS 10 k, no filter | 19.6 / 22.9 ms | ≈ 17.6 ms | tie to slightly slower |
+| CPT 10 k, no filter | 19.8 / 19.6 ms | ≈ 44.9 ms | −25 ms (2.3×) — under the 50 ms bar |
+| HPOS 100 k, no filter | **314.6 / 287.3 ms** | ≈ 189.5 ms | **slower** (+52–66 %) |
+| CPT 100 k, no filter | 231.6 / 225.7 ms | ≈ 463.4 ms | −232 / −238 ms of the 899 ms page load (−26 %; the count part alone 2.0×) |
+| HPOS 100 k, 1-week period | 3.6 / 3.6 ms | ≈ 127.0 ms | wins — a narrow window only, the same story as A' |
+| CPT 100 k, 1-week period | 191.2 / 181.2 ms | ≈ 103.8 ms | **slower** (the date is not used on `posts`) |
 
 *"The N calls" is derived, not measured directly:* the page-load total minus the page's own request minus the
-«Новые» scope request (≈ the page's cost; the N carrier requests carry ~¼ of the ids each). The conclusion does not
-depend on it — even taking the whole CPT gap, B stays under 2×. Its counts equal the N calls' in every cell, on the
-rig's UTC timezone; making that hold for every site timezone, every status and every carrier tree means
-re-implementing WooCommerce's date/status semantics inside the count, and the count still cannot include a
-search. That is the cost side; the gain side is above.
+«Новые» scope request (≈ the page's cost; the N carrier requests carry ~¼ of the ids each), taken from the `today`
+rows of the same result file. The 100 k baseline of the B comparison is therefore that file's own `today` run
+(HPOS page load 553 ms, CPT 899 ms) — a fresh seed, so it differs by a few % from the 583 / 929 ms of
+`r2-100k.jsonl` used in the tables above. The conclusion does not depend on the derivation: on CPT the whole gap
+(≈ 235 ms) takes the page load from 899 to ≈ 665 ms, ≈ 1.35× — under 2× — and HPOS gets worse. B's counts equal the
+N calls' in every cell (`agree` in the file), on the rig's UTC timezone; making that hold for every site timezone,
+every status and every carrier tree means re-implementing WooCommerce's date/status semantics inside the count, and
+the count still cannot include a search. That is the cost side; the gain side is above.
 
 ## Independent cross-check
 
@@ -193,7 +203,8 @@ docker exec "$(scripts/machine/rig-container.sh mysql)" mariadb -uroot -ppasswor
 Parameters (`SIZE`, `CONFIG`, `STORES`, `MODES`, `SCENARIOS`, `RUNS`, `UNRELATED`, `SEED`, `PAGELOAD`, `CANDIDATES`)
 are documented at the top of [`run.php`](run.php). It writes only to `probe935`. Result files: `r1-10k` (all
 scenarios, `today`/`a_exists`/`a_join`, B), `r1b-10k-drive` (`a_drive`), `r2-100k` (main 100 k pass),
-`r3-100k-windows` (window-width sweep, request rows only).
+`r3-100k-windows` (window-width sweep, request rows only), `r4-100k-b` (candidate B at 100 k, unfiltered and 1-week, both
+datastores — `SIZE=100000 RUNS=3 MODES=today SCENARIOS=none,period_1w CANDIDATES=B`; also carries that run's `today` rows).
 
 ## Related
 

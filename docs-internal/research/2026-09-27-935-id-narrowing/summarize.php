@@ -31,9 +31,23 @@ foreach ( $sizes as $size ) {
 		}
 		$sel = array_filter( $rows, static fn( $r ) => $r['size'] === $size && $r['store'] === $store && 'carrier_counts_b' === $r['kind'] );
 		if ( $sel ) {
-			echo "\n#### " . strtoupper( $store ) . " · {$size} orders · candidate B (all carrier counts, ONE GROUP BY)\n\n| scenario | form | time | counts equal N calls |\n|---|---|---|---|\n";
+			// "The N calls it replaces" is derived, not measured: the page load minus the page's own request minus the «Новые»
+			// scope request (≈ the page's cost), from the `today` rows of the SAME file — so a B row is only comparable when
+			// its file also carries them (r4-100k-b.jsonl does).
+			$find = static function ( string $scenario, string $kind ) use ( $rows, $size, $store ) {
+				foreach ( $rows as $r ) {
+					if ( $r['size'] === $size && $r['store'] === $store && $r['scenario'] === $scenario && 'today' === $r['mode'] && $kind === $r['kind'] ) {
+						return $r['total_ms'] ?? null;
+					}
+				}
+				return null;
+			};
+			echo "\n#### " . strtoupper( $store ) . " · {$size} orders · candidate B (all carrier counts, ONE GROUP BY)\n\n| scenario | form | time | ≈ the N calls (derived) | counts equal N calls |\n|---|---|---|---|---|\n";
 			foreach ( $sel as $r ) {
-				printf( "| %s | %s | %s | %s |\n", $r['scenario'], $r['mode'], $fmt( $r['total_ms'] ?? null ), null === ( $r['agree'] ?? null ) ? 'ERR ' . ( $r['error'] ?? '' ) : ( $r['agree'] ? 'yes' : 'NO' ) );
+				$pl      = $find( $r['scenario'], 'page_load' );
+				$rq      = $find( $r['scenario'], 'request' );
+				$derived = null !== $pl && null !== $rq ? round( $pl - 2 * $rq, 1 ) : null;
+				printf( "| %s | %s | %s | %s | %s |\n", $r['scenario'], $r['mode'], $fmt( $r['total_ms'] ?? null ), $fmt( $derived ), null === ( $r['agree'] ?? null ) ? 'ERR ' . ( $r['error'] ?? '' ) : ( $r['agree'] ? 'yes' : 'NO' ) );
 			}
 		}
 	}
