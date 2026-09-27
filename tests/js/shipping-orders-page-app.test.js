@@ -746,6 +746,29 @@ describe( 'the display mode is a TOGGLE, not a picker (#835, operator 09.09.2026
 	 *
 	 * It asserts the FETCH, not the URL — the URL was never the broken part.
 	 */
+	/**
+	 * #843: `match=any` in the URL is what the block's All/Any select writes; it has to
+	 * reach the REST request, and flipping it has to refetch (it is part of the snapshot
+	 * `filtersEqual()` compares).
+	 */
+	test( '`match=any` in the URL reaches the fetch, and changing it refetches', async () => {
+		fakeQuery = { filter: 'advanced', has_tracking_is: 'yes', status_is: 'wc-processing', match: 'any' };
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenCalledWith( expect.objectContaining( { match: 'any', hasTracking: true } ) )
+		);
+
+		navigate( { filter: 'advanced', has_tracking_is: 'yes', status_is: 'wc-processing' } );
+
+		await waitFor( () =>
+			expect( fetchOrders ).toHaveBeenLastCalledWith( expect.objectContaining( { match: 'all' } ) )
+		);
+	} );
+
 	test( 'a filter arriving by history push reaches the fetch, not the previous query', async () => {
 		getProviders.mockReturnValue( oneProvider() );
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );

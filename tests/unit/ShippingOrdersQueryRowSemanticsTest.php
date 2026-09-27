@@ -46,6 +46,7 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
@@ -55,6 +56,12 @@ use Woodev\Framework\Shipping\Order\Delivery_Status;
  * @since 2.0.2
  */
 class ShippingOrdersQueryRowSemanticsTest extends TestCase {
+
+	/**
+	 * Where a universe row carries its ORDER status (#843). Not a meta key — the in-memory
+	 * resolver's walk reads it for the order-status leaf, the oracle for the status rule.
+	 */
+	private const STATUS_KEY = '__order_status';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -324,6 +331,12 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 
 			if ( isset( $node['key'] ) ) {
 				$results[] = $this->matches_leaf( $node, $meta );
+				continue;
+			}
+
+			// #843: the order's own status, carried in the row under STATUS_KEY.
+			if ( isset( $node[ Orders_Id_Resolver::ORDER_STATUS_LEAF ] ) ) {
+				$results[] = in_array( $meta[ self::STATUS_KEY ] ?? null, (array) $node[ Orders_Id_Resolver::ORDER_STATUS_LEAF ], true );
 				continue;
 			}
 
@@ -679,5 +692,329 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status' => Delivery_Status::UNKNOWN ], $is_hpos ) );
 			$this->assertCount( 1, $query->resolved, 'the seam WAS asked this time' );
 		}
+	}
+
+	// ----- «Все / Любое» — `match` and the order status (#843) -----
+
+	/**
+	 * One carrier with every concept an advanced filter can ask about (status map, tracking
+	 * key, pickup-point key) and one bare carrier without any.
+	 *
+	 * @since 2.0.2
+	 */
+	private function registry_for_match(): Orders_Registry {
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+
+		$registry->register_provider(
+			Orders_Provider::create(
+				'm1',
+				'M1',
+				'_m1_marker',
+				[ 'm1' ],
+				[
+					'status_meta_key'       => '_m1_status',
+					'status_map'            => [
+						'M1_GO'   => Delivery_Status::IN_TRANSIT,
+						'M1_DONE' => Delivery_Status::DELIVERED,
+					],
+					'tracking_meta_key'     => '_m1_tracking',
+					'pickup_point_meta_key' => '_m1_pickup',
+				]
+			)
+		);
+		$registry->register_provider( Orders_Provider::create( 'b1', 'B1', '_b1_marker', [ 'b1' ] ) );
+
+		return $registry;
+	}
+
+	/**
+	 * Every order over {@see self::registry_for_match()} that carries at most one marker
+	 * (the same narrowing as {@see self::universe()}): the mapped carrier's marker,
+	 * status (absent / `M1_GO` / `M1_DONE` / `JUNK`), tracking and pickup point, each
+	 * present or absent independently — impossible combinations included on purpose —
+	 * times the bare carrier's marker, times the ORDER status `pending` / `processing` /
+	 * `cancelled`.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	private function match_universe(): array {
+		$axes = [
+			[ [ '_m1_marker' => '1' ], [] ],
+			[ [], [ '_m1_status' => 'M1_GO' ], [ '_m1_status' => 'M1_DONE' ], [ '_m1_status' => 'JUNK' ] ],
+			[ [ '_m1_tracking' => 'T1' ], [] ],
+			[ [ '_m1_pickup' => 'P1' ], [] ],
+			[ [ '_b1_marker' => '1' ], [] ],
+			[ [ self::STATUS_KEY => 'wc-pending' ], [ self::STATUS_KEY => 'wc-processing' ], [ self::STATUS_KEY => 'wc-cancelled' ] ],
+		];
+
+		$rows = [ [] ];
+
+		foreach ( $axes as $axis ) {
+			$next = [];
+
+			foreach ( $rows as $row ) {
+				foreach ( $axis as $choice ) {
+					$next[] = array_merge( $row, $choice );
+				}
+			}
+
+			$rows = $next;
+		}
+
+		return array_values(
+			array_filter(
+				$rows,
+				static function ( array $meta ): bool {
+					return count(
+						array_intersect_key(
+							$meta,
+							[
+								'_m1_marker' => 1,
+								'_b1_marker' => 1,
+							]
+						)
+					) <= 1;
+				}
+			)
+		);
+	}
+
+	/**
+	 * The request space: `match` (absent / `all` / `any`) x delivery status (none / is
+	 * unknown / is in_transit / is not in_transit) x tracking (none / yes / no) x pickup
+	 * point (none / yes / no) x order status (none / is / is several / is not / is nothing
+	 * real).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function match_requests(): array {
+		$matches = [ [], [ 'match' => 'all' ], [ 'match' => 'any' ] ];
+
+		$deliveries = [
+			[],
+			[ 'delivery_status' => Delivery_Status::UNKNOWN ],
+			[ 'delivery_status' => Delivery_Status::IN_TRANSIT ],
+			[ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ],
+		];
+
+		$trackings = [ [], [ 'has_tracking' => true ], [ 'has_tracking' => false ] ];
+		$pickups   = [ [], [ 'has_pickup_point' => true ], [ 'has_pickup_point' => false ] ];
+
+		$statuses = [
+			[],
+			[ 'status' => [ 'processing' ] ],
+			[ 'status' => [ 'wc-pending', 'cancelled' ] ],
+			[ 'status_not' => [ 'processing' ] ],
+			[ 'status' => [ 'nonsense' ] ],
+		];
+
+		$requests = [];
+
+		foreach ( $matches as $match ) {
+			foreach ( $deliveries as $delivery ) {
+				foreach ( $trackings as $tracking ) {
+					foreach ( $pickups as $pickup ) {
+						foreach ( $statuses as $status ) {
+							$requests[] = array_merge( $match, $delivery, $tracking, $pickup, $status );
+						}
+					}
+				}
+			}
+		}
+
+		return $requests;
+	}
+
+	/**
+	 * The oracle for a request with `match` and order status in it — the specification,
+	 * written from the operator's decision (#843) and the carriers' own definitions, not
+	 * from the tree:
+	 *
+	 * an order is selected iff it is in scope (carries a registered carrier's marker)
+	 * AND satisfies the advanced filters — ALL of them under `all` or absent, AT LEAST
+	 * ONE under `any` when two or more were requested (one or none: same as `all`) —
+	 * AND, when no order-status filter was requested, is in the default view (not
+	 * cancelled / failed). An order-status filter is a filter like the others: `is` =
+	 * the order's status is among the recognised requested ones (none recognised =>
+	 * nothing satisfies it), `is not` = it is not among the excluded ones.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param Orders_Provider[]    $providers registered providers.
+	 * @param array<string,mixed>  $request   the request.
+	 * @param array<string,string> $meta      one universe row.
+	 */
+	private function match_oracle_selects( array $providers, array $request, array $meta ): bool {
+		$in_scope = false;
+
+		foreach ( $providers as $provider ) {
+			$in_scope = $in_scope || array_key_exists( $provider->get_marker_meta_key(), $meta );
+		}
+
+		if ( ! $in_scope ) {
+			return false;
+		}
+
+		$valid   = [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ];
+		$status  = $meta[ self::STATUS_KEY ];
+		$filters = [];
+
+		$canonical = $request['delivery_status'] ?? $request['delivery_status_not'] ?? null;
+
+		if ( null !== $canonical ) {
+			$negate = ! isset( $request['delivery_status'] );
+			$hit    = false;
+
+			foreach ( $providers as $provider ) {
+				$hit = $hit || $this->provider_satisfies_delivery_status( $provider, $meta, $canonical, $negate );
+			}
+
+			$filters[] = $hit;
+		}
+
+		$presence = [
+			'has_tracking'     => 'get_tracking_meta_key',
+			'has_pickup_point' => 'get_pickup_point_meta_key',
+		];
+
+		foreach ( $presence as $arg => $getter ) {
+			if ( ! array_key_exists( $arg, $request ) ) {
+				continue;
+			}
+
+			$wanted = (bool) $request[ $arg ];
+			$hit    = false;
+
+			foreach ( $providers as $provider ) {
+				$key            = $provider->$getter();
+				$marker_present = array_key_exists( $provider->get_marker_meta_key(), $meta );
+
+				if ( null === $key ) {
+					$hit = $hit || ( ! $wanted && $marker_present );
+				} elseif ( $wanted ) {
+					$hit = $hit || array_key_exists( $key, $meta );
+				} else {
+					$hit = $hit || ( $marker_present && ! array_key_exists( $key, $meta ) );
+				}
+			}
+
+			$filters[] = $hit;
+		}
+
+		$normalise = static function ( array $values ): array {
+			return array_map(
+				static function ( string $value ): string {
+					return 0 === strpos( $value, 'wc-' ) ? $value : 'wc-' . $value;
+				},
+				$values
+			);
+		};
+
+		$status_requested = isset( $request['status'] ) || isset( $request['status_not'] );
+
+		if ( isset( $request['status'] ) ) {
+			$filters[] = in_array( $status, array_intersect( $normalise( $request['status'] ), $valid ), true );
+		} elseif ( isset( $request['status_not'] ) ) {
+			$filters[] = in_array( $status, array_diff( $valid, $normalise( $request['status_not'] ) ), true );
+		}
+
+		$is_any     = 'any' === ( $request['match'] ?? null ) && count( $filters ) >= 2;
+		$filters_ok = $is_any ? in_array( true, $filters, true ) : ! in_array( false, $filters, true );
+
+		if ( ! $status_requested && in_array( $status, [ 'wc-cancelled', 'wc-failed' ], true ) ) {
+			return false;
+		}
+
+		return $filters_ok;
+	}
+
+	/**
+	 * The ids the query finally selects: what the id query resolved, narrowed by the
+	 * NATIVE `status` arg exactly as `wc_get_orders()` does after `post__in` — so a
+	 * status widened when it should not be, or left narrow when it should not be, shows
+	 * up here.
+	 *
+	 * @since 2.0.2
+	 *
+	 * @param array<string,mixed>             $request the request.
+	 * @param array<int,array<string,string>> $rows    the universe.
+	 * @return int[]
+	 */
+	private function final_ids( Orders_Query $query, array $request, bool $is_hpos, array $rows ): array {
+		$ids  = $this->selected_ids( $query, $request, $is_hpos );
+		$args = $query->build_args( $request );
+
+		return array_values(
+			array_filter(
+				$ids,
+				static function ( int $id ) use ( $rows, $args ): bool {
+					return in_array( $rows[ $id - 1 ][ self::STATUS_KEY ], $args['status'], true );
+				}
+			)
+		);
+	}
+
+	/**
+	 * The equivalence proof of «Все / Любое» (#843): for EVERY request of the space
+	 * (`match` x delivery x tracking x pickup x order status) and EVERY order of the
+	 * universe, on both datastores, the ids the query finally selects are exactly the
+	 * oracle's — `all` (and absent) the AND of everything, `any` the OR of the advanced
+	 * filters under the always-narrowing scope, the order status one of the disjuncts.
+	 *
+	 * @dataProvider datastore_provider
+	 *
+	 * @since 2.0.2
+	 */
+	public function test_match_all_and_any_select_exactly_the_oracles_orders( bool $is_hpos ): void {
+		$registry  = $this->registry_for_match();
+		$providers = array_values( $registry->get_providers() );
+		$rows      = $this->match_universe();
+
+		$this->assertCount( 144, $rows, 'the enumerated universe' );
+
+		$differing = 0;
+
+		foreach ( $this->match_requests() as $request ) {
+			$query = $this->query_over( $registry, $is_hpos, $rows );
+			$ids   = $this->final_ids( $query, $request, $is_hpos, $rows );
+
+			$expected = [];
+
+			foreach ( $rows as $index => $meta ) {
+				if ( $this->match_oracle_selects( $providers, $request, $meta ) ) {
+					$expected[] = $index + 1;
+				}
+			}
+
+			sort( $ids );
+
+			$this->assertSame(
+				$expected,
+				$ids,
+				sprintf( "The selected ids differ from the oracle's (#843).\nrequest: %s\ndatastore: %s", (string) json_encode( $request ), $is_hpos ? 'HPOS' : 'legacy CPT' )
+			);
+
+			if ( 'any' === ( $request['match'] ?? null ) ) {
+				$as_all = $this->final_ids( $this->query_over( $registry, $is_hpos, $rows ), array_diff_key( $request, [ 'match' => 1 ] ), $is_hpos, $rows );
+				sort( $as_all );
+
+				$differing += $as_all === $ids ? 0 : 1;
+			}
+		}
+
+		$this->assertGreaterThan( 50, $differing, '«Любое» must actually select differently from «Все» over much of the request space, or this gate proves nothing' );
+	}
+
+	/** @return array<string,array{0:bool}> */
+	public function datastore_provider(): array {
+		return [
+			'HPOS'       => [ true ],
+			'legacy CPT' => [ false ],
+		];
 	}
 }

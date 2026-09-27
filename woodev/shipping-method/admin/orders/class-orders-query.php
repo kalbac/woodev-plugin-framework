@@ -57,6 +57,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		/** @var int default page size, absent an explicit `per_page`. */
 		const DEFAULT_PER_PAGE = 20;
 
+		/** @var string `match` request value: every advanced filter must hold (the default). */
+		const MATCH_ALL = 'all';
+
+		/** @var string `match` request value: at least one advanced filter must hold (#843). */
+		const MATCH_ANY = 'any';
+
 		/**
 		 * Custom query var carrying the marker meta keys in scope, for the legacy CPT
 		 * datastore path. It always carries an array;
@@ -185,6 +191,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 *     @type bool     $has_pickup_point    present (any value) => filters on whether the matched
 		 *                                         carrier's own pickup-point meta exists (#836); absent
 		 *                                         => not filtered. Same presence rule as `$has_tracking`.
+		 *     @type string   $match               `'any'` (#843, «Любое») => the advanced filters — delivery
+		 *                                         status, tracking presence, pickup-point presence and
+		 *                                         order status — are OR-ed: an order is selected when it
+		 *                                         is in scope (carrier, period, search, `$is_exported`,
+		 *                                         all of which ALWAYS narrow) AND satisfies AT LEAST ONE
+		 *                                         of the requested ones. Anything else, or absent, is
+		 *                                         `'all'`: every requested filter must hold. With fewer
+		 *                                         than two advanced filters requested the two are the
+		 *                                         same and nothing changes. Under `'any'` the order-status
+		 *                                         filter is a leaf inside the id query's OR, so the
+		 *                                         native `status` arg is widened to the full valid status
+		 *                                         list instead of carrying the requested statuses (it
+		 *                                         would AND them back on); a status request nothing in
+		 *                                         which is real makes just that leaf match nothing.
 		 *     @type bool     $is_exported         present (any value) => filters on whether the matched
 		 *                                         carrier's own carrier-order-id meta exists (SP-10 #841)
 		 *                                         — i.e. whether the order has ever been exported to the
@@ -233,9 +253,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			 * expands it into every valid status.
 			 */
 			$requested_statuses     = $this->resolve_requested_statuses( $request );
-			$status_matches_nothing = ( [] === $requested_statuses );
+			$status_matches_nothing = $this->status_empties_scope( $request );
 
-			if ( null !== $requested_statuses && ! $status_matches_nothing ) {
+			if ( null !== $requested_statuses && $this->is_or_match( $request ) ) {
+				/*
+				 * #843, `match=any`: the status filter is a LEAF inside the OR of the id
+				 * query, so the native `status` arg must NOT carry it too — that would AND
+				 * it back on and turn «Любое» into «Все». The native arg is widened to the
+				 * FULL valid list, the very list `status_not` computes against (cancelled /
+				 * failed included), so the leaf alone decides which statuses are shown. It
+				 * is widened even when nothing in the request is a real status: that leaf
+				 * then matches nothing and the OR goes on with the other filters, over the
+				 * whole table rather than the default view, because a status filter WAS asked
+				 * for and the default view is what an absent one falls back to.
+				 */
+				$args['status'] = array_keys( wc_get_order_statuses() );
+			} elseif ( null !== $requested_statuses && ! $status_matches_nothing ) {
 				$args['status'] = $requested_statuses;
 			}
 
@@ -298,6 +331,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * one clause per participating provider OR-ed together, or the
 		 * {@see self::NO_MATCH_META_QUERY} sentinel when nothing participates.
 		 *
+		 * **`match=any` with two or more advanced filters** (#843) replaces the delivery,
+		 * tracking and pickup parts (and adds the order status, as a
+		 * {@see Orders_Id_Resolver::ORDER_STATUS_LEAF} part) by ONE part, their OR
+		 * ({@see self::any_of()}): scope AND (filter₁ OR filter₂ OR …) AND export scope.
+		 * The OR lives only in this tree, which only the id query reads — never in a
+		 * `meta_query` the datastore would join (gotcha
+		 * `an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`).
+		 *
 		 * The #839 rule that dropped the scope part whenever every filter clause already
 		 * bound its own marker went with the joins it saved: in the id query the scope is
 		 * the DRIVER — one index range on `meta_key` — not a join, so it always stays.
@@ -308,21 +349,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * @return array<int|string,mixed>
 		 */
 		public function build_meta_query( array $request = [] ): array {
-			return $this->build_scope( $request, [] === $this->resolve_requested_statuses( $request ) )['meta_query'];
+			return $this->build_scope( $request, $this->status_empties_scope( $request ) )['meta_query'];
 		}
 
-		/**
-		 * Builds the scope tree and the marker keys that drive it — see
-		 * {@see self::build_meta_query()} for the shape.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param array<string,mixed> $request                see {@see self::build_args()}.
-		 * @param bool                $status_matches_nothing true => the native status filter named
-		 *                                                    nothing real, so the provider scope is
-		 *                                                    emptied (#837 defect 3).
-		 * @return array{marker_keys:string[],meta_query:array<int|string,mixed>}
-		 */
 		private function build_scope( array $request, bool $status_matches_nothing ): array {
 			$carrier   = isset( $request['carrier'] ) ? (string) $request['carrier'] : '';
 			$providers = $status_matches_nothing ? [] : $this->resolve_providers( $carrier );
@@ -333,27 +362,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				$providers
 			);
 
-			$parts = [ self::meta_query_for_keys( $keys ) ];
+			$parts   = [ self::meta_query_for_keys( $keys ) ];
+			$filters = [];
 
 			// `delivery_status` ('is') and `delivery_status_not` ('is not', #836) are mutually
 			// exclusive from the UI's own rule picker; if a caller somehow sends both, 'is'
 			// wins — there is exactly one status part either way.
-			$valid_delivery_statuses = array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] );
-			$delivery_status         = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
-			$delivery_status_not     = isset( $request['delivery_status_not'] ) ? (string) $request['delivery_status_not'] : '';
+			$delivery_status = $this->resolve_delivery_status_request( $request );
 
-			if ( '' !== $delivery_status && in_array( $delivery_status, $valid_delivery_statuses, true ) ) {
-				$parts[] = self::meta_query_for_clauses( $this->delivery_status_meta_clauses( $providers, $delivery_status, false ) );
-			} elseif ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid_delivery_statuses, true ) ) {
-				$parts[] = self::meta_query_for_clauses( $this->delivery_status_meta_clauses( $providers, $delivery_status_not, true ) );
+			if ( null !== $delivery_status ) {
+				$filters[] = self::meta_query_for_clauses( $this->delivery_status_meta_clauses( $providers, $delivery_status['value'], $delivery_status['negate'] ) );
 			}
 
 			if ( array_key_exists( 'has_tracking', $request ) ) {
-				$parts[] = self::meta_query_for_clauses( $this->tracking_meta_clauses( $providers, wc_string_to_bool( $request['has_tracking'] ) ) );
+				$filters[] = self::meta_query_for_clauses( $this->tracking_meta_clauses( $providers, wc_string_to_bool( $request['has_tracking'] ) ) );
 			}
 
 			if ( array_key_exists( 'has_pickup_point', $request ) ) {
-				$parts[] = self::meta_query_for_clauses( $this->pickup_point_meta_clauses( $providers, wc_string_to_bool( $request['has_pickup_point'] ) ) );
+				$filters[] = self::meta_query_for_clauses( $this->pickup_point_meta_clauses( $providers, wc_string_to_bool( $request['has_pickup_point'] ) ) );
+			}
+
+			if ( $this->is_or_match( $request ) ) {
+				// `match=any` (#843): the advanced filters — order status among them, as a
+				// leaf of its own — are ONE part, the OR of the filter parts. The parts
+				// before it (the scope) and after it (the export scope) still narrow.
+				$requested_statuses = $this->resolve_requested_statuses( $request );
+
+				if ( null !== $requested_statuses ) {
+					$filters[] = self::order_status_part( $requested_statuses );
+				}
+
+				$parts[] = self::any_of( $filters );
+			} else {
+				$parts = array_merge( $parts, $filters );
 			}
 
 			if ( array_key_exists( 'is_exported', $request ) ) {
@@ -364,6 +405,141 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 				'marker_keys' => $keys,
 				'meta_query'  => self::combine_meta_queries( $parts ),
 			];
+		}
+
+		/**
+		 * Whether the request is an OR of its advanced filters (#843): `match=any` AND at
+		 * least two advanced filters requested. With none or one, «Любое» and «Все» select
+		 * the same rows, so nothing about the query changes — the AND path stays the only
+		 * path there, byte for byte.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return bool
+		 */
+		private function is_or_match( array $request ): bool {
+			return isset( $request['match'] )
+				&& is_string( $request['match'] )
+				&& self::MATCH_ANY === strtolower( trim( $request['match'] ) )
+				&& $this->count_advanced_filters( $request ) >= 2;
+		}
+
+		/**
+		 * How many of the four advanced filters the request carries: delivery status
+		 * (is / is not — a value that is not a real state does not count, it is ignored),
+		 * tracking presence, pickup-point presence, and order status (is / is not — a
+		 * request nothing in which is real DOES count: it was asked for, and it selects
+		 * nothing). The scope's own `is_exported`, the period, the carrier and the search
+		 * are not advanced filters — they always narrow.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return int
+		 */
+		private function count_advanced_filters( array $request ): int {
+			return ( null !== $this->resolve_delivery_status_request( $request ) ? 1 : 0 )
+				+ ( array_key_exists( 'has_tracking', $request ) ? 1 : 0 )
+				+ ( array_key_exists( 'has_pickup_point', $request ) ? 1 : 0 )
+				+ ( null !== $this->resolve_requested_statuses( $request ) ? 1 : 0 );
+		}
+
+		/**
+		 * Whether a status request nothing in which is real empties the PROVIDER scope
+		 * (#837 defect 3). Only under `all`: under an OR that request is one leaf that
+		 * matches nothing, and the OR goes on with the others.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return bool
+		 */
+		private function status_empties_scope( array $request ): bool {
+			return [] === $this->resolve_requested_statuses( $request ) && ! $this->is_or_match( $request );
+		}
+
+		/**
+		 * The delivery-status filter of a request, if it carries a real one: `is` wins
+		 * over `is not`, and an unrecognised value is no filter at all.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return array{value:string,negate:bool}|null
+		 */
+		private function resolve_delivery_status_request( array $request ): ?array {
+			$valid               = array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] );
+			$delivery_status     = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
+			$delivery_status_not = isset( $request['delivery_status_not'] ) ? (string) $request['delivery_status_not'] : '';
+
+			if ( '' !== $delivery_status && in_array( $delivery_status, $valid, true ) ) {
+				return [
+					'value'  => $delivery_status,
+					'negate' => false,
+				];
+			}
+
+			if ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid, true ) ) {
+				return [
+					'value'  => $delivery_status_not,
+					'negate' => true,
+				];
+			}
+
+			return null;
+		}
+
+		/**
+		 * The part carrying the order-status leaf ({@see Orders_Id_Resolver::ORDER_STATUS_LEAF})
+		 * — a single-clause part like the ones {@see self::meta_query_for_clauses()} builds —
+		 * or the {@see self::NO_MATCH_META_QUERY} sentinel when the request named no real
+		 * status.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $statuses recognised `wc-`-prefixed statuses; empty means "matches nothing".
+		 * @return array<int|string,mixed>
+		 */
+		private static function order_status_part( array $statuses ): array {
+			if ( [] === $statuses ) {
+				return self::NO_MATCH_META_QUERY;
+			}
+
+			return [ [ Orders_Id_Resolver::ORDER_STATUS_LEAF => array_values( $statuses ) ] ];
+		}
+
+		/**
+		 * ORs filter parts together (#843). A part that matches nothing is left out — in
+		 * an OR it contributes nothing, and leaving the sentinel in would compile a
+		 * pointless never-true subquery; when NO part is left the result is the sentinel
+		 * itself, which the caller's AND root turns into "matches nothing" without asking
+		 * the database. One part left is returned as it is.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int,array<int|string,mixed>> $parts filter parts.
+		 * @return array<int|string,mixed>
+		 */
+		private static function any_of( array $parts ): array {
+			$live = array_values(
+				array_filter(
+					$parts,
+					static function ( array $part ): bool {
+						return self::NO_MATCH_META_QUERY !== $part;
+					}
+				)
+			);
+
+			if ( [] === $live ) {
+				return self::NO_MATCH_META_QUERY;
+			}
+
+			if ( 1 === count( $live ) ) {
+				return $live[0];
+			}
+
+			return array_merge( [ 'relation' => 'OR' ], $live );
 		}
 
 		/**

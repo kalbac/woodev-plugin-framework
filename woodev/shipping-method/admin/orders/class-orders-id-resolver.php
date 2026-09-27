@@ -48,6 +48,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 	 * The unit gate `ShippingOrdersQueryRowSemanticsTest` walks the same tree against an
 	 * independent oracle; `ShippingOrdersIdResolverTest` pins this SQL's shape.
 	 *
+	 * **One leaf is not a meta clause** (#843, «Любое»): {@see self::ORDER_STATUS_LEAF},
+	 * the order's own status, compiled against the order table's status column of the
+	 * active datastore. It exists so `match=any` can OR the order-status filter with the
+	 * meta-based ones inside THIS statement — an OR of them in the main `wc_get_orders`
+	 * query is exactly the un-predicated join per key this class avoids.
+	 *
 	 * ⚠ The id list is the size of the RESULT, not of the page — ~6 bytes per id in the
 	 * main query's SQL, linear in the store; ~3 M carrier orders would reach MariaDB's
 	 * 16 MB default `max_allowed_packet`. And an EMPTY list must never reach `post__in`:
@@ -78,8 +84,40 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 		const LEAF_ALIAS = 'm';
 
 		/**
+		 * Alias of the order row a status leaf's correlated subquery looks at.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const ORDER_ALIAS = 'o';
+
+		/**
+		 * The marker of the ONE leaf kind that is not a meta clause (#843): «the order's
+		 * own status is one of these». A leaf of the tree is
+		 * `[ self::ORDER_STATUS_LEAF => [ 'wc-processing', … ] ]` — no `key`, no `compare`,
+		 * so it can never be mistaken for a meta clause (or read as a nested group) by
+		 * anything that walks the tree, and it never reaches `WP_Meta_Query`: the tree only
+		 * ever goes through this class.
+		 *
+		 * Order status lives on the order itself, not in the meta table, so the leaf is
+		 * compiled against the COLUMN of the active datastore — HPOS `{wc_orders}.status`,
+		 * legacy CPT `{posts}.post_status` (both hold the `wc-`-prefixed slug) — as a
+		 * correlated `EXISTS` on the driver's order id, the same shape every meta leaf has:
+		 * one primary-key lookup per driver row, no join. {@see Orders_Query} emits it only
+		 * under `match=any` (under `all` the status stays a native `status` arg), and always
+		 * with a NON-EMPTY list: a status request nothing in which is real is the
+		 * sentinel, not an empty leaf.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		const ORDER_STATUS_LEAF = 'order_status';
+
+		/**
 		 * Database connection — `$wpdb`, or a stand-in exposing `prepare()`, `get_col()`,
-		 * `prefix` and `postmeta` (unit tests).
+		 * `last_error`, `prefix`, `posts` and `postmeta` (unit tests).
 		 *
 		 * @since 2.0.2
 		 *
@@ -128,6 +166,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 
 			$rows = $this->wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- the one flat id query of the orders page (#928); every literal in $sql went through $wpdb->prepare() in compile(); caching is decided by the caller (the badge already caches its counts).
 
+			$error = (string) $this->wpdb->last_error;
+
+			if ( '' !== $error ) {
+				// Fail CLOSED, as before: nothing came back, so the caller gets `[]` → the
+				// «matches nothing» sentinel, never every order. The only change is that a
+				// broken statement no longer looks like an honest empty result (#936).
+				$this->log_query_failure( $error );
+
+				return [];
+			}
+
 			if ( ! is_array( $rows ) ) {
 				return [];
 			}
@@ -143,6 +192,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 			}
 
 			return array_values( $ids );
+		}
+
+		/**
+		 * Writes a failed id query to the PHP error log (#936) — the same `[woodev]`
+		 * `error_log()` diagnostic the rest of the shipping subsystem uses. The text never
+		 * reaches a screen, so it is neither translated nor escaped.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $error `$wpdb->last_error` after the failed statement.
+		 * @return void
+		 */
+		private function log_query_failure( string $error ): void {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a failed id query; the merchant only ever sees an empty orders page.
+				sprintf( '[woodev] shipping orders id query failed, the page shows no orders: %s', $error )
+			);
 		}
 
 		/**
@@ -235,9 +300,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 					continue;
 				}
 
-				$terms[] = isset( $child['key'] )
-					? $this->compile_leaf( $child, $table, $id_column )
-					: $this->compile_group( $child, $table, $id_column );
+				if ( isset( $child['key'] ) ) {
+					$terms[] = $this->compile_leaf( $child, $table, $id_column );
+				} elseif ( isset( $child[ self::ORDER_STATUS_LEAF ] ) ) {
+					$terms[] = $this->compile_order_status_leaf( (array) $child[ self::ORDER_STATUS_LEAF ], $id_column );
+				} else {
+					$terms[] = $this->compile_group( $child, $table, $id_column );
+				}
 			}
 
 			return $terms;
@@ -320,6 +389,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 			}
 
 			throw new \InvalidArgumentException( "Orders_Id_Resolver: unhandled compare '{$compare}' for key '{$leaf['key']}'." );
+		}
+
+		/**
+		 * Compiles the order-status leaf ({@see self::ORDER_STATUS_LEAF}) to a correlated
+		 * subquery on the active datastore's ORDER table, keyed on the driver's order id.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[] $statuses  `wc-`-prefixed order statuses; must not be empty.
+		 * @param string   $id_column order-id column of the META table (the driver's).
+		 * @return string
+		 *
+		 * @throws \InvalidArgumentException on an empty list — the builder turns "no real
+		 *                                   status" into the sentinel, and an empty `IN ()`
+		 *                                   is not SQL.
+		 */
+		private function compile_order_status_leaf( array $statuses, string $id_column ): string {
+			$statuses = array_map( 'strval', array_values( $statuses ) );
+
+			if ( [] === $statuses ) {
+				throw new \InvalidArgumentException( 'Orders_Id_Resolver: an order-status leaf with no statuses.' );
+			}
+
+			return sprintf(
+				'EXISTS (SELECT 1 FROM %1$s AS %2$s WHERE %2$s.%3$s = %4$s.%5$s AND %2$s.%6$s IN (%7$s))',
+				$this->hpos ? $this->wpdb->prefix . 'wc_orders' : $this->wpdb->posts,
+				self::ORDER_ALIAS,
+				$this->hpos ? 'id' : 'ID',
+				self::DRIVER_ALIAS,
+				$id_column,
+				$this->hpos ? 'status' : 'post_status',
+				$this->quote_list( $statuses )
+			);
 		}
 
 		/**

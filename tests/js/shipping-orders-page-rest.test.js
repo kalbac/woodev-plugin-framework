@@ -192,3 +192,19 @@ describe( 'isExported — the «Новые» scope arg (#841)', () => {
 		expect( new URL( calledUrl() ).searchParams.has( 'is_exported' ) ).toBe( false );
 	} );
 } );
+
+describe( 'match — «Все / Любое» (#843)', () => {
+	test( "'any' sends match=any", async () => {
+		await fetchOrders( { match: 'any' } );
+
+		expect( new URL( calledUrl() ).searchParams.get( 'match' ) ).toBe( 'any' );
+	} );
+
+	test( "'all' and undefined send nothing — the URL writes nothing for «Все» and the server reads the absence as all", async () => {
+		await fetchOrders( { match: 'all' } );
+		expect( new URL( calledUrl() ).searchParams.has( 'match' ) ).toBe( false );
+
+		await fetchOrders( {} );
+		expect( new URL( calledUrl() ).searchParams.has( 'match' ) ).toBe( false );
+	} );
+} );

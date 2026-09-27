@@ -2,7 +2,7 @@
 /**
  * A `$wpdb` stand-in for the tests around {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver}
  * (#928): enough of `wpdb` to compile the id query without a database — `prepare()`
- * with `%s` / `%d`, the two table-name properties the resolver reads, and a `get_col()`
+ * with `%s` / `%d`, the table-name properties the resolver reads, and a `get_col()`
  * that records every statement it was handed and answers with a canned list.
  *
  * Not a Mockery mock on purpose: the same object is shared by three test files (the
@@ -26,8 +26,17 @@ class OrdersIdResolverFakeWpdb {
 	/** @var string */
 	public $postmeta = 'wp_postmeta';
 
+	/** @var string the legacy CPT order table (an order-status leaf reads `post_status` from it, #843). */
+	public $posts = 'wp_posts';
+
 	/** @var string[] every statement `get_col()` received, in order. */
 	public $queries = [];
+
+	/** @var string what `wpdb::$last_error` reads after the last `get_col()` — `''` unless {@see self::fail_with()} was told otherwise (#936). */
+	public $last_error = '';
+
+	/** @var string the error every following `get_col()` reports, `''` for none. */
+	private $failure = '';
 
 	/** @var callable(string):array<int,string|int> answers `get_col()` from the statement. */
 	private $answer;
@@ -70,10 +79,26 @@ class OrdersIdResolverFakeWpdb {
 	}
 
 	/**
+	 * Makes every following `get_col()` fail the way `wpdb` does: `last_error` is set and
+	 * the canned answer is what `wpdb::get_col()` returns for a broken statement — an
+	 * empty array, indistinguishable from "no rows" without reading `last_error`.
+	 *
+	 * @param string $error the message `wpdb::$last_error` should carry.
+	 */
+	public function fail_with( string $error ): void {
+		$this->failure = $error;
+	}
+
+	/**
 	 * @return array<int,string|int>
 	 */
 	public function get_col( string $sql ): array {
-		$this->queries[] = $sql;
+		$this->queries[]  = $sql;
+		$this->last_error = $this->failure; // wpdb::flush() clears it at the start of every statement.
+
+		if ( '' !== $this->failure ) {
+			return [];
+		}
 
 		return ( $this->answer )( $sql );
 	}

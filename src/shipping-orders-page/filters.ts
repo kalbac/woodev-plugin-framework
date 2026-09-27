@@ -102,7 +102,7 @@ export function advancedFiltersToggleQuery( open: boolean ): Record<string, stri
 		[ HAS_TRACKING_PARAM ]: undefined,
 		[ HAS_PICKUP_POINT_PARAM ]: undefined,
 		// `AdvancedFilters` writes this itself when its All/Any select is used.
-		match: undefined,
+		[ MATCH_PARAM ]: undefined,
 	};
 }
 
@@ -132,6 +132,14 @@ export const ORDER_STATUS_NOT_PARAM = 'status_is_not';
 
 /** Presence of a pickup point (#836) — the fourth thing a provider declares a meta key for. */
 export const HAS_PICKUP_POINT_PARAM = 'has_pickup_point_is';
+
+/**
+ * «Все / Любое» (#843). `AdvancedFilters` writes `match=any` itself when its select in the
+ * block title is set to «Any» and writes NOTHING for «All» (`getUpdateHref()` maps `all` to
+ * `undefined`), so the URL only ever carries `any` — which is also how the server reads it:
+ * anything else is `all`.
+ */
+export const MATCH_PARAM = 'match';
 
 /** `has_tracking_is` values — `AdvancedFilters`' `SelectControl` input only ever carries strings. */
 export const HAS_TRACKING_YES = 'yes';
@@ -353,6 +361,11 @@ export function getDeliveryStatusNotFromQuery( query: WcQuery ): DeliveryStatusC
 	return ( query[ DELIVERY_STATUS_NOT_PARAM ] as DeliveryStatusCanonical | undefined ) || '';
 }
 
+/** «Все / Любое» (#843): `'any'` only when the URL says exactly so, otherwise `'all'`. */
+export function getMatchFromQuery( query: WcQuery ): MatchMode {
+	return MATCH_ANY === query[ MATCH_PARAM ] ? MATCH_ANY : MATCH_ALL;
+}
+
 /** WC order statuses the merchant asked to EXCLUDE (#836). */
 export function getOrderStatusNotFromQuery( query: WcQuery ): string[] {
 	const value = query[ ORDER_STATUS_NOT_PARAM ];
@@ -406,6 +419,11 @@ export function getHasTrackingFromQuery( query: WcQuery ): boolean | undefined {
 	return undefined;
 }
 
+/** The two values of the block title's «Все / Любое» select, as the REST route's `match` arg spells them. */
+export type MatchMode = 'all' | 'any';
+export const MATCH_ALL: MatchMode = 'all';
+export const MATCH_ANY: MatchMode = 'any';
+
 /** One comparable snapshot of every URL-driven filter — used to decide whether a change should reset `paged` to 1 (requirement #4). */
 export interface UrlFilters {
 	carrier: string;
@@ -427,6 +445,8 @@ export interface UrlFilters {
 	hasTracking: boolean | undefined;
 	/** #836: presence of a pickup point; `undefined` is "no filter", as with tracking. */
 	hasPickupPoint: boolean | undefined;
+	/** #843: whether the four advanced filters above are AND-ed (`all`) or OR-ed (`any`). */
+	match: MatchMode;
 }
 
 /** Whether two {@link UrlFilters} snapshots represent the same filter state. */
@@ -443,6 +463,7 @@ export function filtersEqual( a: UrlFilters, b: UrlFilters ): boolean {
 		a.deliveryStatusNot === b.deliveryStatusNot &&
 		a.hasTracking === b.hasTracking &&
 		a.hasPickupPoint === b.hasPickupPoint &&
+		a.match === b.match &&
 		sameList( a.status, b.status ) &&
 		sameList( a.statusNot, b.statusNot )
 	);
@@ -635,7 +656,13 @@ export function buildAdvancedFiltersConfig(
 	}
 
 	return {
-		title: __( 'Заказы соответствуют условиям', 'woodev-plugin-framework' ),
+		/**
+		 * `{{select /}}` is the token `AdvancedFilters.getTitle()` swaps for its «Все / Любое»
+		 * `SelectControl` (#843) — without it the control is not rendered at all. The two
+		 * option labels are WooCommerce's own (`__( 'All' / 'Any', 'woocommerce' )`), so they
+		 * follow the shop's WooCommerce translation, not ours.
+		 */
+		title: __( 'Заказы соответствуют {{select /}} условиям', 'woodev-plugin-framework' ),
 		filters,
 	};
 }

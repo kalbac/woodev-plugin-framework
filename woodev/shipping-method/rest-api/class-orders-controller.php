@@ -187,6 +187,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 							'type'              => 'boolean',
 							'sanitize_callback' => 'rest_sanitize_boolean',
 						],
+						// «Все / Любое» (#843) — whether the advanced filters (delivery
+						// status, tracking, pickup point, order status) are AND-ed or OR-ed.
+						'match'               => [
+							'type'    => 'string',
+							'enum'    => [ Orders_Query::MATCH_ALL, Orders_Query::MATCH_ANY ],
+							'default' => Orders_Query::MATCH_ALL,
+						],
 					],
 				]
 			);
@@ -438,6 +445,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				'status_not'          => $request->get_param( 'status_not' ),
 				'delivery_status'     => $request->get_param( 'delivery_status' ),
 				'delivery_status_not' => $request->get_param( 'delivery_status_not' ),
+				'match'               => $request->get_param( 'match' ),
 			];
 
 			// `has_tracking`/`has_pickup_point`/`is_exported` carry no default (SP-10 spec
@@ -496,7 +504,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 *
 		 * **Every OTHER filter of the request is inherited**, `carrier` alone is
 		 * overridden: that is the axis the picker selects between, so inheriting it would
-		 * make every option report the current carrier's number.
+		 * make every option report the current carrier's number. `match` («Все / Любое»,
+		 * #843) is inherited with the filters it combines — here and in
+		 * {@see self::build_scope_counts()} — so a count is always the table the same
+		 * rule would show.
 		 *
 		 * ⚠ The scope (`is_exported`) is inherited on purpose, unlike in
 		 * {@see self::build_scope_counts()} where it is the overridden axis. Standing in
