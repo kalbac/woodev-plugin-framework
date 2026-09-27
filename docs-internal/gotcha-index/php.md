@@ -26,3 +26,4 @@
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
+- [php/wp-load-order] **`deactivate_plugins()` & the rest of `wp-admin/includes/plugin.php` are UNDEFINED on `plugins_loaded` — Brain Monkey defines them, so every unit test stays green.** → [admin-only-wp-functions-are-undefined-on-plugins-loaded](../gotchas/admin-only-wp-functions-are-undefined-on-plugins-loaded.md) (s141)

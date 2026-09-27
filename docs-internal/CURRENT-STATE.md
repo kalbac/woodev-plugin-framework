@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-27 (s141).** ✅ **#843 «Все / Любое» + #936 merged** (PR #937, accepted on the rig 27.09.2026). ⏳ PR **#938** (#916) awaits his word on the message text. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-27 (s141).** ✅ **#843 «Все / Любое» + #936 merged** (PR #937, accepted on the rig 27.09.2026). ✅ **#916 merged (PR #944):** a second plugin with an already-claimed download id cannot be activated — `download_id` is a required loader-definition field, the resolver never invokes a duplicate, the activation guard keeps the already-active plugin (operator's decision 27.09.2026). Follow-ups #942, #943. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -109,7 +109,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 57, measured 27.09.2026 (s141):** Инбокс holds **#922** (Supermemory, parked by his word) and **#916** (awaiting his word).
+**Open cards — 57, measured 27.09.2026 (s141):** Инбокс holds **#922** (Supermemory, parked by his word) .
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
