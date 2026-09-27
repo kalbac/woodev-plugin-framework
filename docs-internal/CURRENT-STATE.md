@@ -33,9 +33,9 @@ datastores; a DB error reads as "no orders"). Gotcha
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
 unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
 
-⛔ **Codex under Orca on this Mac 401s on every request and still reads `live`** — a silent loss of a
-worker or a critic, burning a whole `check --wait`. **#926**; until then the critic gate needs a
-Claude model of a different size.
+✅ **Codex under Orca on this Mac works again** (#926 closed 27.09.2026: smoke via `worker-start
+--agent codex` returned the right hash, no 401). If the s139 failure recurs, check the terminal
+BUFFER, not `stage` — it read `live` while every request 401'd.
 
 ⚠ **Four ways a UI change passes every gate and is still wrong** — a GREP'd vendor rule, a green
 build that committed no bundles, a row rebuilt after an action (legacy CPT only), a probe whose
@@ -108,7 +108,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 58, measured 27.09.2026 (s140):** Инбокс holds **#926** (Codex 401), waiting on him.
+**Open cards — 57, measured 27.09.2026 (s140):** Инбокс holds **#922** (Supermemory), parked by his word.
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
