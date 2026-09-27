@@ -1,15 +1,22 @@
 <?php
 /**
- * Unit: Orders_Query args-building (SP-10 increment 1, spec M2 + round 2).
+ * Unit: Orders_Query args-building (SP-10 increment 1, spec M2 + round 2; #928).
  *
- * Pins the ARGS built by Orders_Query::build_args(), not wc_get_orders() itself —
- * the aggregate `relation => OR` shape was measured against a real HPOS install on
- * the rig (SP-10 spec M2); this test only pins that the class still asks for it.
+ * Pins the TREE Orders_Query::build_meta_query() builds and the ARGS build_args() hands
+ * to wc_get_orders() — never wc_get_orders() itself. The aggregate `relation => OR`
+ * shape was measured against a real HPOS install on the rig (SP-10 spec M2); this
+ * file only pins that the class still asks for it.
+ *
+ * #928: the tree no longer reaches the datastore as `meta_query`. build_args() resolves
+ * it to order ids through the `protected` seam `Orders_Query::resolve_order_ids()` and
+ * passes them as `post__in`; a `meta_query` (HPOS) or the empty marker-keys var (legacy
+ * CPT) is emitted only to say "matches nothing". So the shape tests read the tree from
+ * build_meta_query(), and the args tests run against a subclass whose resolver returns
+ * a fixed id list ({@see self::query_with_hpos()}) — the real one would need `$wpdb`.
  *
  * Round 2: the legacy CPT order datastore does not support `meta_query` at all (fires
- * `_doing_it_wrong` and silently returns UNFILTERED results), so build_args() branches
- * on the datastore — every test below runs against BOTH branches via
- * {@see self::query_with_hpos()}, which overrides the real
+ * `_doing_it_wrong` and silently returns UNFILTERED results), so the sentinel branches
+ * on the datastore — exercised through the same subclass, which also overrides the real
  * `Woodev_Plugin_Compatibility::is_hpos_enabled()` static call: that call always
  * returns false under Brain Monkey (no `OrderUtil` class is loaded here — see
  * `PluginCompatibilityTest::is_hpos_enabled_returns_false_when_order_util_not_available()`),
@@ -79,51 +86,64 @@ class ShippingOrdersQueryTest extends TestCase {
 		return $registry;
 	}
 
+	/** The ids the stubbed resolver answers with, unless a test asks for another list. */
+	private const STUB_IDS = [ 11, 12, 13 ];
+
 	/**
 	 * Builds an Orders_Query whose datastore detection is pinned to $hpos, bypassing
-	 * the real (always-false-under-Brain-Monkey) static call. See the class docblock.
+	 * the real (always-false-under-Brain-Monkey) static call, and whose id resolver
+	 * answers $ids without a database, recording what it was asked (`->resolved`,
+	 * one `[ marker keys, tree ]` pair per call). See the class docblock.
+	 *
+	 * @return Orders_Query&object{resolved:array<int,array{0:string[],1:array<int|string,mixed>}>}
 	 */
-	private function query_with_hpos( bool $hpos, ?Orders_Registry $registry = null ): Orders_Query {
-		return new class( $registry, $hpos ) extends Orders_Query {
+	private function query_with_hpos( bool $hpos, ?Orders_Registry $registry = null, array $ids = self::STUB_IDS ): Orders_Query {
+		return new class( $registry, $hpos, $ids ) extends Orders_Query {
 			/** @var bool */
 			private $hpos;
 
-			public function __construct( ?Orders_Registry $registry, bool $hpos ) {
+			/** @var int[] */
+			private $ids;
+
+			/** @var array<int,array{0:string[],1:array<int|string,mixed>}> */
+			public $resolved = [];
+
+			public function __construct( ?Orders_Registry $registry, bool $hpos, array $ids ) {
 				parent::__construct( $registry );
 				$this->hpos = $hpos;
+				$this->ids  = $ids;
 			}
 
 			protected function is_hpos_enabled(): bool {
 				return $this->hpos;
 			}
+
+			protected function resolve_order_ids( array $marker_keys, array $meta_query ): array {
+				$this->resolved[] = [ $marker_keys, $meta_query ];
+
+				return $this->ids;
+			}
 		};
 	}
 
 	/**
-	 * Splits a combined `meta_query` into its top-level parts, regardless of
-	 * which shape {@see Orders_Query::combine_meta_queries()} returned: a
-	 * single unwrapped part, or the `relation => AND` wrapper around several.
+	 * Splits a combined tree into its top-level parts, regardless of which shape
+	 * {@see Orders_Query::combine_meta_queries()} returned: a single unwrapped part
+	 * (the scope alone), or the `relation => AND` wrapper around several.
 	 *
-	 * The PRESENCE of a `relation` key does not tell the two apart: an
-	 * unwrapped single part can carry its own top-level `relation` too — a
-	 * status filter with several participating providers is itself
-	 * `[ 'relation' => 'OR', ... ]` once the marker-key scope part has been
-	 * dropped (#839 step 2), and branching on `array_key_exists( 'relation',
-	 * … )` alone then shreds that OR-group into fake top-level parts. What IS
-	 * unambiguous is the wrapper's own shape: {@see
+	 * The PRESENCE of a `relation` key does not tell the two apart: the scope alone
+	 * carries its own top-level `relation => OR` with two carriers, and branching on
+	 * `array_key_exists( 'relation', … )` alone then shreds that OR-group into fake
+	 * top-level parts. What IS unambiguous is the wrapper's own shape: {@see
 	 * Orders_Query::combine_meta_queries()} only ever builds it as
-	 * `array_merge( [ 'relation' => 'AND' ], $parts )` with the marker-key
-	 * scope part ALWAYS first — {@see Orders_Query::build_args()} pushes it
-	 * onto `$meta_query_parts` before any filter part is added. So the
-	 * wrapper is recognised by its known first child being byte-equal to the
-	 * scope part built from the SAME marker keys — never by matching the
-	 * scope's shape against every child, which is what misreads a filter
-	 * part that happens to equal the scope on its own (see
-	 * {@see self::meta_query_filter_part()}), and never by an AND-group that
-	 * is itself one provider's OWN filter clause — {@see
-	 * Orders_Query::delivery_status_meta_clauses()} builds
-	 * `AND( marker EXISTS, OR( … ) )` per provider, which never has 'relation'
-	 * at the OUTER level once it is the sole remaining part.
+	 * `array_merge( [ 'relation' => 'AND' ], $parts )` with the marker-key scope part
+	 * ALWAYS first — {@see Orders_Query::build_meta_query()} pushes it before any
+	 * filter part is added (since #928 unconditionally: the id query's driver, not a
+	 * join, so the #839 redundancy drop is gone). So the wrapper is recognised by its
+	 * known first child being byte-equal to the scope part built from the SAME marker
+	 * keys — never by matching the scope's shape against every child, which is what
+	 * misreads a filter part that happens to equal the scope on its own (see
+	 * {@see self::meta_query_filter_part()}).
 	 *
 	 * @param array<int|string, mixed> $meta_query
 	 * @param array<int|string, mixed> $scope the marker-key scope part built from the SAME marker keys ({@see Orders_Query::meta_query_for_keys()}), used to recognise the wrapper by its known first child.
@@ -144,12 +164,10 @@ class ShippingOrdersQueryTest extends TestCase {
 	 * marker-key SCOPE part plus exactly one active filter — every call site in
 	 * this file that reaches for a specific filter part combines just those
 	 * two. Located by ROLE via {@see self::meta_query_top_level_parts()}: the
-	 * scope, when present, is always the first of exactly two top-level parts
-	 * (never found by matching its shape against the filter's own content,
-	 * which breaks the moment a filter part is itself shaped like the scope —
-	 * see that method's docblock), so the filter is whichever part is NOT the
-	 * scope by position — the second of two, or the sole part when the scope
-	 * was dropped (#839 step 2).
+	 * scope is always the first of exactly two top-level parts (never found by
+	 * matching its shape against the filter's own content, which breaks the moment
+	 * a filter part is itself shaped like the scope — see that method's docblock),
+	 * so the filter is the second part by position.
 	 *
 	 * @param array<int|string, mixed> $meta_query
 	 * @param string[]                 $scope_marker_keys marker keys of the providers in scope for the request.
@@ -175,7 +193,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 		$registry->register_provider( $this->provider( 'yandex', '_yandex_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'carrier' => 'cdek' ] );
 
 		$this->assertSame(
 			[
@@ -184,9 +202,8 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
-		$this->assertArrayNotHasKey( Orders_Query::QUERY_VAR_MARKER_KEYS, $args );
 	}
 
 	public function test_hpos_aggregate_builds_an_or_clause_per_registered_provider(): void {
@@ -194,7 +211,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 		$registry->register_provider( $this->provider( 'yandex', '_yandex_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'all' ] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'carrier' => 'all' ] );
 
 		$this->assertSame(
 			[
@@ -208,7 +225,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
@@ -220,9 +237,9 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 		$registry->register_provider( $this->provider( 'yandex', '_yandex_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [] );
 
-		$this->assertArrayHasKey( 'relation', $args['meta_query'] );
+		$this->assertArrayHasKey( 'relation', $tree );
 	}
 
 	/**
@@ -248,34 +265,141 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
 	}
 
-	// ----- Legacy CPT: no meta_query, the marker-keys query var instead (round 2) -----
+	// ----- #928: the tree is resolved to ids and travels as post__in, on BOTH datastores -----
+
+	/** @return array<string,array{0:bool}> */
+	public function datastore_provider(): array {
+		return [
+			'HPOS'       => [ true ],
+			'legacy CPT' => [ false ],
+		];
+	}
 
 	/**
-	 * The regression itself: on the legacy CPT datastore `meta_query` must never be
-	 * emitted at all — its mere presence is what fires `_doing_it_wrong` and makes
-	 * WooCommerce silently ignore the whole arg, returning UNFILTERED results.
+	 * The re-form itself (#928): neither datastore ever sees the scope as a
+	 * `meta_query` (whose OR-ed marker `EXISTS` clauses cost one un-predicated join
+	 * each, `~d^N`) nor as the marker-keys query var — the ids the resolver returned
+	 * are the whole scope, as `post__in`. On the legacy CPT datastore that is ALSO the
+	 * round-2 regression guard: `meta_query`'s mere presence fires `_doing_it_wrong`
+	 * there and WooCommerce silently returns the UNFILTERED table.
+	 *
+	 * @dataProvider datastore_provider
 	 */
-	public function test_legacy_cpt_single_carrier_never_emits_meta_query_and_carries_the_key(): void {
+	public function test_the_resolved_ids_travel_as_post__in_and_nothing_else_scopes_the_query( bool $hpos ): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 		$registry->register_provider( $this->provider( 'yandex', '_yandex_marker' ) );
 
-		$args = $this->query_with_hpos( false, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+		$query = $this->query_with_hpos( $hpos, $registry );
+		$args  = $query->build_args( [ 'carrier' => 'cdek' ] );
 
+		$this->assertSame( self::STUB_IDS, $args['post__in'] );
 		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame( [ '_cdek_marker' ], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+		$this->assertArrayNotHasKey( Orders_Query::QUERY_VAR_MARKER_KEYS, $args );
 	}
 
-	public function test_legacy_cpt_aggregate_never_emits_meta_query_and_carries_every_key(): void {
+	/**
+	 * What the resolver is handed is exactly the marker keys in scope and the tree
+	 * {@see Orders_Query::build_meta_query()} builds for the same request — so a shape
+	 * test on the tree is a test of what the id query will resolve, on both datastores.
+	 *
+	 * @dataProvider datastore_provider
+	 */
+	public function test_the_resolver_is_handed_the_marker_keys_and_the_built_tree( bool $hpos ): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 		$registry->register_provider( $this->provider( 'yandex', '_yandex_marker' ) );
 
-		$args = $this->query_with_hpos( false, $registry )->build_args( [ 'carrier' => 'all' ] );
+		$request = [
+			'carrier'      => 'all',
+			'has_tracking' => false,
+		];
 
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame( [ '_cdek_marker', '_yandex_marker' ], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+		$query = $this->query_with_hpos( $hpos, $registry );
+		$query->build_args( $request );
+
+		$this->assertCount( 1, $query->resolved, 'exactly one id query per build' );
+		$this->assertSame( [ '_cdek_marker', '_yandex_marker' ], $query->resolved[0][0] );
+		$this->assertSame( $query->build_meta_query( $request ), $query->resolved[0][1] );
 	}
+
+	/**
+	 * ⚠ An EMPTY `post__in` fails OPEN on both datastores — HPOS reads `[]` as "argument
+	 * not set" (`OrdersTableQuery::SKIPPED_VALUES`), `WP_Query` tests the var for truth —
+	 * so "the id query found no order" must become the one "matches nothing" sentinel
+	 * each datastore already has, never an empty list.
+	 *
+	 * @dataProvider datastore_provider
+	 */
+	public function test_an_empty_id_result_becomes_the_sentinel_never_an_empty_post__in( bool $hpos ): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$query = $this->query_with_hpos( $hpos, $registry, [] );
+		$args  = $query->build_args( [ 'carrier' => 'cdek' ] );
+
+		$this->assertCount( 1, $query->resolved, 'the resolver WAS asked — the scope itself is not empty' );
+		$this->assertArrayNotHasKey( 'post__in', $args );
+
+		if ( $hpos ) {
+			$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+			$this->assertArrayNotHasKey( Orders_Query::QUERY_VAR_MARKER_KEYS, $args );
+		} else {
+			$this->assertArrayNotHasKey( 'meta_query', $args );
+			$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+		}
+	}
+
+	/**
+	 * A tree that can match nothing — no provider in scope, or a filter no provider can
+	 * satisfy — is answered without asking the database at all.
+	 *
+	 * @dataProvider datastore_provider
+	 */
+	public function test_a_tree_that_matches_nothing_is_never_resolved( bool $hpos ): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
+
+		$unknown_carrier = $this->query_with_hpos( $hpos, $registry );
+		$unknown_carrier->build_args( [ 'carrier' => 'ghost' ] );
+
+		$this->assertSame( [], $unknown_carrier->resolved, 'an unrecognised carrier is known to match nothing' );
+
+		$no_participant = $this->query_with_hpos( $hpos, $registry );
+		$no_participant->build_args(
+			[
+				'carrier'      => 'cdek',
+				'has_tracking' => true, // this carrier has no tracking concept => the sentinel part.
+			]
+		);
+
+		$this->assertSame( [], $no_participant->resolved, 'a filter no provider can satisfy is known to match nothing' );
+	}
+
+	/**
+	 * The #839 step-2 rule is REVERSED on purpose: it dropped the scope part whenever
+	 * every filter clause already bound its own marker, to save one join per carrier.
+	 * In the id query the scope is the driver — one index range on `meta_key` — so it
+	 * costs nothing to keep and it always comes first, which is what lets the resolver
+	 * fold it into the driver predicate.
+	 */
+	public function test_the_scope_part_stays_first_even_when_every_clause_binds_its_own_marker(): void {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
+		);
+		$registry->register_provider(
+			$this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YA_SHIPPED' => Delivery_Status::IN_TRANSIT ] )
+		);
+
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'delivery_status' => Delivery_Status::UNKNOWN ] );
+
+		$this->assertSame( 'AND', $tree['relation'] );
+		$this->assertSame( Orders_Query::meta_query_for_keys( [ '_cdek_marker', '_yandex_marker' ] ), $tree[0] );
+		$this->assertCount( 3, $tree ); // relation + scope part + status part.
+	}
+
+	// ----- Legacy CPT: "matches nothing" is the EMPTY marker-keys query var (round 2) -----
 
 	/**
 	 * The worst version of the bug (round 2 brief, point 3): on the legacy datastore a
@@ -563,7 +687,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			)
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'cdek',
 				'delivery_status' => Delivery_Status::IN_TRANSIT,
@@ -587,7 +711,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
@@ -596,14 +720,14 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry->register_provider( $this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] ) );
 		$registry->register_provider( $this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YAN_DONE' => Delivery_Status::DELIVERED ] ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'all',
 				'delivery_status' => Delivery_Status::DELIVERED,
 			]
 		);
 
-		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$status_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame(
 			[
@@ -632,7 +756,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider_with_status( 'novendor', '_novendor_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'novendor',
 				'delivery_status' => Delivery_Status::UNKNOWN,
@@ -644,7 +768,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_novendor_marker',
 				'compare' => 'EXISTS',
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_novendor_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_novendor_marker' ] )[0]
 		);
 	}
 
@@ -671,7 +795,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'cdek',
 				'delivery_status' => Delivery_Status::UNKNOWN,
@@ -698,7 +822,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -726,11 +850,11 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YA_SHIPPED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[ 'delivery_status' => Delivery_Status::UNKNOWN ]
 		);
 
-		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$status_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $status_part['relation'] );
 
@@ -759,21 +883,21 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'cdek',
 				'delivery_status' => Delivery_Status::DELIVERED,
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) );
 	}
 
 	public function test_delivery_status_unrecognized_value_is_ignored_entirely(): void {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'cdek',
 				'delivery_status' => 'not-a-real-canonical-state',
@@ -788,35 +912,10 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
-	public function test_delivery_status_legacy_cpt_carries_the_status_clauses_query_var_not_meta_query(): void {
-		$registry = Orders_Registry::instance();
-		$registry->register_provider(
-			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] )
-		);
-
-		$args = $this->query_with_hpos( false, $registry )->build_args(
-			[
-				'carrier'         => 'cdek',
-				'delivery_status' => Delivery_Status::DELIVERED,
-			]
-		);
-
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_status',
-					'value'   => [ 'CDEK_DONE' ],
-					'compare' => 'IN',
-				],
-			],
-			$args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ]
-		);
-	}
 
 	// ----- tracking-presence filter (SP-10 spec D10) -----
 
@@ -826,7 +925,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'cdek',
 				'has_tracking' => true,
@@ -840,7 +939,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -854,7 +953,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'cdek',
 				'has_tracking' => false,
@@ -875,7 +974,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -900,14 +999,14 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'tracking_meta_key' => '_yandex_tracking' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'all',
 				'has_tracking' => false,
 			]
 		);
 
-		$tracking_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$tracking_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $tracking_part['relation'] );
 
@@ -935,14 +1034,14 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'cdek',
 				'has_tracking' => true,
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -953,7 +1052,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'cdek',
 				'has_tracking' => false,
@@ -967,7 +1066,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -975,7 +1074,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'carrier' => 'cdek' ] );
 
 		$this->assertSame(
 			[
@@ -984,7 +1083,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
@@ -998,41 +1097,16 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'      => 'cdek',
 				'has_tracking' => false,
 			]
 		);
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + tracking part.
+		$this->assertCount( 3, $tree ); // relation + scope part + tracking part.
 	}
 
-	public function test_has_tracking_legacy_cpt_carries_the_tracking_clauses_query_var_not_meta_query(): void {
-		$registry = Orders_Registry::instance();
-		$registry->register_provider(
-			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'tracking_meta_key' => '_cdek_tracking' ] )
-		);
-
-		$args = $this->query_with_hpos( false, $registry )->build_args(
-			[
-				'carrier'      => 'cdek',
-				'has_tracking' => true,
-			]
-		);
-
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_tracking',
-					'compare' => 'EXISTS',
-				],
-			],
-			$args[ Orders_Query::QUERY_VAR_TRACKING_CLAUSES ]
-		);
-	}
 
 	// ----- delivery-status 'is not' rule (#836) -----
 
@@ -1042,7 +1116,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'             => 'cdek',
 				'delivery_status_not' => Delivery_Status::IN_TRANSIT,
@@ -1069,7 +1143,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1088,11 +1162,11 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'yandex', '_yandex_marker', '_yandex_status', [ 'YA_DONE' => Delivery_Status::DELIVERED ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[ 'delivery_status_not' => Delivery_Status::DELIVERED ]
 		);
 
-		$status_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$status_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $status_part['relation'] );
 
@@ -1118,7 +1192,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'             => 'cdek',
 				'delivery_status_not' => Delivery_Status::DELIVERED,
@@ -1130,7 +1204,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_cdek_marker',
 				'compare' => 'EXISTS',
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1142,7 +1216,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider_with_status( 'novendor', '_novendor_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'             => 'novendor',
 				'delivery_status_not' => Delivery_Status::DELIVERED,
@@ -1154,7 +1228,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'key'     => '_novendor_marker',
 				'compare' => 'EXISTS',
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_novendor_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_novendor_marker' ] )[0]
 		);
 	}
 
@@ -1176,7 +1250,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			)
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'             => 'cdek',
 				'delivery_status_not' => Delivery_Status::UNKNOWN,
@@ -1189,7 +1263,7 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'CDEK_ACCEPTED', 'CDEK_DONE' ],
 				'compare' => 'IN',
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
 		);
 	}
 
@@ -1199,7 +1273,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_ACCEPTED' => Delivery_Status::IN_TRANSIT ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'             => 'cdek',
 				'delivery_status'     => Delivery_Status::IN_TRANSIT,
@@ -1214,49 +1288,10 @@ class ShippingOrdersQueryTest extends TestCase {
 				'value'   => [ 'CDEK_ACCEPTED' ],
 				'compare' => 'IN',
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )[0]
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )[0]
 		);
 	}
 
-	public function test_delivery_status_not_legacy_cpt_carries_the_status_clauses_query_var_not_meta_query(): void {
-		$registry = Orders_Registry::instance();
-		$registry->register_provider(
-			$this->provider_with_status( 'cdek', '_cdek_marker', '_cdek_status', [ 'CDEK_DONE' => Delivery_Status::DELIVERED ] )
-		);
-
-		$args = $this->query_with_hpos( false, $registry )->build_args(
-			[
-				'carrier'             => 'cdek',
-				'delivery_status_not' => Delivery_Status::DELIVERED,
-			]
-		);
-
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame(
-			[
-				[
-					'relation' => 'AND',
-					[
-						'key'     => '_cdek_marker',
-						'compare' => 'EXISTS',
-					],
-					[
-						'relation' => 'OR',
-						[
-							'key'     => '_cdek_status',
-							'compare' => 'NOT EXISTS',
-						],
-						[
-							'key'     => '_cdek_status',
-							'value'   => [ 'CDEK_DONE' ],
-							'compare' => 'NOT IN',
-						],
-					],
-				],
-			],
-			$args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ]
-		);
-	}
 
 	// ----- native WC order status 'is not' rule (#836) -----
 
@@ -1318,7 +1353,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'cdek',
 				'has_pickup_point' => true,
@@ -1332,7 +1367,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1346,7 +1381,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'cdek',
 				'has_pickup_point' => false,
@@ -1367,7 +1402,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1385,14 +1420,14 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'pickup_point_meta_key' => '_yandex_pickup_point' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'all',
 				'has_pickup_point' => false,
 			]
 		);
 
-		$pickup_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$pickup_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $pickup_part['relation'] );
 
@@ -1418,14 +1453,14 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'cdek',
 				'has_pickup_point' => true,
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -1436,7 +1471,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'cdek',
 				'has_pickup_point' => false,
@@ -1450,7 +1485,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1458,7 +1493,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'carrier' => 'cdek' ] );
 
 		$this->assertSame(
 			[
@@ -1467,7 +1502,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
@@ -1481,41 +1516,16 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'          => 'cdek',
 				'has_pickup_point' => false,
 			]
 		);
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + pickup point part.
+		$this->assertCount( 3, $tree ); // relation + scope part + pickup point part.
 	}
 
-	public function test_has_pickup_point_legacy_cpt_carries_the_pickup_point_clauses_query_var_not_meta_query(): void {
-		$registry = Orders_Registry::instance();
-		$registry->register_provider(
-			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'pickup_point_meta_key' => '_cdek_pickup_point' ] )
-		);
-
-		$args = $this->query_with_hpos( false, $registry )->build_args(
-			[
-				'carrier'          => 'cdek',
-				'has_pickup_point' => true,
-			]
-		);
-
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_pickup_point',
-					'compare' => 'EXISTS',
-				],
-			],
-			$args[ Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES ]
-		);
-	}
 
 	// ----- export-presence filter / "new orders" (SP-10 #841) -----
 
@@ -1531,7 +1541,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'cdek',
 				'is_exported' => true,
@@ -1546,7 +1556,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => '!=',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1561,7 +1571,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'cdek',
 				'is_exported' => false,
@@ -1590,7 +1600,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					],
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1608,14 +1618,14 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'yandex', 'Яндекс', '_yandex_marker', [ 'yandex' ], [ 'carrier_order_id_meta_key' => '_yandex_carrier_order_id' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'all',
 				'is_exported' => false,
 			]
 		);
 
-		$exported_part = $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker', '_yandex_marker' ] );
+		$exported_part = $this->meta_query_filter_part( $tree, [ '_cdek_marker', '_yandex_marker' ] );
 
 		$this->assertSame( 'OR', $exported_part['relation'] );
 
@@ -1646,14 +1656,14 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'cdek',
 				'is_exported' => true,
 			]
 		);
 
-		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] ) );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $this->meta_query_filter_part( $tree, [ '_cdek_marker' ] ) );
 	}
 
 	/**
@@ -1665,7 +1675,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'cdek',
 				'is_exported' => false,
@@ -1679,7 +1689,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$this->meta_query_filter_part( $args['meta_query'], [ '_cdek_marker' ] )
+			$this->meta_query_filter_part( $tree, [ '_cdek_marker' ] )
 		);
 	}
 
@@ -1687,7 +1697,7 @@ class ShippingOrdersQueryTest extends TestCase {
 		$registry = Orders_Registry::instance();
 		$registry->register_provider( $this->provider( 'cdek', '_cdek_marker' ) );
 
-		$args = $this->query_with_hpos( true, $registry )->build_args( [ 'carrier' => 'cdek' ] );
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query( [ 'carrier' => 'cdek' ] );
 
 		$this->assertSame(
 			[
@@ -1696,7 +1706,7 @@ class ShippingOrdersQueryTest extends TestCase {
 					'compare' => 'EXISTS',
 				],
 			],
-			$args['meta_query']
+			$tree
 		);
 	}
 
@@ -1710,42 +1720,16 @@ class ShippingOrdersQueryTest extends TestCase {
 			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'     => 'cdek',
 				'is_exported' => false,
 			]
 		);
 
-		$this->assertArrayHasKey( 'meta_query', $args );
-		$this->assertCount( 3, $args['meta_query'] ); // relation + scope part + exported part.
+		$this->assertCount( 3, $tree ); // relation + scope part + exported part.
 	}
 
-	public function test_is_exported_legacy_cpt_carries_the_exported_clauses_query_var_not_meta_query(): void {
-		$registry = Orders_Registry::instance();
-		$registry->register_provider(
-			Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek' ], [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] )
-		);
-
-		$args = $this->query_with_hpos( false, $registry )->build_args(
-			[
-				'carrier'     => 'cdek',
-				'is_exported' => true,
-			]
-		);
-
-		$this->assertArrayNotHasKey( 'meta_query', $args );
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_carrier_order_id',
-					'value'   => '',
-					'compare' => '!=',
-				],
-			],
-			$args[ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ]
-		);
-	}
 
 	// ----- combining more than one filter -----
 
@@ -1769,7 +1753,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			)
 		);
 
-		$args = $this->query_with_hpos( true, $registry )->build_args(
+		$tree = $this->query_with_hpos( true, $registry )->build_meta_query(
 			[
 				'carrier'         => 'cdek',
 				'delivery_status' => Delivery_Status::DELIVERED,
@@ -1777,7 +1761,7 @@ class ShippingOrdersQueryTest extends TestCase {
 			]
 		);
 
-		$this->assertSame( 'AND', $args['meta_query']['relation'] );
-		$this->assertCount( 4, $args['meta_query'] ); // relation + scope part + status part + tracking part.
+		$this->assertSame( 'AND', $tree['relation'] );
+		$this->assertCount( 4, $tree ); // relation + scope part + status part + tracking part.
 	}
 }

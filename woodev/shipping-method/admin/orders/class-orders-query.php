@@ -28,18 +28,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 	 * matching ANY registered provider's marker key — never N queries stitched
 	 * together.
 	 *
-	 * **The scope mechanism itself branches on the order datastore** (round 2 of this
+	 * **The scope does not travel as a `meta_query`** (#928; it did through s139). One
+	 * `meta_query`-shaped tree is still BUILT ({@see self::build_meta_query()}) — it is
+	 * the specification of the rows, and the unit gates walk it — but it is resolved to
+	 * order ids by {@see Orders_Id_Resolver} with one flat statement against the
+	 * order-meta table and handed to `wc_get_orders()` as `post__in`, which both
+	 * datastores support. Handed over as `meta_query`, every OR-ed marker `EXISTS`
+	 * costs its own un-predicated join and the page costs `~d^N` in the carrier count
+	 * `N` (measured: 11.7 s per 10 000 orders at four carriers, no filter at all).
+	 *
+	 * **What still branches on the datastore is "matches nothing"** (round 2 of this
 	 * increment; round 1 assumed one mechanism covered both and was wrong):
 	 *
-	 * - HPOS: a real `meta_query` — measured correct against a real HPOS install on the
-	 *   rig, 07.09.2026 (SP-10 spec M2).
+	 * - HPOS: the {@see self::NO_MATCH_META_QUERY} `meta_query` itself.
 	 * - Legacy CPT: `WC_Order_Data_Store_CPT` does not support `meta_query` at all — it
 	 *   fires `_doing_it_wrong` (WC ≥9.2) and silently returns UNFILTERED results, so a
 	 *   `meta_query` arg must never reach it. This class instead emits the
-	 *   {@see self::QUERY_VAR_MARKER_KEYS} custom query var, which
-	 *   {@see Orders_Registry::translate_marker_keys_query_var()} turns into a real
-	 *   `meta_query` on WooCommerce's own `woocommerce_order_data_store_cpt_get_orders_query`
+	 *   {@see self::QUERY_VAR_MARKER_KEYS} custom query var (empty), which
+	 *   {@see Orders_Registry::translate_marker_keys_query_var()} turns into that same
+	 *   sentinel on WooCommerce's own `woocommerce_order_data_store_cpt_get_orders_query`
 	 *   filter — the same technique all three shipped carrier plugins already use.
+	 * - And the id query's table: HPOS `wc_orders_meta.order_id`, CPT `postmeta.post_id`.
 	 *
 	 * @since 2.0.2
 	 */
@@ -50,9 +59,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 		/**
 		 * Custom query var carrying the marker meta keys in scope, for the legacy CPT
-		 * datastore path. One var covers both the single-carrier and aggregate cases —
-		 * it always carries an array, one entry for a single carrier, N for the
-		 * aggregate, zero for "matches nothing".
+		 * datastore path. It always carries an array;
+		 * {@see Orders_Registry::translate_marker_keys_query_var()} turns it into
+		 * {@see self::meta_query_for_keys()} of those keys. Since #928
+		 * {@see self::build_args()} emits it EMPTY only — the one way to say "matches
+		 * nothing" on a datastore that drops `meta_query` — because the keys themselves
+		 * now drive the id query and reach the datastore as `post__in`.
 		 *
 		 * @since 2.0.2
 		 *
@@ -81,56 +93,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 
 
 		/**
-		 * Custom query var carrying the already-built delivery-status meta clauses, for
-		 * the legacy CPT datastore path (SP-10 spec D10). Built by
-		 * {@see self::delivery_status_meta_clauses()} — one clause per participating
-		 * provider — never combined into a `relation` shape itself; the CPT-side
-		 * translation combines it the same way {@see self::build_args()} does on HPOS, so
-		 * the two paths cannot silently diverge on what the delivery-status filter means.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var string
-		 */
-		const QUERY_VAR_STATUS_CLAUSES = 'woodev_shipping_status_clauses';
-
-		/**
-		 * Custom query var carrying the already-built tracking-presence meta clauses, for
-		 * the legacy CPT datastore path (SP-10 spec D10). Same shape and reason as
-		 * {@see self::QUERY_VAR_STATUS_CLAUSES}, built by
-		 * {@see self::tracking_meta_clauses()}.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var string
-		 */
-		const QUERY_VAR_TRACKING_CLAUSES = 'woodev_shipping_tracking_clauses';
-
-		/**
-		 * Custom query var carrying the already-built pickup-point-presence meta clauses,
-		 * for the legacy CPT datastore path (#836). Same shape and reason as
-		 * {@see self::QUERY_VAR_TRACKING_CLAUSES}, built by
-		 * {@see self::pickup_point_meta_clauses()}.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var string
-		 */
-		const QUERY_VAR_PICKUP_POINT_CLAUSES = 'woodev_shipping_pickup_point_clauses';
-
-		/**
-		 * Custom query var carrying the already-built export-presence meta clauses,
-		 * for the legacy CPT datastore path (SP-10 #841). Same shape and reason as
-		 * {@see self::QUERY_VAR_PICKUP_POINT_CLAUSES}, built by
-		 * {@see self::is_exported_meta_clauses()}.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @var string
-		 */
-		const QUERY_VAR_EXPORTED_CLAUSES = 'woodev_shipping_exported_clauses';
-
-		/**
 		 * Registry to read providers from.
 		 *
 		 * @since 2.0.2
@@ -151,9 +113,32 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * Builds the `wc_get_orders()` args for a request (pure; injectable for tests).
+		 * Builds the `wc_get_orders()` args for a request.
+		 *
+		 * The row scope and every meta-based filter do NOT reach the datastore as a
+		 * `meta_query`. They are built into one tree ({@see self::build_meta_query()} —
+		 * the pure part of this method, and what the unit gates assert on), resolved to
+		 * order ids through {@see self::resolve_order_ids()} — one flat statement against
+		 * the order-meta table, {@see Orders_Id_Resolver} — and handed over as
+		 * `post__in`, which both datastores support (SP-10 spec M2 as re-formed by #928:
+		 * `WP_Query` renders `ID IN (…)`, HPOS `OrdersTableQuery::maybe_remap_args()` maps
+		 * it to `id`, and `paginate` / `total` / `max_num_pages` follow the list on both).
+		 *
+		 * A `meta_query` — or, on the legacy CPT datastore, the
+		 * {@see self::QUERY_VAR_MARKER_KEYS} query var — is emitted only to say "matches
+		 * nothing", through {@see self::NO_MATCH_META_QUERY}: when nothing is in scope to
+		 * begin with (zero providers, an unknown carrier, a status request nothing in
+		 * which is real, a filter no provider can satisfy), and when the id query found no
+		 * order. ⚠ The latter must never become `post__in => []`: both datastores read an
+		 * empty list as "argument not set" and return EVERY order (HPOS
+		 * `OrdersTableQuery::SKIPPED_VALUES`; `WP_Query` tests the var for truth).
+		 *
+		 * So this method is pure only up to the id query; a unit test overrides
+		 * {@see self::resolve_order_ids()} exactly as it overrides
+		 * {@see self::is_hpos_enabled()}.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #928: the scope and the meta-based filters travel as `post__in`.
 		 *
 		 * @param array<string,mixed> $request {
 		 *     Optional. Request-shaped params.
@@ -247,133 +232,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			 * An empty status ARRAY is worse still: HPOS's `OrdersTableQuery::sanitize_status()`
 			 * expands it into every valid status.
 			 */
-			$requested_statuses = $this->resolve_requested_statuses( $request );
+			$requested_statuses     = $this->resolve_requested_statuses( $request );
 			$status_matches_nothing = ( [] === $requested_statuses );
 
 			if ( null !== $requested_statuses && ! $status_matches_nothing ) {
 				$args['status'] = $requested_statuses;
 			}
 
-			$providers = $status_matches_nothing ? [] : $this->resolve_providers( $carrier );
-			$keys      = array_map(
-				static function ( Orders_Provider $provider ): string {
-					return $provider->get_marker_meta_key();
-				},
-				$providers
-			);
+			$scope = $this->build_scope( $request, $status_matches_nothing );
+			$ids   = self::matches_nothing( $scope['meta_query'] )
+				? []
+				: $this->resolve_order_ids( $scope['marker_keys'], $scope['meta_query'] );
 
-			// `delivery_status` ('is') and `delivery_status_not` ('is not', #836) are mutually
-			// exclusive from the UI's own rule picker; if a caller somehow sends both, 'is'
-			// wins — there is exactly one status_clauses part either way.
-			$valid_delivery_statuses = array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] );
-			$delivery_status         = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
-			$delivery_status_not     = isset( $request['delivery_status_not'] ) ? (string) $request['delivery_status_not'] : '';
-			$status_clauses          = null;
-
-			if ( '' !== $delivery_status && in_array( $delivery_status, $valid_delivery_statuses, true ) ) {
-				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status, false );
-			} elseif ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid_delivery_statuses, true ) ) {
-				$status_clauses = $this->delivery_status_meta_clauses( $providers, $delivery_status_not, true );
-			}
-
-			/*
-			 * #839: the marker-key SCOPE part is a pure duplicate — and not a cheap one —
-			 * whenever every clause the delivery-status filter built ALREADY binds the row to
-			 * one provider's own marker key, so in that case it is dropped.
-			 *
-			 * The saving is one `LEFT JOIN` per registered carrier, and it is the expensive
-			 * half that qualifies. Measured with no pathological query executed (#839): leaf
-			 * clauses counted off the built tree, turned into SQL by the real `WP_Meta_Query`
-			 * for the legacy CPT path and captured on HPOS through
-			 * `woocommerce_orders_table_query_clauses`. With M carriers owning a usable status
-			 * map and B owning no status concept at all:
-			 *
-			 *     delivery_status=unknown           4M + 2B  ->  3M + B
-			 *     delivery_status_not=<canonical>   4M + 2B  ->  3M + B
-			 *
-			 * The s128 fixture is the worked example — four carriers, two of each kind:
-			 * TWELVE joins, exactly the twelve `LEFT JOIN wp_postmeta` that sat in
-			 * `Sending data` for over four minutes, down to EIGHT.
-			 *
-			 * ⚠ Why a structural test and not «the filter is a negative one»: the answer must
-			 * be read off the clauses that were actually built, or it drifts the first time
-			 * {@see self::delivery_status_meta_clauses()} grows a branch — which is how #837
-			 * defect 2 happened. {@see self::clauses_bind_their_own_provider()} therefore
-			 * inspects the clauses, and says no for the positive `IN` shapes, which carry no
-			 * marker: for those the scope STAYS. They are cheap anyway (`M + B + participants`
-			 * joins, never the `4M` that wedged MySQL), and dropping it there would NOT be
-			 * equivalent — enumerating every possible order over two and three carriers showed
-			 * the unbound `IN` shapes then additionally match an order carrying a carrier's
-			 * status meta WITHOUT that carrier's marker, while the bound shapes matched
-			 * identically on every one of those rows.
-			 *
-			 * ⚠ And the scope always stays when there is no status filter at all: nothing else
-			 * then constrains the rows to registered carriers, and dropping it would return
-			 * the whole table.
-			 */
-			$scope_is_redundant = null !== $status_clauses
-				&& $this->clauses_bind_their_own_provider( $status_clauses, $keys );
-
-			$meta_query_parts = [];
-
-			if ( ! $scope_is_redundant ) {
-				$meta_query_parts[] = self::meta_query_for_keys( $keys );
-			}
-
-			if ( null !== $status_clauses ) {
-				$meta_query_parts[] = self::meta_query_for_clauses( $status_clauses );
-			}
-
-			$tracking_clauses = null;
-			if ( array_key_exists( 'has_tracking', $request ) ) {
-				$tracking_clauses   = $this->tracking_meta_clauses( $providers, wc_string_to_bool( $request['has_tracking'] ) );
-				$meta_query_parts[] = self::meta_query_for_clauses( $tracking_clauses );
-			}
-
-			$pickup_point_clauses = null;
-			if ( array_key_exists( 'has_pickup_point', $request ) ) {
-				$pickup_point_clauses = $this->pickup_point_meta_clauses( $providers, wc_string_to_bool( $request['has_pickup_point'] ) );
-				$meta_query_parts[]   = self::meta_query_for_clauses( $pickup_point_clauses );
-			}
-
-			$exported_clauses = null;
-			if ( array_key_exists( 'is_exported', $request ) ) {
-				$exported_clauses   = $this->is_exported_meta_clauses( $providers, wc_string_to_bool( $request['is_exported'] ) );
-				$meta_query_parts[] = self::meta_query_for_clauses( $exported_clauses );
-			}
-
-			if ( $this->is_hpos_enabled() ) {
-				$args['meta_query'] = self::combine_meta_queries( $meta_query_parts ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- the framework's supported HPOS row-scope/filter mechanism (SP-10 spec M2, D10); never reached on the legacy CPT datastore (see class docblock).
+			if ( [] !== $ids ) {
+				$args['post__in'] = $ids;
+			} elseif ( $this->is_hpos_enabled() ) {
+				$args['meta_query'] = self::NO_MATCH_META_QUERY; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- the one "matches nothing" sentinel; a single keyed `=` clause, never reached on the legacy CPT datastore (see class docblock).
 			} else {
 				// `meta_query` is unsupported on the legacy CPT datastore (fires
-				// _doing_it_wrong and is silently ignored) — pass one custom query var per
-				// part instead; Orders_Registry::translate_marker_keys_query_var() rebuilds
-				// and combines them through the SAME self::combine_meta_queries(), so the two
-				// datastore paths cannot silently diverge on what any of these filters mean.
-				// #839: the scope var is omitted on exactly the same condition as the HPOS part
-				// above, and the decision is made HERE rather than in
-				// Orders_Registry::translate_marker_keys_query_var() so both datastore paths
-				// drop the same duplicate join from the SAME decision instead of each deciding
-				// for itself — the reason every other part of this shape is shared too.
-				if ( ! $scope_is_redundant ) {
-					$args[ self::QUERY_VAR_MARKER_KEYS ] = $keys;
-				}
-
-				if ( null !== $status_clauses ) {
-					$args[ self::QUERY_VAR_STATUS_CLAUSES ] = $status_clauses;
-				}
-
-				if ( null !== $tracking_clauses ) {
-					$args[ self::QUERY_VAR_TRACKING_CLAUSES ] = $tracking_clauses;
-				}
-
-				if ( null !== $pickup_point_clauses ) {
-					$args[ self::QUERY_VAR_PICKUP_POINT_CLAUSES ] = $pickup_point_clauses;
-				}
-
-				if ( null !== $exported_clauses ) {
-					$args[ self::QUERY_VAR_EXPORTED_CLAUSES ] = $exported_clauses;
-				}
+				// _doing_it_wrong and is silently ignored) — the EMPTY marker-keys var says
+				// "matches nothing" there; Orders_Registry::translate_marker_keys_query_var()
+				// turns it into the SAME sentinel on WooCommerce's own filter.
+				$args[ self::QUERY_VAR_MARKER_KEYS ] = [];
 			}
 
 			if ( '' !== $search ) {
@@ -406,12 +286,149 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		}
 
 		/**
-		 * Builds the `meta_query` shape for a set of marker keys.
+		 * The pure half of {@see self::build_args()}: the marker-key scope and every
+		 * meta-based filter of a request as ONE `meta_query`-shaped tree — the
+		 * specification {@see self::resolve_order_ids()} resolves to ids, identical for
+		 * both datastores.
 		 *
-		 * Shared by the HPOS path ({@see self::build_args()}) and the legacy-CPT
-		 * translation ({@see Orders_Registry::translate_marker_keys_query_var()}), so
-		 * the two paths cannot silently diverge on what "one carrier", "several
-		 * carriers" or "matches nothing" means. A thin wrapper over
+		 * Shape: {@see self::combine_meta_queries()} over the parts, the scope part
+		 * ({@see self::meta_query_for_keys()} over the registered marker keys in scope)
+		 * ALWAYS first, then one part per requested filter, in this order: delivery
+		 * status, tracking presence, pickup-point presence, export presence. Each part is
+		 * one clause per participating provider OR-ed together, or the
+		 * {@see self::NO_MATCH_META_QUERY} sentinel when nothing participates.
+		 *
+		 * The #839 rule that dropped the scope part whenever every filter clause already
+		 * bound its own marker went with the joins it saved: in the id query the scope is
+		 * the DRIVER — one index range on `meta_key` — not a join, so it always stays.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request see {@see self::build_args()}.
+		 * @return array<int|string,mixed>
+		 */
+		public function build_meta_query( array $request = [] ): array {
+			return $this->build_scope( $request, [] === $this->resolve_requested_statuses( $request ) )['meta_query'];
+		}
+
+		/**
+		 * Builds the scope tree and the marker keys that drive it — see
+		 * {@see self::build_meta_query()} for the shape.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $request                see {@see self::build_args()}.
+		 * @param bool                $status_matches_nothing true => the native status filter named
+		 *                                                    nothing real, so the provider scope is
+		 *                                                    emptied (#837 defect 3).
+		 * @return array{marker_keys:string[],meta_query:array<int|string,mixed>}
+		 */
+		private function build_scope( array $request, bool $status_matches_nothing ): array {
+			$carrier   = isset( $request['carrier'] ) ? (string) $request['carrier'] : '';
+			$providers = $status_matches_nothing ? [] : $this->resolve_providers( $carrier );
+			$keys      = array_map(
+				static function ( Orders_Provider $provider ): string {
+					return $provider->get_marker_meta_key();
+				},
+				$providers
+			);
+
+			$parts = [ self::meta_query_for_keys( $keys ) ];
+
+			// `delivery_status` ('is') and `delivery_status_not` ('is not', #836) are mutually
+			// exclusive from the UI's own rule picker; if a caller somehow sends both, 'is'
+			// wins — there is exactly one status part either way.
+			$valid_delivery_statuses = array_merge( Delivery_Status::canonical_states(), [ Delivery_Status::UNKNOWN ] );
+			$delivery_status         = isset( $request['delivery_status'] ) ? (string) $request['delivery_status'] : '';
+			$delivery_status_not     = isset( $request['delivery_status_not'] ) ? (string) $request['delivery_status_not'] : '';
+
+			if ( '' !== $delivery_status && in_array( $delivery_status, $valid_delivery_statuses, true ) ) {
+				$parts[] = self::meta_query_for_clauses( $this->delivery_status_meta_clauses( $providers, $delivery_status, false ) );
+			} elseif ( '' !== $delivery_status_not && in_array( $delivery_status_not, $valid_delivery_statuses, true ) ) {
+				$parts[] = self::meta_query_for_clauses( $this->delivery_status_meta_clauses( $providers, $delivery_status_not, true ) );
+			}
+
+			if ( array_key_exists( 'has_tracking', $request ) ) {
+				$parts[] = self::meta_query_for_clauses( $this->tracking_meta_clauses( $providers, wc_string_to_bool( $request['has_tracking'] ) ) );
+			}
+
+			if ( array_key_exists( 'has_pickup_point', $request ) ) {
+				$parts[] = self::meta_query_for_clauses( $this->pickup_point_meta_clauses( $providers, wc_string_to_bool( $request['has_pickup_point'] ) ) );
+			}
+
+			if ( array_key_exists( 'is_exported', $request ) ) {
+				$parts[] = self::meta_query_for_clauses( $this->is_exported_meta_clauses( $providers, wc_string_to_bool( $request['is_exported'] ) ) );
+			}
+
+			return [
+				'marker_keys' => $keys,
+				'meta_query'  => self::combine_meta_queries( $parts ),
+			];
+		}
+
+		/**
+		 * Whether a tree from {@see self::build_meta_query()} can match no order at all —
+		 * it is the {@see self::NO_MATCH_META_QUERY} sentinel, or an `AND` root carrying
+		 * it as a part. Such a tree is never resolved: the answer is known.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<int|string,mixed> $meta_query the tree.
+		 * @return bool
+		 */
+		private static function matches_nothing( array $meta_query ): bool {
+			if ( self::NO_MATCH_META_QUERY === $meta_query ) {
+				return true;
+			}
+
+			if ( 'AND' !== strtoupper( (string) ( $meta_query['relation'] ?? '' ) ) ) {
+				return false;
+			}
+
+			foreach ( $meta_query as $key => $part ) {
+				if ( 'relation' !== $key && self::NO_MATCH_META_QUERY === $part ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * The id-resolution seam (#928): the ids of the orders that satisfy the tree, by
+		 * one flat statement against the active datastore's order-meta table
+		 * ({@see Orders_Id_Resolver}). `protected`, like {@see self::is_hpos_enabled()},
+		 * so a unit test can substitute an in-memory resolver over an enumerated universe
+		 * — that is how `ShippingOrdersQueryRowSemanticsTest` keeps proving the tree
+		 * against its oracle after the tree stopped being a `meta_query`.
+		 *
+		 * Never called for a tree {@see self::matches_nothing()} already answers, so an
+		 * empty return here means "the database has no such order", and
+		 * {@see self::build_args()} turns it into the sentinel rather than an empty
+		 * `post__in`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string[]                $marker_keys registered marker keys in scope (never empty here).
+		 * @param array<int|string,mixed> $meta_query  the tree, from {@see self::build_meta_query()}.
+		 * @return int[] matching order ids; empty when there are none.
+		 */
+		protected function resolve_order_ids( array $marker_keys, array $meta_query ): array {
+			global $wpdb;
+
+			return ( new Orders_Id_Resolver( $wpdb, $this->is_hpos_enabled() ) )->resolve( $marker_keys, $meta_query );
+		}
+
+		/**
+		 * Builds the `meta_query` shape for a set of marker keys — the SCOPE part of
+		 * {@see self::build_meta_query()}, always its first part.
+		 *
+		 * Shared by the tree builder, by {@see Orders_Id_Resolver::compile()} (which
+		 * recognises this exact part as the one its driver predicate already states) and
+		 * by the legacy-CPT translation
+		 * ({@see Orders_Registry::translate_marker_keys_query_var()}), so none of them can
+		 * silently diverge on what "one carrier", "several carriers" or "matches nothing"
+		 * means. A thin wrapper over
 		 * {@see self::meta_query_for_clauses()} — every key becomes an `EXISTS` clause,
 		 * which is the same OR-across-providers shape the delivery-status and
 		 * tracking-presence filters build (SP-10 spec D10).
@@ -473,9 +490,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * Returns the single part unchanged when there is only one, so the existing
 		 * scope-only shape survives byte for byte when no extra filter was requested.
 		 *
-		 * `public`, not `private`: {@see Orders_Registry::translate_marker_keys_query_var()}
-		 * calls this too, on the legacy-CPT path — the two datastore paths share this one
-		 * combination rule rather than each growing their own.
+		 * `public`, not `private`: the unit gates (`ShippingOrdersQueryJoinGrowthTest`,
+		 * `ShippingOrdersQueryRowSemanticsTest`) rebuild and take apart the tree through
+		 * this one rule rather than growing their own reading of the wrapper.
 		 *
 		 * @since 2.0.2
 		 *
@@ -507,92 +524,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 			}
 
 			return array_values( $this->registry->get_providers() );
-		}
-
-		/**
-		 * Whether EVERY clause in a set already constrains the row to one provider's own
-		 * marker key — the condition under which the marker-key scope part
-		 * ({@see self::meta_query_for_keys()}) is a pure duplicate and can be dropped,
-		 * saving one `LEFT JOIN` per registered carrier (#839).
-		 *
-		 * Read off the built clauses on purpose, rather than inferred from which filter
-		 * was requested: {@see self::delivery_status_meta_clauses()} emits five different
-		 * shapes already and #837 defect 2 was exactly a rule that stopped matching the
-		 * clauses it described. A new branch there cannot silently lose the scope here.
-		 *
-		 * Two shapes qualify, and they are the two the negative filters produce:
-		 *
-		 *   - a bare `[ 'key' => <a marker key>, 'compare' => 'EXISTS' ]` — the provider
-		 *     that is ALWAYS unknown, or never maps to the negated state;
-		 *   - an `AND` group with such a clause among its own direct children — the
-		 *     `AND( marker EXISTS, OR( status NOT EXISTS, status NOT IN … ) )` pair.
-		 *
-		 * A positive `IN` on a provider's status key does NOT qualify. It implies that
-		 * provider's order only if a carrier never writes another's meta, and that is an
-		 * assumption about installed data, not something this clause states — so the
-		 * scope stays and nothing rests on it.
-		 *
-		 * An empty set qualifies trivially: it becomes {@see self::NO_MATCH_META_QUERY},
-		 * which matches nothing with or without the scope AND-ed to it.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param array<int,array<string,mixed>> $clauses     clauses as built for one filter.
-		 * @param string[]                       $marker_keys marker keys of the providers in scope.
-		 * @return bool
-		 */
-		private function clauses_bind_their_own_provider( array $clauses, array $marker_keys ): bool {
-			foreach ( $clauses as $clause ) {
-				if ( ! is_array( $clause ) ) {
-					return false;
-				}
-
-				if ( isset( $clause['key'] ) ) {
-					if ( ! self::is_marker_exists_clause( $clause, $marker_keys ) ) {
-						return false;
-					}
-
-					continue;
-				}
-
-				if ( 'AND' !== strtoupper( (string) ( $clause['relation'] ?? '' ) ) ) {
-					return false;
-				}
-
-				$bound = false;
-
-				foreach ( $clause as $key => $child ) {
-					if ( 'relation' === $key || ! is_array( $child ) ) {
-						continue;
-					}
-
-					if ( self::is_marker_exists_clause( $child, $marker_keys ) ) {
-						$bound = true;
-						break;
-					}
-				}
-
-				if ( ! $bound ) {
-					return false;
-				}
-			}
-
-			return true;
-		}
-
-		/**
-		 * Whether one clause is exactly «this provider's marker key exists» (#839).
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param array<string,mixed> $clause      a single first-order clause.
-		 * @param string[]            $marker_keys marker keys of the providers in scope.
-		 * @return bool
-		 */
-		private static function is_marker_exists_clause( array $clause, array $marker_keys ): bool {
-			return isset( $clause['key'] )
-				&& 'EXISTS' === strtoupper( (string) ( $clause['compare'] ?? '' ) )
-				&& in_array( $clause['key'], $marker_keys, true );
 		}
 
 		/**
@@ -632,16 +563,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Query
 		 * decision 26.09.2026). Change either and this method is wrong without a test failing:
 		 *
 		 * 1. A carrier writes only ITS OWN status meta. The positive `IN` clauses are left
-		 *    unbound to the marker on purpose (binding costs a join per participating
-		 *    provider); an order carrying carrier A's marker and carrier B's status meta
-		 *    would match B's filter. The negative forms ARE bound, because there the
-		 *    unbound OR matched the whole table (#837 defect 2).
+		 *    unbound to the marker on purpose — a value on a provider's own status key is
+		 *    read as that provider's order (the oracle in
+		 *    `ShippingOrdersQueryRowSemanticsTest` adopts the same reading and names it);
+		 *    an order carrying carrier A's marker and carrier B's status meta would match
+		 *    B's filter. The negative forms ARE bound, because there the unbound OR
+		 *    matched the whole table (#837 defect 2). Since #928 the binding costs no
+		 *    join — every clause is a correlated subquery in the id query — so the
+		 *    asymmetry is about MEANING only, not price; it is kept because the oracle gate
+		 *    pins it and no real carrier plugin writes another's meta.
 		 * 2. An order carries AT MOST ONE carrier marker — a product rule (YAGNI: there is no
 		 *    multi-carrier delivery), NOT a property of the data: `edostavka` already
-		 *    writes a marker per package, so such orders can exist. The shapes
-		 *    built here stay correct on a multi-marker order; a cheaper negative form
-		 *    that subtracts one set of orders is equivalent ONLY under this rule
-		 *    (#919 measured the divergence, #928 builds on the rule).
+		 *    writes a marker per package, so such orders can exist; under `WP_DEBUG`
+		 *    {@see Orders_Registry::report_multiple_markers()} reports one (#928 wave 1).
+		 *    ⚠ The #928 id query does NOT lean on this rule: {@see Orders_Id_Resolver}
+		 *    resolves the SAME tree this method builds, each negative clause still bound
+		 *    to its own marker, so it is equivalent to the `meta_query` on a multi-marker
+		 *    order too. The rule is what a cheaper SET-based negation (one global
+		 *    exclusion set, #919 Q4) would need; that form was measured and NOT built —
+		 *    the wall was the marker scope, not the negation
+		 *    (`docs-internal/research/2026-09-26-928-form-measurement/`). The oracle
+		 *    gate's universe is single-marker by the operator's decision, not because the
+		 *    query needs it.
 		 *
 		 * Gotcha: `the-orders-filter-stands-on-two-unenforced-carrier-invariants`.
 		 *

@@ -44,7 +44,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Orders_Registry::instance()->reset_for_tests();
 
 		$_GET = [];
-		unset( $GLOBALS['plugin_page'] );
+		unset( $GLOBALS['plugin_page'], $GLOBALS['wpdb'] ); // the id-query double stubOrdersQueryEnvironment() installs (#928).
 
 		parent::tearDown();
 	}
@@ -356,7 +356,10 @@ class ShippingOrdersRegistryTest extends TestCase {
 	// translate_marker_keys_query_var() — round 2: the legacy CPT datastore does not
 	// support `meta_query` at all (fires `_doing_it_wrong` and silently returns
 	// UNFILTERED results), so this filter is what turns the framework's own
-	// Orders_Query::QUERY_VAR_MARKER_KEYS var into a real `meta_query` there.
+	// Orders_Query::QUERY_VAR_MARKER_KEYS var into a real `meta_query` there. Since
+	// #928 Orders_Query emits that var EMPTY only (the scope travels as post__in), so
+	// the sentinel case below is the one production reaches; the non-empty cases pin
+	// that the translation itself did not change meaning.
 	// -----------------------------------------------------------------------
 
 	public function test_translate_marker_keys_leaves_the_query_untouched_when_the_var_is_absent(): void {
@@ -421,90 +424,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $result['meta_query'] );
 	}
 
-	/**
-	 * SP-10 spec D10: the delivery-status and tracking-presence filters get the SAME
-	 * legacy-CPT translation as the marker-key scope, through the two new query vars
-	 * — never left to reach the CPT datastore as `meta_query` directly.
-	 */
-	public function test_translate_status_clauses_var_alone_produces_its_meta_query_shape(): void {
-		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
-			[],
-			[
-				Orders_Query::QUERY_VAR_STATUS_CLAUSES => [
-					[
-						'key'     => '_cdek_status',
-						'value'   => [ 'CDEK_DONE' ],
-						'compare' => 'IN',
-					],
-				],
-			]
-		);
 
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_status',
-					'value'   => [ 'CDEK_DONE' ],
-					'compare' => 'IN',
-				],
-			],
-			$result['meta_query']
-		);
-	}
 
-	public function test_translate_tracking_clauses_var_alone_produces_its_meta_query_shape(): void {
-		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
-			[],
-			[
-				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
-					[
-						'key'     => '_cdek_tracking',
-						'compare' => 'NOT EXISTS',
-					],
-				],
-			]
-		);
-
-		$this->assertSame(
-			[
-				[
-					'key'     => '_cdek_tracking',
-					'compare' => 'NOT EXISTS',
-				],
-			],
-			$result['meta_query']
-		);
-	}
-
-	/**
-	 * All three vars present at once — marker keys, delivery status, tracking — must
-	 * be ANDed together, never left to silently combine as one flat OR (which would
-	 * scope-leak every carrier's orders back in).
-	 */
-	public function test_translate_all_three_vars_together_ands_them(): void {
-		$result = Orders_Registry::instance()->translate_marker_keys_query_var(
-			[],
-			[
-				Orders_Query::QUERY_VAR_MARKER_KEYS      => [ '_cdek_marker' ],
-				Orders_Query::QUERY_VAR_STATUS_CLAUSES   => [
-					[
-						'key'     => '_cdek_status',
-						'value'   => [ 'CDEK_DONE' ],
-						'compare' => 'IN',
-					],
-				],
-				Orders_Query::QUERY_VAR_TRACKING_CLAUSES => [
-					[
-						'key'     => '_cdek_tracking',
-						'compare' => 'EXISTS',
-					],
-				],
-			]
-		);
-
-		$this->assertSame( 'AND', $result['meta_query']['relation'] );
-		$this->assertCount( 4, $result['meta_query'] ); // relation + one part per var.
-	}
 
 	// -----------------------------------------------------------------------
 	// enqueue_assets() — increment 2b rewrite: gated on is_wc_admin_screen(), a
@@ -1023,6 +944,32 @@ class ShippingOrdersRegistryTest extends TestCase {
 				return is_bool( $value ) ? $value : ( 'yes' === $value || 'true' === $value || '1' === $value || 1 === $value );
 			}
 		);
+		/*
+		 * #928: Orders_Query::build_args() resolves the scope to order ids through
+		 * `$wpdb` before wc_get_orders() sees anything, so the badge's queries need a
+		 * database double. This one answers the id query with the 1-based POSITION of
+		 * every registered provider whose marker key the statement's driver names —
+		 * `[ 1 ]` for the first carrier alone, `[ 1, 2 ]` for the aggregate — which is
+		 * what `$totals` then reads back from `post__in` to tell the queries apart.
+		 */
+		global $wpdb;
+		$wpdb = new OrdersIdResolverFakeWpdb(
+			static function ( string $sql ): array {
+				$ids      = [];
+				$position = 0;
+
+				foreach ( Orders_Registry::instance()->get_providers() as $provider ) {
+					++$position;
+
+					if ( false !== strpos( $sql, "'" . $provider->get_marker_meta_key() . "'" ) ) {
+						$ids[] = $position;
+					}
+				}
+
+				return $ids;
+			}
+		);
+
 		Functions\when( 'wc_get_orders' )->alias(
 			static function ( array $args ) use ( &$captured, $totals ) {
 				$captured[] = $args;
@@ -1034,6 +981,15 @@ class ShippingOrdersRegistryTest extends TestCase {
 				];
 			}
 		);
+	}
+
+	/** The request the badge's aggregate count runs — mirrors Orders_Registry::new_orders_request(). */
+	private static function badge_request(): array {
+		return [
+			'carrier'     => 'all',
+			'is_exported' => false,
+			'per_page'    => 1,
+		];
 	}
 
 	/**
@@ -1132,47 +1088,60 @@ class ShippingOrdersRegistryTest extends TestCase {
 
 		$this->assertNotSame( [], $captured, 'the badge must actually have run a query' );
 
-		$expected = ( new Orders_Query( $registry ) )->build_args(
-			[
-				'carrier'     => 'all',
-				'is_exported' => false,
-				'per_page'    => 1,
-			]
-		);
+		$expected = ( new Orders_Query( $registry ) )->build_args( self::badge_request() );
 
 		$this->assertSame( $expected, $captured[0] );
 
 		/*
 		 * Spelled out as well, so the assertion above cannot pass vacuously if both
-		 * sides ever stop asking about exports. Brain Monkey reports the legacy CPT
-		 * datastore, where `meta_query` is silently DROPPED by wc_get_orders() — the
-		 * export filter has to travel as Orders_Query's own query var instead, which
-		 * is precisely what a hand-rolled count would get wrong.
+		 * sides ever stop asking about exports. Since #928 the export filter travels
+		 * INSIDE the id query (the ids reach wc_get_orders() as `post__in`, never as a
+		 * `meta_query`, which the legacy CPT datastore Brain Monkey reports would
+		 * silently DROP) — so what is pinned is the tree the badge's request builds and
+		 * the statement the database double actually received for it.
 		 */
+		global $wpdb;
+
+		$this->assertSame( [ 1 ], $captured[0]['post__in'], 'the ids the id query answered' );
+		$this->assertArrayNotHasKey( 'meta_query', $captured[0] );
 		$this->assertSame(
 			[
+				'relation' => 'AND',
 				[
-					'relation' => 'AND',
 					[
 						'key'     => '_marker_cdek',
 						'compare' => 'EXISTS',
 					],
+				],
+				[
 					[
-						'relation' => 'OR',
+						'relation' => 'AND',
 						[
-							'key'     => '_carrier_order_id_cdek',
-							'compare' => 'NOT EXISTS',
+							'key'     => '_marker_cdek',
+							'compare' => 'EXISTS',
 						],
 						[
-							'key'     => '_carrier_order_id_cdek',
-							'value'   => '',
-							'compare' => '=',
+							'relation' => 'OR',
+							[
+								'key'     => '_carrier_order_id_cdek',
+								'compare' => 'NOT EXISTS',
+							],
+							[
+								'key'     => '_carrier_order_id_cdek',
+								'value'   => '',
+								'compare' => '=',
+							],
 						],
 					],
 				],
 			],
-			$captured[0][ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ]
+			( new Orders_Query( $registry ) )->build_meta_query( self::badge_request() )
 		);
+		// queries[0] is the aggregate badge count's id query; the per-carrier one and the
+		// `$expected` rebuild above follow it.
+		$this->assertNotEmpty( $wpdb->queries );
+		$this->assertStringContainsString( "NOT EXISTS (SELECT 1 FROM wp_postmeta AS m WHERE m.post_id = mk.post_id AND m.meta_key = '_carrier_order_id_cdek')", $wpdb->queries[0] );
+		$this->assertStringContainsString( "m.meta_key = '_carrier_order_id_cdek' AND m.meta_value = ''", $wpdb->queries[0] );
 
 		// `paginate => true` is what makes ->total the count; per_page => 1 keeps the
 		// row fetch down to a single order.
@@ -1184,13 +1153,13 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$captured = [];
 		$this->stubOrdersQueryEnvironment(
 			static function ( array $args ): int {
-				$keys = $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ];
+				$ids = $args['post__in']; // 1 = СДЭК, 2 = Яндекс — see stubOrdersQueryEnvironment().
 
-				if ( [ '_marker_cdek' ] === $keys ) {
+				if ( [ 1 ] === $ids ) {
 					return 2;
 				}
 
-				if ( [ '_marker_yandex' ] === $keys ) {
+				if ( [ 2 ] === $ids ) {
 					return 5;
 				}
 
@@ -1326,13 +1295,13 @@ class ShippingOrdersRegistryTest extends TestCase {
 	 */
 	private function disjoint_carrier_totals(): callable {
 		return static function ( array $args ): int {
-			$keys = $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ];
+			$ids = $args['post__in']; // 1 = СДЭК, 2 = Яндекс — see stubOrdersQueryEnvironment().
 
-			if ( [ '_marker_cdek' ] === $keys ) {
+			if ( [ 1 ] === $ids ) {
 				return 48;
 			}
 
-			if ( [ '_marker_yandex' ] === $keys ) {
+			if ( [ 2 ] === $ids ) {
 				return 53;
 			}
 
