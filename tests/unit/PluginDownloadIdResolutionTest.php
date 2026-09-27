@@ -6,10 +6,11 @@
  * authority all read (class-plugin.php:1304+). It used to resolve the loader definition by
  * `get_id()` alone, which silently returned 0 the moment a plugin's own `PLUGIN_ID` did not
  * match the `plugin_id` it registered in its loader definition — a real author error this
- * repo's own `tests/_fixtures/woodev-test-payment-gateway` fixture demonstrates: its definition
- * declares `plugin_id => 'woodev-test-payment-gateway'` while the constructed plugin's
- * `PLUGIN_ID` is `'woodev-test-payment-gateway-plugin'`. The mismatch test plugin below
- * reproduces that exact shape.
+ * repo's own `tests/_fixtures/woodev-test-payment-gateway` fixture demonstrated by accident
+ * until it was aligned (#916 round 2): its definition declared `plugin_id =>
+ * 'woodev-test-payment-gateway'` while the constructed plugin's `PLUGIN_ID` was
+ * `'woodev-test-payment-gateway-plugin'`. The mismatch test plugin below reproduces that exact
+ * shape deliberately, as regression coverage for the case the fixture no longer exhibits.
  *
  * @package Woodev\Tests\Unit
  */
@@ -256,8 +257,10 @@ class PluginDownloadIdResolutionTest extends TestCase {
 	/**
 	 * #916 follow-up (MAJOR): get_download_id() must resolve the correct download id even
 	 * though the plugin's own PLUGIN_ID does not match its loader definition's plugin_id —
-	 * the exact shape of the woodev-test-payment-gateway fixture (real download id 9002).
-	 * The mismatch must also be reported loudly under WP_DEBUG, never silently swallowed.
+	 * the shape the woodev-test-payment-gateway fixture used to exhibit by accident (real
+	 * download id 9002). #916 round 2: a mismatch that still resolves (a non-zero result) is
+	 * NOT reported — the class lookup already did its job, so there is nothing to warn about;
+	 * only a resolution that returns 0 is (see {@see self::test_get_download_id_reports_a_true_zero_result_only_once()}).
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -266,16 +269,7 @@ class PluginDownloadIdResolutionTest extends TestCase {
 		define( 'WP_DEBUG', true );
 		$this->mock_construction_and_resolver_functions();
 
-		// self::class inside Woodev_Plugin::get_download_id() resolves to the DECLARING class
-		// (Woodev_Plugin), not this subclass — self:: is not late-static-bound. Construction
-		// itself (the real license handler, left at its default) already reaches
-		// get_download_id() once, before this test calls it again explicitly — atLeast(1),
-		// not exactly once, is the correct assertion.
-		Functions\expect( '_doing_it_wrong' )->atLeast()->once()->with(
-			'Woodev_Plugin::get_download_id',
-			\Mockery::type( 'string' ),
-			'2.0.2'
-		);
+		Functions\expect( '_doing_it_wrong' )->never();
 
 		$bootstrap = \Woodev_Plugin_Bootstrap::instance();
 		$bootstrap->register_loader_definition(
@@ -337,6 +331,34 @@ class PluginDownloadIdResolutionTest extends TestCase {
 		$plugin = new Woodev_Download_Id_Never_Invoked_Test_Plugin();
 
 		$this->assertSame( 9202, $plugin->get_download_id() );
+	}
+
+	/**
+	 * #916 round 2: a genuine resolution failure — nothing registered for either the class
+	 * or the plugin id, a true 0 result — is reported via `_doing_it_wrong()`, but only ONCE
+	 * per plugin instance per request: `get_download_id()` runs from the constructor (which
+	 * itself already reaches it once through the real license handler, left at its default),
+	 * so an unconditional report would print the notice on every call for the request's
+	 * lifetime instead of once.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_get_download_id_reports_a_true_zero_result_only_once(): void {
+		define( 'WP_DEBUG', true );
+		$this->mock_construction_and_resolver_functions();
+
+		Functions\expect( '_doing_it_wrong' )->once()->with(
+			'Woodev_Plugin::get_download_id',
+			\Mockery::type( 'string' ),
+			'2.0.2'
+		);
+
+		// Deliberately never registered anywhere: both the class and plugin_id lookups miss.
+		$plugin = new Woodev_Download_Id_Never_Invoked_Test_Plugin();
+
+		$this->assertSame( 0, $plugin->get_download_id() );
+		$this->assertSame( 0, $plugin->get_download_id() );
 	}
 }
 }

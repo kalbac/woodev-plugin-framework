@@ -64,6 +64,9 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/** @var Woodev_Admin_Notice_Handler the admin notice handler class */
 		private $admin_notice_handler;
 
+		/** @var bool whether a download id resolution failure was already reported via `_doing_it_wrong()` in this request — `get_download_id()` runs from the constructor, so every request would otherwise print the notice several times over */
+		private $download_id_resolution_warned = false;
+
 		/** @var Woodev_REST_API REST API handler instance */
 		protected $rest_api_handler;
 
@@ -1305,16 +1308,28 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Returns the plugin download id — the EDD product id on woodev.ru.
 		 *
-		 * Single source of truth: the plugin's own loader definition. Resolved PRIMARILY by this
-		 * instance's own class (walking up to the nearest registered ancestor) — the resolver
-		 * records which definition invoked which `main_class` at invocation time, so this is
-		 * accurate even when a plugin author's `plugin_id` (passed to the constructor, returned by
-		 * {@see self::get_id()}) does not match the `plugin_id` they typed into their own loader
-		 * definition. That mismatch is a real author error this repo's own fixture demonstrates
-		 * (#916 follow-up) and is otherwise unenforced, so falling back to a {@see self::get_id()}
-		 * lookup ALONE — the previous, sole strategy — silently returned 0 for it. The class lookup
-		 * falls back to plugin id only for legacy/callback-only registrations the resolver never
-		 * mapped by class.
+		 * Single source of truth: the plugin's own loader definition. Resolution order is
+		 * exact class match → exact plugin_id match → nearest registered ANCESTOR class
+		 * (#916 round 2): an exact match — by class or by this plugin's own declared
+		 * `plugin_id` — is a real registration for THIS plugin, while an ancestor match only
+		 * means some OTHER plugin's `main_class` happens to be a parent of this one (the real
+		 * shape of a callback-only plugin whose class extends another plugin's main class
+		 * without registering its own main_class); an ancestor match must never win over
+		 * either exact one. The resolver records which definition invoked which `main_class`
+		 * at invocation time, so the class lookup is accurate even when a plugin author's
+		 * `plugin_id` (passed to the constructor, returned by {@see self::get_id()}) does not
+		 * match the `plugin_id` they typed into their own loader definition — a real author
+		 * error this repo's own fixture demonstrated (#916 follow-up), for which falling back
+		 * to a {@see self::get_id()} lookup ALONE — the original, sole strategy — silently
+		 * returned 0.
+		 *
+		 * A mismatched `plugin_id` that still resolves (a non-zero result) is NOT reported: the
+		 * lookup already did its job. Only a resolution that returns 0 — nothing registered
+		 * for this class or plugin id at all — is worth a `_doing_it_wrong()`, and even then only
+		 * once per plugin instance per request ({@see self::$download_id_resolution_warned}): this
+		 * method runs from the constructor, so an unconditional report would print the notice on
+		 * every request (front-end included), several times over under WP_DEBUG, and — under
+		 * WP_DEBUG_DISPLAY — before headers are sent.
 		 *
 		 * The winning `Woodev_Plugin_Bootstrap` copy can be a DIFFERENT vendored copy than this
 		 * class (alphabetically-first vs highest-framework-version rendezvous — the same
@@ -1334,39 +1349,52 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 
 			$bootstrap = Woodev_Plugin_Bootstrap::instance();
 
-			if ( ! method_exists( $bootstrap, 'get_loader_definition_for_class' ) || ! method_exists( $bootstrap, 'get_loader_definition_for_plugin_id' ) ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					_doing_it_wrong(
-						self::class . '::get_download_id',
-						sprintf( 'The active Woodev_Plugin_Bootstrap copy (%s) predates loader definition lookups; download id resolution was skipped.', esc_html( get_class( $bootstrap ) ) ),
-						'2.0.2'
-					);
-				}
+			if (
+				! method_exists( $bootstrap, 'get_loader_definition_for_class' )
+				|| ! method_exists( $bootstrap, 'get_loader_definition_for_plugin_id' )
+				|| ! method_exists( $bootstrap, 'get_loader_definition_for_class_ancestor' )
+			) {
+				$this->report_download_id_resolution_failure(
+					sprintf( 'The active Woodev_Plugin_Bootstrap copy (%s) predates loader definition lookups; download id resolution was skipped.', esc_html( get_class( $bootstrap ) ) )
+				);
 
 				return 0;
 			}
 
 			$definition = $bootstrap->get_loader_definition_for_class( get_class( $this ) )
-				?? $bootstrap->get_loader_definition_for_plugin_id( $this->get_id() );
+				?? $bootstrap->get_loader_definition_for_plugin_id( $this->get_id() )
+				?? $bootstrap->get_loader_definition_for_class_ancestor( get_class( $this ) );
 
 			if ( ! $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ) {
+				$this->report_download_id_resolution_failure(
+					sprintf( 'No loader definition is registered for plugin "%s" (class %s); download id resolution returned 0.', esc_html( $this->get_id() ), esc_html( get_class( $this ) ) )
+				);
+
 				return 0;
 			}
 
-			if ( $definition->get_plugin_id() !== $this->get_id() && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				_doing_it_wrong(
-					self::class . '::get_download_id',
-					sprintf(
-						'Plugin "%s" (class %s) does not match its own loader definition plugin_id "%s"; resolved the download id by class instead of failing silently.',
-						esc_html( $this->get_id() ),
-						esc_html( get_class( $this ) ),
-						esc_html( $definition->get_plugin_id() )
-					),
-					'2.0.2'
-				);
+			return $definition->get_download_id();
+		}
+
+		/**
+		 * Reports a download id resolution failure via `_doing_it_wrong()`, once per plugin
+		 * instance per request. {@see self::get_download_id()} is called from the constructor, so
+		 * a bare, unconditional report would fire on every call site (admin, front-end, hooks)
+		 * for the lifetime of the request.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $message
+		 * @return void
+		 */
+		private function report_download_id_resolution_failure( $message ) {
+			if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG || $this->download_id_resolution_warned ) {
+				return;
 			}
 
-			return $definition->get_download_id();
+			$this->download_id_resolution_warned = true;
+
+			_doing_it_wrong( self::class . '::get_download_id', $message, '2.0.2' );
 		}
 
 		/**

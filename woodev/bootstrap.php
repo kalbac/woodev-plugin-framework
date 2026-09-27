@@ -64,6 +64,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			// `load_plugins()` (on `plugins_loaded`) has already run for this request.
 			add_action( 'activated_plugin', [ $this, 'guard_activated_plugin' ] );
 			add_action( 'admin_notices', [ $this, 'render_activation_guard_notice' ] );
+			add_action( 'network_admin_notices', [ $this, 'render_activation_guard_notice' ] );
 		}
 
 		/**
@@ -445,8 +446,8 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
-		 * Gets the registered loader definition for a plugin's own class (or nearest registered
-		 * ancestor). The PRIMARY source {@see Woodev_Plugin::get_download_id()} reads through.
+		 * Gets the registered loader definition for a plugin's own class, EXACT match only.
+		 * The PRIMARY source {@see Woodev_Plugin::get_download_id()} reads through.
 		 *
 		 * @since 2.0.2
 		 *
@@ -455,6 +456,20 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		 */
 		public function get_loader_definition_for_class( string $class ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
 			return $this->resolver->get_loader_definition_for_class( $class );
+		}
+
+		/**
+		 * Gets the registered loader definition for the nearest registered ancestor of a
+		 * plugin's own class — last-resort fallback, after both an exact class match and an
+		 * exact plugin_id match missed. {@see Woodev_Plugin::get_download_id()} reads through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class_ancestor( string $class ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolver->get_loader_definition_for_class_ancestor( $class );
 		}
 
 		/**

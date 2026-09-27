@@ -138,13 +138,21 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		}
 
 		/**
-		 * Gets the registered loader definition for a plugin's own class (or nearest registered
-		 * ancestor), falling back to none when the class was never invoked through this resolver.
+		 * Gets the registered loader definition for a plugin's own class, EXACT match only —
+		 * no ancestor walk. Callers wanting the ancestor fallback too must try
+		 * {@see self::get_loader_definition_for_plugin_id()} first and only reach for
+		 * {@see self::get_loader_definition_for_class_ancestor()} last: an exact `plugin_id`
+		 * match is a real registration for THIS class, while an ancestor match merely means
+		 * some OTHER, unrelated plugin's `main_class` happens to be a parent of this one — a
+		 * real shape when a callback-only plugin's class extends another plugin's main class
+		 * without registering its own main_class (#916 round 2).
+		 *
+		 * The class-name match is case-insensitive, same as PHP itself treats class names.
 		 *
 		 * The PRIMARY lookup {@see Woodev_Plugin::get_download_id()} reads through, because a
 		 * plugin's `get_id()` is a free-form string chosen by convention to match its own
 		 * definition's `plugin_id` — nothing enforces that they agree, and a real fixture in this
-		 * repo demonstrates the mismatch (#916 follow-up). The main class is authoritative: it is
+		 * repo demonstrated the mismatch (#916 follow-up). The main class is authoritative: it is
 		 * literally the class the definition names, recorded in {@see invoke_plugin()} at the
 		 * moment this resolver invoked it.
 		 *
@@ -158,6 +166,23 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				return $this->definitions_by_main_class[ $class ];
 			}
 
+			return $this->find_definition_by_main_class_case_insensitive( $class );
+		}
+
+		/**
+		 * Gets the registered loader definition for the nearest registered ANCESTOR of a
+		 * plugin's own class — last-resort fallback only, after both an exact class match
+		 * ({@see self::get_loader_definition_for_class()}) and an exact `plugin_id` match
+		 * ({@see self::get_loader_definition_for_plugin_id()}) missed. An ancestor match means
+		 * some other plugin's `main_class` is a parent of this class; that other plugin's own
+		 * exact registration must never lose to it (#916 round 2).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class_ancestor( string $class ): ?Framework_Plugin_Loader_Definition {
 			// class_parents() warns (and returns false) for a class that does not exist — never
 			// itself invoked through this resolver is the common case for that, not a bug.
 			if ( ! class_exists( $class ) && ! interface_exists( $class ) ) {
@@ -167,6 +192,32 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			foreach ( class_parents( $class ) as $ancestor ) {
 				if ( isset( $this->definitions_by_main_class[ $ancestor ] ) ) {
 					return $this->definitions_by_main_class[ $ancestor ];
+				}
+
+				$definition = $this->find_definition_by_main_class_case_insensitive( $ancestor );
+				if ( null !== $definition ) {
+					return $definition;
+				}
+			}
+
+			return null;
+		}
+
+		/**
+		 * Case-insensitive fallback for an exact {@see self::$definitions_by_main_class} lookup
+		 * that missed — PHP class names are case-insensitive, but a loader definition's
+		 * `main_class` is a plain string an author typed, so its casing is not guaranteed to
+		 * match the class's actual declared casing (#916 round 2).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Class name to match, case-insensitively, against registered main classes.
+		 * @return Framework_Plugin_Loader_Definition|null
+		 */
+		private function find_definition_by_main_class_case_insensitive( string $class ): ?Framework_Plugin_Loader_Definition {
+			foreach ( $this->definitions_by_main_class as $main_class => $definition ) {
+				if ( 0 === strcasecmp( $main_class, $class ) ) {
+					return $definition;
 				}
 			}
 
@@ -253,62 +304,91 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				$definition  = $plugin['definition'] ?? null;
 				$download_id = $definition instanceof Framework_Plugin_Loader_Definition ? $definition->get_download_id() : 0;
 
-				if ( $download_id > 0 ) {
-					if ( isset( $claimed_download_ids[ $download_id ] ) ) {
-						$holder = $claimed_download_ids[ $download_id ];
-						$index  = count( $this->quarantined_download_id_plugins );
+				// A claim is only ever recorded for a plugin that actually ran (below, after a
+				// successful invoke_plugin()) — never here, up front. Recording it before invoking
+				// would quarantine a later plugin for an id held by one that never actually loaded
+				// (e.g. an invalid definition whose main_class does not exist), which is worse than
+				// the collision itself: the id sits claimed forever by nothing (#916 round 2).
+				if ( $download_id > 0 && isset( $claimed_download_ids[ $download_id ] ) ) {
+					$holder = $claimed_download_ids[ $download_id ];
+					$index  = count( $this->quarantined_download_id_plugins );
 
-						$this->quarantined_download_id_plugins[] = $plugin + [
-							'claimed_by'  => $holder['plugin_name'],
-							'deactivated' => false,
-						];
+					$this->quarantined_download_id_plugins[] = $plugin + [
+						'claimed_by'  => $holder['plugin_name'],
+						'deactivated' => false,
+					];
 
-						// Both plugins were already active before this code ran (bulk activation,
-						// or an update that introduced the collision): self-heal by removing the
-						// duplicate from the active_plugins option, but only in a context where a
-						// deliberate admin action is plausible — never for an anonymous front-end
-						// request or a cron/AJAX tick, where deactivate_plugins() would be a
-						// silent, unauthorized site change (#916).
-						//
-						// The actual call is DEFERRED to `admin_init` (blocker): `load_plugins()`
-						// runs on `plugins_loaded`, which on every wp-admin request fires BEFORE
-						// `wp-admin/admin.php` requires `wp-admin/includes/admin.php` (→
-						// `wp-admin/includes/plugin.php`). `deactivate_plugins()` — and
-						// `is_plugin_active_for_network()`, needed for the multisite check below —
-						// are undefined at this point, so calling them here fatals every admin page
-						// once two active plugins share a download id. By `admin_init` WordPress has
-						// already required that file for every admin request.
-						if ( is_admin() && ! defined( 'DOING_AJAX' ) && current_user_can( 'activate_plugins' ) ) {
-							$plugin_file = plugin_basename( $definition->get_plugin_file() );
+					// Both plugins were already active before this code ran (bulk activation,
+					// or an update that introduced the collision): self-heal by removing the
+					// duplicate from the active_plugins option, but only in a context where a
+					// deliberate admin action is plausible — never for an anonymous front-end
+					// request or a cron/AJAX tick, where deactivate_plugins() would be a
+					// silent, unauthorized site change (#916).
+					//
+					// The actual call is DEFERRED to `admin_init` (blocker): `load_plugins()`
+					// runs on `plugins_loaded`, which on every wp-admin request fires BEFORE
+					// `wp-admin/admin.php` requires `wp-admin/includes/admin.php` (→
+					// `wp-admin/includes/plugin.php`). `deactivate_plugins()` — and
+					// `is_plugin_active_for_network()`, needed for the multisite check below —
+					// are undefined at this point, so calling them here fatals every admin page
+					// once two active plugins share a download id. By `admin_init` WordPress has
+					// already required that file for every admin request.
+					if ( is_admin() && ! defined( 'DOING_AJAX' ) && current_user_can( 'activate_plugins' ) ) {
+						$plugin_file  = plugin_basename( $definition->get_plugin_file() );
+						$plugin_name  = $plugin['plugin_name'];
+						$holder_name  = $holder['plugin_name'];
 
-							add_action(
-								'admin_init',
-								function () use ( $plugin_file, $index ): void {
-									// Never network-deactivate a duplicate from a subsite screen —
-									// only self-heal a network-active duplicate from the network
-									// admin, and pass network_wide explicitly rather than leaving
-									// deactivate_plugins() to infer it (#916).
-									$network_wide = is_multisite() && is_plugin_active_for_network( $plugin_file );
+						add_action(
+							'admin_init',
+							function () use ( $plugin_file, $index, $plugin_name, $holder_name ): void {
+								// Never network-deactivate a duplicate from a subsite screen —
+								// only self-heal a network-active duplicate from the network
+								// admin, and pass network_wide explicitly rather than leaving
+								// deactivate_plugins() to infer it (#916).
+								$network_wide = is_multisite() && is_plugin_active_for_network( $plugin_file );
 
-									if ( $network_wide && ! is_network_admin() ) {
-										return;
-									}
-
-									deactivate_plugins( $plugin_file, false, $network_wide );
-
-									$this->quarantined_download_id_plugins[ $index ]['deactivated'] = true;
+								if ( $network_wide && ! is_network_admin() ) {
+									return;
 								}
-							);
-						}
 
-						continue;
+								deactivate_plugins( $plugin_file, false, $network_wide );
+
+								$this->quarantined_download_id_plugins[ $index ]['deactivated'] = true;
+
+								// admin-post.php processes an action and redirects/exits without
+								// ever firing admin_notices or network_admin_notices on THIS
+								// request, so the array-based render_update_notices() message
+								// above would never be shown (and, once this plugin is
+								// deactivated, never reappears on a later request either — the
+								// collision that produced it is gone). Queue it through the same
+								// single-use transient the activation guard uses instead, so
+								// render_activation_guard_notice() shows it on the next request
+								// that does render notices (#916 round 2).
+								if ( isset( $GLOBALS['pagenow'] ) && 'admin-post.php' === $GLOBALS['pagenow'] ) {
+									set_transient(
+										self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id(),
+										sprintf(
+											/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
+											__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+											$plugin_name,
+											$holder_name
+										),
+										60
+									);
+								}
+							}
+						);
 					}
 
-					$claimed_download_ids[ $download_id ] = $plugin;
+					continue;
 				}
 
 				if ( ! $this->invoke_plugin( $plugin ) ) {
 					continue;
+				}
+
+				if ( $download_id > 0 ) {
+					$claimed_download_ids[ $download_id ] = $plugin;
 				}
 
 				if ( ! in_array( $plugin, $this->active_plugins, true ) ) {
@@ -316,8 +396,14 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				}
 			}
 
-			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) && ! has_action( 'admin_notices', $this->update_notice_renderer ) ) {
-				add_action( 'admin_notices', $this->update_notice_renderer );
+			if ( $this->has_update_notices() && is_admin() && ! defined( 'DOING_AJAX' ) ) {
+				if ( ! has_action( 'admin_notices', $this->update_notice_renderer ) ) {
+					add_action( 'admin_notices', $this->update_notice_renderer );
+				}
+
+				if ( ! has_action( 'network_admin_notices', $this->update_notice_renderer ) ) {
+					add_action( 'network_admin_notices', $this->update_notice_renderer );
+				}
 			}
 
 			do_action( 'woodev_plugins_loaded' );
