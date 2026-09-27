@@ -333,7 +333,7 @@ and all. Card **#683 is closed** on the controlled run above.
 TASK text is in it, not just the preamble. A `Working` spinner proves it is doing something, not
 that it received what you sent.
 
-## s141 (macOS, Orca 1.4.214, codex 0.157.1): readiness times out on an IDLE, dialog-free Codex
+## s141 (macOS, Orca 1.4.214, codex 0.157.1): `--model`/`--effort` make readiness time out
 
 Five `worker-start --agent codex` launches on 27.09.2026, every one `state: failed`, `failedStage:
 agent_readiness`, `lastError: timeout` — including two `--retry-of … --terminal … --worktree current`
@@ -341,7 +341,18 @@ retries. The terminal held a healthy Codex sitting at `› Ask Codex to do anyth
 hooks prompt; only a footer `⚠ 1 warning · f2 to view`. None of the s107 cases (A/B/C) matches, and a retry
 does not help: Orca never recognises the prompt as ready, so the preamble is never injected.
 
-What worked, every time: keep the terminal the failed start created and
+**Cause, measured the same day (27.09.2026, 16:00):** the flags. F2 on the footer warning reads *"Running
+without the shared background server: command-line configuration overrides (-c, --enable, --disable, or
+--search) requires embedded mode"* — Orca turns `--model`/`--effort` into `-c` overrides, Codex drops to
+embedded mode, and Orca's readiness probe never sees it ready. With the Codex limit at 0 % the same
+launch WITH `--model gpt-5.6-luna --effort low` failed again, and WITHOUT them it reached
+`input_accepted` and returned the right hash through `worker_done`. It was never the rate limit.
+
+✅ **Launch Codex WITHOUT `--model`/`--effort`** — `~/.codex/config.toml` already defaults to
+`gpt-5.6-terra`. When luna or astra is really needed, the fallback below still works.
+
+Fallback (used for all three s141 critics before the cause was known): keep the terminal the failed start
+created and
 `terminal send --text "Read the file <brief> … write your report to <file> and stop" --enter`. The critic
 ran normally; with no preamble it has no lifecycle ids, so the report comes back as a FILE (the brief says
 where, with the canary as its first word) and the coordinator waits on the file, then releases the failed

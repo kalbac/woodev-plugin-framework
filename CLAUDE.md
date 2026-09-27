@@ -77,7 +77,8 @@ agents.* A paid resource left idle is a loss, not a saving.
 Inside Codex the model is a third choice, and the default is deliberately not the best one
 (operator, 06.09.2026). **`gpt-5.6-terra` is the default, set in `~/.codex/config.toml`** — best
 value for money, so a launch naming no model is already right. Reach past it with `--model`, and
-only for a reason: **`gpt-5.6-luna`** for plainly small work (a routine diff read, a mechanical
+only for a reason (⚠ on the Mac, codex 0.157.1: `--model`/`--effort` break Orca's readiness — gotcha
+`starting-codex-under-orca-needs-four-steps-not-one`, s141): **`gpt-5.6-luna`** for plainly small work (a routine diff read, a mechanical
 sweep); **`gpt-6-astra`** when a STRONG opinion is wanted — adversarial review of an architectural
 fork, a third round on one card, a defect where two runs already disagreed. `gpt-6-astra` is the
 priority-1 model and priced like it; `Sol` stays out (operator, 29.08.2026).

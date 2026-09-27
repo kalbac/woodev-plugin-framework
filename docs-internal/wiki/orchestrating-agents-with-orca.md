@@ -472,7 +472,7 @@ that was handy.
   rig container mounts it, and a worktree cannot run the suite. Worked three times in s141 (#936, #935,
   the #939 fix): the brief names the branch to create, lets it push (the pre-push hook passes there) and
   requires it to finish on a named branch, clean; the coordinator does not touch the tree meanwhile.
-- **Codex readiness on 0.157.1 never succeeds** — `terminal send` fallback, report as a file: gotcha
+- **Codex 0.157.1: `--model`/`--effort` break readiness; launch without them** (fallback: `terminal send`, report as a file) — gotcha
   `starting-codex-under-orca-needs-four-steps-not-one`, s141 section.
 
 ### Added in s140
