@@ -231,14 +231,14 @@ msgstr ""
 msgid "Please %1$supdate WordPress%2$s"
 msgstr ""
 
-#: class-framework-resolver.php:401
-#: class-framework-resolver.php:545
-#: class-framework-resolver.php:721
+#: class-framework-resolver.php:372
+#: class-framework-resolver.php:516
+#: class-framework-resolver.php:692
 #, php-format
 msgid "Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина."
 msgstr ""
 
-#: class-framework-resolver.php:727
+#: class-framework-resolver.php:698
 #, php-format
 msgid "Плагин «%1$s» не запущен: он использует тот же идентификатор лицензии, что и «%2$s». Обратитесь к автору плагина."
 msgstr ""
