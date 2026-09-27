@@ -481,4 +481,45 @@ class ShippingOrdersIdResolverTest extends TestCase {
 		$this->assertCount( 1, $wpdb->queries );
 		$this->assertSame( $resolver->compile( $keys, Orders_Query::meta_query_for_keys( $keys ) ), $wpdb->queries[0] );
 	}
+
+	// ----- a failed id query (#936) -----
+
+	/**
+	 * A statement that errors still yields the empty list — the caller turns it into the
+	 * «matches nothing» sentinel, never into every order — but it is now logged, so a
+	 * broken query is told apart from an honest empty result.
+	 */
+	public function test_a_failed_id_query_is_logged_and_still_fails_closed(): void {
+		$wpdb = new OrdersIdResolverFakeWpdb( [ 1, 2, 3 ] );
+		$wpdb->fail_with( "Unknown column 'mk.order_id' in 'field list'" );
+
+		$captured = null;
+		Functions\expect( 'error_log' )
+			->once()
+			->with(
+				\Mockery::on(
+					static function ( $message ) use ( &$captured ): bool {
+						$captured = $message;
+
+						return true;
+					}
+				)
+			);
+
+		$keys = [ '_a_marker' ];
+
+		$this->assertSame( [], ( new Orders_Id_Resolver( $wpdb, true ) )->resolve( $keys, Orders_Query::meta_query_for_keys( $keys ) ) );
+		$this->assertCount( 1, $wpdb->queries );
+		$this->assertStringStartsWith( '[woodev] ', $captured );
+		$this->assertStringContainsString( "Unknown column 'mk.order_id' in 'field list'", $captured );
+	}
+
+	public function test_a_successful_id_query_writes_nothing_to_the_log(): void {
+		Functions\expect( 'error_log' )->never();
+
+		$keys = [ '_a_marker' ];
+
+		$this->assertSame( [ 4 ], ( new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb( [ 4 ] ), false ) )->resolve( $keys, Orders_Query::meta_query_for_keys( $keys ) ) );
+		$this->assertSame( [], ( new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb( [] ), false ) )->resolve( $keys, Orders_Query::meta_query_for_keys( $keys ) ), 'an honest empty result is not an error' );
+	}
 }

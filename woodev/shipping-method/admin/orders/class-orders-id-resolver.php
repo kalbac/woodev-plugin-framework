@@ -117,7 +117,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 
 		/**
 		 * Database connection — `$wpdb`, or a stand-in exposing `prepare()`, `get_col()`,
-		 * `prefix` and `postmeta` (unit tests).
+		 * `last_error`, `prefix`, `posts` and `postmeta` (unit tests).
 		 *
 		 * @since 2.0.2
 		 *
@@ -166,6 +166,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 
 			$rows = $this->wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- the one flat id query of the orders page (#928); every literal in $sql went through $wpdb->prepare() in compile(); caching is decided by the caller (the badge already caches its counts).
 
+			$error = (string) $this->wpdb->last_error;
+
+			if ( '' !== $error ) {
+				// Fail CLOSED, as before: nothing came back, so the caller gets `[]` → the
+				// «matches nothing» sentinel, never every order. The only change is that a
+				// broken statement no longer looks like an honest empty result (#936).
+				$this->log_query_failure( $error );
+
+				return [];
+			}
+
 			if ( ! is_array( $rows ) ) {
 				return [];
 			}
@@ -181,6 +192,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Id_Re
 			}
 
 			return array_values( $ids );
+		}
+
+		/**
+		 * Writes a failed id query to the PHP error log (#936) — the same `[woodev]`
+		 * `error_log()` diagnostic the rest of the shipping subsystem uses. The text never
+		 * reaches a screen, so it is neither translated nor escaped.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $error `$wpdb->last_error` after the failed statement.
+		 * @return void
+		 */
+		private function log_query_failure( string $error ): void {
+			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a failed id query; the merchant only ever sees an empty orders page.
+				sprintf( '[woodev] shipping orders id query failed, the page shows no orders: %s', $error )
+			);
 		}
 
 		/**

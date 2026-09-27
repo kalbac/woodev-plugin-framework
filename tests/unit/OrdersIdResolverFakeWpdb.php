@@ -32,6 +32,12 @@ class OrdersIdResolverFakeWpdb {
 	/** @var string[] every statement `get_col()` received, in order. */
 	public $queries = [];
 
+	/** @var string what `wpdb::$last_error` reads after the last `get_col()` — `''` unless {@see self::fail_with()} was told otherwise (#936). */
+	public $last_error = '';
+
+	/** @var string the error every following `get_col()` reports, `''` for none. */
+	private $failure = '';
+
 	/** @var callable(string):array<int,string|int> answers `get_col()` from the statement. */
 	private $answer;
 
@@ -73,10 +79,26 @@ class OrdersIdResolverFakeWpdb {
 	}
 
 	/**
+	 * Makes every following `get_col()` fail the way `wpdb` does: `last_error` is set and
+	 * the canned answer is what `wpdb::get_col()` returns for a broken statement — an
+	 * empty array, indistinguishable from "no rows" without reading `last_error`.
+	 *
+	 * @param string $error the message `wpdb::$last_error` should carry.
+	 */
+	public function fail_with( string $error ): void {
+		$this->failure = $error;
+	}
+
+	/**
 	 * @return array<int,string|int>
 	 */
 	public function get_col( string $sql ): array {
-		$this->queries[] = $sql;
+		$this->queries[]  = $sql;
+		$this->last_error = $this->failure; // wpdb::flush() clears it at the start of every statement.
+
+		if ( '' !== $this->failure ) {
+			return [];
+		}
 
 		return ( $this->answer )( $sql );
 	}
