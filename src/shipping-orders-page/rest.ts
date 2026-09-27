@@ -267,6 +267,12 @@ export interface FetchOrdersArgs {
 	 * reason as `hasTracking` — the REST arg's PRESENCE is what decides.
 	 */
 	isExported?: boolean;
+	/**
+	 * #843: «Все / Любое» — how the advanced filters (delivery status, tracking, pickup
+	 * point, order status) combine. Only `'any'` is ever sent; `'all'` and `undefined` send
+	 * nothing, which is what the URL does too and what the server reads as `all`.
+	 */
+	match?: 'all' | 'any';
 }
 
 /**
@@ -288,6 +294,7 @@ export function fetchOrders( {
 	hasTracking,
 	hasPickupPoint,
 	isExported,
+	match,
 }: FetchOrdersArgs = {} ): Promise<OrdersResponse> {
 	const { restRoot = '', nonce = '' } = bootstrap();
 
@@ -339,6 +346,10 @@ export function fetchOrders( {
 
 	if ( undefined !== isExported ) {
 		params.set( 'is_exported', isExported ? 'true' : 'false' );
+	}
+
+	if ( 'any' === match ) {
+		params.set( 'match', 'any' );
 	}
 
 	return apiFetch<OrdersResponse>( {

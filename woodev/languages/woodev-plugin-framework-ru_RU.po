@@ -3666,7 +3666,7 @@ msgid "Статус заказа {{rule /}} {{filter /}}"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
-msgid "Заказы соответствуют условиям"
+msgid "Заказы соответствуют {{select /}} условиям"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1

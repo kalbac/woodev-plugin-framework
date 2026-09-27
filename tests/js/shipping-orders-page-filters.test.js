@@ -23,6 +23,7 @@ import {
 	getDeliveryStatusFromQuery,
 	getDeliveryStatusNotFromQuery,
 	getHasPickupPointFromQuery,
+	getMatchFromQuery,
 	getHasTrackingFromQuery,
 	getOrderStatusFromQuery,
 	getOrderStatusNotFromQuery,
@@ -123,10 +124,20 @@ describe( 'filtersEqual', () => {
 		statusNot: [],
 		hasTracking: undefined,
 		hasPickupPoint: undefined,
+		match: 'all',
 	};
 
 	test( 'two identical snapshots are equal', () => {
 		expect( filtersEqual( base, { ...base } ) ).toBe( true );
+	} );
+
+	/**
+	 * #843: `match` scopes the fetch exactly like the filters it combines, so it has to
+	 * be part of the comparison — or flipping «Все» / «Любое» would neither refetch nor
+	 * reset the page (#850's guard reads this as «nothing changed»).
+	 */
+	test( 'a different «Все / Любое» is not equal', () => {
+		expect( filtersEqual( base, { ...base, match: 'any' } ) ).toBe( false );
 	} );
 
 	test( 'a different carrier is not equal', () => {
@@ -739,5 +750,47 @@ describe( 'the «Все / Новые» scope (#841)', () => {
 	test( 'closing the advanced block does not clear the scope', () => {
 		expect( advancedFiltersToggleQuery( false ) ).not.toHaveProperty( 'scope' );
 		expect( advancedFiltersToggleQuery( true ) ).not.toHaveProperty( 'scope' );
+	} );
+} );
+
+/**
+ * «Все / Любое» (#843). `AdvancedFilters` writes `match=any` itself and writes NOTHING for
+ * «Все» (`getUpdateHref()` maps `all` to `undefined`), so the URL only ever carries `any`;
+ * the reader degrades everything else to `all`, like the server does.
+ */
+describe( 'the «Все / Любое» match mode (#843)', () => {
+	const deliveryStatusLabels = { pending: 'К отправке', delivered: 'Доставлено' };
+
+	test( '`any` is read as any', () => {
+		expect( getMatchFromQuery( { match: 'any' } ) ).toBe( 'any' );
+	} );
+
+	test( 'absent, `all` and anything unrecognised are all', () => {
+		expect( getMatchFromQuery( {} ) ).toBe( 'all' );
+		expect( getMatchFromQuery( { match: 'all' } ) ).toBe( 'all' );
+		expect( getMatchFromQuery( { match: 'ANY' } ) ).toBe( 'all' );
+		expect( getMatchFromQuery( { match: 'sometimes' } ) ).toBe( 'all' );
+	} );
+
+	/**
+	 * Without the `{{select /}}` token `AdvancedFilters.getTitle()` renders no All/Any
+	 * control at all — the block would filter, and never offer «Любое».
+	 */
+	test( 'the block title carries the token that renders the All/Any select', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { 'wc-processing': 'В обработке' } );
+
+		expect( config.title ).toContain( '{{select /}}' );
+		expect( config.title ).toBe( 'Заказы соответствуют {{select /}} условиям' );
+	} );
+
+	test( 'order status stays in the advanced block, so «Любое» covers it too', () => {
+		const config = buildAdvancedFiltersConfig( deliveryStatusLabels, { 'wc-processing': 'В обработке' } );
+
+		expect( Object.keys( config.filters ) ).toEqual( [
+			'delivery_status',
+			'has_tracking',
+			'has_pickup_point',
+			'status',
+		] );
 	} );
 } );

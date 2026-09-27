@@ -101,6 +101,7 @@ import {
 	getDeliveryStatusNotFromQuery,
 	getHasPickupPointFromQuery,
 	getHasTrackingFromQuery,
+	getMatchFromQuery,
 	getOrderStatusFromQuery,
 	getOrderStatusNotFromQuery,
 	getScopeFromQuery,
@@ -166,6 +167,7 @@ function readUrlFilters( query: Record<string, string | undefined> ): UrlFilters
 		statusNot: getOrderStatusNotFromQuery( query ),
 		hasTracking: getHasTrackingFromQuery( query ),
 		hasPickupPoint: getHasPickupPointFromQuery( query ),
+		match: getMatchFromQuery( query ),
 	};
 }
 
@@ -1532,7 +1534,7 @@ export default function OrdersPage() {
 			 * dependencies, so it re-ran, `setRows( null )` dropped the table into its loading
 			 * skeleton, and the same query came back with the same rows.
 			 *
-			 * `filter=advanced` is not one of the nine fields `readUrlFilters()` reads, which
+			 * `filter=advanced` is not one of the ten fields `readUrlFilters()` reads, which
 			 * is why this shows up on a control that selects nothing at all. The verdict was
 			 * already being computed here — it was spent on the page reset and thrown away for
 			 * the identity, which is the whole defect.
@@ -1590,6 +1592,8 @@ export default function OrdersPage() {
 			deliveryStatusNot: urlFilters.deliveryStatusNot,
 			hasTracking: urlFilters.hasTracking,
 			hasPickupPoint: urlFilters.hasPickupPoint,
+			// #843: «Все / Любое» — the server ORs the advanced filters under `any`.
+			match: urlFilters.match,
 			// #841: «Новые» IS `is_exported=false`, and «Все» is the absence of the arg
 			// rather than `true` — `filters.ts` owns that mapping because the tri-state
 			// is a REST contract, not a display choice.
