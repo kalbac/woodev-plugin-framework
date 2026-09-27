@@ -75,6 +75,7 @@ class BootstrapRegistrationTest extends TestCase {
 		return array_merge(
 			[
 				'plugin_id'         => $plugin_id,
+				'download_id'       => 9800,
 				'plugin_name'       => $plugin_name,
 				'plugin_version'    => '1.0.0',
 				'framework_version' => $framework_version,
@@ -94,7 +95,9 @@ class BootstrapRegistrationTest extends TestCase {
 	 * Bootstrap::instance() should return a singleton.
 	 */
 	public function test_instance_returns_singleton(): void {
-		Functions\expect( 'add_action' )->twice();
+		// plugins_loaded + admin_init (original pair) plus activated_plugin + admin_notices,
+		// wired for the #916 download-id activation guard.
+		Functions\expect( 'add_action' )->times( 4 );
 
 		$instance1 = \Woodev_Plugin_Bootstrap::instance();
 		$instance2 = \Woodev_Plugin_Bootstrap::instance();

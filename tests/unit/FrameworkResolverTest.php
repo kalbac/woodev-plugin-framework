@@ -532,6 +532,7 @@ class FrameworkResolverTest extends TestCase {
 			$this->get_loader_definition(
 				[
 					'plugin_id'         => 'low-plugin',
+					'download_id'       => 9101,
 					'plugin_name'       => 'Low Version Plugin',
 					'framework_version' => '2.0.0',
 					'callback'          => static function () use ( &$low_loaded ): void {
@@ -544,6 +545,7 @@ class FrameworkResolverTest extends TestCase {
 			$this->get_loader_definition(
 				[
 					'plugin_id'         => 'high-plugin',
+					'download_id'       => 9102,
 					'plugin_name'       => 'High Version Plugin',
 					'framework_version' => '2.10.0',
 					'callback'          => static function () use ( &$high_loaded ): void {
@@ -721,6 +723,7 @@ class FrameworkResolverTest extends TestCase {
 		$accepted = $bootstrap->register_loader_definition(
 			[
 				'plugin_id'         => 'boot-test-plugin',
+				'download_id'       => 9910,
 				'plugin_name'       => 'Boot Test Plugin',
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.0',
@@ -747,6 +750,441 @@ class FrameworkResolverTest extends TestCase {
 	}
 
 	/**
+	 * #916: two plugins claiming the same download id — the first (in resolver order)
+	 * is invoked, the second is quarantined instead of invoked, and the quarantine entry
+	 * names the holder.
+	 */
+	public function test_resolver_quarantines_second_plugin_with_same_download_id(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$a_loaded = false;
+		$b_loaded = false;
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 500,
+					'plugin_name' => 'Download Id Plugin A',
+					'callback'    => static function () use ( &$a_loaded ): void {
+						$a_loaded = true;
+					},
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 500,
+					'plugin_name' => 'Download Id Plugin B',
+					'callback'    => static function () use ( &$b_loaded ): void {
+						$b_loaded = true;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $a_loaded, 'The first plugin to claim a download id must be invoked.' );
+		$this->assertFalse( $b_loaded, 'The second plugin claiming an already-taken download id must not be invoked.' );
+		$this->assertCount( 1, $resolver->get_active_plugins() );
+
+		$quarantined = $resolver->get_quarantined_download_id_plugins();
+		$this->assertCount( 1, $quarantined );
+		$this->assertSame( 'Download Id Plugin B', $quarantined[0]['plugin_name'] );
+		$this->assertSame( 'Download Id Plugin A', $quarantined[0]['claimed_by'] );
+	}
+
+	/**
+	 * #916: plugins with DIFFERENT download ids must both be invoked — the guard is keyed
+	 * by download id, never by plugin_id or registration order alone.
+	 */
+	public function test_resolver_invokes_both_plugins_with_different_download_ids(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+		$a_loaded = false;
+		$b_loaded = false;
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 501,
+					'plugin_name' => 'Download Id Plugin A',
+					'callback'    => static function () use ( &$a_loaded ): void {
+						$a_loaded = true;
+					},
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 502,
+					'plugin_name' => 'Download Id Plugin B',
+					'callback'    => static function () use ( &$b_loaded ): void {
+						$b_loaded = true;
+					},
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertTrue( $a_loaded );
+		$this->assertTrue( $b_loaded );
+		$this->assertCount( 2, $resolver->get_active_plugins() );
+		$this->assertEmpty( $resolver->get_quarantined_download_id_plugins() );
+	}
+
+	/**
+	 * #916: the rendered admin notice must name both the refused plugin and the plugin
+	 * already holding its download id.
+	 */
+	public function test_render_update_notices_names_both_plugins_in_the_download_id_collision(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 503,
+					'plugin_name' => 'Download Id Plugin A',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 503,
+					'plugin_name' => 'Download Id Plugin B',
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Download Id Plugin B', $output, 'The notice must name the refused plugin.' );
+		$this->assertStringContainsString( 'Download Id Plugin A', $output, 'The notice must name the plugin already holding the id.' );
+		$this->assertStringContainsString( 'Плагин отключён', $output );
+	}
+
+	/**
+	 * #916: in an admin, non-AJAX request by a capable user, a download-id collision
+	 * discovered at load time (both plugins already active — e.g. a bulk activation, or an
+	 * update that introduced the bug) is self-healed by deactivating the quarantined plugin.
+	 */
+	public function test_resolver_deactivates_quarantined_plugin_in_admin_context(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'add_action' )->justReturn( true );
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 504,
+					'plugin_name' => 'Download Id Plugin A',
+					'plugin_file' => '/plugins/download-id-a/download-id-a.php',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 504,
+					'plugin_name' => 'Download Id Plugin B',
+					'plugin_file' => '/plugins/download-id-b/download-id-b.php',
+				]
+			)
+		);
+
+		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php' );
+
+		$resolver->load_plugins();
+	}
+
+	/**
+	 * #916: outside an admin, non-AJAX, capable-user context, a load-time collision is only
+	 * skipped — never physically deactivated (an anonymous front-end request or a cron/AJAX
+	 * tick must not silently change the site's active plugins).
+	 */
+	public function test_resolver_does_not_deactivate_quarantined_plugin_outside_admin_context(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+		Functions\expect( 'deactivate_plugins' )->never();
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 505,
+					'plugin_name' => 'Download Id Plugin A',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 505,
+					'plugin_name' => 'Download Id Plugin B',
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertCount( 1, $resolver->get_quarantined_download_id_plugins() );
+	}
+
+	/**
+	 * #916: `guard_activated_plugin()` (hooked to WordPress's `activated_plugin`) must
+	 * deactivate a just-activated plugin whose download id is already claimed by a plugin
+	 * loaded earlier in the SAME request, and must queue the flashed notice.
+	 */
+	public function test_guard_activated_plugin_deactivates_a_duplicate_of_an_already_loaded_plugin(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'guard-plugin-a',
+					'download_id' => 700,
+					'plugin_name' => 'Guard Plugin A',
+					'plugin_file' => '/plugins/guard-a/guard-a.php',
+				]
+			)
+		);
+		$resolver->load_plugins();
+
+		// Simulates activate_plugin() including guard-b's file AFTER plugins_loaded already ran.
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'guard-plugin-b',
+					'download_id' => 700,
+					'plugin_name' => 'Guard Plugin B',
+					'plugin_file' => '/plugins/guard-b/guard-b.php',
+				]
+			)
+		);
+
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\when( 'get_current_user_id' )->justReturn( 1 );
+		Functions\expect( 'deactivate_plugins' )->once()->with( 'guard-b/guard-b.php' );
+		Functions\expect( 'set_transient' )->once()->with(
+			\Woodev\Framework\Framework_Resolver::ACTIVATION_GUARD_NOTICE_TRANSIENT . '1',
+			\Mockery::type( 'string' ),
+			60
+		);
+
+		$resolver->guard_activated_plugin( 'guard-b/guard-b.php' );
+	}
+
+	/**
+	 * #916: activating a plugin with a UNIQUE download id must never deactivate it or queue
+	 * a notice.
+	 */
+	public function test_guard_activated_plugin_does_nothing_for_a_unique_download_id(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'guard-plugin-a',
+					'download_id' => 701,
+					'plugin_name' => 'Guard Plugin A',
+					'plugin_file' => '/plugins/guard-a/guard-a.php',
+				]
+			)
+		);
+		$resolver->load_plugins();
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'guard-plugin-c',
+					'download_id' => 900,
+					'plugin_name' => 'Guard Plugin C',
+					'plugin_file' => '/plugins/guard-c/guard-c.php',
+				]
+			)
+		);
+
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\expect( 'deactivate_plugins' )->never();
+		Functions\expect( 'set_transient' )->never();
+
+		$resolver->guard_activated_plugin( 'guard-c/guard-c.php' );
+	}
+
+	/**
+	 * #916: bulk-in-one-request case. Two plugins that are BOTH inactive before the request
+	 * and get activated together must still be caught: the first activation in the batch
+	 * claims the id, the second is deactivated.
+	 */
+	public function test_guard_activated_plugin_quarantines_the_second_of_two_bulk_activated_duplicates(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		// Nothing of ours is active yet when this request's plugins_loaded fired.
+		$resolver->load_plugins();
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'bulk-plugin-a',
+					'download_id' => 800,
+					'plugin_name' => 'Bulk Plugin A',
+					'plugin_file' => '/plugins/bulk-a/bulk-a.php',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'bulk-plugin-b',
+					'download_id' => 800,
+					'plugin_name' => 'Bulk Plugin B',
+					'plugin_file' => '/plugins/bulk-b/bulk-b.php',
+				]
+			)
+		);
+
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\when( 'get_current_user_id' )->justReturn( 1 );
+		Functions\expect( 'deactivate_plugins' )->once()->with( 'bulk-b/bulk-b.php' );
+		Functions\expect( 'set_transient' )->once();
+
+		$resolver->guard_activated_plugin( 'bulk-a/bulk-a.php' );
+		$resolver->guard_activated_plugin( 'bulk-b/bulk-b.php' );
+	}
+
+	/**
+	 * #916: `render_activation_guard_notice()` reads, prints and clears the flashed
+	 * transient exactly once — the same single-use pattern
+	 * {@see \Woodev_Account_Connection::render_connect_notice()} uses.
+	 */
+	public function test_render_activation_guard_notice_prints_and_clears_the_flashed_message(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'get_current_user_id' )->justReturn( 7 );
+		Functions\when( 'get_transient' )->justReturn( 'Невозможно активировать «B»: он использует тот же идентификатор лицензии, что и «A». Плагин отключён. Обратитесь к автору плагина.' );
+		Functions\expect( 'delete_transient' )->once()->with( \Woodev\Framework\Framework_Resolver::ACTIVATION_GUARD_NOTICE_TRANSIENT . '7' );
+
+		ob_start();
+		$resolver->render_activation_guard_notice();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Плагин отключён', $output );
+		$this->assertStringContainsString( '<div class="error">', $output );
+	}
+
+	/**
 	 * Returns a valid loader definition with optional overrides.
 	 *
 	 * @param array<string,mixed> $overrides Definition overrides.
@@ -756,6 +1194,7 @@ class FrameworkResolverTest extends TestCase {
 		return array_merge(
 			[
 				'plugin_id'         => 'test-plugin',
+				'download_id'       => 9999,
 				'plugin_name'       => 'Test Plugin',
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.0',

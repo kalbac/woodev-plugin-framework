@@ -136,6 +136,7 @@ final class LoaderDormantNoticeTest extends TestCase {
 			$plugin_file,
 			[
 				'plugin_id'         => 'dormant-notice-happy-path',
+				'download_id'       => 9930,
 				'plugin_name'       => 'Dormant Notice Happy Path',
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.2',

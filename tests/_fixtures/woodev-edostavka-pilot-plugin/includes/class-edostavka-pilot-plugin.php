@@ -122,17 +122,6 @@ final class Woodev_Edostavka_Pilot_Plugin extends \Woodev\Framework\Shipping\Shi
 	}
 
 	/**
-	 * Gets the fixture download ID.
-	 *
-	 * Models the production edostavka EDD download ID shape.
-	 *
-	 * @return int
-	 */
-	public function get_download_id(): int {
-		return 216;
-	}
-
-	/**
 	 * Gets the shipping method classes for test assertions.
 	 *
 	 * @return array<string,string>

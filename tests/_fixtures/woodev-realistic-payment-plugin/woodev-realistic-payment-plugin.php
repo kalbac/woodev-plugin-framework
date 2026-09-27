@@ -22,6 +22,7 @@ defined( 'WOODEV_REALISTIC_PAYMENT_FILE' ) || define( 'WOODEV_REALISTIC_PAYMENT_
 function woodev_realistic_payment_plugin_loader_definition(): array {
 	return [
 		'plugin_id'         => 'woodev-realistic-payment',
+		'download_id'       => 9003,
 		'plugin_name'       => 'Woodev Realistic Payment Fixture',
 		'plugin_version'    => WOODEV_REALISTIC_PAYMENT_VERSION,
 		'framework_version' => '2.0.0',

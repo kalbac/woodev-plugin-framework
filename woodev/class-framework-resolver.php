@@ -21,6 +21,9 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 	 */
 	class Framework_Resolver {
 
+		/** @var string Transient key prefix (suffixed by the current user id) for a queued activation-guard notice — same post-redirect pattern as {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::NOTICE_TRANSIENT_KEY}. */
+		public const ACTIVATION_GUARD_NOTICE_TRANSIENT = 'woodev_download_id_guard_notice_';
+
 		/** @var array<int,array<string,mixed>> Registered plugin arrays. */
 		protected array $registered_plugins = [];
 
@@ -42,8 +45,17 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		/** @var array<int,array<string,mixed>> Invalid loader definitions. */
 		protected array $invalid_loader_definitions = [];
 
+		/** @var array<int,array<string,mixed>> Plugins refused a download id already claimed by another loaded/holder plugin — each entry carries the legacy plugin array plus a 'claimed_by' holder plugin name. */
+		protected array $quarantined_download_id_plugins = [];
+
 		/** @var array<string,bool> Plugin IDs already registered — prevents duplicates from colliding on options, cron, license keys, and logger handles. */
 		protected array $plugin_ids = [];
+
+		/** @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Registered loader definitions keyed by plugin_id — the single source of truth Woodev_Plugin::get_download_id() reads from. */
+		protected array $definitions_by_plugin_id = [];
+
+		/** @var array<int,array<string,mixed>>|null Download ids already claimed at the `activated_plugin` guard, keyed by download id, lazily seeded from the already-loaded active plugins on first activation in this request. Null until seeded. */
+		protected ?array $activation_guard_claims = null;
 
 		/** @var bool Guards load_plugins() against double execution in long-running processes (WP-Cron, Action Scheduler). */
 		protected bool $loaded = false;
@@ -97,10 +109,29 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				return false;
 			}
 
-			$this->plugin_ids[ $loader_definition->get_plugin_id() ] = true;
-			$this->registered_plugins[]                              = $loader_definition->to_legacy_plugin();
+			$this->plugin_ids[ $loader_definition->get_plugin_id() ]              = true;
+			$this->definitions_by_plugin_id[ $loader_definition->get_plugin_id() ] = $loader_definition;
+			$this->registered_plugins[]                                           = $loader_definition->to_legacy_plugin();
 
 			return true;
+		}
+
+		/**
+		 * Gets the registered loader definition for a plugin id.
+		 *
+		 * The single source of truth {@see Woodev_Plugin::get_download_id()} reads through —
+		 * a plugin instance cannot reach its own loader definition directly (its constructor
+		 * is invoked with no reference to it), but its `plugin_id` (the id it passes to
+		 * `Woodev_Plugin::__construct()`) is, by framework convention, the same string it
+		 * declared as `plugin_id` in its own loader definition.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_id Plugin id, as returned by `Woodev_Plugin::get_id()`.
+		 * @return Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_plugin_id( string $plugin_id ): ?Framework_Plugin_Loader_Definition {
+			return $this->definitions_by_plugin_id[ $plugin_id ] ?? null;
 		}
 
 		/**
@@ -119,7 +150,8 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 			usort( $this->registered_plugins, [ $this, 'framework_compare' ] );
 
-			$loaded_framework = null;
+			$loaded_framework    = null;
+			$claimed_download_ids = [];
 			foreach ( $this->registered_plugins as $plugin ) {
 				if ( null === $loaded_framework ) {
 					$loaded_framework = $plugin;
@@ -165,6 +197,31 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				if ( $this->fails_woocommerce_requirement( $plugin ) ) {
 					$this->incompatible_wc_version_plugins[] = $plugin;
 					continue;
+				}
+
+				$definition  = $plugin['definition'] ?? null;
+				$download_id = $definition instanceof Framework_Plugin_Loader_Definition ? $definition->get_download_id() : 0;
+
+				if ( $download_id > 0 ) {
+					if ( isset( $claimed_download_ids[ $download_id ] ) ) {
+						$holder = $claimed_download_ids[ $download_id ];
+
+						$this->quarantined_download_id_plugins[] = $plugin + [ 'claimed_by' => $holder['plugin_name'] ];
+
+						// Both plugins were already active before this code ran (bulk activation,
+						// or an update that introduced the collision): self-heal by removing the
+						// duplicate from the active_plugins option, but only in a context where a
+						// deliberate admin action is plausible — never for an anonymous front-end
+						// request or a cron/AJAX tick, where deactivate_plugins() would be a
+						// silent, unauthorized site change (#916).
+						if ( is_admin() && ! defined( 'DOING_AJAX' ) && current_user_can( 'activate_plugins' ) ) {
+							deactivate_plugins( plugin_basename( $definition->get_plugin_file() ) );
+						}
+
+						continue;
+					}
+
+					$claimed_download_ids[ $download_id ] = $plugin;
 				}
 
 				if ( ! $this->invoke_plugin( $plugin ) ) {
@@ -226,6 +283,128 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			}
 
 			add_action( 'admin_notices', $this->deactivation_notice_renderer );
+		}
+
+
+		/**
+		 * Guards a single plugin activation against a download id collision.
+		 *
+		 * Hooked to WordPress's `activated_plugin`, which fires once per plugin — even inside
+		 * a bulk activation — AFTER that plugin's own file has been included (so its loader
+		 * definition is already registered) and after WordPress persisted it into the
+		 * `active_plugins` option. `load_plugins()` itself already ran on this request's
+		 * `plugins_loaded` (`$this->loaded` is true) and will not run again for it, so this is
+		 * the only place a just-activated plugin's download id is checked before the NEXT
+		 * request would otherwise load it. Deactivating it here is safe under WP-CLI (`wp
+		 * plugin activate`) and silent AJAX activation alike: `deactivate_plugins()` and
+		 * `set_transient()` require no admin screen, and the queued notice simply never
+		 * renders when nobody with an admin session reads it back (#916).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin Activated plugin's basename (`folder/file.php`).
+		 * @return void
+		 */
+		public function guard_activated_plugin( string $plugin ): void {
+			if ( ! $this->loaded ) {
+				return;
+			}
+
+			$definition = null;
+			$activated  = null;
+
+			foreach ( $this->registered_plugins as $registered ) {
+				$candidate = $registered['definition'] ?? null;
+
+				if ( $candidate instanceof Framework_Plugin_Loader_Definition && plugin_basename( $candidate->get_plugin_file() ) === $plugin ) {
+					$definition = $candidate;
+					$activated  = $registered;
+					break;
+				}
+			}
+
+			if ( null === $definition ) {
+				return;
+			}
+
+			$download_id = $definition->get_download_id();
+
+			if ( $download_id <= 0 ) {
+				return;
+			}
+
+			$this->seed_activation_guard_claims();
+
+			$holder = $this->activation_guard_claims[ $download_id ] ?? null;
+
+			if ( null !== $holder && ( $holder['plugin_name'] ?? '' ) !== $activated['plugin_name'] ) {
+				deactivate_plugins( $plugin );
+
+				set_transient(
+					self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id(),
+					sprintf(
+						/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
+						__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+						$activated['plugin_name'],
+						$holder['plugin_name']
+					),
+					60
+				);
+
+				return;
+			}
+
+			$this->activation_guard_claims[ $download_id ] = $activated;
+		}
+
+		/**
+		 * Renders a flashed activation-guard refusal notice, if one is waiting for the current
+		 * user. Same single-use transient/`admin_notices` mechanism as
+		 * {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::render_action_notice()}
+		 * and {@see \Woodev_Account_Connection::render_connect_notice()} use for a message that
+		 * must survive `deactivate_plugins()`'s implicit redirect back to the plugins screen.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function render_activation_guard_notice(): void {
+			$key     = self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id();
+			$message = get_transient( $key );
+
+			if ( ! is_string( $message ) || '' === $message ) {
+				return;
+			}
+
+			delete_transient( $key );
+
+			printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
+		}
+
+		/**
+		 * Lazily seeds the activation guard's claimed-id map from plugins already loaded by
+		 * `load_plugins()` earlier in this request. Seeded once per request: a plugin activated
+		 * earlier in the SAME bulk-activation request claims its id here too, via
+		 * {@see self::guard_activated_plugin()}'s own final assignment.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function seed_activation_guard_claims(): void {
+			if ( null !== $this->activation_guard_claims ) {
+				return;
+			}
+
+			$this->activation_guard_claims = [];
+
+			foreach ( $this->active_plugins as $plugin ) {
+				$definition = $plugin['definition'] ?? null;
+
+				if ( $definition instanceof Framework_Plugin_Loader_Definition && $definition->get_download_id() > 0 ) {
+					$this->activation_guard_claims[ $definition->get_download_id() ] = $plugin;
+				}
+			}
 		}
 
 		/**
@@ -336,6 +515,20 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				echo '</ul>';
 				echo '<p>' . sprintf( esc_html__( 'Please %1$supdate WordPress%2$s', 'woodev-plugin-framework' ), '<a href="' . esc_url( admin_url( 'update-core.php' ) ) . '">', '&nbsp;&raquo;</a>' ) . '</p></div>';
 			}
+
+			foreach ( $this->quarantined_download_id_plugins as $plugin ) {
+				printf(
+					'<div class="error"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
+							__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+							$plugin['plugin_name'],
+							$plugin['claimed_by']
+						)
+					)
+				);
+			}
 		}
 
 		/**
@@ -413,6 +606,18 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 */
 		public function get_invalid_loader_definitions(): array {
 			return $this->invalid_loader_definitions;
+		}
+
+
+		/**
+		 * Gets plugins refused a download id already claimed by another loaded/holder plugin.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_quarantined_download_id_plugins(): array {
+			return $this->quarantined_download_id_plugins;
 		}
 
 		/**
@@ -573,7 +778,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return bool
 		 */
 		protected function has_update_notices(): bool {
-			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins;
+			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins || $this->quarantined_download_id_plugins;
 		}
 
 		/**

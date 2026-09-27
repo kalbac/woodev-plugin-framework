@@ -137,6 +137,14 @@ if ( ! class_exists( 'Woodev_Plugins_License' ) ) :
 		 * — the command endpoint then treats that id as unknown_plugin. A re-register
 		 * of the SAME plugin id (e.g. a reload) is not a collision.
 		 *
+		 * #916: since `download_id` became a required loader-definition field, the
+		 * resolver ({@see \Woodev\Framework\Framework_Resolver::load_plugins()} and
+		 * {@see \Woodev\Framework\Framework_Resolver::guard_activated_plugin()}) refuses to
+		 * ever RUN a second plugin with an already-claimed download id in the first place —
+		 * this §9.3 branch is defense in depth for whatever the resolver cannot see (a
+		 * legacy v1 plugin sharing the id, or two v2 copies loaded through separate,
+		 * non-framework registration paths), not the primary guard.
+		 *
 		 * @since 2.0.0
 		 * @since 2.0.2 #905: a download id that has no store product (see
 		 *              self::has_store_product()) is never flagged ambiguous and never

@@ -22,6 +22,7 @@ defined( 'WOODEV_REALISTIC_SHIPPING_FILE' ) || define( 'WOODEV_REALISTIC_SHIPPIN
 function woodev_realistic_shipping_plugin_loader_definition(): array {
 	return [
 		'plugin_id'         => 'woodev-realistic-shipping',
+		'download_id'       => 9004,
 		'plugin_name'       => 'Woodev Realistic Shipping Fixture',
 		'plugin_version'    => WOODEV_REALISTIC_SHIPPING_VERSION,
 		'framework_version' => '2.0.0',

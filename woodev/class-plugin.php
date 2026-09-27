@@ -1303,11 +1303,29 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		}
 
 		/**
-		 * Returns the plugin download id
+		 * Returns the plugin download id — the EDD product id on woodev.ru.
 		 *
-		 * @return integer plugin download id
+		 * Single source of truth: the plugin's own loader definition, matched by plugin id.
+		 * A plugin instance carries no reference to the definition it was registered with (its
+		 * constructor is invoked with no such argument, and adding one would mean changing the
+		 * constructor signature of every downstream plugin), so this looks the definition up
+		 * through the framework bootstrap instead, keyed by {@see self::get_id()} — the same
+		 * string a plugin passes as its own `plugin_id` in its loader definition, by convention.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int plugin download id, or 0 if no matching loader definition is registered
 		 */
-		abstract public function get_download_id();
+		public function get_download_id() {
+
+			if ( ! class_exists( 'Woodev_Plugin_Bootstrap', false ) ) {
+				return 0;
+			}
+
+			$definition = Woodev_Plugin_Bootstrap::instance()->get_loader_definition_for_plugin_id( $this->get_id() );
+
+			return $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ? $definition->get_download_id() : 0;
+		}
 
 		/**
 		 * Whether this plugin requires a license to operate.

@@ -231,6 +231,12 @@ msgstr ""
 msgid "Please %1$supdate WordPress%2$s"
 msgstr ""
 
+#: class-framework-resolver.php:347
+#: class-framework-resolver.php:525
+#, php-format
+msgid "Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина."
+msgstr ""
+
 #: class-helper.php:402
 msgctxt "coordinating conjunction for a list of items: a, b, and c"
 msgid "and"

@@ -129,15 +129,6 @@ final class Woodev_Realistic_Payment_Plugin extends \Woodev_Payment_Gateway_Plug
 	}
 
 	/**
-	 * Gets the fixture download ID.
-	 *
-	 * @return int
-	 */
-	public function get_download_id(): int {
-		return 9003;
-	}
-
-	/**
 	 * Gets the registered gateway class names for test assertions.
 	 *
 	 * @return array<int,string>
