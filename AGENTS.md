@@ -30,7 +30,7 @@
    - Read `docs-internal/DOCS-SCHEMA.md` for exact format rules
 4. **Audit the board** — move the session's cards (`В работе` → `Готово`), close cards resolved by unrelated work, file cards for anything that surfaced but was never written down (see Backlog rule below)
 5. **Update `docs-internal/next-session-prompt.md`** — replace it with the handoff for the next session (write it for someone with zero context)
-6. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each worker of yours. A Codex critic that has already sent `worker_done` stays a LIVE terminal holding RAM, and RAM is the hard cap here (2–3 agents). s123 left one running; it was still there ~10 h later and the operator had to point it out. Check at session START too — a stray worker is not always yours.
+6. **Close the agent terminals this session started** — `orca terminal list --json`, then `orca terminal close` for each worker of yours. A Codex critic that has already sent `worker_done` stays a LIVE terminal holding RAM (the hard cap on the Windows desktop, 2–3 agents) and a slot of the rate-limit budget (the only cap on the Mac). s123 left one running; it was still there ~10 h later and the operator had to point it out. Check at session START too — a stray worker is not always yours.
 7. Commit with Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
 8. **Push every branch that carries work** — git is how the other machine gets it; a local-only
    branch simply does not travel.

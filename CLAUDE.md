@@ -112,10 +112,10 @@ Gotcha
 
 **Two caps from that same decision STAY, because they were never about the budget:**
 
-- **2–3 concurrent agents.** This is a HARDWARE limit, not a quota one. At six agents free RAM hit
-  0.4 GB of 15.3 and a starting Codex died on `VirtualAlloc`; even at three, `phpcs` failed in ways
-  that read as code defects and jest OOM'd (gotcha
-  `three-agents-is-the-concurrency-cap-on-this-machine`). A reset allowance buys no RAM.
+- **Concurrent agents — by MACHINE** (operator, 27.09.2026). **Windows desktop: 2–3, a RAM limit**
+  (gotcha `three-agents-is-the-concurrency-cap-on-this-machine`). **Mac (64 GB): no RAM cap** — the
+  only brake is the 5-hour rate limit; size the wave by `account list`, not memory. Either way,
+  parallel workers need disjoint files.
 - **2–3 rounds per card**, after which a card needs decomposition or an operator decision rather
   than a fourth blind round. This is process discipline. s88 is the worked example: three rounds on
   #458 failed, the fourth was licensed only by the operator settling Rule 7c, and it landed.
@@ -141,8 +141,7 @@ Five project facts no skill knows, because they are ours:
    `worker-start --task <task> --retry-of <failed dispatch> --terminal <handle> --worktree current`.
    A retry while a dialog is still up fails `agent_unconfigured`. Read the buffer back after every
    step (gotcha `starting-codex-under-orca-needs-four-steps-not-one`).
-4. **Cap the wave at three agents** — the caps above; the number was measured on the 15.3 GB
-   Windows desktop, so re-measure it on other hardware before trusting it.
+4. **Size the wave by machine** — see the caps above.
 5. **A worker's green gate is not this tree's green gate.** A worktree can skip tests the primary
    checkout runs, and its `npm run build` can never match CI's. Generated bundles are built in the
    PRIMARY CHECKOUT only (gotchas `a-worktree-silently-skips-five-contract-tests`,

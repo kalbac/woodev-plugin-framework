@@ -99,7 +99,7 @@ darwin binaries in `node_modules`. After the first setup the only path is git.
 | `orca` on PATH | works | `/usr/local/bin/orca` is a root-owned `lrwx------` symlink an agent's shell cannot read (`Unable to determine Orca.app path`) — call `/Applications/Orca.app/Contents/Resources/bin/orca` (measured s136) |
 | Docker engine | Docker Desktop, WSL2 backend (8 GB to the VM) | **OrbStack** (operator, 13.09.2026) |
 | Rig response time | **5–9 s to first byte, warm** — `/` 6.6 s, `/wp-admin/` 7–9 s, the orders page 5–6 s (measured s135, 13.09.2026). Cause: every rig file, WordPress core included (`~/.wp-env/<hash>/WordPress`), is a bind mount from the Windows filesystem into the WSL2 VM, and OPcache runs with `validate_timestamps=1`, so each request stats thousands of files across that bridge. Remedies, not applied: keep the project inside the WSL2 filesystem, or relax `opcache.revalidate_freq` (edits then show with a delay) | pages open in a fraction of a second (operator, 13.09.2026 — not yet timed by an agent) |
-| Agent concurrency cap | 3 (measured on 15.3 GB RAM) | unmeasured — start at 2–3 and re-measure (the laptop shows the same 15.66 GB to docker) |
+| Agent concurrency cap | 3 (measured on 15.3 GB RAM) | **no RAM cap** — 64 GB host, ~33 GB free with four agents live (s141); the 5-hour rate limit sizes the wave (operator, 27.09.2026). Docker's VM sees 15.66 GB, which bounds the rig, not the agents |
 | `run-local-ci` (the global CI rehearsal tool) | does not run natively; WSL only | still unverified — not exercised in s136 |
 
 Gotchas that apply to only one OS carry a `> **Platform:**` or `> **Measured on:**` line under their

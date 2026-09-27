@@ -1,5 +1,8 @@
 # gotcha: three agents is the real concurrency cap here — past it, gates fail in ways that look like code bugs
-> **Measured on:** the Windows desktop (15.3 GB RAM) — re-measure on other hardware.
+> **Measured on:** the Windows desktop (15.3 GB RAM). **Does NOT apply to the MacBook** (64 GB,
+> ~33 GB free with four agents live across two projects, s141): there the only concurrency brake is
+> the 5-hour rate limit — do not let parallel agents drain the session window early (operator,
+> 27.09.2026).
 
 **Namespace:** `[tooling/parallel-agents]`
 **Discovered:** s84 (2026-08-21)
@@ -30,7 +33,8 @@ own.
 
 ## ✅ Correct
 
-- **Cap the wave at three agents** while Docker and WSL are up. Release and close settled workers
+- **On the Windows desktop, cap the wave at three agents** while Docker and WSL are up. On the Mac,
+  size the wave by `orca account list` (5-hour window), not by RAM. Release and close settled workers
   BEFORE starting the next wave, not at the end of the session.
 - **Put the warning in every brief.** The wording that worked: *"several agents share this machine
   and it has been low on memory tonight … if that happens, say so plainly and retry once; never

@@ -286,7 +286,7 @@ Codex is a full worker again — `CLAUDE.md` → Orca carries the live rule.
 passes into #395 and still did not close it. The third REJECT is the signal to stop and hand the
 operator the fork, not to brief a fourth round.
 
-**Cap the wave at three agents.** With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
+**Cap the wave at three agents — on the Windows desktop.** (The MacBook has 64 GB and no RAM cap; there the wave is sized by the 5-hour rate limit only — operator, 27.09.2026.) With six live, free RAM hit 0.4 GB of 15.3 GB and a starting
 Codex died on `VirtualAlloc`. Even at three, `composer phpcs` OOM'd for one agent and blamed five
 innocent files for another (failed `shell_exec()` syntax checks read as PHPCS internal exceptions),
 and jest died with `Fatal process out of memory`. A Codex terminal starts about eleven MCP servers
@@ -550,7 +550,7 @@ that was handy.
   checkpoint, not a failure.
 - **Three workers CAN share ONE worktree** — proven twice in s101, six workers total — provided
   their file sets are disjoint AND the brief forbids them git commands and gate runs. The
-  coordinator runs the gates. That last clause is what keeps this inside the three-agent RAM cap:
+  coordinator runs the gates. That last clause is what keeps this inside the desktop's three-agent RAM cap:
   the OOM in s84 came from concurrent heavy gate runs, not from the agents themselves.
 
 ## Related
