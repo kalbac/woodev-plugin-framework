@@ -54,6 +54,9 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		/** @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Registered loader definitions keyed by plugin_id — the single source of truth Woodev_Plugin::get_download_id() reads from. */
 		protected array $definitions_by_plugin_id = [];
 
+		/** @var array<string,\Woodev\Framework\Framework_Plugin_Loader_Definition> Loader definitions keyed by their `main_class`, recorded at invocation time — the PRIMARY source Woodev_Plugin::get_download_id() reads from, since a plugin's `get_id()` is not guaranteed to equal its own definition's `plugin_id` (#916 follow-up: a plugin author error, not enforced anywhere else). */
+		protected array $definitions_by_main_class = [];
+
 		/** @var array<int,array<string,mixed>>|null Download ids already claimed at the `activated_plugin` guard, keyed by download id, lazily seeded from the already-loaded active plugins on first activation in this request. Null until seeded. */
 		protected ?array $activation_guard_claims = null;
 
@@ -135,7 +138,55 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		}
 
 		/**
+		 * Gets the registered loader definition for a plugin's own class (or nearest registered
+		 * ancestor), falling back to none when the class was never invoked through this resolver.
+		 *
+		 * The PRIMARY lookup {@see Woodev_Plugin::get_download_id()} reads through, because a
+		 * plugin's `get_id()` is a free-form string chosen by convention to match its own
+		 * definition's `plugin_id` — nothing enforces that they agree, and a real fixture in this
+		 * repo demonstrates the mismatch (#916 follow-up). The main class is authoritative: it is
+		 * literally the class the definition names, recorded in {@see invoke_plugin()} at the
+		 * moment this resolver invoked it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class( string $class ): ?Framework_Plugin_Loader_Definition {
+			if ( isset( $this->definitions_by_main_class[ $class ] ) ) {
+				return $this->definitions_by_main_class[ $class ];
+			}
+
+			// class_parents() warns (and returns false) for a class that does not exist — never
+			// itself invoked through this resolver is the common case for that, not a bug.
+			if ( ! class_exists( $class ) && ! interface_exists( $class ) ) {
+				return null;
+			}
+
+			foreach ( class_parents( $class ) as $ancestor ) {
+				if ( isset( $this->definitions_by_main_class[ $ancestor ] ) ) {
+					return $this->definitions_by_main_class[ $ancestor ];
+				}
+			}
+
+			return null;
+		}
+
+		/**
 		 * Loads compatible registered plugins.
+		 *
+		 * On a download id collision below, which plugin loads (and which is quarantined) is
+		 * decided by `framework_compare()`'s sort — highest `framework_version` first, then
+		 * registration order — NOT by which plugin was active first or longest. A merchant's
+		 * long-installed, licensed plugin can lose to a newer-framework plugin that happens to
+		 * collide with it. That is accepted (operator decision, #916: the resolver only prevents
+		 * a SECOND plugin from ever running with a taken id — it does not arbitrate seniority),
+		 * because the ACTIVATION guard ({@see guard_activated_plugin()}) is the primary defence:
+		 * it refuses the second plugin's activation outright, so a fresh collision never reaches
+		 * this load-order tiebreak at all. This tiebreak only matters for a duplicate that is
+		 * already active by the time this runs (a bulk activation, or an update that introduced
+		 * the collision), which the activation guard could not have seen.
 		 *
 		 * @since 2.0.0
 		 *
@@ -205,8 +256,12 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 				if ( $download_id > 0 ) {
 					if ( isset( $claimed_download_ids[ $download_id ] ) ) {
 						$holder = $claimed_download_ids[ $download_id ];
+						$index  = count( $this->quarantined_download_id_plugins );
 
-						$this->quarantined_download_id_plugins[] = $plugin + [ 'claimed_by' => $holder['plugin_name'] ];
+						$this->quarantined_download_id_plugins[] = $plugin + [
+							'claimed_by'  => $holder['plugin_name'],
+							'deactivated' => false,
+						];
 
 						// Both plugins were already active before this code ran (bulk activation,
 						// or an update that introduced the collision): self-heal by removing the
@@ -214,8 +269,36 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 						// deliberate admin action is plausible — never for an anonymous front-end
 						// request or a cron/AJAX tick, where deactivate_plugins() would be a
 						// silent, unauthorized site change (#916).
+						//
+						// The actual call is DEFERRED to `admin_init` (blocker): `load_plugins()`
+						// runs on `plugins_loaded`, which on every wp-admin request fires BEFORE
+						// `wp-admin/admin.php` requires `wp-admin/includes/admin.php` (→
+						// `wp-admin/includes/plugin.php`). `deactivate_plugins()` — and
+						// `is_plugin_active_for_network()`, needed for the multisite check below —
+						// are undefined at this point, so calling them here fatals every admin page
+						// once two active plugins share a download id. By `admin_init` WordPress has
+						// already required that file for every admin request.
 						if ( is_admin() && ! defined( 'DOING_AJAX' ) && current_user_can( 'activate_plugins' ) ) {
-							deactivate_plugins( plugin_basename( $definition->get_plugin_file() ) );
+							$plugin_file = plugin_basename( $definition->get_plugin_file() );
+
+							add_action(
+								'admin_init',
+								function () use ( $plugin_file, $index ): void {
+									// Never network-deactivate a duplicate from a subsite screen —
+									// only self-heal a network-active duplicate from the network
+									// admin, and pass network_wide explicitly rather than leaving
+									// deactivate_plugins() to infer it (#916).
+									$network_wide = is_multisite() && is_plugin_active_for_network( $plugin_file );
+
+									if ( $network_wide && ! is_network_admin() ) {
+										return;
+									}
+
+									deactivate_plugins( $plugin_file, false, $network_wide );
+
+									$this->quarantined_download_id_plugins[ $index ]['deactivated'] = true;
+								}
+							);
 						}
 
 						continue;
@@ -517,17 +600,21 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			}
 
 			foreach ( $this->quarantined_download_id_plugins as $plugin ) {
-				printf(
-					'<div class="error"><p>%s</p></div>',
-					esc_html(
-						sprintf(
-							/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
-							__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
-							$plugin['plugin_name'],
-							$plugin['claimed_by']
-						)
+				$message = ( $plugin['deactivated'] ?? false )
+					? sprintf(
+						/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
+						__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+						$plugin['plugin_name'],
+						$plugin['claimed_by']
 					)
-				);
+					: sprintf(
+						/* translators: Placeholders: %1$s - the plugin that was not started, %2$s - the plugin already holding the same license identifier */
+						__( 'Плагин «%1$s» не запущен: он использует тот же идентификатор лицензии, что и «%2$s». Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+						$plugin['plugin_name'],
+						$plugin['claimed_by']
+					);
+
+				printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
 			}
 		}
 
@@ -742,12 +829,24 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return bool True when a plugin callback or main class was invoked.
 		 */
 		protected function invoke_plugin( array $plugin ): bool {
+			// Recorded UNCONDITIONALLY, before the callback branch below can return early —
+			// a definition can carry both a 'callback' (which wraps the main class definition
+			// and its own construction) and a 'main_class', and get_download_id() needs this
+			// mapping regardless of which path actually constructs the instance (#916 follow-up).
+			$definition = $plugin['definition'] ?? null;
+			if ( $definition instanceof Framework_Plugin_Loader_Definition ) {
+				$main_class = $definition->get_main_class();
+
+				if ( null !== $main_class ) {
+					$this->definitions_by_main_class[ $main_class ] = $definition;
+				}
+			}
+
 			if ( is_callable( $plugin['callback'] ) ) {
 				$plugin['callback']();
 				return true;
 			}
 
-			$definition = $plugin['definition'] ?? null;
 			if ( ! $definition instanceof Framework_Plugin_Loader_Definition ) {
 				return false;
 			}

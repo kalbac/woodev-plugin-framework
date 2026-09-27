@@ -31,6 +31,22 @@ class Resolver_Main_Class_Only_Plugin {
 }
 
 /**
+ * Test helper: registered as a loader definition's main_class, never invoked directly.
+ * `get_loader_definition_for_class()` must resolve a SUBCLASS of this by walking up.
+ */
+class Resolver_Definition_Lookup_Base {
+
+	/** @return void */
+	public static function instance(): void {}
+}
+
+/**
+ * Test helper: never itself registered as a main_class — only its parent is.
+ */
+class Resolver_Definition_Lookup_Child extends Resolver_Definition_Lookup_Base {
+}
+
+/**
  * Test helper exposing protected resolver methods.
  */
 class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_Resolver {
@@ -902,13 +918,24 @@ class FrameworkResolverTest extends TestCase {
 
 		$this->assertStringContainsString( 'Download Id Plugin B', $output, 'The notice must name the refused plugin.' );
 		$this->assertStringContainsString( 'Download Id Plugin A', $output, 'The notice must name the plugin already holding the id.' );
-		$this->assertStringContainsString( 'Плагин отключён', $output );
+
+		// is_admin() is false here, so the self-heal never ran and nothing was actually
+		// deactivated — the notice must say so, not claim a deactivation that never happened (#916).
+		$this->assertStringContainsString( 'не запущен', $output );
+		$this->assertStringNotContainsString( 'Плагин отключён', $output );
 	}
 
 	/**
-	 * #916: in an admin, non-AJAX request by a capable user, a download-id collision
-	 * discovered at load time (both plugins already active — e.g. a bulk activation, or an
-	 * update that introduced the bug) is self-healed by deactivating the quarantined plugin.
+	 * #916 blocker: `load_plugins()` runs on `plugins_loaded`, which on a real wp-admin request
+	 * fires BEFORE `wp-admin/includes/plugin.php` is loaded. Calling `deactivate_plugins()`
+	 * synchronously here would fatal every admin page once two active plugins share a download
+	 * id. The self-heal must instead be REGISTERED for `admin_init` (where WordPress has already
+	 * required that file for every admin request) — never invoked directly from `load_plugins()`.
+	 *
+	 * Brain Monkey defines a harmless `deactivate_plugins()` stub, so a test that only asserts
+	 * "`deactivate_plugins` was called once" cannot tell a safe deferred call from an unsafe
+	 * synchronous one — it would pass either way. This test instead captures what `add_action()`
+	 * is called with and asserts the `admin_init` registration explicitly.
 	 */
 	public function test_resolver_deactivates_quarantined_plugin_in_admin_context(): void {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
@@ -923,12 +950,24 @@ class FrameworkResolverTest extends TestCase {
 		Functions\when( 'is_admin' )->justReturn( true );
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'has_action' )->justReturn( false );
-		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'plugin_basename' )->alias(
 			static function ( string $file ): string {
 				return basename( dirname( $file ) ) . '/' . basename( $file );
 			}
 		);
+		Functions\when( 'is_multisite' )->justReturn( false );
+
+		$admin_init_callbacks = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$admin_init_callbacks ): bool {
+				if ( 'admin_init' === $hook ) {
+					$admin_init_callbacks[] = $callback;
+				}
+
+				return true;
+			}
+		);
+
 		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
 
 		$resolver->register_loader_definition(
@@ -952,9 +991,172 @@ class FrameworkResolverTest extends TestCase {
 			)
 		);
 
-		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php' );
+		$resolver->load_plugins();
+
+		$this->assertCount(
+			1,
+			$admin_init_callbacks,
+			'The self-heal must be registered for admin_init, not run synchronously on plugins_loaded.'
+		);
+		$this->assertFalse(
+			$resolver->get_quarantined_download_id_plugins()[0]['deactivated'],
+			'Nothing is actually deactivated yet — only registered for admin_init.'
+		);
+
+		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php', false, false );
+
+		// Simulates WordPress firing admin_init later in the same request.
+		( $admin_init_callbacks[0] )();
+
+		$this->assertTrue(
+			$resolver->get_quarantined_download_id_plugins()[0]['deactivated'],
+			'The quarantine entry must record that the plugin was actually deactivated.'
+		);
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Плагин отключён', $output );
+		$this->assertStringNotContainsString( 'не запущен', $output );
+	}
+
+	/**
+	 * #916 multisite: a network-active duplicate must never be network-deactivated from a
+	 * subsite screen — only from the network admin. `is_network_admin()` and
+	 * `is_plugin_active_for_network()` are themselves `wp-admin/includes/plugin.php` functions,
+	 * so this check also lives inside the deferred admin_init callback, never in load_plugins().
+	 */
+	public function test_resolver_self_heal_never_network_deactivates_from_a_subsite_screen(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\when( 'is_multisite' )->justReturn( true );
+		Functions\when( 'is_plugin_active_for_network' )->justReturn( true );
+		Functions\when( 'is_network_admin' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$admin_init_callbacks = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$admin_init_callbacks ): bool {
+				if ( 'admin_init' === $hook ) {
+					$admin_init_callbacks[] = $callback;
+				}
+
+				return true;
+			}
+		);
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 506,
+					'plugin_name' => 'Download Id Plugin A',
+					'plugin_file' => '/plugins/download-id-a/download-id-a.php',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 506,
+					'plugin_name' => 'Download Id Plugin B',
+					'plugin_file' => '/plugins/download-id-b/download-id-b.php',
+				]
+			)
+		);
+
+		Functions\expect( 'deactivate_plugins' )->never();
 
 		$resolver->load_plugins();
+
+		( $admin_init_callbacks[0] )();
+
+		$this->assertFalse( $resolver->get_quarantined_download_id_plugins()[0]['deactivated'] );
+	}
+
+	/**
+	 * #916 multisite: the SAME network-active duplicate IS self-healed from the network admin,
+	 * with network_wide passed explicitly (true) rather than left for deactivate_plugins() to infer.
+	 */
+	public function test_resolver_self_heal_network_deactivates_a_network_active_duplicate_from_network_admin(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( true );
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'plugin_basename' )->alias(
+			static function ( string $file ): string {
+				return basename( dirname( $file ) ) . '/' . basename( $file );
+			}
+		);
+		Functions\when( 'is_multisite' )->justReturn( true );
+		Functions\when( 'is_plugin_active_for_network' )->justReturn( true );
+		Functions\when( 'is_network_admin' )->justReturn( true );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$admin_init_callbacks = [];
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, $callback ) use ( &$admin_init_callbacks ): bool {
+				if ( 'admin_init' === $hook ) {
+					$admin_init_callbacks[] = $callback;
+				}
+
+				return true;
+			}
+		);
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-a',
+					'download_id' => 507,
+					'plugin_name' => 'Download Id Plugin A',
+					'plugin_file' => '/plugins/download-id-a/download-id-a.php',
+				]
+			)
+		);
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_id'   => 'download-id-plugin-b',
+					'download_id' => 507,
+					'plugin_name' => 'Download Id Plugin B',
+					'plugin_file' => '/plugins/download-id-b/download-id-b.php',
+				]
+			)
+		);
+
+		Functions\expect( 'deactivate_plugins' )->once()->with( 'download-id-b/download-id-b.php', false, true );
+
+		$resolver->load_plugins();
+
+		( $admin_init_callbacks[0] )();
+
+		$this->assertTrue( $resolver->get_quarantined_download_id_plugins()[0]['deactivated'] );
 	}
 
 	/**
@@ -1182,6 +1384,74 @@ class FrameworkResolverTest extends TestCase {
 
 		$this->assertStringContainsString( 'Плагин отключён', $output );
 		$this->assertStringContainsString( '<div class="error">', $output );
+	}
+
+	/**
+	 * #916 follow-up: `get_loader_definition_for_class()` is the PRIMARY lookup
+	 * `Woodev_Plugin::get_download_id()` reads through — recorded in `invoke_plugin()` at
+	 * load time, keyed by the definition's own `main_class`, regardless of a mismatched
+	 * `plugin_id`. An exact class match must resolve without walking any ancestors.
+	 */
+	public function test_get_loader_definition_for_class_resolves_an_exact_main_class_match(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition( [ 'main_class' => Resolver_Definition_Lookup_Base::class ] )
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertSame(
+			$resolver->get_loader_definition_for_plugin_id( 'test-plugin' ),
+			$resolver->get_loader_definition_for_class( Resolver_Definition_Lookup_Base::class )
+		);
+	}
+
+	/**
+	 * #916 follow-up: a plugin instance whose own class is a SUBCLASS of the registered
+	 * `main_class` must still resolve — the lookup walks up to the nearest registered ancestor.
+	 */
+	public function test_get_loader_definition_for_class_walks_up_to_a_registered_ancestor(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition( [ 'main_class' => Resolver_Definition_Lookup_Base::class ] )
+		);
+
+		$resolver->load_plugins();
+
+		$this->assertSame(
+			$resolver->get_loader_definition_for_plugin_id( 'test-plugin' ),
+			$resolver->get_loader_definition_for_class( Resolver_Definition_Lookup_Child::class )
+		);
+	}
+
+	/**
+	 * #916 follow-up: a class never invoked through this resolver has no mapping — the caller
+	 * ({@see \Woodev_Plugin::get_download_id()}) is the one that falls back to plugin id, not this.
+	 */
+	public function test_get_loader_definition_for_class_returns_null_for_an_unregistered_class(): void {
+		$resolver = new \Woodev\Framework\Framework_Resolver();
+
+		$this->assertNull( $resolver->get_loader_definition_for_class( 'Some_Never_Registered_Class' ) );
 	}
 
 	/**

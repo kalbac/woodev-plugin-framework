@@ -1305,12 +1305,22 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 		/**
 		 * Returns the plugin download id — the EDD product id on woodev.ru.
 		 *
-		 * Single source of truth: the plugin's own loader definition, matched by plugin id.
-		 * A plugin instance carries no reference to the definition it was registered with (its
-		 * constructor is invoked with no such argument, and adding one would mean changing the
-		 * constructor signature of every downstream plugin), so this looks the definition up
-		 * through the framework bootstrap instead, keyed by {@see self::get_id()} — the same
-		 * string a plugin passes as its own `plugin_id` in its loader definition, by convention.
+		 * Single source of truth: the plugin's own loader definition. Resolved PRIMARILY by this
+		 * instance's own class (walking up to the nearest registered ancestor) — the resolver
+		 * records which definition invoked which `main_class` at invocation time, so this is
+		 * accurate even when a plugin author's `plugin_id` (passed to the constructor, returned by
+		 * {@see self::get_id()}) does not match the `plugin_id` they typed into their own loader
+		 * definition. That mismatch is a real author error this repo's own fixture demonstrates
+		 * (#916 follow-up) and is otherwise unenforced, so falling back to a {@see self::get_id()}
+		 * lookup ALONE — the previous, sole strategy — silently returned 0 for it. The class lookup
+		 * falls back to plugin id only for legacy/callback-only registrations the resolver never
+		 * mapped by class.
+		 *
+		 * The winning `Woodev_Plugin_Bootstrap` copy can be a DIFFERENT vendored copy than this
+		 * class (alphabetically-first vs highest-framework-version rendezvous — the same
+		 * cross-copy precedent as `Woodev_Plugin_Bootstrap::instance()->get_active_plugin_instances()`
+		 * in `admin/class-admin-pages.php`) and may predate these lookup methods; guarded with
+		 * `method_exists()` so an old copy fails loud (`_doing_it_wrong()`), never fatal.
 		 *
 		 * @since 2.0.2
 		 *
@@ -1322,9 +1332,41 @@ if ( ! class_exists( 'Woodev_Plugin' ) ) :
 				return 0;
 			}
 
-			$definition = Woodev_Plugin_Bootstrap::instance()->get_loader_definition_for_plugin_id( $this->get_id() );
+			$bootstrap = Woodev_Plugin_Bootstrap::instance();
 
-			return $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ? $definition->get_download_id() : 0;
+			if ( ! method_exists( $bootstrap, 'get_loader_definition_for_class' ) || ! method_exists( $bootstrap, 'get_loader_definition_for_plugin_id' ) ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					_doing_it_wrong(
+						self::class . '::get_download_id',
+						sprintf( 'The active Woodev_Plugin_Bootstrap copy (%s) predates loader definition lookups; download id resolution was skipped.', esc_html( get_class( $bootstrap ) ) ),
+						'2.0.2'
+					);
+				}
+
+				return 0;
+			}
+
+			$definition = $bootstrap->get_loader_definition_for_class( get_class( $this ) )
+				?? $bootstrap->get_loader_definition_for_plugin_id( $this->get_id() );
+
+			if ( ! $definition instanceof \Woodev\Framework\Framework_Plugin_Loader_Definition ) {
+				return 0;
+			}
+
+			if ( $definition->get_plugin_id() !== $this->get_id() && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				_doing_it_wrong(
+					self::class . '::get_download_id',
+					sprintf(
+						'Plugin "%s" (class %s) does not match its own loader definition plugin_id "%s"; resolved the download id by class instead of failing silently.',
+						esc_html( $this->get_id() ),
+						esc_html( get_class( $this ) ),
+						esc_html( $definition->get_plugin_id() )
+					),
+					'2.0.2'
+				);
+			}
+
+			return $definition->get_download_id();
 		}
 
 		/**

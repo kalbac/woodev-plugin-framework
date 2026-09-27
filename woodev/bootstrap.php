@@ -445,6 +445,19 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Gets the registered loader definition for a plugin's own class (or nearest registered
+		 * ancestor). The PRIMARY source {@see Woodev_Plugin::get_download_id()} reads through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class( string $class ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolver->get_loader_definition_for_class( $class );
+		}
+
+		/**
 		 * Synchronizes reflected compatibility state from the resolver.
 		 *
 		 * @return void
