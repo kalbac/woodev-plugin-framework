@@ -347,6 +347,127 @@ class ShippingOrdersIdResolverTest extends TestCase {
 		$resolver->compile( [], Orders_Query::NO_MATCH_META_QUERY );
 	}
 
+	// ----- the order-status leaf (#843, «Любое») -----
+
+	/** The aggregate's id query for a `match=any` request of delivery status `unknown` plus order status `wc-processing`. */
+	private function any_sql( bool $hpos, array $extra = [] ): string {
+		return $this->sql_for(
+			$this->registry_of( 1, 0 ),
+			array_merge(
+				[
+					'match'           => 'any',
+					'delivery_status' => Delivery_Status::UNKNOWN,
+					'status'          => [ 'processing' ],
+				],
+				$extra
+			),
+			$hpos
+		);
+	}
+
+	/**
+	 * HPOS: the order status is one more disjunct of the OR, compiled against
+	 * `wc_orders.status`, correlated on the driver's order id — an index lookup by primary
+	 * key per driver row, like every meta leaf; the meta leaves keep their shape untouched.
+	 */
+	public function test_hpos_the_order_status_leaf_compiles_against_the_wc_orders_status_column(): void {
+		$this->assertSame(
+			'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_mapped1_marker\')'
+			. ' AND ((EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_marker\')'
+			. ' AND (NOT EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\')'
+			. ' OR EXISTS (SELECT 1 FROM wp_wc_orders_meta AS m WHERE m.order_id = mk.order_id AND m.meta_key = \'_mapped1_status\''
+			. ' AND m.meta_value NOT IN (\'M1_ACCEPTED\',\'M1_DONE\'))))'
+			. ' OR EXISTS (SELECT 1 FROM wp_wc_orders AS o WHERE o.id = mk.order_id AND o.status IN (\'wc-processing\')))',
+			$this->any_sql( true )
+		);
+	}
+
+	/** Legacy CPT: the same leaf against `posts.post_status`, correlated on `posts.ID = postmeta.post_id`. */
+	public function test_cpt_the_order_status_leaf_compiles_against_the_posts_post_status_column(): void {
+		$sql = $this->any_sql( false );
+
+		$this->assertStringStartsWith( 'SELECT DISTINCT mk.post_id FROM wp_postmeta AS mk WHERE mk.meta_key IN (\'_mapped1_marker\') AND ((', $sql );
+		$this->assertStringEndsWith(
+			' OR EXISTS (SELECT 1 FROM wp_posts AS o WHERE o.ID = mk.post_id AND o.post_status IN (\'wc-processing\')))',
+			$sql
+		);
+		$this->assertStringNotContainsString( 'wc_orders', $sql, 'the CPT statement never touches the HPOS tables' );
+	}
+
+	/** The rest of the statement is the meta-only one, on each datastore: only the table names differ. */
+	public function test_the_meta_leaves_around_the_order_status_leaf_are_unchanged(): void {
+		$hpos = $this->any_sql( true );
+		$cpt  = $this->any_sql( false );
+
+		$this->assertSame(
+			$cpt,
+			str_replace(
+				[ 'wp_wc_orders_meta', 'order_id', 'wp_wc_orders AS o', 'o.id', 'o.status' ],
+				[ 'wp_postmeta', 'post_id', 'wp_posts AS o', 'o.ID', 'o.post_status' ],
+				$hpos
+			)
+		);
+	}
+
+	/** Several statuses → one `IN`, every value through `$wpdb->prepare()`; the leaf is one keyed subquery, never a join. */
+	public function test_the_order_status_leaf_takes_a_list_quotes_it_and_adds_one_subquery_and_no_join(): void {
+		$resolver = new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb(), true );
+		$keys     = [ '_a_marker' ];
+		$sql      = $resolver->compile(
+			$keys,
+			[
+				'relation' => 'AND',
+				Orders_Query::meta_query_for_keys( $keys ),
+				[
+					'relation' => 'OR',
+					[
+						[
+							'key'     => '_a_tracking',
+							'compare' => 'EXISTS',
+						],
+					],
+					[ [ Orders_Id_Resolver::ORDER_STATUS_LEAF => [ 'wc-on-hold', "wc-o'hare" ] ] ],
+				],
+			]
+		);
+
+		$this->assertSame( 0, preg_match_all( '/\bJOIN\b/i', $sql ) );
+		$this->assertSame( 2, $this->subquery_count( $sql ), 'one for the tracking leaf, one for the status leaf' );
+		$this->assertStringEndsWith( "o.status IN ('wc-on-hold','wc-o\\'hare')))", $sql );
+	}
+
+	/** A single status leaf as the whole filter part is not wrapped in an `OR` of one. */
+	public function test_an_order_status_leaf_alone_under_the_and_root_is_a_plain_conjunct(): void {
+		$resolver = new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb(), true );
+		$keys     = [ '_a_marker' ];
+
+		$this->assertSame(
+			'SELECT DISTINCT mk.order_id FROM wp_wc_orders_meta AS mk WHERE mk.meta_key IN (\'_a_marker\')'
+			. ' AND EXISTS (SELECT 1 FROM wp_wc_orders AS o WHERE o.id = mk.order_id AND o.status IN (\'wc-pending\'))',
+			$resolver->compile(
+				$keys,
+				[
+					'relation' => 'AND',
+					Orders_Query::meta_query_for_keys( $keys ),
+					[ [ Orders_Id_Resolver::ORDER_STATUS_LEAF => [ 'wc-pending' ] ] ],
+				]
+			)
+		);
+	}
+
+	public function test_an_order_status_leaf_with_no_statuses_is_refused(): void {
+		$this->expectException( \InvalidArgumentException::class );
+
+		( new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb(), true ) )->compile(
+			[ '_a_marker' ],
+			[
+				'relation' => 'AND',
+				Orders_Query::meta_query_for_keys( [ '_a_marker' ] ),
+				[ [ Orders_Id_Resolver::ORDER_STATUS_LEAF => [] ] ],
+			]
+		);
+	}
+
 	// ----- resolve(): what comes back -----
 
 	public function test_resolve_runs_the_compiled_statement_once_and_returns_distinct_positive_ints(): void {

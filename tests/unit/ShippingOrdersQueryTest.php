@@ -1764,4 +1764,313 @@ class ShippingOrdersQueryTest extends TestCase {
 		$this->assertSame( 'AND', $tree['relation'] );
 		$this->assertCount( 4, $tree ); // relation + scope part + status part + tracking part.
 	}
+
+	// ----- «Все / Любое»: `match=any` (#843) -----
+
+	/** One carrier that has a status concept, a tracking key and a pickup-point key. */
+	private function registry_for_match(): Orders_Registry {
+		$registry = Orders_Registry::instance();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'cdek',
+				'СДЭК',
+				'_cdek_marker',
+				[ 'cdek' ],
+				[
+					'status_meta_key'          => '_cdek_status',
+					'status_map'               => [ 'CDEK_DONE' => Delivery_Status::DELIVERED ],
+					'tracking_meta_key'        => '_cdek_tracking',
+					'pickup_point_meta_key'    => '_cdek_pickup',
+					'carrier_order_id_meta_key' => '_cdek_order_id',
+				]
+			)
+		);
+
+		return $registry;
+	}
+
+	/** The scope part, the delivery-status-`delivered` part and the has-tracking part of {@see self::registry_for_match()}. */
+	private function match_parts(): array {
+		return [
+			[
+				[
+					'key'     => '_cdek_marker',
+					'compare' => 'EXISTS',
+				],
+			],
+			[
+				[
+					'key'     => '_cdek_status',
+					'value'   => [ 'CDEK_DONE' ],
+					'compare' => 'IN',
+				],
+			],
+			[
+				[
+					'key'     => '_cdek_tracking',
+					'compare' => 'EXISTS',
+				],
+			],
+		];
+	}
+
+	/** «Любое» with two filters: scope AND (filter OR filter) — the OR is ONE part of the AND root. */
+	public function test_match_any_ors_the_advanced_filters_under_the_scope(): void {
+		[ $scope, $delivery, $tracking ] = $this->match_parts();
+
+		$tree = $this->query_with_hpos( true, $this->registry_for_match() )->build_meta_query(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'has_tracking'    => true,
+			]
+		);
+
+		$this->assertSame(
+			[
+				'relation' => 'AND',
+				$scope,
+				[
+					'relation' => 'OR',
+					$delivery,
+					$tracking,
+				],
+			],
+			$tree
+		);
+	}
+
+	/** The scope's own `is_exported` is NOT an advanced filter: it ANDs with the OR, it does not join it. */
+	public function test_match_any_keeps_the_export_scope_outside_the_or(): void {
+		[ $scope, $delivery, $tracking ] = $this->match_parts();
+
+		$tree = $this->query_with_hpos( true, $this->registry_for_match() )->build_meta_query(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'has_tracking'    => true,
+				'is_exported'     => true,
+			]
+		);
+
+		$this->assertSame( 'AND', $tree['relation'] );
+		$this->assertCount( 4, $tree ); // relation + scope + the OR + export scope.
+		$this->assertSame( $scope, $tree[0] );
+		$this->assertSame(
+			[
+				'relation' => 'OR',
+				$delivery,
+				$tracking,
+			],
+			$tree[1]
+		);
+		$this->assertSame( '_cdek_order_id', $tree[2][0]['key'] );
+	}
+
+	/** Order status is a leaf of the OR, and the native `status` arg is widened to the full valid list so it cannot AND it back. */
+	public function test_match_any_makes_order_status_a_leaf_and_widens_the_native_status_arg(): void {
+		[ , $delivery ] = $this->match_parts();
+
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'processing' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'], 'the full valid list, cancelled/failed included — the leaf alone narrows' );
+		$this->assertSame( [ 11, 12, 13 ], $args['post__in'] );
+		$this->assertCount( 1, $query->resolved );
+		$this->assertSame(
+			[
+				'relation' => 'OR',
+				$delivery,
+				[ [ 'order_status' => [ 'wc-processing' ] ] ],
+			],
+			$query->resolved[0][1][1]
+		);
+	}
+
+	/** `status_not` under «Любое»: the leaf carries every valid status except the excluded ones, the same list `status_not` computes against. */
+	public function test_match_any_status_not_becomes_a_leaf_of_the_complement(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'      => 'any',
+				'has_tracking' => true,
+				'status_not' => [ 'cancelled', 'failed' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+		$this->assertSame( [ [ 'order_status' => [ 'wc-pending', 'wc-processing' ] ] ], $query->resolved[0][1][1][1] );
+	}
+
+	/** No status filter requested: the default view (no cancelled/failed) stays an AND on the native arg, even under «Любое». */
+	public function test_match_any_without_a_status_filter_keeps_the_default_status_view(): void {
+		$args = $this->query_with_hpos( true, $this->registry_for_match() )->build_args(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'has_tracking'    => true,
+			]
+		);
+
+		$this->assertSame( [ 'wc-pending', 'wc-processing' ], $args['status'] );
+	}
+
+	/** A status request nothing in which is real: that leaf matches nothing, the OR goes on, providers are NOT emptied. */
+	public function test_match_any_an_unrecognised_status_request_drops_only_its_own_leaf(): void {
+		[ $scope, $delivery ] = $this->match_parts();
+
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'           => 'any',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'nonsense' ],
+			]
+		);
+
+		$this->assertSame( [ 11, 12, 13 ], $args['post__in'], 'the other filter still selects rows' );
+		$this->assertSame( [ 'wc-pending', 'wc-processing', 'wc-cancelled', 'wc-failed' ], $args['status'] );
+		$this->assertSame( [ 'relation' => 'AND', $scope, $delivery ], $query->resolved[0][1], 'the dead leaf leaves the OR; one live part is not wrapped' );
+	}
+
+	/** Under `all` the same request keeps today's behaviour: the whole result is nothing. */
+	public function test_match_all_an_unrecognised_status_request_still_matches_nothing(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'           => 'all',
+				'delivery_status' => Delivery_Status::DELIVERED,
+				'status'          => [ 'nonsense' ],
+			]
+		);
+
+		$this->assertArrayNotHasKey( 'post__in', $args );
+		$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+		$this->assertSame( [], $query->resolved );
+	}
+
+	/** Every leaf of the OR dead => "matches nothing", answered without the database, on both datastores. */
+	public function test_match_any_with_every_leaf_dead_lands_on_the_sentinel_without_asking_the_seam(): void {
+		foreach ( [ true, false ] as $hpos ) {
+			Orders_Registry::instance()->reset_for_tests();
+			$registry = Orders_Registry::instance();
+			$registry->register_provider( $this->provider( 'bare', '_bare_marker' ) );
+
+			$query = $this->query_with_hpos( $hpos, $registry );
+			$args  = $query->build_args(
+				[
+					'match'               => 'any',
+					'delivery_status_not' => Delivery_Status::UNKNOWN, // a bare carrier is always unknown => nothing is "not unknown".
+					'status'              => [ 'nonsense' ],
+				]
+			);
+
+			$this->assertArrayNotHasKey( 'post__in', $args );
+			$this->assertSame( [], $query->resolved );
+
+			if ( $hpos ) {
+				$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] );
+			} else {
+				$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
+			}
+		}
+	}
+
+	/** `match=any` with 0 or 1 advanced filter is `all`: the same args and the same tree, byte for byte. */
+	public function test_match_any_with_fewer_than_two_advanced_filters_changes_nothing(): void {
+		$requests = [
+			'none'                       => [],
+			'one meta filter'            => [ 'has_tracking' => false ],
+			'one delivery filter'        => [ 'delivery_status' => Delivery_Status::DELIVERED ],
+			'one status filter'          => [ 'status' => [ 'processing' ] ],
+			'one status_not filter'      => [ 'status_not' => [ 'cancelled' ] ],
+			'unknown status nothing real' => [ 'status' => [ 'nonsense' ] ],
+			'export scope + one filter'  => [
+				'is_exported'  => false,
+				'has_tracking' => true,
+			],
+			'a delivery value that is no state does not count as a filter' => [
+				'delivery_status' => 'bogus',
+				'has_tracking'    => true,
+			],
+			'search and period are not advanced filters' => [
+				'search'       => 'ivanov',
+				'after'        => '2026-09-01',
+				'has_tracking' => true,
+			],
+		];
+
+		foreach ( $requests as $label => $request ) {
+			$all = $this->query_with_hpos( true, $this->registry_for_match() );
+			$any = $this->query_with_hpos( true, $this->registry_for_match() );
+
+			$this->assertSame(
+				$all->build_args( $request ),
+				$any->build_args( array_merge( $request, [ 'match' => 'any' ] ) ),
+				"args differ under match=any: {$label}"
+			);
+			$this->assertSame(
+				$all->build_meta_query( $request ),
+				$any->build_meta_query( array_merge( $request, [ 'match' => 'any' ] ) ),
+				"tree differs under match=any: {$label}"
+			);
+		}
+	}
+
+	/** `all`, and any value that is not `any`, is today's AND of everything. */
+	public function test_match_all_and_unknown_values_keep_the_and_of_everything(): void {
+		[ $scope, $delivery, $tracking ] = $this->match_parts();
+		$request                          = [
+			'delivery_status' => Delivery_Status::DELIVERED,
+			'has_tracking'    => true,
+		];
+
+		foreach ( [ null, 'all', 'ALL', '', 'sometimes', [ 'any' ] ] as $match ) {
+			$tree = $this->query_with_hpos( true, $this->registry_for_match() )->build_meta_query(
+				null === $match ? $request : array_merge( $request, [ 'match' => $match ] )
+			);
+
+			$this->assertSame( [ 'relation' => 'AND', $scope, $delivery, $tracking ], $tree );
+		}
+	}
+
+	/** Under `all` the order status stays the native arg and never becomes a leaf. */
+	public function test_match_all_keeps_order_status_a_native_arg(): void {
+		$query = $this->query_with_hpos( true, $this->registry_for_match() );
+		$args  = $query->build_args(
+			[
+				'match'        => 'all',
+				'has_tracking' => true,
+				'status'       => [ 'processing' ],
+			]
+		);
+
+		$this->assertSame( [ 'wc-processing' ], $args['status'] );
+		$this->assertStringNotContainsString( 'order_status', (string) json_encode( $query->resolved[0][1] ) );
+	}
+
+	/** «Любое» reaches the datastore through ids only: no OR of `meta_query` clauses ever goes into the main query. */
+	public function test_match_any_never_puts_an_or_of_meta_clauses_into_the_main_query(): void {
+		foreach ( [ true, false ] as $hpos ) {
+			$args = $this->query_with_hpos( $hpos, $this->registry_for_match() )->build_args(
+				[
+					'match'            => 'any',
+					'delivery_status'  => Delivery_Status::DELIVERED,
+					'has_tracking'     => true,
+					'has_pickup_point' => true,
+					'status'           => [ 'processing' ],
+				]
+			);
+
+			$this->assertSame( [ 11, 12, 13 ], $args['post__in'] );
+			$this->assertArrayNotHasKey( 'meta_query', $args );
+			$this->assertArrayNotHasKey( Orders_Query::QUERY_VAR_MARKER_KEYS, $args );
+		}
+	}
 }

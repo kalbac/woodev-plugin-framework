@@ -2,7 +2,7 @@
 /**
  * A `$wpdb` stand-in for the tests around {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver}
  * (#928): enough of `wpdb` to compile the id query without a database — `prepare()`
- * with `%s` / `%d`, the two table-name properties the resolver reads, and a `get_col()`
+ * with `%s` / `%d`, the table-name properties the resolver reads, and a `get_col()`
  * that records every statement it was handed and answers with a canned list.
  *
  * Not a Mockery mock on purpose: the same object is shared by three test files (the
@@ -25,6 +25,9 @@ class OrdersIdResolverFakeWpdb {
 
 	/** @var string */
 	public $postmeta = 'wp_postmeta';
+
+	/** @var string the legacy CPT order table (an order-status leaf reads `post_status` from it, #843). */
+	public $posts = 'wp_posts';
 
 	/** @var string[] every statement `get_col()` received, in order. */
 	public $queries = [];
