@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-26 (s139).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-27 (s140).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -16,28 +16,19 @@ the real signed-envelope route. The admin license REST route refuses an ambiguou
 **NOT** an id without a store product — registration retains such an engine, deliberately; the
 divergence is stated in `resolve_license()`'s docblock.
 
-✅ **#839 CLOSED (s139).** Negative delivery-status filters cost **`3M + B`** joins, was `4M + 2B`
-(`M` mapped, `B` bare); s128's fixture 12 → 8. Positive column unchanged **except M = 0** (collapses
-onto the NO_MATCH sentinel, `N + 1` → `1`; both match nothing). ⚠ **The CPT wall is the PLANNER, not the
-join count** — 12 joins on `wp_postmeta` never finish, 8 on `wc_orders_meta` take 4 ms, and `3M + B`
-reaches that same 12 at **M = 4**: no proven headroom. Harness and proof:
-`research/2026-09-25-839-join-growth-evidence/`.
-
-⛔ **#919 CLOSED as not viable by measurement → #928, which the operator then UNBLOCKED.** The
-obstacle was never cost but the QUANTIFIER: the filter is an existential over the providers PRESENT on
-an order, a global set-subtraction is not, so the rewrite is strictly narrower and diverges exactly on
-multi-marker orders. **He declared those unreachable in practice (YAGNI, 26.09.2026)**, so the cheap
-form is viable again — for every order this system really has. ⚠ The measurement is NOT disproven, only
-declared unreachable, and the code does not enforce the rule. Two prohibitions still bind #928: no
-subquery reaches either datastore through the supported surface (so either a raw SQL hook, or two
-queries feeding `exclude`), and a raw hook **blinds `ShippingOrdersQueryRowSemanticsTest`**, which walks
-a `meta_query` tree. Note and replayable probe: `research/2026-09-26-919-subquery-seam/`.
-
-✅ **The equivalence proof is a COMMITTED TEST** — `ShippingOrdersQueryRowSemanticsTest`: the emitted
-`meta_query` against a SPECIFICATION oracle, 3 fixtures × 5 filters × **both datastores**, 16/64/128
-enumerated orders; mutation-tested (`sessions/s139.md`). ⚠ Its adopted reading is **#924**, a raw-SQL
-filter would blind it (#928), and **it still enumerates multi-marker orders — narrowing that universe to
-match his YAGNI rule is part of #928**, not a silent edit.
+✅ **#928 CLOSED (s140): the orders page resolves its marker scope to ids and passes `post__in`.** The
+wall was never the negation: an OR of `EXISTS` marker clauses joins the meta table once per carrier
+with no key predicate (`~d^N`) — the UNFILTERED page at 4 carriers took **11.7 s / 10 k orders**, and
+sites with 4+ carriers exist (operator, 27.09.2026). `Orders_Id_Resolver` runs one flat id query
+(driver `meta_key IN`, correlated `EXISTS`/`NOT EXISTS`) on every path — page, tabs, all filters,
+badge; main-query joins **0**; 10 k × 4 carriers → 13 ms. Empty list → NO_MATCH (`[]` fails OPEN on
+both datastores). `ShippingOrdersQueryRowSemanticsTest` substitutes the seam and checks the id set
+against its oracle; the universe is single-marker by explicit decision, and a `WP_DEBUG`
+`_doing_it_wrong()` reports a multi-marker order. Open follow-ups: **#935** (id list not narrowed by
+status/date/search; N+2 resolver calls per page), **#936** (DB-level resolver test on both
+datastores; a DB error reads as "no orders"). Gotcha
+`an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`; evidence
+`research/2026-09-26-928-form-measurement/`.
 
 ⚠ **Addressing a `meta_query` part by "has a `relation` key" cannot tell the `AND` wrapper from a single
 unwrapped part** — gotcha `a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part`.
@@ -84,8 +75,8 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 
 ✅ **CI works and the repo is PUBLIC** (since 27.08.2026) — no quota consumed; the exhaustion symptom is gotcha `every-ci-job-failing-in-two-seconds-is-a-billing-block`.
 
-**Baselines — macOS laptop, 26.09.2026 (s139)** (the two machines matched to the digit in s136, so
-these are not platform-dependent): unit **4112 / 12357**, 1 skipped, sodium ON; jest **1975** in
+**Baselines — macOS laptop, 27.09.2026 (s140)** (the two machines matched to the digit in s136, so
+these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
 
@@ -117,7 +108,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 59, measured 26.09.2026 (s139):** Инбокс holds **#926** (Codex 401), waiting on him.
+**Open cards — 58, measured 27.09.2026 (s140):** Инбокс holds **#926** (Codex 401), waiting on him.
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON
@@ -201,8 +192,8 @@ gotcha `a-detach-that-only-unbinds-still-writes-through-whatever-was-in-flight`.
 - *У заказа НЕ БОЛЬШЕ ОДНОГО маркера перевозчика — YAGNI* (26.09.2026): «на практике нет; для этого
   нужна реализация мультидоставки, которой у нас нет». Это **разблокировало дешёвую форму #928**, решило
   **#924** («оставить инвариант и записать»), закрыло **#929**. ⚠ Код его НЕ обеспечивает (`edostavka`
-  пишет маркер на каждый пакет), поэтому на #928 сторож `_doing_it_wrong()` под `WP_DEBUG` — он один
-  делает YAGNI безопасным.
+  пишет маркер на каждый пакет), поэтому сторож `_doing_it_wrong()` под `WP_DEBUG` (#932, s140) сообщает о
+  таком заказе.
 
 - *Хэндшейк-секрет остаётся в URL при редиректе на woodev.ru* (#382) — он РАЗОВЫЙ (15 минут,
   привязан к `state` + `user_id`); долгоживущий `access_token_secret` идёт POST'ом, PKCE отклонён.

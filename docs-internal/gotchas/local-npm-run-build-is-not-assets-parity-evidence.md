@@ -103,6 +103,16 @@ Two consequences:
   prints exactly what was left behind — read that list before forcing it away, since it is the last
   moment anyone can see what the worker did not commit.
 
+## s140: the pre-push hook makes this a PUSH blocker, not only a parity trap
+
+Since #871 `.githooks/pre-push` rebuilds the bundles whenever a push touches `src/` or `woodev/` and
+refuses if they differ. In a worktree they always differ, so **every worker push of a PHP-only change
+is refused** — three workers hit it in one session. One pushed with `--no-verify`, which skips the
+catalogue gates too. The working recipe: the worker commits, restores `woodev/assets/build`, and does
+NOT push; the coordinator pushes that commit from the PRIMARY checkout, where the hook runs honestly:
+`git push origin <sha>:refs/heads/<branch>` (the branch itself is checked out in the worktree, so the
+primary cannot check it out). Say this in every brief; forbid `--no-verify` by name.
+
 ## Related
 
 - [sharing-vendor-breaks-composer-autoload-in-a-worktree](sharing-vendor-breaks-composer-autoload-in-a-worktree.md) — the same symlink-resolution mechanism, one layer down: Composer bakes `$baseDir` and PHP resolves the link too

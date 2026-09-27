@@ -18,4 +18,5 @@
 > **From s140 a row is ONE LINE of at most 600 characters, enforced by `lint:docs` (#930)** — the
 > gate kept firing because rows had become paragraphs copied out of the session file.
 
+- **[s140](sessions/s140.md)** — 2026-09-27 — **#928 закрыта: маркерная область заменена запросом id → `post__in` на всех путях, страница при 4 перевозчиках 11,7 с → 13 мс.** Плюс #930 (архив s130–s139, лимит строки 600) и #924 (инварианты записаны). PR #931–#934; заведены #935 #936. Unit **4132/14586**, интеграция **200/730**.
 - **[Platform v2 daily runs](sessions/platform-v2-daily-2026-05-28--06-08.md)** — 2026-05-28 … 2026-06-08 — 45 short single-topic runs from before session numbering

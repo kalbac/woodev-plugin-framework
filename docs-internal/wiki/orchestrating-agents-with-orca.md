@@ -462,6 +462,22 @@ that was handy.
 
 ## Traps
 
+### Added in s140
+
+- **A `--types worker_done,…` waiter never wakes on a heartbeat, but Orca still nudges the
+  coordinator («You have 1 orchestration message») for EVERY heartbeat.** A second `check` while the
+  typed waiter is alive fails (`waiter_exists`), so each nudge costs stop-waiter → check → ack →
+  restart. What worked: one background loop that runs `check --wait` WITHOUT `--types`, acks
+  delivery batches made only of heartbeats and exits on anything else — it slept through a whole
+  wave with no nudge handling.
+- **Every worker push of a PHP-only change was refused by the pre-push hook** (bundles never
+  reproduce in a worktree). Workers commit and stop; the coordinator pushes
+  `git push origin <sha>:refs/heads/<branch>` from the primary checkout. Gotcha
+  `local-npm-run-build-is-not-assets-parity-evidence`, s140 section.
+- **Claude-subagent critics (the Agent tool) worked as the cross-model gate while Codex is down
+  (#926):** Sonnet on an Opus diff, Opus on Sonnet and Fable diffs, resumed with `SendMessage` for the
+  fix round. Each ran its own mutations and restored the tree byte-exactly.
+
 ### Added in s139 (moved out of the handoff, which is size-gated)
 
 - **Codex под Orca на маке отдаёт `ok: true`, читается `live` и не делает НИЧЕГО.** `401 Unauthorized:
