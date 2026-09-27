@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-27 (s140).** ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-27 (s141).** ⏳ **Awaiting the operator:** PR **#937** (#843 «Все / Любое» + #936, rig acceptance — the tree is left on `kalbac/s141-843-match-any`) and PR **#938** (#916, the message wording). Both critic-PASSED, CI green. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -24,9 +24,9 @@ sites with 4+ carriers exist (operator, 27.09.2026). `Orders_Id_Resolver` runs o
 badge; main-query joins **0**; 10 k × 4 carriers → 13 ms. Empty list → NO_MATCH (`[]` fails OPEN on
 both datastores). `ShippingOrdersQueryRowSemanticsTest` substitutes the seam and checks the id set
 against its oracle; the universe is single-marker by explicit decision, and a `WP_DEBUG`
-`_doing_it_wrong()` reports a multi-marker order. Open follow-ups: **#935** (id list not narrowed by
-status/date/search; N+2 resolver calls per page), **#936** (DB-level resolver test on both
-datastores; a DB error reads as "no orders"). Gotcha
+`_doing_it_wrong()` reports a multi-marker order. Follow-ups: **#935** CLOSED by measurement (s141, PR #939 — neither narrowing nor one `GROUP BY` pays;
+the narrow-period variant is frozen as **#940**); **#936** done in PR #937 (DB-level oracle test on both
+datastores, a DB error is logged). Gotcha
 `an-or-of-exists-meta-clauses-joins-the-meta-table-once-per-key-unpredicated`; evidence
 `research/2026-09-26-928-form-measurement/`.
 
@@ -79,6 +79,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
+These are `main`'s, whose code did not change in s141. PR #937's branch (27.09.2026): unit **4154**, jest **1983**, integration **202 / 2908**.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -108,7 +109,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 57, measured 27.09.2026 (s140):** Инбокс holds **#922** (Supermemory), parked by his word.
+**Open cards — 57, measured 27.09.2026 (s141):** Инбокс holds **#922** (Supermemory, parked by his word) and **#843 #916 #936** (awaiting his acceptance).
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON

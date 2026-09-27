@@ -333,6 +333,20 @@ and all. Card **#683 is closed** on the controlled run above.
 TASK text is in it, not just the preamble. A `Working` spinner proves it is doing something, not
 that it received what you sent.
 
+## s141 (macOS, Orca 1.4.214, codex 0.157.1): readiness times out on an IDLE, dialog-free Codex
+
+Five `worker-start --agent codex` launches on 27.09.2026, every one `state: failed`, `failedStage:
+agent_readiness`, `lastError: timeout` — including two `--retry-of … --terminal … --worktree current`
+retries. The terminal held a healthy Codex sitting at `› Ask Codex to do anything`, no update dialog, no
+hooks prompt; only a footer `⚠ 1 warning · f2 to view`. None of the s107 cases (A/B/C) matches, and a retry
+does not help: Orca never recognises the prompt as ready, so the preamble is never injected.
+
+What worked, every time: keep the terminal the failed start created and
+`terminal send --text "Read the file <brief> … write your report to <file> and stop" --enter`. The critic
+ran normally; with no preamble it has no lifecycle ids, so the report comes back as a FILE (the brief says
+where, with the canary as its first word) and the coordinator waits on the file, then releases the failed
+dispatch and closes the terminal. Three critics ran this way in s141.
+
 ## Related
 
 - [input-accepted-is-not-proof-a-worker-started](input-accepted-is-not-proof-a-worker-started.md) — the s83 half of this: the receipt lies about delivery

@@ -462,6 +462,19 @@ that was handy.
 
 ## Traps
 
+### Added in s141
+
+- **Orca updates ITSELF mid-session and restarts its runtime** (1.4.212 → 1.4.214 at ~04:00, s141). A
+  running `check --wait` died with `runtime_unavailable` / "closed the connection before responding";
+  worker terminals survived and `worker-list` read them `unverifiable / restored_unconfirmed`. The
+  background waiter must treat a non-JSON / `ok:false` answer as "retry in 20 s", not as a message.
+- **A worker that needs the integration suite runs in the PRIMARY checkout** (`--worktree current`) — the
+  rig container mounts it, and a worktree cannot run the suite. Worked three times in s141 (#936, #935,
+  the #939 fix): the brief names the branch to create, lets it push (the pre-push hook passes there) and
+  requires it to finish on a named branch, clean; the coordinator does not touch the tree meanwhile.
+- **Codex readiness on 0.157.1 never succeeds** — `terminal send` fallback, report as a file: gotcha
+  `starting-codex-under-orca-needs-four-steps-not-one`, s141 section.
+
 ### Added in s140
 
 - **A `--types worker_done,…` waiter never wakes on a heartbeat, but Orca still nudges the
