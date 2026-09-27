@@ -292,20 +292,24 @@ if ( ! class_exists( 'Woodev_REST_API_License' ) ) :
 		 * @since 2.0.0
 		 * @since 2.0.2 #907 An ambiguous download id is rejected, matching the §9.3 rule
 		 *                   the signed command endpoint applies.
+		 * @since 2.0.2 #916 The ambiguous rejection has its own code and status (409) so the
+		 *                   admin is told about the id collision instead of "not found".
+		 *                   `woodev_license_unknown_plugin` / 404 keeps its meaning: the id
+		 *                   is not registered.
 		 *
 		 * @param string $plugin_id The EDD download id from the route.
 		 *
-		 * @return Woodev_Plugins_License|WP_Error The engine, or a 404 WP_Error when the id is
-		 *                                         unknown or ambiguous.
+		 * @return Woodev_Plugins_License|WP_Error The engine, a 404 WP_Error when the id is
+		 *                                         unknown, or a 409 WP_Error when it is ambiguous.
 		 */
 		private function resolve_license( string $plugin_id ) {
 
 			// #907: reject an ambiguous download id — §9.3 parity with signed commands.
 			if ( Woodev_Plugins_License::is_download_id_ambiguous( $plugin_id ) ) {
 				return new WP_Error(
-					'woodev_license_unknown_plugin',
-					esc_html__( 'Плагин с указанным идентификатором не найден.', 'woodev-plugin-framework' ),
-					[ 'status' => 404 ]
+					'woodev_license_ambiguous_plugin',
+					esc_html__( 'Два установленных плагина используют один и тот же идентификатор лицензии, поэтому лицензией нельзя управлять. Отключите один из них или обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+					[ 'status' => 409 ]
 				);
 			}
 

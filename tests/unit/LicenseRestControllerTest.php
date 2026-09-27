@@ -414,7 +414,9 @@ class LicenseRestControllerTest extends TestCase {
 
 	/**
 	 * All four handlers reject an ambiguous download id before they can call the
-	 * first registered engine, matching the command endpoint's §9.3 rule.
+	 * first registered engine, matching the command endpoint's §9.3 rule. The
+	 * rejection carries its own code and a 409 so the admin is told about the id
+	 * collision instead of "not found" (#916).
 	 *
 	 * @since 2.0.2
 	 *
@@ -425,7 +427,7 @@ class LicenseRestControllerTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_ambiguous_plugin_id_returns_404_wp_error_for_every_handler( string $handler, array $params ): void {
+	public function test_ambiguous_plugin_id_returns_409_collision_error_for_every_handler( string $handler, array $params ): void {
 		$engine = $this->make_engine_mock();
 		$engine->shouldNotReceive( 'get_state' );
 		$engine->shouldNotReceive( 'activate' );
@@ -433,6 +435,31 @@ class LicenseRestControllerTest extends TestCase {
 		$engine->shouldNotReceive( 'set_beta_enabled' );
 		$this->seed_license_registry( '216', $engine );
 		$this->seed_ambiguous_download_id( '216' );
+
+		$controller = new \Woodev_REST_API_License();
+		$result     = $controller->$handler( $this->make_request( $params ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'woodev_license_ambiguous_plugin', $result->code );
+		$this->assertSame( 409, $result->data['status'] );
+		$this->assertStringContainsString( 'один и тот же идентификатор лицензии', $result->message );
+	}
+
+	/**
+	 * An unregistered id keeps the installed-site contract on every handler:
+	 * `woodev_license_unknown_plugin` / 404, never the collision code (#916).
+	 *
+	 * @since 2.0.2
+	 *
+	 * @dataProvider ambiguous_plugin_id_handler_provider
+	 *
+	 * @param string               $handler Route handler method.
+	 * @param array<string, mixed> $params  Request parameters.
+	 *
+	 * @return void
+	 */
+	public function test_unregistered_plugin_id_keeps_404_unknown_plugin_for_every_handler( string $handler, array $params ): void {
+		$params['plugin_id'] = 'nope';
 
 		$controller = new \Woodev_REST_API_License();
 		$result     = $controller->$handler( $this->make_request( $params ) );
