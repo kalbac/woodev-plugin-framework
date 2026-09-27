@@ -43,7 +43,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: **«Создать заказ»** (#710 — the brainstorm is HIS); SP-10 itself is done.
+Next: the tails (#872 → #868 → #942 → #652 → #943 → #941), then **«Создать заказ» / «Редактировать»** (#710) — the brainstorm is DONE (s141, 27.09.2026) and the spec is `specs/2026-09-27-710-create-edit-order-design.md`, increments I0–I8.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
