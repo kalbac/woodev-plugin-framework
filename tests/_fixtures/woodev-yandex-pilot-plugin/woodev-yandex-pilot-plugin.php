@@ -26,6 +26,7 @@ defined( 'WOODEV_YANDEX_PILOT_FILE' ) || define( 'WOODEV_YANDEX_PILOT_FILE', __F
 function woodev_yandex_pilot_plugin_loader_definition(): array {
 	return [
 		'plugin_id'         => 'yandex_delivery',
+		'download_id'       => 821,
 		'plugin_name'       => 'Woodev Yandex Pilot Fixture',
 		'plugin_version'    => WOODEV_YANDEX_PILOT_VERSION,
 		'framework_version' => '2.0.0',

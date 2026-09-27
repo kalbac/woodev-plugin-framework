@@ -164,6 +164,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) {
 function woodev_test_shipping_method_plugin_loader_definition(): array {
 	return [
 		'plugin_id'         => 'woodev-test-shipping-method',
+		'download_id'       => 9005,
 		'plugin_name'       => 'Woodev Test Shipping Method Plugin',
 		'plugin_version'    => '1.0.0',
 		'framework_version' => '1.4.0',
@@ -1037,13 +1038,6 @@ function woodev_test_shipping_method_plugin_init(): void {
 			 */
 			public function get_plugin_name(): string {
 				return 'Woodev Test Shipping Method Plugin';
-			}
-
-			/**
-			 * @inheritDoc
-			 */
-			public function get_download_id(): int {
-				return 9005;
 			}
 
 			/**

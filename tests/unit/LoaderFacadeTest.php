@@ -37,6 +37,7 @@ final class LoaderFacadeTest extends TestCase {
 			$plugin_file,
 			[
 				'plugin_id'         => 'loader-facade-fixture',
+				'download_id'       => 9920,
 				'plugin_name'       => 'Loader Facade Fixture',
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.2',
@@ -76,6 +77,7 @@ final class LoaderFacadeTest extends TestCase {
 			$plugin_file,
 			[
 				'plugin_id'         => 'x',
+				'download_id'       => 9921,
 				'plugin_name'       => 'X',
 				'plugin_version'    => '1.0.0',
 				'framework_version' => '2.0.2',

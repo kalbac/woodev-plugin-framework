@@ -38,6 +38,9 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		/** @var array invalid explicit loader definitions */
 		protected array $invalid_loader_definitions = [];
 
+		/** @var array<int,array<string,mixed>> plugins refused a download id already claimed by another plugin */
+		protected array $quarantined_download_id_plugins = [];
+
 		/** @var array<int,array<string,string>> Legacy (v1) plugins quarantined by the mixed-fleet tombstone — see B-1. */
 		protected array $mixed_fleet_incompatible_plugins = [];
 
@@ -55,6 +58,13 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 
 			add_action( 'plugins_loaded', [ $this, 'load_plugins' ] );
 			add_action( 'admin_init', [ $this, 'maybe_deactivate_framework_plugins' ] );
+
+			// #916: refuse to activate a second plugin whose download id is already taken.
+			// `activated_plugin` fires once per plugin, even inside a bulk activation, after
+			// `load_plugins()` (on `plugins_loaded`) has already run for this request.
+			add_action( 'activated_plugin', [ $this, 'guard_activated_plugin' ] );
+			add_action( 'admin_notices', [ $this, 'render_activation_guard_notice' ] );
+			add_action( 'network_admin_notices', [ $this, 'render_activation_guard_notice' ] );
 		}
 
 		/**
@@ -300,6 +310,30 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Guards a single plugin activation against a download id collision (#916).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin Activated plugin's basename (`folder/file.php`).
+		 * @return void
+		 */
+		public function guard_activated_plugin( string $plugin ): void {
+			$this->resolver->guard_activated_plugin( $plugin );
+			$this->sync_resolver_state();
+		}
+
+		/**
+		 * Renders a flashed activation-guard refusal notice, if one is waiting for the current user.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function render_activation_guard_notice(): void {
+			$this->resolver->render_activation_guard_notice();
+		}
+
+		/**
 		 * Handles the compatibility deactivation action.
 		 *
 		 * @return void
@@ -398,6 +432,47 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 		}
 
 		/**
+		 * Gets the registered loader definition for a plugin id.
+		 *
+		 * The single source of truth {@see Woodev_Plugin::get_download_id()} reads through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_id Plugin id, as returned by `Woodev_Plugin::get_id()`.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_plugin_id( string $plugin_id ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolver->get_loader_definition_for_plugin_id( $plugin_id );
+		}
+
+		/**
+		 * Gets the registered loader definition for a plugin's own class, EXACT match only.
+		 * The PRIMARY source {@see Woodev_Plugin::get_download_id()} reads through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class( string $class ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolver->get_loader_definition_for_class( $class );
+		}
+
+		/**
+		 * Gets the registered loader definition for the nearest registered ancestor of a
+		 * plugin's own class — last-resort fallback, after both an exact class match and an
+		 * exact plugin_id match missed. {@see Woodev_Plugin::get_download_id()} reads through.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $class Plugin instance class, as returned by `get_class( $plugin )`.
+		 * @return \Woodev\Framework\Framework_Plugin_Loader_Definition|null
+		 */
+		public function get_loader_definition_for_class_ancestor( string $class ): ?\Woodev\Framework\Framework_Plugin_Loader_Definition {
+			return $this->resolver->get_loader_definition_for_class_ancestor( $class );
+		}
+
+		/**
 		 * Synchronizes reflected compatibility state from the resolver.
 		 *
 		 * @return void
@@ -410,6 +485,7 @@ if ( ! class_exists( 'Woodev_Plugin_Bootstrap' ) ) :
 			$this->incompatible_wp_version_plugins  = $this->resolver->get_incompatible_wp_version_plugins();
 			$this->incompatible_php_version_plugins = $this->resolver->get_incompatible_php_version_plugins();
 			$this->invalid_loader_definitions       = $this->resolver->get_invalid_loader_definitions();
+			$this->quarantined_download_id_plugins  = $this->resolver->get_quarantined_download_id_plugins();
 		}
 	}
 

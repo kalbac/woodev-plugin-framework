@@ -37,6 +37,7 @@ Woodev_Loader::register(
 	WOODEV_ENTRY_PATH_FIXTURE_FILE,
 	[
 		'plugin_id'         => 'woodev-entry-path-fixture',
+		'download_id'       => 9006,
 		'plugin_name'       => 'Woodev Entry Path Fixture',
 		'plugin_version'    => WOODEV_ENTRY_PATH_FIXTURE_VERSION,
 		'framework_version' => '2.0.2',

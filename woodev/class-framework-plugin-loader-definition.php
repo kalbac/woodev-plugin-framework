@@ -28,6 +28,9 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		/** @var string Stable internal plugin ID. */
 		protected string $plugin_id;
 
+		/** @var int EDD download (product) id on woodev.ru — the license identity. Required: two plugins sharing one is always an author error, guarded upstream by the resolver. */
+		protected int $download_id;
+
 		/** @var string Human-readable plugin name. */
 		protected string $plugin_name;
 
@@ -67,6 +70,7 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		 */
 		private function __construct( array $definition ) {
 			$this->plugin_id            = (string) $definition['plugin_id'];
+			$this->download_id          = (int) $definition['download_id'];
 			$this->plugin_name          = (string) $definition['plugin_name'];
 			$this->plugin_version       = (string) $definition['plugin_version'];
 			$this->framework_version    = (string) $definition['framework_version'];
@@ -111,6 +115,17 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 		 */
 		public function get_plugin_id(): string {
 			return $this->plugin_id;
+		}
+
+		/**
+		 * Gets the EDD download (product) id on woodev.ru.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int
+		 */
+		public function get_download_id(): int {
+			return $this->download_id;
 		}
 
 		/**
@@ -279,6 +294,12 @@ if ( ! class_exists( Framework_Plugin_Loader_Definition::class, false ) ) :
 				if ( ! array_key_exists( $field, $definition ) || '' === $definition[ $field ] || [] === $definition[ $field ] ) {
 					$errors[] = sprintf( 'Missing required loader definition field: %s.', $field );
 				}
+			}
+
+			if ( ! array_key_exists( 'download_id', $definition ) || '' === $definition['download_id'] || null === $definition['download_id'] ) {
+				$errors[] = 'Missing required loader definition field: download_id.';
+			} elseif ( ! is_numeric( $definition['download_id'] ) || (int) $definition['download_id'] <= 0 ) {
+				$errors[] = 'Loader definition download_id must be a positive integer — it is the EDD product id on woodev.ru and two plugins sharing one is always an author error.';
 			}
 
 			if ( empty( $definition['main_class'] ) && empty( $definition['callback'] ) ) {

@@ -375,15 +375,6 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	}
 
 	/**
-	 * Gets the fixture download ID.
-	 *
-	 * @return int
-	 */
-	public function get_download_id(): int {
-		return 9004;
-	}
-
-	/**
 	 * Gets the shipping method classes for test assertions.
 	 *
 	 * @return array<string,string>

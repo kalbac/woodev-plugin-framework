@@ -128,17 +128,6 @@ final class Woodev_Yandex_Pilot_Shipping_Plugin extends \Woodev\Framework\Shippi
 	}
 
 	/**
-	 * Gets the fixture download ID.
-	 *
-	 * Models the production yandex EDD download ID shape.
-	 *
-	 * @return int
-	 */
-	public function get_download_id(): int {
-		return 821;
-	}
-
-	/**
 	 * Gets the shipping method classes for test assertions.
 	 *
 	 * @return array<string,string>

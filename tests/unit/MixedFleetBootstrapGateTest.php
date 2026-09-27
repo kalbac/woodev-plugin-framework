@@ -373,10 +373,13 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		$this->assertSame( 'Legacy Plugin', $recorded[0]['plugin_name'] );
 		$this->assertSame( '/path/legacy.php', $recorded[0]['path'] );
 
+		// Filtered by callback, not just the hook name: the bootstrap constructor also
+		// unconditionally wires 'admin_notices' to render_activation_guard_notice() (#916),
+		// an unrelated notice this test does not exercise.
 		$admin_notice_hooks = array_filter(
 			$added,
-			static function ( array $hook ): bool {
-				return 'admin_notices' === $hook[0];
+			static function ( array $hook ) use ( $bootstrap ): bool {
+				return 'admin_notices' === $hook[0] && [ $bootstrap, 'render_mixed_fleet_notice' ] === $hook[1];
 			}
 		);
 		$this->assertCount( 1, $admin_notice_hooks, 'The tombstone must engage the admin_notices path.' );
@@ -435,10 +438,11 @@ class MixedFleetBootstrapGateTest extends TestCase {
 		$this->assertSame( 'Legacy Plugin One', $recorded[0]['plugin_name'] );
 		$this->assertSame( 'Legacy Plugin Two', $recorded[1]['plugin_name'] );
 
+		// Filtered by callback, not just the hook name — see the sibling test above.
 		$admin_notice_hooks = array_filter(
 			$added,
-			static function ( array $hook ): bool {
-				return 'admin_notices' === $hook[0];
+			static function ( array $hook ) use ( $bootstrap ): bool {
+				return 'admin_notices' === $hook[0] && [ $bootstrap, 'render_mixed_fleet_notice' ] === $hook[1];
 			}
 		);
 		$this->assertCount( 1, $admin_notice_hooks, 'The admin_notices hook must be added exactly once, not twice.' );
@@ -480,10 +484,13 @@ class MixedFleetBootstrapGateTest extends TestCase {
 
 		$bootstrap->register_plugin( '1.4.1', 'Legacy Plugin', '/path/legacy.php', static function (): void {}, [] );
 
+		// Filtered by callback, not just the hook name: the bootstrap constructor also
+		// unconditionally wires 'admin_notices' to render_activation_guard_notice() (#916),
+		// an unrelated notice this test does not exercise.
 		$admin_notice_hooks = array_filter(
 			$added,
-			static function ( array $hook ): bool {
-				return 'admin_notices' === $hook[0];
+			static function ( array $hook ) use ( $bootstrap ): bool {
+				return 'admin_notices' === $hook[0] && [ $bootstrap, 'render_mixed_fleet_notice' ] === $hook[1];
 			}
 		);
 		$render_callback = $admin_notice_hooks[ array_key_first( $admin_notice_hooks ) ][1];
@@ -573,10 +580,11 @@ class MixedFleetBootstrapGateTest extends TestCase {
 			[]
 		);
 
+		// Filtered by callback, not just the hook name — see the sibling test above.
 		$admin_notice_hooks = array_filter(
 			$added,
-			static function ( array $hook ): bool {
-				return 'admin_notices' === $hook[0];
+			static function ( array $hook ) use ( $bootstrap ): bool {
+				return 'admin_notices' === $hook[0] && [ $bootstrap, 'render_mixed_fleet_notice' ] === $hook[1];
 			}
 		);
 		$render_callback = $admin_notice_hooks[ array_key_first( $admin_notice_hooks ) ][1];

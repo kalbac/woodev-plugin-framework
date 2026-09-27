@@ -22,6 +22,7 @@ defined( 'WOODEV_EDOSTAVKA_PILOT_FILE' ) || define( 'WOODEV_EDOSTAVKA_PILOT_FILE
 function woodev_edostavka_pilot_plugin_loader_definition(): array {
 	return [
 		'plugin_id'         => 'woodev-edostavka-pilot',
+		'download_id'       => 216,
 		'plugin_name'       => 'Woodev Edostavka Pilot Fixture',
 		'plugin_version'    => WOODEV_EDOSTAVKA_PILOT_VERSION,
 		'framework_version' => '2.0.0',
