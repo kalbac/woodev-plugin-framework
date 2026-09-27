@@ -1,36 +1,36 @@
 <?php
 /**
- * Unit: how fast the aggregate delivery-status filter grows in JOINs (#839).
+ * Unit: how the aggregate delivery-status filter grows in JOINs (#839), re-pinned after
+ * #928 moved the scope and every meta-based filter out of the main query.
  *
  * The orders page scopes its rows by OR-ing one clause per registered carrier, and
  * #837 defect 2 forced every NEGATIVE clause to be bound to that carrier's own marker
- * key as well. Both halves enumerate the carriers, so the query grows linearly in the
- * carrier count — and nothing in the suite noticed, because every other test here
- * asserts the SHAPE of the built `meta_query` and a shape looks the same at any size.
+ * key as well. Handed to the datastore as a `meta_query`, each of those clauses was one
+ * JOIN on the meta table with no key in its `ON`, and nothing in the suite noticed the
+ * growth, because every other test asserts the SHAPE of the built tree and a shape looks
+ * the same at any size.
  *
  * It was noticed the expensive way instead. In s128 the integration suite hung: MySQL
  * sat in `Sending data` for over four minutes on ONE query carrying TWELVE
  * `LEFT JOIN wp_postmeta` at four registered carriers, two with a status map and two
- * without. Killing PHP does not stop that query; it keeps running, holds the metadata
- * lock, and the next run then hangs on `DROP TABLE wp_users`.
+ * without. #839 step 2 brought that to eight. Then the #928 measurement showed the real
+ * law — every un-predicated join multiplies the row count by the order's meta density,
+ * `~d^N` — and that the UNFILTERED page at four carriers already paid 11.7 s per
+ * 10 000 orders on the dev rig's own density. So #928 took the joins out entirely: the
+ * tree is resolved to ids by one flat statement ({@see Orders_Id_Resolver}) and reaches
+ * the main query as `post__in`.
  *
- * So this file pins the SIZE, which no other test does. It counts the leaf clauses the
- * builder emits, because a leaf clause is what becomes a join:
+ * This file therefore pins TWO sizes, and both are a budget, not a description:
  *
- *   - on HPOS the correspondence is exact — WooCommerce's own meta-query builder emits
- *     one join per leaf, measured for card #839 by capturing the real SQL through
- *     `woocommerce_orders_table_query_clauses` with two carriers registered (8 leaves,
- *     8 joins for `delivery_status=unknown`);
- *   - on the legacy CPT datastore `WP_Meta_Query` emits one join per leaf too, except
- *     that it shares one alias between sibling clauses of an OR whose comparison is
- *     "positive" (`IN` among them, `EXISTS` NOT among them), so the positive filters
- *     cost slightly less there. Verified for #839 by running the real `WP_Meta_Query`
- *     over the built tree with a stub `$wpdb`, no database involved: the s128 fixture
- *     reproduces its observed twelve exactly.
- *
- * The numbers below are therefore a budget, not a description. When a change moves one
- * of them the diff has to say so out loud — which is the whole point, since the last
- * two changes to these builders each added a join per carrier without anyone noticing.
+ *   - the MAIN query carries NO meta join at all — its `meta_query` is absent, or the
+ *     one-leaf "matches nothing" sentinel. If the scope OR of marker `EXISTS` clauses
+ *     ever comes back into the main query, this is the file that goes red;
+ *   - the ID query carries no JOIN either, and the number of correlated subqueries it
+ *     carries follows the old leaf law — `N` scope keys folded into the driver's `IN`,
+ *     then `3M + B` for `unknown` / `is not <canonical>`, `M` for `<canonical>` /
+ *     `is not unknown`, `0` with no filter. Each subquery is one index lookup per driver
+ *     row, so the cost is linear in `N`, but a change that moves one of these numbers
+ *     still has to say so out loud.
  *
  * ⚠ Never turn this file into an integration test by registering four carriers and
  * actually RUNNING the aggregate on the CPT datastore. That is what wedged the shared
@@ -42,12 +42,16 @@
 namespace Woodev\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Id_Resolver;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 class ShippingOrdersQueryJoinGrowthTest extends TestCase {
+
+	/** What the stubbed resolver hands back, so `post__in` is observable. */
+	public const STUB_IDS = [ 101, 102 ];
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -116,21 +120,40 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	}
 
 	/**
-	 * Builds an Orders_Query pinned to the HPOS branch, so `meta_query` is emitted
-	 * directly. See ShippingOrdersQueryTest's class docblock for why this subclass is
-	 * needed at all.
+	 * An Orders_Query pinned to one datastore whose id resolver is stubbed (the real one
+	 * needs `$wpdb`) and which records the marker keys and tree it was handed, so the id
+	 * query can be compiled here from exactly that input.
+	 *
+	 * @return Orders_Query&object{resolved:array<int,array{0:string[],1:array<int|string,mixed>}>}
 	 */
-	private function query_with_hpos( Orders_Registry $registry ): Orders_Query {
-		return new class( $registry ) extends Orders_Query {
+	private function query_on( bool $hpos, Orders_Registry $registry ): Orders_Query {
+		return new class( $registry, $hpos ) extends Orders_Query {
+			/** @var bool */
+			private $hpos;
+
+			/** @var array<int,array{0:string[],1:array<int|string,mixed>}> */
+			public $resolved = [];
+
+			public function __construct( ?Orders_Registry $registry, bool $hpos ) {
+				parent::__construct( $registry );
+				$this->hpos = $hpos;
+			}
+
 			protected function is_hpos_enabled(): bool {
-				return true;
+				return $this->hpos;
+			}
+
+			protected function resolve_order_ids( array $marker_keys, array $meta_query ): array {
+				$this->resolved[] = [ $marker_keys, $meta_query ];
+
+				return ShippingOrdersQueryJoinGrowthTest::STUB_IDS;
 			}
 		};
 	}
 
 	/**
 	 * Counts LEAF clauses in a `meta_query` tree — every node carrying a `key`, at any
-	 * nesting depth. One leaf is one join (see the class docblock).
+	 * nesting depth. In the MAIN query one leaf is one join (see the class docblock).
 	 *
 	 * @param array<int|string,mixed> $tree
 	 */
@@ -148,39 +171,61 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		return $leaves;
 	}
 
-	private function leaves_for( int $mapped, int $bare, array $request ): int {
+	/**
+	 * Both sizes for one (fixture, request, datastore): the leaf count of whatever
+	 * `meta_query` the MAIN query still carries (0 when none), and the id query's SQL
+	 * as {@see Orders_Id_Resolver} compiles it from what the query handed the seam
+	 * (null when the tree matched nothing and no id query was asked for).
+	 *
+	 * @return array{main_leaves:int,post__in:bool,id_sql:?string}
+	 */
+	private function sizes_for( int $mapped, int $bare, array $request, bool $hpos = true ): array {
 		$registry = $this->registry_of( $mapped, $bare );
+		$query    = $this->query_on( $hpos, $registry );
+		$args     = $query->build_args( $request );
 
-		return $this->leaf_count( $this->query_with_hpos( $registry )->build_args( $request )['meta_query'] );
+		$id_sql = null;
+
+		if ( [] !== $query->resolved ) {
+			[ $keys, $tree ] = $query->resolved[0];
+
+			$id_sql = ( new Orders_Id_Resolver( new OrdersIdResolverFakeWpdb(), $hpos ) )->compile( $keys, $tree );
+		}
+
+		return [
+			'main_leaves' => isset( $args['meta_query'] ) ? $this->leaf_count( (array) $args['meta_query'] ) : 0,
+			'post__in'    => array_key_exists( 'post__in', $args ),
+			'id_sql'      => $id_sql,
+		];
+	}
+
+	private function joins( string $sql ): int {
+		return preg_match_all( '/\bJOIN\b/i', $sql );
+	}
+
+	private function subqueries( string $sql ): int {
+		return preg_match_all( '/EXISTS \(SELECT 1 FROM /', $sql );
 	}
 
 	/**
-	 * The measured budget, RE-PINNED for the #839 step 2 marker-scope collapse. `M`
-	 * carriers own a usable status map, `B` own no status concept, and `N = M + B`:
+	 * The measured budget, RE-PINNED for #928. `M` carriers own a usable status map, `B`
+	 * own no status concept, and `N = M + B`. The MAIN query: zero meta joins, always,
+	 * except the one-leaf sentinel when the tree matches nothing. The ID query, in
+	 * correlated subqueries (the `N` scope keys are the driver's `IN` list, not counted):
 	 *
-	 *     no filter                         N
-	 *     delivery_status=unknown           3M + B          (was 4M + 2B)
-	 *     delivery_status=<canonical>       N + M           (1 when M is 0; was N + 1)
-	 *     delivery_status_not=<canonical>   3M + B          (was 4M + 2B)
-	 *     delivery_status_not=unknown       N + M           (1 when M is 0; was N + 1)
+	 *     no filter                         0               (was N joins in the main query)
+	 *     delivery_status=unknown           3M + B          (was 3M + B joins; 4M + 2B before #839;
+	 *                                                        0 when M is 0 — see below)
+	 *     delivery_status=<canonical>       M               (was N + M joins; sentinel when M is 0)
+	 *     delivery_status_not=<canonical>   3M + B          (was 3M + B joins; 0 when M is 0)
+	 *     delivery_status_not=unknown       M               (was N + M joins; sentinel when M is 0)
 	 *
-	 * The marker-key scope part used to contribute `N` on top of every filter's own
-	 * cost, paying for the marker join a second time whenever every clause the filter
-	 * built already bound its own provider's marker. #839 step 2 drops the scope part
-	 * entirely in exactly that case, so `delivery_status=unknown` and
-	 * `delivery_status_not=<canonical>` lose the `N` term outright, and their per-carrier
-	 * cost falls from four leaves to three (the marker join that used to come from the
-	 * scope AND from the binding now comes from the binding alone).
+	 * With no mapped carrier at all, the `unknown` / `is not <canonical>` filter part is
+	 * every bare carrier's marker `EXISTS` OR-ed — byte for byte the scope part — and
+	 * {@see Orders_Id_Resolver::compile()} folds a part identical to the scope into the
+	 * driver predicate, so it costs nothing: the filter IS the scope there.
 	 *
-	 * The scope still stays, unchanged, for `delivery_status=<canonical>` and
-	 * `delivery_status_not=unknown`: both are built from a bare `IN` on a provider's own
-	 * status key, which does not bind its own provider's marker, so the scope is not a
-	 * duplicate there — EXCEPT when no carrier participates at all (`M` is 0), where the
-	 * clause set is empty and collapses to the shared
-	 * {@see Orders_Query::NO_MATCH_META_QUERY} sentinel regardless, scope included: one
-	 * leaf, not `N + 1`.
-	 *
-	 * @return array<string,array{0:int,1:int,2:array<string,mixed>,3:int}>
+	 * @return array<string,array{0:int,1:int,2:array<string,mixed>,3:string}>
 	 */
 	public function growth_law_provider(): array {
 		$cases = [];
@@ -194,10 +239,10 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		];
 
 		$splits = [
-			'all mapped' => static function ( int $n ): array {
+			'all mapped'    => static function ( int $n ): array {
 				return [ $n, 0 ];
 			},
-			'none mapped' => static function ( int $n ): array {
+			'none mapped'   => static function ( int $n ): array {
 				return [ 0, $n ];
 			},
 			'half and half' => static function ( int $n ): array {
@@ -210,9 +255,7 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 				list( $mapped, $bare ) = $split( $n );
 
 				foreach ( $requests as $request_label => $request ) {
-					$expected = $this->expected_leaves( $mapped, $bare, $request_label );
-
-					$cases[ "{$request_label}, {$split_label}, N={$n}" ] = [ $mapped, $bare, $request, $expected ];
+					$cases[ "{$request_label}, {$split_label}, N={$n}" ] = [ $mapped, $bare, $request, $request_label ];
 				}
 			}
 		}
@@ -220,28 +263,21 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 		return $cases;
 	}
 
-	/** The budget as a formula, so the provider cannot drift from the docblock above. */
-	private function expected_leaves( int $mapped, int $bare, string $request_label ): int {
-		$scope = $mapped + $bare;
-
+	/** The id-query budget as a formula, so the provider cannot drift from the docblock above. `null` = the sentinel, no id query. */
+	private function expected_subqueries( int $mapped, int $bare, string $request_label ): ?int {
 		switch ( $request_label ) {
 			case 'no filter':
-				return $scope;
+				return 0;
 
 			case 'delivery_status=unknown':
 			case 'delivery_status_not=in_transit':
-				// #839 step 2: every clause binds its own provider's marker, so the
-				// scope is a pure duplicate and is dropped outright.
-				return ( 3 * $mapped ) + $bare;
+				// No mapped carrier => the filter part IS the scope part and folds into the driver.
+				return 0 === $mapped ? 0 : ( 3 * $mapped ) + $bare;
 
 			case 'delivery_status=in_transit':
 			case 'delivery_status_not=unknown':
-				// No carrier can report it => the NO_MATCH sentinel, one leaf, and the
-				// scope collapses along with it (#839 step 2 drops a scope that is
-				// redundant for ANY reason, not only the bound-clause one). Otherwise
-				// the scope stays: a bare `IN` on a provider's own status key does not
-				// bind its own provider's marker.
-				return 0 === $mapped ? 1 : $scope + $mapped;
+				// No carrier can report it => the NO_MATCH sentinel, answered without an id query.
+				return 0 === $mapped ? null : $mapped;
 		}
 
 		throw new \LogicException( "no budget for {$request_label}" );
@@ -252,12 +288,32 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	 *
 	 * @param array<string,mixed> $request
 	 */
-	public function test_the_delivery_status_filter_stays_within_its_measured_join_budget( int $mapped, int $bare, array $request, int $expected ): void {
+	public function test_the_main_query_carries_no_meta_join_and_the_id_query_stays_within_its_budget( int $mapped, int $bare, array $request, string $request_label ): void {
+		$sizes    = $this->sizes_for( $mapped, $bare, $request );
+		$expected = $this->expected_subqueries( $mapped, $bare, $request_label );
+
+		if ( null === $expected ) {
+			$this->assertSame( 1, $sizes['main_leaves'], 'a tree that matches nothing is the one-leaf sentinel in the main query' );
+			$this->assertFalse( $sizes['post__in'] );
+			$this->assertNull( $sizes['id_sql'], 'and no id query is asked for' );
+
+			return;
+		}
+
+		$this->assertSame(
+			0,
+			$sizes['main_leaves'],
+			'The MAIN query carries a meta_query again. Every OR-ed marker EXISTS there is one un-predicated join and the '
+			. 'page costs ~d^N in the carrier count (#928) — the scope and the filters belong in the id query, as post__in.'
+		);
+		$this->assertTrue( $sizes['post__in'] );
+		$this->assertNotNull( $sizes['id_sql'] );
+		$this->assertSame( 0, $this->joins( (string) $sizes['id_sql'] ), 'The id query must never join (#928).' );
 		$this->assertSame(
 			$expected,
-			$this->leaves_for( $mapped, $bare, $request ),
-			'The aggregate filter changed size. One leaf clause is one JOIN, so this is a performance contract, '
-			. 'not a shape detail — say so in the change, and re-measure (#839).'
+			$this->subqueries( (string) $sizes['id_sql'] ),
+			'The id query changed size. One correlated subquery is one index lookup per order in scope, so this is a '
+			. 'performance contract, not a shape detail — say so in the change, and re-measure (#839, #928).'
 		);
 	}
 
@@ -266,39 +322,32 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	 * in the wild rather than derived: four carriers, two with a status map and two
 	 * without, `delivery_status=unknown`. s128 saw TWELVE `LEFT JOIN wp_postmeta` on the
 	 * legacy CPT datastore and MySQL sat in `Sending data` for over four minutes; #839
-	 * step 2 dropped the duplicate marker-scope join, re-measured at EIGHT (never run on
-	 * a real CPT install — see the class docblock's standing warning).
+	 * step 2 brought it to eight; #928 brought the main query to ZERO and the id query
+	 * to eight keyed subqueries and no join.
 	 */
-	public function test_the_s128_fixture_that_wedged_mysql_now_costs_eight_joins(): void {
-		$this->assertSame(
-			8,
-			$this->leaves_for( 2, 2, [ 'delivery_status' => Delivery_Status::UNKNOWN ] ),
-			'This is the exact query that hung the integration suite in s128, re-measured after the #839 step 2 '
-			. 'scope collapse (was twelve). If the number moved again, say so in the change and re-measure.'
-		);
+	public function test_the_s128_fixture_that_wedged_mysql_now_costs_zero_joins(): void {
+		$sizes = $this->sizes_for( 2, 2, [ 'delivery_status' => Delivery_Status::UNKNOWN ] );
+
+		$this->assertSame( 0, $sizes['main_leaves'], 'This is the exact query that hung the integration suite in s128 (#928: no meta join in the main query).' );
+		$this->assertSame( 0, $this->joins( (string) $sizes['id_sql'] ) );
+		$this->assertSame( 8, $this->subqueries( (string) $sizes['id_sql'] ), 'eight keyed subqueries, one per leaf (was eight joins after #839, twelve before)' );
 	}
 
 	/**
-	 * Growth is linear, and the per-carrier slope is what matters: at three joins per
-	 * carrier the `unknown` filter is still the one to watch, so the slope is the thing
-	 * a change has to move. Asserted as a slope rather than as a list of totals so it
-	 * keeps meaning if the constant term ever changes.
+	 * Growth is linear, and the per-carrier slope is what matters: three subqueries per
+	 * mapped carrier for `unknown` — the marker binding plus the two status halves.
+	 * Asserted as a slope rather than as a list of totals so it keeps meaning if the
+	 * constant term ever changes.
 	 */
-	public function test_the_unknown_filter_costs_exactly_three_joins_per_mapped_carrier(): void {
+	public function test_the_unknown_filter_costs_exactly_three_subqueries_per_mapped_carrier(): void {
 		$slopes = [];
 
 		for ( $n = 1; $n <= 6; $n++ ) {
-			$slopes[ $n ] = $this->leaves_for( $n, 0, [ 'delivery_status' => Delivery_Status::UNKNOWN ] );
+			$slopes[ $n ] = $this->subqueries( (string) $this->sizes_for( $n, 0, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] );
 		}
 
 		foreach ( range( 2, 6 ) as $n ) {
-			$this->assertSame(
-				3,
-				$slopes[ $n ] - $slopes[ $n - 1 ],
-				"Each additional carrier with a status map costs three more joins (at N={$n}). "
-				. 'That is the marker, joined once by the binding, plus the two status joins (#839 step 2 '
-				. 'dropped the scope\'s own duplicate marker join).'
-			);
+			$this->assertSame( 3, $slopes[ $n ] - $slopes[ $n - 1 ], "Each additional carrier with a status map costs three more subqueries (at N={$n})." );
 		}
 	}
 
@@ -307,67 +356,50 @@ class ShippingOrdersQueryJoinGrowthTest extends TestCase {
 	 * pinned separately because it reaches it through the other branch of the builder
 	 * and could drift on its own.
 	 */
-	public function test_the_is_not_filter_costs_exactly_three_joins_per_mapped_carrier(): void {
-		$previous = $this->leaves_for( 1, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
+	public function test_the_is_not_filter_costs_exactly_three_subqueries_per_mapped_carrier(): void {
+		$previous = $this->subqueries( (string) $this->sizes_for( 1, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] )['id_sql'] );
 
 		foreach ( range( 2, 6 ) as $n ) {
-			$current = $this->leaves_for( $n, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] );
+			$current = $this->subqueries( (string) $this->sizes_for( $n, 0, [ 'delivery_status_not' => Delivery_Status::IN_TRANSIT ] )['id_sql'] );
 
-			$this->assertSame( 3, $current - $previous, "`is not` grew by something other than three at N={$n} (#839 step 2)." );
+			$this->assertSame( 3, $current - $previous, "`is not` grew by something other than three at N={$n}." );
 
 			$previous = $current;
 		}
 	}
 
 	/**
-	 * A carrier with NO status concept now costs exactly ONE join under `unknown` — the
-	 * same as without any status filter at all. Before #839 step 2 it paid for its
-	 * marker twice (its marker in the scope, and its marker again standing in for
-	 * "always unknown"); the scope collapse (#839 step 2) removes that duplicate
-	 * entirely for this filter, which is the clearest statement of what the step bought.
+	 * A carrier with NO status concept costs exactly ONE subquery under `unknown` beside
+	 * a mapped carrier — its own marker standing in for "always unknown" — and NOTHING
+	 * on its own (the filter part is then the scope itself) or without a filter, where
+	 * its marker is only the driver's `IN` entry.
 	 */
-	public function test_a_carrier_with_no_status_concept_now_pays_for_its_marker_once(): void {
-		$this->assertSame(
-			1,
-			$this->leaves_for( 0, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] ),
-			'One carrier with no status concept: its own marker EXISTS clause stands in for "always unknown", '
-			. 'and the scope is redundant, so it costs the same as no filter at all (#839 step 2).'
-		);
+	public function test_a_carrier_with_no_status_concept_pays_one_subquery_under_unknown_and_none_without_a_filter(): void {
+		$beside_a_mapped_one = $this->subqueries( (string) $this->sizes_for( 1, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] );
+		$mapped_alone        = $this->subqueries( (string) $this->sizes_for( 1, 0, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] );
 
-		$this->assertSame(
-			1,
-			$this->leaves_for( 0, 1, [] ),
-			'Without a status filter the same carrier still costs ONE join — the duplicate is gone, not just hidden.'
-		);
+		$this->assertSame( 1, $beside_a_mapped_one - $mapped_alone );
+		$this->assertSame( 0, $this->subqueries( (string) $this->sizes_for( 0, 1, [ 'delivery_status' => Delivery_Status::UNKNOWN ] )['id_sql'] ) );
+		$this->assertSame( 0, $this->subqueries( (string) $this->sizes_for( 0, 1, [] )['id_sql'] ) );
 	}
 
 	/**
-	 * The legacy-CPT path must carry the same budget, because it rebuilds the same parts
-	 * through the same {@see Orders_Query::combine_meta_queries()}. Pinned so the two
-	 * datastore paths cannot diverge in COST while still agreeing on meaning.
+	 * The legacy-CPT path must carry the same budget: the same tree reaches the same
+	 * resolver, only the table differs. Pinned so the two datastore paths cannot diverge
+	 * in COST while still agreeing on meaning.
 	 */
 	public function test_the_legacy_cpt_path_carries_the_same_budget(): void {
-		$registry = $this->registry_of( 2, 2 );
+		$hpos = $this->sizes_for( 2, 2, [ 'delivery_status' => Delivery_Status::UNKNOWN ], true );
+		$cpt  = $this->sizes_for( 2, 2, [ 'delivery_status' => Delivery_Status::UNKNOWN ], false );
 
-		$args = ( new Orders_Query( $registry ) )->build_args( [ 'delivery_status' => Delivery_Status::UNKNOWN ] );
-
-		$this->assertArrayNotHasKey( 'meta_query', $args, 'The CPT path must never emit meta_query.' );
-
-		// #839 step 2: the scope var is omitted on the CPT path too when it is
-		// redundant, so there may be no QUERY_VAR_MARKER_KEYS part to combine at all.
-		$parts = [];
-
-		if ( array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $args ) ) {
-			$parts[] = Orders_Query::meta_query_for_keys( (array) $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
-		}
-
-		$parts[] = Orders_Query::meta_query_for_clauses( (array) $args[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] );
-
+		$this->assertSame( 0, $cpt['main_leaves'], 'The CPT path must never emit meta_query (its presence alone drops the whole filter there).' );
+		$this->assertTrue( $cpt['post__in'] );
+		$this->assertSame( 0, $this->joins( (string) $cpt['id_sql'] ) );
+		$this->assertSame( 8, $this->subqueries( (string) $cpt['id_sql'] ) );
 		$this->assertSame(
-			8,
-			$this->leaf_count( Orders_Query::combine_meta_queries( $parts ) ),
-			'The legacy CPT translation must cost what HPOS costs — re-measured at eight joins on the s128 '
-			. 'fixture after the #839 step 2 scope collapse (was twelve).'
+			$cpt['id_sql'],
+			str_replace( [ 'wp_wc_orders_meta', 'order_id' ], [ 'wp_postmeta', 'post_id' ], (string) $hpos['id_sql'] ),
+			'same statement, other table'
 		);
 	}
 }

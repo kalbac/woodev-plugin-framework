@@ -1388,68 +1388,42 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
-		 * Translates {@see Orders_Query}'s custom query vars — marker keys, plus the
-		 * optional delivery-status, tracking-presence, pickup-point-presence and
-		 * export-presence filter clauses (SP-10 spec D10; pickup-point added #836,
-		 * export-presence added #841) — into one real `meta_query` on the legacy CPT
-		 * order datastore.
+		 * Translates {@see Orders_Query}'s marker-keys custom query var into a real
+		 * `meta_query` on the legacy CPT order datastore.
 		 *
-		 * On HPOS, {@see Orders_Query::build_args()} emits `meta_query` directly —
-		 * measured correct against a real HPOS install (SP-10 spec M2). On the legacy CPT
-		 * datastore WooCommerce's `WC_Order_Data_Store_CPT` does not support a
-		 * `meta_query` arg at all: passing one fires `_doing_it_wrong` (WC ≥9.2) and
-		 * silently returns UNFILTERED results — every carrier's orders leaking into every
-		 * tab, the worst version of this bug because it fails open, not closed. All three
-		 * shipped carrier plugins solve exactly this the same way — a custom query var,
-		 * translated into `meta_query` through this exact filter — so this mirrors them
-		 * instead of inventing a second mechanism, and now does the same for every new
-		 * meta-based filter D10 added, not only the marker-key scope: each of
-		 * {@see Orders_Query::QUERY_VAR_MARKER_KEYS},
-		 * {@see Orders_Query::QUERY_VAR_STATUS_CLAUSES},
-		 * {@see Orders_Query::QUERY_VAR_TRACKING_CLAUSES},
-		 * {@see Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES} and
-		 * {@see Orders_Query::QUERY_VAR_EXPORTED_CLAUSES}, when present, becomes one
-		 * `meta_query` part, and the parts are ANDed together through
-		 * {@see Orders_Query::combine_meta_queries()} — the SAME combination rule
-		 * {@see Orders_Query::build_args()} uses on HPOS, so the two datastore paths
-		 * cannot silently diverge on what any of these filters mean.
+		 * On HPOS {@see Orders_Query::build_args()} can emit a `meta_query` directly. On
+		 * the legacy CPT datastore WooCommerce's `WC_Order_Data_Store_CPT` does not
+		 * support a `meta_query` arg at all: passing one fires `_doing_it_wrong` (WC ≥9.2)
+		 * and silently returns UNFILTERED results — every carrier's orders leaking into
+		 * every tab, the worst version of this bug because it fails open, not closed. All
+		 * three shipped carrier plugins solve exactly this the same way — a custom query
+		 * var, translated into `meta_query` through this exact filter — so this mirrors
+		 * them instead of inventing a second mechanism.
+		 *
+		 * Since #928 the scope and every meta-based filter reach BOTH datastores as
+		 * `post__in` (the ids are resolved by {@see Orders_Id_Resolver} first), so the var
+		 * arrives here EMPTY only, and this translation's whole job is to say "matches
+		 * nothing" through {@see Orders_Query::NO_MATCH_META_QUERY} —
+		 * {@see Orders_Query::meta_query_for_keys()} of an empty list. It still translates
+		 * a non-empty list faithfully, so the two paths cannot diverge on what the var
+		 * means should a caller's `woodev_shipping_orders_query_args` filter set one.
 		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #928: the delivery-status / tracking / pickup-point / export clause
+		 *              vars are gone — those filters travel inside `post__in` now.
 		 *
 		 * @param array<string,mixed> $query      WP_Query-shaped args the CPT datastore is building.
 		 * @param array<string,mixed> $query_vars the original wc_get_orders() args.
 		 * @return array<string,mixed>
 		 */
 		public function translate_marker_keys_query_var( array $query, array $query_vars ): array {
-			$parts = [];
-
-			if ( array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
-				$parts[] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] );
-			}
-
-			if ( array_key_exists( Orders_Query::QUERY_VAR_STATUS_CLAUSES, $query_vars ) ) {
-				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_STATUS_CLAUSES ] );
-			}
-
-			if ( array_key_exists( Orders_Query::QUERY_VAR_TRACKING_CLAUSES, $query_vars ) ) {
-				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_TRACKING_CLAUSES ] );
-			}
-
-			if ( array_key_exists( Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES, $query_vars ) ) {
-				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_PICKUP_POINT_CLAUSES ] );
-			}
-
-			if ( array_key_exists( Orders_Query::QUERY_VAR_EXPORTED_CLAUSES, $query_vars ) ) {
-				$parts[] = Orders_Query::meta_query_for_clauses( (array) $query_vars[ Orders_Query::QUERY_VAR_EXPORTED_CLAUSES ] );
-			}
-
-			if ( [] === $parts ) {
+			if ( ! array_key_exists( Orders_Query::QUERY_VAR_MARKER_KEYS, $query_vars ) ) {
 				return $query;
 			}
 
-			$query['meta_query'] = Orders_Query::combine_meta_queries( $parts ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query vars; the only CPT-safe way to scope/filter this query (SP-10 spec D10).
+			$query['meta_query'] = Orders_Query::meta_query_for_keys( (array) $query_vars[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- translating the framework's own custom query var; the only CPT-safe way to say "matches nothing" (SP-10 spec M2, #928).
 
 			/**
 			 * Filters the CPT-datastore query after the marker-keys var is translated.

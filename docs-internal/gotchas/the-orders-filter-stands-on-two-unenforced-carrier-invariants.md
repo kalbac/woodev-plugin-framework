@@ -26,12 +26,24 @@ turned out to be the first invariant, not a defect (#924).
    (`class-wc-edostavka-checkout.php:930`), `yandex` on export, gating only on its own shipping being
    present (`class-order.php:100`) — measured in #919's research note, carried on #928.
 
+   **#928 wave 3 (s140) did NOT take that form.** The measurement (wave 2) showed the wall was the
+   marker SCOPE — one un-predicated join per OR-ed marker `EXISTS`, `~d^N` — not the negation, so
+   the whole tree now resolves to ids by one flat statement (`Orders_Id_Resolver`) and reaches the
+   datastore as `post__in`. Each negative clause stays bound to its own marker inside that tree, so
+   the id form is equivalent to the `meta_query` on a multi-marker order too and leans on
+   invariant 2 no more than the joins did. The wave-1 guard (`Orders_Registry::report_multiple_markers()`,
+   `_doing_it_wrong()` under `WP_DEBUG`) and the single-marker oracle universe stand on the
+   operator's ruling, not on a need of the query.
+
 ## Fix
 
 Before changing either clause family, decide which invariant the new shape leans on, and say so in
 the method's docblock (it lists both). A form that needs invariant 2 must ship with the guard #928
 specifies — `_doing_it_wrong()` under `WP_DEBUG` when an order carries more than one marker — and an
-oracle test whose universe EXCLUDES multi-marker orders explicitly, not by accident.
+oracle test whose universe EXCLUDES multi-marker orders explicitly, not by accident. Since #928 the
+place to change a clause's MEANING is the tree (`Orders_Query::build_meta_query()`), which the oracle
+gate walks through the `resolve_order_ids()` seam; the place to change its COST is the compiler
+(`Orders_Id_Resolver::compile()`), whose shape `ShippingOrdersIdResolverTest` pins.
 
 ❌ Wrong — reasoning «the carriers never overlap» and dropping a binding or a scope on that belief:
 
@@ -53,3 +65,4 @@ $args['exclude'] = $ids_with_status_x; // silently narrower on a multi-marker or
 - [a-negative-meta-clause-or-ed-across-providers-matches-every-order](a-negative-meta-clause-or-ed-across-providers-matches-every-order.md) — why the negative forms are bound
 - [a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part](a-relation-key-does-not-tell-the-and-wrapper-from-a-single-meta-query-part.md) — the same test, the addressing trap
 - [919-subquery-seam](../research/2026-09-26-919-subquery-seam/README.md) — the quantifier measurement
+- [928-form-measurement](../research/2026-09-26-928-form-measurement/README.md) — why the wall was the scope, and the id form that replaced it

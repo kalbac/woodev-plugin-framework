@@ -10,13 +10,25 @@
  * CURRENT tree against a PROPOSED one, which stops meaning anything the moment the
  * proposal merges: at that point it compares a thing with itself.
  *
- * This file proves something that survives BOTH #839 step 2 and #919's subquery
- * rewrite: the emitted `meta_query` (on both datastores) against a predicate written
- * straight from the carrier definitions and the order's own meta, never derived from
- * {@see Orders_Query}'s OUTPUT. One reading is adopted from that class's documented
+ * This file proves something that survives BOTH #839 step 2 and #928's id-query
+ * rewrite: the tree {@see Orders_Query} builds (on both datastores) against a predicate
+ * written straight from the carrier definitions and the order's own meta, never derived
+ * from {@see Orders_Query}'s OUTPUT. One reading is adopted from that class's documented
  * invariant rather than derived mechanically, and it is named where it is taken — see
  * {@see self::provider_satisfies_delivery_status()}. If a future rewrite changes which
  * rows the filter selects, this is the file that turns red.
+ *
+ * #928: the tree no longer reaches the datastore as `meta_query`; `Orders_Query`
+ * resolves it to order ids through the `protected` seam `resolve_order_ids()` and hands
+ * them over as `post__in`. This gate therefore substitutes an IN-MEMORY resolver at that
+ * seam ({@see self::query_over()}): it walks the tree it is handed against every order
+ * of the enumerated universe with the same WP_Meta_Query semantics as before, and the
+ * assertion is that the id set `build_args()` puts into `post__in` equals the oracle's
+ * set — for every row, fixture, filter and datastore. Drift in the tree (a new provider
+ * branch), in what is handed to the seam, or in the empty ⇒ sentinel rule all land here.
+ * What this file cannot prove is the SQL the production resolver compiles from the same
+ * tree; `ShippingOrdersIdResolverTest` pins its shape and the #928 research probe
+ * measured it row for row at database level.
  *
  * The oracle implements WP_Meta_Query / MySQL leaf semantics, including the trap that
  * `NOT IN` does NOT match a row that has no such meta row at all (gotcha
@@ -115,42 +127,91 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	}
 
 	/**
-	 * Builds an Orders_Query pinned to the HPOS branch, so `meta_query` is emitted
-	 * directly instead of the legacy custom query vars.
+	 * Builds an Orders_Query pinned to one datastore whose id resolver is this file's
+	 * in-memory one: the tree it is handed is walked against every order of `$rows`
+	 * (order `i` has id `i + 1`) with {@see self::matches_query()}, and the ids of the
+	 * rows that match come back — exactly what the production resolver does against the
+	 * meta table, minus the database. It also records what it was handed, so the test
+	 * can check the seam receives the registered marker keys.
 	 *
 	 * @since 2.0.2
+	 *
+	 * @param array<int,array<string,string>> $rows the universe.
+	 * @return Orders_Query&object{resolved:array<int,array{0:string[],1:array<int|string,mixed>}>}
 	 */
-	private function query_with_hpos( Orders_Registry $registry ): Orders_Query {
-		return new class( $registry ) extends Orders_Query {
+	private function query_over( Orders_Registry $registry, bool $is_hpos, array $rows ): Orders_Query {
+		$walk = function ( array $tree, array $meta ): bool {
+			return $this->matches_query( $tree, $meta );
+		};
+
+		return new class( $registry, $is_hpos, $rows, $walk ) extends Orders_Query {
+			/** @var bool */
+			private $hpos;
+
+			/** @var array<int,array<string,string>> */
+			private $rows;
+
+			/** @var callable(array,array):bool */
+			private $walk;
+
+			/** @var array<int,array{0:string[],1:array<int|string,mixed>}> */
+			public $resolved = [];
+
+			public function __construct( ?Orders_Registry $registry, bool $hpos, array $rows, callable $walk ) {
+				parent::__construct( $registry );
+				$this->hpos = $hpos;
+				$this->rows = $rows;
+				$this->walk = $walk;
+			}
+
 			protected function is_hpos_enabled(): bool {
-				return true;
+				return $this->hpos;
+			}
+
+			protected function resolve_order_ids( array $marker_keys, array $meta_query ): array {
+				$this->resolved[] = [ $marker_keys, $meta_query ];
+
+				$ids = [];
+
+				foreach ( $this->rows as $index => $meta ) {
+					if ( ( $this->walk )( $meta_query, $meta ) ) {
+						$ids[] = $index + 1;
+					}
+				}
+
+				return $ids;
 			}
 		};
 	}
 
 	/**
-	 * Builds the `meta_query` tree a given datastore path ultimately produces for
-	 * `$request`. On HPOS this is `build_args()['meta_query']` directly; on the legacy
-	 * CPT datastore `build_args()` returns the custom query vars instead, so this
-	 * routes them through {@see Orders_Registry::translate_marker_keys_query_var()} —
-	 * the SAME translation the real `woocommerce_order_data_store_cpt_get_orders_query`
-	 * filter calls — rather than hand-reconstructing what that translation does.
+	 * The id set `build_args()` hands the datastore for `$request`: `post__in` when the
+	 * resolver found rows, the empty set when it emitted the "matches nothing" sentinel
+	 * instead — and never both, never neither.
 	 *
 	 * @since 2.0.2
 	 *
-	 * @param array<string,mixed> $request
-	 * @return array<int|string,mixed>
+	 * @return int[]
 	 */
-	private function built_tree( Orders_Registry $registry, array $request, bool $is_hpos ): array {
-		if ( $is_hpos ) {
-			$args = $this->query_with_hpos( $registry )->build_args( $request );
+	private function selected_ids( Orders_Query $query, array $request, bool $is_hpos ): array {
+		$args = $query->build_args( $request );
 
-			return $args['meta_query'];
+		if ( array_key_exists( 'post__in', $args ) ) {
+			$this->assertArrayNotHasKey( 'meta_query', $args, 'with ids in hand nothing else may scope the query' );
+			$this->assertArrayNotHasKey( Orders_Query::QUERY_VAR_MARKER_KEYS, $args );
+			$this->assertNotSame( [], $args['post__in'], 'an empty post__in fails OPEN on both datastores' );
+
+			return array_map( 'intval', $args['post__in'] );
 		}
 
-		$args = ( new Orders_Query( $registry ) )->build_args( $request );
+		if ( $is_hpos ) {
+			$this->assertSame( Orders_Query::NO_MATCH_META_QUERY, $args['meta_query'] ?? null, 'HPOS: no ids => the sentinel meta_query' );
+		} else {
+			$this->assertArrayNotHasKey( 'meta_query', $args );
+			$this->assertSame( [], $args[ Orders_Query::QUERY_VAR_MARKER_KEYS ] ?? null, 'legacy CPT: no ids => the empty marker-keys var' );
+		}
 
-		return $registry->translate_marker_keys_query_var( [], $args )['meta_query'];
+		return [];
 	}
 
 	/**
@@ -490,16 +551,17 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 	}
 
 	/**
-	 * Builds the tree and the universe ONCE per (fixture, filter, datastore), then
-	 * loops the 12-64 rows against both — not the reverse, so the 124 orders x 5
-	 * filters x 2 datastores this file covers stays a few seconds, not a rebuild per
-	 * row.
+	 * Builds the universe ONCE per (fixture, filter, datastore) and runs ONE
+	 * `build_args()` over it — the in-memory resolver walks the 12-64 rows against the
+	 * tree — then compares the selected id set with the oracle's, row by row, so a
+	 * mismatch names the order. The 124 orders x 5 filters x 2 datastores this file
+	 * covers stay a few seconds.
 	 *
 	 * @dataProvider meta_query_matches_oracle_provider
 	 *
 	 * @since 2.0.2
 	 */
-	public function test_meta_query_matches_the_row_semantics_oracle(
+	public function test_the_selected_ids_match_the_row_semantics_oracle(
 		int $mapped,
 		int $bare,
 		string $canonical,
@@ -512,9 +574,7 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 		$registry  = $this->registry_of( $mapped, $bare );
 		$providers = array_values( $registry->get_providers() );
 		$request   = $negate ? [ 'delivery_status_not' => $canonical ] : [ 'delivery_status' => $canonical ];
-
-		$tree = $this->built_tree( $registry, $request, $is_hpos );
-		$rows = $this->universe( $mapped, $bare );
+		$rows      = $this->universe( $mapped, $bare );
 
 		// Operator decision 26.09.2026 (YAGNI) + #928: the checked universe must hold no order
 		// with two markers. Measured against the registered providers, not against
@@ -537,24 +597,87 @@ class ShippingOrdersQueryRowSemanticsTest extends TestCase {
 			);
 		}
 
-		foreach ( $rows as $meta ) {
+		$query    = $this->query_over( $registry, $is_hpos, $rows );
+		$selected = $this->selected_ids( $query, $request, $is_hpos );
+
+		// The seam is handed exactly the registered marker keys (the id query's driver)
+		// — a scope narrowed or widened here would be invisible to the walk below.
+		$this->assertCount( 1, $query->resolved, 'exactly one id resolution per build' );
+		$this->assertSame(
+			array_map(
+				static function ( Orders_Provider $provider ): string {
+					return $provider->get_marker_meta_key();
+				},
+				$providers
+			),
+			$query->resolved[0][0]
+		);
+
+		foreach ( $rows as $index => $meta ) {
 			$expected = $this->oracle_matches( $providers, $meta, $canonical, $negate );
-			$actual   = $this->matches_query( $tree, $meta );
+			$actual   = in_array( $index + 1, $selected, true );
 
 			$this->assertSame(
 				$expected,
 				$actual,
 				sprintf(
-					"Row-semantics mismatch between the independent oracle and the built meta_query.\n"
-					. "fixture: %s\nfilter: %s\ndatastore: %s\norder meta: %s\noracle verdict: %s\nbuilt-query verdict: %s",
+					"Row-semantics mismatch between the independent oracle and the ids the query selects (#928).\n"
+					. "fixture: %s\nfilter: %s\ndatastore: %s\norder id: %d\norder meta: %s\noracle verdict: %s\nquery verdict: %s",
 					$fixture_label,
 					$filter_label,
 					$datastore_label,
+					$index + 1,
 					[] === $meta ? '(no meta at all)' : (string) json_encode( $meta ),
 					$expected ? 'MATCH' : 'no match',
-					$actual ? 'MATCH' : 'no match'
+					$actual ? 'selected' : 'not selected'
 				)
 			);
+		}
+	}
+
+	/**
+	 * The empty ⇒ sentinel rule, proven on a universe where a real filter selects
+	 * nothing: one bare carrier, `delivery_status_not=unknown` — a bare carrier is
+	 * always unknown, so no order is "not unknown", the tree is the sentinel, the seam
+	 * is never asked, and each datastore gets its own "matches nothing" form rather
+	 * than an empty `post__in`.
+	 *
+	 * @since 2.0.2
+	 */
+	public function test_a_filter_no_order_satisfies_lands_on_the_sentinel_on_both_datastores(): void {
+		foreach ( [ true, false ] as $is_hpos ) {
+			$registry = $this->registry_of( 0, 1 );
+			$rows     = $this->universe( 0, 1 );
+			$query    = $this->query_over( $registry, $is_hpos, $rows );
+
+			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status_not' => Delivery_Status::UNKNOWN ], $is_hpos ) );
+			$this->assertSame( [], $query->resolved, 'a tree that matches nothing is answered without the seam' );
+		}
+	}
+
+	/**
+	 * And the same rule when the seam IS asked and finds nothing: the resolver walks a
+	 * universe with no order in scope at all (every row without a marker), returns the
+	 * empty set, and `build_args()` must still emit the sentinel, never `post__in => []`.
+	 *
+	 * @since 2.0.2
+	 */
+	public function test_an_id_resolution_that_finds_nothing_lands_on_the_sentinel_on_both_datastores(): void {
+		foreach ( [ true, false ] as $is_hpos ) {
+			$registry = $this->registry_of( 1, 0 );
+			$rows     = array_values(
+				array_filter(
+					$this->universe( 1, 0 ),
+					static function ( array $meta ): bool {
+						return ! array_key_exists( '_m1_marker', $meta );
+					}
+				)
+			);
+			$query    = $this->query_over( $registry, $is_hpos, $rows );
+
+			$this->assertNotEmpty( $rows );
+			$this->assertSame( [], $this->selected_ids( $query, [ 'delivery_status' => Delivery_Status::UNKNOWN ], $is_hpos ) );
+			$this->assertCount( 1, $query->resolved, 'the seam WAS asked this time' );
 		}
 	}
 }
