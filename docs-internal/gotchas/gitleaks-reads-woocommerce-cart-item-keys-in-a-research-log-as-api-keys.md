@@ -5,7 +5,7 @@
 ## What happens
 
 A research note (`research/2026-09-28-710-i0-measurement/logs/*.txt`) carried raw Store API / checkout
-dumps. Each cart line has a `"key": "c20ad4d76fe97759aa27a0c99bff6710"` — WooCommerce's md5 cart-item
+dumps. Each cart line has a `"key"` holding a 32-hex value — WooCommerce's md5 cart-item
 key, not a secret. CI's `Secret scan` job flagged all eight as `generic-api-key`:
 
 ```text
