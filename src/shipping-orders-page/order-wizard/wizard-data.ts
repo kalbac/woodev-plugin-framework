@@ -74,6 +74,7 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			rate_cost: '',
 			rate_is_pickup: false,
 			rates_pending: false,
+			pickup_check: null,
 		},
 		settlementKey: '',
 		settlementRecord: null,
@@ -145,6 +146,7 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			// The rates have not come back yet; a saved point is the only sign of a pickup rate until they do.
 			rate_is_pickup: !! prefill.pickup_point,
 			rates_pending: false,
+			pickup_check: null,
 		},
 		settlementKey: '',
 		settlementRecord: null,
@@ -276,16 +278,17 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
 
 /**
  * The state minus what the wizard derives on its own (the carrier's reference price, the pickup
- * flag and the pending marker step ④ keeps, the settlement record step ② keeps): opening a step
+ * flag, the pending marker and the pickup check step ④ keeps, the settlement record step ② keeps): opening a step
  * and letting it look things up is not «the manager typed something».
  */
 function withoutDerived( data: WizardData ): unknown {
-	const { rate_cost, rate_is_pickup, rates_pending, ...rest } = data.rest;
+	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, ...rest } = data.rest;
 	const { settlementRecord, ...view } = data;
 
 	void rate_cost;
 	void rate_is_pickup;
 	void rates_pending;
+	void pickup_check;
 	void settlementRecord;
 
 	return { ...view, rest };

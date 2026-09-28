@@ -261,6 +261,26 @@ export function setPickupPoint( data: WizardData, point: { id: string; name?: st
 	};
 }
 
+/**
+ * Remembers which carrier's points route and which package weight the chosen pickup point was
+ * picked against, so step ⑤ can ask whether the point still suits the payment method chosen after
+ * it (D3). Returns the very same object when nothing changes.
+ *
+ * @param {WizardData} data     the wizard state.
+ * @param {string}     provider the carrier whose picker config holds the points route.
+ * @param {number}     weight   the package weight in grams the rates answer reported.
+ * @return {WizardData} the new state.
+ */
+export function withPickupCheck( data: WizardData, provider: string, weight: number ): WizardData {
+	const current = data.rest.pickup_check;
+
+	if ( current && current.provider === provider && current.weight === weight ) {
+		return data;
+	}
+
+	return { ...data, rest: { ...data.rest, pickup_check: { provider, weight } } };
+}
+
 /** The id of the point held in the state, or ''. */
 export function pickedPointId( rest: WizardRest ): string {
 	const point = rest.pickup_point;

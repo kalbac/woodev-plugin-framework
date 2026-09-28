@@ -885,7 +885,54 @@ class ShippingOrdersRegistryTest extends TestCase {
 			]
 		);
 
-		Functions\when( 'WC' )->justReturn( (object) [ 'countries' => $countries ] );
+		$gateways = new class() {
+			public function payment_gateways(): array {
+				return [
+					'cod'      => new class() {
+						public $enabled = 'yes';
+
+						public function get_title(): string {
+							return 'Наложенный <b>платёж</b>';
+						}
+					},
+					'bacs'     => new class() {
+						public $enabled = 'no';
+
+						public function get_title(): string {
+							return 'Банковский перевод';
+						}
+					},
+					'yookassa' => new class() {
+						public $enabled = 'yes';
+
+						public function get_title(): string {
+							return '';
+						}
+
+						public function get_method_title(): string {
+							return 'ЮKassa';
+						}
+					},
+				];
+			}
+		};
+
+		Functions\when( 'WC' )->justReturn(
+			new class( $countries, $gateways ) {
+				public $countries;
+				private $gateways;
+
+				public function __construct( $countries, $gateways ) {
+					$this->countries = $countries;
+					$this->gateways  = $gateways;
+				}
+
+				public function payment_gateways() {
+					return $this->gateways;
+				}
+			}
+		);
+		Functions\when( 'wc_tax_enabled' )->justReturn( true );
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 		Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
 		Functions\when( 'get_woocommerce_currency_symbol' )->justReturn( '&#8381;' );
@@ -894,7 +941,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
 		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
 		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
-		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-pending' => 'Ожидает оплаты', 'wc-processing' => 'В обработке' ] );
 		Functions\when( 'wc_get_orders' )->justReturn( (object) [ 'orders' => [], 'total' => 0, 'max_num_pages' => 1 ] );
 		Functions\when( 'wp_enqueue_style' )->justReturn( null );
 		Functions\when( 'wp_enqueue_script' )->justReturn( null );
@@ -921,6 +968,13 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( [ 'МОСКВА', 'МОСКОВСКАЯ ОБЛАСТЬ' ], array_keys( $data['wizard']['states']['RU'] ) );
 		// The symbol arrives decoded — it is written into React text, never into HTML.
 		$this->assertSame( [ 'code' => 'RUB', 'symbol' => '₽' ], $data['wizard']['currency'] );
+		// Step ⑤ (#971): only ENABLED gateways, keyed by id, titled by what the shop calls them
+		// (the method title when the customer-facing one is empty); statuses lose the `wc-` prefix
+		// the payload does not use; the terminal ones an edit may not target ride along.
+		$this->assertSame( [ 'cod' => 'Наложенный платёж', 'yookassa' => 'ЮKassa' ], $data['wizard']['paymentMethods'] );
+		$this->assertSame( [ 'pending' => 'Ожидает оплаты', 'processing' => 'В обработке' ], $data['wizard']['orderStatuses'] );
+		$this->assertSame( [ 'completed', 'cancelled', 'refunded', 'failed' ], $data['wizard']['finalStatuses'] );
+		$this->assertTrue( $data['wizard']['taxesEnabled'] );
 		// No carrier here has a pickup handler, so the map is empty — and stays a JSON OBJECT
 		// (`{}`, keyed by carrier id), never `[]`, which a client keyed by string would misread.
 		$this->assertStringContainsString( '"pickup":{}', $captured );

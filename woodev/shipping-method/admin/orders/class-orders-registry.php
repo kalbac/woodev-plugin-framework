@@ -1362,9 +1362,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * Empty lists when WooCommerce is not loaded — the wizard then shows plain text fields.
 		 *
+		 * Step ⑤ (#971) reads the payment methods and the order statuses the same way — inlined,
+		 * because `wc/v3/payment_gateways` demands `manage_woocommerce` too — see
+		 * {@see self::build_wizard_payment_bootstrap()}.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}}
+		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}, paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, taxesEnabled: bool}
 		 */
 		private function build_wizard_bootstrap(): array {
 			$data = [
@@ -1375,7 +1379,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 					'code'   => '',
 					'symbol' => '',
 				],
-			];
+			] + $this->build_wizard_payment_bootstrap();
 
 			$wc = function_exists( 'WC' ) ? WC() : null;
 
@@ -1399,6 +1403,58 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 					'code'   => (string) get_woocommerce_currency(),
 					'symbol' => html_entity_decode( (string) get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
 				];
+			}
+
+			return $data;
+		}
+
+		/**
+		 * What step ⑤ «Оплата» offers (#971): the shop's payment methods, its order statuses, the
+		 * statuses an edit may not move an order into, and whether taxes are on.
+		 *
+		 * Payment methods are the ENABLED gateways, keyed by gateway id — the validator accepts any
+		 * registered one, and a method the shop switched off is not something to offer a manager
+		 * (an order that already carries one is added to the list by the client). Statuses are
+		 * WooCommerce's, without the `wc-` prefix the payload does not use.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, taxesEnabled: bool}
+		 */
+		private function build_wizard_payment_bootstrap(): array {
+			$data = [
+				'paymentMethods' => [],
+				'orderStatuses'  => [],
+				'finalStatuses'  => Order_Actions::FINAL_STATUSES,
+				'taxesEnabled'   => function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled(),
+			];
+
+			if ( function_exists( 'wc_get_order_statuses' ) ) {
+				foreach ( (array) wc_get_order_statuses() as $slug => $name ) {
+					$slug = (string) $slug;
+
+					$data['orderStatuses'][ 0 === strpos( $slug, 'wc-' ) ? substr( $slug, 3 ) : $slug ] = (string) $name;
+				}
+			}
+
+			$wc = function_exists( 'WC' ) ? WC() : null;
+
+			if ( ! is_object( $wc ) || ! method_exists( $wc, 'payment_gateways' ) ) {
+				return $data;
+			}
+
+			foreach ( (array) $wc->payment_gateways()->payment_gateways() as $id => $gateway ) {
+				if ( ! is_object( $gateway ) || 'yes' !== ( $gateway->enabled ?? '' ) ) {
+					continue;
+				}
+
+				$title = method_exists( $gateway, 'get_title' ) ? (string) $gateway->get_title() : '';
+
+				if ( '' === $title && method_exists( $gateway, 'get_method_title' ) ) {
+					$title = (string) $gateway->get_method_title();
+				}
+
+				$data['paymentMethods'][ (string) $id ] = wp_strip_all_tags( '' !== $title ? $title : (string) $id );
 			}
 
 			return $data;

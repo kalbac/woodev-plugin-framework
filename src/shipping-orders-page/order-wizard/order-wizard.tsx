@@ -11,9 +11,10 @@
  * (`validation.ts`), and a 422 from the final request is routed per field to the earliest step
  * that owns an error — shown on the very control, with the server's own sentence.
  *
- * **Steps.** ①–④ are built here (④ «Доставка» is I5a, #970). ⑤ «Оплата» is I5b: it renders as a
- * marked placeholder until a host passes a real one through `renderers` — the shell is not
- * edited for it. ⑤ owns the submit button (`StepProps.submit`).
+ * **Steps.** All five are built here — ④ «Доставка» is I5a (#970), ⑤ «Оплата» I5b (#971); a host
+ * may still replace any of them through `renderers`. ⑤ owns the submit button
+ * (`StepProps.submit`); before it sends, every step is checked once more, and the first one with
+ * a problem is shown.
  *
  * **Modes.** `create` opens empty; `edit` (an `orderId`) loads the prefill first — the row
  * action that opens it is I6.
@@ -34,11 +35,11 @@ import StepAddress from './step-address';
 import StepCustomer from './step-customer';
 import StepDelivery from './step-delivery';
 import StepItems from './step-items';
-import StepPlaceholder from './step-placeholder';
+import StepPayment from './step-payment';
 import type { SetWizardData, StepRenderers } from './step-props';
 import { WIZARD_STEPS } from './types';
 import type { FieldErrors, PrefillOrder, SaveResult, WizardData, WizardStepId } from './types';
-import { errorsOfStep, firstStepWithErrors, groupServerErrors, validateStep } from './validation';
+import { errorsOfStep, firstStepWithErrors, groupServerErrors, validateAll, validateStep } from './validation';
 import { buildPayload, emptyWizardData, isDirty, prefillToData } from './wizard-data';
 
 export interface OrderWizardProps {
@@ -48,7 +49,7 @@ export interface OrderWizardProps {
 	onClose: () => void;
 	/** Called once with the saved order, right before `onClose`. */
 	onSaved: ( result: SaveResult, mode: 'create' | 'edit' ) => void;
-	/** Overrides for any step; ⑤ (I5b) has no built-in yet, so an absent one shows the placeholder. */
+	/** Overrides for any step; an absent one uses the built-in. */
 	renderers?: StepRenderers;
 }
 
@@ -71,6 +72,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const { wizard } = getWizardContext();
 	const countries = wizard.countries || {};
 	const states = wizard.states || {};
+	const statuses = wizard.orderStatuses;
 
 	const [ phase, setPhase ] = useState<Phase>( editing ? 'loading' : 'ready' );
 	const [ loadError, setLoadError ] = useState( '' );
@@ -124,12 +126,21 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 	// While a step shows problems, fixing a field takes its problem away (the client-checkable
 	// ones; a server-only one clears with the edit and comes back from the next request if real).
+	// Only an EDIT counts: a step that looks things up on arrival (④ asks the tariffs) changes
+	// derived bookkeeping in the state, and that must not wipe the server's 422 the wizard has
+	// just routed to it (`isDirty()` ignores exactly that bookkeeping).
+	const settled = useRef<WizardData>( data );
+
 	useEffect( () => {
-		if ( 0 === Object.keys( errorsOfStep( errors, stepId ) ).length ) {
+		const before = settled.current;
+
+		settled.current = data;
+
+		if ( ! isDirty( before, data ) || 0 === Object.keys( errorsOfStep( errors, stepId ) ).length ) {
 			return;
 		}
 
-		const fresh = validateStep( index, data, countries, states );
+		const fresh = validateStep( index, data, countries, states, statuses );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...fresh } ) );
 		// Only an edit re-checks; the errors themselves changing must not loop.
@@ -153,7 +164,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	};
 
 	const goNext = () => {
-		const found = validateStep( index, data, countries, states );
+		const found = validateStep( index, data, countries, states, statuses );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...found } ) );
 
@@ -165,6 +176,19 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 	const submit = async (): Promise<void> => {
 		if ( busy ) {
+			return;
+		}
+
+		// The last look: every step once more. The manager passed each on the way here, but a step's data
+		// can move behind its back (a tariff dropping out, the tariffs still being asked).
+		const problems = validateAll( data, countries, states, statuses );
+		const first = firstStepWithErrors( problems );
+
+		if ( first >= 0 ) {
+			setErrors( problems );
+			setIndex( first );
+			setSubmitError( __( 'Проверьте отмеченные поля — заказ ещё не создан.', 'woodev-plugin-framework' ) );
+
 			return;
 		}
 
@@ -193,7 +217,8 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		}
 	};
 
-	const props = { data, setData, errors, mode, order, submit, busy } as const;
+	const goToStep = ( step: WizardStepId ) => setIndex( Math.max( 0, ids.indexOf( step ) ) );
+	const props = { data, setData, errors, mode, order, submit, busy, goToStep } as const;
 	const body = ( () => {
 		const custom = renderers[ stepId ];
 
@@ -211,7 +236,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			case 'delivery':
 				return <StepDelivery { ...props } />;
 			default:
-				return <StepPlaceholder title={ labels[ stepId ] } />;
+				return <StepPayment { ...props } />;
 		}
 	} )();
 

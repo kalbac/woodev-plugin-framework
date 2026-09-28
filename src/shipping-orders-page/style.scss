@@ -1349,6 +1349,79 @@
 		border-radius: wd.$radius-sm;
 	}
 
+	// Step ⑤ (#971): the read-only summary with a «change» link per row, then the totals and the send button.
+	&__summary {
+		margin: 0 0 wd.$gap;
+	}
+
+	&__summary-row {
+		display: grid;
+		gap: wd.$gap-sm;
+		grid-template-columns: 110px minmax(0, 1fr) auto;
+		align-items: start;
+		padding: wd.$gap-sm 0;
+		border-bottom: 1px solid wd.$divider;
+
+		dt {
+			color: wd.$muted;
+		}
+
+		dd {
+			margin: 0;
+			min-width: 0;
+			overflow-wrap: anywhere;
+		}
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr) auto;
+
+			dt {
+				grid-column: 1 / -1;
+			}
+		}
+	}
+
+	&__summary-row &__muted {
+		display: block;
+	}
+
+	&__summary-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__totals {
+		display: grid;
+		gap: wd.$gap-xs;
+		margin: wd.$gap 0 0;
+		max-width: 320px;
+		margin-inline-start: auto;
+
+		div {
+			display: flex;
+			justify-content: space-between;
+			gap: wd.$gap;
+		}
+
+		dt,
+		dd {
+			margin: 0;
+		}
+	}
+
+	&__totals-sum {
+		padding-top: wd.$gap-xs;
+		border-top: 1px solid wd.$divider;
+		font-weight: 600;
+	}
+
+	&__actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: wd.$gap-lg;
+	}
+
 	&__footer {
 		display: flex;
 		flex-wrap: wrap;

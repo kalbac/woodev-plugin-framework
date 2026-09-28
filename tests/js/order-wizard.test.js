@@ -6,8 +6,9 @@
  * back, never ahead); each step checks its own fields before letting the manager on; a 422
  * from the final request lands ON THE FIELD it names, on the earliest step that owns an
  * error; closing with typed input asks first. Step ④ is the real one since I5a (#970; its own
- * behaviour is in order-wizard-delivery.test.js — here it is only walked through); ⑤ is I5b's, so
- * the shell is driven to the end through the `renderers` seam that increment will use.
+ * behaviour is in order-wizard-delivery.test.js — here it is only walked through); ⑤ is I5b's
+ * (own tests in order-wizard-payment.test.js), so the sending tests below drive the shell to
+ * the end through the `renderers` seam, with a bare button standing in for the step.
  *
  * @see src/shipping-orders-page/order-wizard/order-wizard.tsx
  */
@@ -196,7 +197,7 @@ describe( 'shell and navigation (D1: forward only via «Далее»)', () => {
 		expect( screen.getByLabelText( 'Имя' ) ).toHaveValue( 'Иван' );
 	} );
 
-	test( 'step ④ is the real delivery step and ⑤ is a marked placeholder until I5b plugs one in', async () => {
+	test( 'steps ④ and ⑤ are the real ones, and ⑤ owns the send button — there is no «Далее» on it', async () => {
 		mount();
 
 		passCustomer();
@@ -209,8 +210,8 @@ describe( 'shell and navigation (D1: forward only via «Далее»)', () => {
 
 		await passDelivery();
 
-		expect( modal().getByText( 'Оплата', { selector: 'h3' } ) ).toBeInTheDocument();
-		expect( modal().getByText( 'Этот шаг ещё в разработке — он появится в следующем обновлении.' ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Оплата и итоги', { selector: 'h3' } ) ).toBeInTheDocument();
+		expect( modal().getByRole( 'button', { name: 'Создать заказ' } ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'Далее' } ) ).toBeNull();
 	} );
 } );
@@ -573,7 +574,7 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 			meta: {},
 		} );
 		expect( request.data.pickup_point ).toBeNull();
-		expect( JSON.stringify( request.data ) ).not.toMatch( /rate_cost|rate_is_pickup|rates_pending|settlementRecord/ );
+		expect( JSON.stringify( request.data ) ).not.toMatch( /rate_cost|rate_is_pickup|rates_pending|pickup_check|settlementRecord/ );
 	} );
 
 	test( 'a 422 puts each message on the field it names and returns to the earliest step with one', async () => {
@@ -607,6 +608,30 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		next();
 		const qty = screen.getByText( 'Количество должно быть не меньше единицы.' );
 		expect( qty.closest( '.woodev-order-wizard__field' ) ).toContainElement( screen.getByLabelText( 'Кол-во' ) );
+	} );
+
+	test( 'every step is checked once more before sending: a state that went bad behind ⑤\'s back never reaches the server', async () => {
+		routeApi( { '/shipping/orders': () => Promise.resolve( { id: 1, number: '1', message: 'x' } ) } );
+		const { onSaved } = await toPayment( {
+			renderers: {
+				payment: ( { submit, setData } ) =>
+					createElement(
+						'div',
+						null,
+						createElement( 'button', { type: 'button', onClick: () => setData( ( d ) => ( { ...d, items: [] } ) ) }, 'Сломать' ),
+						createElement( 'button', { type: 'button', onClick: submit }, 'Создать' )
+					),
+			},
+		} );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сломать' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать' } ) );
+
+		// Back on the earliest step that owns a problem, with its own sentence — and no request was made.
+		expect( await modal().findByText( 'Добавьте в заказ хотя бы один товар.' ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Проверьте отмеченные поля — заказ ещё не создан.' ) ).toBeInTheDocument();
+		expect( apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => 'POST' === r.method && r.url === ORDERS_ROOT ) ).toHaveLength( 0 );
+		expect( onSaved ).not.toHaveBeenCalled();
 	} );
 
 	test( 'a non-validation failure (409: exported meanwhile) shows the server\'s sentence and stays open', async () => {

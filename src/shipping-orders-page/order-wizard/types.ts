@@ -85,6 +85,13 @@ export interface WizardRest {
 	 * package is not confirmed yet, so «Далее» waits for the answer. UI only: never sent.
 	 */
 	rates_pending: boolean;
+	/**
+	 * What step ⑤ needs to ask whether the chosen pickup point still suits the payment method the
+	 * manager picks AFTER it (D3: «⑤ re-validates»): the carrier whose picker config holds the points
+	 * route, and the package weight in grams the last rates answer reported. `null` until the rates
+	 * have answered. UI only: never sent.
+	 */
+	pickup_check: { provider: string; weight: number } | null;
 }
 
 /** The whole wizard state. */

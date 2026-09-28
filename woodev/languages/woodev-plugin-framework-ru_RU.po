@@ -4364,10 +4364,6 @@ msgid "Товары:"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
-msgid "Этот шаг ещё в разработке — он появится в следующем обновлении."
-msgstr ""
-
-#: assets/build/shipping-orders-page/index.js:2
 msgid "Укажите город или населённый пункт."
 msgstr ""
 
@@ -4477,4 +4473,74 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Дождитесь расчёта тарифов."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Оплата и итоги"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Изменить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя не указано"
+msgstr ""
+
+#. translators: %s: the registered customer's name / email.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Зарегистрированный покупатель: %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Гость; при создании заказа заведём аккаунт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Гость"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не указан"
+msgstr ""
+
+#. translators: 1: product name, 2: quantity, 3: unit price.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "%1$s — %2$s шт. × %3$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не выбрана"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Способ оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce."
+msgstr ""
+
+#. translators: 1: the payment method's name, 2: the carrier's own reason (may be empty).
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Выбранный пункт выдачи не подходит для способа оплаты «%1$s». %2$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбрать другой пункт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Налоги WooCommerce добавит сам при сохранении заказа — итог в заказе может быть больше."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Пункт выдачи не найден — выберите другой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Проверьте отмеченные поля — заказ ещё не создан."
 msgstr ""

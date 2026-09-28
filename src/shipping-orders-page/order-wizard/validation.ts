@@ -198,12 +198,32 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 	return errors;
 }
 
-/** Runs the check of step `index`. Step ⑤ is I5b's: nothing to check yet. */
+/**
+ * ⑤ Оплата. The payment method and the status are picked from lists the server built from the
+ * same sources the validator checks (`Order_Payload_Validator::check_payment_method()` /
+ * `check_status()`), so a manager cannot pick a wrong one — this only catches a value the
+ * lists do not know (a prefilled status of a plugin that has since gone). An empty list means the
+ * server sent none (an older bootstrap): nothing to compare with, the server has the last word.
+ */
+export function validatePayment( data: WizardData, statuses: Record<string, string> | undefined ): FieldErrors {
+	const errors: FieldErrors = {};
+	const known = Object.keys( statuses || {} );
+	const status = data.rest.status.replace( /^wc-/, '' );
+
+	if ( '' !== status && known.length > 0 && ! known.includes( status ) ) {
+		add( errors, 'status', __( 'Такого статуса заказа нет.', 'woodev-plugin-framework' ) );
+	}
+
+	return errors;
+}
+
+/** Runs the check of step `index`. */
 export function validateStep(
 	index: number,
 	data: WizardData,
 	countries: Record<string, string>,
-	states: Record<string, Record<string, string>>
+	states: Record<string, Record<string, string>>,
+	statuses?: Record<string, string>
 ): FieldErrors {
 	switch ( WIZARD_STEPS[ index ] ) {
 		case 'customer':
@@ -214,7 +234,30 @@ export function validateStep(
 			return validateItems( data );
 		case 'delivery':
 			return validateDelivery( data );
+		case 'payment':
+			return validatePayment( data, statuses );
 		default:
 			return {};
 	}
+}
+
+/**
+ * Every step's check, merged — the last look before the order is sent. The manager can only get
+ * to ⑤ through «Далее», which checked each step on the way, but a step's data can change
+ * behind its back (the rates answering late, a tariff dropping out), and one 422 round trip is
+ * a poor way to learn it.
+ */
+export function validateAll(
+	data: WizardData,
+	countries: Record<string, string>,
+	states: Record<string, Record<string, string>>,
+	statuses?: Record<string, string>
+): FieldErrors {
+	const all: FieldErrors = {};
+
+	WIZARD_STEPS.forEach( ( _step, index ) => {
+		Object.assign( all, validateStep( index, data, countries, states, statuses ) );
+	} );
+
+	return all;
 }

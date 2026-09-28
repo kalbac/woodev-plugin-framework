@@ -49,6 +49,7 @@ import {
 	resetDeliveryCost,
 	setDeliveryCost,
 	setPickupPoint,
+	withPickupCheck,
 } from './delivery-state';
 import { FieldErrorList, TextField, errorsFor } from './fields';
 import PickupMap from './pickup-map';
@@ -200,6 +201,18 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 	const canDrawPicker = isPickupRuntimeAvailable( pickupConfig );
 	const pointId = pickedPointId( rest );
 	const noRates = 'ready' === rates.phase && !! response && response.needs_shipping && response.providers.every( ( group ) => 0 === group.rates.length );
+
+	// Step ⑤ asks the points route about the chosen point once a payment method is picked; it needs to
+	// know whose route and which weight this package had (D3).
+	const checkProvider = found ? found.group.id : '';
+	const checkWeight = response ? response.weight : 0;
+
+	useEffect( () => {
+		if ( '' !== checkProvider ) {
+			setData( ( d ) => withPickupCheck( d, checkProvider, checkWeight ) );
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ checkProvider, checkWeight ] );
 
 	const onPickPoint = ( point: PickupPoint ) =>
 		setData( ( d ) =>

@@ -21,14 +21,16 @@ export interface StepProps {
 	order: PrefillOrder | null;
 	/**
 	 * Sends the order (`POST` / `PUT`). A 422 comes back as per-field errors and moves the
-	 * wizard to the earliest step that has one. The buttons that call it are steps ⑤'s (I5b).
+	 * wizard to the earliest step that has one. The button that calls it is step ⑤'s.
 	 */
 	submit: () => Promise<void>;
 	/** A request is in flight. */
 	busy: boolean;
+	/** Jumps back to a step already passed — the summary's «Изменить» links (⑤). */
+	goToStep: ( step: WizardStepId ) => void;
 }
 
-/** Renders one step's body. Step ⑤ is plugged in through this seam by I5b (④ is built in since I5a). */
+/** Renders one step's body — a host may replace any of the five through {@link StepRenderers}. */
 export type StepRenderer = ( props: StepProps ) => ReactNode;
 
 /** The renderers a host may override; anything absent uses the built-in step. */

@@ -133,6 +133,52 @@ export function fetchRates( payload: Record<string, unknown> ): Promise<RatesRes
 	} );
 }
 
+/** What the points route says about ONE point for a given weight and payment method. */
+export interface PointVerdict {
+	allowed: boolean;
+	/** The route's own sentence (`esc_html()`-escaped), '' when it gave none. */
+	reason: string;
+}
+
+/**
+ * `GET {points root}/{id}?weight=…&payment_method=…` — the admin point-detail route
+ * (`Pickup_Controller::handle_admin_point_request()`, I2b), which re-runs the constraint checker
+ * over the full record. Step ⑤ asks it once the payment method is chosen, because the point was
+ * picked before it (D3). Resolves with `null` when the route gave no verdict (a failure, or a
+ * checker that stayed silent) — the constraint data is permissive by omission, so an unknown answer
+ * never blocks the order; a 404 means the point is gone and reads as «not allowed».
+ *
+ * @param {string} pointsRoot     the carrier's points route (`wizard.pickup[provider].restRoot`).
+ * @param {string} pointId        the chosen point.
+ * @param {number} weight         the package weight in grams.
+ * @param {string} paymentMethod  the gateway id.
+ * @return {Promise<PointVerdict|null>} the verdict.
+ */
+export async function checkPickupPoint( pointsRoot: string, pointId: string, weight: number, paymentMethod: string ): Promise<PointVerdict | null> {
+	const query = new URLSearchParams( { weight: String( Math.max( 0, Math.round( weight ) ) ), payment_method: paymentMethod } );
+
+	try {
+		const point = await apiFetch<{ selectable?: { allowed?: unknown; reason?: unknown } }>( {
+			url: `${ pointsRoot.replace( /\/+$/, '' ) }/${ encodeURIComponent( pointId ) }?${ query.toString() }`,
+			method: 'GET',
+			headers: headers(),
+		} );
+		const verdict = point && point.selectable;
+
+		if ( ! verdict || 'boolean' !== typeof verdict.allowed ) {
+			return null;
+		}
+
+		return { allowed: verdict.allowed, reason: 'string' === typeof verdict.reason ? verdict.reason : '' };
+	} catch ( raw ) {
+		const error = toRequestError( raw );
+
+		return 404 === error.status
+			? { allowed: false, reason: __( 'Пункт выдачи не найден — выберите другой.', 'woodev-plugin-framework' ) }
+			: null;
+	}
+}
+
 /** One row of a search dropdown. */
 export interface SearchOption {
 	id: string;

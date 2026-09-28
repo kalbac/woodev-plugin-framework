@@ -203,6 +203,18 @@ export interface WizardBootstrap {
 	 * is the storefront's own picker config, read by `order-wizard/pickup-session.ts`.
 	 */
 	pickup?: Record<string, Record<string, unknown>>;
+	/**
+	 * The shop's ENABLED payment methods, gateway id → title (`Orders_Registry::build_wizard_payment_bootstrap()`,
+	 * #971). Inlined because `wc/v3/payment_gateways` demands `manage_woocommerce`. An empty PHP array
+	 * arrives as `[]`, so read it through `Object.entries`, never assume an object.
+	 */
+	paymentMethods?: Record<string, string>;
+	/** WooCommerce order statuses, slug WITHOUT the `wc-` prefix → name. */
+	orderStatuses?: Record<string, string>;
+	/** Statuses an edit may not move an order into (`Order_Actions::FINAL_STATUSES`). */
+	finalStatuses?: string[];
+	/** Whether WooCommerce taxes are on — the totals the manager sees are then before tax. */
+	taxesEnabled?: boolean;
 }
 
 /** `window.woodevShippingOrders`, inlined by `Orders_Registry::enqueue_assets()`. */
