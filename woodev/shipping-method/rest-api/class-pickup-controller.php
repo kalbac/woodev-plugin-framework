@@ -53,6 +53,7 @@ namespace Woodev\Framework\Shipping\Rest_Api;
 use Woodev\Framework\Http\Rest_Rate_Limit_Trait;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
+use Woodev\Framework\Shipping\Pickup\Location_Aware_Point_Source;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
@@ -910,6 +911,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				],
 			];
 
+			/*
+			 * The destination record, a `Location_Record::to_array()` shape, on BOTH routes
+			 * (spec D3): the list and the detail resolve the carrier identity from the same
+			 * explicit record, so a source whose detail lookup depends on the destination
+			 * cannot disagree with the list. No nested schema, for the reason
+			 * `/location/select` gives: the contract lives in Location_Record::from_array(),
+			 * and a second copy here would only drift. Optional — a carrier that addresses by
+			 * bbox needs none.
+			 */
+			$location_arg = [
+				'type'              => 'object',
+				'validate_callback' => 'rest_validate_request_arg',
+			];
+
 			register_rest_route(
 				'woodev/v1',
 				$base,
@@ -938,18 +953,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 									'validate_callback' => 'rest_validate_request_arg',
 									'sanitize_callback' => 'sanitize_text_field',
 								],
-
-								/*
-								 * The destination record, a `Location_Record::to_array()` shape. No
-								 * nested schema, for the reason `/location/select` gives: the
-								 * contract lives in Location_Record::from_array(), and a second copy
-								 * here would only drift. Optional — a carrier that addresses by
-								 * bbox needs none.
-								 */
-								'location' => [
-									'type'              => 'object',
-									'validate_callback' => 'rest_validate_request_arg',
-								],
+								'location' => $location_arg,
 							]
 						),
 					],
@@ -967,11 +971,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 						'args'                => array_merge(
 							$context_args,
 							[
-								'id' => [
+								'id'       => [
 									'type'              => 'string',
 									'required'          => true,
 									'validate_callback' => 'rest_validate_request_arg',
 								],
+								'location' => $location_arg,
 							]
 						),
 					],
@@ -1043,6 +1048,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		/**
 		 * Handles an admin single-point detail request (#959).
 		 *
+		 * Takes the same explicit `location` the list route does (spec D3), validated the
+		 * same way — a malformed record is a `400` before the carrier is asked anything.
+		 *
 		 * @internal
 		 *
 		 * @since 2.0.2
@@ -1053,6 +1061,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 */
 		public function handle_admin_point_request( \WP_REST_Request $request ) {
 
+			$record = $this->parse_location_param( $request->get_param( 'location' ) );
+
+			if ( $record instanceof \WP_Error ) {
+				return $record;
+			}
+
 			$id = $this->cap_length(
 				(string) wc_clean( wp_unslash( $request->get_param( 'id' ) ) ),
 				self::MAX_PARAM_LENGTH
@@ -1062,7 +1076,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				$point = $this->get_point_data_for(
 					$id,
 					$this->explicit_weight( $request ),
-					$this->explicit_payment_method( $request )
+					$this->explicit_payment_method( $request ),
+					$record
 				);
 			} catch ( \Woodev_API_Exception $e ) {
 				$this->log_carrier_failure( $e, 'admin point details fetch' );
@@ -1262,19 +1277,34 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 * given, so a point the list showed as selectable cannot come back refused (or the
 		 * other way round) from its own detail.
 		 *
+		 * The destination record reaches the source too (spec D3): when the source
+		 * implements {@see Location_Aware_Point_Source} and the location resolver answered
+		 * for `$record`, the detail lookup is {@see Location_Aware_Point_Source::fetch_details_for()}
+		 * with the SAME record and carrier identity the list route's {@see Point_Query}
+		 * carries. With no record, no resolver, an unusable answer (the list route's
+		 * fail-open) or a source that does not opt in, it is the plain
+		 * {@see Point_Source::fetch_details()}.
+		 *
 		 * @since 2.0.2
 		 *
-		 * @param string $id             carrier point id.
-		 * @param int    $cart_weight    order weight in grams.
-		 * @param string $payment_method chosen gateway id, `''` when not chosen yet.
+		 * @param string               $id             carrier point id.
+		 * @param int                  $cart_weight    order weight in grams.
+		 * @param string               $payment_method chosen gateway id, `''` when not chosen yet.
+		 * @param Location_Record|null $record         destination record, or `null` when there is none.
 		 *
 		 * @return array<string, mixed>|null the escaped point payload, or null when unknown.
 		 *
 		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
 		 */
-		public function get_point_data_for( string $id, int $cart_weight, string $payment_method ): ?array {
+		public function get_point_data_for( string $id, int $cart_weight, string $payment_method, ?Location_Record $record ): ?array {
 
-			$point = $this->source->fetch_details( $id );
+			$context = $this->resolve_explicit_context( $record );
+
+			if ( null !== $context && $this->source instanceof Location_Aware_Point_Source ) {
+				$point = $this->source->fetch_details_for( $id, $context['record'], $context['resolved_identity'] );
+			} else {
+				$point = $this->source->fetch_details( $id );
+			}
 
 			if ( null === $point ) {
 				return null;
@@ -1332,6 +1362,39 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			}
 
 			return $this->apply_location_context( $query, ( $this->location_resolver )( $record ) );
+		}
+
+		/**
+		 * Asks the location resolver for the layer context of an EXPLICIT record (#959) — the
+		 * detail route's counterpart of {@see self::attach_explicit_location()}, which
+		 * applies the same answer to a {@see Point_Query}.
+		 *
+		 * Same fail-open: `null` when no record was given, when the plugin wired no
+		 * {@see self::$location_resolver}, or when the resolver answers anything but the
+		 * documented `{ record, resolved_identity }` shape.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record|null $record the destination record the caller named.
+		 *
+		 * @return array{record: Location_Record, resolved_identity: mixed}|null
+		 */
+		private function resolve_explicit_context( ?Location_Record $record ): ?array {
+
+			if ( null === $record || null === $this->location_resolver ) {
+				return null;
+			}
+
+			$context = ( $this->location_resolver )( $record );
+
+			if ( ! is_array( $context ) || ! ( $context['record'] ?? null ) instanceof Location_Record ) {
+				return null;
+			}
+
+			return [
+				'record'            => $context['record'],
+				'resolved_identity' => $context['resolved_identity'] ?? null,
+			];
 		}
 
 		/**

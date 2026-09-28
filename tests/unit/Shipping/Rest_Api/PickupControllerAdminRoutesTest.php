@@ -17,6 +17,7 @@ use Brain\Monkey\Functions;
 use WP_Error;
 use WP_REST_Request;
 use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Pickup\Location_Aware_Point_Source;
 use Woodev\Framework\Shipping\Pickup\Pickup_Point;
 use Woodev\Framework\Shipping\Pickup\Point_Query;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
@@ -30,6 +31,7 @@ require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-loc
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-pickup-point.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-point-query.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-point-source.php';
+require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/interface-location-aware-point-source.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-selection-result.php';
 
@@ -70,6 +72,58 @@ final class Pickup_Admin_Test_Source implements Point_Source {
 
 	public function fetch_details( string $point_id ): ?Pickup_Point {
 		return ( $this->details_provider )( $point_id );
+	}
+}
+
+/**
+ * A {@see Location_Aware_Point_Source} double whose points DEPEND on the destination: the
+ * weight limit is `1000` g when the carrier identity is `strict`, unlimited otherwise.
+ * The list and the detail build the point through the SAME rule, from the identity each
+ * one is handed.
+ */
+final class Pickup_Admin_Test_Location_Source implements Location_Aware_Point_Source {
+
+	/** @var array<int, string> what fetch_details_for() was called with, as `id|key|identity`. */
+	public array $detail_calls = [];
+
+	/** @var int how many times the plain fetch_details() ran. */
+	public int $plain_detail_calls = 0;
+
+	public function get_strategy(): string {
+		return Point_Source::STRATEGY_BULK;
+	}
+
+	public function fetch_points( Point_Query $query ): array {
+		return [ $this->point_for( $query->get_resolved_identity() ) ];
+	}
+
+	public function fetch_details( string $point_id ): ?Pickup_Point {
+		++$this->plain_detail_calls;
+
+		return $this->point_for( null );
+	}
+
+	public function fetch_details_for( string $point_id, Location_Record $record, $resolved_identity ): ?Pickup_Point {
+		$this->detail_calls[] = $point_id . '|' . $record->key() . '|' . (string) $resolved_identity;
+
+		return $this->point_for( $resolved_identity );
+	}
+
+	/**
+	 * @param mixed $identity
+	 */
+	private function point_for( $identity ): Pickup_Point {
+		return Pickup_Point::from_array(
+			[
+				'id'         => 'P1',
+				'name'       => 'Точка',
+				'lat'        => 55.75,
+				'lng'        => 37.61,
+				'address'    => 'Москва',
+				'type'       => [ 'code' => 'PVZ', 'label' => 'ПВЗ' ],
+				'max_weight' => 'strict' === $identity ? 1000 : 0,
+			]
+		);
 	}
 }
 
@@ -247,6 +301,10 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 		$list_args = $routes['/shipping/orders/pickup/test-plugin/points']['endpoints'][0]['args'];
 		$this->assertArrayHasKey( 'location', $list_args );
 		$this->assertSame( 'object', $list_args['location']['type'] );
+
+		$detail_args = $routes['/shipping/orders/pickup/test-plugin/points/(?P<id>[^/]+)']['endpoints'][0]['args'];
+		$this->assertArrayHasKey( 'location', $detail_args, 'spec D3: the detail takes the explicit record too' );
+		$this->assertSame( $list_args['location'], $detail_args['location'], 'one schema for both routes' );
 	}
 
 	// ---- the explicit context reaches the verdict; the public callables are never read ----
@@ -494,6 +552,126 @@ final class PickupControllerAdminRoutesTest extends TestCase {
 				],
 			],
 		];
+	}
+
+	// ---- the explicit location record on the DETAIL route (spec D3) ----
+
+	private function strict_resolver(): callable {
+		return static fn( Location_Record $given ) => [ 'record' => $given, 'resolved_identity' => 'strict' ];
+	}
+
+	public function test_the_detail_hands_a_location_aware_source_the_record_and_its_identity(): void {
+		$record = $this->location_record();
+		$source = new Pickup_Admin_Test_Location_Source();
+
+		$response = $this->controller( $source, $this->strict_resolver() )->handle_admin_point_request(
+			new WP_REST_Request( [ 'id' => 'P1', 'location' => $record->to_array() ] )
+		);
+
+		$this->assertSame( [ 'P1|dadata:fias-1|strict' ], $source->detail_calls );
+		$this->assertSame( 0, $source->plain_detail_calls );
+		$this->assertIsArray( $response );
+	}
+
+	public function test_the_detail_and_list_agree_for_a_location_dependent_source(): void {
+		$location = $this->location_record()->to_array();
+		$source   = new Pickup_Admin_Test_Location_Source();
+
+		$with_resolver = $this->controller( $source, $this->strict_resolver() );
+		$without       = $this->controller( $source );
+
+		foreach ( [ [ 2000, false ], [ 500, true ] ] as [ $weight, $expected ] ) {
+			$args = [ 'weight' => $weight, 'payment_method' => 'bacs' ];
+
+			$list   = $with_resolver->handle_admin_points_request( new WP_REST_Request( [ 'locality' => 'dadata:fias-1', 'location' => $location ] + $args ) );
+			$detail = $with_resolver->handle_admin_point_request( new WP_REST_Request( [ 'id' => 'P1', 'location' => $location ] + $args ) );
+
+			$this->assertSame( $expected, $list['points'][0]['selectable']['allowed'], "list, weight $weight" );
+			$this->assertSame( $list['points'][0]['selectable'], $detail['selectable'], "list and detail must agree with a location, weight $weight" );
+		}
+
+		// Without a record both fall back to the same location-free verdict — 2000 g passes.
+		$args   = [ 'weight' => 2000, 'payment_method' => 'bacs' ];
+		$list   = $without->handle_admin_points_request( new WP_REST_Request( [ 'locality' => 'dadata:fias-1' ] + $args ) );
+		$detail = $without->handle_admin_point_request( new WP_REST_Request( [ 'id' => 'P1' ] + $args ) );
+
+		$this->assertSame( $list['points'][0]['selectable'], $detail['selectable'], 'list and detail must agree without a location' );
+	}
+
+	public function test_the_detail_without_a_record_uses_the_plain_lookup_and_never_asks_the_resolver(): void {
+		$source = new Pickup_Admin_Test_Location_Source();
+
+		$this->controller(
+			$source,
+			static function () {
+				throw new \LogicException( 'No record was sent, so nothing to resolve.' );
+			}
+		)->handle_admin_point_request( new WP_REST_Request( [ 'id' => 'P1' ] ) );
+
+		$this->assertSame( 1, $source->plain_detail_calls );
+		$this->assertSame( [], $source->detail_calls );
+	}
+
+	public function test_the_detail_falls_back_to_the_plain_lookup_when_the_resolver_is_missing_or_unusable(): void {
+		$location = $this->location_record()->to_array();
+
+		foreach ( [ 'no resolver' => null, 'answers null' => static fn() => null, 'answers junk' => static fn() => 'x' ] as $label => $resolver ) {
+			$source = new Pickup_Admin_Test_Location_Source();
+
+			$this->controller( $source, $resolver )->handle_admin_point_request(
+				new WP_REST_Request( [ 'id' => 'P1', 'location' => $location ] )
+			);
+
+			$this->assertSame( 1, $source->plain_detail_calls, $label );
+			$this->assertSame( [], $source->detail_calls, $label );
+		}
+	}
+
+	public function test_a_plain_source_still_answers_the_detail_when_a_record_is_sent(): void {
+		$asked = [];
+
+		$source = new Pickup_Admin_Test_Source(
+			static fn() => [],
+			static function ( string $id ) use ( &$asked ) {
+				$asked[] = $id;
+				return Pickup_Point::from_array(
+					[
+						'id'      => $id,
+						'name'    => 'Точка',
+						'lat'     => 55.75,
+						'lng'     => 37.61,
+						'address' => 'Москва',
+						'type'    => [ 'code' => 'PVZ', 'label' => 'ПВЗ' ],
+					]
+				);
+			}
+		);
+
+		$response = $this->controller( $source, $this->strict_resolver() )->handle_admin_point_request(
+			new WP_REST_Request( [ 'id' => 'P1', 'location' => $this->location_record()->to_array() ] )
+		);
+
+		$this->assertSame( [ 'P1' ], $asked );
+		$this->assertIsArray( $response );
+	}
+
+	/**
+	 * @dataProvider provide_invalid_locations
+	 *
+	 * @param mixed $location raw request value.
+	 */
+	public function test_an_invalid_location_on_the_detail_is_a_400_and_never_reaches_the_carrier( $location ): void {
+		$source = new Pickup_Admin_Test_Location_Source();
+
+		$response = $this->controller( $source, $this->strict_resolver() )->handle_admin_point_request(
+			new WP_REST_Request( [ 'id' => 'P1', 'location' => $location ] )
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'woodev_location_invalid_record', $response->get_error_code() );
+		$this->assertSame( 400, $response->get_error_data()['status'] );
+		$this->assertSame( [], $source->detail_calls );
+		$this->assertSame( 0, $source->plain_detail_calls );
 	}
 
 	// ---- shape, strategy guarantee, errors ----
