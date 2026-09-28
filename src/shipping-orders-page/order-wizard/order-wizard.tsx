@@ -69,6 +69,13 @@ function stepLabels(): Record<WizardStepId, string> {
 	};
 }
 
+/** What a typed-code check is made of (the model is `step-payment.tsx`'s `checkKey`): the route, the code, the tariff, the weight, the method, the destination. */
+function typedPointCheckKey( data: WizardData, restRoot: string, pointId: string ): string {
+	const { rest } = data;
+
+	return JSON.stringify( [ restRoot, pointId, rest.shipping_line?.rate_id ?? '', rest.pickup_check?.provider ?? '', rest.pickup_check?.weight ?? null, rest.payment_method, data.settlementRecord ] );
+}
+
 type Phase = 'loading' | 'ready' | 'failed';
 
 export default function OrderWizard( { orderId = null, onClose, onSaved, renderers = {} }: OrderWizardProps ) {
@@ -92,6 +99,10 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const [ submitError, setSubmitError ] = useState( '' );
 	const [ confirmingClose, setConfirmingClose ] = useState( false );
 	const saved = useRef( false );
+	// The latest render's state — what an `await` in `goNext` finds when it resumes (its closure holds the state it started with).
+	const latest = useRef( { data, index } );
+
+	latest.current = { data, index };
 
 	// Edit: the prefill is the wizard's starting — and «unchanged» — state.
 	useEffect( () => {
@@ -187,11 +198,22 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			const pointId = pickedPointId( data.rest );
 
 			if ( data.rest.rate_is_pickup && '' !== pointId && data.rest.pickup_check && config?.restRoot && ! isPickupRuntimeAvailable( config ) ) {
+				const asked = typedPointCheckKey( data, config.restRoot, pointId );
+
 				setBusy( true );
 
 				const verdict = await checkPickupPoint( config.restRoot, pointId, data.rest.pickup_check.weight, data.rest.payment_method, data.settlementRecord );
 
 				setBusy( false );
+
+				// The code input stays editable while the check runs. An answer about a code (or a carrier, tariff, method, destination)
+				// that is no longer the one on screen says nothing about what is there now: stay on ④, so «Далее» asks again about the
+				// current one — never advance on the old answer, and never show its refusal against the new code.
+				const now = latest.current;
+
+				if ( now.index !== index || asked !== typedPointCheckKey( now.data, config.restRoot, pickedPointId( now.data.rest ) ) ) {
+					return;
+				}
 
 				if ( verdict && ! verdict.allowed ) {
 					const reason = verdict.reason.trim() || __( 'Этот пункт выдачи не подходит для заказа — проверьте код.', 'woodev-plugin-framework' );

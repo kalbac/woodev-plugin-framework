@@ -12,7 +12,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { createElement, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import OrderWizard from '../../src/shipping-orders-page/order-wizard/order-wizard';
@@ -658,6 +658,41 @@ describe( 'a point code typed by hand is checked before «Далее» leaves �
 
 		await screen.findByRole( 'button', { name: 'Создать заказ' } );
 		expect( pointCalls()[ 1 ].url ).toContain( '/GOOD?weight=1000' );
+	} );
+
+	test( 'a code changed while its check is in flight: the old answer neither advances nor blocks, and «Далее» asks about the new one', async () => {
+		let releaseGood;
+
+		await walkToDelivery( ( request ) => {
+			if ( request.url.includes( '/GOOD?' ) ) {
+				return new Promise( ( resolve ) => {
+					releaseGood = () => resolve( { id: 'GOOD', selectable: { allowed: true } } );
+				} );
+			}
+
+			return Promise.reject( { code: 'woodev_pickup_point_not_found', message: 'x', data: { status: 404 } } );
+		} );
+
+		type( 'Код пункта выдачи', 'GOOD' );
+		next();
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
+
+		// The input is still editable while the answer is on its way.
+		type( 'Код пункта выдачи', 'BAD' );
+		await act( async () => {
+			releaseGood();
+		} );
+
+		// The answer was about GOOD: ④ stays, BAD is not accepted, and the old answer put no error on BAD.
+		expect( screen.getByLabelText( 'Код пункта выдачи' ) ).toHaveValue( 'BAD' );
+		expect( screen.queryByRole( 'button', { name: 'Создать заказ' } ) ).toBeNull();
+		expect( screen.queryByText( 'Пункт выдачи не найден — выберите другой.' ) ).toBeNull();
+
+		next();
+
+		expect( await screen.findByText( 'Пункт выдачи не найден — выберите другой.' ) ).toBeInTheDocument();
+		expect( pointCalls()[ 1 ].url ).toContain( '/BAD?weight=1000' );
+		expect( screen.queryByRole( 'button', { name: 'Создать заказ' } ) ).toBeNull();
 	} );
 
 	test( 'a check that fails (network) never holds the manager on ④', async () => {
