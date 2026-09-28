@@ -1,0 +1,264 @@
+{
+ "ctx": "cli",
+ "context": {
+  "REST_REQUEST": false,
+  "REST_API_REQUEST": false,
+  "XMLRPC_REQUEST": false,
+  "DOING_AJAX": false,
+  "is_admin()": false,
+  "WC_is_rest_api_request": false,
+  "current_user_id": 0,
+  "can_edit_shop_orders": false,
+  "WC()->session": "WC_Session_Handler",
+  "WC()->cart": "WC_Cart",
+  "WC()->customer": "WC_Customer",
+  "did_action(cart_loaded_from_session)": 1
+ },
+ "providers": {
+  "realistic": [
+   "woodev_realistic_shipping",
+   "woodev_realistic_pickup_shipping"
+  ],
+  "test_shipping": [
+   "woodev_test_shipping"
+  ]
+ },
+ "destinations": {
+  "RU Moscow (state code МОСКВА)": {
+   "zone": "1 Russia",
+   "methods_enabled_only": [
+    "free_shipping:1 WC_Shipping_Free_Shipping",
+    "woodev_test_shipping:3 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_pickup_shipping:5 Woodev_Realistic_Pickup_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 3,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:3",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:3": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_pickup_shipping:5",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_pickup_shipping:5": {
+       "label": "Woodev Realistic Pickup Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "free_shipping:1",
+    "woodev_test_shipping:3",
+    "woodev_realistic_pickup_shipping:5"
+   ]
+  },
+  "RU SPb (state code)": {
+   "zone": "1 Russia",
+   "methods_enabled_only": [
+    "free_shipping:1 WC_Shipping_Free_Shipping",
+    "woodev_test_shipping:3 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_pickup_shipping:5 Woodev_Realistic_Pickup_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 3,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:3",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:3": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_pickup_shipping:5",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_pickup_shipping:5": {
+       "label": "Woodev Realistic Pickup Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "free_shipping:1",
+    "woodev_test_shipping:3",
+    "woodev_realistic_pickup_shipping:5"
+   ]
+  },
+  "RU state EMPTY, city Kazan": {
+   "zone": "1 Russia",
+   "methods_enabled_only": [
+    "free_shipping:1 WC_Shipping_Free_Shipping",
+    "woodev_test_shipping:3 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_pickup_shipping:5 Woodev_Realistic_Pickup_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 3,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:3",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:3": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_pickup_shipping:5",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_pickup_shipping:5": {
+       "label": "Woodev Realistic Pickup Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "free_shipping:1",
+    "woodev_test_shipping:3",
+    "woodev_realistic_pickup_shipping:5"
+   ]
+  },
+  "RU state LABEL \"Москва\"": {
+   "zone": "1 Russia",
+   "methods_enabled_only": [
+    "free_shipping:1 WC_Shipping_Free_Shipping",
+    "woodev_test_shipping:3 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_pickup_shipping:5 Woodev_Realistic_Pickup_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 3,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:3",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:3": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_pickup_shipping:5",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_pickup_shipping:5": {
+       "label": "Woodev Realistic Pickup Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "free_shipping:1",
+    "woodev_test_shipping:3",
+    "woodev_realistic_pickup_shipping:5"
+   ]
+  },
+  "KZ Almaty": {
+   "zone": "0 Locations not covered by your other zones",
+   "methods_enabled_only": [
+    "woodev_test_shipping:2 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_shipping:6 Woodev_Realistic_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 2,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:2",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:2": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_shipping:6",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_shipping:6": {
+       "label": "Woodev Realistic Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "woodev_test_shipping:2",
+    "woodev_realistic_shipping:6"
+   ]
+  },
+  "US CA": {
+   "zone": "0 Locations not covered by your other zones",
+   "methods_enabled_only": [
+    "woodev_test_shipping:2 Woodev_Test_Shipping_Method [provider=test_shipping]",
+    "woodev_realistic_shipping:6 Woodev_Realistic_Shipping_Method [provider=realistic]"
+   ],
+   "methods_all_count": 2,
+   "framework_methods": [
+    {
+     "method": "woodev_test_shipping:2",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_test_shipping:2": {
+       "label": "Woodev Test Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    },
+    {
+     "method": "woodev_realistic_shipping:6",
+     "should_send_cart_api_request()": true,
+     "is_available": true,
+     "get_rates_for_package": {
+      "woodev_realistic_shipping:6": {
+       "label": "Woodev Realistic Shipping",
+       "cost": "0",
+       "meta_keys": []
+      }
+     }
+    }
+   ],
+   "calculate_shipping_for_package": [
+    "woodev_test_shipping:2",
+    "woodev_realistic_shipping:6"
+   ]
+  }
+ }
+}

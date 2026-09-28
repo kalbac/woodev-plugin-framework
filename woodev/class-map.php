@@ -78,6 +78,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Handler' => 'woodev/shipping-method/order/abstract-shipment-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Tracking_Handler' => 'woodev/shipping-method/order/abstract-tracking-handler.php',
 	'Woodev\\Framework\\Shipping\\Order\\Abstract_Webhook_Handler' => 'woodev/shipping-method/order/abstract-webhook-handler.php',
+	'Woodev\\Framework\\Shipping\\Order\\Action_Result' => 'woodev/shipping-method/order/class-action-result.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Status' => 'woodev/shipping-method/order/class-delivery-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Delivery_Sync_Status' => 'woodev/shipping-method/order/class-delivery-sync-status.php',
 	'Woodev\\Framework\\Shipping\\Order\\Order_Marker' => 'woodev/shipping-method/order/class-order-marker.php',

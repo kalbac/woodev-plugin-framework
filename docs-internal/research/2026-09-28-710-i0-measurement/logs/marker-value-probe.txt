@@ -1,0 +1,15 @@
+# Marker VALUE semantics — measured on the rig (28.09.2026, HPOS, WC 11.1.0, PHP 8.1.34)
+#
+# For each value: a fresh order got `_woodev_test_shipping_marker` = value, was saved, the object cache was
+# flushed, the order was re-read, and `Orders_Registry::resolve_provider_for_order()` was called with an error
+# handler capturing warnings. `meta_exists()` is what the SP-10 list query's EXISTS clause and
+# `report_multiple_markers()` use (PRESENCE); `resolve_provider_for_order()` uses `'' !== (string) value`.
+# Orders were deleted afterwards.
+
+'1'                        meta_exists=true raw='1'  resolve_provider=test_shipping warnings=[]
+true (Russian Post)        meta_exists=true raw='1'  resolve_provider=test_shipping warnings=[]
+'' (empty string)          meta_exists=true raw=''   resolve_provider=NULL          warnings=[]
+false                      meta_exists=true raw=''   resolve_provider=NULL          warnings=[]
+'0'                        meta_exists=true raw='0'  resolve_provider=test_shipping warnings=[]
+array (edostavka v1 shape) meta_exists=true raw=array(0 => [tariff_data => [...], method_instance => ...])
+                                                     resolve_provider=test_shipping warnings=["Array to string conversion"]

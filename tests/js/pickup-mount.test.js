@@ -7069,6 +7069,26 @@ test( 'the announcement arrives BEFORE the write — a listener still sees the O
 	expect( console ).toHaveWarned();
 } );
 
+test( 'a listener that vetoes billing_city on the announcement keeps the customer\'s city — the other fields still land (#961)', async () => {
+	setConfig( makeConfig( { replaceAddress: { enabled: true, billingOnly: true } } ) );
+	mountAll();
+	clickTrigger();
+
+	const city = document.getElementById( 'billing_city' );
+	const before = city.value;
+
+	document.body.addEventListener( 'woodev_pickup_address_replacing', ( e ) => {
+		delete e.detail.fields.billing_city;
+	} );
+
+	await selectAndConfirm( StubProvider.instances[ 0 ], point( { locality: 'г.Москва' } ) );
+
+	expect( city.value ).toBe( before );
+	expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул. Ленина, 1' );
+	expect( document.getElementById( 'billing_postcode' ).value ).toBe( '101000' );
+	expect( console ).toHaveWarned();
+} );
+
 test( 'no announcement when replaceAddress is disabled — nothing is written, so nothing to announce', async () => {
 	setConfig( makeConfig( { replaceAddress: { enabled: false, billingOnly: true } } ) );
 	mountAll();

@@ -23,6 +23,7 @@ use Woodev\Framework\Shipping\Location\Location_Provider;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
 
@@ -770,8 +771,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				// above out of framework-owned state, so the reason is in hand — reporting
 				// the bare fact sends the merchant to support asking what it means
 				// (operator, s134). {@see Order_Actions::unavailable_reason()} answers for
-				// the framework's own gate only; a CARRIER-side refusal is #819's boundary
-				// and cannot be described here at all today.
+				// the framework's own gate only; a CARRIER-side refusal is described by the
+				// handler's {@see Action_Result} below (#872).
 				return new \WP_Error(
 					'woodev_shipping_orders_action_not_available',
 					$this->order_actions->unavailable_reason( $order, $provider, $action ),
@@ -793,17 +794,19 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			try {
-				$succeeded = $this->dispatch_action( $handler, $order, $action, $provider );
+				$result = $this->dispatch_action( $handler, $order, $action, $provider );
 			} catch ( \Throwable $exception ) {
 				$this->log_action_failure( $provider->get_id(), $action, $exception );
 
 				return $this->action_upstream_error();
 			}
 
-			if ( ! $succeeded ) {
+			if ( ! $result->is_success() ) {
+				// The carrier's own reason, prefixed with its name — for the merchant only
+				// (#872, #608/#610). No text from the carrier → the generic sentence.
 				return new \WP_Error(
 					'woodev_shipping_orders_action_failed',
-					self::action_failure_message( $action ),
+					$result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ),
 					[ 'status' => 502 ]
 				);
 			}
@@ -811,7 +814,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			return rest_ensure_response(
 				[
 					'row'     => $this->build_row( self::reread_order( $order ), $provider ),
-					'message' => self::action_success_message( $action ),
+					'message' => $result->merchant_message( $provider->get_label(), self::action_success_message( $action ) ),
 				]
 			);
 		}
@@ -829,8 +832,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * recomputed gate, no registered handler) is SKIPPED, not failed — the operator's own
 		 * rule: an inapplicable order is simply ignored for that action. Every ELIGIBLE order is
 		 * then dispatched through the same {@see self::dispatch_action()} path the single-order
-		 * route uses, so `export()` returning `''` (#860) counts as a failure there too, and an
-		 * exception is caught PER ORDER and counted as a failure rather than aborting the batch.
+		 * route uses, so a failed {@see Action_Result} (incl. an export with no id, #860) counts as
+		 * a failure there too, and an exception is caught PER ORDER and counted as a failure rather
+		 * than aborting the batch. Each failure's reason — the carrier's text, prefixed with its
+		 * name — is listed in `failures` as `{id, message}` beside the aggregate `messages` (#872);
+		 * the merchant-only rule of {@see Action_Result} applies.
 		 *
 		 * Always a 200, even when every eligible order failed — a partial (or total) failure
 		 * among many orders is not a failed REQUEST.
@@ -849,6 +855,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$succeeded = 0;
 			$failed    = 0;
 			$rows      = [];
+			$failures  = [];
 
 			foreach ( $ids as $id ) {
 				$order = wc_get_order( absint( $id ) );
@@ -881,19 +888,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				++$eligible;
 
 				try {
-					$succeeded_this_order = $this->dispatch_action( $handler, $order, $action, $provider );
+					$result = $this->dispatch_action( $handler, $order, $action, $provider );
 				} catch ( \Throwable $exception ) {
 					$this->log_action_failure( $provider->get_id(), $action, $exception );
-					$succeeded_this_order = false;
+					$result = null;
 				}
 
-				if ( $succeeded_this_order ) {
+				if ( null !== $result && $result->is_success() ) {
 					++$succeeded;
 					$rows[] = $this->build_row( self::reread_order( $order ), $provider );
 					continue;
 				}
 
 				++$failed;
+
+				$failures[] = [
+					'id'      => $order->get_id(),
+					'message' => null === $result
+						? self::action_upstream_message()
+						: $result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ),
+				];
 			}
 
 			return rest_ensure_response(
@@ -905,6 +919,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					'succeeded' => $succeeded,
 					'failed'    => $failed,
 					'rows'      => $rows,
+					'failures'  => $failures,
 					'messages'  => self::build_bulk_messages( $action, $eligible, $succeeded, $failed ),
 				]
 			);
@@ -1070,9 +1085,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		/**
 		 * Dispatches one action to the carrier's shipment handler.
 		 *
-		 * ⚠ `export()` returns `''` on failure AND on a carrier response with no id
-		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
-		 * return bool.
+		 * Every verb returns an {@see Action_Result} (card #872), so a failure carries
+		 * the carrier's own text to {@see self::perform_action()}. A carrier response
+		 * with no id (card #860) is a failure there too, with no text.
 		 *
 		 * The framework itself performs only its own three verbs — export/cancel/
 		 * update. Anything else is a carrier extra declared via the
@@ -1087,19 +1102,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 *              `woodev_shipping_perform_order_action` filter instead of
 		 *              unconditionally returning false, so a carrier's own declared
 		 *              action can actually be performed.
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; the filter's value
+		 *              is an `Action_Result` too, and anything else a callback
+		 *              returns is treated as a failure.
 		 *
 		 * @param Abstract_Shipment_Handler $handler handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order   the order.
 		 * @param string                    $action  one of {@see Order_Actions}' action ids.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
-		 * @return bool
+		 * @return Action_Result
 		 */
-		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): bool {
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
 			switch ( $action ) {
 				case Order_Actions::EXPORT:
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
 
-					return '' !== $handler->export( $order, $settlement, $settlement_provider );
+					return $handler->export( $order, $settlement, $settlement_provider );
 
 				case Order_Actions::CANCEL:
 					return $handler->cancel( $order );
@@ -1117,17 +1135,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 					 * knows how to perform it, so it hooks this filter, checks `$action`
 					 * (and, if it serves more than one carrier, `$provider`) is its own,
 					 * performs the action against its own API, and returns whether it
-					 * succeeded. Defaults to `false`, so an action nothing hooks still
-					 * fails honestly instead of reporting success it never earned.
+					 * succeeded. Defaults to a failure with no text, so an action nothing
+					 * hooks still fails honestly instead of reporting success it never
+					 * earned. A callback returns {@see Action_Result::success()} or
+					 * {@see Action_Result::failure()} with the carrier's reason — shown to
+					 * the merchant, prefixed with the carrier name, never to a buyer.
 					 *
 					 * @since 2.0.2
+					 * @since 2.0.2 Card #872: the value is an {@see Action_Result}, not a bool.
 					 *
-					 * @param bool            $performed whether the action was performed successfully; default false.
-					 * @param string          $action    the action id, as declared by the carrier's filter.
-					 * @param \WC_Order       $order     the order the action was requested for.
-					 * @param Orders_Provider $provider  the matched carrier descriptor.
+					 * @param Action_Result   $result   the outcome so far; default a failure with no text.
+					 * @param string          $action   the action id, as declared by the carrier's filter.
+					 * @param \WC_Order       $order    the order the action was requested for.
+					 * @param Orders_Provider $provider the matched carrier descriptor.
 					 */
-					return (bool) apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
+					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
+
+					return $result instanceof Action_Result ? $result : Action_Result::failure();
 			}
 		}
 
@@ -1251,9 +1275,20 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		private static function action_upstream_error(): \WP_Error {
 			return new \WP_Error(
 				'woodev_shipping_orders_action_error',
-				__( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' ),
+				self::action_upstream_message(),
 				[ 'status' => 502 ]
 			);
+		}
+
+		/**
+		 * The generic sentence for an action that threw rather than returning a result.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private static function action_upstream_message(): string {
+			return __( 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.', 'woodev-plugin-framework' );
 		}
 
 		/**

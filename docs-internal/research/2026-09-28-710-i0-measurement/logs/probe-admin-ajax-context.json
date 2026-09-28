@@ -1,0 +1,64 @@
+{
+ "0": {
+  "REST_REQUEST": false,
+  "REST_API_REQUEST": false,
+  "XMLRPC_REQUEST": false,
+  "DOING_AJAX": true,
+  "is_admin()": true,
+  "WC_is_rest_api_request": false,
+  "current_user_id": 1,
+  "can_edit_shop_orders": true,
+  "WC()->session": "WC_Session_Handler",
+  "WC()->cart": "WC_Cart",
+  "WC()->customer": "WC_Customer",
+  "did_action(cart_loaded_from_session)": 1
+ },
+ "1": {
+  "REST_REQUEST": false,
+  "REST_API_REQUEST": false,
+  "XMLRPC_REQUEST": false,
+  "DOING_AJAX": true,
+  "is_admin()": true,
+  "WC_is_rest_api_request": false,
+  "current_user_id": 1,
+  "can_edit_shop_orders": true,
+  "WC()->session": "WC_Session_Handler",
+  "WC()->cart": "WC_Cart",
+  "WC()->customer": "WC_Customer",
+  "did_action(cart_loaded_from_session)": 1
+ },
+ "methods_after": {
+  "RU": [
+   {
+    "method": "woodev_test_shipping:3",
+    "should_send_cart_api_request()": false,
+    "is_available": true,
+    "get_rates_for_package": [],
+    "calculate_rate_direct": {
+     "class": "Woodev\\Framework\\Shipping\\Shipping_Rate",
+     "array": {
+      "id": "woodev_test_shipping:3",
+      "label": "Woodev Test Shipping",
+      "cost": "0",
+      "meta_data": []
+     }
+    }
+   },
+   {
+    "method": "woodev_realistic_pickup_shipping:5",
+    "should_send_cart_api_request()": false,
+    "is_available": true,
+    "get_rates_for_package": [],
+    "calculate_rate_direct": {
+     "class": "Woodev\\Framework\\Shipping\\Shipping_Rate",
+     "array": {
+      "id": "woodev_realistic_pickup_shipping:5",
+      "label": "Woodev Realistic Pickup Shipping",
+      "cost": "0",
+      "meta_data": []
+     }
+    }
+   }
+  ]
+ }
+}

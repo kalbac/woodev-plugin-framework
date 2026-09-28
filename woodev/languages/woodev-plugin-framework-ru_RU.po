@@ -4211,4 +4211,9 @@ msgstr ""
 #: shipping-method/admin/orders/class-order-actions.php:270
 #, php-format
 msgid "Отправление уже в конечном статусе «%s» — редактировать заказ нельзя."
+
+#. translators: Placeholder: %s - the name of the plugin that did not start
+#: class-framework-resolver.php:770
+#, php-format
+msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
 msgstr ""

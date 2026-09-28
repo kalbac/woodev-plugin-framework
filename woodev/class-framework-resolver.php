@@ -355,27 +355,18 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 								$this->quarantined_download_id_plugins[ $index ]['deactivated'] = true;
 
-								// admin-post.php processes an action and redirects/exits without
-								// ever firing admin_notices or network_admin_notices on THIS
-								// request, so the array-based render_update_notices() message
-								// above would never be shown (and, once this plugin is
-								// deactivated, never reappears on a later request either — the
-								// collision that produced it is gone). Queue it through the same
-								// single-use transient the activation guard uses instead, so
-								// render_activation_guard_notice() shows it on the next request
-								// that does render notices (#916 round 2).
-								if ( isset( $GLOBALS['pagenow'] ) && 'admin-post.php' === $GLOBALS['pagenow'] ) {
-									set_transient(
-										self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id(),
-										sprintf(
-											/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
-											__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
-											$plugin_name,
-											$holder_name
-										),
-										60
-									);
-								}
+								// Always queue the notice through the single-use transient the
+								// activation guard uses, never only render it from the in-memory
+								// quarantine list: admin_init also runs on requests that process
+								// an action and redirect/exit BEFORE admin_notices fires
+								// (admin-post.php, POST options.php, plugins.php?action=…, a
+								// post.php save), and once this plugin is deactivated the
+								// collision is gone, so the message would never reappear on a
+								// later request either — a silent deactivation. The transient
+								// survives the redirect; render_activation_guard_notice() shows
+								// it once, on the next screen that renders notices (#916 round 2,
+								// #943).
+								$this->queue_refusal_notice( $plugin_name, $holder_name );
 							}
 						);
 					}
@@ -509,16 +500,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			if ( null !== $holder && ( $holder['plugin_name'] ?? '' ) !== $activated['plugin_name'] ) {
 				deactivate_plugins( $plugin );
 
-				set_transient(
-					self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id(),
-					sprintf(
-						/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
-						__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
-						$activated['plugin_name'],
-						$holder['plugin_name']
-					),
-					60
-				);
+				$this->queue_refusal_notice( $activated['plugin_name'], $holder['plugin_name'] );
 
 				return;
 			}
@@ -538,16 +520,67 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return void
 		 */
 		public function render_activation_guard_notice(): void {
-			$key     = self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id();
-			$message = get_transient( $key );
+			$key    = self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id();
+			$queued = $this->normalize_queued_notices( get_transient( $key ) );
 
-			if ( ! is_string( $message ) || '' === $message ) {
+			if ( [] === $queued ) {
 				return;
 			}
 
 			delete_transient( $key );
 
-			printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
+			foreach ( $queued as $message ) {
+				printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
+			}
+		}
+
+		/**
+		 * Queues a refusal notice for the current user, keeping any notice already waiting.
+		 *
+		 * Two duplicates deactivated in one request (a bulk activation, or an update that
+		 * introduced two collisions) share the one per-user transient, so a plain overwrite
+		 * would silently drop all but the last message.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $plugin_name Name of the plugin that was refused/deactivated.
+		 * @param string $holder_name Name of the plugin already holding the same download id.
+		 * @return void
+		 */
+		protected function queue_refusal_notice( string $plugin_name, string $holder_name ): void {
+			$key    = self::ACTIVATION_GUARD_NOTICE_TRANSIENT . get_current_user_id();
+			$queued = $this->normalize_queued_notices( get_transient( $key ) );
+
+			$queued[] = sprintf(
+				/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
+				__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+				$plugin_name,
+				$holder_name
+			);
+
+			set_transient( $key, $queued, 60 );
+		}
+
+		/**
+		 * Normalizes a stored notice transient to a list of non-empty strings. Accepts the
+		 * single-string shape too: an older framework copy in a mixed fleet writes that one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $stored Raw `get_transient()` value.
+		 * @return array<int,string>
+		 */
+		protected function normalize_queued_notices( $stored ): array {
+			$stored = is_array( $stored ) ? $stored : [ $stored ];
+
+			return array_values(
+				array_filter(
+					$stored,
+					static function ( $message ): bool {
+						return is_string( $message ) && '' !== $message;
+					}
+				)
+			);
 		}
 
 		/**
@@ -686,22 +719,98 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 			}
 
 			foreach ( $this->quarantined_download_id_plugins as $plugin ) {
-				$message = ( $plugin['deactivated'] ?? false )
-					? sprintf(
-						/* translators: Placeholders: %1$s - the plugin that was refused, %2$s - the plugin already holding the same license identifier */
-						__( 'Невозможно активировать «%1$s»: он использует тот же идентификатор лицензии, что и «%2$s». Плагин отключён. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
-						$plugin['plugin_name'],
-						$plugin['claimed_by']
-					)
-					: sprintf(
-						/* translators: Placeholders: %1$s - the plugin that was not started, %2$s - the plugin already holding the same license identifier */
-						__( 'Плагин «%1$s» не запущен: он использует тот же идентификатор лицензии, что и «%2$s». Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
-						$plugin['plugin_name'],
-						$plugin['claimed_by']
-					);
+				// A plugin the self-heal actually deactivated is announced through the queued
+				// transient instead (see queue_refusal_notice()) — rendering it here too would
+				// print the same message twice on a request that does reach admin_notices (#943).
+				if ( $plugin['deactivated'] ?? false ) {
+					continue;
+				}
+
+				$message = sprintf(
+					/* translators: Placeholders: %1$s - the plugin that was not started, %2$s - the plugin already holding the same license identifier */
+					__( 'Плагин «%1$s» не запущен: он использует тот же идентификатор лицензии, что и «%2$s». Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+					$plugin['plugin_name'],
+					$plugin['claimed_by']
+				);
 
 				printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
 			}
+
+			$this->render_invalid_loader_definition_notices();
+		}
+
+		/**
+		 * Renders one notice per plugin whose loader definition was rejected (#942).
+		 *
+		 * A rejected definition means the plugin never started — no fatal, no explanation.
+		 * The screen gets a plain merchant-facing sentence naming the plugin; the validation
+		 * errors are technical detail for the plugin author and go to the log instead. Shown
+		 * only to users who can act on it (`activate_plugins`), the same audience as the
+		 * plugin list itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function render_invalid_loader_definition_notices(): void {
+			if ( empty( $this->invalid_loader_definitions ) || ! current_user_can( 'activate_plugins' ) ) {
+				return;
+			}
+
+			foreach ( $this->invalid_loader_definitions as $invalid ) {
+				$plugin_name = $this->get_invalid_loader_definition_plugin_name( $invalid );
+
+				$this->log_invalid_loader_definition( $plugin_name, $invalid['errors'] ?? [] );
+
+				printf(
+					'<div class="error"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: Placeholder: %s - the name of the plugin that did not start */
+							__( 'Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+							$plugin_name
+						)
+					)
+				);
+			}
+		}
+
+		/**
+		 * Gets a displayable plugin name for a rejected loader definition.
+		 *
+		 * The entry carries either the raw array (rejected at registration — its name may be
+		 * missing or not a string) or a validated definition object (rejected at invocation).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $invalid Invalid loader definition entry.
+		 * @return string
+		 */
+		protected function get_invalid_loader_definition_plugin_name( array $invalid ): string {
+			$definition = $invalid['definition'] ?? null;
+
+			if ( $definition instanceof Framework_Plugin_Loader_Definition ) {
+				$name = $definition->get_plugin_name();
+			} elseif ( is_array( $definition ) && isset( $definition['plugin_name'] ) && is_string( $definition['plugin_name'] ) ) {
+				$name = trim( $definition['plugin_name'] );
+			} else {
+				$name = '';
+			}
+
+			return '' !== $name ? $name : __( 'Неизвестный плагин', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Logs the technical reasons a loader definition was rejected (#942).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string            $plugin_name Displayable plugin name.
+		 * @param array<int,string> $errors      Validation errors.
+		 * @return void
+		 */
+		protected function log_invalid_loader_definition( string $plugin_name, array $errors ): void {
+			error_log( sprintf( '[woodev] Plugin "%s" was not loaded, invalid loader definition: %s', $plugin_name, implode( ' ', array_map( 'strval', $errors ) ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- the resolver runs before WooCommerce and the framework logger exist.
 		}
 
 		/**
@@ -963,7 +1072,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return bool
 		 */
 		protected function has_update_notices(): bool {
-			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins || $this->quarantined_download_id_plugins;
+			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins || $this->quarantined_download_id_plugins || $this->invalid_loader_definitions;
 		}
 
 		/**

@@ -175,7 +175,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order  = Mockery::mock( '\WC_Order' );
 			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertTrue( $result->is_success() );
+			$this->assertSame( 'CARRIER-1', $result->get_carrier_order_id() );
 		}
 
 		/**
@@ -196,7 +197,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 			$order  = Mockery::mock( '\WC_Order' );
 			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( '', $result );
+			$this->assertFalse( $result->is_success(), 'a response with no carrier id is a failure (#860)' );
+			$this->assertSame( '', $result->get_message() );
 		}
 
 		// -------------------------------------------------------------------
@@ -279,7 +281,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $handler->export( $order );
 
-			$this->assertSame( '', $result );
+			$this->assertFalse( $result->is_success() );
 		}
 
 		/**
@@ -328,7 +330,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( 'CARRIER-1', $result, 'export() must still report success — enrolment failing must not undo a real export.' );
+			$this->assertSame( 'CARRIER-1', $result->get_carrier_order_id(), 'export() must still report success — enrolment failing must not undo a real export.' );
 		}
 
 		// -------------------------------------------------------------------
@@ -364,7 +366,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertSame( 'CARRIER-1', $result->get_carrier_order_id() );
 			$this->assertSame(
 				sprintf(
 					'[woodev] popular-settlements enrolment failed for provider "%s": %s',
@@ -405,7 +407,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $handler->export( $order, $record, $provider );
 
-			$this->assertSame( 'CARRIER-1', $result );
+			$this->assertSame( 'CARRIER-1', $result->get_carrier_order_id() );
 			$this->assertSame(
 				sprintf(
 					'[woodev] popular-settlements enrolment failed for provider "%s": %s',
