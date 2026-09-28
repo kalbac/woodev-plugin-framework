@@ -486,8 +486,76 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/**
-		 * The fallback for a WooCommerce without `WC()->is_store_api_request()`: WordPress's own
-		 * dispatched route.
+		 * The fallback for a WooCommerce without `WC()->is_store_api_request()` (absent through 8.9):
+		 * with pretty permalinks the request is `/wp-json/wc/store/v1/…` and WordPress may leave no
+		 * `rest_route` behind — the path alone must be enough.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_pretty_permalink_store_api_request_is_recognised_without_the_wc_helper(): void {
+			define( 'REST_REQUEST', true );
+
+			$this->fallback_request_helpers();
+			$_SERVER['REQUEST_URI'] = '/wp-json/wc/store/v1/cart/update-customer?_locale=user';
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-pretty', 'Pretty Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * The same fallback on a site in a subdirectory or with a custom REST prefix.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_store_api_request_under_a_subdirectory_and_custom_prefix_is_recognised(): void {
+			define( 'REST_REQUEST', true );
+
+			$this->fallback_request_helpers( 'api' );
+			$_SERVER['REQUEST_URI'] = '/shop/api/wc/store/v1/checkout';
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-prefix', 'Prefix Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * The fallback with plain permalinks: the route is the `rest_route` query parameter.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_plain_permalink_store_api_request_is_recognised_without_the_wc_helper(): void {
+			define( 'REST_REQUEST', true );
+
+			$this->fallback_request_helpers();
+			$_SERVER['REQUEST_URI'] = '/index.php?rest_route=%2Fwc%2Fstore%2Fv1%2Fcart%2Fupdate-customer';
+			$_GET['rest_route']     = '/wc/store/v1/cart/update-customer';
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-plain', 'Plain Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * The fallback through the route WordPress itself dispatched (`query_vars`).
 		 *
 		 * @runInSeparateProcess
 		 * @preserveGlobalState disabled
@@ -497,6 +565,7 @@ namespace Woodev\Tests\Unit\Shipping {
 		public function test_a_store_api_request_is_recognised_by_the_dispatched_route_without_the_wc_helper(): void {
 			define( 'REST_REQUEST', true );
 
+			$this->fallback_request_helpers();
 			$GLOBALS['wp'] = (object) [ 'query_vars' => [ 'rest_route' => '/wc/store/v1/cart/update-customer' ] ];
 
 			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
@@ -529,7 +598,30 @@ namespace Woodev\Tests\Unit\Shipping {
 		}
 
 		/**
-		 * The same guard through the route fallback: a `wc/v3` route is not the Store API.
+		 * The same guard through the fallback, pretty permalinks: a `wc/v3` route is not the Store
+		 * API, and neither is a request that only carries a Store API URL in its query string.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_non_store_rest_request_is_still_guarded_without_the_wc_helper(): void {
+			define( 'REST_REQUEST', true );
+
+			$this->fallback_request_helpers();
+			$_SERVER['REQUEST_URI'] = '/wp-json/wc/v3/orders?redirect=/wp-json/wc/store/v1/cart';
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-v3', 'V3 Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+		}
+
+		/**
+		 * The same guard through the fallback, plain permalinks and the dispatched route.
 		 *
 		 * @runInSeparateProcess
 		 * @preserveGlobalState disabled
@@ -539,10 +631,13 @@ namespace Woodev\Tests\Unit\Shipping {
 		public function test_a_non_store_rest_route_is_still_guarded_without_the_wc_helper(): void {
 			define( 'REST_REQUEST', true );
 
-			$GLOBALS['wp'] = (object) [ 'query_vars' => [ 'rest_route' => '/wc/v3/orders' ] ];
+			$this->fallback_request_helpers();
+			$_SERVER['REQUEST_URI'] = '/index.php?rest_route=/wc/v3/orders';
+			$_GET['rest_route']     = '/wc/v3/orders';
+			$GLOBALS['wp']          = (object) [ 'query_vars' => [ 'rest_route' => '/wc/v3/orders' ] ];
 
 			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
-			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-v3', 'V3 Rate', '100' );
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-v3b', 'V3 Rate', '100' );
 
 			$method->calculate_shipping( [] );
 
@@ -675,6 +770,28 @@ namespace Woodev\Tests\Unit\Shipping {
 			$this->expectException( \LogicException::class );
 
 			$method->calculate_shipping( [] );
+		}
+
+		/**
+		 * The WordPress helpers the Store API fallback leans on, for a WooCommerce that has no
+		 * `WC()->is_store_api_request()` (the test process defines no `WC()` at all).
+		 *
+		 * @param string $rest_prefix the REST URL prefix (`wp-json` by default).
+		 * @return void
+		 */
+		private function fallback_request_helpers( string $rest_prefix = 'wp-json' ): void {
+			Functions\when( 'wp_unslash' )->returnArg( 1 );
+			Functions\when( 'trailingslashit' )->alias(
+				static function ( $value ) {
+					return rtrim( (string) $value, '/\\' ) . '/';
+				}
+			);
+			Functions\when( 'rest_get_url_prefix' )->justReturn( $rest_prefix );
+			Functions\when( 'wp_parse_url' )->alias(
+				static function ( $url, $component = -1 ) {
+					return parse_url( $url, $component ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+				}
+			);
 		}
 
 		/**

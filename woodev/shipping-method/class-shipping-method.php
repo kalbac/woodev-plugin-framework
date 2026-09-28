@@ -871,9 +871,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Whether the current request is a WooCommerce Store API request.
 		 *
-		 * Prefers WooCommerce's own detection; falls back to the route WordPress itself dispatches
-		 * (`rest_route`, set for both pretty and plain permalinks) on a WooCommerce that predates
-		 * `WC()->is_store_api_request()`.
+		 * Prefers WooCommerce's own detection. `WC()->is_store_api_request()` only exists from
+		 * WooCommerce 9.0, so on the older versions this framework still supports (7.0+) the fallback
+		 * mirrors what WooCommerce itself does, for both permalink structures: the request path
+		 * against `rest_get_url_prefix()` + `/wc/store/` (pretty permalinks, `/wp-json/wc/store/v1/…`)
+		 * and the `rest_route` parameter (plain permalinks, `?rest_route=/wc/store/v1/…`, or the
+		 * route WordPress itself dispatched).
 		 *
 		 * @since 2.0.2
 		 *
@@ -887,9 +890,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 				return (bool) $woocommerce->is_store_api_request();
 			}
 
-			$route = isset( $GLOBALS['wp']->query_vars['rest_route'] ) ? $GLOBALS['wp']->query_vars['rest_route'] : '';
+			// Pretty permalinks: match the path only (the leading slash anchors the prefix), so a query
+			// argument that merely looks like a Store API URL is not mistaken for one.
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$request_uri = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+			$path        = '' !== $request_uri ? wp_parse_url( '/' . ltrim( $request_uri, '/' ), PHP_URL_PATH ) : null;
 
-			return is_string( $route ) && 0 === strpos( '/' . ltrim( $route, '/' ), '/wc/store/' );
+			if ( is_string( $path ) && false !== strpos( $path, '/' . trailingslashit( rest_get_url_prefix() ) . 'wc/store/' ) ) {
+				return true;
+			}
+
+			// Plain permalinks: the route travels as a parameter. WordPress copies it into query_vars for
+			// both structures, so that is checked too.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the route only, no state change.
+			$routes = [ $GLOBALS['wp']->query_vars['rest_route'] ?? '', $_GET['rest_route'] ?? '' ];
+
+			foreach ( $routes as $route ) {
+				if ( is_string( $route ) && 0 === strpos( '/' . ltrim( rawurldecode( wp_unslash( $route ) ), '/' ), '/wc/store/' ) ) {
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/**
