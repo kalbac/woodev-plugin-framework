@@ -2002,6 +2002,15 @@
 
 				touched = true;
 
+				// Issue #961: the settlement field is the customer's own confirmed pick under the
+				// server guard — the point's spelling must not replace it. The announcement is
+				// the veto channel: `pickup-mount.js` reads `fields` back after this returns.
+				if ( holdsGuardedSettlement( entry, fieldId ) ) {
+					delete fields[ fieldId ];
+
+					return;
+				}
+
 				writeSilently( entry, fieldId, String( fields[ fieldId ] ) );
 			} );
 
@@ -2011,6 +2020,33 @@
 				promoteSettlementRecord( entry );
 			}
 		} );
+	}
+
+	/**
+	 * Whether `fieldId` is this entry's SETTLEMENT field while the server guard
+	 * (`Checkout_Handler::guard_custom_settlement()`, #531) is enforcing it — `ajax-select2`
+	 * mode, custom settlements not allowed (#528) — and a confirmed settlement record exists.
+	 *
+	 * In that state the guard accepts only a posted settlement equal to the record's own name,
+	 * so a pickup point's locality string («г.Москва», a different spelling, a neighbouring
+	 * settlement) written over the field cannot reach the order: the customer is refused at
+	 * «Place order» with no visible cause (issue #961). The record is what the customer
+	 * picked, so the field keeps it and the announced write is dropped ({@see handlePickupAddressReplacing}).
+	 * With custom settlements allowed, or another mode, the guard is off and the point's own
+	 * locality still replaces the field (issue #339).
+	 *
+	 * @param {Object} entry
+	 * @param {string} fieldId
+	 * @returns {boolean}
+	 */
+	function holdsGuardedSettlement( entry, fieldId ) {
+		var info = nodeInfo( entry, fieldId );
+
+		return !! info
+			&& 'settlement' === info.level
+			&& !! entry.records.settlement
+			&& 'ajax-select2' === settlementAxisMode( entry )
+			&& ! ( entry.location && entry.location.allowCustomSettlement );
 	}
 
 	/**
