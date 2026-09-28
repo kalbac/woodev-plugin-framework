@@ -55,19 +55,50 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	class Order_Editor {
 
 		/**
-		 * Order meta an EDIT arms before its status transition runs: the transition action
-		 * (`woocommerce_order_status_{from}_to_{to}`) whose «New order» notification must not go
-		 * out for this order. Consumed by {@see self::mute_new_order_email()} the moment WooCommerce
-		 * asks whether that e-mail is enabled while dispatching exactly that notification — inside
-		 * the edit when WooCommerce sends synchronously, in a later request when it defers (#981).
+		 * Order meta an EDIT arms before its status transition runs: the list of «New order»
+		 * notifications that must not go out for this order, one entry per edit whose transition
+		 * WooCommerce announces — `[ [ 'transition' => 'woocommerce_order_status_{from}_to_{to}',
+		 * 'created_at' => <unix time> ], … ]`, oldest first. {@see self::mute_new_order_email()}
+		 * consumes ONE entry the moment WooCommerce asks whether that e-mail is enabled while
+		 * dispatching exactly that entry's notification — inside the edit when WooCommerce sends
+		 * synchronously, in a later request when it defers (#981). Entries are independent, so two
+		 * edits whose notifications are both still queued each mute their own; an entry older than
+		 * {@see self::NEW_ORDER_EMAIL_MUTE_TTL} is dropped on every read that writes, and the key is
+		 * deleted when nothing is left (#981 round 3). A value of any other shape — round 2's single
+		 * string, a foreign write — is treated as no entry at all.
 		 *
 		 * Installed-site data contract (a meta key of the framework's own): keep byte-for-byte.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #981 round 3: a list of independent, expiring entries instead of one transition.
 		 *
 		 * @var string
 		 */
 		public const NEW_ORDER_EMAIL_MUTE_META = '_woodev_new_order_email_mute';
+
+		/**
+		 * How long an entry of {@see self::NEW_ORDER_EMAIL_MUTE_META} keeps muting, in seconds.
+		 *
+		 * WooCommerce schedules the deferred send for NOW: since 10.8 one Action Scheduler action
+		 * per notification at `time()` (`DeferredEmailQueue::dispatch()` → `WC_Action_Queue::add()`
+		 * → `as_schedule_single_action( time(), … )`), run by the next queue runner — WP-Cron every
+		 * minute or the async runner on shutdown; up to 10.7 a non-blocking loopback request on
+		 * `shutdown` with a WP-Cron health check every 5 minutes (`WC_Background_Emailer`). Both are
+		 * built to finish within seconds and to retry within minutes. The one bound WooCommerce's
+		 * own stack puts on «this should have run by now» is Action Scheduler's past-due threshold,
+		 * `action_scheduler_pastdue_actions_seconds` = `DAY_IN_SECONDS` (11.1's bundled Action
+		 * Scheduler, `ActionScheduler_AdminView`), so an entry lives exactly that long: a queue that
+		 * is merely slow (a backlog, a store whose cron only fires on page views) still meets its
+		 * mute, and a queue that is LOST (the action deleted, the loopback never served) stops
+		 * muting after a day instead of waiting for the next repeat of that very transition. A
+		 * shorter value would only trade the second residual for the first — a real «New order» on
+		 * an edit, the thing spec C4 forbids.
+		 *
+		 * @since 2.0.2 #981 round 3.
+		 *
+		 * @var int
+		 */
+		public const NEW_ORDER_EMAIL_MUTE_TTL = DAY_IN_SECONDS;
 
 		/**
 		 * Carrier registry.
@@ -616,21 +647,30 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * On create the transition itself sends «New order» (and the customer's mail) through the
 		 * `pending_to_*_notification` actions. On an edit spec C4 says no «New order» goes out — an
 		 * allowed pending→processing update runs that very transition — so the order is ARMED before
-		 * it runs: {@see self::NEW_ORDER_EMAIL_MUTE_META} names the transition, and
-		 * {@see self::mute_new_order_email()} answers «disabled» to WooCommerce for THIS order while
-		 * THAT transition's notification is being dispatched, consuming the marker. The marker is
-		 * persisted together with the status because WooCommerce may DEFER its transactional e-mails
-		 * (`woocommerce_defer_transactional_emails`): the notification is then only queued and is
-		 * dispatched in a later request — `WC_Background_Emailer` up to 10.7, an Action Scheduler
-		 * action since 10.8 — where nothing of this call survives but what the order carries (#981
-		 * round 2). When WooCommerce dispatched synchronously and nothing consumed the marker (the
-		 * e-mail is not listening), it is dropped here: a marker never outlives an edit that did not
-		 * need it. Any other plugin's hooks, other orders and the customer's own e-mails (which follow
-		 * WooCommerce's status transitions, C4) are untouched.
+		 * it runs: an entry naming the transition is appended to {@see self::NEW_ORDER_EMAIL_MUTE_META},
+		 * and {@see self::mute_new_order_email()} answers «disabled» to WooCommerce for THIS order
+		 * while THAT transition's notification is being dispatched, consuming the entry. The entry
+		 * is persisted together with the status because WooCommerce may DEFER its transactional
+		 * e-mails (`woocommerce_defer_transactional_emails`): the notification is then only queued
+		 * and is dispatched in a later request — `WC_Background_Emailer` up to 10.7, an Action
+		 * Scheduler action since 10.8 — where nothing of this call survives but what the order
+		 * carries (#981 round 2). When WooCommerce dispatched synchronously and nothing consumed the
+		 * entry (the e-mail is not listening), it is dropped here: an entry never outlives an edit
+		 * that did not need it. Entries of EARLIER edits are left alone — their notifications may
+		 * still be queued, and each mutes its own (#981 round 3: an edit processing→pending between
+		 * a queued pending→processing and its dispatch no longer un-arms the order). Any other
+		 * plugin's hooks, other orders and the customer's own e-mails (which follow WooCommerce's
+		 * status transitions, C4) are untouched.
+		 *
+		 * Write races are considered only as far as one admin save path goes: two requests editing
+		 * the same order at the same instant may each read the list before the other writes it, and
+		 * the last `save()` wins — the wizard's own contract (D5) serialises edits of one order.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #981 round 2: a persisted, self-consuming marker instead of a filter scoped to
 		 *              this call, so WooCommerce's deferred dispatch honours the mute too.
+		 * @since 2.0.2 #981 round 3: one entry per edit, appended to a list, so interleaved edits
+		 *              cannot overwrite a mute whose notification is still queued.
 		 *
 		 * @param \WC_Order   $order     the order.
 		 * @param string|null $status    the requested status; null keeps the current one.
@@ -647,23 +687,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			WC()->mailer();
 
 			$transition = 'woocommerce_order_status_' . $order->get_status() . '_to_' . $status;
+			$armed      = 0;
 
 			if ( $is_update ) {
-				$order->update_meta_data( self::NEW_ORDER_EMAIL_MUTE_META, $transition );
+				$entries   = self::pending_mutes( $order );
+				$armed     = count( self::matching_mutes( $entries, $transition ) );
+				$entries[] = [
+					'transition' => $transition,
+					'created_at' => time(),
+				];
+				self::store_mutes( $order, $entries );
 			}
 
 			$order->set_status( $status, '', true );
 			$order->save();
 
-			if ( ! $is_update || '' === (string) $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META ) ) {
+			if ( ! $is_update ) {
 				return;
 			}
 
+			$entries = self::pending_mutes( $order );
+			$indices = self::matching_mutes( $entries, $transition );
+
+			if ( count( $indices ) <= $armed ) {
+				return; // WooCommerce dispatched synchronously and the mute consumed this edit's entry.
+			}
+
 			// Still armed. Either WooCommerce queued the notification for a later request — its queue
-			// sits on the transition action, and the marker must wait for it — or it dispatched
-			// synchronously and nothing consumed the marker, in which case nothing ever will.
+			// sits on the transition action, and the entry must wait for it — or it dispatched
+			// synchronously and nothing consumed the entry, in which case nothing ever will.
 			if ( false === has_action( $transition, [ 'WC_Emails', 'queue_transactional_email' ] ) ) {
-				$order->delete_meta_data( self::NEW_ORDER_EMAIL_MUTE_META );
+				unset( $entries[ (int) end( $indices ) ] ); // This edit's own entry: the newest one.
+				self::store_mutes( $order, array_values( $entries ) );
 				$order->save();
 			}
 		}
@@ -671,15 +726,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 		/**
 		 * Answers WooCommerce's `woocommerce_email_enabled_new_order` for an order an edit ARMED
-		 * ({@see self::apply_status()}): «disabled», once, while the notification of exactly the
-		 * transition that edit ran is being dispatched — synchronously inside the edit, or from
-		 * WooCommerce's deferred queue in a later request. The marker is consumed on the spot, so it
-		 * cannot silence a later «New order» of the same order: one WooCommerce sends for a different
-		 * transition is not matched; one sent by hand («Resend new order notification») runs under no
-		 * `_notification` action; and a repeat of the very same transition meets the marker only if
-		 * WooCommerce never ran the deferred dispatch that would have consumed it — then exactly one
-		 * e-mail is muted. Anything that is not a marked order passes through untouched: other
-		 * orders, other e-mails, the settings screen's `is_enabled()` with no order at all.
+		 * ({@see self::apply_status()}): «disabled», once per entry, while the notification of
+		 * exactly the transition an edit ran is being dispatched — synchronously inside the edit, or
+		 * from WooCommerce's deferred queue in a later request. The oldest matching entry is consumed
+		 * on the spot (the queue dispatches in order), so it cannot silence a later «New order» of
+		 * the same order: one WooCommerce sends for a different transition is not matched; one sent
+		 * by hand («Resend new order notification») runs under no `_notification` action; and a
+		 * repeat of the very same transition meets an entry only if WooCommerce never ran the
+		 * deferred dispatch that would have consumed it, and only within
+		 * {@see self::NEW_ORDER_EMAIL_MUTE_TTL} of the edit — expired entries are dropped here on
+		 * every call that finds the order marked, and the key with them once nothing is left. A
+		 * marked order's meta is re-read from the datastore first, because the object WooCommerce
+		 * hands over can predate an earlier dispatch's consumption (the legacy background emailer
+		 * unserialises its whole batch before running it). Anything that is not a marked order
+		 * passes through untouched: other orders, other e-mails, the settings screen's
+		 * `is_enabled()` with no order at all.
 		 *
 		 * Hooked at `PHP_INT_MAX` by {@see Orders_Registry::add_hooks()} — the last word, after the
 		 * store's own setting and any other plugin.
@@ -687,6 +748,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * @internal
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #981 round 3: consumes one entry of a list, prunes expired ones.
 		 *
 		 * @param mixed $enabled what WooCommerce and the filters before this one decided.
 		 * @param mixed $order   the order the e-mail is about (`WC_Email::$object`), if any.
@@ -697,16 +759,122 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				return $enabled;
 			}
 
-			$transition = (string) $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META );
+			$stored = $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META );
 
-			if ( '' === $transition || ! doing_action( $transition . '_notification' ) ) {
+			if ( '' === $stored || null === $stored || [] === $stored ) {
 				return $enabled;
 			}
 
-			$order->delete_meta_data( self::NEW_ORDER_EMAIL_MUTE_META );
+			// The object in hand may be STALE: WooCommerce's legacy background emailer (up to 10.7)
+			// unserialises a whole batch of queued notifications at once, so the second notification
+			// of the same order arrives with the meta the first one has already consumed and saved.
+			// Only what the datastore holds now can say which entries are still unconsumed.
+			$order->read_meta_data( true );
+			$stored = $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META );
+
+			if ( '' === $stored || null === $stored || [] === $stored ) {
+				return $enabled; // Consumed — or dropped — by an earlier dispatch since this object was read.
+			}
+
+			$entries  = self::pending_mutes( $order );
+			$consumed = null;
+
+			foreach ( $entries as $index => $entry ) {
+				if ( doing_action( $entry['transition'] . '_notification' ) ) {
+					$consumed = $index;
+					break;
+				}
+			}
+
+			if ( null === $consumed && count( $entries ) === count( (array) $stored ) ) {
+				return $enabled; // Nothing to consume, nothing expired: leave the order as it is.
+			}
+
+			if ( null !== $consumed ) {
+				unset( $entries[ $consumed ] );
+			}
+
+			self::store_mutes( $order, array_values( $entries ) );
 			$order->save();
 
-			return false;
+			return null === $consumed ? $enabled : false;
+		}
+
+		/**
+		 * The mute entries an order carries that can still mute: well-formed and younger than
+		 * {@see self::NEW_ORDER_EMAIL_MUTE_TTL}, in stored order (oldest first).
+		 *
+		 * @since 2.0.2 #981 round 3.
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return array<int, array{transition: string, created_at: int}>
+		 */
+		private static function pending_mutes( \WC_Order $order ): array {
+			$stored = $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META );
+			$alive  = [];
+			$oldest = time() - self::NEW_ORDER_EMAIL_MUTE_TTL;
+
+			foreach ( is_array( $stored ) ? $stored : [] as $entry ) {
+				if ( ! is_array( $entry ) || ! isset( $entry['transition'], $entry['created_at'] ) ) {
+					continue;
+				}
+
+				if ( ! is_string( $entry['transition'] ) || '' === $entry['transition'] || ! is_numeric( $entry['created_at'] ) ) {
+					continue;
+				}
+
+				if ( (int) $entry['created_at'] < $oldest ) {
+					continue;
+				}
+
+				$alive[] = [
+					'transition' => $entry['transition'],
+					'created_at' => (int) $entry['created_at'],
+				];
+			}
+
+			return $alive;
+		}
+
+		/**
+		 * The indices of the entries armed against one transition, oldest first.
+		 *
+		 * @since 2.0.2 #981 round 3.
+		 *
+		 * @param array<int, array{transition: string, created_at: int}> $entries    {@see self::pending_mutes()}.
+		 * @param string                                                 $transition the transition action.
+		 * @return int[]
+		 */
+		private static function matching_mutes( array $entries, string $transition ): array {
+			$indices = [];
+
+			foreach ( $entries as $index => $entry ) {
+				if ( $entry['transition'] === $transition ) {
+					$indices[] = $index;
+				}
+			}
+
+			return $indices;
+		}
+
+		/**
+		 * Writes the mute entries onto the order object — the list, or no key at all when nothing
+		 * is left. Does not save; the caller's `save()` carries it.
+		 *
+		 * @since 2.0.2 #981 round 3.
+		 *
+		 * @param \WC_Order                                              $order   the order.
+		 * @param array<int, array{transition: string, created_at: int}> $entries the entries to keep.
+		 * @return void
+		 */
+		private static function store_mutes( \WC_Order $order, array $entries ): void {
+			if ( [] === $entries ) {
+				$order->delete_meta_data( self::NEW_ORDER_EMAIL_MUTE_META );
+
+				return;
+			}
+
+			$order->update_meta_data( self::NEW_ORDER_EMAIL_MUTE_META, $entries );
 		}
 
 		/**

@@ -177,7 +177,7 @@ So in every version the later request calls `is_enabled()` → `apply_filters( '
 
 **An invented meta key.** WooCommerce's own key, `_new_order_email_sent`, was evaluated and rejected: setting it on an edit tells WooCommerce «this order was announced», which would also suppress a LATER legitimate «New order» (an edit pending→on-hold, then the customer pays and the gateway moves on-hold→processing — WooCommerce would have announced that, the guard would now block it), and it cannot be unset once the dispatch is deferred. `woocommerce_allow_send_queued_transactional_email` was rejected because it kills the whole notification — the customer's e-mail with it. `_woodev_new_order_email_mute` is therefore a new installed-site data contract; keep it byte-for-byte.
 
-**Why it cannot hit a later, unrelated trigger.** The marker names ONE transition and is deleted the first time the New order e-mail is evaluated under that transition's notification. A different transition (`on-hold_to_processing`, `failed_to_processing`…) does not match. A manual «Resend new order notification» runs under no `_notification` action. Other orders and other e-mails never read it (`is_enabled()` of `new_order` only, and only with that order as `$object`; the settings screen passes no order). The single residual: if WooCommerce queued the edit's notification and the queue never ran (lost option, Action Scheduler never executes the action), the marker survives until the order makes the very same from→to transition again — one e-mail muted, once. Accepted and documented in the method's docblock.
+**Why it cannot hit a later, unrelated trigger.** The marker names ONE transition and is deleted the first time the New order e-mail is evaluated under that transition's notification. A different transition (`on-hold_to_processing`, `failed_to_processing`…) does not match. A manual «Resend new order notification» runs under no `_notification` action. Other orders and other e-mails never read it (`is_enabled()` of `new_order` only, and only with that order as `$object`; the settings screen passes no order). The single residual: if WooCommerce queued the edit's notification and the queue never ran (lost option, Action Scheduler never executes the action), the marker survives until the order makes the very same from→to transition again — one e-mail muted, once. Accepted in round 2 — **superseded in Round 3**, together with the single-slot marker itself (see below).
 
 ### Evidence
 
@@ -194,6 +194,90 @@ The red run on 9.3.0 / 8.5.1 doubles as proof that the legacy drain is real: the
 ### The harness (finding 3)
 
 `setUp()` → `ensure_mailer_listens()`: the repair (`WC_Emails::init()`) runs only when this mailer's own «New order» listener is missing; before it, every callback the stale e-mail objects still hold on any hook is removed (`unhook_object()`); after it — and always — `WC_Email_New_Order::trigger` and `WC_Email_Customer_Processing_Order::trigger` are asserted to sit on `…_pending_to_processing_notification` exactly once (`count_listeners()`). A partially restored hook table can neither silence nor double-send them unnoticed.
+
+## Round 3: independent markers + TTL (the critic's blocker and major on round 2)
+
+> Same rig, same three WooCommerce copies (11.1.0 in place; 8.5.1 and 9.3.0 copied into the tests
+> container as `woocommerce-probe-{version}/` and selected by a temporary `WOODEV_WC_PROBE` override in
+> `tests/bootstrap.php`, both removed afterwards). Fable 5.1 worker, 28.09.2026. Baseline `bea182c`.
+
+**Both findings were real.** Round 2 kept ONE marker per order. (1) Under deferral, edit A pending→processing
+queues its notification; before the queue runs, edit B processing→pending (allowed by the validator, and a
+transition WooCommerce sends no e-mail for) overwrote A's marker with its own and then dropped it as
+unconsumed — A's queued `pending_to_processing_notification` found no marker and «New order» went out.
+(2) A marker whose dispatch was lost muted the next legitimate repeat of that transition, however much later.
+
+### The design now
+
+`_woodev_new_order_email_mute` (same key — the installed-site data contract keeps its name; the VALUE shape
+changed while the branch is unreleased) holds a **list of entries**, oldest first:
+`[ [ 'transition' => 'woocommerce_order_status_{from}_to_{to}', 'created_at' => <unix time> ], … ]`.
+
+- `Order_Editor::apply_status()` (an edit only) **appends** one entry before the transition runs and never
+  touches the others. After a synchronous transition it compares the number of entries matching this
+  transition with the number before the edit: equal → the mute consumed this edit's entry; one more and
+  WooCommerce's queue is NOT hooked on the transition (`has_action( $transition, [ 'WC_Emails',
+  'queue_transactional_email' ] )`) → nothing will ever consume it, the newest matching entry is removed.
+  Otherwise it waits for the deferred dispatch.
+- `Order_Editor::mute_new_order_email()` **consumes the OLDEST entry** whose `transition . '_notification'`
+  is `doing_action()` — the queue dispatches in order — answers `false` for that one evaluation, and writes the
+  list back; **expired entries are pruned on every call that finds the order marked**, and the key is deleted
+  once the list is empty. A value of another shape (round 2's single string, a foreign write) is treated as no
+  entry and dropped.
+- **TTL = `DAY_IN_SECONDS`** (`Order_Editor::NEW_ORDER_EMAIL_MUTE_TTL`). Justification from how WooCommerce
+  schedules the send: 10.8+ schedules one Action Scheduler action per notification for `time()`
+  (`DeferredEmailQueue::dispatch()` → `WC_Action_Queue::add()` → `as_schedule_single_action( time(), … )`),
+  run by the next queue runner (WP-Cron every minute, or the async runner on shutdown); ≤ 10.7 fires a
+  non-blocking loopback on `shutdown` and a WP-Cron health check every 5 minutes (`WC_Background_Emailer`,
+  `wp-background-process`). Both finish within seconds and retry within minutes. The one bound WooCommerce's
+  own stack puts on «this should have run by now» is Action Scheduler's past-due threshold —
+  `action_scheduler_pastdue_actions_seconds` = `DAY_IN_SECONDS` in the Action Scheduler bundled with 11.1
+  (`ActionScheduler_AdminView`). A slow-but-working queue (a backlog, a store whose cron fires only on page
+  views) therefore still meets its mute; a LOST queue stops muting after a day. A shorter TTL would trade the
+  lost-queue residual for a real «New order» on an edit — the thing C4 forbids.
+- **Write races** are considered only as far as one admin save path goes: two requests editing the same order
+  at the same instant may each read the list before the other writes it, last `save()` wins. The wizard's
+  contract (D5) serialises edits of one order; stated in the method's docblock.
+
+### A third finding, from the 8.5.1/9.3.0 run
+
+With the list in place the two-queued-edits test still left ONE entry behind on 8.5.1 and 9.3.0 (both
+datastores), while 11.1 was clean. `WC_Background_Emailer::handle()` → `get_batch()` **unserialises the whole
+batch at once**, so both queued notifications of the same order are constructed (`WC_Data::__wakeup()` →
+re-read) BEFORE either runs: the second arrives with the meta the first has already consumed and saved, consumes
+«one» from its stale copy and writes the stale remainder back. Action Scheduler (10.8+) runs one action per
+request slot and `wc_get_order()`s the order at run time, hence no symptom there. Fix: a marked order's meta is
+**re-read from the datastore** (`$order->read_meta_data( true )`) before anything is consumed; an order whose
+key is gone by then passes through. Safe in the synchronous path too: `WC_Order::save()` persists meta before
+`status_transition()` fires the notification, so the re-read returns exactly what the edit just wrote. Only
+orders that carry the key pay the extra read.
+
+### Evidence
+
+**Red first, against `bea182c`** (production file stashed to the baseline, the six new tests run against it):
+
+| new test (`OrderEditorDatastoresTest`, both datastores, deferral ON) | on `bea182c` |
+|---|---|
+| `test_an_edit_between_a_queued_edit_and_its_dispatch_does_not_unmute_it` | armed entries after edit B: `[]` instead of `[pending_to_processing]`; with the shape assertions removed (a throw-away probe copy): «edit A's «New order» stays muted although edit B ran in between — `1 is identical to 0`» |
+| `test_two_queued_edits_of_the_same_transition_are_both_muted` | meta is a string, not a list; probe copy: «neither edit's «New order» goes out — `1 is identical to 0`» |
+| `test_a_stale_entry_from_a_lost_queue_does_not_mute_a_later_transition` | meta is a string; probe copy: «a day-old entry of a lost queue mutes nothing — `0 is identical to 1`» |
+
+6 failures out of 6 in both forms. The lost queue is simulated the way a request that dies before `shutdown`
+loses it (the in-memory list emptied through the same private member the drain reads); the day is simulated by
+moving the entries' `created_at` back past the TTL through the datastore, since the clock cannot be moved.
+
+**Green with the fix:**
+
+| WooCommerce | `--filter OrderEditorDatastoresTest` | full Integration suite |
+|---|---|---|
+| 11.1.0 | OK, 52 tests, 668 assertions | OK, 309 tests, 3915 assertions |
+| 9.3.0 | OK, 52 tests, 670 assertions | 309 tests, 3912 assertions, Skipped: 2 |
+| 8.5.1 | OK, 52 tests, 670 assertions | 309 tests, 3912 assertions, Skipped: 2 |
+
+`composer check` green: phpcs, phpstan (237 files, no errors), 4426 unit tests — `OrderEditorEmailMuteTest`
+now pins the list semantics: oldest matching entry consumed, a different transition untouched, an expired entry
+pruned instead of muting, an expired one pruned alongside the consumed one, a stale object deferring to the
+datastore, round 2's string shape dropped.
 
 ## Related
 

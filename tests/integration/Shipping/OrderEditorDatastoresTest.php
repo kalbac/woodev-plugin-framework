@@ -503,6 +503,110 @@ class OrderEditorDatastoresTest extends TestCase {
 		return $queued;
 	}
 
+	/**
+	 * LOSES WooCommerce's deferred e-mail queue the way a request that dies before `shutdown` loses
+	 * it — nothing of what the transition queued is ever dispatched — and says how many notifications
+	 * were lost. The in-memory list is emptied through the same private member the drain reads
+	 * ({@see drain_deferred_emails()}); no option, no Action Scheduler action is ever written.
+	 *
+	 * @return int notifications lost.
+	 */
+	private function lose_deferred_emails(): int {
+		if ( class_exists( '\Automattic\WooCommerce\Internal\Email\DeferredEmailQueue' ) ) {
+			$queue = wc_get_container()->get( \Automattic\WooCommerce\Internal\Email\DeferredEmailQueue::class );
+			$list  = new \ReflectionProperty( $queue, 'queue' );
+
+			if ( PHP_VERSION_ID < 80100 ) {
+				$list->setAccessible( true );
+			}
+
+			$lost = count( (array) $list->getValue( $queue ) );
+			$list->setValue( $queue, [] );
+
+			return $lost;
+		}
+
+		$emailer_property = new \ReflectionProperty( \WC_Emails::class, 'background_emailer' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$emailer_property->setAccessible( true );
+		}
+
+		$emailer = $emailer_property->getValue();
+
+		$this->assertInstanceOf( \WC_Background_Emailer::class, $emailer, 'WooCommerce built its background emailer when it switched to deferral' );
+
+		$data_property = new \ReflectionProperty( $emailer, 'data' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$data_property->setAccessible( true );
+		}
+
+		$lost = count( (array) $data_property->getValue( $emailer ) );
+		$data_property->setValue( $emailer, [] );
+
+		return $lost;
+	}
+
+	/**
+	 * The mute entries an order carries, read fresh from the datastore.
+	 *
+	 * @param int $order_id order id.
+	 * @return array<int, array{transition: string, created_at: int}>
+	 */
+	private function armed_entries( int $order_id ): array {
+		$stored = $this->fresh( $order_id )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META );
+
+		if ( '' === $stored ) {
+			return [];
+		}
+
+		$this->assertIsArray( $stored, 'the mute meta is a list of entries' );
+
+		foreach ( $stored as $entry ) {
+			$this->assertIsArray( $entry );
+			$this->assertArrayHasKey( 'transition', $entry );
+			$this->assertArrayHasKey( 'created_at', $entry );
+		}
+
+		return array_values( $stored );
+	}
+
+	/**
+	 * Asserts that nothing is left on the order that could mute a later «New order».
+	 *
+	 * @param int    $order_id order id.
+	 * @param string $message  why.
+	 * @return void
+	 */
+	private function assert_not_armed( int $order_id, string $message ): void {
+		$this->assertSame( '', $this->fresh( $order_id )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META ), $message );
+	}
+
+	/**
+	 * Ages every mute entry of an order past {@see Order_Editor::NEW_ORDER_EMAIL_MUTE_TTL}, as if the
+	 * edit that wrote it had happened more than a day ago — the clock cannot be moved, so the entries
+	 * are moved instead, through the very datastore write an old edit would have left behind.
+	 *
+	 * @param int $order_id order id.
+	 * @return void
+	 */
+	private function age_mute_entries( int $order_id ): void {
+		$entries = $this->armed_entries( $order_id );
+
+		$this->assertNotSame( [], $entries, 'there is an entry to age' );
+
+		foreach ( $entries as &$entry ) {
+			$entry['created_at'] = time() - Order_Editor::NEW_ORDER_EMAIL_MUTE_TTL - 1;
+		}
+
+		unset( $entry );
+
+		$order = $this->fresh( $order_id );
+		$order->update_meta_data( Order_Editor::NEW_ORDER_EMAIL_MUTE_META, $entries );
+		$order->save();
+	}
+
 	// -------------------------------------------------------------------------
 	// create
 	// -------------------------------------------------------------------------
@@ -671,7 +775,7 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertInstanceOf( \WC_Order::class, $updated );
 		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'the transition itself still happens' );
 		$this->assertSame( 0, $sent['count'], 'an edit sends no «New order»' );
-		$this->assertSame( '', (string) $this->fresh( $pending->get_id() )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META ), 'the synchronous dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
+		$this->assert_not_armed( $pending->get_id(), 'the synchronous dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
 
 		$this->create( $this->payload( [ 'status' => 'processing' ] ) );
 		$this->assertSame( 1, $sent['count'], 'the mute was scoped to the edit: a created order still announces itself' );
@@ -710,11 +814,120 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertGreaterThan( 0, $this->drain_deferred_emails(), 'the edit\'s notification was queued, and the drain ran it' );
 		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail, so a zero below is a mute and not a dead queue' );
 		$this->assertSame( 0, $new_order['count'], 'an edit sends no «New order» — not after the deferred dispatch either' );
-		$this->assertSame( '', (string) $this->fresh( $pending->get_id() )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META ), 'the deferred dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
+		$this->assert_not_armed( $pending->get_id(), 'the deferred dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
 
 		$this->create( $this->payload( [ 'status' => 'processing' ] ) );
 		$this->drain_deferred_emails();
 		$this->assertSame( 1, $new_order['count'], 'the mute was scoped to the edit: a created order still announces itself through the deferred dispatch' );
+	}
+
+	/**
+	 * Two edits interleaved with the deferred dispatch must each keep their own mute (#981 round 3,
+	 * the critic's blocker on round 2).
+	 *
+	 * Under deferral edit A (pending→processing) only QUEUES its notification. Before WooCommerce
+	 * runs the queue, edit B (processing→pending — allowed, and a transition WooCommerce sends no
+	 * e-mail for) arms and un-arms the order in turn. Round 2 kept ONE marker per order, so B's edit
+	 * overwrote A's and then dropped it, and A's queued «New order» went out when the queue ran.
+	 * Now each edit appends its own entry: B's is dropped as unneeded, A's waits for its dispatch.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_edit_between_a_queued_edit_and_its_dispatch_does_not_unmute_it( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->defer_transactional_emails();
+
+		$new_order = $this->count_sent_email( 'new_order' );
+		$customer  = $this->count_sent_email( 'customer_processing_order' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$editor  = new Order_Editor();
+
+		$this->assertInstanceOf( \WC_Order::class, $editor->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) ) );
+		$this->assertInstanceOf( \WC_Order::class, $editor->update( $pending->get_id(), $this->payload( [ 'status' => 'pending' ] ) ) );
+
+		$this->assertSame( 'pending', $this->fresh( $pending->get_id() )->get_status(), 'both edits happened' );
+		$this->assertSame( [ 'woocommerce_order_status_pending_to_processing' ], array_column( $this->armed_entries( $pending->get_id() ), 'transition' ), 'edit A\'s mute waits for its queued dispatch; edit B\'s transition sends nothing and left no entry' );
+		$this->assertSame( 0, $customer['count'], 'deferred: nothing leaves during the requests that edit the order' );
+
+		$this->assertGreaterThan( 0, $this->drain_deferred_emails(), 'edit A\'s notification was queued, and the drain ran it' );
+		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail, so a zero below is a mute and not a dead queue' );
+		$this->assertSame( 0, $new_order['count'], 'edit A\'s «New order» stays muted although edit B ran in between' );
+		$this->assert_not_armed( $pending->get_id(), 'the dispatch consumed edit A\'s entry: nothing is left on the order' );
+	}
+
+	/**
+	 * Two queued edits of the SAME transition each mute their own notification (#981 round 3).
+	 *
+	 * pending→processing, back to pending, pending→processing again — all before WooCommerce runs
+	 * its queue — leaves two `pending_to_processing` notifications queued and two entries armed.
+	 * Each dispatch consumes one; neither «New order» goes out, and nothing is left afterwards.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_two_queued_edits_of_the_same_transition_are_both_muted( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->defer_transactional_emails();
+
+		$new_order = $this->count_sent_email( 'new_order' );
+		$customer  = $this->count_sent_email( 'customer_processing_order' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$editor  = new Order_Editor();
+
+		foreach ( [ 'processing', 'pending', 'processing' ] as $status ) {
+			$this->assertInstanceOf( \WC_Order::class, $editor->update( $pending->get_id(), $this->payload( [ 'status' => $status ] ) ) );
+		}
+
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'all three edits happened' );
+		$this->assertCount( 2, $this->armed_entries( $pending->get_id() ), 'one entry per queued pending→processing edit' );
+
+		$this->assertSame( 2, $this->drain_deferred_emails(), 'both pending→processing notifications were queued, and the drain ran them' );
+		$this->assertSame( 2, $customer['count'], 'the drain delivered both customer e-mails' );
+		$this->assertSame( 0, $new_order['count'], 'neither edit\'s «New order» goes out' );
+		$this->assert_not_armed( $pending->get_id(), 'both entries were consumed: nothing is left on the order' );
+	}
+
+	/**
+	 * An entry whose dispatch was LOST stops muting after {@see Order_Editor::NEW_ORDER_EMAIL_MUTE_TTL}
+	 * (#981 round 3, the critic's major on round 2).
+	 *
+	 * The edit's notification is queued and then lost (the request dies before WooCommerce's
+	 * `shutdown`), so its entry is never consumed. A day later the order legitimately makes the
+	 * very same transition outside the editor — the customer pays — and WooCommerce must announce it:
+	 * the stale entry is pruned instead of muting, and the key goes with it.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_stale_entry_from_a_lost_queue_does_not_mute_a_later_transition( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->defer_transactional_emails();
+
+		$new_order = $this->count_sent_email( 'new_order' );
+		$customer  = $this->count_sent_email( 'customer_processing_order' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+
+		$this->assertInstanceOf( \WC_Order::class, ( new Order_Editor() )->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) ) );
+		$this->assertGreaterThan( 0, $this->lose_deferred_emails(), 'the edit\'s notification was queued — and is now lost for good' );
+		$this->assertCount( 1, $this->armed_entries( $pending->get_id() ), 'the entry waits for a dispatch that will never come' );
+
+		$this->age_mute_entries( $pending->get_id() );
+
+		$order = $this->fresh( $pending->get_id() );
+		$order->update_status( 'pending' );
+		$order->update_status( 'processing' ); // Not an edit: the same transition, from outside the editor.
+
+		$this->assertSame( 1, $this->drain_deferred_emails(), 'the repeat transition\'s notification was queued, and the drain ran it' );
+		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail' );
+		$this->assertSame( 1, $new_order['count'], 'a day-old entry of a lost queue mutes nothing: the legitimate «New order» goes out' );
+		$this->assert_not_armed( $pending->get_id(), 'the stale entry was pruned and the key deleted' );
 	}
 
 	/**
