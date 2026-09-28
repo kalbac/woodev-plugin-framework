@@ -131,7 +131,10 @@ export interface OrdersScopeCounts {
  * action that does not exist for this row, never one the merchant cannot currently use.
  */
 export interface OrderRowAction {
-	/** `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter. */
+	/**
+	 * `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter — or `'edit'`
+	 * (#972), which opens the order wizard on the client and is never sent to the action routes.
+	 */
 	action: string;
 	/** Button text, already translated server-side. */
 	label: string;

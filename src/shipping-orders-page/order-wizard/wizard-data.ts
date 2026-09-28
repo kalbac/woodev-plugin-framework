@@ -278,11 +278,17 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
 
 /**
  * The state minus what the wizard derives on its own (the carrier's reference price, the pickup
- * flag, the pending marker and the pickup check step ④ keeps, the settlement record step ② keeps): opening a step
- * and letting it look things up is not «the manager typed something».
+ * flag, the pending marker and the pickup check step ④ keeps, the settlement record step ② keeps,
+ * and what the chosen tariff fills in around its id): opening a step and letting it look things up
+ * is not «the manager typed something».
+ *
+ * The last one matters on EDIT (#972): the order is loaded with its shipping item's label and meta
+ * as WooCommerce saved them, and step ④'s re-quote replaces them with the tariff's own — the very
+ * same choice, spelled differently. Only the tariff (`rate_id`) and the price the manager may type
+ * over are the manager's.
  */
 function withoutDerived( data: WizardData ): unknown {
-	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, ...rest } = data.rest;
+	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, shipping_line, ...rest } = data.rest;
 	const { settlementRecord, ...view } = data;
 
 	void rate_cost;
@@ -291,7 +297,13 @@ function withoutDerived( data: WizardData ): unknown {
 	void pickup_check;
 	void settlementRecord;
 
-	return { ...view, rest };
+	return {
+		...view,
+		rest: {
+			...rest,
+			shipping_line: shipping_line ? { rate_id: shipping_line.rate_id, cost: shipping_line.cost } : null,
+		},
+	};
 }
 
 /** A line as the items step adds it. */

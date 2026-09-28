@@ -6,7 +6,7 @@
  * @package woodev-plugin-framework
  */
 
-import type { WizardAddress, WizardData } from './types';
+import type { PrefillOrder, WizardAddress, WizardData } from './types';
 import { itemsSubtotal } from './wizard-data';
 
 export interface SelectOption {
@@ -103,6 +103,47 @@ export function orderTotals( data: WizardData ): Totals {
 	const delivery = deliveryCost( data );
 
 	return { items, delivery, total: items + delivery };
+}
+
+export interface PaidTotalChange {
+	/** The total the order has now (saved). */
+	was: number;
+	/** What it comes to with the edits: the saved total moved by what the manager changed. */
+	now: number;
+}
+
+/**
+ * O14: an already PAID order whose total the edit changes. `null` when the order is not paid, was
+ * not loaded, or the edit leaves the total where it was.
+ *
+ * The change is measured on the wizard's own arithmetic — items + delivery now against the same
+ * sum for the order as loaded (`baseline`) — and applied to the SAVED total, so WooCommerce's taxes
+ * (which the wizard cannot compute) stay inside «было» and never trigger the warning on their own.
+ * A difference that rounds to the same cent is arithmetic noise, not an edit.
+ *
+ * @param {PrefillOrder|null} order    the loaded order.
+ * @param {number|null}       baseline the wizard's total for it as loaded.
+ * @param {WizardData}        data     the wizard state now.
+ * @return {PaidTotalChange|null} the change to warn about.
+ */
+export function paidTotalChange( order: PrefillOrder | null, baseline: number | null | undefined, data: WizardData ): PaidTotalChange | null {
+	if ( ! order || ! order.is_paid || null === baseline || undefined === baseline ) {
+		return null;
+	}
+
+	const saved = Number( order.total );
+
+	if ( ! Number.isFinite( saved ) ) {
+		return null;
+	}
+
+	const delta = orderTotals( data ).total - baseline;
+
+	if ( Math.abs( delta ) < 0.005 ) {
+		return null;
+	}
+
+	return { was: saved, now: saved + delta };
 }
 
 /** «Имя Фамилия» of an address, '' when both are empty. */

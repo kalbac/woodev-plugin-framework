@@ -16,8 +16,9 @@
  * (`StepProps.submit`); before it sends, every step is checked once more, and the first one with
  * a problem is shown.
  *
- * **Modes.** `create` opens empty; `edit` (an `orderId`) loads the prefill first — the row
- * action that opens it is I6.
+ * **Modes.** `create` opens empty; `edit` (an `orderId`) loads the prefill first — the
+ * «Редактировать» row action that opens it is #972. An edit of a PAID order warns on ⑤ when the
+ * total changes (O14, `paidTotalChange()`), measured against the total the loaded order came to.
  *
  * **Closing** with unsaved input asks first (C3); nothing is persisted as a draft.
  *
@@ -40,6 +41,7 @@ import type { SetWizardData, StepRenderers } from './step-props';
 import { WIZARD_STEPS } from './types';
 import type { FieldErrors, PrefillOrder, SaveResult, WizardData, WizardStepId } from './types';
 import { errorsOfStep, firstStepWithErrors, groupServerErrors, validateAll, validateStep } from './validation';
+import { orderTotals } from './payment-state';
 import { buildPayload, emptyWizardData, isDirty, prefillToData } from './wizard-data';
 
 export interface OrderWizardProps {
@@ -79,6 +81,8 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const initial = useRef<WizardData>( emptyWizardData( wizard.defaultCountry || '' ) );
 	const [ data, setDataState ] = useState<WizardData>( initial.current );
 	const [ order, setOrder ] = useState<PrefillOrder | null>( null );
+	// O14's yardstick: the wizard's own total for the order as loaded (see `StepProps.baselineTotal`).
+	const [ baselineTotal, setBaselineTotal ] = useState<number | null>( null );
 	const [ errors, setErrors ] = useState<FieldErrors>( {} );
 	const [ index, setIndex ] = useState( 0 );
 	const [ busy, setBusy ] = useState( false );
@@ -102,6 +106,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 				initial.current = prefillToData( prefill );
 				setDataState( initial.current );
 				setOrder( prefill.order );
+				setBaselineTotal( orderTotals( initial.current ).total );
 				setPhase( 'ready' );
 			} )
 			.catch( ( error: WizardRequestError ) => {
@@ -218,7 +223,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	};
 
 	const goToStep = ( step: WizardStepId ) => setIndex( Math.max( 0, ids.indexOf( step ) ) );
-	const props = { data, setData, errors, mode, order, submit, busy, goToStep } as const;
+	const props = { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep } as const;
 	const body = ( () => {
 		const custom = renderers[ stepId ];
 

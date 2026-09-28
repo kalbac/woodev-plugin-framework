@@ -23,7 +23,7 @@ import {
 	setDeliveryCost,
 	setPickupPoint,
 } from '../../src/shipping-orders-page/order-wizard/delivery-state';
-import { emptyWizardData, isDirty, newItem } from '../../src/shipping-orders-page/order-wizard/wizard-data';
+import { emptyWizardData, isDirty, newItem, prefillToData } from '../../src/shipping-orders-page/order-wizard/wizard-data';
 import { buildPayload } from '../../src/shipping-orders-page/order-wizard/wizard-data';
 
 const COURIER = { id: 'cdek_courier:3', method_id: 'cdek_courier', instance_id: 3, label: 'Курьер', cost: 250.5, delivery_time: '2-3 дня', description: '', is_pickup: false, meta: { tariff_code: 137, nested: { a: 1 }, flag: true } };
@@ -309,5 +309,90 @@ describe( 'isDirty ignores what the wizard derives on its own', () => {
 		const initial = filled();
 
 		expect( isDirty( initial, chooseRate( initial, COURIER ) ) ).toBe( true );
+	} );
+} );
+
+describe( 'an order loaded for edit meets the rates (#972, O4)', () => {
+	/** What `Order_Editor::build_prefill()` sends for a pickup order: the shipping item as WooCommerce saved it. */
+	const prefill = ( patch = {} ) => ( {
+		order: { id: 7, number: '7', status: 'processing', status_name: 'В обработке', is_paid: false, total: '1380.00', currency: 'RUB' },
+		carrier: 'cdek',
+		customer: { id: 5, create_account: false },
+		billing: { first_name: 'Анна', last_name: 'Ким', email: 'anna@example.test', country: 'RU', city: 'Москва' },
+		shipping: { country: 'RU', state: 'МОСКВА', city: 'Москва', address_1: 'ул Тверская 1' },
+		items: [ { item_id: 11, product_id: 12, variation_id: 0, name: 'Кружка', quantity: 1, price: '1000.00' } ],
+		shipping_line: {
+			method_id: 'cdek_pvz',
+			instance_id: 5,
+			rate_id: 'cdek_pvz:5',
+			label: 'ПВЗ (сохранено)',
+			cost: '380',
+			// WooCommerce adds its own «Items» meta to a shipping item; a fresh tariff does not carry it.
+			meta: { Items: 'Кружка × 1', tariff_code: 136 },
+		},
+		pickup_point: { id: 'P-1', name: 'ПВЗ Центр', address: 'ул Арбат 3' },
+		fields: {},
+		carrier_fields: {},
+		payment_method: 'cod',
+		status: 'processing',
+		...patch,
+	} );
+
+	test( 'the saved tariff, price and point are what the state opens with — the point marks it a pickup order before the rates answer', () => {
+		const data = prefillToData( prefill() );
+
+		expect( chosenRateId( data.rest ) ).toBe( 'cdek_pvz:5' );
+		expect( data.rest.shipping_line.cost ).toBe( '380' );
+		expect( pickedPointId( data.rest ) ).toBe( 'P-1' );
+		expect( data.rest.rate_is_pickup ).toBe( true );
+		expect( data.rest.rate_cost ).toBe( '' );
+	} );
+
+	test( 'the first answer keeps the saved price and the saved point, and only fills in the reference', () => {
+		const data = applyRates( prefillToData( prefill() ), answer( PVZ ) );
+
+		expect( data.rest.shipping_line.cost ).toBe( '380' );
+		expect( pickedPointId( data.rest ) ).toBe( 'P-1' );
+		expect( data.rest.rate_cost ).toBe( '120' );
+		expect( data.rest.rate_is_pickup ).toBe( true );
+		expect( isCostOverridden( data.rest ) ).toBe( true );
+	} );
+
+	test( 'the tariff dropped out of the answer: the line and its point go, and the step says so (the manager picks again)', () => {
+		const loaded = prefillToData( prefill() );
+		const response = answer( COURIER );
+
+		expect( isChosenRateGone( loaded, response ) ).toBe( true );
+
+		const data = applyRates( loaded, response );
+
+		expect( data.rest.shipping_line ).toBeNull();
+		expect( data.rest.pickup_point ).toBeNull();
+	} );
+
+	test( 'the request the step asks is built from the prefilled order — at its saved price, to its saved address', () => {
+		expect( buildRatesRequest( prefillToData( prefill() ) ) ).toEqual( {
+			items: [ { product_id: 12, variation_id: 0, quantity: 1, price: 1000 } ],
+			destination: { country: 'RU', state: 'МОСКВА', city: 'Москва', postcode: '', address: 'ул Тверская 1', address_2: '' },
+			customer_id: 5,
+		} );
+	} );
+
+	test( 'the re-quote spells the same choice differently (label, meta) — that is not «the manager typed something»', () => {
+		const loaded = prefillToData( prefill() );
+		const requoted = applyRates( loaded, answer( { ...PVZ, meta: { tariff_code: 136 } } ) );
+
+		expect( requoted.rest.shipping_line.label ).toBe( 'ПВЗ' );
+		expect( requoted.rest.shipping_line.meta ).toEqual( { tariff_code: 136 } );
+		expect( isDirty( loaded, requoted ) ).toBe( false );
+	} );
+
+	test( 'a price typed over, another tariff and another point ARE edits', () => {
+		const loaded = prefillToData( prefill() );
+		const requoted = applyRates( loaded, answer( PVZ, COURIER ) );
+
+		expect( isDirty( loaded, setDeliveryCost( requoted, '400' ) ) ).toBe( true );
+		expect( isDirty( loaded, chooseRate( requoted, COURIER ) ) ).toBe( true );
+		expect( isDirty( loaded, setPickupPoint( requoted, { id: 'P-2' } ) ) ).toBe( true );
 	} );
 } );

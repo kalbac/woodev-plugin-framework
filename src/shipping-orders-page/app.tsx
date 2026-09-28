@@ -368,6 +368,8 @@ type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
  * back to a neutral glyph — it renders rather than vanishing.
  */
 const ACTION_ICONS: Record< string, DashiconName > = {
+	// #972 — «Редактировать» has no counterpart in the reference plugins: the WordPress pencil.
+	edit: 'edit',
 	export: 'upload',
 	update: 'update',
 	cancel: 'remove',
@@ -393,6 +395,7 @@ const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
 type ActionTone = 'go' | 'stop' | 'warn' | 'neutral';
 
 const ACTION_TONES: Record< string, ActionTone > = {
+	edit: 'neutral',
 	export: 'go',
 	cancel: 'stop',
 	update: 'warn',
@@ -546,6 +549,18 @@ function confirmQuestion( action: OrderRowAction, row: ActionableOrder ): string
 		  );
 }
 
+/** The server-side id of the one row action that opens the wizard instead of calling the carrier (#972). */
+const EDIT_ACTION = 'edit';
+
+/**
+ * Whether the server can EXECUTE any of a row's actions — what makes it worth a bulk checkbox.
+ * «Редактировать» only opens the wizard on the client, so a row that offers nothing else is not
+ * selectable: the bulk routes would refuse it (#972).
+ */
+function hasBulkableActions( row: Pick<OrderRow, 'actions'> ): boolean {
+	return Boolean( row.actions && row.actions.some( ( action ) => EDIT_ACTION !== action.action ) );
+}
+
 /**
  * The `cb` column's per-row cell (#874). A row whose `actions` is absent or empty renders
  * NO checkbox at all — the operator's own rule, so a merchant never selects an order the
@@ -565,7 +580,7 @@ function CheckboxCell( {
 	rowState?: RowActionState;
 	onToggle: ( orderId: number, checked: boolean ) => void;
 } ) {
-	if ( ! row.actions || 0 === row.actions.length ) {
+	if ( ! hasBulkableActions( row ) ) {
 		return null;
 	}
 
@@ -1435,8 +1450,8 @@ export default function OrdersPage() {
 	/** #874 — a destructive bulk pick awaiting «Да / Нет», page-level (not keyed by row). */
 	const [ bulkConfirming, setBulkConfirming ] = useState<BulkAction | null>( null );
 	/**
-	 * #969 — the order wizard (#710): `null` closed, `{ orderId: null }` creating a new order.
-	 * The «Редактировать» row action (I6) opens it with an `orderId`.
+	 * #969 — the order wizard (#710): `null` closed, `{ orderId: null }` creating a new order,
+	 * `{ orderId }` editing that one — the «Редактировать» row action (#972) opens it so.
 	 */
 	const [ wizard, setWizard ] = useState<{ orderId: number | null } | null>( null );
 	/**
@@ -1664,6 +1679,12 @@ export default function OrdersPage() {
 	const onWizardSaved = ( result: SaveResult ) => {
 		setActionNotice( { status: 'success', text: result.message } );
 		dispatch( noticesStore ).createSuccessNotice( result.message, { type: 'snackbar' } );
+		// An edited order's cached preview describes it BEFORE the edit (#972) — same reason as after a row action.
+		setPreviewCache( ( current ) => {
+			const next = { ...current };
+			delete next[ result.id ];
+			return next;
+		} );
 		setReloadKey( ( key ) => key + 1 );
 	};
 
@@ -1862,6 +1883,15 @@ export default function OrdersPage() {
 	 * both end up calling {@link performAction} the same way.
 	 */
 	const onActionClick = ( row: ActionableOrder, action: OrderRowAction ) => {
+		// #972 — «Редактировать» opens the wizard on this order; nothing goes to the carrier, so it
+		// skips the pending/confirm bookkeeping below. A preview it was clicked in closes first —
+		// two modals stacked would leave the stale preview under the wizard.
+		if ( EDIT_ACTION === action.action ) {
+			setPreviewOrderId( null );
+			setWizard( { orderId: row.id } );
+			return;
+		}
+
 		if ( action.destructive && actionRowStates[ row.id ]?.confirmingAction !== action.action ) {
 			setActionRowStates( ( current ) => ( {
 				...current,
@@ -1899,7 +1929,7 @@ export default function OrdersPage() {
 	// `CheckboxCell` renders nothing for, never another page's ids, since `rows` only ever
 	// holds this page's data.
 	const checkableIds = ( rows || [] )
-		.filter( ( r ) => r.actions && r.actions.length > 0 )
+		.filter( hasBulkableActions )
 		.map( ( r ) => r.id );
 	const selectAllChecked =
 		checkableIds.length > 0 && checkableIds.every( ( id ) => selectedIds.has( id ) );

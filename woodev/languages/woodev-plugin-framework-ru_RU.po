@@ -4235,6 +4235,14 @@ msgid "Отправление уже в конечном статусе «%s» �
 msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-actions.php:238
+msgid "Редактировать"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:239
+msgid "Изменить заказ, пока он не выгружен перевозчику"
+msgstr ""
+
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Не удалось выполнить запрос. Попробуйте ещё раз."
 msgstr ""
@@ -4543,4 +4551,20 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Проверьте отмеченные поля — заказ ещё не создан."
+msgstr ""
+
+#. translators: 1: the order total now, 2: the approximate total after the edit.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, станет примерно %2$s."
+msgstr ""
+
+#. translators: 1: the order total now, 2: the total after the edit.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, стало %2$s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Возврат или доплату сделайте средствами WooCommerce; в заказ добавится заметка об изменении."
 msgstr ""

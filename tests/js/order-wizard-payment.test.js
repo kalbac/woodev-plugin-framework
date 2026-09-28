@@ -59,7 +59,7 @@ const filledState = ( patch = {} ) => {
 };
 
 /** The step with real state behind it, so a select's change comes back through `setData` like in the shell. */
-function Harness( { initial, mode = 'create', errors = {}, submit, busy = false, goToStep, onData } ) {
+function Harness( { initial, mode = 'create', order = null, baselineTotal = null, errors = {}, submit, busy = false, goToStep, onData } ) {
 	const [ data, setData ] = useState( initial );
 
 	onData( data );
@@ -69,7 +69,8 @@ function Harness( { initial, mode = 'create', errors = {}, submit, busy = false,
 		setData: ( update ) => setData( ( current ) => update( current ) ),
 		errors,
 		mode,
-		order: null,
+		order,
+		baselineTotal,
 		submit,
 		busy,
 		goToStep,
@@ -225,6 +226,57 @@ describe( 'payment method and status (O7)', () => {
 	} );
 } );
 
+describe( 'editing a PAID order that changes its total (O14, #972)', () => {
+	/** The order as the load route reports it: one mug at 1000 and a courier at 250.5. */
+	const PAID = { id: 7, number: '7', status: 'processing', status_name: 'В обработке', is_paid: true, total: '1250.50', currency: 'RUB' };
+	const BASELINE = 1250.5;
+	const dearer = ( state, price = '1100' ) => ( { ...state, items: [ { ...state.items[ 0 ], price } ] } );
+	const warning = () => document.querySelector( '.woodev-order-wizard__paid-warning' );
+
+	test( 'shows «было X, стало Y» and where the refund is made, and leaves the button working', () => {
+		mountStep( { mode: 'edit', order: PAID, baselineTotal: BASELINE, initial: dearer( filledState() ) } );
+
+		expect( warning() ).not.toBeNull();
+		expect( plain( warning() ) ).toContain( 'Заказ уже оплачен, а его сумма меняется: было 1 250,50 ₽, стало 1 350,50 ₽.' );
+		expect( plain( warning() ) ).toContain( 'Возврат или доплату сделайте средствами WooCommerce' );
+		expect( plain( warning() ) ).toContain( 'в заказ добавится заметка' );
+		expect( screen.getByRole( 'button', { name: 'Сохранить' } ) ).toBeEnabled();
+	} );
+
+	test( 'says nothing while the total is what it was', () => {
+		mountStep( { mode: 'edit', order: PAID, baselineTotal: BASELINE, initial: filledState() } );
+
+		expect( warning() ).toBeNull();
+	} );
+
+	test( 'says nothing for an order nobody paid', () => {
+		mountStep( { mode: 'edit', order: { ...PAID, is_paid: false }, baselineTotal: BASELINE, initial: dearer( filledState() ) } );
+
+		expect( warning() ).toBeNull();
+	} );
+
+	test( 'says nothing on a create', () => {
+		mountStep( { mode: 'create', order: null, baselineTotal: null, initial: dearer( filledState() ) } );
+
+		expect( warning() ).toBeNull();
+	} );
+
+	test( 'the new total moves with the price', () => {
+		const { data } = mountStep( { mode: 'edit', order: PAID, baselineTotal: BASELINE, initial: dearer( filledState(), '1200' ) } );
+
+		expect( plain( warning() ) ).toContain( 'стало 1 450,50 ₽' );
+		expect( data().items[ 0 ].price ).toBe( '1200' );
+	} );
+
+	test( 'with taxes on, the new total is only an estimate and says so', () => {
+		window.woodevShippingOrders.wizard = { ...WIZARD, taxesEnabled: true };
+
+		mountStep( { mode: 'edit', order: PAID, baselineTotal: BASELINE, initial: dearer( filledState() ) } );
+
+		expect( plain( warning() ) ).toContain( 'было 1 250,50 ₽, станет примерно 1 350,50 ₽.' );
+	} );
+} );
+
 describe( 'the send button', () => {
 	test( '«Создать заказ» on create calls the shell\'s submit', () => {
 		const { submit } = mountStep();
@@ -367,10 +419,18 @@ const RATES = {
 	],
 };
 
-const routeApi = ( save ) => {
+const routeApi = ( save, edit = null ) => {
 	apiFetch.mockImplementation( ( request ) => {
 		if ( request.url.endsWith( '/shipping/orders/rates' ) ) {
 			return Promise.resolve( RATES );
+		}
+
+		if ( edit && request.url === `${ ORDERS_ROOT }/7/edit` ) {
+			return Promise.resolve( edit.prefill );
+		}
+
+		if ( edit && request.url === `${ ORDERS_ROOT }/7` && 'PUT' === request.method ) {
+			return Promise.resolve( edit.saved );
 		}
 
 		if ( request.url.includes( '/wc/v3/products' ) ) {
@@ -509,5 +569,99 @@ describe( 'the real step inside the shell', () => {
 
 		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
 		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
+	} );
+} );
+
+describe( 'editing an order through the whole shell (#972)', () => {
+	/** `Order_Editor::build_prefill()` for a PAID order: one mug at 1000 and the courier at 250.5, saved at 1250.50. */
+	const PREFILL = {
+		order: { id: 7, number: '7', status: 'processing', status_name: 'В обработке', is_paid: true, total: '1250.50', currency: 'RUB' },
+		carrier: 'cdek',
+		customer: { id: 0, create_account: false },
+		billing: { first_name: 'Анна', last_name: 'Ким', phone: '+79001112233', email: 'anna@example.test', country: 'RU', state: 'МОСКВА', city: 'Москва', address_1: 'ул Тверская 1' },
+		shipping: { first_name: 'Анна', last_name: 'Ким', country: 'RU', state: 'МОСКВА', city: 'Москва', address_1: 'ул Тверская 1' },
+		items: [ { item_id: 11, product_id: 12, variation_id: 0, name: 'Кружка', quantity: 1, price: '1000.00' } ],
+		shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '250.5', meta: { Items: 'Кружка × 1' } },
+		pickup_point: null,
+		fields: {},
+		carrier_fields: {},
+		payment_method: 'cod',
+		status: 'processing',
+	};
+
+	const SAVED = { id: 7, number: '7', message: 'Заказ №7 сохранён.' };
+
+	/** Opens the order and walks ①→⑤ (the saved tariff must come back from the rates before ④ lets it through). */
+	const walkEdit = async ( prefill, beforeDelivery = () => {} ) => {
+		routeApi( null, { prefill, saved: SAVED } );
+
+		const onClose = jest.fn();
+		const onSaved = jest.fn();
+
+		render( createElement( OrderWizard, { orderId: 7, onClose, onSaved } ) );
+
+		await screen.findByRole( 'dialog', { name: 'Редактировать заказ №7' } );
+		next(); // ① → ②
+		next(); // ② → ③
+		beforeDelivery();
+		next(); // ③ → ④
+		await waitFor( () => expect( screen.getByRole( 'radio', { name: /Курьер/ } ) ).toBeChecked() );
+		next(); // ④ → ⑤
+		await screen.findByRole( 'button', { name: 'Сохранить' } );
+
+		return { onClose, onSaved };
+	};
+
+	test( 'the saved tariff is preselected on ④ at its saved price, and ⑤ opens on the order\'s payment method and status', async () => {
+		await walkEdit( PREFILL );
+
+		expect( screen.getByLabelText( 'Способ оплаты' ) ).toHaveValue( 'cod' );
+		expect( screen.getByLabelText( 'Статус заказа' ) ).toHaveValue( 'processing' );
+		// Totals are recalculated from the lines, at the saved prices.
+		expect( plain( document.querySelector( '.woodev-order-wizard__totals-sum' ) ) ).toContain( '1 250,50 ₽' );
+	} );
+
+	test( 'an untouched paid order shows no warning, and PUTs the order back as it was', async () => {
+		const { onSaved } = await walkEdit( PREFILL );
+
+		expect( document.querySelector( '.woodev-order-wizard__paid-warning' ) ).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
+
+		const put = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => 'PUT' === r.method );
+
+		expect( put.url ).toBe( `${ ORDERS_ROOT }/7` );
+		expect( put.data.items ).toEqual( [ { item_id: 11, product_id: 12, variation_id: 0, quantity: 1, price: '1000.00' } ] );
+		expect( put.data.shipping_line ).toMatchObject( { rate_id: 'cdek_courier:3', cost: '250.5' } );
+		expect( onSaved.mock.calls[ 0 ][ 1 ] ).toBe( 'edit' );
+	} );
+
+	test( 'a price changed on ③ reaches ⑤ as «было X, стало Y» and the total there is recalculated', async () => {
+		await walkEdit( PREFILL, () => fireEvent.change( screen.getByLabelText( 'Цена за шт.' ), { target: { value: '1100' } } ) );
+
+		const warning = document.querySelector( '.woodev-order-wizard__paid-warning' );
+
+		expect( warning ).not.toBeNull();
+		expect( plain( warning ) ).toContain( 'было 1 250,50 ₽, стало 1 350,50 ₽' );
+		expect( plain( document.querySelector( '.woodev-order-wizard__totals-sum' ) ) ).toContain( '1 350,50 ₽' );
+	} );
+
+	test( 'the same change on an order nobody paid shows no warning', async () => {
+		await walkEdit(
+			{ ...PREFILL, order: { ...PREFILL.order, is_paid: false } },
+			() => fireEvent.change( screen.getByLabelText( 'Цена за шт.' ), { target: { value: '1100' } } )
+		);
+
+		expect( document.querySelector( '.woodev-order-wizard__paid-warning' ) ).toBeNull();
+	} );
+
+	test( 'looking through an edit and pressing «Отмена» never asks «Закрыть окно?» — the re-quote is not an edit', async () => {
+		const { onClose } = await walkEdit( PREFILL );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Отмена' } ) );
+
+		expect( screen.queryByText( 'Закрыть окно? Введённые данные не сохранятся.' ) ).toBeNull();
+		expect( onClose ).toHaveBeenCalledTimes( 1 );
 	} );
 } );

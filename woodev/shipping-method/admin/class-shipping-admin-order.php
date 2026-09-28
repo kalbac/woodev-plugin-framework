@@ -251,6 +251,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			$fields      = $is_exported ? $this->build_fields( $order, $provider, $row ) : [];
 			$actions     = is_array( $row['actions'] ?? null ) ? $row['actions'] : [];
 
+			// «Редактировать» opens the wizard of the orders PAGE; there is nothing behind it on the order
+			// screen, and a button posting `edit` would only be refused (#972).
+			$actions = array_values(
+				array_filter(
+					$actions,
+					static function ( $action ): bool {
+						return ! is_array( $action ) || Order_Actions::EDIT !== ( $action['action'] ?? '' );
+					}
+				)
+			);
+
 			$info_text = $is_exported ? '' : sprintf(
 				/* translators: %s: carrier label, e.g. "СДЭК" */
 				__( 'Заказ ещё не передан перевозчику «%s».', 'woodev-plugin-framework' ),

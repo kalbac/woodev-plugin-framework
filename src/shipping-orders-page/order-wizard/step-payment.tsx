@@ -16,8 +16,10 @@
  * routed by the shell to the step and field that own the problem; the ones that belong here
  * (`payment_method`, `status`, anything unmapped) are shown on this step.
  *
- * Edit-mode extras — the «было X, стало Y» warning for a paid order (O14) — are I6's; the
- * immediate-export checkbox (O9, D6) waits for #872.
+ * Edit mode (#972) adds the «было X, стало Y» warning for a PAID order whose total the edit
+ * changes (O14): a warning only — the button stays, and the refund or extra payment is done with
+ * WooCommerce's own tools. The private order note that goes with it is written by the server on
+ * save (`Order_Editor::write()`). The immediate-export checkbox (O9, D6) waits for #872.
  *
  * @package woodev-plugin-framework
  */
@@ -31,7 +33,8 @@ import { checkPickupPoint } from './api';
 import type { PointVerdict } from './api';
 import { decodeEntities, pickedPointId } from './delivery-state';
 import { FieldErrorList, SelectField, errorsFor } from './fields';
-import { addressLine, orderTotals, paymentOptions, personName, shownStatus, statusOptions } from './payment-state';
+import type { PaidTotalChange } from './payment-state';
+import { addressLine, orderTotals, paidTotalChange, paymentOptions, personName, shownStatus, statusOptions } from './payment-state';
 import type { StepProps } from './step-props';
 import type { WizardStepId } from './types';
 import { errorsOfStep } from './validation';
@@ -60,7 +63,27 @@ function SummaryRow( { title, step, goToStep, disabled, children }: SummaryRowPr
 	);
 }
 
-export default function StepPayment( { data, setData, errors, mode, submit, busy, goToStep }: StepProps ) {
+/** The first sentence of O14's warning; with taxes on, the new total is only an estimate (WooCommerce adds the tax on save). */
+function paidWarning( change: PaidTotalChange, symbol: string, approximate: boolean ): string {
+	const was = formatMoney( change.was, symbol );
+	const now = formatMoney( change.now, symbol );
+
+	return approximate
+		? sprintf(
+				/* translators: 1: the order total now, 2: the approximate total after the edit. */
+				__( 'Заказ уже оплачен, а его сумма меняется: было %1$s, станет примерно %2$s.', 'woodev-plugin-framework' ),
+				was,
+				now
+		  )
+		: sprintf(
+				/* translators: 1: the order total now, 2: the total after the edit. */
+				__( 'Заказ уже оплачен, а его сумма меняется: было %1$s, стало %2$s.', 'woodev-plugin-framework' ),
+				was,
+				now
+		  );
+}
+
+export default function StepPayment( { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep }: StepProps ) {
 	const { wizard } = getWizardContext();
 	const symbol = wizard.currency?.symbol || '';
 	const countries = wizard.countries || {};
@@ -68,6 +91,7 @@ export default function StepPayment( { data, setData, errors, mode, submit, busy
 	const { rest } = data;
 	const totals = orderTotals( data );
 	const editing = 'edit' === mode;
+	const paidChange = editing ? paidTotalChange( order, baselineTotal, data ) : null;
 
 	const pointId = pickedPointId( rest );
 	const check = rest.pickup_check;
@@ -203,6 +227,13 @@ export default function StepPayment( { data, setData, errors, mode, submit, busy
 			) }
 
 			<FieldErrorList messages={ strayErrors } />
+
+			{ paidChange && (
+				<Notice status="warning" isDismissible={ false } className="woodev-order-wizard__paid-warning">
+					{ paidWarning( paidChange, symbol, !! wizard.taxesEnabled ) }{ ' ' }
+					{ __( 'Возврат или доплату сделайте средствами WooCommerce; в заказ добавится заметка об изменении.', 'woodev-plugin-framework' ) }
+				</Notice>
+			) }
 
 			<dl className="woodev-order-wizard__totals">
 				<div>

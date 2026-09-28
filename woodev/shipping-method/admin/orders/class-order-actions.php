@@ -41,6 +41,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public const CANCEL = 'cancel';
 
 		/**
+		 * «Редактировать» — opens the order wizard (#710, card #972). A CLIENT-side action: it appears on
+		 * a row through {@see self::for_row()} only, and is not something the action / bulk routes or the
+		 * metabox can execute, so it is not part of {@see self::for_order()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const EDIT = 'edit';
+
+		/**
 		 * WC order statuses «Выгрузить» is offered on: still early enough in the
 		 * order's own lifecycle to be worth shipping (mirrors the shipped v1
 		 * plugins' own gate, see class docblock of
@@ -186,6 +197,51 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 			$filtered = apply_filters( 'woodev_shipping_order_actions', $actions, $order, $provider );
 
 			return is_array( $filtered ) ? self::sanitize_actions( $filtered ) : $actions;
+		}
+
+		/**
+		 * The actions a ROW of the orders page shows: {@see self::for_order()}'s set plus «Редактировать»
+		 * when the order may still be edited (#710 spec D5, card #972).
+		 *
+		 * ⚠ Deliberately a SECOND method, not an extra entry in `for_order()`. `for_order()` is the set of
+		 * things the server can EXECUTE for an order — the REST action route, the bulk route and the
+		 * metabox all recompute it to refuse a stale click, and each would have to learn that `edit` is
+		 * not a carrier call. «Редактировать» opens the wizard on the client and never reaches those
+		 * routes; they keep refusing it, as they refuse any unknown id.
+		 *
+		 * The button is offered by {@see self::is_editable()} — the one policy the load / update routes
+		 * re-check — so it cannot outlive what the server would accept. Like every action here it needs
+		 * a registered shipment handler; a carrier without one shows no actions at all.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null when it could not be resolved.
+		 * @return array<int,array<string,mixed>> the same shape as {@see self::for_order()}; the edit
+		 *                                        action, when offered, comes first.
+		 */
+		public function for_row( \WC_Order $order, ?Orders_Provider $provider ): array {
+			$actions = $this->for_order( $order, $provider );
+
+			if ( null === $provider || null === $this->registry->get_shipment_handler( $provider->get_id() ) ) {
+				return $actions;
+			}
+
+			if ( ! self::is_editable( $order, $provider ) ) {
+				return $actions;
+			}
+
+			array_unshift(
+				$actions,
+				self::build_action(
+					self::EDIT,
+					__( 'Редактировать', 'woodev-plugin-framework' ),
+					__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
+					false
+				)
+			);
+
+			return $actions;
 		}
 
 		/**

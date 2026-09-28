@@ -20,6 +20,12 @@ export interface StepProps {
 	/** The loaded order on edit (O14 reads its total and paid flag); `null` on create. */
 	order: PrefillOrder | null;
 	/**
+	 * What the wizard's own totals (`orderTotals()`) came to for the order AS LOADED — the yardstick
+	 * O14's «было X, стало Y» measures a change against, so the tax WooCommerce added to the saved
+	 * total never reads as an edit. `null` on create, and until the order has loaded.
+	 */
+	baselineTotal?: number | null;
+	/**
 	 * Sends the order (`POST` / `PUT`). A 422 comes back as per-field errors and moves the
 	 * wizard to the earliest step that has one. The button that calls it is step ⑤'s.
 	 */

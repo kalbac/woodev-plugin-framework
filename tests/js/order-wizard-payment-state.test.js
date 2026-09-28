@@ -9,6 +9,7 @@ import {
 	addressLine,
 	deliveryCost,
 	orderTotals,
+	paidTotalChange,
 	paymentOptions,
 	personName,
 	shownStatus,
@@ -168,5 +169,95 @@ describe( 'withPickupCheck', () => {
 		const data = validState();
 
 		expect( isDirty( data, withPickupCheck( data, 'cdek', 3250 ) ) ).toBe( false );
+	} );
+} );
+
+describe( 'paidTotalChange (O14)', () => {
+	/** The order as loaded: one mug at 1000 and a courier at 250.5, saved at 1250.50. */
+	const loaded = ( patch = {} ) => ( {
+		id: 7,
+		number: '7',
+		status: 'processing',
+		status_name: 'В обработке',
+		is_paid: true,
+		total: '1250.50',
+		currency: 'RUB',
+		...patch,
+	} );
+
+	const state = () => {
+		const data = validState();
+
+		data.rest = { ...data.rest, shipping_line: { rate_id: 'a:1', cost: '250.5' } };
+
+		return data;
+	};
+
+	const baselineOf = ( data ) => orderTotals( data ).total;
+
+	test( 'nothing changed → nothing to say', () => {
+		const data = state();
+
+		expect( paidTotalChange( loaded(), baselineOf( data ), data ) ).toBeNull();
+	} );
+
+	test( 'a changed line price on a paid order → was the saved total, now the saved total moved by the change', () => {
+		const data = state();
+		const baseline = baselineOf( data );
+		const edited = { ...data, items: [ { ...data.items[ 0 ], price: '1100' } ] };
+
+		expect( paidTotalChange( loaded(), baseline, edited ) ).toEqual( { was: 1250.5, now: 1350.5 } );
+	} );
+
+	test( 'a changed delivery price, a changed quantity and a removed line all count', () => {
+		const data = state();
+		const baseline = baselineOf( data );
+
+		const dearer = { ...data, rest: { ...data.rest, shipping_line: { ...data.rest.shipping_line, cost: '300' } } };
+		const twice = { ...data, items: [ { ...data.items[ 0 ], quantity: '2' } ] };
+		const empty = { ...data, items: [] };
+
+		expect( paidTotalChange( loaded(), baseline, dearer ).now ).toBeCloseTo( 1300, 5 );
+		expect( paidTotalChange( loaded(), baseline, twice ).now ).toBeCloseTo( 2250.5, 5 );
+		expect( paidTotalChange( loaded(), baseline, empty ).now ).toBeCloseTo( 250.5, 5 );
+	} );
+
+	test( 'an order that is not paid needs no warning, whatever the edit', () => {
+		const data = state();
+		const edited = { ...data, items: [ { ...data.items[ 0 ], price: '1100' } ] };
+
+		expect( paidTotalChange( loaded( { is_paid: false } ), baselineOf( data ), edited ) ).toBeNull();
+	} );
+
+	test( 'nothing loaded (a create, or the load has not landed) → nothing to compare', () => {
+		const data = state();
+		const edited = { ...data, items: [ { ...data.items[ 0 ], price: '1100' } ] };
+
+		expect( paidTotalChange( null, 1250.5, edited ) ).toBeNull();
+		expect( paidTotalChange( loaded(), null, edited ) ).toBeNull();
+		expect( paidTotalChange( loaded(), undefined, edited ) ).toBeNull();
+		expect( paidTotalChange( loaded( { total: 'n/a' } ), baselineOf( data ), edited ) ).toBeNull();
+	} );
+
+	test( 'taxes inside the saved total are not an edit: it is the change that counts, not the difference from the wizard\'s own sum', () => {
+		const data = state();
+		// WooCommerce saved 1 500,60 — the wizard cannot know the 250,10 of tax, and the unedited state must stay quiet.
+		const taxed = loaded( { total: '1500.60' } );
+
+		expect( paidTotalChange( taxed, baselineOf( data ), data ) ).toBeNull();
+
+		const edited = { ...data, items: [ { ...data.items[ 0 ], price: '1100' } ] };
+
+		expect( paidTotalChange( taxed, baselineOf( data ), edited ) ).toEqual( { was: 1500.6, now: 1600.6 } );
+	} );
+
+	test( 'float noise is not a change, one cent is', () => {
+		const data = state();
+		const baseline = baselineOf( data );
+		const noise = { ...data, items: [ { ...data.items[ 0 ], price: String( 1000 + 1e-9 ) } ] };
+		const cent = { ...data, items: [ { ...data.items[ 0 ], price: '1000.01' } ] };
+
+		expect( paidTotalChange( loaded(), baseline, noise ) ).toBeNull();
+		expect( paidTotalChange( loaded(), baseline, cent ) ).not.toBeNull();
 	} );
 } );

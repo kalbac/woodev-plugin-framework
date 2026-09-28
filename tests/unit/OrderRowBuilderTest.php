@@ -627,9 +627,10 @@ class OrderRowBuilderTest extends TestCase {
 	/**
 	 * Plumbing only — {@see \Woodev\Tests\Unit\ShippingOrderActionsTest} covers the
 	 * full gate; this proves the row actually carries `Order_Actions`' output rather
-	 * than a hardcoded shape.
+	 * than a hardcoded shape. Since #972 the row's set is `for_row()`: `for_order()`'s plus
+	 * «Редактировать» while the order is still editable.
 	 */
-	public function test_actions_reflects_order_actions_for_order(): void {
+	public function test_actions_reflects_order_actions_for_row(): void {
 		$handler = Mockery::mock( Abstract_Shipment_Handler::class );
 
 		Orders_Registry::instance()->register_shipment_handler( 'cdek', $handler );
@@ -638,7 +639,7 @@ class OrderRowBuilderTest extends TestCase {
 
 		$row = ( new Order_Row_Builder() )->build( $order, $this->provider() );
 
-		$this->assertSame( [ Order_Actions::EXPORT ], array_column( $row['actions'], 'action' ) );
+		$this->assertSame( [ Order_Actions::EDIT, Order_Actions::EXPORT ], array_column( $row['actions'], 'action' ) );
 	}
 
 	// ----- multi-marker guard (#928) -----

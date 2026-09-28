@@ -116,7 +116,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'tracking'        => $this->build_tracking( $order, $provider ),
 				'delivery_status' => $this->resolve_delivery_status( $order, $provider ),
 				'is_exported'     => self::is_exported( $order, $provider ),
-				'actions'         => $this->order_actions->for_order( $order, $provider ),
+				'actions'         => $this->order_actions->for_row( $order, $provider ),
 			];
 
 			/**
@@ -178,7 +178,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Row_Bu
 				'tracking'        => $this->build_tracking( $order, $provider ),
 				'items'           => $this->build_preview_items( $order ),
 				'customer_note'   => (string) $order->get_customer_note(),
-				'actions'         => $this->order_actions->for_order( $order, $provider ),
+				'actions'         => $this->order_actions->for_row( $order, $provider ),
 			];
 
 			/**
