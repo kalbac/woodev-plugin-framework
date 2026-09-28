@@ -48,6 +48,7 @@
 - [testing/unit] **An invented fixture tests your assumptions, not the carrier.** → [an-invented-fixture-tests-your-assumptions-not-the-carrier](../gotchas/an-invented-fixture-tests-your-assumptions-not-the-carrier.md) (s57)
 - [testing/unit] **Tests that assert on framework source AS TEXT break on any mechanical reformat (633 `array()`->`[]` cost 47 failures), and swapping a plain function for a WP wrapper inside a PRIVATE method breaks suites that `grep` cannot find.** → [a-source-asserting-test-breaks-on-mechanical-reformatting](../gotchas/a-source-asserting-test-breaks-on-mechanical-reformatting.md) (s110)
 - [testing/paths] **macOS `sys_get_temp_dir()` is a symlink but `ReflectionClass::getFileName()` reports the RESOLVED path — a fixture comparing the two reads as a resolver regression.** → [on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it](../gotchas/on-macos-sys-get-temp-dir-is-a-symlink-so-a-reflected-path-never-matches-it.md) (s136)
+- [testing/integration] **`WP_UnitTestCase` restores the hook table after each test, so a WooCommerce mailer first built INSIDE a test loses its e-mail listeners for the rest of the run — 0 e-mails on WC 8.5/9.3.** → [wp-unittestcase-hook-restore-unhooks-woocommerce-email-listeners-before-wc-11](../gotchas/wp-unittestcase-hook-restore-unhooks-woocommerce-email-listeners-before-wc-11.md) (s143)
 
 ## Related
 

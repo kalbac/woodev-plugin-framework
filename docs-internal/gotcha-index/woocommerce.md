@@ -27,6 +27,9 @@
 - [woocommerce/address-autocomplete] **Wrapping `window.wc.addressAutocomplete.providers` touches a namespace, not a contract — and two implementation traps along the way.** → [wc-address-autocomplete-registry-wrap-is-not-a-documented-contract](../gotchas/wc-address-autocomplete-registry-wrap-is-not-a-documented-contract.md) (s69)
 
 - [woocommerce/meta-query-joins] **On HPOS every leaf meta clause is its own join; `WP_Meta_Query` on CPT shares an alias between POSITIVE `OR` siblings — and the CPT wall is the PLANNER, not the count.** → [on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases](../gotchas/on-hpos-a-leaf-meta-clause-is-always-one-join-on-cpt-wp-meta-query-shares-aliases.md) (s138)
+- [woocommerce/email] **`woocommerce_email_recipient_{id}` fires for e-mails WC did NOT send (10.9+ EmailLogger) and twice per send on 8.5 — count `woocommerce_email_sent`.** → [woocommerce-email-recipient-filter-is-not-a-sent-signal](../gotchas/woocommerce-email-recipient-filter-is-not-a-sent-signal.md) (s143)
+- [woocommerce/email] **A filter added and removed around a status change cannot mute a DEFERRED e-mail — persist the intent on the order; and WC ≤ 10.7 dispatches a batch from stale order copies.** → [a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email](../gotchas/a-call-scoped-filter-cannot-mute-a-deferred-woocommerce-email.md) (s143)
+
 ## Related
 
 - [../GOTCHAS.md](../GOTCHAS.md) — the topic map
