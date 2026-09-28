@@ -196,6 +196,13 @@ export interface WizardBootstrap {
 	states?: Record<string, Record<string, string>>;
 	defaultCountry?: string;
 	currency?: { code?: string; symbol?: string };
+	/**
+	 * The pickup picker's JS config per carrier that has a pickup handler, keyed by PROVIDER id
+	 * (`Orders_Registry::collect_wizard_pickup()`, #970). A carrier absent here has no picker; its
+	 * pickup tariffs, if any, fall back to a typed point code. Typed loosely on purpose: the shape
+	 * is the storefront's own picker config, read by `order-wizard/pickup-session.ts`.
+	 */
+	pickup?: Record<string, Record<string, unknown>>;
 }
 
 /** `window.woodevShippingOrders`, inlined by `Orders_Registry::enqueue_assets()`. */

@@ -119,6 +119,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping\Admin {
 
+	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
@@ -131,6 +132,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-admin-rate-calculator.php';
 
 	/**
@@ -273,14 +275,16 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * @param bool  $shippable   whether it needs shipping.
 		 * @param int   $id          product id.
 		 * @param int   $parent_id   parent id (variations).
+		 * @param string $weight     the product's weight in the store's unit ('' = none set).
 		 * @return \WC_Product&\Mockery\MockInterface
 		 */
-		private function product( float $price = 100.0, bool $shippable = true, int $id = 12, int $parent_id = 0 ) {
+		private function product( float $price = 100.0, bool $shippable = true, int $id = 12, int $parent_id = 0, string $weight = '' ) {
 			$product = Mockery::mock( $parent_id > 0 ? '\WC_Product_Variation' : '\WC_Product' );
 			$product->shouldReceive( 'needs_shipping' )->andReturn( $shippable );
 			$product->shouldReceive( 'get_price' )->andReturn( (string) $price );
 			$product->shouldReceive( 'get_id' )->andReturn( $id );
 			$product->shouldReceive( 'get_parent_id' )->andReturn( $parent_id );
+			$product->shouldReceive( 'get_weight' )->andReturn( $weight );
 			$product->shouldReceive( 'get_variation_attributes' )->andReturn( [ 'attribute_pa_color' => 'red' ] );
 
 			return $product;
@@ -610,6 +614,76 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			);
 
 			$this->assertSame( [ [ 'id' => 'test', 'label' => 'TEST label', 'rates' => [] ] ], $result['providers'] );
+		}
+
+		/**
+		 * The wizard hands the pickup routes an explicit weight in GRAMS, so the calculator reports
+		 * the package's: line weights times quantities, converted from the store's unit by the same
+		 * authority the storefront's cart weight uses.
+		 *
+		 * @covers ::calculate
+		 * @covers ::package_weight_grams
+		 *
+		 * @return void
+		 */
+		public function test_it_reports_the_package_weight_in_grams(): void {
+			// The store keeps kilograms; the conversion authority answers grams.
+			Functions\when( 'wc_get_weight' )->alias(
+				static function ( $weight, $unit ) {
+					return 'g' === $unit ? (float) $weight * 1000 : $weight;
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [];
+
+			$result = $calculator->calculate(
+				[
+					[
+						'product'  => $this->product( 100.0, true, 12, 0, '1.5' ),
+						'quantity' => 2,
+						'price'    => null,
+					],
+					[
+						'product'  => $this->product( 50.0, true, 13, 0, '0.25' ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+					// Needs no shipping, so it is not in the package and weighs nothing here.
+					[
+						'product'  => $this->product( 10.0, false, 14, 0, '9' ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+				],
+				[ 'country' => 'RU' ]
+			);
+
+			$this->assertSame( 3250, $result['weight'] );
+		}
+
+		/**
+		 * @covers ::calculate
+		 * @covers ::package_weight_grams
+		 *
+		 * @return void
+		 */
+		public function test_a_package_with_no_weights_reports_zero_which_the_pickup_routes_read_as_unknown(): void {
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [];
+
+			$result = $calculator->calculate(
+				[
+					[
+						'product'  => $this->product(),
+						'quantity' => 3,
+						'price'    => null,
+					],
+				],
+				[ 'country' => 'RU' ]
+			);
+
+			$this->assertSame( 0, $result['weight'] );
 		}
 
 		/**

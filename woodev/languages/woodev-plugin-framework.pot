@@ -4386,3 +4386,73 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Далее"
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Как доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Считаем тарифы…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Повторить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Для этого адреса и товаров тарифов нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Чтобы посчитать доставку, укажите на предыдущих шагах страну и товары."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбранный тариф больше не подходит для этого адреса и товаров — выберите другой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "В заказе нет товаров, которым нужна доставка."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Перевозчики не предложили тарифов. Проверьте адрес и товары на предыдущих шагах."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Стоимость доставки"
+msgstr ""
+
+#. translators: %s: the carrier's own price, e.g. "250,00 ₽".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Тариф перевозчика: %s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Цена изменена."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Вернуть цену тарифа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбран:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Пункт ещё не выбран — выберите его в списке или на карте."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Карта пунктов выдачи для этого перевозчика недоступна — укажите код пункта вручную."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Код пункта выдачи"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Дождитесь расчёта тарифов."
+msgstr ""

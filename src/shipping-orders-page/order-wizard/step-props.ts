@@ -28,7 +28,7 @@ export interface StepProps {
 	busy: boolean;
 }
 
-/** Renders one step's body. Steps ④ and ⑤ are replaced through this seam by I5a / I5b. */
+/** Renders one step's body. Step ⑤ is plugged in through this seam by I5b (④ is built in since I5a). */
 export type StepRenderer = ( props: StepProps ) => ReactNode;
 
 /** The renderers a host may override; anything absent uses the built-in step. */

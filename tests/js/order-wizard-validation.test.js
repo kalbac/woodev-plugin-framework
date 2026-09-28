@@ -155,8 +155,8 @@ describe( 'validateItems', () => {
 } );
 
 describe( 'validateStep', () => {
-	test( 'steps ④ and ⑤ have nothing to check yet', () => {
-		expect( validateStep( 3, emptyWizardData( 'RU' ), COUNTRIES, STATES ) ).toEqual( {} );
+	test( 'step ④ checks the delivery, ⑤ has nothing to check yet (I5b)', () => {
+		expect( Object.keys( validateStep( 3, emptyWizardData( 'RU' ), COUNTRIES, STATES ) ) ).toEqual( [ 'shipping_line' ] );
 		expect( validateStep( 4, emptyWizardData( 'RU' ), COUNTRIES, STATES ) ).toEqual( {} );
 	} );
 } );

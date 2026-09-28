@@ -1229,6 +1229,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ]
 			);
 
+			// The wizard's delivery step draws the pickup list and map INSIDE itself (#970, O10):
+			// each carrier plugin that has a pickup handler registers the picker's scripts, and the
+			// bundle depends on them so they are on the page before it runs.
+			$wizard_pickup = $this->collect_wizard_pickup();
+			$dependencies  = array_values( array_unique( array_merge( $dependencies, $wizard_pickup['handles'] ) ) );
+
 			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
 			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
 			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
@@ -1248,7 +1254,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
 						// What the order wizard's address step needs before its first request (#969).
-						'wizard'           => $this->build_wizard_bootstrap(),
+						'wizard'           => $this->build_wizard_bootstrap() + [ 'pickup' => (object) $wizard_pickup['configs'] ],
 					]
 				) . ';',
 				'before'
@@ -1396,6 +1402,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			return $data;
+		}
+
+		/**
+		 * What the order wizard's delivery step needs to show a carrier's pickup points inside
+		 * itself (#970, spec D3 / O10): the picker's script handles and the picker's JS config,
+		 * per registered carrier that has a pickup handler.
+		 *
+		 * Keyed by PROVIDER id — the id the rates response groups its rates under — because the
+		 * step reads it with the carrier of the tariff the manager picked. A carrier registered
+		 * without a plugin, or whose plugin wired no pickup handler, is absent: its tariffs are
+		 * then never pickup ones, and the step never asks.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{handles: string[], configs: array<string, array<string, mixed>>}
+		 */
+		private function collect_wizard_pickup(): array {
+			$handles = [];
+			$configs = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$plugin  = $this->get_provider_plugin( $provider->get_id() );
+				$handler = null !== $plugin ? $plugin->get_pickup_handler() : null;
+
+				if ( null === $handler ) {
+					continue;
+				}
+
+				$handles = array_merge( $handles, $handler->register_admin_wizard_assets() );
+
+				$configs[ $provider->get_id() ] = $handler->get_admin_wizard_js_config();
+			}
+
+			return [
+				'handles' => array_values( array_unique( $handles ) ),
+				'configs' => $configs,
+			];
 		}
 
 		/**

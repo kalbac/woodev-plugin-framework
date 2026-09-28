@@ -10,6 +10,7 @@
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
 use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Pickup\Constraint_Checker;
 use Woodev\Framework\Shipping\Shipping_Method;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -302,6 +303,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * @return array{
 		 *     destination: array<string, string>,
 		 *     needs_shipping: bool,
+		 *     weight: int,
 		 *     zone: array{id: int, name: string}|null,
 		 *     providers: array<int, array{id: string, label: string, rates: array<int, array<string, mixed>>}>
 		 * } Every registered provider appears, with an empty `rates` list when it offers nothing for
@@ -345,12 +347,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 			return [
 				'destination'    => $destination,
 				'needs_shipping' => [] !== $package['contents'],
+				'weight'         => $this->package_weight_grams( $package ),
 				'zone'           => null === $zone ? null : [
 					'id'   => (int) $zone->get_id(),
 					'name' => (string) $zone->get_zone_name(),
 				],
 				'providers'      => $groups,
 			];
+		}
+
+		/**
+		 * The package's weight in GRAMS — what the wizard hands the admin pickup-points routes as
+		 * their explicit `weight`, the same unit and the same conversion authority
+		 * ({@see Constraint_Checker::to_grams()}) the storefront's cart weight goes through, so
+		 * a point's weight limit gives the same verdict in both places.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $package a {@see self::build_package()} result.
+		 *
+		 * @return int grams, 0 when nothing in it has a weight.
+		 */
+		private function package_weight_grams( array $package ): int {
+
+			$weight = 0.0;
+
+			foreach ( (array) $package['contents'] as $line ) {
+				$weight += (float) $line['data']->get_weight() * max( 1, (int) $line['quantity'] );
+			}
+
+			return $weight > 0 ? Constraint_Checker::to_grams( $weight ) : 0;
 		}
 
 		/**

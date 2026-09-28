@@ -5,8 +5,9 @@
  * What is asserted, per the operator's D1: forward only through «Далее» (the stepper jumps
  * back, never ahead); each step checks its own fields before letting the manager on; a 422
  * from the final request lands ON THE FIELD it names, on the earliest step that owns an
- * error; closing with typed input asks first. Steps ④/⑤ are I5a / I5b — the shell is driven
- * to the end here through the `renderers` seam those increments will use.
+ * error; closing with typed input asks first. Step ④ is the real one since I5a (#970; its own
+ * behaviour is in order-wizard-delivery.test.js — here it is only walked through); ⑤ is I5b's, so
+ * the shell is driven to the end through the `renderers` seam that increment will use.
  *
  * @see src/shipping-orders-page/order-wizard/order-wizard.tsx
  */
@@ -39,9 +40,29 @@ const PRODUCTS = [
 
 const VARIATIONS = [ { id: 21, sku: 'TS-M', price: '550', attributes: [ { name: 'Размер', option: 'M' } ] } ];
 
+/** What the rates route answers unless a test says otherwise: one courier tariff, nothing to pick up. */
+const RATES = {
+	destination: { country: 'RU' },
+	needs_shipping: true,
+	weight: 1000,
+	zone: { id: 1, name: 'Россия' },
+	providers: [
+		{
+			id: 'cdek',
+			label: 'СДЭК',
+			rates: [ { id: 'cdek_courier:3', method_id: 'cdek_courier', instance_id: 3, label: 'Курьер', cost: 250.5, delivery_time: '2-3 дня', description: '', is_pickup: false, meta: {} } ],
+		},
+	],
+};
+
 const routeApi = ( overrides = {} ) => {
 	apiFetch.mockImplementation( ( request ) => {
 		const url = request.url;
+
+		// Ahead of the overrides: a save test's `/shipping/orders` fragment must not swallow this route.
+		if ( url.endsWith( '/shipping/orders/rates' ) && ! overrides[ '/shipping/orders/rates' ] ) {
+			return Promise.resolve( RATES );
+		}
 
 		for ( const [ fragment, handler ] of Object.entries( overrides ) ) {
 			if ( url.includes( fragment ) ) {
@@ -102,6 +123,12 @@ const passAddress = () => {
 const passItems = async () => {
 	type( 'Добавить товар', 'кружка' );
 	fireEvent.click( await screen.findByRole( 'option', { name: /Кружка/ } ) );
+	next();
+};
+
+/** ④: the courier tariff chosen once the rates are in; «Далее» pressed. */
+const passDelivery = async () => {
+	fireEvent.click( await screen.findByRole( 'radio', { name: /Курьер/ } ) );
 	next();
 };
 
@@ -169,16 +196,19 @@ describe( 'shell and navigation (D1: forward only via «Далее»)', () => {
 		expect( screen.getByLabelText( 'Имя' ) ).toHaveValue( 'Иван' );
 	} );
 
-	test( 'steps ④ and ⑤ are marked placeholders until real ones are passed in', async () => {
+	test( 'step ④ is the real delivery step and ⑤ is a marked placeholder until I5b plugs one in', async () => {
 		mount();
 
 		passCustomer();
 		passAddress();
 		await passItems();
 
-		expect( await modal().findByText( 'Этот шаг ещё в разработке — он появится в следующем обновлении.' ) ).toBeInTheDocument();
-		expect( modal().getByText( 'Доставка', { selector: 'h3' } ) ).toBeInTheDocument();
-		next();
+		expect( await screen.findByRole( 'radio', { name: /Курьер/ } ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Как доставить', { selector: 'h3' } ) ).toBeInTheDocument();
+		expect( modal().queryByText( 'Этот шаг ещё в разработке — он появится в следующем обновлении.' ) ).toBeNull();
+
+		await passDelivery();
+
 		expect( modal().getByText( 'Оплата', { selector: 'h3' } ) ).toBeInTheDocument();
 		expect( modal().getByText( 'Этот шаг ещё в разработке — он появится в следующем обновлении.' ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'button', { name: 'Далее' } ) ).toBeNull();
@@ -333,6 +363,38 @@ describe( 'step ② Адрес', () => {
 		expect( request.url ).toContain( 'level=settlement' );
 		expect( request.url ).toContain( 'country=RU' );
 		expect( request.headers ).toEqual( { 'X-WP-Nonce': 'nonce-1' } );
+
+		// ④ (#970). The whole flow is ONE test on purpose: a second location search in the same
+		// file finds the shared popover layer in the state the first one left it. What step ④
+		// needs from the pick is asserted along the way.
+		type( 'Улица, дом', 'ул Гагарина 1' );
+		next();
+		await passItems();
+		await screen.findByRole( 'radio', { name: /Курьер/ } );
+
+		const asked = () => apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url.endsWith( '/shipping/orders/rates' ) );
+
+		// The record rides whole, next to the typed fields: a carrier that prices by its own settlement id needs it.
+		expect( asked()[ 0 ].data.location ).toEqual( {
+			key: 'dadata:city-1',
+			level: 'settlement',
+			region: { name: 'Московская', type: 'обл' },
+			settlement: { name: 'Жуковский', type: 'г' },
+			postcode: '140180',
+		} );
+		expect( asked()[ 0 ].data.destination ).toMatchObject( { country: 'RU', state: 'МОСКОВСКАЯ ОБЛАСТЬ', city: 'Жуковский', postcode: '140180', address: 'ул Гагарина 1' } );
+
+		// Back to ②, another city typed over it: a hand-typed place has no record.
+		fireEvent.click( screen.getByRole( 'button', { name: 'Назад' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Назад' } ) );
+		type( 'Город или населённый пункт', 'Раменское' );
+		next();
+		next();
+		await screen.findByRole( 'radio', { name: /Курьер/ } );
+
+		expect( asked() ).toHaveLength( 2 );
+		expect( asked()[ 1 ].data ).not.toHaveProperty( 'location' );
+		expect( asked()[ 1 ].data.destination.city ).toBe( 'Раменское' );
 	} );
 } );
 
@@ -426,6 +488,43 @@ describe( 'step ③ Товары', () => {
 	} );
 } );
 
+describe( 'step ④ Доставка, reached through the shell (#970)', () => {
+	test( '«Далее» is refused until a tariff is chosen, with the server\'s own sentence', async () => {
+		mount();
+		passCustomer();
+		passAddress();
+		await passItems();
+		await screen.findByRole( 'radio', { name: /Курьер/ } );
+
+		next();
+
+		expect( modal().getByText( 'Выберите способ доставки.' ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Как доставить', { selector: 'h3' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'going back and changing the package asks the tariffs again on the way forward', async () => {
+		mount();
+		passCustomer();
+		passAddress();
+		await passItems();
+		await passDelivery();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Назад' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Назад' } ) );
+		fireEvent.change( screen.getByLabelText( 'Кол-во' ), { target: { value: '3' } } );
+		next();
+		await screen.findByRole( 'radio', { name: /Курьер/ } );
+
+		const asked = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url.endsWith( '/shipping/orders/rates' ) );
+
+		// On arrival, on coming back into ④, and once more after the package changed.
+		expect( asked ).toHaveLength( 3 );
+		expect( asked[ 2 ].data.items[ 0 ].quantity ).toBe( 3 );
+		// The tariff chosen before is still offered, so it stays chosen.
+		await waitFor( () => expect( screen.getByRole( 'radio', { name: /Курьер/ } ) ).toBeChecked() );
+	} );
+} );
+
 describe( 'sending the order and server-side validation (422, shown per field)', () => {
 	/** ⑤ as I5b will supply it: a step that owns the submit button. */
 	const renderers = {
@@ -438,7 +537,7 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		passCustomer();
 		passAddress();
 		await passItems();
-		next(); // ④ placeholder → ⑤
+		await passDelivery();
 		await screen.findByRole( 'button', { name: 'Создать' } );
 
 		return mounted;
@@ -457,13 +556,24 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		expect( onSaved.mock.calls[ 0 ][ 1 ] ).toBe( 'create' );
 		expect( onClose ).toHaveBeenCalled();
 
-		const request = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => r.method === 'POST' );
+		const request = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => r.method === 'POST' && r.url === ORDERS_ROOT );
 		expect( request.url ).toBe( ORDERS_ROOT );
 		expect( request.headers ).toEqual( { 'X-WP-Nonce': 'nonce-1' } );
 		expect( request.data.customer ).toEqual( { id: 0, create_account: false } );
 		expect( request.data.billing ).toMatchObject( { first_name: 'Иван', city: 'Москва', state: 'МОСКВА', country: 'RU' } );
 		expect( request.data.shipping ).toMatchObject( { first_name: 'Иван', address_1: 'ул Тверская 1' } );
 		expect( request.data.items ).toEqual( [ { product_id: 12, variation_id: 0, quantity: 1, price: '1000' } ] );
+		// ④: the tariff exactly as the rates route returned it, at its own price; UI-only bookkeeping stays home.
+		expect( request.data.shipping_line ).toEqual( {
+			method_id: 'cdek_courier',
+			instance_id: 3,
+			rate_id: 'cdek_courier:3',
+			label: 'Курьер',
+			cost: '250.5',
+			meta: {},
+		} );
+		expect( request.data.pickup_point ).toBeNull();
+		expect( JSON.stringify( request.data ) ).not.toMatch( /rate_cost|rate_is_pickup|rates_pending|settlementRecord/ );
 	} );
 
 	test( 'a 422 puts each message on the field it names and returns to the earliest step with one', async () => {
@@ -633,6 +743,8 @@ describe( 'edit mode (the load route)', () => {
 		next();
 		next();
 		next();
+		// ④ waits for the tariffs of the current package before it lets the saved line through.
+		await screen.findByRole( 'radio', { name: /Курьер/ } );
 		next();
 		fireEvent.click( await screen.findByRole( 'button', { name: 'Сохранить' } ) );
 

@@ -59,13 +59,32 @@ export interface WizardItem {
  * as it is, so an edit that never reaches those steps cannot lose their values.
  */
 export interface WizardRest {
+	/**
+	 * The chosen rate exactly as the payload wants it (`Order_Payload_Validator::check_shipping_line()`):
+	 * `method_id`, `instance_id`, `rate_id`, `label`, `cost` (the FINAL price — the rate's own, or the
+	 * one the manager typed, O8) and the rate's `meta`. Step ④ owns it.
+	 */
 	shipping_line: Record<string, unknown> | null;
+	/** `{ id }` plus display fields; sent as it is, the validator reads only `id`. */
 	pickup_point: Record<string, unknown> | null;
 	fields: Record<string, unknown>;
 	carrier_fields: Record<string, unknown>;
 	payment_method: string;
 	/** '' = the server's default (`pending` on create, «keep» on update). */
 	status: string;
+	/**
+	 * What the carrier's own rate costs, as text — the reference the editable delivery price is
+	 * compared with («изменено», «вернуть цену тарифа»). '' = unknown (an order just loaded for
+	 * edit, before the rates came back). UI only: never sent.
+	 */
+	rate_cost: string;
+	/** Whether the chosen rate is a pickup one — the step checks it for a point. UI only: never sent. */
+	rate_is_pickup: boolean;
+	/**
+	 * The tariffs are being asked for the current package. A tariff chosen against a PREVIOUS
+	 * package is not confirmed yet, so «Далее» waits for the answer. UI only: never sent.
+	 */
+	rates_pending: boolean;
 }
 
 /** The whole wizard state. */
@@ -84,6 +103,14 @@ export interface WizardData {
 	rest: WizardRest;
 	/** The settlement the address search was scoped to (`within` for the street search); UI only. */
 	settlementKey: string;
+	/**
+	 * The location record of the settlement the manager PICKED in step ②, whole and untouched
+	 * (`Location_Record::to_array()` shape), or `null` when the city was typed by hand or the
+	 * order was just loaded for edit. Step ④ hands it to the rates and pickup routes: a carrier
+	 * that prices or lists points by its own settlement id needs it, and the typed fields alone
+	 * cannot name one. Sent as `location`, never as part of the order payload.
+	 */
+	settlementRecord: Record<string, unknown> | null;
 }
 
 /** One problem the server reports — `data.errors` of a 422 (`Order_Editor::validation_error()`). */
@@ -136,6 +163,40 @@ export interface SaveResult {
 	id: number;
 	number: string;
 	message: string;
+}
+
+/** One tariff, as `POST /shipping/orders/rates` returns it (`Admin_Rate_Calculator::format_rate()`). */
+export interface RateOption {
+	/** `method_id:instance_id` — the WooCommerce rate id. */
+	id: string;
+	method_id: string;
+	instance_id: number;
+	label: string;
+	cost: number;
+	delivery_time: string;
+	description: string;
+	is_pickup: boolean;
+	/** The rate's own meta; copied onto the shipping item on save, as `WC_Checkout` does. */
+	meta: Record<string, unknown>;
+}
+
+/** One carrier's tariffs — a carrier with none for this package still appears, with an empty list. */
+export interface RateGroup {
+	/** The provider id — also the key of the carrier's pickup config in the bootstrap. */
+	id: string;
+	label: string;
+	rates: RateOption[];
+}
+
+/** `POST /shipping/orders/rates` success body. */
+export interface RatesResponse {
+	destination: Record<string, string>;
+	/** false when nothing in the order needs shipping. */
+	needs_shipping: boolean;
+	/** Order weight in GRAMS — what the pickup routes take as their explicit `weight`. */
+	weight: number;
+	zone: { id: number; name: string } | null;
+	providers: RateGroup[];
 }
 
 /** The five steps, in order (O6). */

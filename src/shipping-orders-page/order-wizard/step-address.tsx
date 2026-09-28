@@ -81,6 +81,8 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 				...d,
 				shipping: { ...d.shipping, ...patch },
 				settlementKey: 'settlement' === suggestion.level ? suggestion.record.key : d.settlementKey,
+				// Kept whole for step ④: the rates and pickup routes take the settlement's own record.
+				settlementRecord: 'settlement' === suggestion.level ? ( suggestion.record as unknown as Record<string, unknown> ) : d.settlementRecord,
 			};
 		} );
 	};
@@ -98,7 +100,15 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 						value={ shipping.country }
 						options={ countryOptions }
 						errors={ errorsFor( errors, 'shipping.country', 'billing.country' ) }
-						onChange={ ( country ) => setShipping( { country, state: '' } ) }
+						onChange={ ( country ) =>
+							setData( ( d ) => ( {
+								...d,
+								shipping: { ...d.shipping, country, state: '' },
+								// A settlement belongs to its country: another country starts the search over.
+								settlementKey: '',
+								settlementRecord: null,
+							} ) )
+						}
 					/>
 				) : (
 					<TextField
@@ -135,7 +145,9 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 					label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
 					value={ shipping.city }
 					errors={ errorsFor( errors, 'shipping.city', 'billing.city' ) }
-					onChange={ ( city ) => setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '' } ) ) }
+					onChange={ ( city ) =>
+						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
+					}
 				/>
 				<LocationPicker
 					{ ...pickerProps }

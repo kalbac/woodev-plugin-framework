@@ -11,9 +11,9 @@
  * (`validation.ts`), and a 422 from the final request is routed per field to the earliest step
  * that owns an error — shown on the very control, with the server's own sentence.
  *
- * **Steps.** ①–③ are built here. ④ «Доставка» and ⑤ «Оплата» are I5a / I5b: they render as
- * marked placeholders until a host passes real ones through `renderers` — the shell is not
- * edited for them. ⑤ owns the submit button (`StepProps.submit`).
+ * **Steps.** ①–④ are built here (④ «Доставка» is I5a, #970). ⑤ «Оплата» is I5b: it renders as a
+ * marked placeholder until a host passes a real one through `renderers` — the shell is not
+ * edited for it. ⑤ owns the submit button (`StepProps.submit`).
  *
  * **Modes.** `create` opens empty; `edit` (an `orderId`) loads the prefill first — the row
  * action that opens it is I6.
@@ -32,6 +32,7 @@ import { loadOrderPrefill, saveOrder, toRequestError } from './api';
 import type { WizardRequestError } from './api';
 import StepAddress from './step-address';
 import StepCustomer from './step-customer';
+import StepDelivery from './step-delivery';
 import StepItems from './step-items';
 import StepPlaceholder from './step-placeholder';
 import type { SetWizardData, StepRenderers } from './step-props';
@@ -47,7 +48,7 @@ export interface OrderWizardProps {
 	onClose: () => void;
 	/** Called once with the saved order, right before `onClose`. */
 	onSaved: ( result: SaveResult, mode: 'create' | 'edit' ) => void;
-	/** Real ④ / ⑤ (I5a / I5b) — anything absent shows the placeholder. */
+	/** Overrides for any step; ⑤ (I5b) has no built-in yet, so an absent one shows the placeholder. */
 	renderers?: StepRenderers;
 }
 
@@ -207,6 +208,8 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 				return <StepAddress { ...props } />;
 			case 'items':
 				return <StepItems { ...props } />;
+			case 'delivery':
+				return <StepDelivery { ...props } />;
 			default:
 				return <StepPlaceholder title={ labels[ stepId ] } />;
 		}

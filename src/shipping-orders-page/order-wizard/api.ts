@@ -13,7 +13,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 import { getWizardContext } from '../rest';
-import type { OrderPrefill, SaveResult, ServerError } from './types';
+import type { OrderPrefill, RatesResponse, SaveResult, ServerError } from './types';
 import type { WcCustomerRecord } from './wizard-data';
 
 /** A save / load that failed, reduced to what the wizard shows. */
@@ -104,6 +104,28 @@ export function saveOrder( orderId: number | null, payload: Record<string, unkno
 	return apiFetch<SaveResult>( {
 		url: null === orderId ? ordersRoot : `${ ordersRoot }/${ orderId }`,
 		method: null === orderId ? 'POST' : 'PUT',
+		headers: headers(),
+		data: payload,
+	} ).catch( ( error: unknown ) => {
+		throw toRequestError( error );
+	} );
+}
+
+/**
+ * `POST /shipping/orders/rates` — the carriers' tariffs for the package steps ①–③ built
+ * (`Rates_Controller`, I2a). Nothing is read from a cart or a session; the body carries the
+ * lines at their edited prices, the destination and the chosen customer. Rejects with a
+ * {@link WizardRequestError}: 422 for an unknown product / customer or a missing country.
+ *
+ * @param {Record<string, unknown>} payload the request body (`buildRatesRequest()`).
+ * @return {Promise<RatesResponse>} the tariffs, grouped by carrier.
+ */
+export function fetchRates( payload: Record<string, unknown> ): Promise<RatesResponse> {
+	const { ordersRoot } = getWizardContext();
+
+	return apiFetch<RatesResponse>( {
+		url: `${ ordersRoot }/rates`,
+		method: 'POST',
 		headers: headers(),
 		data: payload,
 	} ).catch( ( error: unknown ) => {

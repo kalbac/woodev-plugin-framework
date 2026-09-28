@@ -6676,5 +6676,154 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 
 			$this->assertTrue( true );
 		}
+
+		// -------------------------------------------------------------------
+		// Admin order wizard (#710 D3, card #970): the picker inside the delivery step.
+		// -------------------------------------------------------------------
+
+		public function test_register_admin_wizard_assets_registers_the_drawing_scripts_without_the_checkout_gate_or_the_mount(): void {
+			// No `is_checkout()` stub on purpose: the orders page is not a checkout page, and the
+			// method must not ask.
+			Functions\when( 'plugins_url' )->alias(
+				static fn( $path, $file ) => 'https://example.test/wp-content/plugins/x/' . $path
+			);
+
+			$registered = [];
+			Functions\when( 'wp_register_script' )->alias(
+				static function ( $handle, $src, $deps ) use ( &$registered ) {
+					$registered[ $handle ] = [ 'src' => $src, 'deps' => $deps ];
+				}
+			);
+			Functions\expect( 'wp_enqueue_script' )->never();
+
+			$styles = [];
+			Functions\when( 'wp_enqueue_style' )->alias(
+				static function ( $handle, $src, $deps ) use ( &$styles ) {
+					$styles[ $handle ] = [ 'src' => $src, 'deps' => $deps ];
+				}
+			);
+
+			$handler = new Pickup_Handler_Assets_Built_Probe(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			);
+
+			$handles = $handler->register_admin_wizard_assets();
+
+			$this->assertSame(
+				[
+					'woodev-pickup-datasource',
+					'woodev-pickup-geo',
+					'woodev-pickup-panels',
+					'woodev-pickup-map-provider-yandex',
+				],
+				$handles
+			);
+			$this->assertSame( $handles, array_keys( $registered ) );
+			$this->assertArrayNotHasKey( 'woodev-pickup-mount', $registered, 'the mount is checkout-bound and is not used' );
+			$this->assertSame( [ 'woodev-pickup-geo' ], $registered['woodev-pickup-panels']['deps'] );
+			$this->assertSame( [ 'woodev-pickup-geo' ], $registered['woodev-pickup-map-provider-yandex']['deps'] );
+
+			// `woodev-modal` is registered on the storefront only; a style depending on it would be dropped.
+			$this->assertSame( [], $styles['woodev-pickup-styles']['deps'] );
+			$this->assertStringContainsString( 'pickup.css', $styles['woodev-pickup-styles']['src'] );
+		}
+
+		public function test_register_admin_wizard_assets_skips_what_is_not_built(): void {
+			Functions\expect( 'wp_register_script' )->never();
+			Functions\expect( 'wp_enqueue_style' )->never();
+
+			// The assets do exist on disk now, so "not built" has to be forced.
+			$handler = new class(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			) extends Pickup_Handler {
+				protected static function asset_exists( string $path ): bool {
+					return false;
+				}
+			};
+
+			$this->assertSame( [], $handler->register_admin_wizard_assets() );
+		}
+
+		public function test_get_admin_wizard_js_config_never_reads_the_visitors_session_backed_state(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( false );
+
+			// Each visitor-state reader is a session / customer-store read. The administrator is not the
+			// buyer: their own session must not be read (nor repopulated) to build the wizard's picker.
+			$handler = new class(
+				'p',
+				'pickup_point',
+				$this->source_returning( null ),
+				$this->yandex_provider(),
+				$this->default_location()
+			) extends Pickup_Handler {
+				/** @var string[] */
+				public array $reads = [];
+
+				protected function resolve_chosen_address(): string {
+					$this->reads[] = 'chosenAddress';
+
+					return 'Мой адрес';
+				}
+
+				protected function resolve_remembered_selections(): array {
+					$this->reads[] = 'selections';
+
+					return [ 'k' => [ 'id' => 'P-1', 'address' => 'x' ] ];
+				}
+
+				protected function location_config_block(): ?array {
+					$this->reads[] = 'location';
+
+					return [ 'current' => [ 'key' => 'k' ] ];
+				}
+			};
+
+			$handler->get_admin_wizard_js_config();
+			$this->assertSame( [], $handler->reads );
+
+			$public = $handler->get_js_config();
+			$this->assertSame( [ 'chosenAddress', 'selections', 'location' ], $handler->reads, 'the storefront config still reads all three' );
+			$this->assertSame( 'Мой адрес', $public['chosenAddress'] );
+		}
+
+		public function test_get_admin_wizard_js_config_points_at_the_admin_route_and_drops_the_visitors_state(): void {
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+			Functions\when( 'rest_url' )->justReturn( 'https://example.test/wp-json/woodev/v1' );
+			Functions\when( 'wp_create_nonce' )->justReturn( 'NONCE' );
+			Functions\when( 'wc_ship_to_billing_address_only' )->justReturn( true );
+
+			$handler = $this->make_handler( [ 'plugin_id' => 'carrier-x' ] );
+			$public  = $handler->get_js_config();
+			$config  = $handler->get_admin_wizard_js_config();
+
+			$this->assertSame(
+				'https://example.test/wp-json/woodev/v1/shipping/orders/pickup/carrier-x/points',
+				$config['restRoot']
+			);
+			$this->assertStringContainsString( '/shipping/pickup/carrier-x/points', $public['restRoot'], 'the public route is unchanged' );
+
+			$this->assertSame( '', $config['nonce'], 'the orders page carries its own nonce' );
+			$this->assertSame( '', $config['chosenAddress'] );
+			$this->assertSame( [], $config['selections'] );
+			$this->assertSame( [ 'enabled' => false, 'billingOnly' => false ], $config['replaceAddress'] );
+			$this->assertSame( [ 'close' => false, 'refreshCheckout' => false ], $config['selection'] );
+			$this->assertArrayNotHasKey( 'location', $config );
+
+			// What the picker draws with is the storefront's own config, untouched.
+			foreach ( [ 'strategy', 'provider', 'i18n', 'mapConfig', 'pointIcons', 'pointGlyphs', 'accentColor', 'defaultLocation', 'search', 'distanceUnitSystem' ] as $key ) {
+				$this->assertSame( $public[ $key ], $config[ $key ], $key );
+			}
+		}
 	}
 }

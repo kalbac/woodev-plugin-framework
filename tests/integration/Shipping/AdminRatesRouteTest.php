@@ -170,6 +170,9 @@ class AdminRatesRouteTest extends TestCase {
 		$group = $this->group( $response );
 
 		$this->assertTrue( $data['needs_shipping'] );
+		// Two units of a 1.5-weight product, in grams whatever unit the store keeps (#970): what the
+		// wizard hands the admin pickup routes as their explicit `weight`.
+		$this->assertSame( (int) wc_get_weight( 3, 'g' ), $data['weight'] );
 		$this->assertSame( $this->zone->get_id(), $data['zone']['id'] );
 		$this->assertSame( 'Rates test carrier', $group['label'] );
 		$this->assertCount( 1, $group['rates'] );

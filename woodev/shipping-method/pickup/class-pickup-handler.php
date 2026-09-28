@@ -1193,6 +1193,24 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * }
 		 */
 		public function get_js_config(): array {
+			return $this->build_js_config( true );
+		}
+
+		/**
+		 * Builds the picker's JS config, with or without the VISITOR's state.
+		 *
+		 * The visitor's state — the remembered selections, the chosen address and the customer's
+		 * location record — is read from the session and the customer store. The storefront wants
+		 * it; the admin order wizard (#970) is not the buyer and must not read (nor, through the
+		 * store's session repopulation, touch) the administrator's own, so it asks without it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param bool $with_visitor_state whether to read the visitor's session-backed state.
+		 *
+		 * @return array<string, mixed> see {@see self::get_js_config()} for the shape.
+		 */
+		private function build_js_config( bool $with_visitor_state ): array {
 			$strings = [
 				'modalTitle'     => __( 'Choose a pickup point', 'woodev-plugin-framework' ),
 				'close'          => __( 'Close', 'woodev-plugin-framework' ),
@@ -1501,7 +1519,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// {@see self::resolve_chosen_address()}. `''` when nothing is remembered, no
 				// selection scope is wired, or the stored entry predates this feature — the
 				// mount script degrades to the label alone in every one of those cases.
-				'chosenAddress' => $this->resolve_chosen_address(),
+				'chosenAddress' => $with_visitor_state ? $this->resolve_chosen_address() : '',
 
 				// Every locality this customer has a remembered point for, keyed by the SAME
 				// locality key {@see Provider_Selection_Scope::current_locality()} files them
@@ -1512,7 +1530,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// without a full page render, even though #176's agreed behaviour (stated on
 				// `pickup-mount.js`'s own `handleLocalityChanged()`) is that returning restores.
 				// Empty when no scope is wired or nothing is remembered.
-				'selections' => $this->resolve_remembered_selections(),
+				'selections' => $with_visitor_state ? $this->resolve_remembered_selections() : [],
 
 				'defaultLocation' => $this->default_location,
 				'pointIcons'      => $this->normalized_point_icons(),
@@ -1597,7 +1615,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			// wired — see {@see self::location_config_block()}'s own docblock for why an
 			// ABSENT block (not merely an empty `key`) is what tells the browser to keep
 			// falling back to its pre-existing DOM read.
-			$location = $this->location_config_block();
+			$location = $with_visitor_state ? $this->location_config_block() : null;
 
 			if ( null !== $location ) {
 				$config['location'] = $location;
@@ -2129,6 +2147,97 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 					$this->get_js_config()
 				);
 			}
+		}
+
+		/**
+		 * Registers the picker's browser assets for the admin order wizard's delivery step
+		 * (#710 spec D3, card #970) and returns the script handles the wizard bundle must depend on.
+		 *
+		 * The storefront path ({@see self::enqueue_assets()}) is gated on `is_checkout()` and
+		 * hangs everything off the mount script; the wizard mounts NO `pickup-mount.js` (it is
+		 * checkout-bound) — it needs only the parts that draw and fetch: the data source, the
+		 * geometry helpers, the panels and the active map provider. They are REGISTERED here and
+		 * loaded by the wizard bundle's own dependency list, so nothing is printed on an orders
+		 * page a manager never opens the wizard on beyond what the bundle already pulls.
+		 *
+		 * The stylesheet is enqueued WITHOUT the `woodev-modal` dependency the checkout path
+		 * declares: that handle is registered on the storefront only, and a style depending on an
+		 * unregistered handle is dropped silently by WordPress. The picker's own rules do not need
+		 * it — the wizard shows the picker inside its own dialog, not in a second one (O10).
+		 *
+		 * A script whose file is not built is skipped, exactly like the storefront path.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] the registered script handles, in dependency order.
+		 */
+		public function register_admin_wizard_assets(): array {
+
+			$provider_handle = $this->map_provider->get_script_handle();
+
+			$scripts = [
+				'woodev-pickup-datasource' => [ 'js/frontend/pickup-datasource.js', [] ],
+				'woodev-pickup-geo'        => [ 'js/frontend/pickup-geo.js', [] ],
+				'woodev-pickup-panels'     => [ 'js/frontend/pickup-panels.js', [ 'woodev-pickup-geo' ] ],
+				$provider_handle           => [ 'js/frontend/map-provider-' . $this->map_provider->get_id() . '.js', [ 'woodev-pickup-geo' ] ],
+			];
+
+			$handles = [];
+
+			foreach ( $scripts as $handle => list( $relative, $deps ) ) {
+
+				$path = self::asset_path( $relative );
+
+				if ( ! static::asset_exists( $path ) ) {
+					continue;
+				}
+
+				wp_register_script( $handle, self::asset_url( $relative ), $deps, self::asset_version( $path ), true );
+
+				$handles[] = $handle;
+			}
+
+			$this->enqueue_style_if_built( 'woodev-pickup-styles', 'css/frontend/pickup.css' );
+
+			return $handles;
+		}
+
+		/**
+		 * The picker's JS config for the admin order wizard (#710 spec D3, card #970): the
+		 * storefront's own config ({@see self::get_js_config()}) built WITHOUT the visitor's
+		 * state and pointed at the admin surface.
+		 *
+		 * - `restRoot` is the ADMIN points route (`shipping/orders/pickup/{plugin}/points`, #959),
+		 *   which takes the destination, weight and payment method explicitly.
+		 * - the remembered selection, the chosen address and the customer's location block are the
+		 *   visitor's session state — the admin is not the buyer, so they are never read
+		 *   ({@see self::build_js_config()}).
+		 * - the address-replacement and close-on-select behaviours are checkout mechanics: the
+		 *   wizard writes nothing into address fields from a picked point and keeps its own step
+		 *   open, so both are off.
+		 * - the REST nonce is dropped; the orders page carries its own (`window.woodevShippingOrders`).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array<string, mixed> see {@see self::get_js_config()} for the shape.
+		 */
+		public function get_admin_wizard_js_config(): array {
+
+			$config = $this->build_js_config( false );
+
+			$config['restRoot']       = rtrim( rest_url( 'woodev/v1' ), '/' ) . '/shipping/orders/pickup/' . $this->plugin_segment() . '/points';
+			$config['nonce']          = '';
+			$config['nonceNodeId']    = '';
+			$config['replaceAddress'] = [
+				'enabled'     => false,
+				'billingOnly' => false,
+			];
+			$config['selection']      = [
+				'close'           => false,
+				'refreshCheckout' => false,
+			];
+
+			return $config;
 		}
 
 		/**

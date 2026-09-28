@@ -71,8 +71,12 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			carrier_fields: {},
 			payment_method: '',
 			status: '',
+			rate_cost: '',
+			rate_is_pickup: false,
+			rates_pending: false,
 		},
 		settlementKey: '',
+		settlementRecord: null,
 	};
 }
 
@@ -137,8 +141,13 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			carrier_fields: prefill.carrier_fields || {},
 			payment_method: str( prefill.payment_method ),
 			status: str( prefill.status ),
+			rate_cost: '',
+			// The rates have not come back yet; a saved point is the only sign of a pickup rate until they do.
+			rate_is_pickup: !! prefill.pickup_point,
+			rates_pending: false,
 		},
 		settlementKey: '',
+		settlementRecord: null,
 	};
 }
 
@@ -205,6 +214,7 @@ export function applyCustomer( data: WizardData, record: WcCustomerRecord ): Wiz
 		},
 		billingFollowsShipping: true,
 		settlementKey: '',
+		settlementRecord: null,
 	};
 }
 
@@ -261,7 +271,24 @@ export function buildPayload( data: WizardData ): Record<string, unknown> {
 
 /** Whether two states differ — the unsaved-input check behind the close confirmation (C3). */
 export function isDirty( initial: WizardData, current: WizardData ): boolean {
-	return JSON.stringify( initial ) !== JSON.stringify( current );
+	return JSON.stringify( withoutDerived( initial ) ) !== JSON.stringify( withoutDerived( current ) );
+}
+
+/**
+ * The state minus what the wizard derives on its own (the carrier's reference price, the pickup
+ * flag and the pending marker step ④ keeps, the settlement record step ② keeps): opening a step
+ * and letting it look things up is not «the manager typed something».
+ */
+function withoutDerived( data: WizardData ): unknown {
+	const { rate_cost, rate_is_pickup, rates_pending, ...rest } = data.rest;
+	const { settlementRecord, ...view } = data;
+
+	void rate_cost;
+	void rate_is_pickup;
+	void rates_pending;
+	void settlementRecord;
+
+	return { ...view, rest };
 }
 
 /** A line as the items step adds it. */

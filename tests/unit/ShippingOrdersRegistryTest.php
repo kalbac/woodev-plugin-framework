@@ -921,6 +921,72 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( [ 'МОСКВА', 'МОСКОВСКАЯ ОБЛАСТЬ' ], array_keys( $data['wizard']['states']['RU'] ) );
 		// The symbol arrives decoded — it is written into React text, never into HTML.
 		$this->assertSame( [ 'code' => 'RUB', 'symbol' => '₽' ], $data['wizard']['currency'] );
+		// No carrier here has a pickup handler, so the map is empty — and stays a JSON OBJECT
+		// (`{}`, keyed by carrier id), never `[]`, which a client keyed by string would misread.
+		$this->assertStringContainsString( '"pickup":{}', $captured );
+	}
+
+	/**
+	 * #970 — the delivery step draws the pickup list and map inside itself, so each carrier that
+	 * has a pickup handler contributes the picker's script handles and its JS config, keyed by
+	 * PROVIDER id (the id the rates response groups under). A carrier with no plugin, or a plugin
+	 * with no pickup handler, contributes nothing.
+	 */
+	public function test_collect_wizard_pickup_gathers_handles_and_configs_per_carrier_with_a_pickup_handler(): void {
+		$handler = \Mockery::mock( '\Woodev\Framework\Shipping\Pickup\Pickup_Handler' );
+		$handler->shouldReceive( 'register_admin_wizard_assets' )->once()->andReturn( [ 'woodev-pickup-geo', 'woodev-pickup-map-provider-yandex' ] );
+		$handler->shouldReceive( 'get_admin_wizard_js_config' )->once()->andReturn( [ 'restRoot' => 'https://example.test/points' ] );
+
+		$with_handler = \Mockery::mock( '\Woodev\Framework\Shipping\Shipping_Plugin' );
+		$with_handler->shouldReceive( 'get_pickup_handler' )->andReturn( $handler );
+
+		$without_handler = \Mockery::mock( '\Woodev\Framework\Shipping\Shipping_Plugin' );
+		$without_handler->shouldReceive( 'get_pickup_handler' )->andReturn( null );
+
+		$providers = [
+			'cdek'   => $this->provider( 'cdek', 'СДЭК' ),
+			'yandex' => $this->provider( 'yandex', 'Яндекс' ),
+			'post'   => $this->provider( 'post', 'Почта' ), // no plugin at all
+		];
+
+		$registry = new class( $providers, [ 'cdek' => $with_handler, 'yandex' => $without_handler ] ) extends Orders_Registry {
+			/** @var array<string, mixed> */
+			private array $fixed_providers;
+
+			/** @var array<string, mixed> */
+			private array $fixed_plugins;
+
+			/**
+			 * @param array<string, mixed> $providers providers by id.
+			 * @param array<string, mixed> $plugins   plugin doubles by provider id.
+			 */
+			public function __construct( array $providers, array $plugins ) {
+				$this->fixed_providers = $providers;
+				$this->fixed_plugins   = $plugins;
+			}
+
+			public function get_providers(): array {
+				return $this->fixed_providers;
+			}
+
+			public function get_provider_plugin( string $id ): ?\Woodev\Framework\Shipping\Shipping_Plugin {
+				return $this->fixed_plugins[ $id ] ?? null;
+			}
+		};
+
+		$method = new \ReflectionMethod( Orders_Registry::class, 'collect_wizard_pickup' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		$this->assertSame(
+			[
+				'handles' => [ 'woodev-pickup-geo', 'woodev-pickup-map-provider-yandex' ],
+				'configs' => [ 'cdek' => [ 'restRoot' => 'https://example.test/points' ] ],
+			],
+			$method->invoke( $registry )
+		);
 	}
 
 	// -----------------------------------------------------------------------

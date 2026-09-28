@@ -164,6 +164,80 @@
 	}
 
 	/**
+	 * Flattens a request-context object into `key=value` parts, PHP-style: a nested object or
+	 * array becomes `key[sub]=value` (`location[region][name]=…`), which is exactly the shape
+	 * `WP_REST_Request` hands a route's `object` param as an associative array. `null`,
+	 * `undefined`, empty strings and functions are skipped — an absent value must read as
+	 * absent server-side, never as an empty one.
+	 *
+	 * Used by the ADMIN order wizard (#970): its routes take the destination `location`, the
+	 * order `weight` and the chosen `payment_method` explicitly, because an admin request has no
+	 * cart, no session and no visitor location chain to read them from.
+	 *
+	 * @param {string} prefix the key so far (`''` at the top level).
+	 * @param {*}      value  the value at that key.
+	 * @param {Array}  parts  accumulator of encoded `k=v` strings.
+	 * @returns {Array}
+	 */
+	function flattenContext( prefix, value, parts ) {
+		var key;
+
+		if ( null === value || undefined === value || 'function' === typeof value ) {
+			return parts;
+		}
+
+		if ( 'object' === typeof value ) {
+			for ( key in value ) {
+				if ( Object.prototype.hasOwnProperty.call( value, key ) ) {
+					flattenContext( prefix ? prefix + '[' + key + ']' : key, value[ key ], parts );
+				}
+			}
+
+			return parts;
+		}
+
+		if ( '' === String( value ) || ! prefix ) {
+			return parts;
+		}
+
+		parts.push( encodeURIComponent( prefix ).replace( /%5B/g, '[' ).replace( /%5D/g, ']' ) + '=' + encodeURIComponent( String( value ) ) );
+
+		return parts;
+	}
+
+	/**
+	 * Builds the extra query string an integrator's `context` option contributes, or `''`.
+	 *
+	 * @param {Function|Object|undefined} context the `context` option: an object, or a zero-arg
+	 *                                            function returning the CURRENT one (read on every request).
+	 * @returns {string}
+	 */
+	function serializeContext( context ) {
+		var current = 'function' === typeof context ? context() : context;
+
+		if ( ! current || 'object' !== typeof current ) {
+			return '';
+		}
+
+		return flattenContext( '', current, [] ).join( '&' );
+	}
+
+	/**
+	 * Joins a base URL and query strings, skipping the empty ones.
+	 *
+	 * @param {string} base
+	 * @param {...string} queries
+	 * @returns {string}
+	 */
+	function withQuery( base ) {
+		var queries = Array.prototype.slice.call( arguments, 1 ).filter( function( query ) {
+			return 'string' === typeof query && query.length > 0;
+		} );
+
+		return queries.length > 0 ? base + '?' + queries.join( '&' ) : base;
+	}
+
+	/**
 	 * Builds a transport/parse-level error — a failure that never reached
 	 * (or never got a usable answer from) the REST controller, distinct
 	 * from a server error response (see {@see errorFromResponse}).
@@ -269,11 +343,11 @@
 	 * @param {string}   restRoot
 	 * @param {Function} readNonce
 	 * @param {Object}   query
+	 * @param {Function|Object|undefined} context extra request context, see {@see serializeContext}.
 	 * @returns {Promise<Array>}
 	 */
-	function fetchPointsOnce( restRoot, readNonce, query ) {
-		var qs = serializePointsQuery( query );
-		var url = restRoot + ( qs.length > 0 ? '?' + qs : '' );
+	function fetchPointsOnce( restRoot, readNonce, query, context ) {
+		var url = withQuery( restRoot, serializePointsQuery( query ), serializeContext( context ) );
 
 		return request( url, readNonce ).then( function( body ) {
 			var points = body && Array.isArray( body.points ) ? body.points : [];
@@ -288,10 +362,14 @@
 	 * @param {string}   restRoot
 	 * @param {Function} readNonce
 	 * @param {string}   pointId
+	 * @param {Function|Object|undefined} context extra request context, see {@see serializeContext}.
 	 * @returns {Promise<Object>}
 	 */
-	function fetchDetailsOnce( restRoot, readNonce, pointId ) {
-		var url = restRoot.replace( /\/+$/, '' ) + '/' + encodeURIComponent( pointId );
+	function fetchDetailsOnce( restRoot, readNonce, pointId, context ) {
+		var url = withQuery(
+			restRoot.replace( /\/+$/, '' ) + '/' + encodeURIComponent( pointId ),
+			serializeContext( context )
+		);
 
 		return request( url, readNonce );
 	}
@@ -335,6 +413,15 @@
 	 *                                               why a function, not a captured string, is what makes
 	 *                                               a fragment-refreshed nonce (issue #157) actually reach
 	 *                                               the request.
+	 * @property {Function|Object} [context]        Extra query params for EVERY points and details request,
+	 *                                               as an object or a zero-arg function returning the
+	 *                                               CURRENT one (read per request, so a wizard that
+	 *                                               changes weight or destination between calls is
+	 *                                               always heard). Nested objects serialize PHP-style,
+	 *                                               `location[region][name]=…`. Absent = the storefront's
+	 *                                               behaviour, unchanged: the admin order wizard (#970) is
+	 *                                               the one caller, because an admin request has no cart or
+	 *                                               session to read weight / payment / location from.
 	 * @property {number}          [debounceMs=300] `fetchPoints()` debounce interval — see
 	 *                                               {@see DEBOUNCE_MS} for why 300 is the default and
 	 *                                               must not be lowered without also raising the
@@ -405,7 +492,7 @@
 			latestSeq += 1;
 			mySeq = latestSeq;
 
-			latestPromise = fetchPointsOnce( restRoot, readNonce, args ).then(
+			latestPromise = fetchPointsOnce( restRoot, readNonce, args, opts.context ).then(
 				function( points ) {
 					if ( mySeq === latestSeq ) {
 						resolveAll( waiters, points );
@@ -486,7 +573,7 @@
 		 * @returns {Promise<Object>}
 		 */
 		function fetchDetails( pointId ) {
-			return fetchDetailsOnce( restRoot, readNonce, pointId );
+			return fetchDetailsOnce( restRoot, readNonce, pointId, opts.context );
 		}
 
 		/**

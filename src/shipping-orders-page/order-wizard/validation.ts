@@ -157,7 +157,48 @@ export function validateItems( data: WizardData ): FieldErrors {
 	return errors;
 }
 
-/** Runs the check of step `index`. Steps ④–⑤ are not built yet (I5a / I5b): nothing to check. */
+/**
+ * ④ Доставка. The same three rules, under the same field paths and words, as
+ * `Order_Payload_Validator::check_shipping_line()` / `check_pickup_point()`: a tariff must be
+ * chosen, its price a number not below zero, and a pickup tariff needs a point (checkout parity,
+ * spec A2). Whether the tariff belongs to a carrier that is allowed at all (O12) and whether the
+ * point still exists are the server's to decide — it is asked when the order is saved, and a 422
+ * comes back onto these same paths.
+ */
+export function validateDelivery( data: WizardData ): FieldErrors {
+	const errors: FieldErrors = {};
+	const line = data.rest.shipping_line;
+
+	// A tariff chosen against an earlier package is not confirmed until the new answer lands.
+	if ( data.rest.rates_pending ) {
+		add( errors, 'shipping_line', __( 'Дождитесь расчёта тарифов.', 'woodev-plugin-framework' ) );
+
+		return errors;
+	}
+
+	if ( ! line ) {
+		add( errors, 'shipping_line', __( 'Выберите способ доставки.', 'woodev-plugin-framework' ) );
+
+		return errors;
+	}
+
+	const cost = String( line.cost ?? '' ).trim();
+
+	if ( '' === cost || ! Number.isFinite( Number( cost ) ) || Number( cost ) < 0 ) {
+		add( errors, 'shipping_line.cost', __( 'Стоимость доставки должна быть числом не меньше нуля.', 'woodev-plugin-framework' ) );
+	}
+
+	const point = data.rest.pickup_point;
+	const hasPoint = !! point && '' !== String( point.id ?? '' ).trim();
+
+	if ( data.rest.rate_is_pickup && ! hasPoint ) {
+		add( errors, 'pickup_point.id', __( 'Для этого тарифа выберите пункт выдачи.', 'woodev-plugin-framework' ) );
+	}
+
+	return errors;
+}
+
+/** Runs the check of step `index`. Step ⑤ is I5b's: nothing to check yet. */
 export function validateStep(
 	index: number,
 	data: WizardData,
@@ -171,6 +212,8 @@ export function validateStep(
 			return validateAddress( data, countries, states );
 		case 'items':
 			return validateItems( data );
+		case 'delivery':
+			return validateDelivery( data );
 		default:
 			return {};
 	}

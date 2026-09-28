@@ -511,6 +511,119 @@ test( 'in-order delivery (no race) still resolves each burst with its own result
 // selectPoint — confirms one point with the server (Task 7)
 // -----------------------------------------------------------------------
 
+// -----------------------------------------------------------------------
+// `context` option — the ADMIN order wizard's explicit request context (#970)
+// -----------------------------------------------------------------------
+
+describe( 'context option', () => {
+	const contextQuery = ( url ) => url.slice( url.indexOf( '?' ) + 1 ).split( '&' ).map( decodeURIComponent );
+
+	test( 'appends the context after the query params on a points request', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( {
+			restRoot: REST_ROOT,
+			nonce: NONCE,
+			context: { weight: 3250, payment_method: 'cod' },
+		} );
+		const promise = ds.fetchPoints( { locality: 'msk' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT + '?locality=msk&weight=3250&payment_method=cod' );
+	} );
+
+	test( 'serializes a nested record PHP-style, so the route reads `location` as an associative array', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( {
+			restRoot: REST_ROOT,
+			nonce: NONCE,
+			context: {
+				location: { key: 'dadata:77', level: 'settlement', region: { name: 'Москва', type: 'г' } },
+			},
+		} );
+		const promise = ds.fetchPoints( { locality: 'dadata:77' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		const url = fetchMock.mock.calls[ 0 ][ 0 ];
+
+		// Brackets stay literal (PHP parses them into nesting); values are still percent-encoded.
+		expect( url ).toContain( 'location[region][name]=' + encodeURIComponent( 'Москва' ) );
+		expect( contextQuery( url ) ).toEqual( [
+			'locality=dadata:77',
+			'location[key]=dadata:77',
+			'location[level]=settlement',
+			'location[region][name]=Москва',
+			'location[region][type]=г',
+		] );
+	} );
+
+	test( 'skips null, undefined and empty values instead of sending them empty', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( {
+			restRoot: REST_ROOT,
+			nonce: NONCE,
+			context: { weight: 0, payment_method: '', location: null, other: undefined },
+		} );
+		const promise = ds.fetchPoints( { locality: 'msk' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		// `0` is a real value (weight unknown reads as 0); only absent / empty ones are dropped.
+		expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT + '?locality=msk&weight=0' );
+	} );
+
+	test( 'a function is read on EVERY request, so a context that moved is always heard', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+		let weight = 100;
+
+		const ds = WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: NONCE, context: () => ( { weight } ) } );
+
+		let promise = ds.fetchPoints( { locality: 'msk' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		weight = 900;
+		promise = ds.fetchPoints( { locality: 'msk' } );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		expect( fetchMock.mock.calls.map( ( call ) => call[ 0 ] ) ).toEqual( [
+			REST_ROOT + '?locality=msk&weight=100',
+			REST_ROOT + '?locality=msk&weight=900',
+		] );
+	} );
+
+	test( 'the details request carries the same context, and none when there is no query at all', async () => {
+		const fetchMock = mockFetchOnce( 200, { id: 'P-1' } );
+
+		await WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: NONCE, context: { weight: 500, payment_method: 'cod' } } ).fetchDetails( 'P-1' );
+		await WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: NONCE } ).fetchDetails( 'P-1' );
+
+		expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT + '/P-1?weight=500&payment_method=cod' );
+		expect( fetchMock.mock.calls[ 1 ][ 0 ] ).toBe( REST_ROOT + '/P-1' );
+	} );
+
+	test( 'a points request with neither a query nor a context is the bare route, as before', async () => {
+		jest.useFakeTimers();
+		const fetchMock = mockFetchOnce( 200, { points: [] } );
+
+		const ds = WoodevPickupDataSource( { restRoot: REST_ROOT, nonce: NONCE } );
+		const promise = ds.fetchPoints( {} );
+		jest.advanceTimersByTime( 300 );
+		await promise;
+
+		expect( fetchMock.mock.calls[ 0 ][ 0 ] ).toBe( REST_ROOT );
+	} );
+} );
+
 describe( 'selectPoint', () => {
 	it( 'POSTs to the select route beside the points root, with the live nonce', async () => {
 		mockFetchOnce( 200, { ok: true } );
