@@ -120,6 +120,12 @@
  * (`is-open`, on collapse) hides both at once; there is exactly one source of truth for "is a
  * right-hand panel showing", never two.
  *
+ * MANAGER MODE (#710 D3): the admin order wizard builds the same panels with `mode: 'manager'`,
+ * and the stage carries `is-manager` for it — permanent sidebar, no toggle, a labelled way back
+ * from the card, a marked CTA for the chosen point. Every rule for it is in its own section
+ * (search `MANAGER MODE`) and is reachable only through that class or an element only that
+ * mode builds; a checkout page never carries the class, so nothing there changes.
+ *
  * @since 2.0.2
  */
 
@@ -1780,6 +1786,52 @@
 	background: #f6f7f7;
 }
 
+/* -------------------------------------------------------------------------
+ * MANAGER MODE (#710 D3, operator decision 28.09.2026) — the same panels inside the admin order
+ * wizard, `pickup-panels.js`'s `config.mode === 'manager'`, flagged on the stage as `is-manager`.
+ * The storefront never carries that class, so nothing in this section can reach a checkout page;
+ * every rule here is either gated by `.is-manager` or keyed to an element only manager mode
+ * builds (`__back`, the CTA's `is-selected`). The sidebar toggle needs no rule: manager mode
+ * never renders the element.
+ *
+ * `.woodev-pickup-card__back` replaces the ✕ above as the card's way back to the list — a labelled
+ * pill («← К списку») sitting FIRST in the header row, the chip pushed to the row's far edge by
+ * its own `margin-left: auto` below (the ✕ used that trick from the other side). Same quiet
+ * grey-on-transparent treatment as the ✕, so the two modes' cards share one tone; a pill rather
+ * than a circle because it carries text.
+ * ---------------------------------------------------------------------- */
+
+.woodev-pickup-card__back {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 12px 0 8px;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1;
+	color: #50575e;
+	background: transparent;
+	border: 0;
+	border-radius: 16px;
+	cursor: pointer;
+}
+
+.woodev-pickup-card__back:hover {
+	color: #000;
+	background: #f6f7f7;
+}
+
+.woodev-pickup-card__back-glyph {
+	font-size: 16px;
+	line-height: 1;
+}
+
+.woodev-pickup-stage.is-manager .woodev-pickup-card__chip {
+	margin-left: auto;
+}
+
 .woodev-pickup-card__body {
 	flex: 1 1 auto;
 	min-height: 0; /* Lets this flex child scroll instead of forcing the card taller than the dialog. */
@@ -1926,6 +1978,27 @@
 	background: #dcdcde;
 	cursor: not-allowed;
 	opacity: 1; /* Overrides UA/theme opacity fading, which would make the label unreadable. */
+}
+
+/* Manager mode (#710): the CHOSEN point's CTA — `pickup-panels.js`'s `buildCardFooter()` disables
+   it and adds `is-selected`, so the card marks the wizard's own choice instead of prompting for it
+   again. Not the grey `:disabled` above, which reads as «cannot» — this one reads as «done»: the
+   accent at the 6% tint the selected list row already uses (one tint, both surfaces agree), an
+   accent-fill border and text, a tick drawn by `::before`. Wins over `:disabled` above by
+   specificity (0,2,0 + a pseudo-class vs 0,1,0 + one), no `!important` needed. Element-only
+   selector, no `.is-manager` gate: only manager mode ever adds the class. */
+.woodev-pickup-card__cta.is-selected:disabled {
+	color: var( --woodev-pickup-accent-fill, #047a9b );
+	background: rgba( 6, 174, 221, 0.06 );
+	background: color-mix( in srgb, var( --woodev-pickup-accent, #06aedd ) 6%, transparent );
+	border: 1px solid var( --woodev-pickup-accent-fill, #047a9b );
+	padding: 9px 15px; /* 10px 16px minus the border, so the footer's height never jumps on select. */
+	cursor: default;
+}
+
+.woodev-pickup-card__cta.is-selected::before {
+	margin-right: 8px;
+	content: '\2713'; /* ✓ */
 }
 
 /* The confirmation lock (2026-08-06 spec D-9). A transparent sheet over the card only — NOT
@@ -2104,6 +2177,7 @@
 .woodev-pickup-filter__checkbox:focus-visible,
 .woodev-pickup-card__tab:focus-visible,
 .woodev-pickup-card__close:focus-visible,
+.woodev-pickup-card__back:focus-visible,
 .woodev-pickup-card__cta:focus-visible,
 .woodev-pickup-card__howto > summary:focus-visible {
 	outline: 2px solid var( --woodev-pickup-accent, #06aedd );
@@ -2266,5 +2340,40 @@
 	   gesture bar/home indicator lives, real estate the boxed desktop dialog never reaches. */
 	.woodev-pickup-card__footer {
 		padding-bottom: 24px;
+	}
+
+	/* Manager mode (#710) at this width: the full-bleed panel above is the checkout's answer to a
+	   full-screen dialog, and it covers the map completely — fine when the customer can collapse
+	   it, unusable when the sidebar is permanent (no toggle, so the map would never be seen). The
+	   wizard's host is a boxed region inside the admin, not a full-screen dialog, so the desktop
+	   floating column is restored here: same insets, same cap, same radius as the rules at the top
+	   of this file. The column's own `calc( 100% - 48px )` cap already keeps it narrower than any
+	   stage. `__back` joins the 44px tap-target list above for the same reason `__close` is on it. */
+	.woodev-pickup-stage.is-manager .woodev-pickup-list,
+	.woodev-pickup-stage.is-manager .woodev-pickup-card {
+		top: 16px;
+		right: 16px;
+		bottom: 32px;
+		max-width: min( 320px, calc( 100% - 48px ) );
+		border-radius: 8px;
+	}
+
+	/* No mobile bar in manager mode, so no room reserved for one under the last row. */
+	.woodev-pickup-stage.is-manager .woodev-pickup-list__body {
+		padding-bottom: 0;
+	}
+
+	/* The sidebar's own loading overlay is back at this width (the block above suppresses it
+	   because the full-bleed panel made it dim the whole screen) — the column is 320px wide beside
+	   a visible map here, exactly the desktop case it was designed for. `!important` in kind: the
+	   suppression above carries it, and only a later `!important` at equal-or-higher specificity
+	   can win it back (gotcha `hostile-theme-button-display-none-needs-important`). */
+	.woodev-pickup-stage.is-manager.is-loading.is-open:not( .is-card ) .woodev-pickup-list__loading {
+		display: flex !important;
+	}
+
+	.woodev-pickup-card__back {
+		height: 44px;
+		border-radius: 22px;
 	}
 }

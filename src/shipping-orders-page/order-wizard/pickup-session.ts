@@ -24,11 +24,24 @@
  * the embedded carrier widget) gets the host itself and reports `select`; every other provider
  * gets the panels' map element and the panels own list / card / search.
  *
+ * **Manager mode (operator decision, 28.09.2026).** The panels are built with `mode: 'manager'`
+ * (`pickup-panels.js`): the sidebar is permanent — the list by default, a point's details on a
+ * row or marker click, «← К списку» back — and the card's button is «Выбрать», which reports the
+ * point through `onSelect` exactly as before; the chosen point is then marked in the list and on
+ * its own card («Выбрано»). The storefront's checkout-only chrome (the collapsible drawer and its
+ * mobile bar, the «Продолжить оформление заказа» state) is what the mode drops; clustering,
+ * viewport loading, search, the type filter and the lazy verdict check stay — a manager finds a
+ * point the same way a buyer does. The three labels the mode reads are worded HERE, for a
+ * manager ({@link managerI18n}); the storefront's own config never carries them and never sees
+ * the flag, so the checkout is untouched.
+ *
  * ⚠ The globals are read on every call, never captured at import: the scripts are enqueued
  * classic scripts, so what exists depends on the page, not on the bundle.
  *
  * @package woodev-plugin-framework
  */
+
+import { __ } from '@wordpress/i18n';
 
 /** A point as the points route returns it — display fields arrive already `esc_html()`-escaped. */
 export interface PickupPoint {
@@ -102,6 +115,20 @@ const ERROR_KEYS: Record<string, string> = {
 	woodev_pickup_invalid_nonce: 'stalePage',
 	rest_forbidden: 'stalePage',
 };
+
+/**
+ * The panels' i18n keys manager mode reads, worded for a manager: the card's button, its chosen
+ * state, and the way back from a card to the list. Laid OVER the carrier's own i18n table (which
+ * carries the storefront's `select` wording, «Выбрать этот пункт» for a buyer) — the storefront's
+ * table is never changed, this is the wizard's own copy of it.
+ *
+ * @return {Record<string, string>} key → label.
+ */
+const managerI18n = (): Record<string, string> => ( {
+	select: __( 'Выбрать', 'woodev-plugin-framework' ),
+	selected: __( 'Выбрано', 'woodev-plugin-framework' ),
+	backToList: __( 'К списку', 'woodev-plugin-framework' ),
+} );
 
 /**
  * Whether everything the picker is assembled from is on the page: the data source, the panels
@@ -403,9 +430,16 @@ export function createPickupSession( options: PickupSessionOptions ): PickupSess
 				return;
 			}
 
-			// The panels always start CLOSED, so the camera's margin is reserved for that state
-			// BEFORE its first move (the mount does the same).
-			panels && 'function' === typeof provider.setMargin && provider.setMargin( false, 0 );
+			// Manager mode opens the sidebar in `render()`, before any `listToggle` listener
+			// exists, so the camera's margin for it is reserved HERE, before the first move — by
+			// asking the panels for the strip they occupy, the same number `listToggle` would
+			// carry (the checkout's mount reserves nothing here because its panels start closed).
+			if ( panels && 'function' === typeof provider.setMargin ) {
+				const width = 'function' === typeof panels.getSidebarWidth ? Number( panels.getSidebarWidth() ) || 0 : 0;
+
+				provider.setMargin( width > 0, width );
+			}
+
 			panels?.setBusy( true );
 
 			if ( ! ownsChrome && 'bulk' === config.strategy ) {
@@ -415,7 +449,12 @@ export function createPickupSession( options: PickupSessionOptions ): PickupSess
 	};
 
 	if ( ! ownsChrome ) {
-		panels = new PanelsCtor!( host, { ...config, lang: 'string' === typeof config.mapConfig?.lang ? config.mapConfig.lang : '' } );
+		panels = new PanelsCtor!( host, {
+			...config,
+			mode: 'manager',
+			i18n: { ...( config.i18n || {} ), ...managerI18n() },
+			lang: 'string' === typeof config.mapConfig?.lang ? config.mapConfig.lang : '',
+		} );
 		panels.render();
 		searchLayoutEl = panels.buildSearchLayout();
 

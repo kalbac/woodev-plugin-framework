@@ -173,8 +173,99 @@ test( 'the real panels draw into the host, and a card\'s own choose button reach
 
 	expect( onSelect ).toHaveBeenCalledTimes( 1 );
 	expect( [ 'P-1', 'P-2' ] ).toContain( onSelect.mock.calls[ 0 ][ 0 ].id );
-	// The card's own state follows the choice, as it does at checkout.
-	expect( host.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( 'Пункт выбран' );
+	// Manager mode (#710): the card MARKS the choice («Выбрано», disabled) — never the checkout's
+	// «Продолжить оформление заказа» state, whatever the carrier's own table says for it.
+	const chosen = host.querySelector( '.woodev-pickup-card__cta' );
+
+	expect( chosen.textContent ).toBe( 'Выбрано' );
+	expect( chosen.disabled ).toBe( true );
+	expect( chosen.classList.contains( 'is-selected' ) ).toBe( true );
+} );
+
+describe( 'manager mode (#710 D3, operator decision 28.09.2026)', () => {
+	const stageOf = ( host ) => host.querySelector( '.woodev-pickup-stage' );
+
+	const ready = async () => {
+		const started = start();
+		await new Promise( ( resolve ) => setTimeout( resolve, 350 ) );
+
+		const groups = provider.setPoints.mock.calls[ 0 ][ 0 ];
+		provider.emit( 'visibleChange', groups.map( ( group ) => group.key ) );
+
+		return { ...started, groups };
+	};
+
+	test( 'the sidebar is open from the first paint with the list, has no toggle, and the map margin is reserved for it', async () => {
+		const { host } = await ready();
+		const stage = stageOf( host );
+
+		expect( stage.classList.contains( 'is-manager' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
+		expect( stage.querySelector( '.woodev-pickup-list__toggle' ) ).toBeNull();
+		expect( host.querySelectorAll( '.woodev-pickup-list__item' ).length ).toBe( 2 );
+		// jsdom lays nothing out: the strip is the 16px gutter alone, and it is still reserved.
+		expect( provider.setMargin ).toHaveBeenCalledWith( true, 16 );
+	} );
+
+	test( 'list → details → «Выбрать» sets the wizard\'s point, then the list row and the card are marked; «К списку» goes back', async () => {
+		const { host, onSelect } = await ready();
+		const stage = stageOf( host );
+
+		const row = host.querySelector( '.woodev-pickup-list__item' );
+		row.click();
+		await flush();
+
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+		expect( host.querySelector( '.woodev-pickup-card__close' ) ).toBeNull();
+
+		const cta = host.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.textContent ).toBe( 'Выбрать' );
+
+		cta.click();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+
+		const chosenId = String( onSelect.mock.calls[ 0 ][ 0 ].id );
+
+		expect( host.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( 'Выбрано' );
+		expect( host.querySelector( '.woodev-pickup-card__cta' ).disabled ).toBe( true );
+
+		host.querySelector( '.woodev-pickup-card__back' ).click();
+
+		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+
+		const marked = Array.from( host.querySelectorAll( '.woodev-pickup-list__item.is-selected' ) );
+
+		expect( marked ).toHaveLength( 1 );
+		expect( marked[ 0 ].querySelector( '.woodev-pickup-list__name' ).textContent ).toBe( `Пункт ${ chosenId }` );
+	} );
+
+	test( 'a marker click opens that point\'s details in the sidebar, with the sidebar staying open', async () => {
+		const { host, groups } = await ready();
+		const stage = stageOf( host );
+		const target = groups.find( ( group ) => 'P-2' === String( group.points[ 0 ].id ) );
+
+		provider.emit( 'pointClick', target.key );
+		await flush();
+
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+		expect( host.querySelector( '.woodev-pickup-card__title' ).textContent ).toBe( 'Пункт P-2' );
+		// A marker click only pans — the panels tell the provider so through the same `origin` the checkout uses.
+		expect( provider.focusGroup ).toHaveBeenCalledWith( target.key, { zoom: false } );
+	} );
+
+	test( 'a point chosen elsewhere in the wizard (setSelectedId) is marked in the list without opening a card', async () => {
+		const { host, session } = await ready();
+
+		session.setSelectedId( 'P-1' );
+
+		expect( stageOf( host ).classList.contains( 'is-card' ) ).toBe( false );
+		expect( host.querySelectorAll( '.woodev-pickup-list__item.is-selected' ) ).toHaveLength( 1 );
+	} );
 } );
 
 test( 'a point the carrier says cannot be chosen has a disabled button and never reaches the caller', async () => {
