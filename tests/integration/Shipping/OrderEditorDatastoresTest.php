@@ -433,6 +433,37 @@ class OrderEditorDatastoresTest extends TestCase {
 	}
 
 	/**
+	 * Where WooCommerce's own «New order» notification is NOT wired (CI on WC 8.5.1 / 9.3.0: the mailer
+	 * singleton outlives the hooks its constructor added), the editor triggers the e-mail itself —
+	 * once, and for a status that sends it (#968 r2).
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_the_new_order_email_is_still_sent_once_when_woocommerce_did_not_wire_its_notification( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$email = \WC()->mailer()->emails['WC_Email_New_Order'];
+
+		foreach ( [ 'processing', 'completed', 'on-hold' ] as $to ) {
+			remove_action( 'woocommerce_order_status_pending_to_' . $to . '_notification', [ $email, 'trigger' ], 10 );
+		}
+
+		$emails = $this->count_hook( 'woocommerce_email_enabled_new_order' );
+
+		$this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$this->assertSame( 0, $emails['count'], 'a pending order sends nothing' );
+
+		$this->create( $this->payload( [ 'status' => 'on-hold' ] ) );
+		$this->assertSame( 1, $emails['count'], 'the explicit trigger covers the unwired notification, once' );
+
+		$order = $this->create( $this->payload( [ 'status' => 'processing' ] ) );
+		$this->assertSame( 2, $emails['count'] );
+		$this->assertTrue( $this->fresh( $order->get_id() )->get_new_order_email_sent(), "WooCommerce's own sent flag is set, so nothing can repeat it" );
+	}
+
+	/**
 	 * Stock follows WooCommerce's own status transition on create.
 	 *
 	 * @dataProvider datastore_provider

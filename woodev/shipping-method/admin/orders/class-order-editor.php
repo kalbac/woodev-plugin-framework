@@ -37,9 +37,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	 *
 	 * **E-mail — measured, #962 I0 contradiction 1.** `set_status( 'processing' | 'on-hold' |
 	 * 'completed' )` on a fresh order already sends «New order» (and the customer's mail) through
-	 * WooCommerce's own `pending_to_*_notification` actions. An explicit extra
-	 * `WC_Email_New_Order::trigger()` would DOUBLE-SEND, so none is issued; a `pending` order sends
-	 * nothing, exactly like a checkout order awaiting payment.
+	 * WooCommerce's own `pending_to_*_notification` actions, so an unconditional extra
+	 * `WC_Email_New_Order::trigger()` would DOUBLE-SEND; a `pending` order sends nothing, exactly
+	 * like a checkout order awaiting payment. That holds where the mailer's notification hooks
+	 * are live; when they are not ({@see self::apply_status()} — measured on WC 8.5.1 / 9.3.0 in
+	 * CI, #968 r2) the trigger is issued once, only if WooCommerce did not handle the e-mail.
 	 *
 	 * **Errors are returned, not thrown**: every public method answers with its result or a
 	 * `\WP_Error` whose `data['status']` is the HTTP status of the transport contract — 404 unknown
@@ -323,7 +325,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			$order->calculate_totals( true );
 
-			$this->apply_status( $order, $data['status'] );
+			$this->apply_status( $order, $data['status'], $is_update );
 
 			if ( $was_paid && abs( (float) $order->get_total() - $total_before ) > 0.0001 ) {
 				$order->add_order_note(
@@ -592,25 +594,57 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		}
 
 		/**
-		 * Moves the order to the requested status, through WooCommerce's own transition.
+		 * Moves the order to the requested status, through WooCommerce's own transition — and makes
+		 * sure a created order announces itself with exactly ONE «New order» e-mail.
+		 *
+		 * The transition normally does that by itself, through the `pending_to_*_notification`
+		 * actions the mailer hooks when it is built. When it did not (the mailer was built in a
+		 * scope whose hooks were dropped, a plugin unhooked the notification), WooCommerce's own
+		 * `WC_Email_New_Order::trigger()` is called here — and only then: an e-mail that WooCommerce
+		 * already handled (it reached `is_enabled()`, or the order carries its sent flag) is never
+		 * repeated. Customer e-mails stay entirely WooCommerce's (spec C4). An edit sends nothing
+		 * of its own.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order   $order  the order.
-		 * @param string|null $status the requested status; null keeps the current one.
+		 * @param \WC_Order   $order     the order.
+		 * @param string|null $status    the requested status; null keeps the current one.
+		 * @param bool        $is_update whether this is an edit of an existing order.
 		 * @return void
 		 */
-		private function apply_status( \WC_Order $order, ?string $status ): void {
+		private function apply_status( \WC_Order $order, ?string $status, bool $is_update ): void {
 			if ( null === $status || $status === $order->get_status() ) {
 				return;
 			}
 
 			// The transactional-mail hooks are registered when the mailer is first built, which a REST
 			// request does not do by itself — and the transition below is what sends «New order».
-			WC()->mailer();
+			$mailer  = WC()->mailer();
+			$handled = false;
+			$watcher = static function ( $enabled ) use ( &$handled ) {
+				$handled = true;
 
-			$order->set_status( $status, '', true );
-			$order->save();
+				return $enabled;
+			};
+
+			add_filter( 'woocommerce_email_enabled_new_order', $watcher, 1 );
+
+			try {
+				$order->set_status( $status, '', true );
+				$order->save();
+			} finally {
+				remove_filter( 'woocommerce_email_enabled_new_order', $watcher, 1 );
+			}
+
+			if ( $is_update || $handled || $order->get_new_order_email_sent() ) {
+				return;
+			}
+
+			$email = $mailer->emails['WC_Email_New_Order'] ?? null;
+
+			if ( $email instanceof \WC_Email_New_Order && in_array( $order->get_status(), [ 'processing', 'on-hold', 'completed' ], true ) ) {
+				$email->trigger( $order->get_id(), $order );
+			}
 		}
 
 		/**
