@@ -533,14 +533,12 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		public static function backfill_existing_orders(): int {
 			$order_ids = wc_get_orders(
 				[
-					'limit'      => -1,
-					'return'     => 'ids',
-					'meta_query' => [
-						[
-							'key'     => self::MARKER_META_KEY,
-							'compare' => 'EXISTS',
-						],
-					],
+					'limit'        => -1,
+					'return'       => 'ids',
+					// `meta_key` + `meta_compare`, not `meta_query`: the legacy CPT datastore drops
+					// `meta_query` (an unsupported-arg notice), which would walk EVERY order — foreign ones included.
+					'meta_key'     => self::MARKER_META_KEY,
+					'meta_compare' => 'EXISTS',
 				]
 			);
 
