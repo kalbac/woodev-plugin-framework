@@ -236,12 +236,12 @@ if ( ! class_exists( 'Woodev_Test_Shipment_Handler' ) ) {
 		 *
 		 * @inheritDoc
 		 */
-		public function update( \WC_Order $order ): bool {
+		public function update( \WC_Order $order ): \Woodev\Framework\Shipping\Order\Action_Result {
 			$current = (string) $this->order_handler->get( $order, 'status' );
 
 			$this->order_handler->set( $order, 'status', self::next_status( $current ) );
 
-			return true;
+			return \Woodev\Framework\Shipping\Order\Action_Result::success();
 		}
 
 		/**

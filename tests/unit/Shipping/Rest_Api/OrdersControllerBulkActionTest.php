@@ -26,6 +26,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Tests\Unit\TestCase;
 
@@ -193,7 +194,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 	public function test_skipped_and_failed_are_accounted_separately(): void {
 		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
 		$handler = $this->register_handler( 'cdek' );
-		$handler->shouldReceive( 'export' )->twice()->andReturnValues( [ 'CARRIER-1', '' ] );
+		$handler->shouldReceive( 'export' )->twice()->andReturnValues( [ Action_Result::success( 'CARRIER-1' ), Action_Result::failure() ] );
 
 		$this->order( 1, 'pending', '_cdek_marker' );      // eligible, succeeds
 		$this->order( 2, 'pending', '_cdek_marker' );      // eligible, export() returns '' => fails
@@ -222,7 +223,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 			->andThrow( new \RuntimeException( 'carrier API down' ) );
 		$handler->shouldReceive( 'export' )
 			->once()
-			->andReturn( 'CARRIER-2' );
+			->andReturn( Action_Result::success( 'CARRIER-2' ) );
 
 		$this->order( 1, 'pending', '_cdek_marker' );
 		$this->order( 2, 'pending', '_cdek_marker' );
@@ -234,6 +235,62 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$this->assertSame( 1, $result['failed'] );
 	}
 
+	// ----- #872: per-order failure reasons -----
+
+	/**
+	 * Each failed order's reason — the carrier's text prefixed with its name, the generic
+	 * sentence when it gave none, the upstream sentence when the handler threw — is listed
+	 * in `failures`, beside (never instead of) the aggregate counts.
+	 */
+	public function test_each_failed_order_carries_its_own_reason(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'C1' ) );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Неверный индекс получателя' ) );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure() );
+		$handler->shouldReceive( 'export' )->once()->andThrow( new \RuntimeException( 'SQLSTATE secret-token-123' ) );
+
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$this->order( $i, 'pending', '_cdek_marker' );
+		}
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 1, 2, 3, 4 ] ) );
+
+		$this->assertSame( 1, $result['succeeded'] );
+		$this->assertSame( 3, $result['failed'] );
+		$this->assertSame(
+			[
+				[
+					'id'      => 2,
+					'message' => 'СДЭК: Неверный индекс получателя',
+				],
+				[
+					'id'      => 3,
+					'message' => 'Не удалось выгрузить заказ перевозчику.',
+				],
+				[
+					'id'      => 4,
+					'message' => 'Сервис перевозчика временно недоступен. Попробуйте повторить действие позже.',
+				],
+			],
+			$result['failures']
+		);
+		$this->assertStringNotContainsString( 'secret-token-123', (string) json_encode( $result ) );
+	}
+
+	/** Nothing failed → an empty list, so the client can rely on the key always being there. */
+	public function test_failures_is_an_empty_list_when_nothing_failed(): void {
+		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
+		$handler = $this->register_handler( 'cdek' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'C1' ) );
+
+		$this->order( 1, 'pending', '_cdek_marker' );
+
+		$result = $this->controller()->perform_bulk_action( $this->request( Order_Actions::EXPORT, [ 1 ] ) );
+
+		$this->assertSame( [], $result['failures'] );
+	}
+
 	// ----- mixed-carrier aggregate batch (TWO providers registered) -----
 
 	/** Each order dispatches through ITS OWN carrier's handler, never the other one's. */
@@ -243,8 +300,8 @@ final class OrdersControllerBulkActionTest extends TestCase {
 		$cdek_handler   = $this->register_handler( 'cdek' );
 		$yandex_handler = $this->register_handler( 'yandex' );
 
-		$cdek_handler->shouldReceive( 'export' )->once()->andReturn( 'CDEK-1' );
-		$yandex_handler->shouldReceive( 'export' )->once()->andReturn( 'YANDEX-1' );
+		$cdek_handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CDEK-1' ) );
+		$yandex_handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'YANDEX-1' ) );
 
 		$this->order( 1, 'pending', '_cdek_marker' );
 		$this->order( 2, 'pending', '_yandex_marker' );
@@ -264,7 +321,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 
 		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
 		$handler = $this->register_handler( 'cdek' );
-		$handler->shouldReceive( 'export' )->times( 5 )->andReturnValues( [ 'C1', 'C2', 'C3', '', '' ] );
+		$handler->shouldReceive( 'export' )->times( 5 )->andReturnValues( [ Action_Result::success( 'C1' ), Action_Result::success( 'C2' ), Action_Result::success( 'C3' ), Action_Result::failure(), Action_Result::failure() ] );
 
 		for ( $i = 1; $i <= 5; $i++ ) {
 			$this->order( $i, 'pending', '_cdek_marker' );
@@ -396,7 +453,7 @@ final class OrdersControllerBulkActionTest extends TestCase {
 
 		$this->register_provider( 'cdek', 'СДЭК', '_cdek_marker' );
 		$handler = $this->register_handler( 'cdek' );
-		$handler->shouldReceive( 'export' )->times( $failed_count )->andReturn( '' );
+		$handler->shouldReceive( 'export' )->times( $failed_count )->andReturn( Action_Result::failure() );
 
 		$ids = [];
 		for ( $i = 1; $i <= $failed_count; $i++ ) {

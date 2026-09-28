@@ -18,6 +18,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Actions;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Tests\Unit\TestCase;
 
@@ -207,7 +208,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 	public function test_export_returning_an_empty_id_is_reported_as_a_failure_not_a_success(): void {
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
-		$handler->shouldReceive( 'export' )->once()->andReturn( '' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure() );
 
 		$order = $this->order( 'pending' );
 
@@ -215,12 +216,13 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'Не удалось выгрузить заказ перевозчику.', $result->get_error_message() );
 	}
 
 	public function test_a_successful_export_returns_the_rebuilt_row_and_a_message(): void {
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
-		$handler->shouldReceive( 'export' )->once()->andReturn( 'CARRIER-1' );
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1' ) );
 
 		$order = $this->order( 'pending' );
 
@@ -237,7 +239,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
-		$handler->shouldReceive( 'cancel' )->once()->andReturn( true );
+		$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::success() );
 
 		$order = $this->order( 'processing' );
 
@@ -267,7 +269,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
-		$handler->shouldReceive( 'cancel' )->once()->andReturn( true );
+		$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::success() );
 
 		$order = $this->order( 'processing' );
 		$order->shouldReceive( 'read_meta_data' )->once()->with( true );
@@ -279,7 +281,7 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
 		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
 		$handler = $this->register_handler();
-		$handler->shouldReceive( 'cancel' )->once()->andReturn( false );
+		$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::failure() );
 
 		$order = $this->order( 'processing' );
 
@@ -339,14 +341,15 @@ final class OrdersControllerPerformActionTest extends TestCase {
 
 	/**
 	 * A carrier plugin hooking `woodev_shipping_perform_order_action` and returning
-	 * `true` makes its own declared action actually succeed — the row comes back.
+	 * an `Action_Result::success()` makes its own declared action actually succeed —
+	 * the row comes back.
 	 */
-	public function test_a_filtered_carrier_extra_action_that_returns_true_succeeds(): void {
+	public function test_a_filtered_carrier_extra_action_that_returns_a_success_succeeds(): void {
 		$this->register_provider();
 		$this->register_handler();
 		$this->stub_carrier_extra_action(
-			static function ( string $action ): bool {
-				return 'print_label' === $action;
+			static function ( string $action ): Action_Result {
+				return 'print_label' === $action ? Action_Result::success() : Action_Result::failure();
 			}
 		);
 
@@ -357,5 +360,130 @@ final class OrdersControllerPerformActionTest extends TestCase {
 		$this->assertIsArray( $result );
 		$this->assertArrayHasKey( 'row', $result );
 		$this->assertSame( 123, $result['row']['id'] );
+	}
+
+	// ----- #872: the carrier's text reaches the merchant, prefixed by the carrier name -----
+
+	public function test_a_failed_export_shows_the_carriers_own_reason_prefixed_by_its_name(): void {
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Неверный индекс получателя' ) );
+
+		$this->order( 'pending' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'СДЭК: Неверный индекс получателя', $result->get_error_message() );
+	}
+
+	public function test_a_failed_cancel_shows_the_carriers_own_reason(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::failure( 'Заказ уже передан курьеру' ) );
+
+		$this->order( 'processing' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::CANCEL ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'СДЭК: Заказ уже передан курьеру', $result->get_error_message() );
+	}
+
+	public function test_a_failed_update_shows_the_carriers_own_reason(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler( true );
+		$handler->shouldReceive( 'update' )->once()->andReturn( Action_Result::failure( 'Превышен лимит запросов' ) );
+
+		$this->order( 'processing' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::UPDATE ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'СДЭК: Превышен лимит запросов', $result->get_error_message() );
+	}
+
+	public function test_a_success_carrying_a_carrier_note_shows_it_instead_of_the_generic_sentence(): void {
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1', 'Заказ принят' ) );
+
+		$this->order( 'pending' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'СДЭК: Заказ принят', $result['message'] );
+	}
+
+	public function test_a_plain_success_keeps_the_frameworks_own_sentence(): void {
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::success( 'CARRIER-1' ) );
+
+		$this->order( 'pending' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
+
+		$this->assertSame( 'Заказ выгружен перевозчику.', $result['message'] );
+	}
+
+	/**
+	 * A handler that THROWS is not an `Action_Result` — the exception text is never
+	 * shown (it could be anything), the merchant gets the generic sentence.
+	 */
+	public function test_a_thrown_exception_never_leaks_its_text(): void {
+		$this->register_provider( [ 'carrier_order_id_meta_key' => '_cdek_carrier_order_id' ] );
+		$handler = $this->register_handler();
+		$handler->shouldReceive( 'export' )->once()->andThrow( new \RuntimeException( 'SQLSTATE secret-token-123' ) );
+
+		$this->order( 'pending' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, Order_Actions::EXPORT ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertStringNotContainsString( 'secret-token-123', $result->get_error_message() );
+	}
+
+	public function test_a_filtered_carrier_extra_action_failure_shows_its_reason(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$this->stub_carrier_extra_action(
+			static function (): Action_Result {
+				return Action_Result::failure( 'Принтер этикеток недоступен' );
+			}
+		);
+
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'СДЭК: Принтер этикеток недоступен', $result->get_error_message() );
+	}
+
+	/**
+	 * The filter's contract is an `Action_Result` now. A callback still returning a bare
+	 * `true` is NOT trusted as success (and must not fatal the request).
+	 */
+	public function test_a_filter_callback_returning_a_bare_bool_is_treated_as_a_failure(): void {
+		$this->register_provider();
+		$this->register_handler();
+		$this->stub_carrier_extra_action(
+			static function (): bool {
+				return true;
+			}
+		);
+
+		$this->order( 'completed' );
+
+		$result = $this->controller()->perform_action( $this->request( 123, 'print_label' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'Действие не выполнено.', $result->get_error_message() );
 	}
 }
