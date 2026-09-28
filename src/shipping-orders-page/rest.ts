@@ -216,6 +216,8 @@ export interface WizardBootstrap {
 	orderStatuses?: Record<string, string>;
 	/** Statuses an edit may not move an order into (`Order_Actions::FINAL_STATUSES`). */
 	finalStatuses?: string[];
+	/** Statuses «сразу выгрузить перевозчику» is offered in (`Order_Actions::EXPORTABLE_STATUSES`, #974). */
+	exportableStatuses?: string[];
 	/** Whether WooCommerce taxes are on — the totals the manager sees are then before tax. */
 	taxesEnabled?: boolean;
 }

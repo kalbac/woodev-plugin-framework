@@ -1368,7 +1368,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}, paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, taxesEnabled: bool}
+		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}, paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, exportableStatuses: array<int,string>, taxesEnabled: bool}
 		 */
 		private function build_wizard_bootstrap(): array {
 			$data = [
@@ -1410,7 +1410,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 
 		/**
 		 * What step ⑤ «Оплата» offers (#971): the shop's payment methods, its order statuses, the
-		 * statuses an edit may not move an order into, and whether taxes are on.
+		 * statuses an edit may not move an order into, the statuses «сразу выгрузить перевозчику»
+		 * is offered in (#974), and whether taxes are on.
 		 *
 		 * Payment methods are the ENABLED gateways, keyed by gateway id — the validator accepts any
 		 * registered one, and a method the shop switched off is not something to offer a manager
@@ -1419,14 +1420,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *
 		 * @since 2.0.2
 		 *
-		 * @return array{paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, taxesEnabled: bool}
+		 * @return array{paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, exportableStatuses: array<int,string>, taxesEnabled: bool}
 		 */
 		private function build_wizard_payment_bootstrap(): array {
 			$data = [
-				'paymentMethods' => [],
-				'orderStatuses'  => [],
-				'finalStatuses'  => Order_Actions::FINAL_STATUSES,
-				'taxesEnabled'   => function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled(),
+				'paymentMethods'     => [],
+				'orderStatuses'      => [],
+				'finalStatuses'      => Order_Actions::FINAL_STATUSES,
+				'exportableStatuses' => Order_Actions::EXPORTABLE_STATUSES,
+				'taxesEnabled'       => function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled(),
 			];
 
 			if ( function_exists( 'wc_get_order_statuses' ) ) {

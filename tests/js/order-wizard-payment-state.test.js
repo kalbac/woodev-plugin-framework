@@ -8,6 +8,7 @@
 import {
 	addressLine,
 	deliveryCost,
+	exportOffered,
 	orderTotals,
 	paidTotalChange,
 	paymentOptions,
@@ -259,5 +260,16 @@ describe( 'paidTotalChange (O14)', () => {
 
 		expect( paidTotalChange( loaded(), baseline, noise ) ).toBeNull();
 		expect( paidTotalChange( loaded(), baseline, cent ) ).not.toBeNull();
+	} );
+} );
+
+describe( 'exportOffered (D6, #974)', () => {
+	test( 'the box may be ticked only under a status the export is offered in', () => {
+		expect( exportOffered( 'processing', [ 'pending', 'on-hold', 'processing' ] ) ).toBe( true );
+		expect( exportOffered( 'completed', [ 'pending', 'on-hold', 'processing' ] ) ).toBe( false );
+	} );
+
+	test( 'a bootstrap without the list restricts nothing — the server still refuses, with its own reason', () => {
+		expect( exportOffered( 'completed', undefined ) ).toBe( true );
 	} );
 } );

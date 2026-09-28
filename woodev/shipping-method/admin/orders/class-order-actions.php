@@ -9,6 +9,11 @@
 
 namespace Woodev\Framework\Shipping\Admin\Orders;
 
+use Woodev\Framework\Shipping\Location\Location_Provider;
+use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
+use Woodev\Framework\Shipping\Location\Location_Record;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -24,8 +29,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 	 *
 	 * Pure: given an order + provider (the provider's registered shipment handler is
 	 * resolved internally through {@see Orders_Registry}), which actions are
-	 * available. No rendering, no HTTP — {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller}
-	 * is the one place that turns an action id into an actual carrier call.
+	 * available. No rendering, no HTTP — {@see self::perform()} is the one place that turns an action
+	 * id into an actual carrier call, and the callers (the orders REST routes, the order wizard's
+	 * immediate export) own the gate's refusal wording and the error handling.
 	 *
 	 * @since 2.0.2
 	 */
@@ -264,6 +270,110 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public function is_offered( \WC_Order $order, ?Orders_Provider $provider, string $action ): bool {
 			return in_array( $action, array_column( $this->for_order( $order, $provider ), 'action' ), true );
+		}
+
+		/**
+		 * Performs one action against the carrier's shipment handler — the ONE place an action id
+		 * becomes a carrier call, shared by the row / bulk routes ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller})
+		 * and the wizard's «сразу выгрузить перевозчику» ({@see Order_Editor::export_created()}, #710 D6).
+		 *
+		 * Does NOT gate: the caller has already asked {@see self::is_offered()} (each keeps its own
+		 * refusal wording), and catches what the carrier call throws — the routes log it and answer
+		 * their own generic sentence.
+		 *
+		 * Every verb returns an {@see Action_Result} (card #872), so a failure carries the carrier's
+		 * own text. A carrier response with no id (card #860) is a failure there too, with no text.
+		 * The framework itself performs only its own three verbs — export / cancel / update. Anything
+		 * else is a carrier extra declared via the `woodev_shipping_order_actions` filter
+		 * ({@see self::for_order()}); the `default:` branch below is the matching PERFORMING-side
+		 * extension point, so such an action is not merely advertised but actually executed by the
+		 * carrier plugin that declared it. An action nothing hooks still fails honestly rather than
+		 * reporting a fake success.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Round 2 (MEDIUM 3): the `default:` branch applies the
+		 *              `woodev_shipping_perform_order_action` filter instead of unconditionally
+		 *              returning false, so a carrier's own declared action can actually be performed.
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; the filter's value is an
+		 *              `Action_Result` too, and anything else a callback returns is treated as a failure.
+		 * @since 2.0.2 Card #974: moved here from `Orders_Controller::dispatch_action()`, unchanged.
+		 *
+		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
+		 * @param \WC_Order                 $order    the order.
+		 * @param string                    $action   one of this class's action ids, or a carrier extra.
+		 * @param Orders_Provider           $provider the matched carrier descriptor.
+		 * @return Action_Result
+		 */
+		public function perform( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
+			switch ( $action ) {
+				case self::EXPORT:
+					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
+
+					return $handler->export( $order, $settlement, $settlement_provider );
+
+				case self::CANCEL:
+					return $handler->cancel( $order );
+
+				case self::UPDATE:
+					return $handler->update( $order );
+
+				default:
+					/**
+					 * Performs a carrier's own extra order action (one declared via the
+					 * `woodev_shipping_order_actions` filter, not one of the framework's
+					 * own export/update/cancel verbs).
+					 *
+					 * The carrier plugin that declared the action is the only one that
+					 * knows how to perform it, so it hooks this filter, checks `$action`
+					 * (and, if it serves more than one carrier, `$provider`) is its own,
+					 * performs the action against its own API, and returns whether it
+					 * succeeded. Defaults to a failure with no text, so an action nothing
+					 * hooks still fails honestly instead of reporting success it never
+					 * earned. A callback returns {@see Action_Result::success()} or
+					 * {@see Action_Result::failure()} with the carrier's reason — shown to
+					 * the merchant, prefixed with the carrier name, never to a buyer.
+					 *
+					 * @since 2.0.2
+					 * @since 2.0.2 Card #872: the value is an {@see Action_Result}, not a bool.
+					 *
+					 * @param Action_Result   $result   the outcome so far; default a failure with no text.
+					 * @param string          $action   the action id, as declared by the carrier's filter.
+					 * @param \WC_Order       $order    the order the action was requested for.
+					 * @param Orders_Provider $provider the matched carrier descriptor.
+					 */
+					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
+
+					return $result instanceof Action_Result ? $result : Action_Result::failure();
+			}
+		}
+
+		/**
+		 * Resolves the popular-settlements enrolment context for an order about to be exported —
+		 * the settlement the customer picked at checkout and the SAME provider that produced it
+		 * (#488 slice 2).
+		 *
+		 * Mirrors {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()},
+		 * but reads the framework's own shared singleton ({@see Location_Provider_Registry::instance()})
+		 * directly: `Shipping_Admin_Order` is plugin-constructed and this class has no guaranteed
+		 * access to one. An order made in the admin has no such candidate (the admin is not the
+		 * buyer), so the answer is then `[ null, null ]`.
+		 *
+		 * @since 2.0.2
+		 * @since 2.0.2 Card #974: moved here from `Orders_Controller`, unchanged.
+		 *
+		 * @param \WC_Order $order the order about to be exported.
+		 * @return array{0: Location_Record|null, 1: Location_Provider|null}
+		 */
+		private function resolve_popular_settlement_context( \WC_Order $order ): array {
+			$settlement = Location_Provider_Registry::instance()->popular_settlement_store()->recall_candidate( $order );
+
+			if ( null === $settlement ) {
+				return [ null, null ];
+			}
+
+			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
+
+			return [ $settlement, $provider ];
 		}
 
 		/**

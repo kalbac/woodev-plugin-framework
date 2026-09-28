@@ -19,10 +19,6 @@ use Woodev\Framework\Shipping\Admin\Orders\Order_Row_Builder;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
-use Woodev\Framework\Shipping\Location\Location_Provider;
-use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
-use Woodev\Framework\Shipping\Location\Location_Record;
-use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Framework\Shipping\Order\Delivery_Sync_Status;
@@ -794,7 +790,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			}
 
 			try {
-				$result = $this->dispatch_action( $handler, $order, $action, $provider );
+				$result = $this->order_actions->perform( $handler, $order, $action, $provider );
 			} catch ( \Throwable $exception ) {
 				$this->log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -831,7 +827,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		 * action does not apply to (unknown id, unresolvable carrier, action outside the
 		 * recomputed gate, no registered handler) is SKIPPED, not failed — the operator's own
 		 * rule: an inapplicable order is simply ignored for that action. Every ELIGIBLE order is
-		 * then dispatched through the same {@see self::dispatch_action()} path the single-order
+		 * then dispatched through the same {@see Order_Actions::perform()} path the single-order
 		 * route uses, so a failed {@see Action_Result} (incl. an export with no id, #860) counts as
 		 * a failure there too, and an exception is caught PER ORDER and counted as a failure rather
 		 * than aborting the batch. Each failure's reason — the carrier's text, prefixed with its
@@ -888,7 +884,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 				++$eligible;
 
 				try {
-					$result = $this->dispatch_action( $handler, $order, $action, $provider );
+					$result = $this->order_actions->perform( $handler, $order, $action, $provider );
 				} catch ( \Throwable $exception ) {
 					$this->log_action_failure( $provider->get_id(), $action, $exception );
 					$result = null;
@@ -1083,79 +1079,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 		}
 
 		/**
-		 * Dispatches one action to the carrier's shipment handler.
-		 *
-		 * Every verb returns an {@see Action_Result} (card #872), so a failure carries
-		 * the carrier's own text to {@see self::perform_action()}. A carrier response
-		 * with no id (card #860) is a failure there too, with no text.
-		 *
-		 * The framework itself performs only its own three verbs — export/cancel/
-		 * update. Anything else is a carrier extra declared via the
-		 * `woodev_shipping_order_actions` filter ({@see Order_Actions::for_order()});
-		 * the `default:` branch below is the matching PERFORMING-side extension
-		 * point, so such an action is not merely advertised but actually executed by
-		 * the carrier plugin that declared it. An action nothing hooks still fails
-		 * honestly (`false`) rather than reporting a fake success.
-		 *
-		 * @since 2.0.2
-		 * @since 2.0.2 Round 2 (MEDIUM 3): the `default:` branch applies the
-		 *              `woodev_shipping_perform_order_action` filter instead of
-		 *              unconditionally returning false, so a carrier's own declared
-		 *              action can actually be performed.
-		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; the filter's value
-		 *              is an `Action_Result` too, and anything else a callback
-		 *              returns is treated as a failure.
-		 *
-		 * @param Abstract_Shipment_Handler $handler handler resolved for the order's carrier.
-		 * @param \WC_Order                 $order   the order.
-		 * @param string                    $action  one of {@see Order_Actions}' action ids.
-		 * @param Orders_Provider           $provider the matched carrier descriptor.
-		 * @return Action_Result
-		 */
-		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
-			switch ( $action ) {
-				case Order_Actions::EXPORT:
-					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
-
-					return $handler->export( $order, $settlement, $settlement_provider );
-
-				case Order_Actions::CANCEL:
-					return $handler->cancel( $order );
-
-				case Order_Actions::UPDATE:
-					return $handler->update( $order );
-
-				default:
-					/**
-					 * Performs a carrier's own extra order action (one declared via the
-					 * `woodev_shipping_order_actions` filter, not one of the framework's
-					 * own export/update/cancel verbs).
-					 *
-					 * The carrier plugin that declared the action is the only one that
-					 * knows how to perform it, so it hooks this filter, checks `$action`
-					 * (and, if it serves more than one carrier, `$provider`) is its own,
-					 * performs the action against its own API, and returns whether it
-					 * succeeded. Defaults to a failure with no text, so an action nothing
-					 * hooks still fails honestly instead of reporting success it never
-					 * earned. A callback returns {@see Action_Result::success()} or
-					 * {@see Action_Result::failure()} with the carrier's reason — shown to
-					 * the merchant, prefixed with the carrier name, never to a buyer.
-					 *
-					 * @since 2.0.2
-					 * @since 2.0.2 Card #872: the value is an {@see Action_Result}, not a bool.
-					 *
-					 * @param Action_Result   $result   the outcome so far; default a failure with no text.
-					 * @param string          $action   the action id, as declared by the carrier's filter.
-					 * @param \WC_Order       $order    the order the action was requested for.
-					 * @param Orders_Provider $provider the matched carrier descriptor.
-					 */
-					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
-
-					return $result instanceof Action_Result ? $result : Action_Result::failure();
-			}
-		}
-
-		/**
 		 * Re-reads an order's meta after a carrier action wrote to it.
 		 *
 		 * ⚠ Not a defensive nicety — without it the response is WRONG on a legacy-CPT
@@ -1183,38 +1106,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Orders_Controller
 			$order->read_meta_data( true );
 
 			return $order;
-		}
-
-		/**
-		 * Resolves the popular-settlements enrolment context for an order about to
-		 * be exported through this route — the settlement the customer picked at
-		 * checkout and the SAME provider that produced it (#488 slice 2).
-		 *
-		 * Mirrors {@see \Woodev\Framework\Shipping\Admin\Shipping_Admin_Order::resolve_popular_settlement_context()}
-		 * exactly, but reads the framework's own shared singleton
-		 * ({@see Location_Provider_Registry::instance()}) directly rather than
-		 * depending on `Shipping_Admin_Order` — that class is PLUGIN-constructed
-		 * (each carrier plugin builds its own instance) and this REST controller has
-		 * no guaranteed access to one. `Location_Provider_Registry` and its
-		 * `Popular_Settlement_Store` are already framework-level singletons reused
-		 * this same way elsewhere (e.g. {@see Abstract_Shipment_Handler}'s own
-		 * constructor default), so this introduces no new coupling.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param \WC_Order $order the order about to be exported.
-		 * @return array{0: Location_Record|null, 1: Location_Provider|null}
-		 */
-		private function resolve_popular_settlement_context( \WC_Order $order ): array {
-			$settlement = Location_Provider_Registry::instance()->popular_settlement_store()->recall_candidate( $order );
-
-			if ( null === $settlement ) {
-				return [ null, null ];
-			}
-
-			$provider = Location_Provider_Registry::instance()->get_providers()[ $settlement->provider_id() ] ?? null;
-
-			return [ $settlement, $provider ];
 		}
 
 		/**

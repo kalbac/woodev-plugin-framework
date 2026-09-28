@@ -79,6 +79,12 @@ export interface WizardRest {
 	/** '' = the server's default (`pending` on create, «keep» on update). */
 	status: string;
 	/**
+	 * «Сразу выгрузить перевозчику» (O9, D6): send the order to the carrier right after it is created.
+	 * Create only — an edit never exports (O4), so an edit's state holds `false` and the box is not drawn.
+	 * Sent as the top-level `export_now`, beside the order, never inside it.
+	 */
+	export_now: boolean;
+	/**
 	 * What the carrier's own rate costs, as text — the reference the editable delivery price is
 	 * compared with («изменено», «вернуть цену тарифа»). '' = unknown (an order just loaded for
 	 * edit, before the rates came back). UI only: never sent.
@@ -171,11 +177,24 @@ export interface OrderPrefill {
 	status: string;
 }
 
+/**
+ * How the immediate export went (`Order_Editor_Controller::create_order()`, D6) — present on a create that asked
+ * for it. `message` is one merchant-readable sentence: the carrier's own text prefixed with its name, or the
+ * framework's words when it gave none. For the merchant only.
+ */
+export interface ExportOutcome {
+	success: boolean;
+	message: string;
+}
+
 /** `POST` / `PUT` success body. */
 export interface SaveResult {
 	id: number;
 	number: string;
+	/** For a create with an export, the whole sentence: «Заказ №N создан. …» or «Заказ №N создан, но не выгружен. СДЭК: …». */
 	message: string;
+	/** Only when the create asked for the export; the order exists either way. */
+	export?: ExportOutcome;
 }
 
 /**

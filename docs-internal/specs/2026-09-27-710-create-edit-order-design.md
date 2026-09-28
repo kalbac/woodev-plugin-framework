@@ -219,6 +219,19 @@ Create only. After the order is saved, call the same export path the row action 
 with the carrier's message) — so a failed export reports «Заказ №N создан, но не выгружен: <текст
 перевозчика>» and the order stays (never rolled back). Build D6 after #872.
 
+**As built (#974, I8).** Step ⑤ draws the box in create mode only (never on an edit, O4), offered only in the
+statuses the row action offers export in (`exportableStatuses` in the page bootstrap = `Order_Actions::EXPORTABLE_STATUSES`;
+under any other the box is disabled and cleared). A ticked box sends the top-level `export_now` beside the order —
+NOT part of the payload the validator reads. `POST /shipping/orders` saves the order first, then
+`Order_Editor::export_created()` runs the export through `Order_Actions` — the same gate (`is_offered()`) and the
+same performer (`Order_Actions::perform()`, moved out of `Orders_Controller::dispatch_action()` unchanged) as the row
+action — and the `201` body gains `export: { success, message }`. The `message` is the whole sentence the page shows:
+«Заказ №N создан. …» or «Заказ №N создан, но не выгружен. СДЭК: <carrier text>»; a failure is data beside the
+order, never an error response, and the order is neither rolled back nor moved. The carrier text is composed by
+`Action_Result::merchant_message()` and is for the merchant only — it goes into the response and nowhere else. A
+carrier call that throws is logged and answered with a generic sentence; a status the export is not offered in is
+refused with `Order_Actions::unavailable_reason()`. The page reports a refused export as an error notice.
+
 ## D7. Carrier fields (O13)
 
 A carrier declares its export fields in PHP through the framework's existing typed-field vocabulary

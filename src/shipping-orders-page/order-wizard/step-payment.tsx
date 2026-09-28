@@ -19,7 +19,14 @@
  * Edit mode (#972) adds the «было X, стало Y» warning for a PAID order whose total the edit
  * changes (O14): a warning only — the button stays, and the refund or extra payment is done with
  * WooCommerce's own tools. The private order note that goes with it is written by the server on
- * save (`Order_Editor::write()`). The immediate-export checkbox (O9, D6) waits for #872.
+ * save (`Order_Editor::write()`).
+ *
+ * **«Сразу выгрузить перевозчику» (O9, D6, #974).** Create only — an edit never exports (O4), so the
+ * box is not drawn there. Ticked, the order is sent to the carrier right after it is saved; the
+ * outcome, including the carrier's own refusal text, comes back with the create answer and is
+ * reported by the page. The order exists either way. The export is offered only in some statuses
+ * (`exportableStatuses`), so the box is disabled — and cleared — under any other; the server
+ * refuses with its own reason regardless.
  *
  * @package woodev-plugin-framework
  */
@@ -32,9 +39,9 @@ import { getWizardContext } from '../rest';
 import { checkPickupPoint } from './api';
 import type { PointVerdict } from './api';
 import { decodeEntities, pickedPointId } from './delivery-state';
-import { FieldErrorList, SelectField, errorsFor } from './fields';
+import { CheckboxField, FieldErrorList, SelectField, errorsFor } from './fields';
 import type { PaidTotalChange } from './payment-state';
-import { addressLine, orderTotals, paidTotalChange, paymentOptions, personName, shownStatus, statusOptions } from './payment-state';
+import { addressLine, exportOffered, orderTotals, paidTotalChange, paymentOptions, personName, shownStatus, statusOptions } from './payment-state';
 import type { StepProps } from './step-props';
 import type { WizardStepId } from './types';
 import { errorsOfStep } from './validation';
@@ -130,6 +137,15 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 	const noneLabel = __( 'Не указан', 'woodev-plugin-framework' );
 	const paymentTitle = ( paymentOptions( wizard.paymentMethods, rest.payment_method, noneLabel ).find( ( o ) => o.value === rest.payment_method ) || { label: noneLabel } ).label;
 	const statusValue = shownStatus( data, mode );
+	const exportable = wizard.exportableStatuses;
+	const canExport = exportOffered( statusValue, exportable );
+	const exportHelp = canExport
+		? __( 'Заказ создастся в любом случае. Если перевозчик его не примет, вы увидите причину, а выгрузить заказ можно будет позже из списка.', 'woodev-plugin-framework' )
+		: sprintf(
+				/* translators: %s: comma-separated names of the order statuses the export works in. */
+				__( 'Выгрузить можно заказ в статусах: %s.', 'woodev-plugin-framework' ),
+				( exportable || [] ).map( ( slug ) => wizard.orderStatuses?.[ slug ] || slug ).join( ', ' )
+		  );
 
 	return (
 		<div className="woodev-order-wizard__step">
@@ -205,12 +221,28 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 					options={ statusOptions( wizard.orderStatuses, wizard.finalStatuses, mode, statusValue ) }
 					errors={ errorsFor( errors, 'status' ) }
 					disabled={ busy }
-					onChange={ ( status ) => setData( ( d ) => ( { ...d, rest: { ...d.rest, status } } ) ) }
+					onChange={ ( status ) =>
+						setData( ( d ) => ( {
+							...d,
+							// A status the export is not offered in takes the tick back — the box is disabled under it.
+							rest: { ...d.rest, status, export_now: d.rest.export_now && exportOffered( status, exportable ) },
+						} ) )
+					}
 				/>
 			</div>
 			<p className="woodev-order-wizard__hint">
 				{ __( 'Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce.', 'woodev-plugin-framework' ) }
 			</p>
+
+			{ ! editing && (
+				<CheckboxField
+					label={ __( 'Сразу выгрузить перевозчику', 'woodev-plugin-framework' ) }
+					checked={ rest.export_now && canExport }
+					help={ exportHelp }
+					disabled={ busy || ! canExport }
+					onChange={ ( export_now ) => setData( ( d ) => ( { ...d, rest: { ...d.rest, export_now } } ) ) }
+				/>
+			) }
 
 			{ pointRefused && (
 				<Notice status="error" isDismissible={ false }>
@@ -257,7 +289,11 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 
 			<div className="woodev-order-wizard__actions">
 				<Button variant="primary" isBusy={ busy } disabled={ busy || pointRefused } onClick={ () => void submit() }>
-					{ editing ? __( 'Сохранить', 'woodev-plugin-framework' ) : __( 'Создать заказ', 'woodev-plugin-framework' ) }
+					{ editing
+						? __( 'Сохранить', 'woodev-plugin-framework' )
+						: rest.export_now && canExport
+							? __( 'Создать и выгрузить', 'woodev-plugin-framework' )
+							: __( 'Создать заказ', 'woodev-plugin-framework' ) }
 				</Button>
 			</div>
 		</div>

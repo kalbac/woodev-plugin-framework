@@ -974,6 +974,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$this->assertSame( [ 'cod' => 'Наложенный платёж', 'yookassa' => 'ЮKassa' ], $data['wizard']['paymentMethods'] );
 		$this->assertSame( [ 'pending' => 'Ожидает оплаты', 'processing' => 'В обработке' ], $data['wizard']['orderStatuses'] );
 		$this->assertSame( [ 'completed', 'cancelled', 'refunded', 'failed' ], $data['wizard']['finalStatuses'] );
+		// #974 (D6): the statuses «сразу выгрузить перевозчику» is offered in — the row action's own gate.
+		$this->assertSame( [ 'pending', 'on-hold', 'processing' ], $data['wizard']['exportableStatuses'] );
 		$this->assertTrue( $data['wizard']['taxesEnabled'] );
 		// No carrier here has a pickup handler, so the map is empty — and stays a JSON OBJECT
 		// (`{}`, keyed by carrier id), never `[]`, which a client keyed by string would misread.

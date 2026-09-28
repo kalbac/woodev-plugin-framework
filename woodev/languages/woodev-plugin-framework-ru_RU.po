@@ -2940,6 +2940,26 @@ msgstr ""
 msgid "Заказ №%s создан."
 msgstr ""
 
+#. translators: 1: order number, 2: the carrier's note or the framework's own «Заказ выгружен перевозчику.».
+#: shipping-method/rest-api/class-order-editor-controller.php:186
+#, php-format
+msgid "Заказ №%1$s создан. %2$s"
+msgstr ""
+
+#. translators: 1: order number, 2: why the export did not happen — the carrier's own text, prefixed with its name.
+#: shipping-method/rest-api/class-order-editor-controller.php:192
+#, php-format
+msgid "Заказ №%1$s создан, но не выгружен. %2$s"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:272
+msgid "Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:285
+msgid "Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
 #. translators: %s: order number.
 #: shipping-method/rest-api/class-order-editor-controller.php:209
 #, php-format
@@ -4369,6 +4389,24 @@ msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Товары:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:4
+msgid "Заказ создастся в любом случае. Если перевозчик его не примет, вы увидите причину, а выгрузить заказ можно будет позже из списка."
+msgstr ""
+
+#. translators: %s: comma-separated names of the order statuses the export works in.
+#: assets/build/shipping-orders-page/index.js:5
+#, php-format
+msgid "Выгрузить можно заказ в статусах: %s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Сразу выгрузить перевозчику"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Создать и выгрузить"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2

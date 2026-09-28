@@ -216,17 +216,20 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 		/**
 		 * Structural pin: `Action_Result` is a MERCHANT-surface type. Only the handler that
-		 * builds it and the two surfaces that show it (the REST orders route and the
-		 * order-edit metabox) may name it; a storefront / checkout / email / tracking file
-		 * that starts to would be a path for the carrier's text to a buyer.
+		 * builds it, the two surfaces that show it (the REST orders route and the
+		 * order-edit metabox) and `Order_Actions` — the admin-only performer both the orders
+		 * page and the order wizard's immediate export (#974) go through — may name it; a
+		 * storefront / checkout / email / tracking file that starts to would be a path for the
+		 * carrier's text to a buyer.
 		 */
-		public function test_only_the_handler_and_the_two_merchant_surfaces_name_action_result(): void {
+		public function test_only_the_handler_and_the_merchant_surfaces_name_action_result(): void {
 			$root    = dirname( __DIR__, 4 ) . '/woodev';
 			$allowed = [
 				'shipping-method/order/class-action-result.php',
 				'shipping-method/order/abstract-shipment-handler.php',
 				'shipping-method/rest-api/class-orders-controller.php',
 				'shipping-method/admin/class-shipping-admin-order.php',
+				'shipping-method/admin/orders/class-order-actions.php',
 			];
 
 			$found = [];

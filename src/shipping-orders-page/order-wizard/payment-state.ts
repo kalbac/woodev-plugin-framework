@@ -70,6 +70,20 @@ export function statusOptions(
 }
 
 /**
+ * Whether «сразу выгрузить перевозчику» can be ticked for a status (D6): the export is offered only
+ * in some order statuses (`Order_Actions::EXPORTABLE_STATUSES`, sent as `exportableStatuses`). An
+ * older bootstrap without the list restricts nothing — the server still refuses, with its own
+ * reason, and the order stays.
+ *
+ * @param {string}             status     the status the order will get.
+ * @param {string[]|undefined} exportable the statuses the export is offered in.
+ * @return {boolean} whether the box may be ticked.
+ */
+export function exportOffered( status: string, exportable: string[] | undefined ): boolean {
+	return ! exportable || exportable.includes( status );
+}
+
+/**
  * What the status select shows. A new order sent with no status is created `pending` by the server
  * (`Order_Editor::create()`), so that is what an untouched select honestly reads; an edited order
  * carries its own status from the prefill.

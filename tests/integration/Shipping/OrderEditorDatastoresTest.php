@@ -1755,4 +1755,107 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertCount( 1, $after->get_shipping_methods() );
 		$this->assertCount( 1, $after->get_items( 'line_item' ) );
 	}
+
+	/**
+	 * The test carrier's payload — the one whose fixture handler really exports (D6, #974).
+	 *
+	 * @param array<string,mixed> $override top-level keys to replace.
+	 * @return array<string,mixed>
+	 */
+	private function test_carrier_payload( array $override = [] ): array {
+		return $this->payload(
+			array_replace(
+				[
+					'shipping_line' => [
+						'method_id'   => self::TEST_METHOD,
+						'instance_id' => 3,
+						'label'       => 'Тестовая доставка',
+						'cost'        => '100',
+					],
+					'pickup_point'  => [ 'id' => self::TEST_POINT ],
+				],
+				$override
+			)
+		);
+	}
+
+	/**
+	 * «Сразу выгрузить перевозчику» (#974, D6): the order made by the wizard is exported through the
+	 * very path the row action uses — the carrier order id lands on the order, read back fresh.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_order_created_by_the_wizard_can_be_exported_at_once( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$editor  = new Order_Editor();
+		$created = $this->create( $this->test_carrier_payload() );
+
+		$outcome = $editor->export_created( $created );
+
+		$this->assertTrue( $outcome['success'], $outcome['message'] );
+
+		$order = $this->fresh( $created->get_id() );
+
+		$this->assertStringStartsWith( 'TESTCARRIER-EXPORT-', (string) $order->get_meta( self::TEST_EXPORTED, true ) );
+		$this->assertSame( 'processing', $order->get_status(), 'the export does not move the order' );
+	}
+
+	/**
+	 * A carrier that refuses (the fixture answers with no order id for a delivery to «Урюпинск») does
+	 * not undo the order: it stays, unexported, in the status the manager chose (D6).
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_refused_export_leaves_the_created_order_in_place( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$editor  = new Order_Editor();
+		$created = $this->create(
+			$this->test_carrier_payload(
+				[
+					'shipping' => [
+						'country'   => 'RU',
+						'city'      => 'Урюпинск',
+						'address_1' => 'ул. Ленина, 1',
+					],
+				]
+			)
+		);
+
+		$outcome = $editor->export_created( $created );
+
+		$this->assertFalse( $outcome['success'] );
+		$this->assertNotSame( '', $outcome['message'] );
+
+		$order = $this->fresh( $created->get_id() );
+
+		$this->assertSame( '', (string) $order->get_meta( self::TEST_EXPORTED, true ), 'nothing was exported' );
+		$this->assertSame( 'processing', $order->get_status(), 'the order was neither rolled back nor moved' );
+		$this->assertNotNull( Orders_Registry::instance()->resolve_provider_for_order( $order ), 'and it is still a row of the orders page' );
+	}
+
+	/**
+	 * A status the export is not offered in is refused with the framework's own reason — the carrier
+	 * is never called, the order stays.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_order_in_a_status_the_export_is_not_offered_in_is_not_exported( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$created = $this->create( $this->test_carrier_payload( [ 'status' => 'completed' ] ) );
+
+		$outcome = ( new Order_Editor() )->export_created( $created );
+
+		$this->assertFalse( $outcome['success'] );
+		$this->assertStringContainsString( 'Выгрузить можно только заказ', $outcome['message'] );
+		$this->assertSame( '', (string) $this->fresh( $created->get_id() )->get_meta( self::TEST_EXPORTED, true ) );
+	}
 }

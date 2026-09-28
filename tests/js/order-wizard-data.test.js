@@ -54,6 +54,15 @@ describe( 'buildPayload', () => {
 		expect( payload.customer ).toEqual( { id: 0, create_account: false } );
 	} );
 
+	test( 'export_now (D6, #974) rides beside the order only when ticked — never as an empty flag', () => {
+		expect( buildPayload( base() ) ).not.toHaveProperty( 'export_now' );
+
+		const data = base();
+		data.rest = { ...data.rest, export_now: true };
+
+		expect( buildPayload( data ).export_now ).toBe( true );
+	} );
+
 	test( 'billing address follows the delivery address; names and email stay step ①\'s', () => {
 		const payload = buildPayload( base() );
 

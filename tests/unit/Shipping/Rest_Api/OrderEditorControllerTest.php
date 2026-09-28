@@ -54,6 +54,11 @@ final class OrderEditorControllerTest extends TestCase {
 				};
 			}
 		);
+		Functions\when( 'rest_sanitize_boolean' )->alias(
+			static function ( $value ): bool {
+				return is_string( $value ) ? ! in_array( strtolower( $value ), [ 'false', '0', '' ], true ) : (bool) $value;
+			}
+		);
 		Functions\when( 'absint' )->alias(
 			static function ( $value ): int {
 				return abs( (int) $value );
@@ -198,5 +203,105 @@ final class OrderEditorControllerTest extends TestCase {
 		$this->assertSame( $error, $controller->create_order( $this->request( [] ) ) );
 		$this->assertSame( $error, $controller->update_order( $this->request( [], [ 'id' => '5' ] ) ) );
 		$this->assertSame( $error, $controller->load_order( $this->request( null, [ 'id' => '5' ] ) ) );
+	}
+
+	// ----- #974 (D6): «сразу выгрузить перевозчику» -----
+
+	public function test_a_create_without_the_flag_never_exports_and_carries_no_export_block(): void {
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->andReturn( $this->saved_order() );
+		$editor->shouldReceive( 'export_created' )->never();
+
+		$response = $this->controller( $editor )->create_order( $this->request( [ 'items' => [] ] ) );
+
+		$this->assertArrayNotHasKey( 'export', $response->data );
+	}
+
+	public function test_the_export_flag_is_not_part_of_the_order_payload(): void {
+		$order  = $this->saved_order();
+		$editor = Mockery::mock( Order_Editor::class );
+		// Exactly the known keys — `export_now` rides beside the order, the validator never sees it.
+		$editor->shouldReceive( 'create' )->once()->with( [ 'items' => [ [ 'product_id' => 10 ] ] ] )->andReturn( $order );
+		$editor->shouldReceive( 'export_created' )->once()->with( $order )->andReturn(
+			[
+				'success' => true,
+				'message' => 'Заказ выгружен перевозчику.',
+			]
+		);
+
+		$this->controller( $editor )->create_order( $this->request( [ 'items' => [ [ 'product_id' => 10 ] ], 'export_now' => true ] ) );
+	}
+
+	public function test_a_successful_export_is_reported_beside_the_created_order(): void {
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->andReturn( $this->saved_order( 77, 'A-77' ) );
+		$editor->shouldReceive( 'export_created' )->once()->andReturn(
+			[
+				'success' => true,
+				'message' => 'СДЭК: Накладная 42',
+			]
+		);
+
+		$response = $this->controller( $editor )->create_order( $this->request( [ 'export_now' => true ] ) );
+
+		$this->assertSame( 201, $response->status );
+		$this->assertSame( 77, $response->data['id'] );
+		$this->assertSame( [ 'success' => true, 'message' => 'СДЭК: Накладная 42' ], $response->data['export'] );
+		$this->assertSame( 'Заказ №A-77 создан. СДЭК: Накладная 42', $response->data['message'] );
+	}
+
+	public function test_a_refused_export_is_still_a_201_and_the_message_carries_the_carriers_text(): void {
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->andReturn( $this->saved_order( 77, 'A-77' ) );
+		$editor->shouldReceive( 'export_created' )->once()->andReturn(
+			[
+				'success' => false,
+				'message' => 'СДЭК: Неверный индекс получателя',
+			]
+		);
+
+		$response = $this->controller( $editor )->create_order( $this->request( [ 'export_now' => true ] ) );
+
+		// The order was created and stays (D6): the failure is data beside it, never an error response.
+		$this->assertNotInstanceOf( \WP_Error::class, $response );
+		$this->assertSame( 201, $response->status );
+		$this->assertSame( 77, $response->data['id'] );
+		$this->assertFalse( $response->data['export']['success'] );
+		$this->assertSame( 'Заказ №A-77 создан, но не выгружен. СДЭК: Неверный индекс получателя', $response->data['message'] );
+	}
+
+	public function test_a_falsy_flag_does_not_export(): void {
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->andReturn( $this->saved_order() );
+		$editor->shouldReceive( 'export_created' )->never();
+
+		$this->controller( $editor )->create_order( $this->request( [ 'export_now' => 'false' ] ) );
+	}
+
+	public function test_an_order_that_failed_to_save_is_never_exported(): void {
+		$error  = new \WP_Error( 'woodev_shipping_order_invalid', 'x', [ 'status' => 422 ] );
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'create' )->once()->andReturn( $error );
+		$editor->shouldReceive( 'export_created' )->never();
+
+		$this->assertSame( $error, $this->controller( $editor )->create_order( $this->request( [ 'export_now' => true ] ) ) );
+	}
+
+	public function test_an_update_never_exports_even_when_the_flag_is_sent(): void {
+		$editor = Mockery::mock( Order_Editor::class );
+		$editor->shouldReceive( 'update' )->once()->with( 123, [ 'status' => 'processing' ] )->andReturn( $this->saved_order( 123, '123' ) );
+		$editor->shouldReceive( 'export_created' )->never();
+
+		$response = $this->controller( $editor )->update_order(
+			$this->request(
+				[
+					'status'     => 'processing',
+					'export_now' => true,
+				],
+				[ 'id' => '123' ]
+			)
+		);
+
+		$this->assertArrayNotHasKey( 'export', $response->data );
 	}
 }

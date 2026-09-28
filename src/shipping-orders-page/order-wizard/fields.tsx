@@ -124,12 +124,13 @@ interface CheckboxFieldProps {
 	onChange: ( checked: boolean ) => void;
 	errors?: string[];
 	help?: string;
+	disabled?: boolean;
 }
 
-export function CheckboxField( { label, checked, onChange, errors = [], help }: CheckboxFieldProps ) {
+export function CheckboxField( { label, checked, onChange, errors = [], help, disabled = false }: CheckboxFieldProps ) {
 	return (
 		<FieldShell messages={ errors }>
-			<CheckboxControl __nextHasNoMarginBottom label={ label } checked={ checked } help={ help } onChange={ onChange } />
+			<CheckboxControl __nextHasNoMarginBottom label={ label } checked={ checked } help={ help } disabled={ disabled } onChange={ onChange } />
 		</FieldShell>
 	);
 }

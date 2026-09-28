@@ -1677,8 +1677,13 @@ export default function OrdersPage() {
 	 * other action uses, and refetch the table so the order shows up (O9).
 	 */
 	const onWizardSaved = ( result: SaveResult ) => {
-		setActionNotice( { status: 'success', text: result.message } );
-		dispatch( noticesStore ).createSuccessNotice( result.message, { type: 'snackbar' } );
+		// #974 (D6): the order exists either way; when the immediate export was asked for and the carrier
+		// refused it, the same sentence — it carries the carrier's own text — is shown as an error, so the
+		// merchant notices the order did not reach the carrier.
+		const exportFailed = !! result.export && ! result.export.success;
+
+		setActionNotice( { status: exportFailed ? 'error' : 'success', text: result.message } );
+		dispatch( noticesStore )[ exportFailed ? 'createErrorNotice' : 'createSuccessNotice' ]( result.message, { type: 'snackbar' } );
 		// An edited order's cached preview describes it BEFORE the edit (#972) — same reason as after a row action.
 		setPreviewCache( ( current ) => {
 			const next = { ...current };

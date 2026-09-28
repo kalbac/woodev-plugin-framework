@@ -154,20 +154,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		private $lock_timeout;
 
 		/**
+		 * The action gate and performer of the orders page — the immediate export (D6) goes
+		 * through the very object the row action does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Actions
+		 */
+		private $actions;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #981 round 4: `$lock_timeout`.
+		 * @since 2.0.2 Card #974: added `$actions`.
 		 *
 		 * @param Orders_Registry|null         $registry     carrier registry; defaults to the shared singleton.
 		 * @param Order_Payload_Validator|null $validator    payload validator; defaults to one over `$registry`.
 		 * @param int                          $lock_timeout seconds an update waits for the order's edit lock;
 		 *                                                   defaults to {@see self::UPDATE_LOCK_TIMEOUT}.
+		 * @param Order_Actions|null           $actions      action gate and performer; defaults to one over `$registry`.
 		 */
-		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null, int $lock_timeout = self::UPDATE_LOCK_TIMEOUT ) {
+		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null, int $lock_timeout = self::UPDATE_LOCK_TIMEOUT, ?Order_Actions $actions = null ) {
 			$this->registry     = $registry ?? Orders_Registry::instance();
 			$this->validator    = $validator ?? new Order_Payload_Validator( $this->registry );
 			$this->lock_timeout = max( 0, $lock_timeout );
+			$this->actions      = $actions ?? new Order_Actions( $this->registry );
 		}
 
 		/**
@@ -382,6 +395,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			}
 
 			return $this->build_prefill( $row['order'], $row['provider'] );
+		}
+
+		/**
+		 * «Сразу выгрузить перевозчику» — exports an order this service has just created (#710 D6,
+		 * card #974; create only — an edit never exports, O4).
+		 *
+		 * Goes through {@see Order_Actions} exactly as the row action does: the SAME gate
+		 * ({@see Order_Actions::is_offered()}, so a status the export is not offered in is refused
+		 * with the framework's own reason) and the SAME performer ({@see Order_Actions::perform()}).
+		 * The order is never touched on failure — **an export failure does not roll the order
+		 * back**; it was created and stays, and the manager can export it from the list later.
+		 *
+		 * ⚠ The text is the CARRIER's, for the MERCHANT only (the action result's own rule, #608/#610): it
+		 * is returned to the caller for the response and is not written to the order, a note or an
+		 * e-mail. Nothing here throws — a carrier call that throws is logged and answered with a
+		 * generic sentence (the handler has already queued the retry).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order {@see self::create()} just returned.
+		 * @return array{success: bool, message: string} the outcome, and one merchant-readable
+		 *         sentence: the carrier's own text prefixed with its name («СДЭК: …»), or the
+		 *         framework's own words when the carrier gave none.
+		 */
+		public function export_created( \WC_Order $order ): array {
+			$order->read_meta_data( true );
+
+			$provider = $this->registry->resolve_provider_for_order( $order );
+
+			if ( ! $this->actions->is_offered( $order, $provider, Order_Actions::EXPORT ) ) {
+				return [
+					'success' => false,
+					'message' => $this->actions->unavailable_reason( $order, $provider, Order_Actions::EXPORT ),
+				];
+			}
+
+			$handler = null !== $provider ? $this->registry->get_shipment_handler( $provider->get_id() ) : null;
+
+			if ( null === $provider || null === $handler ) {
+				// `is_offered()` answers true only when both resolved; guarded anyway, not trusted.
+				return [
+					'success' => false,
+					'message' => $this->actions->unavailable_reason( $order, $provider, Order_Actions::EXPORT ),
+				];
+			}
+
+			try {
+				$result = $this->actions->perform( $handler, $order, Order_Actions::EXPORT, $provider );
+			} catch ( \Throwable $exception ) {
+				self::log( sprintf( 'exporting the created order %1$d failed: %2$s', $order->get_id(), \Woodev_API_Base::redact_secret_log_text( $exception->getMessage() ) ) );
+
+				return [
+					'success' => false,
+					'message' => __( 'Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			if ( $result->is_success() ) {
+				return [
+					'success' => true,
+					'message' => $result->merchant_message( $provider->get_label(), __( 'Заказ выгружен перевозчику.', 'woodev-plugin-framework' ) ),
+				];
+			}
+
+			return [
+				'success' => false,
+				'message' => $result->merchant_message( $provider->get_label(), __( 'Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов.', 'woodev-plugin-framework' ) ),
+			];
 		}
 
 		/**

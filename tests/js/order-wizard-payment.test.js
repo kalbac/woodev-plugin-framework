@@ -32,6 +32,7 @@ const WIZARD = {
 	paymentMethods: { cod: 'Наложенный платёж', yookassa: 'ЮKassa' },
 	orderStatuses: { pending: 'Ожидает оплаты', processing: 'В обработке', 'on-hold': 'На удержании', completed: 'Выполнен' },
 	finalStatuses: [ 'completed', 'cancelled', 'refunded', 'failed' ],
+	exportableStatuses: [ 'pending', 'on-hold', 'processing' ],
 	taxesEnabled: false,
 	pickup: { cdek: { restRoot: POINTS_ROOT } },
 };
@@ -302,6 +303,58 @@ describe( 'the send button', () => {
 	} );
 } );
 
+describe( 'immediate export — «Сразу выгрузить перевозчику» (O9, D6, #974)', () => {
+	const BOX = 'Сразу выгрузить перевозчику';
+
+	test( 'a create offers the box, unticked, with the promise that the order is made either way', () => {
+		mountStep();
+
+		expect( screen.getByLabelText( BOX ) ).not.toBeChecked();
+		expect( screen.getByText( /Заказ создастся в любом случае/ ) ).toBeInTheDocument();
+	} );
+
+	test( 'an edit never exports (O4): there is no box', () => {
+		mountStep( { mode: 'edit' } );
+
+		expect( screen.queryByLabelText( BOX ) ).toBeNull();
+	} );
+
+	test( 'ticking it lands in the state and the button says what will happen', () => {
+		const { data } = mountStep();
+
+		fireEvent.click( screen.getByLabelText( BOX ) );
+
+		expect( data().rest.export_now ).toBe( true );
+		expect( screen.getByRole( 'button', { name: 'Создать и выгрузить' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Создать заказ' } ) ).toBeNull();
+	} );
+
+	test( 'a status the export is not offered in takes the tick back and closes the box, naming the statuses that work', () => {
+		const { data } = mountStep();
+
+		fireEvent.click( screen.getByLabelText( BOX ) );
+		fireEvent.change( screen.getByLabelText( 'Статус заказа' ), { target: { value: 'completed' } } );
+
+		expect( data().rest.export_now ).toBe( false );
+		expect( screen.getByLabelText( BOX ) ).toBeDisabled();
+		expect( screen.getByLabelText( BOX ) ).not.toBeChecked();
+		expect( screen.getByText( 'Выгрузить можно заказ в статусах: Ожидает оплаты, На удержании, В обработке.' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeInTheDocument();
+
+		// Back to a status that works: the box opens again, unticked — the manager decides anew.
+		fireEvent.change( screen.getByLabelText( 'Статус заказа' ), { target: { value: 'processing' } } );
+
+		expect( screen.getByLabelText( BOX ) ).not.toBeDisabled();
+		expect( screen.getByLabelText( BOX ) ).not.toBeChecked();
+	} );
+
+	test( 'while a request is in flight the box is locked', () => {
+		mountStep( { busy: true } );
+
+		expect( screen.getByLabelText( BOX ) ).toBeDisabled();
+	} );
+} );
+
 describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)', () => {
 	const pickupState = ( check = { provider: 'cdek', weight: 3250 } ) => {
 		const base = filledState();
@@ -504,6 +557,44 @@ describe( 'the real step inside the shell', () => {
 
 		expect( post.data ).not.toHaveProperty( 'status' );
 		expect( post.data.payment_method ).toBe( '' );
+	} );
+
+	test( 'the ticked box sends export_now beside the order, and the outcome — the carrier\'s own text — reaches the host with the created order', async () => {
+		routeApi( () =>
+			Promise.resolve( {
+				id: 93,
+				number: '93',
+				message: 'Заказ №93 создан, но не выгружен. СДЭК: Неверный индекс получателя',
+				export: { success: false, message: 'СДЭК: Неверный индекс получателя' },
+			} )
+		);
+		const { onSaved, onClose } = await walkToPayment();
+
+		fireEvent.click( screen.getByLabelText( 'Сразу выгрузить перевозчику' ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать и выгрузить' } ) );
+
+		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
+
+		// The order was created either way: the wizard closes, the host reports the carrier's refusal.
+		expect( onSaved.mock.calls[ 0 ][ 0 ] ).toMatchObject( { id: 93, export: { success: false, message: 'СДЭК: Неверный индекс получателя' } } );
+		expect( onClose ).toHaveBeenCalled();
+
+		const post = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => 'POST' === r.method && r.url === ORDERS_ROOT );
+
+		expect( post.data.export_now ).toBe( true );
+		expect( post.data ).not.toHaveProperty( 'status' );
+	} );
+
+	test( 'an unticked box sends no export_now at all', async () => {
+		routeApi( () => Promise.resolve( { id: 94, number: '94', message: 'Заказ №94 создан.' } ) );
+		const { onSaved } = await walkToPayment();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		const post = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => 'POST' === r.method && r.url === ORDERS_ROOT );
+
+		expect( post.data ).not.toHaveProperty( 'export_now' );
 	} );
 
 	test( 'a 422 about the status stays on ⑤ and shows under the status select', async () => {

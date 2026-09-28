@@ -72,6 +72,7 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			carrier_schema: [],
 			payment_method: '',
 			status: '',
+			export_now: false,
 			rate_cost: '',
 			rate_is_pickup: false,
 			rates_pending: false,
@@ -145,6 +146,8 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			carrier_schema: [],
 			payment_method: str( prefill.payment_method ),
 			status: str( prefill.status ),
+			// An edit never exports (O4).
+			export_now: false,
 			rate_cost: '',
 			// The rates have not come back yet; a saved point is the only sign of a pickup rate until they do.
 			rate_is_pickup: !! prefill.pickup_point,
@@ -236,6 +239,7 @@ export function clearCustomer( data: WizardData ): WizardData {
  * - `shipping` takes the recipient's names and phone from billing when its own are empty.
  * - `status` is left out when nothing chose one: the server then applies its own default
  *   (`pending` on create, «keep» on update).
+ * - `export_now` is sent only when ticked (D6, create only).
  */
 export function buildPayload( data: WizardData ): Record<string, unknown> {
 	const billing: WizardBilling = data.billingFollowsShipping
@@ -269,6 +273,11 @@ export function buildPayload( data: WizardData ): Record<string, unknown> {
 
 	if ( '' !== data.rest.status ) {
 		payload.status = data.rest.status;
+	}
+
+	// Beside the order, not in it: the server reads it on create only (D6) and never validates it as order data.
+	if ( data.rest.export_now ) {
+		payload.export_now = true;
 	}
 
 	return payload;

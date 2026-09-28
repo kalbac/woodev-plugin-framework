@@ -48,6 +48,16 @@ class WizardPaymentBootstrapTest extends TestCase {
 		$this->assertSame( Order_Actions::FINAL_STATUSES, $data['finalStatuses'] );
 	}
 
+	public function test_the_statuses_the_immediate_export_is_offered_in_are_real_woocommerce_statuses(): void {
+		$data = $this->bootstrap();
+
+		$this->assertSame( Order_Actions::EXPORTABLE_STATUSES, $data['exportableStatuses'] );
+
+		foreach ( $data['exportableStatuses'] as $slug ) {
+			$this->assertArrayHasKey( $slug, $data['orderStatuses'], 'the client offers the box only under a status the select can hold' );
+		}
+	}
+
 	public function test_only_enabled_gateways_are_offered_and_each_has_a_readable_title(): void {
 		$gateways = WC()->payment_gateways()->payment_gateways();
 
