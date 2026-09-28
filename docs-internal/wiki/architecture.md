@@ -297,6 +297,19 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
   coincidence. Moved here from `CURRENT-STATE.md` in s139.
+- **The carrier marker is a two-sided contract (#967, #710 I1b).** The page FINDS an order by the
+  presence of `Orders_Provider::get_marker_meta_key()` (an `EXISTS` clause; `Orders_Id_Resolver`
+  drives on the same key) and NAMES its carrier through `resolve_provider_for_order()`, which reads
+  the VALUE — so the value must be a **non-empty scalar**: `''`/`false` list the order but leave its
+  row and metabox ownerless, and an array raises «Array to string conversion» on every call (measured,
+  #962 I0; `Order_Marker::is_valid_value()`). The framework never invents the value: the provider
+  declares `marker_writer` (`fn( WC_Order, array $context ): void`, optional in `create()` so installed
+  providers keep constructing; a provider without one is listed but never created/edited for).
+  `Order_Marker` runs it from `Checkout_Handler::persist_values()` — the one core the classic
+  checkout, the Store API checkout and the admin editor share — for the provider whose method id is on
+  one of the order's shipping lines (the checkout handlers run for EVERY order, once per active
+  plugin), saves the order's meta, and verifies the marker the way the page reads it; a broken writer
+  is logged and never breaks the order.
 
 ## Subsystem phase status
 

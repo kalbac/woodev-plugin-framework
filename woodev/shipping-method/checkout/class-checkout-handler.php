@@ -2404,8 +2404,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * The persistence core: writes the managed field values onto the order and nothing
-		 * else — no hooks, no `$_POST`, no session, no notices.
+		 * The persistence core: marks the order as its carrier's ({@see \Woodev\Framework\Shipping\Order\Order_Marker}, #967) and
+		 * writes the managed field values onto it — no hooks, no `$_POST`, no session, no notices.
+		 *
+		 * The marker is part of the core so classic checkout, Store API checkout and the admin
+		 * order editor all mark the same way: it is written for the carrier(s) whose shipping
+		 * method is on the order (none for another carrier's or a free-shipping order — this
+		 * runs for every order, once per active carrier plugin), through the carrier's own
+		 * writer, before any field is written.
 		 *
 		 * Takes explicit input, so every caller that has already decided WHAT to write can
 		 * share the one write path: {@see self::save()} (the checkout wrapper, which adds
@@ -2430,14 +2436,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *                                                     when this handler declares a
 		 *                                                     pickup-slot field
 		 * @param callable|null        $after_field            `fn( string $id, mixed $value ): void`
+		 * @param array<string, mixed> $marker_context         overrides for the carrier-marker writer's
+		 *                                                     context — `rate`, `fields`, `pickup_point`,
+		 *                                                     `carrier_fields`; see
+		 *                                                     {@see \Woodev\Framework\Shipping\Order\Order_Marker::mark_order()}. Checkout
+		 *                                                     passes nothing (the rate is read back from the
+		 *                                                     order's shipping line, `fields` is `$values`);
+		 *                                                     the admin order editor passes what it holds.
 		 *
 		 * @return array<string, mixed> `$values` after the stale pickup-slot entries were removed —
 		 *                              what a caller announces as "the saved values"
 		 */
-		public function persist_values( $order, array $values, string $chosen_shipping_method, ?callable $after_field = null ): array {
+		public function persist_values( $order, array $values, string $chosen_shipping_method, ?callable $after_field = null, array $marker_context = [] ): array {
 			if ( [] !== $this->pickup_slot_fields() ) {
 				$values = $this->drop_stale_pickup_values( $values, $chosen_shipping_method );
 			}
+
+			// The carrier marker (#967) goes first, so nothing below — and no `checkout_*` listener —
+			// sees a carrier order that the orders page could not yet find.
+			( new \Woodev\Framework\Shipping\Order\Order_Marker() )->mark_order( $order, array_merge( [ 'fields' => $values ], $marker_context ) );
 
 			foreach ( $this->effective_fields() as $id => $field ) {
 				if ( ! array_key_exists( $id, $values ) ) {

@@ -99,6 +99,11 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				// A v1-style orders-page slug nothing registers — its URL redirects to the
 				// framework page with this carrier preselected (SP-10 increment 5, #820).
 				'legacy_page_slug'          => 'wc_realistic_shipping_orders',
+				// #967: the REAL marker writer (see the test-shipping fixture's twin) — the
+				// seeder writes the same `'1'`, this one runs on a checkout.
+				'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
+					$order->update_meta_data( '_woodev_realistic_shipping_marker', '1' );
+				},
 			]
 		);
 

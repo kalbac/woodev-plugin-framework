@@ -882,6 +882,13 @@ function woodev_test_shipping_method_plugin_init(): void {
 						'tracking_url_template'     => 'https://testcarrier.example.test/track/{tracking}',
 						'pickup_point_meta_key'     => '_woodev_test_shipping_pickup_point',
 						'carrier_order_id_meta_key' => '_woodev_test_shipping_carrier_order_id',
+						// #967: the REAL marker writer — run by the framework's persistence core on a
+						// checkout (classic or Store API) and, later, by the admin order editor, so an
+						// order placed with this carrier appears on the orders page without seeding.
+						// The seeder writes the same `'1'` (`Woodev_Test_Orders_Seeder::seed_one()`).
+						'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
+							$order->update_meta_data( '_woodev_test_shipping_marker', '1' );
+						},
 					]
 				);
 
