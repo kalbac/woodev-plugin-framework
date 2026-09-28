@@ -213,6 +213,8 @@ namespace Woodev\Tests\Unit\Shipping {
 
 			Functions\when( 'is_admin' )->justReturn( false );
 			Functions\when( 'get_option' )->justReturn( null );
+			// the Store API detection (#949) reads the request URI through it
+			Functions\when( 'wp_unslash' )->returnArg( 1 );
 
 			$this->store = Mockery::mock( Customer_Location_Store::class );
 
