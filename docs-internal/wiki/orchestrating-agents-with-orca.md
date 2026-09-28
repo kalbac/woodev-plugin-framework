@@ -460,6 +460,21 @@ subscription. Operator decision 27.08.2026: **the model is `luna`**, far cheaper
 discount. Measure against the bill, not against a per-round estimate taken on the smallest task
 that was handy.
 
+## Local qwen through Oh My Pi (`omp`) — a WORKER, never a critic (s142)
+
+Operator, 28.09.2026: the local **qwen3.8:27b** is a worker only, and it is launched through the
+`omp` agent (Oh My Pi), not kilocode. Measured in s142:
+
+- `orca orchestration worker-start --spec "…" --worktree new-top-level --name <slug> --agent omp --json`
+  starts it; `--model` does not apply — the model comes from `~/.omp/agent/config.yml`
+  (`modelRoles.default: ollama/qwen3.8:27b-mlx`); `worker-read` shows `provider.model` to confirm.
+- It reads a file brief, sends a real `worker_done` (put the absolute Orca CLI path in the brief), and
+  contradicts a wrong brief with evidence — it found a card already done on `main` and refused to fake
+  a change, and caught a false premise in a gotcha brief.
+- It is SLOW: ~20 min for a tests-only check, ~65 min for a 7 KB gotcha. Give it bounded, verifiable,
+  non-blocking work (docs, gotchas, small test pins) — never a critic seat and never the critical path.
+- It has no Serena; say so in the brief, and verify the card is still open before handing it over.
+
 ## Traps
 
 ### Added in s141
