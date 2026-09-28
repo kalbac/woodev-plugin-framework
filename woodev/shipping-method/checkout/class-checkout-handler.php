@@ -2442,7 +2442,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *                                                     {@see \Woodev\Framework\Shipping\Order\Order_Marker::mark_order()}. Checkout
 		 *                                                     passes nothing (the rate is read back from the
 		 *                                                     order's shipping line, `fields` is `$values`);
-		 *                                                     the admin order editor passes what it holds.
+		 *                                                     the admin order editor passes what it holds,
+		 *                                                     plus `refresh => true` when it re-saves an
+		 *                                                     order (the writers run again).
 		 *
 		 * @return array<string, mixed> `$values` after the stale pickup-slot entries were removed —
 		 *                              what a caller announces as "the saved values"
@@ -2454,7 +2456,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 
 			// The carrier marker (#967) goes first, so nothing below — and no `checkout_*` listener —
 			// sees a carrier order that the orders page could not yet find.
-			( new \Woodev\Framework\Shipping\Order\Order_Marker() )->mark_order( $order, array_merge( [ 'fields' => $values ], $marker_context ) );
+			// `refresh` is not part of the writer's context but the marker's own switch: an order
+			// being RE-saved by the admin editor must re-run the writers, because a marker derived
+			// from the chosen rate has to follow the edit. Checkout never sets it.
+			$refresh_marker = ! empty( $marker_context['refresh'] );
+			unset( $marker_context['refresh'] );
+
+			( new \Woodev\Framework\Shipping\Order\Order_Marker() )->mark_order( $order, array_merge( [ 'fields' => $values ], $marker_context ), $refresh_marker );
 
 			foreach ( $this->effective_fields() as $id => $field ) {
 				if ( ! array_key_exists( $id, $values ) ) {
@@ -2475,6 +2483,81 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			}
 
 			return $values;
+		}
+
+		/**
+		 * The pickup-slot field ids this handler declares — where a chosen pickup point's id
+		 * lives among the managed field values (the admin order editor, #968, puts the point
+		 * it was handed under them before {@see self::persist_values()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function pickup_field_ids(): array {
+			return array_map(
+				static function ( array $field ): string {
+					return (string) $field['id'];
+				},
+				$this->pickup_slot_fields()
+			);
+		}
+
+		/**
+		 * Reads this handler's managed field values back from an order — the inverse of
+		 * {@see self::persist_values()}: every non-native field with a stored, non-empty value,
+		 * keyed by field id. Native WooCommerce address fields are order properties, not meta,
+		 * and are read from the order's own getters by the caller.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return array<string, mixed>
+		 */
+		public function read_values( \WC_Order $order ): array {
+			$values = [];
+
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if ( $this->is_native_wc_field( (string) $id ) ) {
+					continue;
+				}
+
+				$value = \Woodev_Order_Compatibility::get_order_meta( $order, (string) $id );
+
+				if ( is_scalar( $value ) && '' !== (string) $value ) {
+					$values[ (string) $id ] = $value;
+				}
+			}
+
+			return $values;
+		}
+
+		/**
+		 * Announces that the admin order editor saved an order for this carrier plugin.
+		 *
+		 * The three `checkout_*` hooks stay CHECKOUT-ONLY — plugins listening to them must never
+		 * see an admin save (#710 spec D4) — so the admin path has its own, built with the SAME
+		 * prefix rule {@see self::hook()} applies: `woodev_shipping_{prefix}_admin_order_saved`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order   the saved order.
+		 * @param array<string, mixed> $values  the managed field values that were written.
+		 * @param array<string, mixed> $context what the editor was handed: `rate`, `pickup_point`,
+		 *                                      `carrier_fields`, and `is_update`.
+		 * @return void
+		 */
+		public function announce_admin_order_saved( \WC_Order $order, array $values, array $context ): void {
+			/**
+			 * Fires after the admin order editor created or updated an order of this carrier.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param \WC_Order            $order   the saved order
+			 * @param array<string, mixed> $values  the managed field values written
+			 * @param array<string, mixed> $context `rate`, `pickup_point`, `carrier_fields`, `is_update`
+			 */
+			do_action( $this->hook( 'admin_order_saved' ), $order, $values, $context );
 		}
 
 		/**

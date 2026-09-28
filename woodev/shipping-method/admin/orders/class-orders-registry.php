@@ -14,6 +14,7 @@ use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
+use Woodev\Framework\Shipping\Rest_Api\Order_Editor_Controller;
 use Woodev\Framework\Shipping\Rest_Api\Orders_Controller;
 use Woodev\Framework\Shipping\Shipping_Plugin;
 
@@ -343,6 +344,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function get_provider( string $id ): ?Orders_Provider {
 			return $this->get_providers()[ $id ] ?? null;
+		}
+
+		/**
+		 * The plugin a provider was registered with, or null when it was registered without one
+		 * (or without a `Shipping_Plugin`).
+		 *
+		 * The admin order wizard (#710) reaches the owning plugin's checkout and pickup handlers
+		 * through it, so an order it writes is persisted by the SAME handlers as a checkout one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id provider id.
+		 * @return Shipping_Plugin|null
+		 */
+		public function get_provider_plugin( string $id ): ?Shipping_Plugin {
+			return $this->provider_plugins[ $id ] ?? null;
 		}
 
 		/**
@@ -1385,6 +1402,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 */
 		public function register_rest(): void {
 			\Woodev_REST_V1_Registrar::register_controller( new Orders_Controller( $this ) );
+			\Woodev_REST_V1_Registrar::register_controller( new Order_Editor_Controller( $this ) );
 		}
 
 		/**

@@ -1942,6 +1942,107 @@ msgstr "Отследить"
 msgid "You do not have permission to manage this shipment."
 msgstr "У вас нет прав для управления этим отправлением."
 
+#: shipping-method/admin/orders/class-order-editor.php:115
+#: shipping-method/admin/orders/class-order-editor.php:126
+msgid "Не удалось создать заказ."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:181
+msgid "Не удалось сохранить заказ. Проверьте его в списке — часть изменений могла примениться."
+msgstr ""
+
+#. translators: 1: the order total before the edit, 2: the total after it.
+#: shipping-method/admin/orders/class-order-editor.php:332
+#, php-format
+msgid "Заказ изменён из админки: сумма была %1$s, стала %2$s. Возврат или доплата делаются штатными средствами WooCommerce."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:826
+msgid "Заказ не сохранён: проверьте отмеченные поля."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:150
+msgid "Укажите страну доставки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:194
+msgid "Покупатель не найден."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:214
+msgid "Чтобы создать аккаунт, укажите email покупателя."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:220
+msgid "Покупатель с таким email уже есть — выберите его в списке."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:254
+msgid "Такой страны нет в справочнике магазина."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:259
+msgid "Такого региона нет в справочнике магазина для выбранной страны."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:268
+msgid "Проверьте email покупателя."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:291
+msgid "Добавьте в заказ хотя бы один товар."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:297
+msgid "В заказе слишком много позиций."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:314
+msgid "Количество должно быть не меньше единицы."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:321
+msgid "Цена должна быть числом не меньше нуля."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:328
+msgid "Товар не найден — выберите его из списка ещё раз."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:388
+msgid "Выберите способ доставки."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:400
+msgid "Стоимость доставки должна быть числом не меньше нуля."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:410
+msgid "Этот способ доставки не относится к перевозчикам магазина. Такие заказы оформляются штатным редактором WooCommerce."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:421
+msgid "Для этого перевозчика заказы из админки пока недоступны."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:490
+msgid "Для этого тарифа выберите пункт выдачи."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:511
+msgid "Такого способа оплаты нет в магазине."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-payload-validator.php:546
+msgid "Такого статуса заказа нет."
+msgstr ""
+
+#. translators: %s: WooCommerce order status name, e.g. "Выполнен".
+#: shipping-method/admin/orders/class-order-payload-validator.php:554
+#, php-format
+msgid "Статус «%s» при редактировании не выставляется — отмена, возврат и завершение заказа делаются штатными средствами WooCommerce."
+msgstr ""
+
 #: shipping-method/pickup/class-pickup-handler.php:1250
 msgid "Address"
 msgstr "Адрес"
@@ -2827,6 +2928,18 @@ msgstr ""
 #: shipping-method/rest-api/class-location-controller.php:2020
 #: shipping-method/rest-api/class-pickup-controller.php:1096
 msgid "Слишком много запросов. Пожалуйста, подождите немного."
+msgstr ""
+
+#. translators: %s: order number.
+#: shipping-method/rest-api/class-order-editor-controller.php:177
+#, php-format
+msgid "Заказ №%s создан."
+msgstr ""
+
+#. translators: %s: order number.
+#: shipping-method/rest-api/class-order-editor-controller.php:209
+#, php-format
+msgid "Заказ №%s сохранён."
 msgstr ""
 
 #: shipping-method/rest-api/class-pickup-controller.php:563
@@ -4082,4 +4195,20 @@ msgstr ""
 
 #: shipping-method/admin/orders/class-order-actions.php:143
 msgid "Выгрузить заказ в систему перевозчика"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:254
+msgid "Заказ уже выгружен перевозчику — чтобы изменить его, сначала отмените выгрузку."
+msgstr ""
+
+#. translators: %s: WooCommerce order status name, e.g. "Выполнен".
+#: shipping-method/admin/orders/class-order-actions.php:260
+#, php-format
+msgid "Заказ в статусе «%s» — редактировать его нельзя."
+msgstr ""
+
+#. translators: %s: canonical delivery status label, e.g. "Доставлено".
+#: shipping-method/admin/orders/class-order-actions.php:270
+#, php-format
+msgid "Отправление уже в конечном статусе «%s» — редактировать заказ нельзя."
 msgstr ""

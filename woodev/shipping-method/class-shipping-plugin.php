@@ -265,12 +265,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-order-actions.php';
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 
+			// admin order wizard (#710): the create / update / load service and its payload check (#968)
+			require_once $path . '/admin/orders/class-order-payload-validator.php';
+			require_once $path . '/admin/orders/class-order-editor.php';
+
 			// REST API (§8 checkout classes' server-side counterparts)
 			require_once $path . '/rest-api/class-shipping-rest-api.php';
 			require_once $path . '/rest-api/class-field-source-controller.php';
 			require_once $path . '/rest-api/class-location-controller.php';
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
+			require_once $path . '/rest-api/class-order-editor-controller.php';
 		}
 
 		/**
@@ -1400,6 +1405,23 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 		 * @return Checkout\Checkout_Handler|null
 		 */
 		public function get_checkout_handler(): ?Checkout\Checkout_Handler {
+			return null;
+		}
+
+		/**
+		 * Gets the pickup handler.
+		 *
+		 * The framework builds none itself: a host plugin that constructs a
+		 * {@see Pickup\Pickup_Handler} overrides this to return it, which lets the admin order
+		 * wizard (#710) persist a chosen pickup point through the SAME handler the checkout uses.
+		 * Defaults to none — the wizard then stores the point id only, as a checkout without
+		 * full-point persistence does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return Pickup\Pickup_Handler|null
+		 */
+		public function get_pickup_handler(): ?Pickup\Pickup_Handler {
 			return null;
 		}
 

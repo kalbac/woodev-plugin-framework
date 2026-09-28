@@ -310,6 +310,22 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   one of the order's shipping lines (the checkout handlers run for EVERY order, once per active
   plugin), saves the order's meta, and verifies the marker the way the page reads it; a broken writer
   is logged and never breaks the order.
+- **The admin order wizard's server side is `Order_Editor` + three routes (#968, #710 I3).**
+  `POST woodev/v1/shipping/orders` (create), `PUT …/orders/{id}` (update) and `GET …/orders/{id}/edit`
+  (the prefill) are a thin transport (`Order_Editor_Controller`, gated `edit_shop_orders`) over one
+  service. The **transport contract**: 401/403 from WordPress, 404 unknown order OR not a row of the
+  page, 409 not editable, 422 `data.errors` = `[ { field, code, message } ]` (dotted request path), 201
+  `{ id, number, message }` / 200 — declared by the service, not by REST arg schemas (a schema mismatch
+  would add a 400 with a second error format). The request carries the chosen rate and point; the
+  rates / points routes only PRODUCE them (`Order_Payload_Validator` documents the shape). **One
+  writer:** the owning plugin's `Checkout_Handler::persist_values()` (managed fields + marker, with
+  `refresh` on an edit) and `Pickup_Handler::persist_full_point()`; the three `checkout_*` hooks stay
+  checkout-only, an admin save fires `woodev_shipping_{prefix}_admin_order_saved`. **Editable-state
+  policy is ONE method** — `Order_Actions::is_editable()` / `not_editable_reason()` (exported, final
+  status, finished delivery) — read by the row action and by the routes, and evaluated TWICE on an
+  update (before validation, and again on a fresh read before the writes: the stale-row race). **No
+  explicit «New order» trigger** — `set_status()` on a fresh order already sends it through
+  WooCommerce's `pending_to_*_notification` (#962 I0, contradiction 1); an extra one double-sends.
 
 ## Subsystem phase status
 
