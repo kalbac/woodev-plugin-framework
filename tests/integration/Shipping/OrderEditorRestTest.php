@@ -319,6 +319,70 @@ class OrderEditorRestTest extends TestCase {
 		$this->assertSame( 4, (int) array_values( wc_get_order( $id )->get_items( 'line_item' ) )[0]->get_quantity() );
 	}
 
+	// -------------------------------------------------------------------------
+	// the carrier's own fields (#973, spec D7)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The realistic fixture declares one order field — `declared_value`, a number with a floor of
+	 * zero, stored under `_woodev_realistic_declared_value`.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_create_stores_the_declared_carrier_fields_and_drops_what_was_not_declared( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$id    = $this->create_through_the_route( [ 'carrier_fields' => [ 'declared_value' => '1500.5', 'not_declared' => 'x' ] ] );
+		$order = wc_get_order( $id );
+
+		$this->assertEquals( 1500.5, $order->get_meta( '_woodev_realistic_declared_value', true ) );
+		$this->assertSame( '', (string) $order->get_meta( 'not_declared', true ), 'an id the carrier did not declare never reaches the order' );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_create_answers_422_on_a_carrier_field_the_declaration_refuses( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$response = $this->send( 'POST', self::NAMESPACE_ROOT, $this->payload( [ 'carrier_fields' => [ 'declared_value' => '-1' ] ] ) );
+
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertContains( 'carrier_fields.declared_value', array_column( $response->get_data()['data']['errors'], 'field' ) );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_load_returns_the_stored_carrier_fields_and_an_update_changes_or_clears_them( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$id = $this->create_through_the_route( [ 'carrier_fields' => [ 'declared_value' => '1500.5' ] ] );
+
+		$body = $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_data();
+
+		$this->assertEquals( [ 'declared_value' => 1500.5 ], $body['carrier_fields'] );
+
+		$body['carrier_fields']['declared_value'] = '99';
+
+		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $body )->get_status() );
+		$this->assertEquals( 99, wc_get_order( $id )->get_meta( '_woodev_realistic_declared_value', true ) );
+
+		$body['carrier_fields']['declared_value'] = '';
+
+		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $body )->get_status() );
+		$this->assertSame( '', (string) wc_get_order( $id )->get_meta( '_woodev_realistic_declared_value', true ), 'a cleared field is removed, not stored empty' );
+	}
+
 	/**
 	 * @dataProvider datastore_provider
 	 * @param bool $hpos datastore under test.

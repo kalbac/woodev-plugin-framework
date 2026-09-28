@@ -55,6 +55,11 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 					return preg_replace( '/[^\d+]/', '', $phone );
 				}
 			);
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
 			Functions\when( 'wc_format_postcode' )->returnArg( 1 );
 			Functions\when( 'wc_format_decimal' )->alias(
 				static function ( $number ): string {
@@ -111,10 +116,11 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		}
 
 		/**
-		 * @param bool $with_writer whether the carrier declared a marker writer.
+		 * @param bool          $with_writer  whether the carrier declared a marker writer.
+		 * @param callable|null $order_fields the carrier's `order_fields` declaration, if any.
 		 * @return Orders_Registry
 		 */
-		private function registry( bool $with_writer = true ): Orders_Registry {
+		private function registry( bool $with_writer = true, ?callable $order_fields = null ): Orders_Registry {
 			$args = $with_writer
 				? [
 					'marker_writer' => static function ( \WC_Order $order, array $context ): void {
@@ -122,15 +128,19 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 				]
 				: [];
 
+			if ( null !== $order_fields ) {
+				$args['order_fields'] = $order_fields;
+			}
+
 			$registry = Orders_Registry::instance();
 			$registry->register_provider( Orders_Provider::create( 'cdek', 'СДЭК', '_cdek_marker', [ 'cdek_courier', 'cdek_pickup' ], $args ) );
 
 			return $registry;
 		}
 
-		private function validator( bool $with_writer = true ): Order_Payload_Validator {
+		private function validator( bool $with_writer = true, ?callable $order_fields = null ): Order_Payload_Validator {
 			return new Order_Payload_Validator(
-				$this->registry( $with_writer ),
+				$this->registry( $with_writer, $order_fields ),
 				[
 					'pickup_method_ids' => static function (): array {
 						return [ 'cdek_pickup' ];
@@ -485,19 +495,106 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertFalse( $result['data']['customer']['create_account'] );
 		}
 
-		public function test_fields_and_carrier_fields_keep_scalars_only(): void {
+		public function test_fields_keep_scalars_only(): void {
 			$result = $this->validator()->validate(
+				$this->payload( [ 'fields' => [ 'carrier_comment' => ' позвонить ', 'nested' => [ 'x' ] ] ] ),
+				false
+			);
+
+			$this->assertSame( [ 'carrier_comment' => 'позвонить' ], $result['data']['fields'] );
+		}
+
+		/**
+		 * @return callable a carrier declaration: a floor-bounded number and a required select.
+		 */
+		private function declaring(): callable {
+			return static function ( array $context ): array {
+				return [
+					'declared_value' => [
+						'meta_key' => '_cdek_declared_value',
+						'control'  => 'number',
+						'type'     => 'float',
+						'name'     => 'Объявленная ценность',
+						'min'      => 0,
+					],
+					'package_type'   => [
+						'meta_key' => '_cdek_package_type',
+						'name'     => 'Упаковка',
+						'options'  => [ 'box' => 'Коробка', 'envelope' => 'Конверт' ],
+						'default'  => 'box',
+						'required' => true,
+					],
+				];
+			};
+		}
+
+		public function test_carrier_fields_are_read_by_the_carriers_declaration_and_nothing_else(): void {
+			$result = $this->validator( true, $this->declaring() )->validate(
 				$this->payload(
 					[
-						'fields'         => [ 'carrier_comment' => ' позвонить ', 'nested' => [ 'x' ] ],
-						'carrier_fields' => [ 'declared_value' => 100, 'obj' => new \stdClass() ],
+						'carrier_fields' => [
+							'declared_value' => ' 1500.5 ',
+							'package_type'   => 'envelope',
+							'not_declared'   => 'must not reach the order',
+							'obj'            => new \stdClass(),
+						],
 					]
 				),
 				false
 			);
 
-			$this->assertSame( [ 'carrier_comment' => 'позвонить' ], $result['data']['fields'] );
-			$this->assertSame( [ 'declared_value' => 100 ], $result['data']['carrier_fields'] );
+			$this->assertSame( [], $result['errors'] );
+			$this->assertSame( [ 'declared_value' => 1500.5, 'package_type' => 'envelope' ], $result['data']['carrier_fields'] );
+		}
+
+		public function test_a_carrier_that_declares_no_fields_gets_none_whatever_the_client_sent(): void {
+			$result = $this->validator()->validate( $this->payload( [ 'carrier_fields' => [ 'declared_value' => 100 ] ] ), false );
+
+			$this->assertSame( [], $result['errors'] );
+			$this->assertSame( [], $result['data']['carrier_fields'] );
+		}
+
+		public function test_a_carrier_field_the_declaration_refuses_is_reported_as_data_on_its_own_path(): void {
+			$result = $this->validator( true, $this->declaring() )->validate(
+				$this->payload( [ 'carrier_fields' => [ 'declared_value' => '-1', 'package_type' => 'crate' ] ] ),
+				false
+			);
+
+			$this->assertEqualsCanonicalizing(
+				[ 'carrier_fields.declared_value:invalid_carrier_field', 'carrier_fields.package_type:invalid_carrier_field' ],
+				$this->codes( $result )
+			);
+		}
+
+		public function test_a_field_left_out_takes_the_declared_default_and_a_required_one_without_one_is_reported(): void {
+			$missing = $this->validator( true, $this->declaring() )->validate( $this->payload(), false );
+
+			$this->assertSame( [], $missing['errors'], 'package_type has a default' );
+			$this->assertSame( [ 'package_type' => 'box' ], array_intersect_key( $missing['data']['carrier_fields'], [ 'package_type' => 1 ] ) );
+
+			$required = $this->validator(
+				true,
+				static function (): array {
+					return [ 'contact' => [ 'meta_key' => '_cdek_contact', 'name' => 'Контакт', 'required' => true ] ];
+				}
+			)->validate( $this->payload(), false );
+
+			$this->assertSame( [ 'carrier_fields.contact:invalid_carrier_field' ], $this->codes( $required ) );
+		}
+
+		public function test_the_declaration_is_asked_for_the_tariff_the_payload_chose(): void {
+			$asked = [];
+
+			$this->validator(
+				true,
+				static function ( array $context ) use ( &$asked ): array {
+					$asked[] = [ $context['method_id'], $context['is_pickup'] ];
+
+					return [];
+				}
+			)->validate( $this->payload(), false );
+
+			$this->assertSame( [ [ 'cdek_courier', false ] ], $asked );
 		}
 
 		public function test_every_problem_is_reported_at_once(): void {

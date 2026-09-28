@@ -8,7 +8,8 @@
  * @package woodev-plugin-framework
  */
 
-import type { RateGroup, RateOption, RatesResponse, WizardData, WizardRest } from './types';
+import { isFieldVisible } from '../../components/validate';
+import type { CarrierField, RateGroup, RateOption, RatesResponse, WizardData, WizardRest } from './types';
 
 /** A rate's `meta` reduced to what the payload accepts: scalars only (`Order_Payload_Validator::scalar_map()`). */
 export function scalarMeta( meta: unknown ): Record<string, string | number | boolean> {
@@ -142,6 +143,9 @@ export function chooseRate( data: WizardData, rate: RateOption ): WizardData {
 			pickup_point: null,
 			rate_cost: cost,
 			rate_is_pickup: rate.is_pickup,
+			// The carrier's fields belong to the tariff: another tariff asks for its own (D7).
+			carrier_fields: {},
+			carrier_schema: carrierFieldsOf( rate ),
 		},
 	};
 }
@@ -217,7 +221,7 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 	if ( ! found ) {
 		return {
 			...data,
-			rest: { ...data.rest, shipping_line: null, pickup_point: null, rate_cost: '', rate_is_pickup: false },
+			rest: { ...data.rest, shipping_line: null, pickup_point: null, rate_cost: '', rate_is_pickup: false, carrier_fields: {}, carrier_schema: [] },
 		};
 	}
 
@@ -226,10 +230,14 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 	const overridden = isCostOverridden( data.rest );
 	const cost = overridden || '' === data.rest.rate_cost ? String( data.rest.shipping_line?.cost ?? fresh ) : fresh;
 	const line = toShippingLine( rate, cost );
+	const schema = carrierFieldsOf( rate );
+	const carrierFields = keepDeclared( data.rest.carrier_fields, schema );
 	const same =
 		JSON.stringify( line ) === JSON.stringify( data.rest.shipping_line ) &&
 		data.rest.rate_cost === fresh &&
-		data.rest.rate_is_pickup === rate.is_pickup;
+		data.rest.rate_is_pickup === rate.is_pickup &&
+		JSON.stringify( schema ) === JSON.stringify( data.rest.carrier_schema ) &&
+		Object.keys( carrierFields ).length === Object.keys( data.rest.carrier_fields ).length;
 
 	if ( same ) {
 		return data;
@@ -244,8 +252,62 @@ export function applyRates( data: WizardData, response: RatesResponse ): WizardD
 			rate_is_pickup: rate.is_pickup,
 			// A point belongs to a pickup tariff only.
 			pickup_point: rate.is_pickup ? data.rest.pickup_point : null,
+			// The definitions follow the fresh answer; what the manager (or a saved order) already holds for a field
+			// the tariff still asks for stays, and a value of a field it no longer asks for goes.
+			carrier_fields: carrierFields,
+			carrier_schema: schema,
 		},
 	};
+}
+
+/** The fields the carrier asks for under a tariff (D7); none when it declares none. */
+export function carrierFieldsOf( rate: RateOption ): CarrierField[] {
+	return Array.isArray( rate.order_fields ) ? rate.order_fields : [];
+}
+
+/** The values kept for the declared fields only. */
+function keepDeclared( values: Record<string, unknown>, schema: CarrierField[] ): Record<string, unknown> {
+	const kept: Record<string, unknown> = {};
+
+	for ( const field of schema ) {
+		if ( Object.prototype.hasOwnProperty.call( values, field.id ) ) {
+			kept[ field.id ] = values[ field.id ];
+		}
+	}
+
+	return kept;
+}
+
+/**
+ * A carrier field's value as the wizard shows and checks it: what the manager set, else the default the
+ * carrier declared. Nothing is written into the state for an untouched field — the server applies the same
+ * default to a field the request leaves out — so merely looking at a tariff never reads as an edit.
+ */
+export function carrierFieldValue( field: CarrierField, values: Record<string, unknown> ): unknown {
+	return Object.prototype.hasOwnProperty.call( values, field.id ) ? values[ field.id ] : field.value;
+}
+
+/** The effective value of every declared field, by id — what `show_if` conditions are judged against. */
+export function effectiveCarrierValues( schema: CarrierField[], values: Record<string, unknown> ): Record<string, unknown> {
+	const effective: Record<string, unknown> = {};
+
+	for ( const field of schema ) {
+		effective[ field.id ] = carrierFieldValue( field, values );
+	}
+
+	return effective;
+}
+
+/** The fields to show now: those whose `show_if` holds for the values as they stand. */
+export function visibleCarrierFields( schema: CarrierField[], values: Record<string, unknown> ): CarrierField[] {
+	const effective = effectiveCarrierValues( schema, values );
+
+	return schema.filter( ( field ) => isFieldVisible( field, effective ) );
+}
+
+/** The manager sets one carrier field. */
+export function setCarrierField( data: WizardData, id: string, value: unknown ): WizardData {
+	return { ...data, rest: { ...data.rest, carrier_fields: { ...data.rest.carrier_fields, [ id ]: value } } };
 }
 
 /** The point the manager picked in the picker (or typed by code): kept as `{ id, name, address }`. */

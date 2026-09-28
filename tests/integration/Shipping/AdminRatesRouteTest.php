@@ -186,6 +186,55 @@ class AdminRatesRouteTest extends TestCase {
 	}
 
 	/**
+	 * D7 (#973): a carrier's own order fields ride on its rate, declared for the tariff — the pickup
+	 * fixture method is asked with `is_pickup` true and the zone-instance method in the context.
+	 *
+	 * @return void
+	 */
+	public function test_a_rate_carries_the_order_fields_the_carrier_declared_for_its_tariff(): void {
+		$asked    = [];
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'rates_test',
+				'Rates test carrier',
+				'_rates_test_marker',
+				[ 'woodev_test_shipping' ],
+				[
+					'order_fields' => static function ( array $context ) use ( &$asked ): array {
+						$asked[] = $context;
+
+						return [
+							'declared_value' => [
+								'meta_key' => '_rates_test_declared_value',
+								'control'  => 'number',
+								'type'     => 'float',
+								'name'     => 'Объявленная ценность',
+								'min'      => 0,
+							],
+						];
+					},
+				]
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$rate = $this->group( $this->post( $this->body() ) )['rates'][0];
+
+		$this->assertSame( [ 'declared_value' ], array_column( $rate['order_fields'], 'id' ) );
+		$this->assertSame( 'number', $rate['order_fields'][0]['controlType'] );
+		$this->assertSame( 'Объявленная ценность', $rate['order_fields'][0]['name'] );
+
+		$this->assertCount( 1, $asked );
+		$this->assertSame( 'woodev_test_shipping', $asked[0]['method_id'] );
+		$this->assertSame( $this->instance_id, $asked[0]['instance_id'] );
+		$this->assertTrue( $asked[0]['is_pickup'] );
+		$this->assertInstanceOf( \WC_Shipping_Method::class, $asked[0]['method'] );
+	}
+
+	/**
 	 * Only OUR carriers' methods (O12): `free_shipping` in the same zone is not in any group.
 	 *
 	 * @return void

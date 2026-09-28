@@ -43,7 +43,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 	 *  - `pickup_point`   `{ id }` — required when the chosen method is a pickup one, ignored otherwise.
 	 *  - `fields`         the carrier's managed field values by field id (sanitised by its own
 	 *                     checkout handler later).
-	 *  - `carrier_fields` the carrier's own export fields (spec D7) — handed to its marker writer.
+	 *  - `carrier_fields` the carrier's own export fields (spec D7, #973): `field id => value`. Only ids the
+	 *                     carrier DECLARED for the chosen tariff ({@see Orders_Provider::get_order_fields()})
+	 *                     are read; they are checked by the declaration ({@see Carrier_Field_Set::normalize()},
+	 *                     problems under `carrier_fields.{id}`), and the result — typed, defaults applied,
+	 *                     hidden fields dropped — is what {@see Order_Editor} stores and hands the marker writer.
 	 *  - `payment_method` a payment gateway id ('' = none); `status` a WooCommerce order status.
 	 *
 	 * The O12 rule lives here: `shipping_line.method_id` must belong to a registered carrier that
@@ -157,6 +161,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			$items         = $this->check_items( $payload['items'] ?? null, $is_update, $errors );
 			$shipping_line = $this->check_shipping_line( $payload['shipping_line'] ?? null, $errors );
 			$pickup_point  = $this->check_pickup_point( $payload['pickup_point'] ?? null, $shipping_line, $errors );
+			$carrier_data  = $this->check_carrier_fields( $payload['carrier_fields'] ?? [], $shipping_line, $errors );
 
 			$data = [
 				'customer'       => $customer,
@@ -166,7 +171,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 				'shipping_line'  => $shipping_line,
 				'pickup_point'   => $pickup_point,
 				'fields'         => self::scalar_map( $payload['fields'] ?? [] ),
-				'carrier_fields' => self::scalar_map( $payload['carrier_fields'] ?? [] ),
+				'carrier_fields' => $carrier_data,
 				'payment_method' => $this->check_payment_method( $payload['payment_method'] ?? '', $errors ),
 				'status'         => $this->check_status( $payload['status'] ?? null, $is_update, $errors ),
 			];
@@ -493,6 +498,37 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			}
 
 			return [ 'id' => $id ];
+		}
+
+		/**
+		 * The carrier's own order fields for the chosen tariff (spec D7): read by the carrier's
+		 * declaration, anything it did not declare dropped.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed                            $raw           the `carrier_fields` value.
+		 * @param array<string, mixed>|null        $shipping_line the checked shipping line.
+		 * @param array<int, array<string,string>> $errors        collected problems.
+		 * @return array<string, mixed> field id => the normalised value; empty without a usable line.
+		 */
+		private function check_carrier_fields( $raw, ?array $shipping_line, array &$errors ): array {
+			if ( null === $shipping_line ) {
+				return [];
+			}
+
+			$set = Carrier_Field_Set::for_rate( $shipping_line['provider'], $shipping_line['method_id'], $shipping_line['instance_id'] );
+
+			if ( $set->is_empty() ) {
+				return [];
+			}
+
+			$result = $set->normalize( is_array( $raw ) ? $raw : [] );
+
+			foreach ( $result['errors'] as $error ) {
+				self::add_error( $errors, $error['field'], $error['code'], $error['message'] );
+			}
+
+			return $result['values'];
 		}
 
 		/**

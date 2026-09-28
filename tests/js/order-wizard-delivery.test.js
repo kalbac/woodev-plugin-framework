@@ -448,3 +448,112 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		expect( createPickupSession.mock.calls[ 0 ][ 0 ].selectedId ).toBe( 'P-7' );
 	} );
 } );
+
+describe( 'the carrier\'s own fields under the chosen tariff (D7, O13)', () => {
+	const DECLARED_VALUE = { id: 'declared_value', type: 'float', name: 'Объявленная ценность', controlType: 'number', min: 0, required: false, value: null, tooltip: '', description: '', placeholder: '', options: [], is_multi: false };
+	const PACKAGE_TYPE = { id: 'package_type', type: 'string', name: 'Упаковка', controlType: 'select', options: { box: 'Коробка', envelope: 'Конверт' }, required: true, value: 'box', tooltip: '', description: '', placeholder: '', is_multi: false };
+	const CALL_BEFORE = { id: 'call_before', type: 'boolean', name: 'Позвонить перед доставкой', controlType: 'toggle', value: true, tooltip: '', description: '', placeholder: '', options: [], is_multi: false };
+
+	const WITH_FIELDS = {
+		...COURIER,
+		order_fields: [ DECLARED_VALUE, PACKAGE_TYPE, CALL_BEFORE ],
+	};
+	const PVZ_WITH_FIELDS = { ...PVZ, order_fields: [ DECLARED_VALUE ] };
+	const answerWith = ( ...rates ) => response( [ { id: 'cdek', label: 'СДЭК', rates } ] );
+
+	const row = ( name ) => screen.getByText( name, { selector: '.woodev-field__label, .woodev-field__toggle-label' } ).closest( '.woodev-field, .woodev-field__toggle-row' );
+	const CARRIER_SECTION = 'Данные для перевозчика';
+
+	test( 'nothing is asked before a tariff is chosen, and a tariff whose carrier declares no fields asks for nothing', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS, { ...PVZ, id: 'plain:1', method_id: 'plain', instance_id: 1, label: 'Без полей' } ) );
+		mount();
+		await ready();
+
+		expect( screen.queryByText( CARRIER_SECTION ) ).toBeNull();
+
+		fireEvent.click( screen.getByRole( 'radio', { name: /Без полей/ } ) );
+
+		expect( screen.queryByText( CARRIER_SECTION ) ).toBeNull();
+		expect( probe.data.rest.carrier_schema ).toEqual( [] );
+	} );
+
+	test( 'choosing a tariff draws its fields with the settings page\'s controls, each at its declared default', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS ) );
+		mount();
+		fireEvent.click( await ready() );
+
+		expect( screen.getByText( CARRIER_SECTION ) ).toBeInTheDocument();
+		expect( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ) ).toHaveValue( null );
+		expect( within( row( 'Упаковка' ) ).getByText( 'Коробка' ) ).toBeInTheDocument();
+		expect( within( row( 'Позвонить перед доставкой' ) ).getByRole( 'checkbox' ) ).toBeChecked();
+
+		// Looking at them writes nothing: the server applies the same defaults to what the request leaves out.
+		expect( probe.data.rest.carrier_fields ).toEqual( {} );
+	} );
+
+	test( 'what the manager types is held under the field\'s id, exactly as the payload sends it', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS ) );
+		mount();
+		fireEvent.click( await ready() );
+
+		fireEvent.change( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ), { target: { value: '1500' } } );
+		fireEvent.click( within( row( 'Позвонить перед доставкой' ) ).getByRole( 'checkbox' ) );
+
+		expect( probe.data.rest.carrier_fields ).toEqual( { declared_value: '1500', call_before: false } );
+		expect( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ) ).toHaveValue( 1500 );
+		expect( within( row( 'Позвонить перед доставкой' ) ).getByRole( 'checkbox' ) ).not.toBeChecked();
+	} );
+
+	test( 'another tariff swaps the fields for its own and forgets what was typed for the previous one', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS, PVZ_WITH_FIELDS ) );
+		mount();
+		fireEvent.click( await ready() );
+		fireEvent.change( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ), { target: { value: '1500' } } );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: /Пункт выдачи СДЭК/ } ) );
+
+		expect( screen.queryByText( 'Позвонить перед доставкой' ) ).toBeNull();
+		expect( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ) ).toHaveValue( null );
+		expect( probe.data.rest.carrier_fields ).toEqual( {} );
+	} );
+
+	test( 'an order loaded for edit shows the values it saved once the tariffs have answered', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS ) );
+
+		const loaded = filled();
+		loaded.rest = {
+			...loaded.rest,
+			shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '180', meta: {} },
+			carrier_fields: { declared_value: 2500.5, call_before: false },
+		};
+		mount( loaded );
+		await ready();
+
+		await waitFor( () => expect( within( row( 'Объявленная ценность' ) ).getByRole( 'spinbutton' ) ).toHaveValue( 2500.5 ) );
+		expect( within( row( 'Позвонить перед доставкой' ) ).getByRole( 'checkbox' ) ).not.toBeChecked();
+		expect( probe.data.rest.carrier_fields ).toEqual( { declared_value: 2500.5, call_before: false } );
+	} );
+
+	test( '«Далее» is refused for a required field the manager emptied, and the problem shows on that field', async () => {
+		apiFetch.mockResolvedValue( answerWith( { ...WITH_FIELDS, order_fields: [ { ...DECLARED_VALUE, required: true } ] } ) );
+
+		const { rerender } = mount();
+		fireEvent.click( await ready() );
+
+		const errors = validateDelivery( probe.data );
+
+		expect( errors ).toEqual( { 'carrier_fields.declared_value': [ 'Обязательное поле.' ] } );
+
+		rerender( createElement( Harness, { initial: probe.data, errors } ) );
+
+		expect( within( row( 'Объявленная ценность' ) ).getByText( 'Обязательное поле.' ) ).toBeInTheDocument();
+	} );
+
+	test( 'a problem only the server can see (a 422 on the field) shows on that field', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS ) );
+		mount( filled(), { 'carrier_fields.declared_value': [ 'Значение не меньше 0.' ] } );
+		fireEvent.click( await ready() );
+
+		expect( within( row( 'Объявленная ценность' ) ).getByText( 'Значение не меньше 0.' ) ).toBeInTheDocument();
+	} );
+} );

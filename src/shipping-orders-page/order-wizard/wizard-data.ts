@@ -69,6 +69,7 @@ export function emptyWizardData( defaultCountry = '' ): WizardData {
 			pickup_point: null,
 			fields: {},
 			carrier_fields: {},
+			carrier_schema: [],
 			payment_method: '',
 			status: '',
 			rate_cost: '',
@@ -140,6 +141,8 @@ export function prefillToData( prefill: OrderPrefill ): WizardData {
 			pickup_point: prefill.pickup_point || null,
 			fields: prefill.fields || {},
 			carrier_fields: prefill.carrier_fields || {},
+			// Comes with the rates: the tariff's definitions are the server's, asked when step ④ opens.
+			carrier_schema: [],
 			payment_method: str( prefill.payment_method ),
 			status: str( prefill.status ),
 			rate_cost: '',
@@ -278,7 +281,8 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
 
 /**
  * The state minus what the wizard derives on its own (the carrier's reference price, the pickup
- * flag, the pending marker and the pickup check step ④ keeps, the settlement record step ② keeps,
+ * flag, the pending marker, the pickup check and the carrier-field definitions step ④ keeps, the
+ * settlement record step ② keeps,
  * and what the chosen tariff fills in around its id): opening a step and letting it look things up
  * is not «the manager typed something».
  *
@@ -288,13 +292,14 @@ export function isDirty( initial: WizardData, current: WizardData ): boolean {
  * over are the manager's.
  */
 function withoutDerived( data: WizardData ): unknown {
-	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, shipping_line, ...rest } = data.rest;
+	const { rate_cost, rate_is_pickup, rates_pending, pickup_check, carrier_schema, shipping_line, ...rest } = data.rest;
 	const { settlementRecord, ...view } = data;
 
 	void rate_cost;
 	void rate_is_pickup;
 	void rates_pending;
 	void pickup_check;
+	void carrier_schema;
 	void settlementRecord;
 
 	return {

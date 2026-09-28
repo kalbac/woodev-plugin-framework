@@ -332,8 +332,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 						continue;
 					}
 
+					// The carrier's own order fields (D7) are declared per tariff: asked once per method
+					// instance, and every rate it yields carries them.
+					$order_fields = Carrier_Field_Set::for_rate( $provider, (string) $method->id, (int) ( $method->instance_id ?? 0 ), $method )->to_schema();
+
 					foreach ( $method->get_admin_rates_for_package( $package, $record ) as $rate ) {
-						$rates[] = $this->format_rate( $rate, $method );
+						$rates[] = $this->format_rate( $rate, $method, $order_fields );
 					}
 				}
 
@@ -413,14 +417,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 		 * `meta` is the rate's meta as WooCommerce holds it: the order-create route copies it onto
 		 * the shipping item, exactly as `WC_Checkout` does.
 		 *
+		 * `order_fields` are the carrier's own fields for this tariff ({@see Carrier_Field_Set::to_schema()}) —
+		 * empty for a carrier that declares none; the wizard renders them under the chosen tariff (spec D7).
+		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Shipping_Rate $rate   The rate.
-		 * @param Shipping_Method   $method The method that produced it.
+		 * @param \WC_Shipping_Rate                $rate         The rate.
+		 * @param Shipping_Method                  $method       The method that produced it.
+		 * @param array<int, array<string, mixed>> $order_fields The carrier's order-field schema for this tariff.
 		 *
 		 * @return array<string, mixed>
 		 */
-		private function format_rate( \WC_Shipping_Rate $rate, Shipping_Method $method ): array {
+		private function format_rate( \WC_Shipping_Rate $rate, Shipping_Method $method, array $order_fields = [] ): array {
 
 			return [
 				'id'            => (string) $rate->get_id(),
@@ -432,6 +440,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Admin_Rate_C
 				'description'   => method_exists( $rate, 'get_description' ) ? (string) $rate->get_description() : '',
 				'is_pickup'     => $method->is_pickup_shipping(),
 				'meta'          => (array) $rate->get_meta_data(),
+				'order_fields'  => $order_fields,
 			];
 		}
 	}

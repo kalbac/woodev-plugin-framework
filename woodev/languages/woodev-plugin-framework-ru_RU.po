@@ -4418,6 +4418,10 @@ msgid "Как доставить"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
+msgid "Данные для перевозчика"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Считаем тарифы…"
 msgstr ""
 

@@ -14,6 +14,8 @@
  */
 
 import { __ } from '@wordpress/i18n';
+import { validateField } from '../../components/validate';
+import { carrierFieldValue, visibleCarrierFields } from './delivery-state';
 import type { FieldErrors, ServerError, WizardData, WizardStepId } from './types';
 import { WIZARD_STEPS } from './types';
 
@@ -161,7 +163,7 @@ export function validateItems( data: WizardData ): FieldErrors {
  * ④ Доставка. The same three rules, under the same field paths and words, as
  * `Order_Payload_Validator::check_shipping_line()` / `check_pickup_point()`: a tariff must be
  * chosen, its price a number not below zero, and a pickup tariff needs a point (checkout parity,
- * spec A2). Whether the tariff belongs to a carrier that is allowed at all (O12) and whether the
+ * spec A2) — plus the carrier's own fields under the chosen tariff (D7), by the settings page's rules. Whether the tariff belongs to a carrier that is allowed at all (O12) and whether the
  * point still exists are the server's to decide — it is asked when the order is saved, and a 422
  * comes back onto these same paths.
  */
@@ -193,6 +195,16 @@ export function validateDelivery( data: WizardData ): FieldErrors {
 
 	if ( data.rest.rate_is_pickup && ! hasPoint ) {
 		add( errors, 'pickup_point.id', __( 'Для этого тарифа выберите пункт выдачи.', 'woodev-plugin-framework' ) );
+	}
+
+	// The carrier's own fields (D7): the settings page's rules, over the fields the tariff asks for now.
+	// The server re-checks them against the same declaration; a problem only it can see lands on the same path.
+	for ( const field of visibleCarrierFields( data.rest.carrier_schema, data.rest.carrier_fields ) ) {
+		const message = validateField( field, carrierFieldValue( field, data.rest.carrier_fields ) );
+
+		if ( message ) {
+			add( errors, `carrier_fields.${ field.id }`, message );
+		}
 	}
 
 	return errors;

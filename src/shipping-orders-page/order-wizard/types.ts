@@ -68,7 +68,13 @@ export interface WizardRest {
 	/** `{ id }` plus display fields; sent as it is, the validator reads only `id`. */
 	pickup_point: Record<string, unknown> | null;
 	fields: Record<string, unknown>;
+	/** The carrier's own field values by field id (D7) — sent as they are; the server checks them against the carrier's declaration. */
 	carrier_fields: Record<string, unknown>;
+	/**
+	 * The definitions of the carrier fields the CHOSEN tariff asks for (from the rates answer), so «Далее»
+	 * can check them without asking again. Empty until the rates have answered. UI only: never sent.
+	 */
+	carrier_schema: CarrierField[];
 	payment_method: string;
 	/** '' = the server's default (`pending` on create, «keep» on update). */
 	status: string;
@@ -172,6 +178,24 @@ export interface SaveResult {
 	message: string;
 }
 
+/**
+ * One field a carrier asks for under its tariff (O13, D7) — a `Field_Schema` entry (the very shape the
+ * settings page's `ControlField` renders) plus the field's `id`. Declared in PHP; the plugin ships no JS.
+ * Only the keys the wizard itself reads are named; the rest is `ControlField`'s.
+ */
+export interface CarrierField {
+	/** The key of the value under `carrier_fields`. */
+	id: string;
+	name: string;
+	/** The Settings API control (`number`, `select`, `toggle`…); null lets `ControlField` infer one. */
+	controlType: string | null;
+	/** The declared default — the value the field starts with. */
+	value?: unknown;
+	required?: boolean;
+	show_if?: unknown;
+	[ key: string ]: unknown;
+}
+
 /** One tariff, as `POST /shipping/orders/rates` returns it (`Admin_Rate_Calculator::format_rate()`). */
 export interface RateOption {
 	/** `method_id:instance_id` — the WooCommerce rate id. */
@@ -185,6 +209,8 @@ export interface RateOption {
 	is_pickup: boolean;
 	/** The rate's own meta; copied onto the shipping item on save, as `WC_Checkout` does. */
 	meta: Record<string, unknown>;
+	/** The carrier's own fields for this tariff (D7); absent or empty when it asks for none. */
+	order_fields?: CarrierField[];
 }
 
 /** One carrier's tariffs — a carrier with none for this package still appears, with an empty list. */

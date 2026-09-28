@@ -104,6 +104,18 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
 					$order->update_meta_data( '_woodev_realistic_shipping_marker', '1' );
 				},
+				// #973 (spec D7): the carrier's own order field — declared value, the same for every tariff.
+				'order_fields'              => static function ( array $context ): array {
+					return [
+						'declared_value' => [
+							'meta_key' => '_woodev_realistic_declared_value',
+							'control'  => 'number',
+							'type'     => 'float',
+							'name'     => 'Объявленная ценность',
+							'min'      => 0,
+						],
+					];
+				},
 			]
 		);
 

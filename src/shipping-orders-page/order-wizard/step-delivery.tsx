@@ -23,7 +23,12 @@
  * is chosen (checkout parity, spec A2). Where the picker cannot run (no picker for this carrier,
  * a script that did not load) the manager types the point's code instead.
  *
- * Carrier fields (O13) are I7's and are not here.
+ * **Carrier fields (O13, D7).** A carrier declares its own export fields in PHP (declared value, package
+ * type, extra services…), per tariff; the rates answer carries the definitions and this step draws them
+ * under the chosen tariff with the SAME `ControlField` the settings page uses — the plugin ships no JS.
+ * An untouched field shows (and is sent as) the carrier's own default, so what is held in the state is only
+ * what the manager set; «Далее» checks them by the settings page's rules, and the server re-checks against
+ * the same declaration (a problem it alone can see arrives on `carrier_fields.{id}`).
  *
  * @package woodev-plugin-framework
  */
@@ -31,6 +36,8 @@
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Notice, Spinner } from '@wordpress/components';
+import type { ComponentType } from 'react';
+import ControlField from '../../components/control-field';
 import { getWizardContext } from '../rest';
 import { fetchRates, toRequestError } from './api';
 import type { WizardRequestError } from './api';
@@ -38,8 +45,10 @@ import {
 	applyRates,
 	buildRatesRequest,
 	chooseRate,
+	carrierFieldValue,
 	chosenRateId,
 	decodeEntities,
+	effectiveCarrierValues,
 	findRate,
 	isChosenRateGone,
 	isCostOverridden,
@@ -47,8 +56,10 @@ import {
 	pickupContext,
 	ratesRequestKey,
 	resetDeliveryCost,
+	setCarrierField,
 	setDeliveryCost,
 	setPickupPoint,
+	visibleCarrierFields,
 	withPickupCheck,
 } from './delivery-state';
 import { FieldErrorList, TextField, errorsFor } from './fields';
@@ -56,7 +67,7 @@ import PickupMap from './pickup-map';
 import { isPickupRuntimeAvailable } from './pickup-session';
 import type { PickupPoint, PickupWizardConfig } from './pickup-session';
 import type { StepProps } from './step-props';
-import type { RateGroup, RateOption, RatesResponse } from './types';
+import type { CarrierField, FieldErrors, RateGroup, RateOption, RatesResponse } from './types';
 import { formatMoney } from './wizard-data';
 
 type Phase = 'idle' | 'loading' | 'ready' | 'failed';
@@ -116,6 +127,58 @@ function RateGroupList( { group, chosen, symbol, onChoose }: { group: RateGroup;
 				) )
 			) }
 		</fieldset>
+	);
+}
+
+/**
+ * `ControlField` is plain JS whose JSDoc says it returns an `Object`, which TypeScript refuses as a JSX
+ * element: name the props the wizard passes and treat it as the component it is.
+ */
+interface ControlFieldProps {
+	schema: Record<string, unknown>;
+	value: unknown;
+	onChange: ( value: unknown ) => void;
+	showErrors: boolean;
+	settingId?: string;
+	conditionValues?: Record<string, unknown>;
+}
+
+const SettingsControl = ControlField as unknown as ComponentType<ControlFieldProps>;
+
+interface CarrierFieldsProps {
+	schema: CarrierField[];
+	values: Record<string, unknown>;
+	errors: FieldErrors;
+	onChange: ( id: string, value: unknown ) => void;
+}
+
+/** The carrier's own fields for the chosen tariff (D7), drawn by the settings page's control. */
+function CarrierFields( { schema, values, errors, onChange }: CarrierFieldsProps ) {
+	const visible = visibleCarrierFields( schema, values );
+
+	if ( 0 === visible.length ) {
+		return null;
+	}
+
+	const effective = effectiveCarrierValues( schema, values );
+	// «Далее» (or the server) reported something on these fields: show every problem at once, not after a blur.
+	const reveal = visible.some( ( field ) => errorsFor( errors, `carrier_fields.${ field.id }` ).length > 0 );
+
+	return (
+		<div className="woodev-order-wizard__carrier-fields">
+			<h4 className="woodev-order-wizard__pickup-title">{ __( 'Данные для перевозчика', 'woodev-plugin-framework' ) }</h4>
+			{ visible.map( ( field ) => (
+				<SettingsControl
+					key={ field.id }
+					settingId={ field.id }
+					schema={ { ...field, serverError: errorsFor( errors, `carrier_fields.${ field.id }` )[ 0 ] } }
+					value={ carrierFieldValue( field, values ) }
+					conditionValues={ effective }
+					showErrors={ reveal }
+					onChange={ ( value: unknown ) => onChange( field.id, value ) }
+				/>
+			) ) }
+		</div>
 	);
 }
 
@@ -358,6 +421,15 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 						</>
 					) }
 				</div>
+			) }
+
+			{ line && (
+				<CarrierFields
+					schema={ rest.carrier_schema }
+					values={ rest.carrier_fields }
+					errors={ errors }
+					onChange={ ( id, value ) => setData( ( d ) => setCarrierField( d, id, value ) ) }
+				/>
 			) }
 		</div>
 	);

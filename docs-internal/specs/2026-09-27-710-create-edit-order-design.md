@@ -229,6 +229,24 @@ renders them under the chosen tariff with the same React field renderers the set
 and stored as order meta through the writer (D4). Fixture carriers get one or two example fields so
 the path is exercised end to end.
 
+**As built (#973, I7).** The declaration is an optional `order_fields` argument of
+`Orders_Provider::create()` — `fn( array $context ): array` returning `field id => definition`, asked once
+per tariff (`context`: `provider_id`, `method_id`, `instance_id`, `rate_id`, `is_pickup`, and the
+zone-instance `method` for defaults from its settings). A definition is the Settings API's own vocabulary
+(`register_setting()` + `register_control()` arguments: `type`, `control`, `name`, `description`,
+`options`, `default`, `required`, `validate`, `show_if`, `min` / `max` / `step`, `tooltip`, `placeholder`)
+plus one framework key, `meta_key` — the order-meta key the value is stored under, which is the carrier's
+contract with its own export. `Carrier_Field_Set` turns it into a real `Woodev_Abstract_Settings` handler that
+stores nothing, so the definitions (`Field_Schema`), the check (`Woodev_Setting::update_value()`, `show_if`)
+and the persistence (`Woodev_Order_Compatibility`, one meta per field, a boolean as `yes` / `no`) are the
+settings page's own code. The rates response carries `order_fields` (a LIST, in declaration order) on every
+rate of the method; step ④ draws them with `ControlField` under the chosen tariff; an untouched field is its
+declared default on both sides (the state holds only what the manager set); the payload validator reads ONLY
+declared ids and reports problems on `carrier_fields.{id}`; `Order_Editor::persist()` stores them after the
+marker and cleans up the fields of a tariff an edit replaced; the load route reads them back. Not done, on
+purpose: carrier fields on the CLASSIC / Store API checkout (D7 is the wizard's) and any new hook — the
+existing `…_admin_order_saved` already carries `carrier_fields`.
+
 ## Increments (each a card, each ends green; UI ones end with «готово, смотри риг»)
 
 Split per the critic (each small enough for one worker round; the project caps at 2–3 rounds).

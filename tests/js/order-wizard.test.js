@@ -657,6 +657,74 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 	} );
 } );
 
+describe( 'the carrier\'s own fields through the shell (#973, D7)', () => {
+	const DECLARED_VALUE = { id: 'declared_value', type: 'float', name: 'Объявленная ценность', controlType: 'number', min: 0, required: true, value: null, tooltip: '', description: '', placeholder: '', options: [], is_multi: false };
+	const WITH_FIELDS = {
+		...RATES,
+		providers: [ { ...RATES.providers[ 0 ], rates: [ { ...RATES.providers[ 0 ].rates[ 0 ], order_fields: [ DECLARED_VALUE ] } ] } ],
+	};
+
+	const renderers = {
+		payment: ( { submit } ) => createElement( 'button', { type: 'button', onClick: submit }, 'Создать' ),
+	};
+
+	const declared = () => screen.getByText( 'Объявленная ценность', { selector: '.woodev-field__label' } ).closest( '.woodev-field' );
+
+	const toDelivery = async ( overrides = {} ) => {
+		routeApi( { '/shipping/orders/rates': () => Promise.resolve( WITH_FIELDS ), ...overrides } );
+		const mounted = mount( { renderers } );
+
+		passCustomer();
+		passAddress();
+		await passItems();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /Курьер/ } ) );
+
+		return mounted;
+	};
+
+	test( '«Далее» is refused for a required field of the carrier, and passes once it is filled — the value rides in the payload', async () => {
+		const { onSaved } = await toDelivery( {
+			'/shipping/orders': ( request ) => ( 'POST' === request.method && request.url === ORDERS_ROOT ? Promise.resolve( { id: 91, number: '91', message: 'ok' } ) : Promise.resolve( WITH_FIELDS ) ),
+		} );
+
+		next();
+
+		expect( within( declared() ).getByText( 'Обязательное поле.' ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Как доставить', { selector: 'h3' } ) ).toBeInTheDocument();
+
+		fireEvent.change( within( declared() ).getByRole( 'spinbutton' ), { target: { value: '1500' } } );
+		next();
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Создать' } ) );
+
+		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
+
+		const request = apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).find( ( r ) => 'POST' === r.method && r.url === ORDERS_ROOT );
+
+		expect( request.data.carrier_fields ).toEqual( { declared_value: '1500' } );
+		expect( JSON.stringify( request.data ) ).not.toMatch( /carrier_schema/ );
+	} );
+
+	test( 'a 422 on a carrier field returns to step ④ and shows the server\'s sentence under that field', async () => {
+		await toDelivery( {
+			'/shipping/orders': ( request ) =>
+				'POST' === request.method && request.url === ORDERS_ROOT
+					? Promise.reject( {
+						code: 'woodev_shipping_order_invalid',
+						message: 'Заказ не сохранён: проверьте отмеченные поля.',
+						data: { status: 422, errors: [ { field: 'carrier_fields.declared_value', code: 'invalid_carrier_field', message: 'Значение не меньше 0.' } ] },
+					} )
+					: Promise.resolve( WITH_FIELDS ),
+		} );
+
+		fireEvent.change( within( declared() ).getByRole( 'spinbutton' ), { target: { value: '5' } } );
+		next();
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Создать' } ) );
+
+		expect( await within( await waitFor( () => declared() ) ).findByText( 'Значение не меньше 0.' ) ).toBeInTheDocument();
+		expect( modal().getByText( 'Как доставить', { selector: 'h3' } ) ).toBeInTheDocument();
+	} );
+} );
+
 describe( 'closing (C3: unsaved input asks first)', () => {
 	test( 'an untouched wizard closes at once', () => {
 		const { onClose } = mount();

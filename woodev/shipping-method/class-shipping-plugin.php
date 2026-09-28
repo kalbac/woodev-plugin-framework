@@ -268,6 +268,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/admin/orders/class-order-row-builder.php';
 
 			// admin order wizard (#710): the create / update / load service and its payload check (#968)
+			require_once $path . '/admin/orders/class-carrier-field-set.php';
 			require_once $path . '/admin/orders/class-order-payload-validator.php';
 			require_once $path . '/admin/orders/class-order-editor.php';
 			// admin order wizard (#710): rates for a hand-built package, and its route (#965)

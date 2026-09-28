@@ -193,6 +193,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		protected function setUp(): void {
 			parent::setUp();
 
+			// The Settings API handler behind a carrier's order fields (D7) merges its arguments with this.
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
+
 			$this->states = [
 				'RU' => [
 					'МОСКВА'          => 'Москва',
@@ -567,6 +574,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 						'description'   => '',
 						'is_pickup'     => false,
 						'meta'          => [],
+						'order_fields'  => [],
 					],
 				],
 				$result['providers'][0]['rates']
@@ -584,10 +592,76 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 						'description'   => 'Пункт выдачи',
 						'is_pickup'     => true,
 						'meta'          => [ 'tariff_code' => 137 ],
+						'order_fields'  => [],
 					],
 				],
 				$result['providers'][1]['rates'],
 				'rate meta survives to the response'
+			);
+		}
+
+		/**
+		 * D7 (#973): a carrier's own order fields ride on each of its rates, declared per tariff — the
+		 * declaration is asked once per method instance with that method's context.
+		 *
+		 * @covers ::calculate
+		 *
+		 * @return void
+		 */
+		public function test_a_rate_carries_the_carriers_order_fields_declared_for_its_tariff(): void {
+			$asked    = [];
+			$provider = Orders_Provider::create(
+				'test',
+				'TEST label',
+				'_test_marker',
+				[ 'test_shipping', 'test_pickup_shipping' ],
+				[
+					'order_fields' => static function ( array $context ) use ( &$asked ): array {
+						$asked[] = [ $context['method_id'], $context['instance_id'], $context['rate_id'], $context['is_pickup'] ];
+
+						$fields = [
+							'declared_value' => [
+								'meta_key' => '_test_declared_value',
+								'control'  => 'number',
+								'name'     => 'Объявленная ценность',
+							],
+						];
+
+						if ( ! $context['is_pickup'] ) {
+							$fields['call_before'] = [
+								'meta_key' => '_test_call_before',
+								'control'  => 'toggle',
+								'name'     => 'Позвонить',
+							];
+						}
+
+						return $fields;
+					},
+				]
+			);
+
+			$courier              = $this->method( 'test_shipping', false, [ $this->rate(), $this->rate( [ 'id' => 'test_shipping:3:express', 'label' => 'Экспресс' ] ) ] );
+			$courier->instance_id = 3;
+			$pickup               = $this->method( 'test_pickup_shipping', true, [ $this->rate( [ 'id' => 'test_pickup_shipping:5', 'method_id' => 'test_pickup_shipping', 'instance_id' => 5 ] ) ] );
+			$pickup->instance_id  = 5;
+
+			$calculator               = $this->calculator( $provider );
+			$calculator->zone_methods = [ $courier, $pickup ];
+
+			$rates = $calculator->calculate(
+				[ [ 'product' => $this->product(), 'quantity' => 1, 'price' => null ] ],
+				[ 'country' => 'RU' ]
+			)['providers'][0]['rates'];
+
+			$this->assertCount( 3, $rates );
+			$this->assertSame( [ 'declared_value', 'call_before' ], array_column( $rates[0]['order_fields'], 'id' ) );
+			$this->assertSame( $rates[0]['order_fields'], $rates[1]['order_fields'], 'every rate of one method carries the same declaration' );
+			$this->assertSame( [ 'declared_value' ], array_column( $rates[2]['order_fields'], 'id' ), 'a pickup tariff asks for less' );
+			$this->assertSame( 'number', $rates[0]['order_fields'][0]['controlType'] );
+			$this->assertSame(
+				[ [ 'test_shipping', 3, 'test_shipping:3', false ], [ 'test_pickup_shipping', 5, 'test_pickup_shipping:5', true ] ],
+				$asked,
+				'asked once per method instance, not once per rate'
 			);
 		}
 

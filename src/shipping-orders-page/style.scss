@@ -1338,6 +1338,12 @@
 		margin: 0 0 wd.$gap;
 	}
 
+	// The carrier's own fields (D7) — the settings page's `woodev-field` rows, stacked under the tariff.
+	&__carrier-fields {
+		margin-top: wd.$gap-lg;
+		max-width: 560px;
+	}
+
 	// The storefront picker's stage is `position: absolute; inset: 0`, so the host it fills has to
 	// be positioned and sized; the picker draws its own list, card and map into it (O10).
 	&__pickup-map {

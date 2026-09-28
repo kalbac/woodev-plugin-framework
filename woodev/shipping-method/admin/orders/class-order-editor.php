@@ -486,6 +486,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			$touched = $this->apply_items( $order, $data['items'], $is_update );
 
+			// The tariff about to be replaced may have asked for fields the new one does not (D7).
+			$previous_fields = $is_update ? $this->current_field_set( $order, $data['shipping_line']['provider'] ) : null;
+
 			$this->apply_shipping_line( $order, $data['shipping_line'] );
 
 			$order->save();
@@ -498,7 +501,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				}
 			}
 
-			$written = $this->persist( $order, $data, $is_update );
+			$written = $this->persist( $order, $data, $is_update, $previous_fields );
 
 			$order->calculate_totals( true );
 
@@ -683,12 +686,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order            $order     the saved order, already carrying its shipping line.
-		 * @param array<string, mixed> $data      the validated payload.
-		 * @param bool                 $is_update whether the order already existed.
+		 * @param \WC_Order              $order     the saved order, already carrying its shipping line.
+		 * @param array<string, mixed>   $data      the validated payload.
+		 * @param bool                   $is_update whether the order already existed.
+		 * @param Carrier_Field_Set|null $previous_fields the carrier fields of the tariff an edit replaced, so the ones the new
+		 *                                              tariff does not ask for are removed.
 		 * @return array<string, mixed> the field values that were written (after the stale-pickup drop).
 		 */
-		private function persist( \WC_Order $order, array $data, bool $is_update ): array {
+		private function persist( \WC_Order $order, array $data, bool $is_update, ?Carrier_Field_Set $previous_fields = null ): array {
 			$line     = $data['shipping_line'];
 			$provider = $line['provider'];
 			$point    = $data['pickup_point'];
@@ -745,6 +750,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				$pickup_handler->persist_full_point( $order, $point['id'] );
 			}
 
+			// The carrier's own export fields (D7): one meta key per declared field, after the marker
+			// (a writer may read them) and through the same order-meta compatibility layer.
+			$carrier_fields = Carrier_Field_Set::for_rate( $provider, $line['method_id'], $line['instance_id'] );
+			$carrier_fields->persist( $order, $data['carrier_fields'] );
+
+			if ( null !== $previous_fields ) {
+				$previous_fields->forget_except( $order, $carrier_fields->meta_keys() );
+			}
+
 			return $written;
 		}
 
@@ -768,6 +782,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					\Woodev_Order_Compatibility::delete_order_meta( $order, $other->get_marker_meta_key() );
 				}
 			}
+		}
+
+		/**
+		 * The carrier fields the order's CURRENT shipping line of this carrier asks for — what an edit
+		 * that changes the tariff has to clean up after.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order       $order    the order, before the edit replaces its shipping line.
+		 * @param Orders_Provider $provider the carrier.
+		 * @return Carrier_Field_Set|null null when the order has no line of this carrier.
+		 */
+		private function current_field_set( \WC_Order $order, Orders_Provider $provider ): ?Carrier_Field_Set {
+			foreach ( $order->get_shipping_methods() as $line ) {
+				if ( in_array( $line->get_method_id(), $provider->get_method_ids(), true ) ) {
+					return Carrier_Field_Set::for_rate( $provider, (string) $line->get_method_id(), (int) $line->get_instance_id() );
+				}
+			}
+
+			return null;
 		}
 
 		/**
@@ -1087,8 +1121,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				'shipping_line'  => $shipping_line,
 				'pickup_point'   => $this->read_pickup_point( $order, $provider, $handler, $fields ),
 				'fields'         => $fields,
-				// The carrier's own export fields are declared by the carrier (spec D7); the framework stores none of its own.
-				'carrier_fields' => [],
+				// The carrier's own export fields (spec D7), read back from the meta keys the carrier declared.
+				'carrier_fields' => null === $shipping_line
+					? []
+					: Carrier_Field_Set::for_rate( $provider, $shipping_line['method_id'], $shipping_line['instance_id'] )->read( $order ),
 				'payment_method' => (string) $order->get_payment_method(),
 				'status'         => (string) $order->get_status(),
 			];
