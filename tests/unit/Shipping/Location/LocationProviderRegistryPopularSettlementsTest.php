@@ -489,5 +489,60 @@ namespace Woodev\Tests\Unit\Shipping\Location {
 
 			$registry->handle_checkout_order_processed_for_popular_settlements( 1, [], $order );
 		}
+
+		/**
+		 * #964: the block checkout's `woocommerce_store_api_checkout_order_processed` entry
+		 * (one argument — the order, no id and no posted data) stamps the SAME candidate the
+		 * classic entry does, and `add_hooks()` wires it at priority 20 like the classic one.
+		 */
+		public function test_the_store_api_entry_stamps_the_same_candidate_and_is_wired_at_priority_20(): void {
+			$provider = new \Checkout_Listener_Resolving_Fixture_Provider();
+			$registry = $this->registry_with( [ $provider ], $provider->get_id() );
+
+			$record = Location_Record::from_array(
+				[
+					'key'         => $provider->get_id() . ':1',
+					'provider_id' => $provider->get_id(),
+					'level'       => Location_Record::LEVEL_SETTLEMENT,
+					'country'     => 'RU',
+				]
+			);
+
+			$order = Mockery::mock( '\WC_Order' );
+
+			$store = Mockery::mock( Popular_Settlement_Store::class );
+			$store->shouldReceive( 'remember_candidate' )->once()->with(
+				$order,
+				\Mockery::on( static fn( Location_Record $candidate ): bool => $candidate->key() === $record->key() )
+			);
+			$this->set_property( new \ReflectionClass( Location_Provider_Registry::class ), $registry, 'popular_settlement_store', $store );
+
+			Functions\when( 'apply_filters' )->returnArg( 2 );
+
+			$this->stub_logged_in_chain(
+				[
+					'records' => [ $record->to_array() ],
+					'current' => Location_Record::LEVEL_SETTLEMENT,
+				]
+			);
+
+			$registry->handle_store_api_order_processed_for_popular_settlements( $order );
+
+			$registered = [];
+
+			Functions\when( 'add_action' )->alias(
+				static function ( $hook, $callback = null, $priority = 10, $accepted_args = 1 ) use ( &$registered ) {
+					$registered[ $hook ] = [ is_array( $callback ) ? $callback[1] : null, $priority, $accepted_args ];
+				}
+			);
+			Functions\when( 'add_filter' )->justReturn( true );
+
+			( new \ReflectionClass( Location_Provider_Registry::class ) )->newInstanceWithoutConstructor()->add_hooks();
+
+			$this->assertSame(
+				[ 'handle_store_api_order_processed_for_popular_settlements', 20, 1 ],
+				$registered['woocommerce_store_api_checkout_order_processed'] ?? null
+			);
+		}
 	}
 }

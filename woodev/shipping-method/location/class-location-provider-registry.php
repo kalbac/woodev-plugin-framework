@@ -552,6 +552,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			// callback added INSTANCE-bound belongs in the list below.
 			self::remove_hooked_instances( 'init', self::class, 'maybe_install_popular_settlements_table' );
 			self::remove_hooked_instances( 'woocommerce_checkout_order_processed', self::class, 'handle_checkout_order_processed_for_popular_settlements' );
+			self::remove_hooked_instances( 'woocommerce_store_api_checkout_order_processed', self::class, 'handle_store_api_order_processed_for_popular_settlements' );
 
 			self::$instance = null;
 		}
@@ -724,6 +725,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 			add_filter( 'wp_privacy_personal_data_erasers', [ $this, 'register_data_erasers' ] );
 			add_filter( 'woocommerce_states', [ $this, 'inject_related_list_states' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed_for_popular_settlements' ], 20, 3 );
+			add_action( 'woocommerce_store_api_checkout_order_processed', [ $this, 'handle_store_api_order_processed_for_popular_settlements' ], 20 );
 
 			// #505 D6/4f: registers the D8 merchant actions through the shipping-tools
 			// registry's own public filter, the same seam any carrier plugin uses. A
@@ -888,6 +890,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @since 2.0.2 Round 3 (MEDIUM 3): gated by the same D4/D4a rules `enroll()`
 		 *              enforces, instead of stamping a candidate for every active
 		 *              provider unconditionally.
+		 * @since 2.0.2 The stamping moved into {@see self::stamp_popular_settlement_candidate()},
+		 *              shared with the Store API path (#964).
 		 *
 		 * @param int                  $order_id    the created order id (unused; the order object is used)
 		 * @param array<string, mixed> $posted_data the posted checkout data (unused)
@@ -896,6 +900,43 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Provider
 		 * @return void
 		 */
 		public function handle_checkout_order_processed_for_popular_settlements( int $order_id, array $posted_data, \WC_Order $order ): void {
+			$this->stamp_popular_settlement_candidate( $order );
+		}
+
+		/**
+		 * The block checkout's (Store API) counterpart to
+		 * {@see self::handle_checkout_order_processed_for_popular_settlements()} (#964): the
+		 * customer's settlement lives in the same session/user-meta on that request, so the
+		 * candidate is stamped exactly as on a classic checkout.
+		 *
+		 * @internal Hooked to `woocommerce_store_api_checkout_order_processed`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order
+		 *
+		 * @return void
+		 */
+		public function handle_store_api_order_processed_for_popular_settlements( \WC_Order $order ): void {
+			$this->stamp_popular_settlement_candidate( $order );
+		}
+
+		/**
+		 * Stamps the customer's picked settlement onto an order as a popular-settlement
+		 * candidate — see {@see self::handle_checkout_order_processed_for_popular_settlements()}
+		 * for the reasoning and the D4/D4a gates.
+		 *
+		 * Reads the VISITOR's chain, so it belongs to a customer-placed order (classic or block
+		 * checkout) only: an order an administrator builds is not the buyer's, and the admin
+		 * order editor must not call it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created, saved order
+		 *
+		 * @return void
+		 */
+		public function stamp_popular_settlement_candidate( \WC_Order $order ): void {
 			$chain = ( new Customer_Location_Store() )->get_chain();
 
 			if ( null === $chain || ! isset( $chain['records'][ Location_Record::LEVEL_SETTLEMENT ] ) ) {
