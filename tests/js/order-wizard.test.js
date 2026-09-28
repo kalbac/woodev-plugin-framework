@@ -647,6 +647,21 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
+	test( 'a busy order (409 woodev_shipping_order_busy, #981) shows the server\'s sentence and stays open', async () => {
+		const busy = 'Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу.';
+
+		routeApi( {
+			'/shipping/orders': () => Promise.reject( { code: 'woodev_shipping_order_busy', message: busy, data: { status: 409 } } ),
+		} );
+		const { onSaved, onClose } = await toPayment();
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать' } ) );
+
+		expect( await modal().findByText( busy ) ).toBeInTheDocument();
+		expect( onSaved ).not.toHaveBeenCalled();
+		expect( onClose ).not.toHaveBeenCalled();
+	} );
+
 	test( 'a network failure without a body says something human, not nothing', async () => {
 		routeApi( { '/shipping/orders': () => Promise.reject( new Error( 'Failed to fetch' ) ) } );
 		await toPayment();
