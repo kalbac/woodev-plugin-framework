@@ -174,6 +174,9 @@ final class OrderActionsForRowTest extends TestCase {
 
 		$this->meta = [];
 		$this->assertSame( [], $this->ids( $this->order( 'completed' ) ), 'final status' );
+
+		$this->meta = [ '_cdek_status' => 'DELIVERED' ];
+		$this->assertSame( [], $this->ids( $this->order() ), 'finished delivery' );
 	}
 
 	public function test_the_executable_set_never_carries_the_edit_action(): void {
