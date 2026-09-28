@@ -277,6 +277,18 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [ checkProvider, checkWeight ] );
 
+	// m1: a 422 on `carrier_fields.*` / `fields.*` routes here, but the controls only draw a field that is on
+	// screen — an edit whose rates request failed keeps `carrier_schema` empty. Whatever no control shows is
+	// listed, so the manager never gets a jump to ④ with no reason on it.
+	const drawnFields = line ? visibleCarrierFields( rest.carrier_schema, rest.carrier_fields ).map( ( field ) => `carrier_fields.${ field.id }` ) : [];
+	const strayErrors = Array.from(
+		new Set(
+			Object.entries( errors )
+				.filter( ( [ field ] ) => ( field.startsWith( 'carrier_fields' ) || field.startsWith( 'fields' ) ) && ! drawnFields.includes( field ) )
+				.flatMap( ( [ , messages ] ) => messages )
+		)
+	);
+
 	const onPickPoint = ( point: PickupPoint ) =>
 		setData( ( d ) =>
 			setPickupPoint( d, {
@@ -431,6 +443,8 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 					onChange={ ( id, value ) => setData( ( d ) => setCarrierField( d, id, value ) ) }
 				/>
 			) }
+
+			<FieldErrorList messages={ strayErrors } />
 		</div>
 	);
 }

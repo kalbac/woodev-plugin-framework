@@ -30,13 +30,16 @@ import { __, sprintf } from '@wordpress/i18n';
 import { Button, Modal, Notice, Spinner } from '@wordpress/components';
 import Stepper from '../../components/stepper';
 import { getWizardContext } from '../rest';
-import { loadOrderPrefill, saveOrder, toRequestError } from './api';
+import { checkPickupPoint, loadOrderPrefill, saveOrder, toRequestError } from './api';
 import type { WizardRequestError } from './api';
 import StepAddress from './step-address';
 import StepCustomer from './step-customer';
 import StepDelivery from './step-delivery';
 import StepItems from './step-items';
 import StepPayment from './step-payment';
+import { pickedPointId } from './delivery-state';
+import { isPickupRuntimeAvailable } from './pickup-session';
+import type { PickupWizardConfig } from './pickup-session';
 import type { SetWizardData, StepRenderers } from './step-props';
 import { WIZARD_STEPS } from './types';
 import type { FieldErrors, PrefillOrder, SaveResult, WizardData, WizardStepId } from './types';
@@ -168,15 +171,40 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		onClose();
 	};
 
-	const goNext = () => {
+	const goNext = async (): Promise<void> => {
 		const found = validateStep( index, data, countries, states, statuses );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...found } ) );
 
-		if ( 0 === Object.keys( found ).length ) {
-			setSubmitError( '' );
-			setIndex( Math.min( index + 1, ids.length - 1 ) );
+		if ( Object.keys( found ).length > 0 ) {
+			return;
 		}
+
+		// m6: a point code TYPED by hand (the picker could not run) has nobody's eye on it — ask the carrier's
+		// points route before leaving ④. Only for a carrier that has such a route; a failed check never blocks.
+		if ( 'delivery' === stepId ) {
+			const config = data.rest.pickup_check ? ( wizard.pickup?.[ data.rest.pickup_check.provider ] as PickupWizardConfig | undefined ) : undefined;
+			const pointId = pickedPointId( data.rest );
+
+			if ( data.rest.rate_is_pickup && '' !== pointId && data.rest.pickup_check && config?.restRoot && ! isPickupRuntimeAvailable( config ) ) {
+				setBusy( true );
+
+				const verdict = await checkPickupPoint( config.restRoot, pointId, data.rest.pickup_check.weight, data.rest.payment_method, data.settlementRecord );
+
+				setBusy( false );
+
+				if ( verdict && ! verdict.allowed ) {
+					const reason = verdict.reason.trim() || __( 'Этот пункт выдачи не подходит для заказа — проверьте код.', 'woodev-plugin-framework' );
+
+					setErrors( ( current ) => ( { ...current, 'pickup_point.id': [ reason ] } ) );
+
+					return;
+				}
+			}
+		}
+
+		setSubmitError( '' );
+		setIndex( Math.min( index + 1, ids.length - 1 ) );
 	};
 
 	const submit = async (): Promise<void> => {
@@ -192,7 +220,11 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		if ( first >= 0 ) {
 			setErrors( problems );
 			setIndex( first );
-			setSubmitError( __( 'Проверьте отмеченные поля — заказ ещё не создан.', 'woodev-plugin-framework' ) );
+			setSubmitError(
+				editing
+					? __( 'Проверьте отмеченные поля — заказ не сохранён.', 'woodev-plugin-framework' )
+					: __( 'Проверьте отмеченные поля — заказ ещё не создан.', 'woodev-plugin-framework' )
+			);
 
 			return;
 		}
@@ -324,7 +356,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 								</Button>
 							) }
 							{ ! isLast && (
-								<Button variant="primary" onClick={ goNext } disabled={ busy }>
+								<Button variant="primary" onClick={ () => void goNext() } disabled={ busy }>
 									{ __( 'Далее', 'woodev-plugin-framework' ) }
 								</Button>
 							) }

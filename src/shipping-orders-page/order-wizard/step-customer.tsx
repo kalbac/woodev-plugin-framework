@@ -38,7 +38,7 @@ export default function StepCustomer( { data, setData, errors }: StepProps ) {
 			) : (
 				<RemoteSearch
 					label={ __( 'Найти покупателя', 'woodev-plugin-framework' ) }
-					placeholder={ __( 'Имя, email или телефон', 'woodev-plugin-framework' ) }
+					placeholder={ __( 'Имя или email', 'woodev-plugin-framework' ) }
 					search={ searchCustomers }
 					onPick={ ( record ) => setData( ( d ) => applyCustomer( d, record as WcCustomerRecord ) ) }
 				/>

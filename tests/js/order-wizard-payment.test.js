@@ -440,7 +440,7 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 
 		// (`Notice` also speaks into a live region outside the step, which keeps the old sentence.)
 		await waitFor( () => expect( document.querySelector( '.components-notice' ) ).toBeNull() );
-		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled();
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
 	} );
 
 	test( 'a point the route no longer knows (404) is refused with a sentence of its own', async () => {
@@ -459,13 +459,55 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
 		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
-		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled();
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
 
 		apiFetch.mockRejectedValueOnce( new Error( 'Failed to fetch' ) );
 		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'yookassa' } } );
 		await waitFor( () => expect( pointCalls() ).toHaveLength( 2 ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
 		expect( document.querySelector( '.components-notice' ) ).toBeNull();
-		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled();
+	} );
+
+	test( 'M1: while the check is in flight the button is off and does not send; once the check allows, it sends', async () => {
+		let answer;
+		apiFetch.mockImplementation( () => new Promise( ( resolve ) => ( answer = resolve ) ) );
+		const { submit } = mountStep( { initial: pickupState() } );
+
+		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
+
+		const button = screen.getByRole( 'button', { name: 'Создать заказ' } );
+
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
+		expect( button ).toBeDisabled();
+		fireEvent.click( button );
+		expect( submit ).not.toHaveBeenCalled();
+
+		answer( { id: 'P/1', selectable: { allowed: true } } );
+
+		await waitFor( () => expect( button ).toBeEnabled() );
+		fireEvent.click( button );
+		expect( submit ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'M1: a refusal that arrives after the wait still blocks; a FAILED check ends the wait and stays permissive', async () => {
+		let answer;
+		apiFetch.mockImplementation( () => new Promise( ( resolve, reject ) => ( answer = { resolve, reject } ) ) );
+		const { submit } = mountStep( { initial: pickupState() } );
+
+		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
+		answer.resolve( { selectable: { allowed: false, reason: '' } } );
+		await inStep().findByText( /не подходит для способа оплаты/ );
+		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeDisabled();
+
+		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'yookassa' } } );
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 2 ) );
+		expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeDisabled();
+		answer.reject( new Error( 'Failed to fetch' ) );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Создать заказ' } ) ).toBeEnabled() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+		expect( submit ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	test( 'no check for a courier tariff', () => {
@@ -558,6 +600,75 @@ const walkToPayment = async () => {
 
 	return { onClose, onSaved };
 };
+
+describe( 'a point code typed by hand is checked before «Далее» leaves ④ (m6)', () => {
+	const PVZ_RATE = { id: 'cdek_pvz:5', method_id: 'cdek_pvz', instance_id: 5, label: 'Пункт СДЭК', cost: 120, delivery_time: '', description: '', is_pickup: true, meta: {} };
+	const pointCalls = () => apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => r.url.startsWith( POINTS_ROOT ) );
+
+	// No picker scripts on the page in this file, so ④ falls back to a typed point code.
+	const walkToDelivery = async ( points ) => {
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request.url.endsWith( '/shipping/orders/rates' ) ) {
+				return Promise.resolve( { ...RATES, providers: [ { id: 'cdek', label: 'СДЭК', rates: [ PVZ_RATE ] } ] } );
+			}
+
+			if ( request.url.includes( '/wc/v3/products' ) ) {
+				return Promise.resolve( [ { id: 12, name: 'Кружка', type: 'simple', sku: 'MUG', price: '1000' } ] );
+			}
+
+			if ( request.url.startsWith( POINTS_ROOT ) ) {
+				return points( request );
+			}
+
+			return Promise.reject( { message: `unexpected request ${ request.url }` } );
+		} );
+		render( createElement( OrderWizard, { onClose: jest.fn(), onSaved: jest.fn() } ) );
+
+		type( 'Имя', 'Иван' );
+		type( 'Фамилия', 'Петров' );
+		next();
+		type( 'Регион', 'МОСКВА' );
+		type( 'Город или населённый пункт', 'Москва' );
+		type( 'Улица, дом', 'ул Тверская 1' );
+		next();
+		type( 'Добавить товар', 'кружка' );
+		fireEvent.click( await screen.findByRole( 'option', { name: /Кружка/ } ) );
+		next();
+		fireEvent.click( await screen.findByRole( 'radio', { name: /Пункт СДЭК/ } ) );
+		await screen.findByLabelText( 'Код пункта выдачи' );
+	};
+
+	test( 'an unknown point stays on ④ with a field error; a known one goes on to ⑤', async () => {
+		await walkToDelivery( ( request ) =>
+			request.url.includes( '/NOPE?' )
+				? Promise.reject( { code: 'woodev_pickup_point_not_found', message: 'x', data: { status: 404 } } )
+				: Promise.resolve( { id: 'GOOD', selectable: { allowed: true } } )
+		);
+
+		type( 'Код пункта выдачи', 'NOPE' );
+		next();
+
+		expect( await screen.findByText( 'Пункт выдачи не найден — выберите другой.' ) ).toBeInTheDocument();
+		expect( pointCalls() ).toHaveLength( 1 );
+		expect( screen.getByLabelText( 'Код пункта выдачи' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Создать заказ' } ) ).toBeNull();
+
+		type( 'Код пункта выдачи', 'GOOD' );
+		next();
+
+		await screen.findByRole( 'button', { name: 'Создать заказ' } );
+		expect( pointCalls()[ 1 ].url ).toContain( '/GOOD?weight=1000' );
+	} );
+
+	test( 'a check that fails (network) never holds the manager on ④', async () => {
+		await walkToDelivery( () => Promise.reject( new Error( 'Failed to fetch' ) ) );
+
+		type( 'Код пункта выдачи', 'ANY' );
+		next();
+
+		await screen.findByRole( 'button', { name: 'Создать заказ' } );
+	} );
+} );
 
 describe( 'the real step inside the shell', () => {
 	test( 'the send button POSTs the whole order with the payment method and status picked on ⑤, then reports and closes', async () => {

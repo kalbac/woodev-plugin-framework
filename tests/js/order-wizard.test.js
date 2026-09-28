@@ -217,6 +217,12 @@ describe( 'shell and navigation (D1: forward only via «Далее»)', () => {
 } );
 
 describe( 'step ① Покупатель', () => {
+	test( 'm3: the customer search does not promise a phone lookup the route does not have', () => {
+		mount();
+
+		expect( screen.getByLabelText( 'Найти покупателя' ) ).toHaveAttribute( 'placeholder', 'Имя или email' );
+	} );
+
 	test( '«создать аккаунт» without an email stops on ① and says why, on the email field', () => {
 		mount();
 
@@ -632,6 +638,44 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		expect( modal().getByText( 'Проверьте отмеченные поля — заказ ещё не создан.' ) ).toBeInTheDocument();
 		expect( apiFetch.mock.calls.map( ( c ) => c[ 0 ] ).filter( ( r ) => 'POST' === r.method && r.url === ORDERS_ROOT ) ).toHaveLength( 0 );
 		expect( onSaved ).not.toHaveBeenCalled();
+	} );
+
+	test( 'm2: the pre-send notice says the order is «не сохранён» on an edit, «ещё не создан» on a create', async () => {
+		const prefill = {
+			order: { id: 7, number: '7', status: 'processing', status_name: 'В обработке', is_paid: false, total: '2100.00', currency: 'RUB' },
+			carrier: 'cdek',
+			customer: { id: 0, create_account: false },
+			billing: { first_name: 'Анна', last_name: 'Ким', email: 'anna@example.test', city: 'Казань', country: 'RU', state: '' },
+			shipping: { city: 'Казань', country: 'RU', state: '', address_1: 'ул Баумана 1' },
+			items: [ { item_id: 11, product_id: 12, variation_id: 0, name: 'Кружка', quantity: 2, price: '1000.00' } ],
+			shipping_line: { method_id: 'cdek', instance_id: 1, cost: '100' },
+			pickup_point: null,
+			fields: {},
+			carrier_fields: {},
+			payment_method: 'cod',
+			status: 'processing',
+		};
+
+		routeApi( { '/shipping/orders/7/edit': () => Promise.resolve( prefill ) } );
+		mount( {
+			orderId: 7,
+			renderers: {
+				customer: ( { submit, setData } ) =>
+					createElement(
+						'div',
+						null,
+						createElement( 'button', { type: 'button', onClick: () => setData( ( d ) => ( { ...d, items: [] } ) ) }, 'Сломать' ),
+						createElement( 'button', { type: 'button', onClick: submit }, 'Сохранить' )
+					),
+			},
+		} );
+
+		await screen.findByRole( 'dialog', { name: 'Редактировать заказ №7' } );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сломать' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Сохранить' } ) );
+
+		expect( await modal().findByText( 'Проверьте отмеченные поля — заказ не сохранён.' ) ).toBeInTheDocument();
+		expect( modal().queryByText( /ещё не создан/ ) ).toBeNull();
 	} );
 
 	test( 'a non-validation failure (409: exported meanwhile) shows the server\'s sentence and stays open', async () => {

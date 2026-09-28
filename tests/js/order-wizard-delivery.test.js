@@ -556,4 +556,27 @@ describe( 'the carrier\'s own fields under the chosen tariff (D7, O13)', () => {
 
 		expect( within( row( 'Объявленная ценность' ) ).getByText( 'Значение не меньше 0.' ) ).toBeInTheDocument();
 	} );
+
+	test( 'm1: a 422 on a carrier field nothing draws (no schema, e.g. the rates request failed on an edit) is still listed on ④', async () => {
+		apiFetch.mockRejectedValue( { code: 'x', message: 'Сервис недоступен.', data: { status: 500 } } );
+
+		const loaded = filled();
+		loaded.rest = {
+			...loaded.rest,
+			shipping_line: { method_id: 'cdek_courier', instance_id: 3, rate_id: 'cdek_courier:3', label: 'Курьер', cost: '180', meta: {} },
+			carrier_fields: { declared_value: -5 },
+		};
+		mount( loaded, { 'carrier_fields.declared_value': [ 'Значение не меньше 0.' ], 'fields.note': [ 'Слишком длинно.' ] } );
+
+		expect( await step().findByText( 'Значение не меньше 0.' ) ).toBeInTheDocument();
+		expect( step().getByText( 'Слишком длинно.' ) ).toBeInTheDocument();
+	} );
+
+	test( 'm1: a field that IS drawn shows its problem once — on its control, not again in the list', async () => {
+		apiFetch.mockResolvedValue( answerWith( WITH_FIELDS ) );
+		mount( filled(), { 'carrier_fields.declared_value': [ 'Значение не меньше 0.' ] } );
+		fireEvent.click( await ready() );
+
+		expect( screen.getAllByText( 'Значение не меньше 0.' ) ).toHaveLength( 1 );
+	} );
 } );

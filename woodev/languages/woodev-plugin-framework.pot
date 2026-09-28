@@ -4318,7 +4318,7 @@ msgid "Найти покупателя"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
-msgid "Имя, email или телефон"
+msgid "Имя или email"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
@@ -4570,7 +4570,15 @@ msgid "Пункт выдачи не найден — выберите друго
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:2
+msgid "Этот пункт выдачи не подходит для заказа — проверьте код."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
 msgid "Проверьте отмеченные поля — заказ ещё не создан."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Проверьте отмеченные поля — заказ не сохранён."
 msgstr ""
 
 #. translators: 1: the order total now, 2: the approximate total after the edit.

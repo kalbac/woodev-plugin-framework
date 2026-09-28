@@ -10,7 +10,9 @@
  * **The point is re-checked here (D3).** A pickup point is picked in ④, before the payment method
  * exists; a carrier may refuse cash-on-delivery at some points. Once a method is chosen the step
  * asks the admin point-detail route with it, and a point that no longer suits stops the order with
- * a way back to ④. An unknown answer never blocks — the checker is permissive by omission.
+ * a way back to ④. An unknown answer never blocks — the checker is permissive by omission — but
+ * the question being asked does: the button waits (and refuses to send) until the answer is in,
+ * because the server does not re-run this check on save.
  *
  * **The button (StepProps.submit).** It reads «Создать заказ» / «Сохранить». A 422 comes back
  * routed by the shell to the step and field that own the problem; the ones that belong here
@@ -103,30 +105,40 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 	const pointId = pickedPointId( rest );
 	const check = rest.pickup_check;
 	const pointsRoot = check ? ( wizard.pickup?.[ check.provider ]?.restRoot as string | undefined ) : undefined;
-	const [ verdict, setVerdict ] = useState<PointVerdict | null>( null );
+	// What the check is made of. `null` = there is nothing to ask (a courier tariff, no method yet, a carrier without a picker).
+	const checkKey =
+		rest.rate_is_pickup && '' !== pointId && '' !== rest.payment_method && check && pointsRoot
+			? JSON.stringify( [ pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ] )
+			: null;
+	// The answer that came back, tagged with the question it answers — an older question's answer is no answer.
+	// A `null` verdict is a check that FAILED or said nothing: it is over, and it never blocks.
+	const [ answer, setAnswer ] = useState<{ key: string; verdict: PointVerdict | null } | null>( null );
+	const answered = null !== checkKey && answer?.key === checkKey;
+	const verdict = answered && answer ? answer.verdict : null;
+	// M1: derived, not set from the effect — the render that changes the question is already "checking",
+	// so the button is never live for the frame between the change and the request.
+	const checking = null !== checkKey && ! answered;
 
 	// D3: the point was picked before the payment method existed — ask again with it.
 	useEffect( () => {
-		setVerdict( null );
-
-		if ( ! rest.rate_is_pickup || '' === pointId || '' === rest.payment_method || ! check || ! pointsRoot ) {
+		if ( null === checkKey || ! check || ! pointsRoot ) {
 			return undefined;
 		}
 
 		let cancelled = false;
 
-		checkPickupPoint( pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ).then( ( answer ) => {
+		checkPickupPoint( pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ).then( ( result ) => {
 			if ( ! cancelled ) {
-				setVerdict( answer );
+				setAnswer( { key: checkKey, verdict: result } );
 			}
 		} );
 
 		return () => {
 			cancelled = true;
 		};
-		// The route, weight and destination are what the check is made of; the object identity is not.
+		// `checkKey` is the route, point, weight, method and destination; the object identities are not the question.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ rest.rate_is_pickup, pointId, rest.payment_method, check?.provider, check?.weight, pointsRoot, data.settlementRecord ] );
+	}, [ checkKey ] );
 
 	const pointRefused = null !== verdict && ! verdict.allowed;
 	const line = rest.shipping_line;
@@ -288,7 +300,7 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 			) }
 
 			<div className="woodev-order-wizard__actions">
-				<Button variant="primary" isBusy={ busy } disabled={ busy || pointRefused } onClick={ () => void submit() }>
+				<Button variant="primary" isBusy={ busy || checking } disabled={ busy || checking || pointRefused } onClick={ () => ( checking ? undefined : void submit() ) }>
 					{ editing
 						? __( 'Сохранить', 'woodev-plugin-framework' )
 						: rest.export_now && canExport
