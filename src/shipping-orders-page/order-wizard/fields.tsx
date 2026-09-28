@@ -127,9 +127,12 @@ interface CheckboxFieldProps {
 	disabled?: boolean;
 }
 
+// Every checkbox on the wizard follows a block of its own (a field grid, a hint paragraph) with
+// no bottom margin of its own — `&__checkbox` gives it the breathing room the page's other
+// after-a-block elements get (`&__pickup`, `&__carrier-fields`).
 export function CheckboxField( { label, checked, onChange, errors = [], help, disabled = false }: CheckboxFieldProps ) {
 	return (
-		<FieldShell messages={ errors }>
+		<FieldShell messages={ errors } className="woodev-order-wizard__checkbox">
 			<CheckboxControl __nextHasNoMarginBottom label={ label } checked={ checked } help={ help } disabled={ disabled } onChange={ onChange } />
 		</FieldShell>
 	);

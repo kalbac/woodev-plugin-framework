@@ -1100,6 +1100,12 @@
 		margin-top: wd.$gap-xs;
 	}
 
+	// A checkbox that follows a field grid or a hint paragraph — neither leaves a bottom margin
+	// of its own (operator rig acceptance, #710: the box sat flush against the control above it).
+	&__checkbox {
+		margin-top: wd.$gap-lg;
+	}
+
 	&__error {
 		margin: 0;
 		color: wd.$error-text;
@@ -1422,9 +1428,11 @@
 		font-weight: 600;
 	}
 
+	// The submit button (operator rig acceptance, #710): on the LEFT, like the footer's own
+	// primary action, not stranded on the right where a reader's eye does not land first.
 	&__actions {
 		display: flex;
-		justify-content: flex-end;
+		justify-content: flex-start;
 		margin-top: wd.$gap-lg;
 	}
 

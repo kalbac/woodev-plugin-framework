@@ -300,7 +300,13 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 			) }
 
 			<div className="woodev-order-wizard__actions">
-				<Button variant="primary" isBusy={ busy || checking } disabled={ busy || checking || pointRefused } onClick={ () => ( checking ? undefined : void submit() ) }>
+				<Button
+					variant="primary"
+					__next40pxDefaultSize
+					isBusy={ busy || checking }
+					disabled={ busy || checking || pointRefused }
+					onClick={ () => ( checking ? undefined : void submit() ) }
+				>
 					{ editing
 						? __( 'Сохранить', 'woodev-plugin-framework' )
 						: rest.export_now && canExport
