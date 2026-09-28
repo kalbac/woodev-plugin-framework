@@ -28,6 +28,7 @@ class OrderEditorRestTest extends TestCase {
 	private const NAMESPACE_ROOT = '/woodev/v1/shipping/orders';
 	private const MARKER         = '_woodev_realistic_shipping_marker';
 	private const EXPORTED       = '_woodev_test_shipping_carrier_order_id';
+	private const HEARTBEAT_KEY  = 'woodev-refresh-order-lock';
 
 	/** @var int the tests' product. */
 	private $product_id = 0;
@@ -157,6 +158,26 @@ class OrderEditorRestTest extends TestCase {
 		$this->assertInstanceOf( \WC_Order::class, $order );
 
 		return (string) $order->get_meta( '_edit_lock', true );
+	}
+
+	/**
+	 * Counts the native edit-lock rows for the selected datastore.
+	 *
+	 * @param int  $order_id order id.
+	 * @param bool $hpos     active datastore.
+	 * @return int
+	 */
+	private function edit_lock_meta_count( int $order_id, bool $hpos ): int {
+		if ( ! $hpos ) {
+			return count( get_post_meta( $order_id, '_edit_lock', false ) );
+		}
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'wc_orders_meta';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- checks the persisted native lock rows, which WC has no count API for.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE order_id = %d AND meta_key = %s", $order_id, '_edit_lock' ) );
 	}
 
 	/**
@@ -444,14 +465,17 @@ class OrderEditorRestTest extends TestCase {
 		$this->use_datastore( $hpos );
 		$manager_id = $this->login_as_manager();
 		$id         = $this->create_through_the_route();
-		$this->set_edit_lock( $id, $manager_id, time() - 100, $hpos );
+		$old_time   = time() - 100;
+		$this->set_edit_lock( $id, $manager_id, $old_time, $hpos );
 
-		$response = apply_filters( 'heartbeat_received', [], [ 'wc-refresh-order-lock' => $id ], 'woocommerce_page_wc-orders' );
+		apply_filters( 'heartbeat_received', [], [ self::HEARTBEAT_KEY => $id ], 'woocommerce_page_wc-orders' );
+		$response = apply_filters( 'heartbeat_received', [], [ self::HEARTBEAT_KEY => $id ], 'woocommerce_page_wc-orders' );
 		$lock     = explode( ':', $this->get_edit_lock( $id, $hpos ) );
 
-		$this->assertTrue( $response['wc-refresh-order-lock']['lock'], 'the framework heartbeat handler must refresh through its datastore seam' );
+		$this->assertTrue( $response[ self::HEARTBEAT_KEY ]['lock'], 'the framework heartbeat handler must refresh through its datastore seam' );
+		$this->assertSame( 1, $this->edit_lock_meta_count( $id, $hpos ), 'two wizard heartbeats must not add another native lock row' );
 		$this->assertCount( 2, $lock );
-		$this->assertGreaterThanOrEqual( time() - 2, (int) $lock[0] );
+		$this->assertGreaterThan( $old_time, (int) $lock[0] );
 		$this->assertSame( (string) $manager_id, $lock[1] );
 	}
 

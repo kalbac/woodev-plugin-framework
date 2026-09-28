@@ -81,6 +81,8 @@ type Phase = 'loading' | 'ready' | 'failed';
 
 type HeartbeatData = Record<string, unknown>;
 
+const ORDER_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
+
 type HeartbeatJquery = {
 	on: ( event: string, handler: ( event: unknown, data: HeartbeatData ) => void ) => void;
 	off: ( event: string ) => void;
@@ -150,6 +152,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	}, [ editing, orderId ] );
 
 	// The framework's datastore-aware heartbeat handler listens for this exact payload.
+	// Its private key deliberately avoids WooCommerce's global lock refresher.
 	// Namespaced handlers leave the page's heartbeat listeners untouched when the modal closes.
 	useEffect( () => {
 		if ( ! editing || 'ready' !== phase ) {
@@ -164,10 +167,10 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 		const documentHeartbeat = jquery( document );
 		const send = ( event: unknown, data: HeartbeatData ) => {
-			data['wc-refresh-order-lock'] = orderId as number;
+			data[ ORDER_LOCK_HEARTBEAT_KEY ] = orderId as number;
 		};
 		const tick = ( event: unknown, data: HeartbeatData ) => {
-			const response = data['wc-refresh-order-lock'] as { error?: { message?: unknown } } | undefined;
+			const response = data[ ORDER_LOCK_HEARTBEAT_KEY ] as { error?: { message?: unknown } } | undefined;
 			const message = response?.error?.message;
 
 			if ( 'string' === typeof message && message ) {

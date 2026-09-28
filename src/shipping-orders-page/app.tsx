@@ -472,6 +472,7 @@ function ActionsCell( {
 								className={ `woodev-orders-actions__button woodev-orders-actions__button--${ tone }` }
 								isBusy={ pendingAction === action.action }
 								disabled={ rowBusy || action.disabled }
+								accessibleWhenDisabled={ locked }
 								onClick={ () => onActionClick( row, action ) }
 							/>
 						</Tooltip>

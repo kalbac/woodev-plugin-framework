@@ -3319,13 +3319,16 @@ describe( 'the «Редактировать» row action (#972, #710 O2 / O4)', 
 		expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).not.toBeDisabled();
 	} );
 
-	test( 'another manager\'s lock disables edit, keeps its reason, and changes the pencil to a lock (#982)', async () => {
+	test( 'another manager\'s lock disables edit, keeps its reason focusable, and changes the pencil to a lock (#982)', async () => {
 		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ LOCKED_EDIT, EXPORT ] } ) ] ) );
 
 		render( <App /> );
 
 		const edit = await screen.findByRole( 'button', { name: 'Редактировать' } );
-		expect( edit ).toBeDisabled();
+		expect( edit ).not.toBeDisabled();
+		expect( edit ).toHaveAttribute( 'aria-disabled', 'true' );
+		edit.focus();
+		expect( document.activeElement ).toBe( edit );
 		expect( edit.querySelector( '.dashicons-lock' ) ).not.toBeNull();
 	} );
 

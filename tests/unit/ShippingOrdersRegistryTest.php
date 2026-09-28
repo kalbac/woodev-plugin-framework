@@ -465,8 +465,8 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
-	 * The order wizard sends WooCommerce's established heartbeat key, but its handler must be
-	 * framework-owned so legacy CPT orders refresh through WordPress's post-lock API (#982).
+	 * The order wizard sends a framework-owned heartbeat key, so WooCommerce's global handler
+	 * cannot write another lock before the datastore-aware handler runs (#982).
 	 */
 	public function test_add_hooks_hooks_the_datastore_aware_edit_lock_refresh_onto_heartbeat(): void {
 		$calls = [];
@@ -480,6 +480,13 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$registry->register_provider( $this->provider( 'cdek' ) );
 
 		$this->assertContains( [ 'heartbeat_received', [ $registry, 'refresh_order_edit_lock' ], 20, 2 ], $calls );
+	}
+
+	public function test_edit_lock_heartbeat_ignores_non_array_values_from_earlier_filters(): void {
+		$registry = $this->registryOnWcAdminScreen();
+
+		$this->assertSame( 'not an array', $registry->refresh_order_edit_lock( 'not an array', [] ) );
+		$this->assertSame( [], $registry->refresh_order_edit_lock( [], 'not an array' ) );
 	}
 
 	/**

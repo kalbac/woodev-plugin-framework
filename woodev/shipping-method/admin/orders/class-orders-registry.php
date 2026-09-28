@@ -44,6 +44,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/** @var string admin page slug. */
 		const PAGE_SLUG = 'woodev-shipping-orders';
 
+		/** Framework-owned heartbeat payload key for the order wizard edit lock. */
+		private const EDIT_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
+
 		/**
 		 * Transient holding the menu badge's counts — the aggregate AND the per-carrier
 		 * breakdown, in ONE entry (#834 follow-up).
@@ -554,19 +557,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		/**
 		 * Refreshes the wizard's native order edit lock from its heartbeat request.
 		 *
-		 * WooCommerce registers its own handler globally, but that handler only persists
-		 * locks through the HPOS order-meta API. This page therefore refreshes through
-		 * {@see Order_Edit_Lock}, which selects the WordPress post-lock API for legacy CPT
-		 * orders while preserving WooCommerce's response key for the existing client.
+		 * The framework-owned payload key prevents WooCommerce's global handler from
+		 * refreshing a second time. {@see Order_Edit_Lock} then selects the WordPress
+		 * post-lock API for legacy CPT orders and WooCommerce's API for HPOS orders.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param array<string,mixed> $response heartbeat response so far.
-		 * @param array<string,mixed> $data     heartbeat request data.
-		 * @return array<string,mixed>
+		 * @param mixed $response heartbeat response so far.
+		 * @param mixed $data     heartbeat request data.
+		 * @return mixed
 		 */
-		public function refresh_order_edit_lock( array $response, array $data ): array {
-			$order_id = absint( $data['wc-refresh-order-lock'] ?? 0 );
+		public function refresh_order_edit_lock( $response, $data ) {
+			if ( ! is_array( $response ) || ! is_array( $data ) ) {
+				return $response;
+			}
+
+			$order_id = absint( $data[ self::EDIT_LOCK_HEARTBEAT_KEY ] ?? 0 );
 
 			if ( $order_id < 1 ) {
 				return $response;
@@ -578,11 +584,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return $response;
 			}
 
-			$response['wc-refresh-order-lock'] = [];
-			$lock_owner                        = Order_Edit_Lock::get_owner( $order );
+			$response[ self::EDIT_LOCK_HEARTBEAT_KEY ] = [];
+			$lock_owner                                  = Order_Edit_Lock::get_owner( $order );
 
 			if ( null !== $lock_owner ) {
-				$response['wc-refresh-order-lock']['error'] = [
+				$response[ self::EDIT_LOCK_HEARTBEAT_KEY ]['error'] = [
 					/* translators: %s: display name of the manager currently editing the order. */
 					'message' => sprintf(
 						__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
@@ -593,7 +599,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				return $response;
 			}
 
-			$response['wc-refresh-order-lock']['lock'] = Order_Edit_Lock::refresh( $order );
+			$response[ self::EDIT_LOCK_HEARTBEAT_KEY ]['lock'] = Order_Edit_Lock::refresh( $order );
 
 			return $response;
 		}
