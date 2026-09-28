@@ -75,20 +75,7 @@ class OrderEditorDatastoresTest extends TestCase {
 			$this->markTestSkipped( 'The shipping fixture plugins are not loaded.' );
 		}
 
-		// WooCommerce's transactional e-mails are listeners its e-mail objects register when the
-		// mailer is FIRST built. WP_UnitTestCase restores the hook table after every test, so once
-		// the mailer singleton has been built inside some earlier test's scope its listeners are
-		// gone for good while `WC()->mailer()` stays a no-op — every «New order» after that is a
-		// `_notification` action nobody hears (0 e-mails on WC 8.5.1 / 9.3.0 in CI; WC 11 builds
-		// the mailer during bootstrap, so its listeners sit in the backup and survive). Re-building
-		// the e-mail objects when this mailer's own «New order» listener is missing gives THIS test
-		// the hooks; WP_UnitTestCase drops them again afterwards (#981, traced in
-		// docs-internal/research/2026-09-28-981-new-order-email-trace/).
-		$mailer = \WC()->mailer();
-
-		if ( ! isset( $mailer->emails['WC_Email_New_Order'] ) || false === has_action( 'woocommerce_order_status_pending_to_processing_notification', [ $mailer->emails['WC_Email_New_Order'], 'trigger' ] ) ) {
-			$mailer->init();
-		}
+		$this->ensure_mailer_listens();
 
 		Orders_Registry::instance()->reset_for_tests();
 
@@ -334,6 +321,189 @@ class OrderEditorDatastoresTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// WooCommerce's mailer — the harness half of #981
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Makes sure THIS test's WooCommerce mailer is listening for its transactional e-mails, and
+	 * asserts it rather than assuming it.
+	 *
+	 * WooCommerce's e-mail objects register their `…_notification` listeners in their constructors,
+	 * i.e. when the mailer singleton is FIRST built. WP_UnitTestCase restores the hook table after
+	 * every test, so once the singleton was built inside some earlier test's scope its listeners are
+	 * gone for the rest of the process while `WC()->mailer()` stays a no-op — every «New order» after
+	 * that is a `_notification` action nobody hears (0 e-mails on WC 8.5.1 / 9.3.0 in CI; WC 11
+	 * builds the mailer during bootstrap, so its listeners sit in the backup and survive; traced in
+	 * docs-internal/research/2026-09-28-981-new-order-email-trace/).
+	 *
+	 * The repair, `WC_Emails::init()`, rebuilds every e-mail object and hooks the NEW ones; it never
+	 * unhooks the old ones. So it runs only when the mailer's own «New order» listener is missing,
+	 * every callback the OLD objects still hold anywhere is removed first, and afterwards the two
+	 * e-mails this file counts are asserted to be hooked exactly once — a partially restored hook
+	 * table can neither silence them nor double-send them unnoticed (critic, round 2). WP_UnitTestCase
+	 * drops whatever this adds once the test ends.
+	 *
+	 * @return void
+	 */
+	private function ensure_mailer_listens(): void {
+		$mailer = \WC()->mailer();
+		$hook   = 'woocommerce_order_status_pending_to_processing_notification';
+
+		if ( ! isset( $mailer->emails['WC_Email_New_Order'] ) || false === has_action( $hook, [ $mailer->emails['WC_Email_New_Order'], 'trigger' ] ) ) {
+			foreach ( $mailer->emails as $stale ) {
+				$this->unhook_object( $stale );
+			}
+
+			$mailer->init();
+		}
+
+		foreach ( [ 'WC_Email_New_Order', 'WC_Email_Customer_Processing_Order' ] as $class ) {
+			$this->assertSame( 1, $this->count_listeners( $hook, $class, 'trigger' ), "{$class} listens for pending→processing exactly once" );
+		}
+	}
+
+	/**
+	 * Removes every callback an object holds, on any hook at any priority.
+	 *
+	 * @param object $subject the object whose callbacks go.
+	 * @return void
+	 */
+	private function unhook_object( object $subject ): void {
+		foreach ( $GLOBALS['wp_filter'] as $hook => $wp_hook ) {
+			foreach ( $wp_hook->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $callback ) {
+					if ( is_array( $callback['function'] ) && isset( $callback['function'][0] ) && $callback['function'][0] === $subject ) {
+						remove_filter( (string) $hook, $callback['function'], (int) $priority );
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * How many `[ <instance of $class>, $method ]` callbacks sit on a hook.
+	 *
+	 * @param string $hook   the hook.
+	 * @param string $class  class of the callback's object.
+	 * @param string $method the callback's method.
+	 * @return int
+	 */
+	private function count_listeners( string $hook, string $class, string $method ): int {
+		$count = 0;
+
+		foreach ( ( $GLOBALS['wp_filter'][ $hook ]->callbacks ?? [] ) as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( is_array( $callback['function'] ) && isset( $callback['function'][0] ) && $callback['function'][0] instanceof $class && $method === $callback['function'][1] ) {
+					++$count;
+				}
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Switches WooCommerce to DEFERRED transactional e-mails for the rest of this test.
+	 *
+	 * WooCommerce takes that decision once, on `init`, in `WC_Emails::init_transactional_emails()`:
+	 * with `woocommerce_defer_transactional_emails` true it hooks `queue_transactional_email` on
+	 * every e-mail action instead of `send_transactional_email`. Re-taken here the same way — the
+	 * synchronous dispatcher is unhooked from every action it sits on, the filter answers true, and
+	 * WooCommerce's own method hooks its queue. WP_UnitTestCase's hook restore undoes all of it.
+	 *
+	 * @return void
+	 */
+	private function defer_transactional_emails(): void {
+		$synchronous = [ 'WC_Emails', 'send_transactional_email' ];
+		$actions     = [];
+
+		foreach ( array_keys( $GLOBALS['wp_filter'] ) as $hook ) {
+			if ( false !== has_action( (string) $hook, $synchronous ) ) {
+				$actions[] = (string) $hook;
+			}
+		}
+
+		$this->assertContains( 'woocommerce_order_status_pending_to_processing', $actions, 'WooCommerce dispatches its e-mails synchronously until this test switches it' );
+
+		foreach ( $actions as $hook ) {
+			remove_action( $hook, $synchronous, 10 );
+		}
+
+		add_filter( 'woocommerce_defer_transactional_emails', '__return_true' );
+
+		\WC_Emails::init_transactional_emails();
+
+		$this->assertNotFalse( has_action( 'woocommerce_order_status_pending_to_processing', [ 'WC_Emails', 'queue_transactional_email' ] ), 'WooCommerce now queues its e-mails instead of sending them' );
+	}
+
+	/**
+	 * Runs WooCommerce's deferred e-mail queue the way WooCommerce runs it in the LATER request, and
+	 * says how many queued notifications it ran.
+	 *
+	 * WooCommerce 10.8+ (`DeferredEmailQueue`): the request's queue becomes one Action Scheduler
+	 * action per notification on `shutdown` (`dispatch()`); each is run here through Action
+	 * Scheduler's own runner, so the order travels as an id and is re-read from the datastore,
+	 * exactly as in production. WooCommerce 8.5–10.7 (`WC_Background_Emailer`): the request's list
+	 * is saved to an option on `shutdown` and a loopback request runs `handle()` over it; both are
+	 * called here in turn — the save serialises the order down to its id (`WC_Data::__sleep()`) and
+	 * the handler re-reads it. The two members WooCommerce keeps private are reached by reflection;
+	 * nothing about the dispatch itself is hand-rolled.
+	 *
+	 * @return int notifications run.
+	 */
+	private function drain_deferred_emails(): int {
+		if ( class_exists( '\Automattic\WooCommerce\Internal\Email\DeferredEmailQueue' ) ) {
+			$hook = 'woocommerce_send_queued_transactional_email';
+
+			$this->assertNotFalse( has_action( $hook ), 'WooCommerce hooked its Action Scheduler handler at boot' );
+
+			wc_get_container()->get( \Automattic\WooCommerce\Internal\Email\DeferredEmailQueue::class )->dispatch();
+
+			$ids = as_get_scheduled_actions(
+				[
+					'hook'     => $hook,
+					'status'   => \ActionScheduler_Store::STATUS_PENDING,
+					'per_page' => -1,
+				],
+				'ids'
+			);
+
+			foreach ( $ids as $id ) {
+				\ActionScheduler::runner()->process_action( (int) $id, 'woodev-test' );
+			}
+
+			return count( $ids );
+		}
+
+		$emailer_property = new \ReflectionProperty( \WC_Emails::class, 'background_emailer' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$emailer_property->setAccessible( true );
+		}
+
+		$emailer = $emailer_property->getValue();
+
+		$this->assertInstanceOf( \WC_Background_Emailer::class, $emailer, 'WooCommerce built its background emailer when it switched to deferral' );
+
+		$data_property = new \ReflectionProperty( $emailer, 'data' );
+		$handle        = new \ReflectionMethod( $emailer, 'handle' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$data_property->setAccessible( true );
+			$handle->setAccessible( true );
+		}
+
+		$queued = count( (array) $data_property->getValue( $emailer ) );
+
+		$emailer->save(); // What `shutdown` → `dispatch_queue()` does before its loopback request.
+		$data_property->setValue( $emailer, [] ); // So this process' own shutdown has nothing left to dispatch.
+
+		$handle->invoke( $emailer ); // The loopback request's work.
+
+		return $queued;
+	}
+
+	// -------------------------------------------------------------------------
 	// create
 	// -------------------------------------------------------------------------
 
@@ -501,9 +671,50 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertInstanceOf( \WC_Order::class, $updated );
 		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'the transition itself still happens' );
 		$this->assertSame( 0, $sent['count'], 'an edit sends no «New order»' );
+		$this->assertSame( '', (string) $this->fresh( $pending->get_id() )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META ), 'the synchronous dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
 
 		$this->create( $this->payload( [ 'status' => 'processing' ] ) );
 		$this->assertSame( 1, $sent['count'], 'the mute was scoped to the edit: a created order still announces itself' );
+	}
+
+	/**
+	 * The mute must hold when WooCommerce DEFERS its transactional e-mails (#981 round 2).
+	 *
+	 * With `woocommerce_defer_transactional_emails` on, a status transition only QUEUES its
+	 * `…_notification`; WooCommerce dispatches it in a later request — a loopback of
+	 * `WC_Background_Emailer` up to WooCommerce 10.7, an Action Scheduler action since 10.8 — long
+	 * after the editor's call has returned. A mute that lives only as long as the edit is gone by then
+	 * and the queued «New order» goes out. So the edit is made under deferral, the queue is drained the
+	 * way WooCommerce drains it ({@see drain_deferred_emails()}), and only then is the count read. The
+	 * customer's own e-mail is counted alongside as proof that the drain delivered anything at all: a
+	 * queue that never ran would show the same zero for «New order» (the false green of round 1).
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_update_sends_no_new_order_email_when_woocommerce_defers_its_emails( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->defer_transactional_emails();
+
+		$new_order = $this->count_sent_email( 'new_order' );
+		$customer  = $this->count_sent_email( 'customer_processing_order' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$updated = ( new Order_Editor() )->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) );
+
+		$this->assertInstanceOf( \WC_Order::class, $updated );
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'the transition itself still happens' );
+		$this->assertSame( 0, $customer['count'], 'deferred: nothing leaves during the request that edits the order' );
+
+		$this->assertGreaterThan( 0, $this->drain_deferred_emails(), 'the edit\'s notification was queued, and the drain ran it' );
+		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail, so a zero below is a mute and not a dead queue' );
+		$this->assertSame( 0, $new_order['count'], 'an edit sends no «New order» — not after the deferred dispatch either' );
+		$this->assertSame( '', (string) $this->fresh( $pending->get_id() )->get_meta( Order_Editor::NEW_ORDER_EMAIL_MUTE_META ), 'the deferred dispatch consumed the marker: nothing is left on the order to mute a later e-mail' );
+
+		$this->create( $this->payload( [ 'status' => 'processing' ] ) );
+		$this->drain_deferred_emails();
+		$this->assertSame( 1, $new_order['count'], 'the mute was scoped to the edit: a created order still announces itself through the deferred dispatch' );
 	}
 
 	/**

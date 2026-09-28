@@ -513,6 +513,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 *              `admin_menu`, priority 41 — right after {@see self::register_page()}
 		 *              (priority 40) — see that method's own docblock for the timing this
 		 *              was measured against.
+		 * @since 2.0.2 Card #981: also hooks {@see Order_Editor::mute_new_order_email()} onto
+		 *              `woocommerce_email_enabled_new_order`, the half of the editor's e-mail mute
+		 *              that must be present in the request WooCommerce dispatches a DEFERRED e-mail in.
 		 *
 		 * @return void
 		 */
@@ -530,6 +533,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			add_action( 'woodev_shipping_order_exported', [ $this, 'flush_new_order_counts' ] );
 			add_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			add_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10, 2 );
+
+			// #981: the process-wide half of the order editor's «an edit sends no New order» rule
+			// (spec C4). A WooCommerce transactional e-mail may be DEFERRED to a later request, so
+			// the filter has to exist in every request and key on what the order itself carries.
+			add_filter( 'woocommerce_email_enabled_new_order', [ Order_Editor::class, 'mute_new_order_email' ], PHP_INT_MAX, 2 );
 
 			// Card #856: the order-edit metabox is built by the FRAMEWORK the same way
 			// the «Заказы доставки» page is — the moment at least one provider exists,
@@ -1477,6 +1485,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			remove_action( 'rest_api_init', [ $this, 'register_rest' ], 5 );
 			remove_action( 'admin_page_access_denied', [ $this, 'maybe_redirect_legacy_page' ] );
 			remove_filter( 'woocommerce_order_data_store_cpt_get_orders_query', [ $this, 'translate_marker_keys_query_var' ], 10 );
+			remove_filter( 'woocommerce_email_enabled_new_order', [ Order_Editor::class, 'mute_new_order_email' ], PHP_INT_MAX );
 
 			if ( null !== $this->admin_order ) {
 				remove_action( 'add_meta_boxes', [ $this->admin_order, 'add_meta_box' ], 10 );

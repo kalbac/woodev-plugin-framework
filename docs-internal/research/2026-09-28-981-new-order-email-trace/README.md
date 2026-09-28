@@ -134,7 +134,7 @@ two skips CI reports on those versions too). `composer check` green (phpcs, phps
 
 | Candidate | Verdict |
 |---|---|
-| deferred transactional e-mails / sending after `finally` | Dead — feature off, the whole send happens inside `WC_Order->save()` under `apply_status` (A). |
+| deferred transactional e-mails / sending after `finally` | Dead **with the feature off** (the rig's default): the whole send happens inside `WC_Order->save()` under `apply_status` (A). **Superseded in Round 2** — with `woocommerce_defer_transactional_emails` on it is alive, see below. |
 | the filter receives a different object or none | Dead — it receives `Order#11`, the edited order, and returns `false` (A: `woocommerce_email_disabled`). |
 | a resend guard / `_new_order_email_sent` meta | Not involved — meta is `false` before and after the edit (A). |
 | `trigger()` invoked from a hook our code does not wrap | Dead — the only `_notification` on the edit is the one under `apply_status` (A). |
@@ -146,6 +146,54 @@ two skips CI reports on those versions too). `composer check` green (phpcs, phps
   measured, only WooCommerce's decision to send.
 - The framework's REST path (`WC()->mailer()` in `apply_status`, needed because a REST request does not build
   the mailer by itself) was exercised only through the service, not through an HTTP request.
+
+## Round 2: deferred emails (the critic's blocker)
+
+> Same rig, same three WooCommerce copies (11.1.0 in place; 9.3.0 and 8.5.1 piped in as
+> `woocommerce-probe-{version}/` and selected by a temporary env override in `tests/bootstrap.php`,
+> all removed afterwards). Fable 5.1 worker, 28.09.2026.
+
+**The blocker was real.** Round 1's mute was a `woocommerce_email_enabled_new_order` filter added for
+the duration of `$order->save()` and removed in `finally`. When a store or extension answers
+`woocommerce_defer_transactional_emails` with `true`, the status transition only QUEUES the
+`…_notification`; WooCommerce dispatches it in a later request, after the filter is gone, and the
+pending→processing edit sends «New order». The round-1 test never drained the queue, so it stayed green.
+
+### What each WooCommerce version does when it defers
+
+| | 8.5.1 | 9.3.0 | 11.1.0 |
+|---|---|---|---|
+| decision | once, on `init`, in `WC_Emails::init_transactional_emails()`: filter `woocommerce_defer_transactional_emails` (default `false`) | same | same, default = feature flag `deferred_transactional_emails` (off) |
+| queued by | `WC_Emails::queue_transactional_email` on every e-mail action → `WC_Background_Emailer::push_to_queue()` (in-memory list) | same | same → `DeferredEmailQueue::push()` (in-memory list; the order is replaced by `{type: order, id}`) |
+| dispatched | `shutdown` 100: `save()` to an option (the order serialises to its id, `WC_Data::__sleep`), then a non-blocking loopback request runs `handle()` → `task()` | same | `shutdown` 100: one Action Scheduler action `woocommerce_send_queued_transactional_email` per notification, group `woocommerce-emails`; the order is re-read with `wc_get_order()` |
+| the later request | `WC_Emails::send_queued_transactional_email( $filter, $args )` → filter `woocommerce_allow_send_queued_transactional_email` → `do_action_ref_array( $filter . '_notification', $args )` | same | same |
+| `WC_Email_New_Order::trigger()` | resend guard `_new_order_email_sent` / `woocommerce_new_order_email_allows_resend`, then `is_enabled() && get_recipient()` → `send()` | same | resend guard, then `send_notification()` → `is_enabled()` |
+
+So in every version the later request calls `is_enabled()` → `apply_filters( 'woocommerce_email_enabled_new_order', …, $this->object )` with an order object **re-read from the datastore**, under the `…_notification` action of the original transition. That is the seam: whatever the order itself carries is still there, and the action on the stack says which notification is being dispatched.
+
+### The chosen mute
+
+`Order_Editor::apply_status()` (an edit only) writes order meta **`_woodev_new_order_email_mute`** = the transition action (`woocommerce_order_status_{from}_to_{to}`) in the same `save()` that runs the transition. `Order_Editor::mute_new_order_email()` — hooked on `woocommerce_email_enabled_new_order` at `PHP_INT_MAX` by `Orders_Registry::add_hooks()`, so it is present in every request — answers `false` when the order carries the marker **and** `doing_action( $marker . '_notification' )`, and consumes the marker (`delete_meta_data()` + `save()`) as it does. After a synchronous transition, `apply_status()` drops a marker nothing consumed (New order not listening) unless WooCommerce's queue is hooked on that transition action (`has_action( $transition, [ 'WC_Emails', 'queue_transactional_email' ] )`), in which case the marker waits for the later request.
+
+**An invented meta key.** WooCommerce's own key, `_new_order_email_sent`, was evaluated and rejected: setting it on an edit tells WooCommerce «this order was announced», which would also suppress a LATER legitimate «New order» (an edit pending→on-hold, then the customer pays and the gateway moves on-hold→processing — WooCommerce would have announced that, the guard would now block it), and it cannot be unset once the dispatch is deferred. `woocommerce_allow_send_queued_transactional_email` was rejected because it kills the whole notification — the customer's e-mail with it. `_woodev_new_order_email_mute` is therefore a new installed-site data contract; keep it byte-for-byte.
+
+**Why it cannot hit a later, unrelated trigger.** The marker names ONE transition and is deleted the first time the New order e-mail is evaluated under that transition's notification. A different transition (`on-hold_to_processing`, `failed_to_processing`…) does not match. A manual «Resend new order notification» runs under no `_notification` action. Other orders and other e-mails never read it (`is_enabled()` of `new_order` only, and only with that order as `$object`; the settings screen passes no order). The single residual: if WooCommerce queued the edit's notification and the queue never ran (lost option, Action Scheduler never executes the action), the marker survives until the order makes the very same from→to transition again — one e-mail muted, once. Accepted and documented in the method's docblock.
+
+### Evidence
+
+`OrderEditorDatastoresTest::test_an_update_sends_no_new_order_email_when_woocommerce_defers_its_emails` (both datastores): switches WooCommerce to deferral the way WooCommerce does it (unhook `send_transactional_email` from every e-mail action, filter → `true`, `WC_Emails::init_transactional_emails()`), creates a pending order, edits it to processing, asserts nothing left the request, then **drains the queue WooCommerce's way** — 11.1: `DeferredEmailQueue::dispatch()` + Action Scheduler's `process_action()` per pending action; 8.5.1/9.3.0: `WC_Background_Emailer::save()` + `handle()` — and asserts `customer_processing_order` = 1 (the drain delivered) and `new_order` = 0, the marker gone from a fresh read, then a create + drain still announces itself once.
+
+| WooCommerce | fix stashed, test kept | with the fix (`--filter OrderEditorDatastoresTest`) | full Integration suite |
+|---|---|---|---|
+| 11.1.0 | 2 failures, `1 is identical to 0` (both datastores) | OK, 46 tests, 514 assertions | OK, 303 tests, 3761 assertions |
+| 9.3.0 | 2 failures, `1 is identical to 0` | OK, 46 tests, 514 assertions | 303 tests, 3756 assertions, Skipped: 2 |
+| 8.5.1 | 2 failures, `1 is identical to 0` | OK, 46 tests, 514 assertions | 303 tests, 3756 assertions, Skipped: 2 |
+
+The red run on 9.3.0 / 8.5.1 doubles as proof that the legacy drain is real: the loopback's `handle()` re-read the order from its id and sent the e-mail the round-1 mute could not stop. `composer check` green (phpcs, phpstan, 4421 unit tests, incl. the new `OrderEditorEmailMuteTest`).
+
+### The harness (finding 3)
+
+`setUp()` → `ensure_mailer_listens()`: the repair (`WC_Emails::init()`) runs only when this mailer's own «New order» listener is missing; before it, every callback the stale e-mail objects still hold on any hook is removed (`unhook_object()`); after it — and always — `WC_Email_New_Order::trigger` and `WC_Email_Customer_Processing_Order::trigger` are asserted to sit on `…_pending_to_processing_notification` exactly once (`count_listeners()`). A partially restored hook table can neither silence nor double-send them unnoticed.
 
 ## Related
 

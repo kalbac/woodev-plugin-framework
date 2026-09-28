@@ -41,7 +41,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	 * `WC_Email_New_Order::trigger()` would DOUBLE-SEND, so none is issued; a `pending` order sends
 	 * nothing, exactly like a checkout order awaiting payment. An EDIT sends no «New order»: the
 	 * same transition runs on an allowed pending→processing update, so {@see self::apply_status()}
-	 * mutes that one e-mail for that order while it runs (C4).
+	 * arms the order against that one e-mail and {@see self::mute_new_order_email()} — hooked for
+	 * the whole process by {@see Orders_Registry::add_hooks()} — answers «disabled» when WooCommerce
+	 * dispatches that transition's notification, synchronously or from its deferred queue (C4, #981).
 	 *
 	 * **Errors are returned, not thrown**: every public method answers with its result or a
 	 * `\WP_Error` whose `data['status']` is the HTTP status of the transport contract — 404 unknown
@@ -51,6 +53,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	 * @since 2.0.2
 	 */
 	class Order_Editor {
+
+		/**
+		 * Order meta an EDIT arms before its status transition runs: the transition action
+		 * (`woocommerce_order_status_{from}_to_{to}`) whose «New order» notification must not go
+		 * out for this order. Consumed by {@see self::mute_new_order_email()} the moment WooCommerce
+		 * asks whether that e-mail is enabled while dispatching exactly that notification — inside
+		 * the edit when WooCommerce sends synchronously, in a later request when it defers (#981).
+		 *
+		 * Installed-site data contract (a meta key of the framework's own): keep byte-for-byte.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string
+		 */
+		public const NEW_ORDER_EMAIL_MUTE_META = '_woodev_new_order_email_mute';
 
 		/**
 		 * Carrier registry.
@@ -598,13 +615,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 *
 		 * On create the transition itself sends «New order» (and the customer's mail) through the
 		 * `pending_to_*_notification` actions. On an edit spec C4 says no «New order» goes out — an
-		 * allowed pending→processing update runs that very transition — so for the duration of THIS
-		 * transition the e-mail is switched off for THIS order, by a filter the method adds and removes
-		 * itself; any other plugin's hooks, other orders and the customer's own e-mails (which follow
-		 * WooCommerce's status transitions, C4) are untouched. A transactional e-mail a third party
-		 * defers past the transition is out of reach of a scoped filter and is left to WooCommerce.
+		 * allowed pending→processing update runs that very transition — so the order is ARMED before
+		 * it runs: {@see self::NEW_ORDER_EMAIL_MUTE_META} names the transition, and
+		 * {@see self::mute_new_order_email()} answers «disabled» to WooCommerce for THIS order while
+		 * THAT transition's notification is being dispatched, consuming the marker. The marker is
+		 * persisted together with the status because WooCommerce may DEFER its transactional e-mails
+		 * (`woocommerce_defer_transactional_emails`): the notification is then only queued and is
+		 * dispatched in a later request — `WC_Background_Emailer` up to 10.7, an Action Scheduler
+		 * action since 10.8 — where nothing of this call survives but what the order carries (#981
+		 * round 2). When WooCommerce dispatched synchronously and nothing consumed the marker (the
+		 * e-mail is not listening), it is dropped here: a marker never outlives an edit that did not
+		 * need it. Any other plugin's hooks, other orders and the customer's own e-mails (which follow
+		 * WooCommerce's status transitions, C4) are untouched.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #981 round 2: a persisted, self-consuming marker instead of a filter scoped to
+		 *              this call, so WooCommerce's deferred dispatch honours the mute too.
 		 *
 		 * @param \WC_Order   $order     the order.
 		 * @param string|null $status    the requested status; null keeps the current one.
@@ -620,20 +646,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			// request does not do by itself — and the transition below is what sends «New order».
 			WC()->mailer();
 
-			$order_id     = $order->get_id();
-			$mute_new     = static function ( $enabled, $email_order = null ) use ( $order_id ) {
-				return $email_order instanceof \WC_Order && $email_order->get_id() === $order_id ? false : $enabled;
-			};
-			$mute_applied = $is_update && add_filter( 'woocommerce_email_enabled_new_order', $mute_new, PHP_INT_MAX, 2 );
+			$transition = 'woocommerce_order_status_' . $order->get_status() . '_to_' . $status;
 
-			try {
-				$order->set_status( $status, '', true );
-				$order->save();
-			} finally {
-				if ( $mute_applied ) {
-					remove_filter( 'woocommerce_email_enabled_new_order', $mute_new, PHP_INT_MAX );
-				}
+			if ( $is_update ) {
+				$order->update_meta_data( self::NEW_ORDER_EMAIL_MUTE_META, $transition );
 			}
+
+			$order->set_status( $status, '', true );
+			$order->save();
+
+			if ( ! $is_update || '' === (string) $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META ) ) {
+				return;
+			}
+
+			// Still armed. Either WooCommerce queued the notification for a later request — its queue
+			// sits on the transition action, and the marker must wait for it — or it dispatched
+			// synchronously and nothing consumed the marker, in which case nothing ever will.
+			if ( false === has_action( $transition, [ 'WC_Emails', 'queue_transactional_email' ] ) ) {
+				$order->delete_meta_data( self::NEW_ORDER_EMAIL_MUTE_META );
+				$order->save();
+			}
+		}
+
+
+		/**
+		 * Answers WooCommerce's `woocommerce_email_enabled_new_order` for an order an edit ARMED
+		 * ({@see self::apply_status()}): «disabled», once, while the notification of exactly the
+		 * transition that edit ran is being dispatched — synchronously inside the edit, or from
+		 * WooCommerce's deferred queue in a later request. The marker is consumed on the spot, so it
+		 * cannot silence a later «New order» of the same order: one WooCommerce sends for a different
+		 * transition is not matched; one sent by hand («Resend new order notification») runs under no
+		 * `_notification` action; and a repeat of the very same transition meets the marker only if
+		 * WooCommerce never ran the deferred dispatch that would have consumed it — then exactly one
+		 * e-mail is muted. Anything that is not a marked order passes through untouched: other
+		 * orders, other e-mails, the settings screen's `is_enabled()` with no order at all.
+		 *
+		 * Hooked at `PHP_INT_MAX` by {@see Orders_Registry::add_hooks()} — the last word, after the
+		 * store's own setting and any other plugin.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $enabled what WooCommerce and the filters before this one decided.
+		 * @param mixed $order   the order the e-mail is about (`WC_Email::$object`), if any.
+		 * @return mixed
+		 */
+		public static function mute_new_order_email( $enabled, $order = null ) {
+			if ( ! $order instanceof \WC_Order ) {
+				return $enabled;
+			}
+
+			$transition = (string) $order->get_meta( self::NEW_ORDER_EMAIL_MUTE_META );
+
+			if ( '' === $transition || ! doing_action( $transition . '_notification' ) ) {
+				return $enabled;
+			}
+
+			$order->delete_meta_data( self::NEW_ORDER_EMAIL_MUTE_META );
+			$order->save();
+
+			return false;
 		}
 
 		/**
