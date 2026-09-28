@@ -4618,3 +4618,15 @@ msgstr ""
 #: assets/build/shipping-orders-page/index.js:2
 msgid "Возврат или доплату сделайте средствами WooCommerce; в заказ добавится заметка об изменении."
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрано"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "К списку"
+msgstr ""
