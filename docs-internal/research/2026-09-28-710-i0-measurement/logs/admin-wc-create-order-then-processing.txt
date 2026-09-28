@@ -1,0 +1,19 @@
+# wc_create_order() -> set status pending -> save -> set_status(processing) -> save (the D4 create sequence; WP-CLI)
+# Condensed from the throwaway mu-plugin logger: one line per hook in firing order — seq, ms since request start, hook, args (WC_Order shown as id/status/created_via/meta keys/shipping items).
+# Dropped as noise: order-item/order save chatter, rest dispatch, blocks registration, *_pickup_slot_fields, registration flags. `cb:` = callbacks registered on that hook (priority + callable) at its first firing.
+
+== GET 
+  36   451.7 woocommerce_new_order  [343, {"#WC_Order": 343, "status": "pending", "created_via": "i0-probe", "payment_method": "", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [], "shipping_city": "", "billing_city": ""}]
+        cb: 2 Closure; 10 Automattic\WooCommerce\Caches\OrderCountCacheService::update_on_new_order; 10 Automattic\WooCommerce\Internal\Admin\OrderMilestoneEasterEgg::clear_milestone_cache; 100 Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer::handle_updated_order
+  57   540.8 woocommerce_payment_complete_order_status  ["processing", 343, {"#WC_Order": 343, "status": "processing", "created_via": "i0-probe", "payment_method": "cod", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [{"method_id": "woodev_realistic_pickup_shipping", "instance": "5", "total": "150", "meta_keys": []}], "shipping_city": "Москва", "billing_city": "Москва"}]
+        cb: 10 WC_Gateway_COD::change_payment_complete_order_status
+  64   544.4 woocommerce_order_status_processing  [343, {"#WC_Order": 343, "status": "processing", "created_via": "i0-probe", "payment_method": "cod", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [{"method_id": "woodev_realistic_pickup_shipping", "instance": "5", "total": "150", "meta_keys": []}], "shipping_city": "Москва", "billing_city": "Москва"}, {"from": "pending", "to": "processing", "note": "", "manual": false}]
+        cb: 10 wc_downloadable_product_permissions; 10 wc_update_total_sales_counts; 10 wc_update_coupon_usage_counts; 10 wc_maybe_reduce_stock_levels; 10 WC_Gateway_Paypal::capture_payment; 11 wc_release_stock_for_order
+  80   562.1 woocommerce_payment_complete_reduce_order_stock  [true, 343]
+  87     578 woocommerce_order_status_pending_to_processing  [343, {"#WC_Order": 343, "status": "processing", "created_via": "i0-probe", "payment_method": "cod", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [{"method_id": "woodev_realistic_pickup_shipping", "instance": "5", "total": "150", "meta_keys": []}], "shipping_city": "Москва", "billing_city": "Москва"}]
+        cb: 10 WC_Emails::send_transactional_email
+  88   578.2 woocommerce_order_status_pending_to_processing_notification  [[343, {"#WC_Order": 343, "status": "processing", "created_via": "i0-probe", "payment_method": "cod", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [{"method_id": "woodev_realistic_pickup_shipping", "instance": "5", "total": "150", "meta_keys": []}], "shipping_city": "Москва", "billing_city": "Москва"}]]
+        cb: 10 WC_Email_New_Order::trigger; 10 WC_Email_Customer_Processing_Order::trigger
+  91   671.5 woocommerce_order_status_changed  [343, "pending", "processing", {"#WC_Order": 343, "status": "processing", "created_via": "i0-probe", "payment_method": "cod", "order_meta_keys": ["_billing_address_index", "_shipping_address_index"], "shipping_items": [{"method_id": "woodev_realistic_pickup_shipping", "instance": "5", "total": "150", "meta_keys": []}], "shipping_city": "Москва", "billing_city": "Москва"}]
+        cb: 10 Automattic\WooCommerce\Caches\OrderCountCacheService::update_on_order_status_changed; 10 WC_Orders_Tracking::track_order_status_change
+  SHUTDOWN notices=[]
