@@ -91,7 +91,7 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $this->handler( $api, $order_handler )->cancel( $order );
 
-			$this->assertTrue( $result );
+			$this->assertTrue( $result->is_success() );
 		}
 
 		/**
@@ -126,7 +126,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $this->handler( $api, $order_handler )->cancel( $order );
 
-			$this->assertFalse( $result );
+			$this->assertFalse( $result->is_success() );
+			$this->assertSame( 'carrier rejected', $result->get_message(), 'the carrier\'s own text rides on the failure (#872)' );
 		}
 
 		public function test_cancel_with_no_stored_carrier_order_id_never_calls_the_api_or_clears_anything(): void {
@@ -141,7 +142,8 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 			$result = $this->handler( $api, $order_handler )->cancel( $order );
 
-			$this->assertFalse( $result );
+			$this->assertFalse( $result->is_success() );
+			$this->assertSame( '', $result->get_message() );
 		}
 	}
 }

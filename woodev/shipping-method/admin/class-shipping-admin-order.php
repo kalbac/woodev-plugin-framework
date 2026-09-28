@@ -44,6 +44,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Framework\Shipping\Location\Location_Provider_Registry;
 use Woodev\Framework\Shipping\Location\Popular_Settlement_Store;
 use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
+use Woodev\Framework\Shipping\Order\Action_Result;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -517,7 +518,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 			}
 
 			try {
-				$succeeded = $this->dispatch_action( $handler, $order, $action, $provider );
+				$result = $this->dispatch_action( $handler, $order, $action, $provider );
 			} catch ( \Throwable $exception ) {
 				self::log_action_failure( $provider->get_id(), $action, $exception );
 
@@ -526,8 +527,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 				return;
 			}
 
-			if ( ! $succeeded ) {
-				$this->flash_notice( self::action_failure_message( $action ) );
+			if ( ! $result->is_success() ) {
+				// The carrier's own reason, prefixed with its name — for the merchant only
+				// (#872, #608/#610). No text from the carrier → the generic sentence.
+				$this->flash_notice( $result->merchant_message( $provider->get_label(), self::action_failure_message( $action ) ) );
 			}
 		}
 
@@ -536,25 +539,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 		 * it succeeded — the metabox's sibling of
 		 * {@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}.
 		 *
-		 * ⚠ `export()` returns `''` on failure AND on a carrier response with no id
-		 * (card #860) — a `''` return is NOT success. `cancel()`/`update()` already
-		 * return bool.
+		 * Every verb returns an {@see Action_Result} (card #872); a carrier response
+		 * with no id (card #860) is a failure with no text.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result}.
 		 *
 		 * @param Abstract_Shipment_Handler $handler  handler resolved for the order's carrier.
 		 * @param \WC_Order                 $order    the order.
 		 * @param string                    $action   one of {@see Order_Actions}' action ids.
 		 * @param Orders_Provider           $provider the matched carrier descriptor.
-		 * @return bool
+		 * @return Action_Result
 		 */
-		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): bool {
+		private function dispatch_action( Abstract_Shipment_Handler $handler, \WC_Order $order, string $action, Orders_Provider $provider ): Action_Result {
 
 			switch ( $action ) {
 				case Order_Actions::EXPORT:
 					[ $settlement, $settlement_provider ] = $this->resolve_popular_settlement_context( $order );
 
-					return '' !== $handler->export( $order, $settlement, $settlement_provider );
+					return $handler->export( $order, $settlement, $settlement_provider );
 
 				case Order_Actions::CANCEL:
 					return $handler->cancel( $order );
@@ -564,7 +567,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Shipping_Admin_Order
 
 				default:
 					/** This filter is documented in class-orders-controller.php ({@see \Woodev\Framework\Shipping\Rest_Api\Orders_Controller::dispatch_action()}). */
-					return (bool) apply_filters( 'woodev_shipping_perform_order_action', false, $action, $order, $provider );
+					$result = apply_filters( 'woodev_shipping_perform_order_action', Action_Result::failure(), $action, $order, $provider );
+
+					return $result instanceof Action_Result ? $result : Action_Result::failure();
 			}
 		}
 

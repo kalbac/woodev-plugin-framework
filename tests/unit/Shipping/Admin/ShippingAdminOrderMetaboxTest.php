@@ -37,6 +37,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	use Woodev\Framework\Shipping\Admin\Shipping_Admin_Order;
 	use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 	use Woodev\Framework\Shipping\Order\Abstract_Tracking_Handler;
+	use Woodev\Framework\Shipping\Order\Action_Result;
 	use Woodev\Tests\Unit\TestCase;
 
 	require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
@@ -395,10 +396,10 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringContainsString( 'выгружен', $this->flashed_notices[0], 'the flashed reason must be Order_Actions::unavailable_reason()\'s own sentence' );
 		}
 
-		public function test_perform_action_reports_an_empty_export_result_as_a_failure_not_a_success(): void {
+		public function test_perform_action_reports_a_failed_export_result_with_no_text_as_the_generic_failure(): void {
 			$provider = $this->provider();
 			$handler  = $this->register_handler();
-			$handler->shouldReceive( 'export' )->once()->andReturn( '' );
+			$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure() );
 
 			// Exportable status, not yet exported => EXPORT is offered.
 			$order = $this->make_order( [ 'get_status' => 'processing' ] );
@@ -408,6 +409,42 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::EXPORT, $provider );
 
 			$this->assertSame( [ 'Не удалось выгрузить заказ перевозчику.' ], $this->flashed_notices );
+		}
+
+		/**
+		 * #872: the carrier's own reason reaches the merchant's notice, prefixed by the carrier
+		 * name — the same sentence the REST route returns.
+		 */
+		public function test_perform_action_flashes_the_carriers_own_reason_prefixed_by_its_name(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler();
+			$handler->shouldReceive( 'export' )->once()->andReturn( Action_Result::failure( 'Неверный индекс получателя' ) );
+
+			$order = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			$this->invoke_perform_action( new Shipping_Admin_Order( Orders_Registry::instance() ), $handler, $order, Order_Actions::EXPORT, $provider );
+
+			$this->assertSame( [ 'СДЭК: Неверный индекс получателя' ], $this->flashed_notices );
+		}
+
+		public function test_perform_action_flashes_the_carriers_reason_for_a_failed_cancel_and_update(): void {
+			$provider = $this->provider();
+			$handler  = $this->register_handler( true );
+			$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::failure( 'Заказ уже передан курьеру' ) );
+			$handler->shouldReceive( 'update' )->once()->andReturn( Action_Result::failure( 'Превышен лимит запросов' ) );
+
+			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => CANCEL and UPDATE are offered.
+			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );
+
+			$this->capture_flashed_notices();
+
+			$admin = new Shipping_Admin_Order( Orders_Registry::instance() );
+			$this->invoke_perform_action( $admin, $handler, $order, Order_Actions::CANCEL, $provider );
+			$this->invoke_perform_action( $admin, $handler, $order, Order_Actions::UPDATE, $provider );
+
+			$this->assertSame( [ 'СДЭК: Заказ уже передан курьеру', 'СДЭК: Превышен лимит запросов' ], $this->flashed_notices );
 		}
 
 		public function test_perform_action_catches_a_thrown_carrier_exception_and_flashes_a_notice_instead_of_a_fatal(): void {
@@ -443,7 +480,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		public function test_perform_action_happy_path_dispatches_and_flashes_nothing(): void {
 			$provider = $this->provider();
 			$handler  = $this->register_handler();
-			$handler->shouldReceive( 'cancel' )->once()->andReturn( true );
+			$handler->shouldReceive( 'cancel' )->once()->andReturn( Action_Result::success() );
 
 			$this->meta['_wc_cdek_order_id'] = 'CARRIER-1'; // exported => CANCEL is offered.
 			$order                            = $this->make_order( [ 'get_status' => 'processing' ] );

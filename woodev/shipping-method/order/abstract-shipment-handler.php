@@ -134,8 +134,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * Calls {@see Shipping_API::create_order()}, maps the response to the carrier
 		 * order id via {@see self::extract_carrier_order_id()}, and stores it through
 		 * the order handler under the plugin's own meta key. A carrier/network failure
-		 * is not lost: the export is re-queued via {@see self::schedule_retry()} and an
-		 * empty id is returned, so the caller can tell the export did not complete now.
+		 * is not lost: the export is re-queued via {@see self::schedule_retry()} and a
+		 * failed {@see Action_Result} is returned — carrying the carrier's own text
+		 * when it gave one — so the caller can tell the export did not complete now.
 		 *
 		 * A successful export with a NON-EMPTY carrier order id is also "an order
 		 * shipped to this settlement" (#488 popular-settlements spec D2) — the
@@ -164,13 +165,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 *              `woodev_shipping_order_exported` action so framework code
 		 *              (e.g. {@see \Woodev\Framework\Shipping\Admin\Orders\Orders_Registry})
 		 *              can react without depending on `$hook_prefix` (#853).
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result} instead of the bare
+		 *              carrier order id, so a failure can carry the carrier's text.
+		 *              A carrier response with NO id is a failure with no text (#860).
 		 *
 		 * @param \WC_Order              $order      the order to export to the carrier
 		 * @param Location_Record|null   $settlement the settlement this order ships to, if known; null skips enrolment
 		 * @param Location_Provider|null $provider the provider that produced `$settlement`, if known; null skips enrolment
-		 * @return string the carrier-assigned order id, or '' when the export failed and was queued for retry
+		 * @return Action_Result success carrying the carrier-assigned order id, or a failure (queued for retry when the carrier call threw)
 		 */
-		public function export( \WC_Order $order, ?Location_Record $settlement = null, ?Location_Provider $provider = null ): string {
+		public function export( \WC_Order $order, ?Location_Record $settlement = null, ?Location_Provider $provider = null ): Action_Result {
 
 			try {
 				$response = $this->api->create_order( $order );
@@ -188,7 +192,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				 */
 				do_action( $this->hook( 'shipment_export_failed' ), $order, $exception );
 
-				return '';
+				return Action_Result::failure( self::exception_text( $exception ) );
 			}
 
 			$carrier_order_id = $this->extract_carrier_order_id( $response );
@@ -232,9 +236,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 
 			if ( '' !== $carrier_order_id ) {
 				$this->enroll_popular_settlement( $settlement, $provider );
+
+				return Action_Result::success( $carrier_order_id );
 			}
 
-			return $carrier_order_id;
+			return Action_Result::failure();
+		}
+
+		/**
+		 * The carrier's text out of a failed API call, safe to show the merchant.
+		 *
+		 * Secrets are redacted with the same helper the logs use, so a token echoed
+		 * back in an error body cannot reach the notice either. The text is for the
+		 * MERCHANT only and is never stored on the order (#608/#610) — see
+		 * {@see Action_Result}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev_API_Exception $exception the carrier/network failure
+		 * @return string
+		 */
+		private static function exception_text( \Woodev_API_Exception $exception ): string {
+			return \Woodev_API_Base::redact_secret_log_text( $exception->getMessage() );
 		}
 
 		/**
@@ -287,9 +310,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * Cancels an order's shipment with the carrier.
 		 *
 		 * Reads the stored carrier order id through the order handler and calls
-		 * {@see Shipping_API::cancel_order()}. Returns false (without calling the
-		 * carrier) when the order has no stored carrier id, and false when the carrier
-		 * rejects the cancellation.
+		 * {@see Shipping_API::cancel_order()}. Returns a failure (without calling the
+		 * carrier) when the order has no stored carrier id, and a failure carrying the
+		 * carrier's text when the carrier rejects the cancellation.
 		 *
 		 * On a SUCCESSFUL cancellation the stored carrier order id is cleared (written
 		 * back through the same order handler {@see self::export()} uses to set it),
@@ -306,16 +329,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * @since 2.0.2 Round 2 (HIGH 1): clear the stored carrier order id on a
 		 *              successful cancel, so a merchant cannot send the same
 		 *              destructive carrier cancellation twice.
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result}; a rejection carries
+		 *              the carrier's text, a missing stored id carries none.
 		 *
 		 * @param \WC_Order $order the order whose shipment to cancel
-		 * @return bool true when the carrier accepted the cancellation, false otherwise
+		 * @return Action_Result success when the carrier accepted the cancellation, a failure otherwise
 		 */
-		public function cancel( \WC_Order $order ): bool {
+		public function cancel( \WC_Order $order ): Action_Result {
 
 			$carrier_order_id = (string) $this->order_handler->get( $order, static::CARRIER_ORDER_ID_FIELD );
 
 			if ( '' === $carrier_order_id ) {
-				return false;
+				return Action_Result::failure();
 			}
 
 			try {
@@ -332,7 +357,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 				 */
 				do_action( $this->hook( 'shipment_cancel_failed' ), $order, $exception );
 
-				return false;
+				return Action_Result::failure( self::exception_text( $exception ) );
 			}
 
 			$this->order_handler->set( $order, static::CARRIER_ORDER_ID_FIELD, '' );
@@ -350,7 +375,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 			 */
 			do_action( $this->hook( 'shipment_cancelled' ), $order, $carrier_order_id );
 
-			return true;
+			return Action_Result::success();
 		}
 
 		/**
@@ -378,12 +403,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Order\\Abstract_Shipment_Ha
 		 * on a sync it did not itself define.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 Card #872: returns an {@see Action_Result}, so a refusal can
+		 *              carry the carrier's text.
 		 *
 		 * @param \WC_Order $order the order to refresh.
-		 * @return bool true when the refresh succeeded, false otherwise.
+		 * @return Action_Result success when the refresh succeeded, a failure otherwise.
 		 */
-		public function update( \WC_Order $order ): bool {
-			return false;
+		public function update( \WC_Order $order ): Action_Result {
+			return Action_Result::failure();
 		}
 
 		/**

@@ -237,6 +237,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 
 			// order meta handler + abstract shipment/tracking/webhook handlers
 			require_once $path . '/order/class-shipping-order-handler.php';
+			require_once $path . '/order/class-action-result.php';
 			require_once $path . '/order/abstract-shipment-handler.php';
 			require_once $path . '/order/abstract-tracking-handler.php';
 			require_once $path . '/order/abstract-webhook-handler.php';
