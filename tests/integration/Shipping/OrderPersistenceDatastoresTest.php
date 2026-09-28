@@ -26,8 +26,9 @@
  * `woocommerce_custom_orders_table_enabled` option is flipped per test, data sync off, so an
  * order lives in exactly one datastore; {@see self::use_datastore()} proves the flip took.
  *
- * NOT RUN by the author of #964 (the coordinator runs the integration suite): written against
- * the fixture plugin's field ids (`carrier_pickup_point`, method `woodev_test_shipping`).
+ * Written against the fixture plugin's field ids (`carrier_pickup_point`, method
+ * `woodev_test_shipping`) and its required demo field `billing_address_2` (see
+ * {@see self::DEMO_CITY}).
  *
  * @package Woodev\Tests\Integration\Shipping
  * @since   2.0.2
@@ -44,6 +45,14 @@ class OrderPersistenceDatastoresTest extends TestCase {
 	private const POINT_FIELD  = 'carrier_pickup_point';
 	private const POINT_ID     = 'PVZ-964';
 	private const FILTER       = 'woodev_shipping_store_api_posted_data';
+
+	/**
+	 * The fixture declares `billing_address_2` (the §8 demo's dependent city list) as REQUIRED
+	 * for RU, so the classic form validation — which runs before anything is written — blocks
+	 * a submit that leaves it blank, exactly as it would block a customer. A real RU checkout
+	 * always posts it, so the simulated form does too.
+	 */
+	private const DEMO_CITY = 'Москва';
 
 	/** @var callable|null the test's own contribution to the Store API posted-data filter */
 	private $point_contribution = null;
@@ -94,6 +103,7 @@ class OrderPersistenceDatastoresTest extends TestCase {
 		$order = wc_create_order();
 		$order->set_billing_country( 'RU' );
 		$order->set_billing_city( 'Москва' );
+		$order->set_billing_address_2( self::DEMO_CITY );
 
 		$line = new \WC_Order_Item_Shipping();
 		$line->set_method_id( self::METHOD_ID );
@@ -143,10 +153,11 @@ class OrderPersistenceDatastoresTest extends TestCase {
 	 */
 	private function place_through_the_classic_checkout( \WC_Order $order ): void {
 		$_POST = [
-			self::POINT_FIELD => self::POINT_ID,
-			'billing_country' => 'RU',
-			'billing_city'    => 'Москва',
-			'shipping_method' => [ self::METHOD_ID . ':' . self::INSTANCE_ID ],
+			self::POINT_FIELD   => self::POINT_ID,
+			'billing_country'   => 'RU',
+			'billing_city'      => 'Москва',
+			'billing_address_2' => self::DEMO_CITY,
+			'shipping_method'   => [ self::METHOD_ID . ':' . self::INSTANCE_ID ],
 		];
 
 		do_action( 'woocommerce_checkout_order_processed', $order->get_id(), [], $order );
