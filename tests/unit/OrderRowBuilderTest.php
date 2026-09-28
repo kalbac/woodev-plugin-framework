@@ -618,10 +618,10 @@ class OrderRowBuilderTest extends TestCase {
 		$this->assertSame( [], $row['actions'] );
 	}
 
-	public function test_actions_is_empty_when_no_handler_is_registered(): void {
+	public function test_actions_without_a_handler_are_only_the_edit_action(): void {
 		$row = ( new Order_Row_Builder() )->build( $this->make_order(), $this->provider() );
 
-		$this->assertSame( [], $row['actions'] );
+		$this->assertSame( [ 'edit' ], array_column( $row['actions'], 'action' ) );
 	}
 
 	/**

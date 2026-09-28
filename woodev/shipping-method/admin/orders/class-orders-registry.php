@@ -269,8 +269,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		 * Returns the shipment handler registered for one provider, or null when
 		 * none was registered.
 		 *
-		 * A provider with no registered handler offers NO actions at all — see
-		 * {@see Order_Actions::for_order()}, which honours this null.
+		 * A provider with no registered handler offers no executable carrier
+		 * actions — see {@see Order_Actions::for_order()}, which honours this
+		 * null. The row may still offer «Edit», which never calls the handler
+		 * ({@see Order_Actions::for_row()}, #988).
 		 *
 		 * @since 2.0.2
 		 *
