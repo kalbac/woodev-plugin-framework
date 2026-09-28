@@ -140,39 +140,37 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 				) }
 			</div>
 
-			<div className="woodev-order-wizard__grid">
-				<div className="woodev-order-wizard__with-picker">
-					<TextField
-						label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
-						value={ shipping.city }
-						errors={ errorsFor( errors, 'shipping.city', 'billing.city' ) }
-						onChange={ ( city ) =>
-							setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
-						}
-					/>
-					<LocationPicker
-						{ ...pickerProps }
-						level="settlement"
-						disabled={ '' === shipping.country }
-						placeholder={ __( 'Найти населённый пункт…', 'woodev-plugin-framework' ) }
-					/>
-				</div>
+			<div className="woodev-order-wizard__with-picker">
+				<TextField
+					label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
+					value={ shipping.city }
+					errors={ errorsFor( errors, 'shipping.city', 'billing.city' ) }
+					onChange={ ( city ) =>
+						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
+					}
+				/>
+				<LocationPicker
+					{ ...pickerProps }
+					level="settlement"
+					disabled={ '' === shipping.country }
+					placeholder={ __( 'Найти населённый пункт…', 'woodev-plugin-framework' ) }
+				/>
+			</div>
 
-				<div className="woodev-order-wizard__with-picker">
-					<TextField
-						label={ __( 'Улица, дом', 'woodev-plugin-framework' ) }
-						value={ shipping.address_1 }
-						errors={ errorsFor( errors, 'shipping.address_1', 'billing.address_1' ) }
-						onChange={ ( address_1 ) => setShipping( { address_1 } ) }
-					/>
-					<LocationPicker
-						{ ...pickerProps }
-						level="address"
-						within={ settlementKey }
-						disabled={ '' === shipping.country }
-						placeholder={ __( 'Найти адрес…', 'woodev-plugin-framework' ) }
-					/>
-				</div>
+			<div className="woodev-order-wizard__with-picker">
+				<TextField
+					label={ __( 'Улица, дом', 'woodev-plugin-framework' ) }
+					value={ shipping.address_1 }
+					errors={ errorsFor( errors, 'shipping.address_1', 'billing.address_1' ) }
+					onChange={ ( address_1 ) => setShipping( { address_1 } ) }
+				/>
+				<LocationPicker
+					{ ...pickerProps }
+					level="address"
+					within={ settlementKey }
+					disabled={ '' === shipping.country }
+					placeholder={ __( 'Найти адрес…', 'woodev-plugin-framework' ) }
+				/>
 			</div>
 
 			<div className="woodev-order-wizard__grid">

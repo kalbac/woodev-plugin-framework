@@ -3261,6 +3261,14 @@
 	 * whether `buildSearchLayout()` ever ran, which this method has no control over and must not
 	 * assume either way.
 	 *
+	 * MANAGER MODE (#710 rig round 2, finding 4b, coordinator's decision): the toggle/menu never
+	 * builds there — the tariff the order is placed under already fixes the point type, so a
+	 * second control for the same thing is redundant chrome the admin wizard does not need. The
+	 * bookkeeping above (`_filterLabels`/`_filterOrder`/`_filterSelected`) still runs unconditionally
+	 * so {@see pointPassesFilter} keeps working off it — every code it records defaults to
+	 * selected, and manager mode has no UI to ever flip one off, so nothing is actually filtered
+	 * out; only the ADDRESS SEARCH stays, per the same finding.
+	 *
 	 * @param {Array} types `{ code, label }` pairs.
 	 * @returns {void}
 	 */
@@ -3279,6 +3287,10 @@
 
 			self._filterLabels[ type.code ] = type.label;
 		} );
+
+		if ( self._managerMode ) {
+			return;
+		}
 
 		if ( ! self._filterShown && self._filterOrder.length >= 2 ) {
 			self._filterShown = true;

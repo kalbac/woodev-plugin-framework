@@ -2128,7 +2128,19 @@ export default function OrdersPage() {
 
 	return (
 		<>
-			{ /* #969 — the one «Создать заказ» button, shared by every carrier (the page is shared, #694; O2). */ }
+			{ /*
+			 * #969 — the one «Создать заказ» button, shared by every carrier (the page is
+			 * shared, #694; O2). Left-aligned, right under the page's own title, the way
+			 * WooCommerce's «Orders → Add order» sits beside its `<h1>` (operator rig
+			 * acceptance round 2, #710, finding 1) — NOT a `WooHeaderItem` fill into
+			 * `woocommerce-layout__header`: measured against the shipped WooCommerce 11.1.0
+			 * admin bundle, `woocommerce_header_item` is defined by `@woocommerce/admin-layout`
+			 * but no `<Slot>` in this build's `Header` consumes it, so a Fill there renders
+			 * into nothing. `TableCard`'s own `title` also cannot host it: that string is
+			 * reused verbatim as the inner `<Table>`'s `caption`, so a `Button` element there
+			 * would land inside a `<caption>` — invalid content for the element and a broken
+			 * announcement for screen readers. This is the fallback the brief authorized.
+			 */ }
 			<div className="woodev-orders__create-row">
 				<Button variant="primary" onClick={ () => setWizard( { orderId: null } ) }>
 					{ __( 'Создать заказ', 'woodev-plugin-framework' ) }

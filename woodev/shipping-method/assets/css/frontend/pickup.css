@@ -1832,6 +1832,19 @@
 	margin-left: auto;
 }
 
+/* #710 rig round 2, finding 4a: `input[type="search"]` in `wp-admin/css/forms.css` draws its own
+   1px grey border and 2px border-radius, and that selector's specificity — one element plus one
+   attribute selector — beats the plain `.woodev-pickup-search__input` class rule above (the
+   `border: 0` there loses even though it loads later). Only reachable in wp-admin, so the
+   storefront never had this leak; `.is-manager` still gates it, per the section docblock's own
+   rule, and the extra class is what wins the specificity fight. */
+.woodev-pickup-stage.is-manager .woodev-pickup-search__input {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	outline: none;
+}
+
 .woodev-pickup-card__body {
 	flex: 1 1 auto;
 	min-height: 0; /* Lets this flex child scroll instead of forcing the card taller than the dialog. */

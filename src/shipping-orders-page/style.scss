@@ -1044,12 +1044,15 @@
 }
 
 /**
- * The «Создать заказ» button row (#969) — right-aligned above the table, the way a WooCommerce
- * list page puts its «Add» action.
+ * The «Создать заказ» button row (#969, moved left in #710 rig round 2, finding 1) —
+ * left-aligned, the FIRST thing this page renders, right under WooCommerce's own
+ * `<h1>Заказы доставки</h1>` in `woocommerce-layout__header` — the way a classic
+ * WordPress list page puts its «Add» action beside the page title, not stranded at the
+ * end of an unrelated row.
  */
 .woodev-orders__create-row {
 	display: flex;
-	justify-content: flex-end;
+	justify-content: flex-start;
 	margin-bottom: wd.$gap-sm;
 }
 
@@ -1123,11 +1126,12 @@
 		border-radius: wd.$radius-sm;
 	}
 
-	// A typed field with the provider's search button beside it.
+	// A typed field with the provider's search button beside it — each half the row
+	// (operator rig acceptance round 2, #710: "«Город…» (half) + «Найти…» (half)").
 	&__with-picker {
 		display: grid;
 		gap: wd.$gap;
-		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		align-items: end;
 		margin-top: wd.$gap;
 
@@ -1352,9 +1356,20 @@
 
 	// The storefront picker's stage is `position: absolute; inset: 0`, so the host it fills has to
 	// be positioned and sized; the picker draws its own list, card and map into it (O10).
+	//
+	// Height derives from the VIEWPORT, not a flat cap (operator rig acceptance round 2, #710,
+	// finding 3): the WP `Modal` frame itself is capped at `70vh` (`@wordpress/components`'
+	// `.components-modal__frame { max-height: 70% }` past 960px) and its header eats a further
+	// fixed 72px, so a flat `560px` map routinely ran past the frame's own bottom edge — measured
+	// on the rig at 1440×900: the map's box reached ~250px below the modal's visible content
+	// area before this fix. `460px` approximates the chrome around the map that is NOT the map
+	// itself (modal header, the step's own heading/tariff block, the footer) so the map shrinks
+	// on a laptop-height screen and keeps the existing 560px cap on a large monitor, where 100vh
+	// leaves it plenty of room. The manager-mode sidebar (`pickup.css`) fills this same box, so it
+	// fits wherever the map does — no separate rule needed.
 	&__pickup-map {
 		position: relative;
-		height: min(70vh, 560px);
+		height: min(560px, calc(100vh - 460px));
 		min-height: 360px;
 		overflow: hidden;
 		border: 1px solid wd.$border;
@@ -1428,11 +1443,9 @@
 		font-weight: 600;
 	}
 
-	// The submit button (operator rig acceptance, #710): on the LEFT, like the footer's own
-	// primary action, not stranded on the right where a reader's eye does not land first.
 	&__actions {
 		display: flex;
-		justify-content: flex-start;
+		justify-content: flex-end;
 		margin-top: wd.$gap-lg;
 	}
 
