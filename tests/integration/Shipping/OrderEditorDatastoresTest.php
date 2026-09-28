@@ -15,7 +15,8 @@
  *
  * Also proven here, because only the real WooCommerce can:
  *  - «New order» is sent exactly ONCE for a processing order and not at all for a pending one — the
- *    editor issues no explicit trigger (#962 I0 contradiction 1: it would double-send);
+ *    editor issues no explicit trigger (#962 I0 contradiction 1: it would double-send) — and an EDIT
+ *    (pending→processing) sends none (spec C4);
  *  - stock follows WooCommerce's own status transition on create and its own line adjustment on edit;
  *  - the three checkout hooks stay silent on an admin save, the admin hook fires.
  *
@@ -73,6 +74,12 @@ class OrderEditorDatastoresTest extends TestCase {
 		if ( ! class_exists( '\Woodev_Test_Shipping_Method_Plugin' ) || ! class_exists( '\Woodev_Realistic_Shipping_Plugin' ) ) {
 			$this->markTestSkipped( 'The shipping fixture plugins are not loaded.' );
 		}
+
+		// Build WooCommerce's mailer INSIDE this test's scope, so its email classes and the
+		// `pending_to_*_notification` hooks they register exist for the test — CI on WC 8.5.1 / 9.3.0
+		// saw no «New order» where the mailer singleton had been built in an earlier test's scope
+		// whose hooks WP_UnitTestCase then restored (#968 r3 experiment; nothing is unhooked by hand).
+		\WC()->mailer();
 
 		Orders_Registry::instance()->reset_for_tests();
 
@@ -433,34 +440,33 @@ class OrderEditorDatastoresTest extends TestCase {
 	}
 
 	/**
-	 * Where WooCommerce's own «New order» notification is NOT wired (CI on WC 8.5.1 / 9.3.0: the mailer
-	 * singleton outlives the hooks its constructor added), the editor triggers the e-mail itself —
-	 * once, and for a status that sends it (#968 r2).
+	 * An EDIT sends no «New order» (spec C4): an allowed pending→processing update runs the same
+	 * WooCommerce transition that announces a created order, so the editor mutes that one e-mail for
+	 * that order while it runs — and nothing else: a later create still sends it.
+	 *
+	 * Counted on `woocommerce_email_recipient_new_order`, which WooCommerce reads only for an e-mail
+	 * that is enabled and about to go out (unlike `…_enabled_…`, which fires for a muted one too).
 	 *
 	 * @dataProvider datastore_provider
 	 * @param bool $hpos datastore under test.
 	 * @return void
 	 */
-	public function test_the_new_order_email_is_still_sent_once_when_woocommerce_did_not_wire_its_notification( bool $hpos ): void {
+	public function test_an_update_from_pending_to_processing_sends_no_new_order_email( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
-		$email = \WC()->mailer()->emails['WC_Email_New_Order'];
+		$sent = $this->count_hook( 'woocommerce_email_recipient_new_order' );
 
-		foreach ( [ 'processing', 'completed', 'on-hold' ] as $to ) {
-			remove_action( 'woocommerce_order_status_pending_to_' . $to . '_notification', [ $email, 'trigger' ], 10 );
-		}
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$this->assertSame( 0, $sent['count'], 'a pending order sends nothing' );
 
-		$emails = $this->count_hook( 'woocommerce_email_enabled_new_order' );
+		$updated = ( new Order_Editor() )->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) );
 
-		$this->create( $this->payload( [ 'status' => 'pending' ] ) );
-		$this->assertSame( 0, $emails['count'], 'a pending order sends nothing' );
+		$this->assertInstanceOf( \WC_Order::class, $updated );
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'the transition itself still happens' );
+		$this->assertSame( 0, $sent['count'], 'an edit sends no «New order»' );
 
-		$this->create( $this->payload( [ 'status' => 'on-hold' ] ) );
-		$this->assertSame( 1, $emails['count'], 'the explicit trigger covers the unwired notification, once' );
-
-		$order = $this->create( $this->payload( [ 'status' => 'processing' ] ) );
-		$this->assertSame( 2, $emails['count'] );
-		$this->assertTrue( $this->fresh( $order->get_id() )->get_new_order_email_sent(), "WooCommerce's own sent flag is set, so nothing can repeat it" );
+		$this->create( $this->payload( [ 'status' => 'processing' ] ) );
+		$this->assertSame( 1, $sent['count'], 'the mute was scoped to the edit: a created order still announces itself' );
 	}
 
 	/**

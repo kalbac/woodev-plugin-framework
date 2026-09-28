@@ -37,11 +37,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	 *
 	 * **E-mail — measured, #962 I0 contradiction 1.** `set_status( 'processing' | 'on-hold' |
 	 * 'completed' )` on a fresh order already sends «New order» (and the customer's mail) through
-	 * WooCommerce's own `pending_to_*_notification` actions, so an unconditional extra
-	 * `WC_Email_New_Order::trigger()` would DOUBLE-SEND; a `pending` order sends nothing, exactly
-	 * like a checkout order awaiting payment. That holds where the mailer's notification hooks
-	 * are live; when they are not ({@see self::apply_status()} — measured on WC 8.5.1 / 9.3.0 in
-	 * CI, #968 r2) the trigger is issued once, only if WooCommerce did not handle the e-mail.
+	 * WooCommerce's own `pending_to_*_notification` actions. An explicit extra
+	 * `WC_Email_New_Order::trigger()` would DOUBLE-SEND, so none is issued; a `pending` order sends
+	 * nothing, exactly like a checkout order awaiting payment. An EDIT sends no «New order»: the
+	 * same transition runs on an allowed pending→processing update, so {@see self::apply_status()}
+	 * mutes that one e-mail for that order while it runs (C4).
 	 *
 	 * **Errors are returned, not thrown**: every public method answers with its result or a
 	 * `\WP_Error` whose `data['status']` is the HTTP status of the transport contract — 404 unknown
@@ -594,16 +594,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		}
 
 		/**
-		 * Moves the order to the requested status, through WooCommerce's own transition — and makes
-		 * sure a created order announces itself with exactly ONE «New order» e-mail.
+		 * Moves the order to the requested status, through WooCommerce's own transition.
 		 *
-		 * The transition normally does that by itself, through the `pending_to_*_notification`
-		 * actions the mailer hooks when it is built. When it did not (the mailer was built in a
-		 * scope whose hooks were dropped, a plugin unhooked the notification), WooCommerce's own
-		 * `WC_Email_New_Order::trigger()` is called here — and only then: an e-mail that WooCommerce
-		 * already handled (it reached `is_enabled()`, or the order carries its sent flag) is never
-		 * repeated. Customer e-mails stay entirely WooCommerce's (spec C4). An edit sends nothing
-		 * of its own.
+		 * On create the transition itself sends «New order» (and the customer's mail) through the
+		 * `pending_to_*_notification` actions. On an edit spec C4 says no «New order» goes out — an
+		 * allowed pending→processing update runs that very transition — so for the duration of THIS
+		 * transition the e-mail is switched off for THIS order, by a filter the method adds and removes
+		 * itself; any other plugin's hooks, other orders and the customer's own e-mails (which follow
+		 * WooCommerce's status transitions, C4) are untouched. A transactional e-mail a third party
+		 * defers past the transition is out of reach of a scoped filter and is left to WooCommerce.
 		 *
 		 * @since 2.0.2
 		 *
@@ -619,31 +618,21 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 
 			// The transactional-mail hooks are registered when the mailer is first built, which a REST
 			// request does not do by itself — and the transition below is what sends «New order».
-			$mailer  = WC()->mailer();
-			$handled = false;
-			$watcher = static function ( $enabled ) use ( &$handled ) {
-				$handled = true;
+			WC()->mailer();
 
-				return $enabled;
+			$order_id     = $order->get_id();
+			$mute_new     = static function ( $enabled, $email_order = null ) use ( $order_id ) {
+				return $email_order instanceof \WC_Order && $email_order->get_id() === $order_id ? false : $enabled;
 			};
-
-			add_filter( 'woocommerce_email_enabled_new_order', $watcher, 1 );
+			$mute_applied = $is_update && add_filter( 'woocommerce_email_enabled_new_order', $mute_new, PHP_INT_MAX, 2 );
 
 			try {
 				$order->set_status( $status, '', true );
 				$order->save();
 			} finally {
-				remove_filter( 'woocommerce_email_enabled_new_order', $watcher, 1 );
-			}
-
-			if ( $is_update || $handled || $order->get_new_order_email_sent() ) {
-				return;
-			}
-
-			$email = $mailer->emails['WC_Email_New_Order'] ?? null;
-
-			if ( $email instanceof \WC_Email_New_Order && in_array( $order->get_status(), [ 'processing', 'on-hold', 'completed' ], true ) ) {
-				$email->trigger( $order->get_id(), $order );
+				if ( $mute_applied ) {
+					remove_filter( 'woocommerce_email_enabled_new_order', $mute_new, PHP_INT_MAX );
+				}
 			}
 		}
 
