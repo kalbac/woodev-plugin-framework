@@ -645,6 +645,23 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		}
 
 		/**
+		 * Whether an order's total is still unset — pure, so the "never overwrite a manual total"
+		 * rule of the backfill is unit-testable without WordPress.
+		 *
+		 * `''` and any numeric zero (a fresh WooCommerce order carries `0`) count as empty; anything
+		 * else is a total somebody set, and adding line items must not recalculate it away.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $total the order's current total, as stored.
+		 *
+		 * @return bool
+		 */
+		public static function backfill_total_is_empty( string $total ): bool {
+			return '' === trim( $total ) || 0.0 === (float) $total;
+		}
+
+		/**
 		 * Applies {@see self::backfill_plan()} and the missing line items / pickup point to one order.
 		 *
 		 * @since 2.0.2
@@ -660,6 +677,9 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 			foreach ( array_keys( self::backfill_plan( $order_id, [] ) ) as $field ) {
 				$current[ $field ] = (string) $order->{ 'get_' . $field }( 'edit' );
 			}
+
+			// Read before any item is added: the decision to recalculate hangs on the total as the merchant left it.
+			$total_was_empty = self::backfill_total_is_empty( (string) $order->get_total( 'edit' ) );
 
 			$changed = false;
 
@@ -688,9 +708,15 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 				}
 			}
 
-			// Only when items were added: an order that already had its lines keeps its totals.
+			// Only when items were added: an order that already had its lines keeps its totals. And only
+			// when the total itself was empty — recalculating would overwrite a total set by hand
+			// (#868: empty fields only). A kept total stays as the merchant left it, even though the
+			// added lines no longer sum to it.
 			if ( $items_added ) {
-				$order->calculate_totals();
+				if ( $total_was_empty ) {
+					$order->calculate_totals();
+				}
+
 				$changed = true;
 			}
 

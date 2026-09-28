@@ -136,4 +136,33 @@ class OrdersSeederBackfillDatastoresTest extends TestCase {
 		$own = wc_get_order( $own->get_id() );
 		$this->assertSame( $snapshot, [ $own->get_total(), $own->get_billing_city(), count( $own->get_items() ) ] );
 	}
+
+	/**
+	 * A total set by hand on an own, item-less order survives the backfill adding its line items —
+	 * `calculate_totals()` must not run over it (#868: empty fields only, never overwrite a manual edit).
+	 *
+	 * @dataProvider datastore_and_seeder_provider
+	 *
+	 * @param bool         $hpos   datastore under test.
+	 * @param class-string $seeder seeder class under test.
+	 *
+	 * @return void
+	 */
+	public function test_backfill_keeps_a_manually_set_total_when_it_adds_the_missing_items( bool $hpos, string $seeder ): void {
+		$this->use_datastore( $hpos );
+
+		$order = $this->bare_order( $seeder::MARKER_META_KEY );
+		$order->set_total( '999' );
+		$order->save();
+
+		$this->assertSame( 1, $seeder::backfill_existing_orders(), 'the one own order is touched' );
+
+		$order = wc_get_order( $order->get_id() );
+
+		$this->assertNotEmpty( $order->get_items( 'line_item' ), 'the missing line item is still added' );
+		$this->assertSame( 999.0, (float) $order->get_total(), 'the hand-set total is not recalculated away' );
+
+		$this->assertSame( 0, $seeder::backfill_existing_orders(), 'a second run changes nothing' );
+		$this->assertSame( 999.0, (float) wc_get_order( $order->get_id() )->get_total() );
+	}
 }

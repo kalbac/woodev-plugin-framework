@@ -20,6 +20,8 @@ require_once dirname( __DIR__, 2 ) . '/tests/_fixtures/woodev-realistic-shipping
 /**
  * @covers \Woodev_Test_Orders_Seeder::backfill_plan
  * @covers \Woodev_Realistic_Orders_Seeder::backfill_plan
+ * @covers \Woodev_Test_Orders_Seeder::backfill_total_is_empty
+ * @covers \Woodev_Realistic_Orders_Seeder::backfill_total_is_empty
  */
 final class TestOrdersSeederBackfillTest extends TestCase {
 
@@ -150,5 +152,22 @@ final class TestOrdersSeederBackfillTest extends TestCase {
 
 		$this->assertSame( [], array_diff( $seen, \Woodev_Realistic_Orders_Seeder::METHOD_IDS ) );
 		$this->assertCount( 2, array_unique( $seen ) );
+	}
+
+	/**
+	 * Only an unset total may be recalculated; a total set by hand is kept when items are added (#868).
+	 *
+	 * @dataProvider seeder_provider
+	 *
+	 * @param class-string $seeder seeder class under test.
+	 */
+	public function test_only_an_unset_total_counts_as_empty( string $seeder ): void {
+		foreach ( [ '', ' ', '0', '0.00', '0.0' ] as $empty ) {
+			$this->assertTrue( $seeder::backfill_total_is_empty( $empty ), "'{$empty}' is an unset total" );
+		}
+
+		foreach ( [ '999', '999.00', '0.01', '1500.5' ] as $set ) {
+			$this->assertFalse( $seeder::backfill_total_is_empty( $set ), "'{$set}' is a total somebody set" );
+		}
 	}
 }
