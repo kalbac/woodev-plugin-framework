@@ -824,6 +824,11 @@ class My_Shipping_Integration extends Shipping_Integration {
     /**
      * Checks if the integration is fully configured.
      *
+     * Optional: the default already reports "not configured" while a declared
+     * `password` field (or a field marked `'required' => true`) is empty, and
+     * "configured" when no such field is declared. Override it only for a rule
+     * the fields cannot express.
+     *
      * @since 1.0.0
      *
      * @return bool
