@@ -149,7 +149,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 		};
 	}, [ editing, orderId ] );
 
-	// WooCommerce's own `EditLock::refresh_lock_ajax()` listens for this exact payload.
+	// The framework's datastore-aware heartbeat handler listens for this exact payload.
 	// Namespaced handlers leave the page's heartbeat listeners untouched when the modal closes.
 	useEffect( () => {
 		if ( ! editing || 'ready' !== phase ) {

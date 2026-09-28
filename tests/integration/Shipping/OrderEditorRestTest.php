@@ -119,19 +119,44 @@ class OrderEditorRestTest extends TestCase {
 	}
 
 	/**
-	 * Writes the same native WooCommerce lock that its normal order editor writes.
+	 * Writes the native lock for the selected datastore.
 	 *
 	 * @param int $order_id order to lock.
 	 * @param int $user_id  manager who owns the lock.
 	 * @param int $time     lock timestamp.
 	 * @return void
 	 */
-	private function set_edit_lock( int $order_id, int $user_id, int $time ): void {
+	private function set_edit_lock( int $order_id, int $user_id, int $time, bool $hpos ): void {
+		if ( ! $hpos ) {
+			update_post_meta( $order_id, '_edit_lock', $time . ':' . $user_id );
+
+			return;
+		}
+
 		$order = wc_get_order( $order_id );
 
 		$this->assertInstanceOf( \WC_Order::class, $order );
 		$order->update_meta_data( '_edit_lock', $time . ':' . $user_id );
 		$order->save_meta_data();
+	}
+
+	/**
+	 * Reads the native lock for the selected datastore.
+	 *
+	 * @param int  $order_id order id.
+	 * @param bool $hpos     active datastore.
+	 * @return string
+	 */
+	private function get_edit_lock( int $order_id, bool $hpos ): string {
+		if ( ! $hpos ) {
+			return (string) get_post_meta( $order_id, '_edit_lock', true );
+		}
+
+		$order = wc_get_order( $order_id );
+
+		$this->assertInstanceOf( \WC_Order::class, $order );
+
+		return (string) $order->get_meta( '_edit_lock', true );
 	}
 
 	/**
@@ -351,8 +376,9 @@ class OrderEditorRestTest extends TestCase {
 		$id         = $this->create_through_the_route();
 
 		$this->assertSame( 200, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
-		$lock = explode( ':', (string) wc_get_order( $id )->get_meta( '_edit_lock', true ) );
+		$lock = explode( ':', $this->get_edit_lock( $id, $hpos ) );
 
+		$this->assertCount( 2, $lock );
 		$this->assertGreaterThanOrEqual( time() - 2, (int) $lock[0] );
 		$this->assertSame( (string) $manager_id, $lock[1] );
 	}
@@ -367,7 +393,7 @@ class OrderEditorRestTest extends TestCase {
 		$this->login_as_manager();
 		$id       = $this->create_through_the_route();
 		$other_id = self::factory()->user->create( [ 'role' => 'shop_manager', 'display_name' => 'Мария' ] );
-		$this->set_edit_lock( $id, $other_id, time() );
+		$this->set_edit_lock( $id, $other_id, time(), $hpos );
 
 		$response = $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() );
 
@@ -386,10 +412,13 @@ class OrderEditorRestTest extends TestCase {
 		$manager_id = $this->login_as_manager();
 		$id         = $this->create_through_the_route();
 		$other_id   = self::factory()->user->create( [ 'role' => 'shop_manager' ] );
-		$this->set_edit_lock( $id, $other_id, time() - 151 );
+		$this->set_edit_lock( $id, $other_id, time() - 151, $hpos );
 
 		$this->assertSame( 200, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
-		$this->assertSame( (string) $manager_id, explode( ':', (string) wc_get_order( $id )->get_meta( '_edit_lock', true ) )[1] );
+		$lock = explode( ':', $this->get_edit_lock( $id, $hpos ) );
+
+		$this->assertCount( 2, $lock );
+		$this->assertSame( (string) $manager_id, $lock[1] );
 	}
 
 	/**
@@ -401,9 +430,29 @@ class OrderEditorRestTest extends TestCase {
 		$this->use_datastore( $hpos );
 		$manager_id = $this->login_as_manager();
 		$id         = $this->create_through_the_route();
-		$this->set_edit_lock( $id, $manager_id, time() );
+		$this->set_edit_lock( $id, $manager_id, time(), $hpos );
 
 		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() )->get_status() );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_heartbeat_refreshes_the_native_edit_lock_on_both_datastores( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$manager_id = $this->login_as_manager();
+		$id         = $this->create_through_the_route();
+		$this->set_edit_lock( $id, $manager_id, time() - 100, $hpos );
+
+		$response = apply_filters( 'heartbeat_received', [], [ 'wc-refresh-order-lock' => $id ], 'woocommerce_page_wc-orders' );
+		$lock     = explode( ':', $this->get_edit_lock( $id, $hpos ) );
+
+		$this->assertTrue( $response['wc-refresh-order-lock']['lock'], 'the framework heartbeat handler must refresh through its datastore seam' );
+		$this->assertCount( 2, $lock );
+		$this->assertGreaterThanOrEqual( time() - 2, (int) $lock[0] );
+		$this->assertSame( (string) $manager_id, $lock[1] );
 	}
 
 	// -------------------------------------------------------------------------

@@ -23,6 +23,7 @@ use Woodev\Tests\Unit\TestCase;
 require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';
 require_once __DIR__ . '/order-editor-lock-fixtures.php';
 require_once __DIR__ . '/order-edit-lock-fixtures.php';
+require_once __DIR__ . '/order-edit-lock-cpt-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Editor::create

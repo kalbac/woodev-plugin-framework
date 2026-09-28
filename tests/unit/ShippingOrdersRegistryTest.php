@@ -465,6 +465,24 @@ class ShippingOrdersRegistryTest extends TestCase {
 	}
 
 	/**
+	 * The order wizard sends WooCommerce's established heartbeat key, but its handler must be
+	 * framework-owned so legacy CPT orders refresh through WordPress's post-lock API (#982).
+	 */
+	public function test_add_hooks_hooks_the_datastore_aware_edit_lock_refresh_onto_heartbeat(): void {
+		$calls = [];
+		Functions\when( 'add_filter' )->alias(
+			static function ( ...$args ) use ( &$calls ): void {
+				$calls[] = $args;
+			}
+		);
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek' ) );
+
+		$this->assertContains( [ 'heartbeat_received', [ $registry, 'refresh_order_edit_lock' ], 20, 2 ], $calls );
+	}
+
+	/**
 	 * Card #842: `check_method_ids_contract()` must run at `admin_menu` priority
 	 * 41 — right after {@see Orders_Registry::register_page()}'s 40 — so both
 	 * sides of the comparison (the provider and the plugin's own declared class
