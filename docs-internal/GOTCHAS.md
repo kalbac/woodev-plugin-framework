@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 337 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 340 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -18,13 +18,13 @@
 | [`compat/*`](gotcha-index/compat.md) | 2 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
-| [`woocommerce/*`](gotcha-index/woocommerce.md) | 18 | WooCommerce-specific · WooCommerce-specific (session) |
+| [`woocommerce/*`](gotcha-index/woocommerce.md) | 20 | WooCommerce-specific · WooCommerce-specific (session) |
 | [`framework/*`](gotcha-index/framework.md) | 6 | Framework internals |
 | [`framework/contracts`](gotcha-index/framework-contracts.md) | 3 | What the framework guarantees to its consumers |
 | [`shipping/location`](gotcha-index/shipping-location.md) | 12 | Location provider layer |
 | [`rig/*`](gotcha-index/rig.md) | 16 | Local verification rig |
 | [`framework/wiring`](gotcha-index/framework-wiring.md) | 4 | Responsibilities that moved |
-| [`testing/*`](gotcha-index/testing.md) | 46 | Testing patterns |
+| [`testing/*`](gotcha-index/testing.md) | 47 | Testing patterns |
 | [`js/*`](gotcha-index/js.md) | 9 | JavaScript language traps |
 | [`testing/js`](gotcha-index/testing-js.md) | 8 | JavaScript testing pitfalls |
 | [`api/*`](gotcha-index/api.md) | 4 | API layer |

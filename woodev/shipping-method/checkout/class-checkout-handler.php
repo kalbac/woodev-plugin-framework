@@ -248,6 +248,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Registers this instance in {@see self::$instances} and wires
 		 *              {@see self::apply_gateway_coordination()} onto
 		 *              `woocommerce_available_payment_gateways` (issue #713).
+		 * @since 2.0.2 Also wires {@see self::handle_store_api_order_processed()} onto the block
+		 *              checkout's `woocommerce_store_api_checkout_order_processed` — which
+		 *              fires none of the classic checkout hooks above (issue #963).
 		 *
 		 * @return void
 		 */
@@ -256,6 +259,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_filter( 'woocommerce_states', [ $this, 'inject_states' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+			add_action( 'woocommerce_store_api_checkout_order_processed', [ $this, 'handle_store_api_order_processed' ] );
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
@@ -1289,6 +1293,115 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * Persists the framework's order data for a BLOCK checkout (Store API) order.
+		 *
+		 * The block checkout fires none of the classic `woocommerce_checkout_*` hooks this
+		 * handler listens to (measured on the rig, #962 I0 §3), so before this a carrier
+		 * order placed there ended with no framework meta at all. `…_order_processed` is
+		 * its analogue of `woocommerce_checkout_order_processed`, but carries no
+		 * `$posted_data`: the same input is DERIVED from what does exist —
+		 *
+		 *  - the chosen method comes from the order's first shipping line;
+		 *  - the address-shaped managed fields come from the order's own address getters;
+		 *  - anything else (the pickup point chosen through the REST `select` route lives in
+		 *    the session, not in a hidden input) is contributed through the
+		 *    `woodev_shipping_store_api_posted_data` filter — see
+		 *    {@see self::store_api_posted_data()}.
+		 *
+		 * From there it is the classic tail: {@see self::commit_values()} — same stale-pickup
+		 * drop, same writes, same `checkout_field_saved` / `checkout_data_saved` /
+		 * `checkout_processed` hooks, so a plugin listening to them sees a block-checkout
+		 * order exactly like a classic one. Form validation is deliberately NOT run: the
+		 * block form cannot supply a custom field, and by this point the order exists.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order
+		 *
+		 * @return void
+		 */
+		public function handle_store_api_order_processed( \WC_Order $order ): void {
+			$this->commit_values(
+				$order,
+				$this->sanitize_posted_data( $this->store_api_posted_data( $order ) ),
+				self::store_api_chosen_method( $order )
+			);
+		}
+
+		/**
+		 * Builds the classic-shaped "posted" array for a Store API order — what
+		 * {@see self::sanitize_posted_data()} expects, derived from the order.
+		 *
+		 * Native address fields (`billing_*` / `shipping_*`, which reach the
+		 * `checkout_data_saved` payload but are never written as plugin meta) are read from
+		 * the order's getters where one exists. The result then passes through the
+		 * `woodev_shipping_store_api_posted_data` filter: the Store API's counterpart to the
+		 * `woocommerce_checkout_posted_data` filter the classic checkout offers, and where a
+		 * value that lives outside the order (the remembered pickup point) is contributed.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order
+		 *
+		 * @return array<string, mixed> raw values keyed by field id
+		 */
+		protected function store_api_posted_data( \WC_Order $order ): array {
+			$posted = [];
+
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if ( ! $this->is_native_wc_field( $id ) ) {
+					continue;
+				}
+
+				$getter = [ $order, 'get_' . $id ];
+
+				if ( is_callable( $getter ) ) {
+					$posted[ $id ] = call_user_func( $getter );
+				}
+			}
+
+			/**
+			 * Filters the values a Store API (block checkout) order carries for the framework's
+			 * checkout fields.
+			 *
+			 * The block checkout posts no form, so the classic `$_POST` the fields are normally
+			 * read from does not exist. Each contributor adds only the field id it owns, keyed
+			 * exactly like the classic form field — e.g. the pickup handler adds the point id
+			 * remembered in the session under its own field id.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param array<string, mixed> $posted raw values keyed by field id
+			 * @param \WC_Order            $order  the created order
+			 */
+			$filtered = apply_filters( 'woodev_shipping_store_api_posted_data', $posted, $order );
+
+			return is_array( $filtered ) ? $filtered : $posted;
+		}
+
+		/**
+		 * The bare id of the shipping method a Store API order was placed with — its first
+		 * shipping line, the same "package 0" the classic path reads from `shipping_method[0]`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order
+		 *
+		 * @return string bare method id (no `:instance_id`), or empty string when the order has no shipping line
+		 */
+		private static function store_api_chosen_method( \WC_Order $order ): string {
+			foreach ( $order->get_items( 'shipping' ) as $item ) {
+				if ( is_object( $item ) && method_exists( $item, 'get_method_id' ) ) {
+					return self::normalize_method_id( (string) $item->get_method_id() );
+				}
+			}
+
+			return '';
+		}
+
+		/**
 		 * Reads the raw posted checkout data.
 		 *
 		 * Returns the unslashed `$_POST`; per-field cleaning happens in
@@ -2201,12 +2314,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
-		 * Saves the managed field values onto the order (HPOS-safe).
+		 * Saves the managed field values onto the order (HPOS-safe) and fires the checkout
+		 * save hooks.
 		 *
-		 * Persists each value under the field id as the order-meta key via
-		 * {@see self::persist_field()} → {@see \Woodev_Order_Compatibility::update_order_meta()}
-		 * (the only persistence path, so HPOS and classic post-meta stores are both covered).
-		 * Fires a per-field and a final forward hook so plugins can react to saved data.
+		 * The writes themselves live in {@see self::persist_values()} — the hook-free
+		 * persistence core the admin order editor reuses. This method is the CHECKOUT
+		 * wrapper around it: it adds the per-field `checkout_field_saved` hook (fired right
+		 * after each field's write, so a listener sees the order exactly as it stood at that
+		 * moment) and the final `checkout_data_saved` hook, so plugins can react to saved
+		 * data. Those two hooks are part of the installed-site contract and stay
+		 * CHECKOUT-ONLY: an admin save must never fire them.
 		 *
 		 * Fields whose id is a native WooCommerce address key (starts with `billing_` or
 		 * `shipping_`) are skipped — WooCommerce already persists those as core order
@@ -2214,10 +2331,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * drift after edits/refunds. See {@see self::is_native_wc_field()}.
 		 *
 		 * A pickup-slot field whose OWN method does not match the chosen shipping method
-		 * (issue #745) is dropped from `$values` before the loop even starts, via
-		 * {@see self::drop_stale_pickup_values()} — so it is skipped by `persist_field()`
-		 * exactly like an absent key, and it never reaches the per-field
-		 * `checkout_field_saved` hook or the final `checkout_data_saved` payload below
+		 * (issue #745) is dropped from `$values` before the loop even starts — so it is
+		 * skipped by `persist_field()` exactly like an absent key, and it never reaches the
+		 * per-field `checkout_field_saved` hook or the final `checkout_data_saved` payload
 		 * either; those two hooks are part of the same contract as order meta, and leaving
 		 * the stale value in them would only move the bug into a plugin's hook consumer.
 		 * `$chosen_shipping_method` defaults to `null` so this stays self-sufficient for a
@@ -2240,6 +2356,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              here — this loop never persists plugin meta for one (issue #458).
 		 * @since 2.0.2 A pickup-slot field whose own method was not chosen is dropped
 		 *              before persistence and before both save hooks (issue #745).
+		 * @since 2.0.2 The writes moved into {@see self::persist_values()} (#964); behaviour,
+		 *              hook order and payloads are unchanged.
 		 *
 		 * @param \WC_Order|int        $order                  order object or id to save onto
 		 * @param array<string, mixed> $values                 clean values keyed by field id
@@ -2250,39 +2368,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @return void
 		 */
 		public function save( $order, array $values, ?string $chosen_shipping_method = null ): void {
-			if ( [] !== $this->pickup_slot_fields() ) {
-				$values = $this->drop_stale_pickup_values(
-					$values,
-					$chosen_shipping_method ?? $this->chosen_shipping_method()
-				);
+			$chosen = $chosen_shipping_method;
+
+			if ( null === $chosen ) {
+				$chosen = [] !== $this->pickup_slot_fields() ? $this->chosen_shipping_method() : '';
 			}
 
-			foreach ( $this->effective_fields() as $id => $field ) {
-				if ( ! array_key_exists( $id, $values ) ) {
-					continue;
+			$values = $this->persist_values(
+				$order,
+				$values,
+				$chosen,
+				function ( string $id, $value ) use ( $order ): void {
+					/**
+					 * Fires after a single checkout field value is saved to the order.
+					 *
+					 * @since 1.5.0
+					 *
+					 * @param \WC_Order|int $order the order saved onto
+					 * @param string        $id    the field id (also the order-meta key)
+					 * @param mixed         $value the saved value
+					 */
+					do_action( $this->hook( 'checkout_field_saved' ), $order, $id, $value );
 				}
-
-				// Skip native WC address fields — WooCommerce already persists these as core
-				// order properties; adding our own meta would double-store and cause drift.
-				if ( $this->is_native_wc_field( $id ) ) {
-					continue;
-				}
-
-				$value = $values[ $id ];
-
-				$this->persist_field( $order, $id, $value );
-
-				/**
-				 * Fires after a single checkout field value is saved to the order.
-				 *
-				 * @since 1.5.0
-				 *
-				 * @param \WC_Order|int $order the order saved onto
-				 * @param string        $id    the field id (also the order-meta key)
-				 * @param mixed         $value the saved value
-				 */
-				do_action( $this->hook( 'checkout_field_saved' ), $order, $id, $value );
-			}
+			);
 
 			/**
 			 * Fires after all managed checkout fields are saved to the order.
@@ -2296,11 +2404,168 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		}
 
 		/**
+		 * The persistence core: marks the order as its carrier's ({@see \Woodev\Framework\Shipping\Order\Order_Marker}, #967) and
+		 * writes the managed field values onto it — no hooks, no `$_POST`, no session, no notices.
+		 *
+		 * The marker is part of the core so classic checkout, Store API checkout and the admin
+		 * order editor all mark the same way: it is written for the carrier(s) whose shipping
+		 * method is on the order (none for another carrier's or a free-shipping order — this
+		 * runs for every order, once per active carrier plugin), through the carrier's own
+		 * writer, before any field is written.
+		 *
+		 * Takes explicit input, so every caller that has already decided WHAT to write can
+		 * share the one write path: {@see self::save()} (the checkout wrapper, which adds
+		 * the checkout hooks around it) and the admin order editor. Persists each value
+		 * under the field id as the order-meta key via {@see self::persist_field()} →
+		 * {@see \Woodev_Order_Compatibility::update_order_meta()} (the only persistence
+		 * path, so HPOS and classic post-meta stores are both covered), skipping native
+		 * WooCommerce address fields ({@see self::is_native_wc_field()}) and dropping every
+		 * stale pickup-slot value first ({@see self::drop_stale_pickup_values()}, issue #745).
+		 *
+		 * `$after_field` runs right after each field's write, before the next field is
+		 * written — the seam {@see self::save()} uses to fire `checkout_field_saved` at the
+		 * exact moment the checkout always did. A caller with no per-field notification
+		 * passes nothing.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order|int        $order                  order object or id to save onto
+		 * @param array<string, mixed> $values                 clean values keyed by field id
+		 * @param string               $chosen_shipping_method the chosen method (bare, or
+		 *                                                     `id:instance_id`); only read
+		 *                                                     when this handler declares a
+		 *                                                     pickup-slot field
+		 * @param callable|null        $after_field            `fn( string $id, mixed $value ): void`
+		 * @param array<string, mixed> $marker_context         overrides for the carrier-marker writer's
+		 *                                                     context — `rate`, `fields`, `pickup_point`,
+		 *                                                     `carrier_fields`; see
+		 *                                                     {@see \Woodev\Framework\Shipping\Order\Order_Marker::mark_order()}. Checkout
+		 *                                                     passes nothing (the rate is read back from the
+		 *                                                     order's shipping line, `fields` is `$values`);
+		 *                                                     the admin order editor passes what it holds,
+		 *                                                     plus `refresh => true` when it re-saves an
+		 *                                                     order (the writers run again).
+		 *
+		 * @return array<string, mixed> `$values` after the stale pickup-slot entries were removed —
+		 *                              what a caller announces as "the saved values"
+		 */
+		public function persist_values( $order, array $values, string $chosen_shipping_method, ?callable $after_field = null, array $marker_context = [] ): array {
+			if ( [] !== $this->pickup_slot_fields() ) {
+				$values = $this->drop_stale_pickup_values( $values, $chosen_shipping_method );
+			}
+
+			// The carrier marker (#967) goes first, so nothing below — and no `checkout_*` listener —
+			// sees a carrier order that the orders page could not yet find.
+			// `refresh` is not part of the writer's context but the marker's own switch: an order
+			// being RE-saved by the admin editor must re-run the writers, because a marker derived
+			// from the chosen rate has to follow the edit. Checkout never sets it.
+			$refresh_marker = ! empty( $marker_context['refresh'] );
+			unset( $marker_context['refresh'] );
+
+			( new \Woodev\Framework\Shipping\Order\Order_Marker() )->mark_order( $order, array_merge( [ 'fields' => $values ], $marker_context ), $refresh_marker );
+
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if ( ! array_key_exists( $id, $values ) ) {
+					continue;
+				}
+
+				// Skip native WC address fields — WooCommerce already persists these as core
+				// order properties; adding our own meta would double-store and cause drift.
+				if ( $this->is_native_wc_field( $id ) ) {
+					continue;
+				}
+
+				$this->persist_field( $order, $id, $values[ $id ] );
+
+				if ( null !== $after_field ) {
+					$after_field( $id, $values[ $id ] );
+				}
+			}
+
+			return $values;
+		}
+
+		/**
+		 * The pickup-slot field ids this handler declares — where a chosen pickup point's id
+		 * lives among the managed field values (the admin order editor, #968, puts the point
+		 * it was handed under them before {@see self::persist_values()}).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[]
+		 */
+		public function pickup_field_ids(): array {
+			return array_map(
+				static function ( array $field ): string {
+					return (string) $field['id'];
+				},
+				$this->pickup_slot_fields()
+			);
+		}
+
+		/**
+		 * Reads this handler's managed field values back from an order — the inverse of
+		 * {@see self::persist_values()}: every non-native field with a stored, non-empty value,
+		 * keyed by field id. Native WooCommerce address fields are order properties, not meta,
+		 * and are read from the order's own getters by the caller.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order.
+		 * @return array<string, mixed>
+		 */
+		public function read_values( \WC_Order $order ): array {
+			$values = [];
+
+			foreach ( $this->effective_fields() as $id => $field ) {
+				if ( $this->is_native_wc_field( (string) $id ) ) {
+					continue;
+				}
+
+				$value = \Woodev_Order_Compatibility::get_order_meta( $order, (string) $id );
+
+				if ( is_scalar( $value ) && '' !== (string) $value ) {
+					$values[ (string) $id ] = $value;
+				}
+			}
+
+			return $values;
+		}
+
+		/**
+		 * Announces that the admin order editor saved an order for this carrier plugin.
+		 *
+		 * The three `checkout_*` hooks stay CHECKOUT-ONLY — plugins listening to them must never
+		 * see an admin save (#710 spec D4) — so the admin path has its own, built with the SAME
+		 * prefix rule {@see self::hook()} applies: `woodev_shipping_{prefix}_admin_order_saved`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order   the saved order.
+		 * @param array<string, mixed> $values  the managed field values that were written.
+		 * @param array<string, mixed> $context what the editor was handed: `rate`, `pickup_point`,
+		 *                                      `carrier_fields`, and `is_update`.
+		 * @return void
+		 */
+		public function announce_admin_order_saved( \WC_Order $order, array $values, array $context ): void {
+			/**
+			 * Fires after the admin order editor created or updated an order of this carrier.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param \WC_Order            $order   the saved order
+			 * @param array<string, mixed> $values  the managed field values written
+			 * @param array<string, mixed> $context `rate`, `pickup_point`, `carrier_fields`, `is_update`
+			 */
+			do_action( $this->hook( 'admin_order_saved' ), $order, $values, $context );
+		}
+
+		/**
 		 * Runs posted data through the full sanitize → validate → save pipeline.
 		 *
 		 * Returns `false` without saving when validation blocks checkout, so the caller
-		 * can abort the order. On success the values are persisted and a final forward
-		 * hook fires.
+		 * can abort the order. On success the values are persisted through
+		 * {@see self::commit_values()} and a final forward hook fires.
 		 *
 		 * A pickup-slot field whose own method was not chosen (issue #745) is dropped via
 		 * {@see self::drop_stale_pickup_values()} AFTER `validate()` returns — validate()
@@ -2313,6 +2578,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 *              `validate()` for consistent conditional-required evaluation at save time.
 		 * @since 2.0.2 Drops stale pickup-slot values before `save()` and before the
 		 *              `checkout_processed` payload (issue #745).
+		 * @since 2.0.2 The persist-and-announce tail moved into {@see self::commit_values()},
+		 *              shared with the Store API path (#964).
 		 *
 		 * @param array<string, mixed> $posted raw posted data (e.g. `$_POST`)
 		 * @param \WC_Order|int        $order  order object or id to save onto
@@ -2330,9 +2597,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				return false;
 			}
 
-			$persisted_values = $this->drop_stale_pickup_values( $values, $state['chosen_shipping_method'] );
+			$this->commit_values( $order, $values, $state['chosen_shipping_method'] );
 
-			$this->save( $order, $persisted_values, $state['chosen_shipping_method'] );
+			return true;
+		}
+
+		/**
+		 * The persist-and-announce tail every checkout path shares: drop the stale pickup
+		 * values, save what is left (with the per-field and `checkout_data_saved` hooks) and
+		 * fire `checkout_processed`.
+		 *
+		 * Takes ALREADY-VALIDATED, clean values. The classic checkout reaches it through
+		 * {@see self::process()} after `validate()` passed; the block checkout (Store API)
+		 * reaches it through {@see self::handle_store_api_order_processed()} with values
+		 * derived from the order and the session, which no customer typed into a form and
+		 * which therefore skip form validation (nothing in the block form can supply a
+		 * custom field, so validating them would only ever lose the order's data).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order|int        $order                  order object or id to save onto
+		 * @param array<string, mixed> $values                 clean values keyed by field id
+		 * @param string               $chosen_shipping_method the chosen method (bare, or `id:instance_id`)
+		 *
+		 * @return void
+		 */
+		protected function commit_values( $order, array $values, string $chosen_shipping_method ): void {
+			$persisted_values = $this->drop_stale_pickup_values( $values, $chosen_shipping_method );
+
+			$this->save( $order, $persisted_values, $chosen_shipping_method );
 
 			/**
 			 * Fires after posted checkout data is sanitized, validated and saved.
@@ -2343,8 +2636,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			 * @param array<string, mixed> $values the saved values keyed by field id
 			 */
 			do_action( $this->hook( 'checkout_processed' ), $order, $persisted_values );
-
-			return true;
 		}
 
 		/**

@@ -297,6 +297,35 @@ Moved here from `CURRENT-STATE.md` in s139: they are reference, true regardless 
   shipped). Every witness — the REST arg, the «Все / Новые» links, the carrier counts, the badge — reads
   it through the SAME `Orders_Query`, which is why their numbers agree by construction rather than by
   coincidence. Moved here from `CURRENT-STATE.md` in s139.
+- **The carrier marker is a two-sided contract (#967, #710 I1b).** The page FINDS an order by the
+  presence of `Orders_Provider::get_marker_meta_key()` (an `EXISTS` clause; `Orders_Id_Resolver`
+  drives on the same key) and NAMES its carrier through `resolve_provider_for_order()`, which reads
+  the VALUE — so the value must be a **non-empty scalar**: `''`/`false` list the order but leave its
+  row and metabox ownerless, and an array raises «Array to string conversion» on every call (measured,
+  #962 I0; `Order_Marker::is_valid_value()`). The framework never invents the value: the provider
+  declares `marker_writer` (`fn( WC_Order, array $context ): void`, optional in `create()` so installed
+  providers keep constructing; a provider without one is listed but never created/edited for).
+  `Order_Marker` runs it from `Checkout_Handler::persist_values()` — the one core the classic
+  checkout, the Store API checkout and the admin editor share — for the provider whose method id is on
+  one of the order's shipping lines (the checkout handlers run for EVERY order, once per active
+  plugin), saves the order's meta, and verifies the marker the way the page reads it; a broken writer
+  is logged and never breaks the order.
+- **The admin order wizard's server side is `Order_Editor` + three routes (#968, #710 I3).**
+  `POST woodev/v1/shipping/orders` (create), `PUT …/orders/{id}` (update) and `GET …/orders/{id}/edit`
+  (the prefill) are a thin transport (`Order_Editor_Controller`, gated `edit_shop_orders`) over one
+  service. The **transport contract**: 401/403 from WordPress, 404 unknown order OR not a row of the
+  page, 409 not editable, 422 `data.errors` = `[ { field, code, message } ]` (dotted request path), 201
+  `{ id, number, message }` / 200 — declared by the service, not by REST arg schemas (a schema mismatch
+  would add a 400 with a second error format). The request carries the chosen rate and point; the
+  rates / points routes only PRODUCE them (`Order_Payload_Validator` documents the shape). **One
+  writer:** the owning plugin's `Checkout_Handler::persist_values()` (managed fields + marker, with
+  `refresh` on an edit) and `Pickup_Handler::persist_full_point()`; the three `checkout_*` hooks stay
+  checkout-only, an admin save fires `woodev_shipping_{prefix}_admin_order_saved`. **Editable-state
+  policy is ONE method** — `Order_Actions::is_editable()` / `not_editable_reason()` (exported, final
+  status, finished delivery) — read by the row action and by the routes, and evaluated TWICE on an
+  update (before validation, and again on a fresh read before the writes: the stale-row race). **No
+  explicit «New order» trigger** — `set_status()` on a fresh order already sends it through
+  WooCommerce's `pending_to_*_notification` (#962 I0, contradiction 1); an extra one double-sends.
 
 ## Subsystem phase status
 

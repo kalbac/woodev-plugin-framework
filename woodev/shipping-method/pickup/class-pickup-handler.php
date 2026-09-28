@@ -1852,6 +1852,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * `woocommerce_checkout_get_value` is the restore side — see
 		 * {@see self::restore_selection()}.
 		 *
+		 * The block checkout (Store API) fires none of the classic checkout hooks, so it gets
+		 * its own two: {@see self::handle_store_api_order_processed()} on
+		 * `woocommerce_store_api_checkout_order_processed` (priority 20, after every
+		 * `Checkout_Handler`'s priority-10 callback) and
+		 * {@see self::contribute_store_api_posted_data()} on the
+		 * `woodev_shipping_store_api_posted_data` filter (issue #963).
+		 *
 		 * @since 2.0.2
 		 *
 		 * @return void
@@ -1861,6 +1868,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
+			add_action( 'woocommerce_store_api_checkout_order_processed', [ $this, 'handle_store_api_order_processed' ], 20 );
+			add_filter( 'woodev_shipping_store_api_posted_data', [ $this, 'contribute_store_api_posted_data' ], 10, 2 );
 			add_action( 'wp_footer', [ $this, 'print_nonce_node' ] );
 			add_filter( 'woocommerce_update_order_review_fragments', [ $this, 'inject_nonce_fragment' ] );
 			add_action( 'woodev_shipping_pickup_point_selected', [ $this, 'remember_selection' ], 10, 2 );
@@ -2965,9 +2974,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return $value;
 			}
 
-			$point_id = Selection_Scope::TYPE_ANY === $pair['type']
-				? $selection->recall_latest( $pair['locality'] )
-				: $selection->recall( $pair['locality'], $pair['type'] );
+			$point_id = $this->recall_for_pair( $selection, $pair );
 
 			return null !== $point_id ? $point_id : $value;
 		}
@@ -2991,7 +2998,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * {@see self::rest_shipping_method()} does — `WC()->session`'s own record,
 		 * `:instance_id` suffix stripped — replicated rather than shared, since that
 		 * method's own docblock documents it as consumed only by
-		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam.
+		 * {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}'s domain seam. The
+		 * gate itself is {@see self::selection_pair_for_method()}, which the Store API path
+		 * calls with the method read from the ORDER instead.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 Reconciles `type_for_method()` against
@@ -3004,9 +3013,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 *                                                     no pickup type.
 		 */
 		protected function current_selection_pair(): ?array {
-			$scope = $this->selection_scope;
-
-			if ( null === $scope ) {
+			if ( null === $this->selection_scope ) {
 				return null;
 			}
 
@@ -3014,6 +3021,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$method = ( is_array( $chosen ) && isset( $chosen[0] ) && is_scalar( $chosen[0] ) )
 				? explode( ':', (string) wc_clean( (string) $chosen[0] ) )[0]
 				: '';
+
+			return $this->selection_pair_for_method( $method );
+		}
+
+		/**
+		 * The gate of {@see self::current_selection_pair()} for an explicit method id: asks the
+		 * scope whether the method carries a pickup type, reconciles that answer against the
+		 * framework's own pickup-method list, and pairs the type with the scope's current
+		 * locality.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $method Bare shipping-method id (no `:instance_id` suffix), or `''`.
+		 *
+		 * @return array{locality: string, type: string}|null `null` when no scope is wired or the
+		 *                                                     method carries no pickup type.
+		 */
+		private function selection_pair_for_method( string $method ): ?array {
+			$scope = $this->selection_scope;
+
+			if ( null === $scope ) {
+				return null;
+			}
 
 			$type = $scope->type_for_method( $method );
 
@@ -3027,6 +3057,25 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				'locality' => $scope->current_locality(),
 				'type'     => $type,
 			];
+		}
+
+		/**
+		 * Recalls the point id remembered for a resolved (locality, type) pair — an exact
+		 * `type` recalls that type's entry, {@see Selection_Scope::TYPE_ANY} the most recent
+		 * one in the locality. Shared by {@see self::restore_selection()} and the Store API
+		 * path so both resolve "the remembered point" identically.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Pickup_Selection                      $selection the selection map.
+		 * @param array{locality: string, type: string} $pair      the resolved pair.
+		 *
+		 * @return string|null `null` when nothing is remembered.
+		 */
+		private function recall_for_pair( Pickup_Selection $selection, array $pair ): ?string {
+			return Selection_Scope::TYPE_ANY === $pair['type']
+				? $selection->recall_latest( $pair['locality'] )
+				: $selection->recall( $pair['locality'], $pair['type'] );
 		}
 
 		/**
@@ -3263,11 +3312,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * Re-reads the field value from `$_POST` directly (rather than trusting
 		 * `$posted_data`), mirroring
 		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_checkout_order_processed()}'s
-		 * own convention. A blank value, an unknown point, or any thrown `\Throwable`
-		 * while re-fetching are all degraded-but-safe: this method only ever adds to the
-		 * id §8 already persisted and never blocks or (re-)throws after the order exists —
-		 * see the class docblock for why an uncaught throw here is strictly worse than one
-		 * on `woocommerce_checkout_process` (the order row is already committed, and later
+		 * own convention, and hands it to {@see self::persist_full_point()} — the
+		 * persistence core the Store API path and the admin order editor share. A blank
+		 * value, an unknown point, or any thrown `\Throwable` while re-fetching are all
+		 * degraded-but-safe: this method only ever adds to the id §8 already persisted and
+		 * never blocks or (re-)throws after the order exists — see the class docblock for
+		 * why an uncaught throw here is strictly worse than one on
+		 * `woocommerce_checkout_process` (the order row is already committed, and later
 		 * priority callbacks on this same hook — including other plugins' — never run).
 		 *
 		 * @internal
@@ -3281,27 +3332,103 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function handle_checkout_order_processed( int $order_id, array $posted_data, \WC_Order $order ): void {
-			// Issue #176: clears the WHOLE pickup-selection map on order creation — see
-			// spec §6's invalidation table. Deliberately BEFORE the full-point-persistence
-			// early return just below: that return is conditioned on
-			// `$order_handler`/`$point_field_logical`, which is orthogonal to whether
-			// selection persistence is wired at all. Placing the clear after it would
-			// silently skip clearing for every plugin that has not wired full-point
-			// persistence, leaving a stale selection to resurface on the NEXT cart. A
-			// missing {@see self::$selection_scope} makes {@see self::selection()}
-			// return null, and {@see Pickup_Selection::forget_all()} is itself a no-op
-			// without a live WC session — both already degrade safely.
-			$selection = $this->selection();
+			$this->forget_remembered_selections();
 
-			if ( null !== $selection ) {
-				$selection->forget_all();
+			$this->persist_full_point( $order, $this->posted_field_value() );
+		}
+
+		/**
+		 * Handles `woocommerce_store_api_checkout_order_processed` — the block checkout's
+		 * counterpart to {@see self::handle_checkout_order_processed()} (#963).
+		 *
+		 * The block checkout posts no hidden field: the point the customer confirmed through
+		 * the REST `select` route lives only in the session's selection map. It is recalled
+		 * for the method the order was actually placed with, persisted through the same core
+		 * as the classic path, and only THEN is the map cleared.
+		 *
+		 * Registered at priority 20 so it runs after every plugin's
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_store_api_order_processed()}
+		 * (priority 10), which reads the same remembered point through
+		 * {@see self::contribute_store_api_posted_data()} — clearing the map first would
+		 * hand that handler an empty selection.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order.
+		 *
+		 * @return void
+		 */
+		public function handle_store_api_order_processed( \WC_Order $order ): void {
+			$point_id = $this->remembered_point_id_for_order( $order );
+
+			$this->forget_remembered_selections();
+
+			$this->persist_full_point( $order, $point_id );
+		}
+
+		/**
+		 * Filters `woodev_shipping_store_api_posted_data` — adds the point remembered in the
+		 * session under this handler's own checkout field id, so a Store API order reaches
+		 * {@see \Woodev\Framework\Shipping\Checkout\Checkout_Handler} with the same
+		 * "posted" point id a classic checkout order carries (#963).
+		 *
+		 * Only adds when a point is remembered for the method the order was placed with and
+		 * nothing else already supplied the field; every other key is passed through
+		 * untouched, as the filter is global and every plugin's pickup handler sits on it.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed     $posted raw values keyed by field id.
+		 * @param \WC_Order $order  the created order.
+		 *
+		 * @return mixed `$posted`, with this handler's field added when a point is remembered.
+		 */
+		public function contribute_store_api_posted_data( $posted, \WC_Order $order ) {
+			if ( ! is_array( $posted ) || isset( $posted[ $this->field_id ] ) ) {
+				return $posted;
 			}
 
+			$point_id = $this->remembered_point_id_for_order( $order );
+
+			if ( '' !== $point_id ) {
+				$posted[ $this->field_id ] = $point_id;
+			}
+
+			return $posted;
+		}
+
+		/**
+		 * The persistence core for the full pickup point: re-fetches `$point_id` from the
+		 * carrier and stores its canonical array through the plugin's own key map.
+		 *
+		 * Takes the point id explicitly — the classic checkout reads it from `$_POST`, the
+		 * block checkout from the session, the admin order editor from its payload — so the
+		 * three share one write. No-op (and no carrier request) when the owning plugin has
+		 * not wired full-point persistence, or `$point_id` is blank, or the carrier does not
+		 * know the point. Never throws: a failing carrier lookup is logged, because the order
+		 * already exists and an exception here would only strand it half-written.
+		 *
+		 * `store_pickup_point()` writes `to_array()` — the canonical, UNESCAPED
+		 * representation — through the plugin's own logical→real key map. Order meta is data
+		 * at rest that a later stage sends back to the carrier on export;
+		 * `to_browser_array()` exists solely for the REST response and must never reach the
+		 * database.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order    the order to store the point onto.
+		 * @param string    $point_id the carrier's id of the chosen point.
+		 *
+		 * @return void
+		 */
+		public function persist_full_point( \WC_Order $order, string $point_id ): void {
 			if ( null === $this->order_handler || null === $this->point_field_logical ) {
 				return;
 			}
-
-			$point_id = $this->posted_field_value();
 
 			if ( '' === $point_id ) {
 				return;
@@ -3319,12 +3446,72 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				return;
 			}
 
-			// store_pickup_point() writes to_array() — the canonical, UNESCAPED
-			// representation — through the plugin's own logical→real key map. Order meta
-			// is data at rest that a later stage sends back to the carrier on export;
-			// to_browser_array() exists solely for the REST response and must never reach
-			// the database.
 			$this->order_handler->store_pickup_point( $order, $this->point_field_logical, $point );
+		}
+
+		/**
+		 * Clears the WHOLE pickup-selection map on order creation — see spec §6's
+		 * invalidation table (issue #176).
+		 *
+		 * Deliberately independent of full-point persistence: that is conditioned on
+		 * `$order_handler`/`$point_field_logical`, which is orthogonal to whether selection
+		 * persistence is wired at all. Tying the clear to it would silently skip clearing for
+		 * every plugin that has not wired full-point persistence, leaving a stale selection to
+		 * resurface on the NEXT cart. A missing {@see self::$selection_scope} makes
+		 * {@see self::selection()} return null, and {@see Pickup_Selection::forget_all()} is
+		 * itself a no-op without a live WC session — both already degrade safely.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		private function forget_remembered_selections(): void {
+			$selection = $this->selection();
+
+			if ( null !== $selection ) {
+				$selection->forget_all();
+			}
+		}
+
+		/**
+		 * The point id remembered in the session for the method a Store API order was placed
+		 * with, or `''` when nothing is remembered, no selection scope is wired, or the order's
+		 * method carries no pickup type for this plugin.
+		 *
+		 * The block checkout has no posted field, and `WC()->session`'s
+		 * `chosen_shipping_methods` may already have moved on by the time an order exists, so
+		 * the method is read from the ORDER — the same choice the customer paid for.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the created order.
+		 *
+		 * @return string
+		 */
+		private function remembered_point_id_for_order( \WC_Order $order ): string {
+			$selection = $this->selection();
+
+			if ( null === $selection ) {
+				return '';
+			}
+
+			$method = '';
+
+			foreach ( $order->get_items( 'shipping' ) as $item ) {
+				if ( is_object( $item ) && method_exists( $item, 'get_method_id' ) ) {
+					$method = (string) $item->get_method_id();
+
+					break;
+				}
+			}
+
+			$pair = $this->selection_pair_for_method( $method );
+
+			if ( null === $pair ) {
+				return '';
+			}
+
+			return (string) $this->recall_for_pair( $selection, $pair );
 		}
 
 		/**

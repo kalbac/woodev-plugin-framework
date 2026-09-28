@@ -5240,6 +5240,16 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 				->once()
 				->with( 'woocommerce_checkout_order_processed', [ $handler, 'handle_checkout_order_processed' ], 10, 3 );
 
+			// #963: the block checkout — priority 20, so it runs after every Checkout_Handler's
+			// priority-10 Store API callback that reads the remembered point through the filter.
+			Functions\expect( 'add_action' )
+				->once()
+				->with( 'woocommerce_store_api_checkout_order_processed', [ $handler, 'handle_store_api_order_processed' ], 20 );
+
+			Functions\expect( 'add_filter' )
+				->once()
+				->with( 'woodev_shipping_store_api_posted_data', [ $handler, 'contribute_store_api_posted_data' ], 10, 2 );
+
 			// Issue #157: the nonce-refresh channel — the footer node and the fragment that
 			// replaces it on every update_checkout.
 			Functions\expect( 'add_action' )

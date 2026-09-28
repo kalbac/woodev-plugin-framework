@@ -59,6 +59,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		public const EXPORTABLE_STATUSES = [ 'pending', 'on-hold', 'processing' ];
 
 		/**
+		 * WC order statuses an order is FINAL in: the admin order wizard neither edits an order
+		 * in one of them nor moves an order into one (#710 spec D5) — refunds, cancellations and
+		 * the like stay with WooCommerce's own tools.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var string[]
+		 */
+		public const FINAL_STATUSES = [ 'completed', 'cancelled', 'refunded', 'failed' ];
+
+		/**
 		 * Canonical delivery statuses that retire «Отменить»: the shipment already
 		 * reached an end state at the carrier, so cancelling it is meaningless.
 		 *
@@ -197,6 +208,71 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public function is_offered( \WC_Order $order, ?Orders_Provider $provider, string $action ): bool {
 			return in_array( $action, array_column( $this->for_order( $order, $provider ), 'action' ), true );
+		}
+
+		/**
+		 * The ONE editable-state policy of the admin order wizard (#710 spec D5, card #968):
+		 * whether a row of the orders page may still be edited.
+		 *
+		 * Read by the row action AND by the update / load routes, so the button and the server
+		 * can never disagree — the routes re-evaluate it on every call and never trust the
+		 * client's row (a stale row is exactly the race D5 names).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null when the order is not a
+		 *                                        row of this page.
+		 * @return bool
+		 */
+		public static function is_editable( \WC_Order $order, ?Orders_Provider $provider ): bool {
+			return '' === self::not_editable_reason( $order, $provider );
+		}
+
+		/**
+		 * Why an order cannot be edited, in one merchant-readable sentence — or `''` when it can.
+		 *
+		 * Editable means ALL of: the order is a row of this page (`$provider` resolved, spec O3);
+		 * it was not exported to the carrier (the carrier-order-id meta the «Новые» tab reads,
+		 * {@see self::is_exported()}; spec O4 — cancel the export first); its status is not final
+		 * ({@see self::FINAL_STATUSES}); and the delivery has not reached an end state
+		 * ({@see self::CANCEL_RETIRED_STATUSES} — the framework has no other final-state API,
+		 * `Delivery_Status` only names the canonical states).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order    the order.
+		 * @param Orders_Provider|null $provider the matched carrier, or null.
+		 * @return string a sentence for the manager; empty when the order is editable.
+		 */
+		public static function not_editable_reason( \WC_Order $order, ?Orders_Provider $provider ): string {
+			if ( null === $provider ) {
+				return __( 'Для этого заказа не удалось определить перевозчика.', 'woodev-plugin-framework' );
+			}
+
+			if ( self::is_exported( $order, $provider ) ) {
+				return __( 'Заказ уже выгружен перевозчику — чтобы изменить его, сначала отмените выгрузку.', 'woodev-plugin-framework' );
+			}
+
+			if ( in_array( $order->get_status(), self::FINAL_STATUSES, true ) ) {
+				return sprintf(
+					/* translators: %s: WooCommerce order status name, e.g. "Выполнен". */
+					__( 'Заказ в статусе «%s» — редактировать его нельзя.', 'woodev-plugin-framework' ),
+					wc_get_order_status_name( $order->get_status() )
+				);
+			}
+
+			$canonical = self::resolve_canonical_status( $order, $provider );
+
+			if ( in_array( $canonical, self::CANCEL_RETIRED_STATUSES, true ) ) {
+				return sprintf(
+					/* translators: %s: canonical delivery status label, e.g. "Доставлено". */
+					__( 'Отправление уже в конечном статусе «%s» — редактировать заказ нельзя.', 'woodev-plugin-framework' ),
+					Delivery_Status::label( $canonical )
+				);
+			}
+
+			return '';
 		}
 
 		/**

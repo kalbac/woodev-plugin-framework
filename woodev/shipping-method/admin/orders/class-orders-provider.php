@@ -182,6 +182,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $cron_hook;
 
 		/**
+		 * The carrier's own marker writer — `fn( \WC_Order $order, array $context ): void` —
+		 * or null when this carrier declared none (#967). See {@see self::mark_order()} for
+		 * the contract, and {@see self::has_marker_writer()} for what its absence means.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var callable|null
+		 */
+		private $marker_writer;
+
+		/**
 		 * Use {@see self::create()} instead.
 		 *
 		 * @since 2.0.2
@@ -199,6 +210,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string|null          $carrier_order_id_meta_key  carrier-order-id order-meta key.
 		 * @param string|null          $legacy_page_slug           legacy v1 orders-page slug.
 		 * @param string|null          $cron_hook                  carrier cron hook that refreshes delivery statuses.
+		 * @param callable|null        $marker_writer              carrier marker writer (#967).
 		 */
 		private function __construct(
 			string $id,
@@ -213,7 +225,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $pickup_point_meta_key,
 			?string $carrier_order_id_meta_key,
 			?string $legacy_page_slug,
-			?string $cron_hook
+			?string $cron_hook,
+			?callable $marker_writer = null
 		) {
 			$this->id                        = $id;
 			$this->label                     = $label;
@@ -228,6 +241,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->carrier_order_id_meta_key = $carrier_order_id_meta_key;
 			$this->legacy_page_slug          = $legacy_page_slug;
 			$this->cron_hook                 = $cron_hook;
+			$this->marker_writer             = $marker_writer;
 		}
 
 		/**
@@ -253,10 +267,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *     @type string               $carrier_order_id_meta_key carrier-order-id order-meta key (SP-10 #841).
 		 *     @type string               $legacy_page_slug          legacy v1 orders-page slug.
 		 *     @type string               $cron_hook                 carrier cron hook that refreshes delivery statuses.
+		 *     @type callable             $marker_writer             `fn( \WC_Order $order, array $context ): void` — writes THIS
+		 *                                                           carrier's marker onto an order it owns (#967). Optional: a carrier
+		 *                                                           without one still gets its orders LISTED, but the framework will
+		 *                                                           never create or edit an order for it (see {@see self::mark_order()}).
 		 * }
 		 * @return self
 		 *
-		 * @throws Shipping_Exception when a required field is empty.
+		 * @throws Shipping_Exception when a required field is empty, or `marker_writer` is present but not callable.
 		 */
 		public static function create( string $id, string $label, string $marker_meta_key, array $method_ids, array $args = [] ): self {
 			foreach ( [
@@ -287,6 +305,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				return isset( $args[ $key ] ) && is_array( $args[ $key ] ) ? $args[ $key ] : [];
 			};
 
+			// Declared-but-broken is a plugin bug, not an absent writer: silently treating a
+			// typo'd callable as "none" would hide the carrier from the order editor with no trace.
+			if ( isset( $args['marker_writer'] ) && ! is_callable( $args['marker_writer'] ) ) {
+				throw new Shipping_Exception(
+					sprintf( 'Orders_Provider "%s": "marker_writer" must be callable.', $id )
+				);
+			}
+
 			return new self(
 				$id,
 				$label,
@@ -300,7 +326,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'pickup_point_meta_key' ),
 				$nullable_string( $args, 'carrier_order_id_meta_key' ),
 				$nullable_string( $args, 'legacy_page_slug' ),
-				$nullable_string( $args, 'cron_hook' )
+				$nullable_string( $args, 'cron_hook' ),
+				$args['marker_writer'] ?? null
 			);
 		}
 
@@ -328,6 +355,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 
 		/**
 		 * Returns the order-meta marker key.
+		 *
+		 * The KEY only — the value and the moment it is written are the carrier's, through
+		 * its {@see self::mark_order()} writer (#967); the value must be a non-empty scalar.
 		 *
 		 * @since 2.0.2
 		 *
@@ -463,6 +493,79 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 */
 		public function get_cron_hook(): ?string {
 			return $this->cron_hook;
+		}
+
+		/**
+		 * Whether this carrier declared a marker writer (#967).
+		 *
+		 * The framework NEVER creates or edits an order for a carrier that has none — the
+		 * marker's value and its source differ per carrier (a flag, a value derived from the
+		 * chosen rate, the carrier's own raw-status meta), so there is no default to fall back
+		 * on. Listing the carrier's existing orders is unaffected.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function has_marker_writer(): bool {
+			return null !== $this->marker_writer;
+		}
+
+		/**
+		 * Marks an order as belonging to this carrier — the framework-level marker contract
+		 * (#967, spec `2026-09-27-710-create-edit-order-design.md` D4).
+		 *
+		 * Calls the carrier's own writer with the live order and a context array. Called by
+		 * {@see \Woodev\Framework\Shipping\Order\Order_Marker}, never directly: that class
+		 * decides WHICH orders a provider marks, persists the result and enforces the value
+		 * rule below, so classic checkout, Store API checkout and the admin order editor all
+		 * mark the same way.
+		 *
+		 * **What the writer must leave behind** — this is what the orders page reads, and it is
+		 * an installed-site data contract:
+		 *
+		 *  - the meta key {@see self::get_marker_meta_key()} present on the order (the list query
+		 *    matches it by `EXISTS`, {@see Orders_Query});
+		 *  - with a NON-EMPTY SCALAR value ({@see \Woodev\Framework\Shipping\Order\Order_Marker::is_valid_value()}):
+		 *    {@see Orders_Registry::resolve_provider_for_order()} treats `''` / `false` as «no
+		 *    marker», so the list shows the order while its row and metabox cannot name its
+		 *    carrier, and an array value raises an «Array to string conversion» warning on every
+		 *    call. `'1'` is the safe value.
+		 *
+		 * The writer sets the meta on the order OBJECT (`$order->update_meta_data()`); the
+		 * framework saves it. It must be idempotent — it runs again when an order is edited.
+		 *
+		 * `$context` — every key is always present:
+		 *
+		 *  - `provider_id`    string   this provider's id;
+		 *  - `method_id`      string   the order's shipping line that made it this carrier's (bare id);
+		 *  - `instance_id`    int      that line's zone-instance id (0 when unknown);
+		 *  - `rate`           array    `id`, `method_id`, `instance_id`, `label`, `cost` (string), `meta`
+		 *                              (`key => value`) — read back from the order's shipping line, or
+		 *                              supplied by the caller (the admin editor hands over the chosen rate);
+		 *  - `fields`         array    the carrier's checkout/wizard field values, keyed by field id, after the
+		 *                              stale-pickup drop — empty when the caller has none;
+		 *  - `pickup_point`   mixed    a {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point}, its `to_array()`,
+		 *                              or null — supplied by callers that hold the full point (the admin editor);
+		 *                              a checkout caller carries the point id inside `fields` instead;
+		 *  - `carrier_fields` array    the carrier's own export fields (spec D7) — empty until I7.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order           $order   the order to mark, already carrying its shipping line.
+		 * @param array<string,mixed> $context see above.
+		 * @return void
+		 *
+		 * @throws Shipping_Exception when this provider declared no marker writer.
+		 */
+		public function mark_order( \WC_Order $order, array $context ): void {
+			if ( null === $this->marker_writer ) {
+				throw new Shipping_Exception(
+					sprintf( 'Orders_Provider "%s" declared no marker_writer, so it cannot mark an order.', $this->id )
+				);
+			}
+
+			call_user_func( $this->marker_writer, $order, $context );
 		}
 	}
 

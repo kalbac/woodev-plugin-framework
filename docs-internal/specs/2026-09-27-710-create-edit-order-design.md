@@ -46,7 +46,7 @@ Coordinator defaults (not asked; each is WooCommerce's own behaviour or a safety
 | C1 | Capability: `edit_shop_orders` for both create and edit (WooCommerce's own order-edit cap). REST routes check it. |
 | C2 | Stock: WooCommerce's status transitions do it (`wc_maybe_reduce_stock_levels` on processing/completed/on-hold) — never by hand. |
 | C3 | Closing a modal with unsaved input asks for confirmation. No drafts are persisted. |
-| C4 | Emails: customer emails follow WooCommerce's status transitions; the admin «New order» email is triggered explicitly once on create (WooCommerce does not send it for admin-created orders). No email on edit. |
+| C4 | Emails: customer emails follow WooCommerce's status transitions; the admin «New order» email is sent once on create by WooCommerce's own `pending_to_*_notification` transition — the editor issues no explicit trigger, which would double-send (#962 I0, contradiction 1). No «New order» on edit: the editor mutes it, for that order only, while its own status transition runs (#968 r3). |
 | C5 | Wording: admin-facing Russian msgids (AGENTS.md → Translatable strings), no jargon (Rule 10c). Labels short (Rule 10a). |
 
 ## What exists and what does not — the reuse map (measured 27.09.2026)
@@ -189,8 +189,8 @@ checks on every `{id}` route (the order is a row of this page, D5).
 - create: `wc_create_order()` (+ `customer_id` or guest; `wc_create_new_customer()` when O11's box
   is ticked) → addresses → line items at the edited prices → one `WC_Order_Item_Shipping` from the
   chosen rate (cost overridden if edited, rate meta copied) → payment method → writer (D4) →
-  marker → `calculate_totals()` → status (triggers WC emails + stock, C2/C4) → admin «New order»
-  email once (C4).
+  marker → `calculate_totals()` → status (WC's own transition sends «New order» once
+  and does stock, C2/C4; muted on update).
 - update: same, replacing items/shipping item/addresses/metas in place; never touches a final
   status; refuses when exported (D5); O14 warning is computed client-side from the loaded total and
   the note is added server-side.
