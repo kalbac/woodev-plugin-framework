@@ -1247,6 +1247,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// defect 4) — see build_reachable_delivery_statuses() for why the
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
+						// What the order wizard's address step needs before its first request (#969).
+						'wizard'           => $this->build_wizard_bootstrap(),
 					]
 				) . ';',
 				'before'
@@ -1338,6 +1340,62 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			return $entries;
+		}
+
+
+		/**
+		 * The order wizard's reference data (#969): the shop's countries, their regions keyed by
+		 * WooCommerce STATE CODE, the default country and the shop currency.
+		 *
+		 * Inlined rather than fetched because the address step needs it on its first paint and
+		 * the only REST source for it (`wc/v3/data/countries`) demands `manage_woocommerce`,
+		 * which a manager holding just `edit_shop_orders` does not have — the very capability the
+		 * wizard's own routes require. The lists are the ones the payload validator checks
+		 * against (`Order_Payload_Validator`), so a value the wizard offers is never one it
+		 * then rejects. Countries without regions are left out of `states`.
+		 *
+		 * Empty lists when WooCommerce is not loaded — the wizard then shows plain text fields.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}}
+		 */
+		private function build_wizard_bootstrap(): array {
+			$data = [
+				'countries'      => [],
+				'states'         => [],
+				'defaultCountry' => '',
+				'currency'       => [
+					'code'   => '',
+					'symbol' => '',
+				],
+			];
+
+			$wc = function_exists( 'WC' ) ? WC() : null;
+
+			if ( ! is_object( $wc ) || ! is_object( $wc->countries ) ) {
+				return $data;
+			}
+
+			$countries = $wc->countries;
+
+			$data['countries']      = array_map( 'wp_strip_all_tags', (array) $countries->get_countries() );
+			$data['defaultCountry'] = (string) $countries->get_base_country();
+
+			foreach ( (array) $countries->get_states() as $code => $states ) {
+				if ( is_array( $states ) && [] !== $states ) {
+					$data['states'][ (string) $code ] = $states;
+				}
+			}
+
+			if ( function_exists( 'get_woocommerce_currency' ) && function_exists( 'get_woocommerce_currency_symbol' ) ) {
+				$data['currency'] = [
+					'code'   => (string) get_woocommerce_currency(),
+					'symbol' => html_entity_decode( (string) get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+				];
+			}
+
+			return $data;
 		}
 
 		/**

@@ -112,6 +112,8 @@ import {
 } from './filters';
 import type { UrlFilters } from './filters';
 import PeriodPicker from './period-picker';
+import OrderWizard from './order-wizard/order-wizard';
+import type { SaveResult } from './order-wizard/types';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
@@ -1432,6 +1434,17 @@ export default function OrdersPage() {
 	const [ bulkAction, setBulkAction ] = useState( '' );
 	/** #874 — a destructive bulk pick awaiting «Да / Нет», page-level (not keyed by row). */
 	const [ bulkConfirming, setBulkConfirming ] = useState<BulkAction | null>( null );
+	/**
+	 * #969 — the order wizard (#710): `null` closed, `{ orderId: null }` creating a new order.
+	 * The «Редактировать» row action (I6) opens it with an `orderId`.
+	 */
+	const [ wizard, setWizard ] = useState<{ orderId: number | null } | null>( null );
+	/**
+	 * #969 — bumped when the wizard saves an order, so the fetch effect below runs again and the
+	 * new order appears in the table (O9). A counter rather than a flag: two saves in a row
+	 * must each refetch.
+	 */
+	const [ reloadKey, setReloadKey ] = useState( 0 );
 	/** #875 — which order's preview `Modal` is open, or `null` for closed. */
 	const [ previewOrderId, setPreviewOrderId ] = useState<number | null>( null );
 	/**
@@ -1642,7 +1655,17 @@ export default function OrdersPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [ urlFilters, page, perPage, orderby, order, search ] );
+	}, [ urlFilters, page, perPage, orderby, order, search, reloadKey ] );
+
+	/**
+	 * #969 — the wizard saved an order: report it in the same `Notice` slot and toast every
+	 * other action uses, and refetch the table so the order shows up (O9).
+	 */
+	const onWizardSaved = ( result: SaveResult ) => {
+		setActionNotice( { status: 'success', text: result.message } );
+		dispatch( noticesStore ).createSuccessNotice( result.message, { type: 'snackbar' } );
+		setReloadKey( ( key ) => key + 1 );
+	};
 
 	/**
 	 * `Table` (inside `TableCard`) computes the NEXT sort direction itself from
@@ -2070,6 +2093,12 @@ export default function OrdersPage() {
 
 	return (
 		<>
+			{ /* #969 — the one «Создать заказ» button, shared by every carrier (the page is shared, #694; O2). */ }
+			<div className="woodev-orders__create-row">
+				<Button variant="primary" onClick={ () => setWizard( { orderId: null } ) }>
+					{ __( 'Создать заказ', 'woodev-plugin-framework' ) }
+				</Button>
+			</div>
 			{ /*
 			 * #837 defect 5: a rejected query parameter used to return this
 			 * `Notice` INSTEAD OF the whole page, leaving bare text on an
@@ -2282,6 +2311,13 @@ export default function OrdersPage() {
 					onActionClick={ onActionClick }
 					onCancelConfirm={ onCancelConfirm }
 					onClose={ () => setPreviewOrderId( null ) }
+				/>
+			) }
+			{ null !== wizard && (
+				<OrderWizard
+					orderId={ wizard.orderId }
+					onClose={ () => setWizard( null ) }
+					onSaved={ onWizardSaved }
 				/>
 			) }
 			{ /* #824 round 2 — native WP toasts, the same queue the settings page uses. Rendered

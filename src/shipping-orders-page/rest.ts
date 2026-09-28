@@ -184,6 +184,20 @@ export interface OrdersProvider {
 	label: string;
 }
 
+/**
+ * `window.woodevShippingOrders.wizard` — the order wizard's reference data
+ * (`Orders_Registry::build_wizard_bootstrap()`, #969). Every key is optional: an older
+ * server sends none of it, and the wizard then falls back to plain text inputs.
+ */
+export interface WizardBootstrap {
+	/** Country code → name, the shop's whole list. */
+	countries?: Record<string, string>;
+	/** Country code → { WooCommerce STATE CODE → name }; countries without regions are absent. */
+	states?: Record<string, Record<string, string>>;
+	defaultCountry?: string;
+	currency?: { code?: string; symbol?: string };
+}
+
 /** `window.woodevShippingOrders`, inlined by `Orders_Registry::enqueue_assets()`. */
 export interface ShippingOrdersBootstrap {
 	restRoot: string;
@@ -196,6 +210,8 @@ export interface ShippingOrdersBootstrap {
 	 * offering every canonical state rather than offering none.
 	 */
 	deliveryStatuses?: string[];
+	/** The order wizard's reference data (#969). */
+	wizard?: WizardBootstrap;
 }
 
 declare global {
@@ -206,6 +222,25 @@ declare global {
 
 function bootstrap(): Partial<ShippingOrdersBootstrap> {
 	return window.woodevShippingOrders || {};
+}
+
+/**
+ * The REST root (`…/woodev/v1`) and nonce the order wizard talks to, plus its reference data.
+ *
+ * `restRoot` is the ORDERS route (`…/woodev/v1/shipping/orders`), which is what every other
+ * call on this page appends its query to; the wizard needs the namespace root above it (the
+ * location picker's `/location/suggest`, the editor's `/shipping/orders/{id}/edit`).
+ */
+export function getWizardContext(): { apiRoot: string; ordersRoot: string; nonce: string; wizard: WizardBootstrap } {
+	const { restRoot = '', nonce = '', wizard = {} } = bootstrap();
+	const ordersRoot = restRoot.replace( /\/+$/, '' );
+
+	return {
+		apiRoot: ordersRoot.replace( /\/shipping\/orders$/, '' ),
+		ordersRoot,
+		nonce,
+		wizard,
+	};
 }
 
 /**

@@ -78,6 +78,22 @@ describe( 'Stepper', () => {
 		expect( () => fireEvent.click( screen.getByRole( 'button', { name: 'Доставка' } ) ) ).not.toThrow();
 	} );
 
+	test( 'canNavigate=false renders a step as a plain label; true keeps it a button', () => {
+		const onNavigate = jest.fn();
+		const { container } = render(
+			createElement( Stepper, { steps: STEPS, index: 1, onNavigate, canNavigate: ( i ) => i < 1 } )
+		);
+
+		const items = container.querySelectorAll( 'li' );
+
+		// Back to a completed step stays a button…
+		expect( items[ 0 ].querySelector( 'button' ) ).not.toBeNull();
+		// …forward (index 2) is a label: reachable only through the wizard's own «Далее».
+		expect( items[ 2 ].querySelector( 'button' ) ).toBeNull();
+		expect( items[ 2 ].querySelector( 'span.woodev-stepper__label' ) ).not.toBeNull();
+		expect( screen.queryByRole( 'button', { name: 'Готово' } ) ).toBeNull();
+	} );
+
 	test( 'the last step active marks every earlier one done', () => {
 		const { container } = render( createElement( Stepper, { steps: STEPS, index: 2 } ) );
 

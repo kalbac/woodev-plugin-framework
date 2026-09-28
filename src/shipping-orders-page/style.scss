@@ -8,6 +8,8 @@
 
 @use '../components/tokens' as wd;
 @use '../components/wp-recolor';
+@use '../components/field';
+@use '../components/stepper';
 
 .woodev-orders {
 	// The carrier `FilterPicker` sits ABOVE the card, the way «Аналитика → Заказы»
@@ -1039,4 +1041,211 @@
 .woodev-orders__scope-count {
 	color: wd.$muted;
 	font-weight: 400;
+}
+
+/**
+ * The «Создать заказ» button row (#969) — right-aligned above the table, the way a WooCommerce
+ * list page puts its «Add» action.
+ */
+.woodev-orders__create-row {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: wd.$gap-sm;
+}
+
+/**
+ * The order wizard's modal (#969, #710 D1). Steps are plain stacked blocks; a field never
+ * leaves the modal's own width, so nothing here scrolls sideways at phone width.
+ */
+.woodev-order-wizard {
+	width: min(880px, 100%);
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-lg 0;
+	}
+
+	&__body {
+		min-height: 260px;
+	}
+
+	&__step-title {
+		margin: 0 0 wd.$gap;
+		font-size: 15px;
+	}
+
+	&__grid {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin-top: wd.$gap;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	&__field {
+		min-width: 0;
+
+		&.has-error input,
+		&.has-error select {
+			border-color: wd.$error;
+		}
+	}
+
+	&__errors {
+		margin-top: wd.$gap-xs;
+	}
+
+	&__error {
+		margin: 0;
+		color: wd.$error-text;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	&__picked {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		background: wd.$accent-soft;
+		border-radius: wd.$radius-sm;
+	}
+
+	// A typed field with the provider's search button beside it.
+	&__with-picker {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+		align-items: end;
+		margin-top: wd.$gap;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	&__search {
+		position: relative;
+	}
+
+	&__search-hint {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__results {
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		margin-top: wd.$gap-xs;
+		max-height: 240px;
+		overflow-y: auto;
+		background: wd.$surface;
+	}
+
+	&__results-parent {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		border-bottom: 1px solid wd.$divider;
+	}
+
+	&__results-status {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-sm wd.$gap;
+		color: wd.$muted;
+
+		&.is-error {
+			color: wd.$error-text;
+		}
+	}
+
+	&__result {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: wd.$gap-sm wd.$gap;
+		border: 0;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			background: wd.$accent-soft;
+		}
+	}
+
+	&__result-hint {
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__lines {
+		list-style: none;
+		margin: wd.$gap 0 0;
+		padding: 0;
+	}
+
+	&__line {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: minmax(0, 3fr) 90px 130px 110px auto;
+		align-items: start;
+		padding: wd.$gap-sm 0;
+		border-bottom: 1px solid wd.$divider;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		}
+	}
+
+	&__line-name {
+		grid-column: 1 / -1;
+		font-weight: 600;
+
+		@media (min-width: 601px) {
+			grid-column: auto;
+			padding-top: wd.$gap-lg;
+		}
+	}
+
+	&__line-total {
+		padding-top: wd.$gap-lg;
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	&__line-remove {
+		margin-top: wd.$gap-lg;
+	}
+
+	&__subtotal {
+		margin: wd.$gap 0 0;
+		text-align: right;
+	}
+
+	&__footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap-sm;
+		margin-top: wd.$gap-lg;
+		padding-top: wd.$gap;
+		border-top: 1px solid wd.$divider;
+	}
+
+	&__footer-spacer {
+		flex: 1 1 auto;
+	}
 }

@@ -860,6 +860,69 @@ class ShippingOrdersRegistryTest extends TestCase {
 		}
 	}
 
+	/**
+	 * #969 — the order wizard's reference data rides in the same bootstrap, so its address step
+	 * has countries and WooCommerce STATE CODES before its first request (the only REST source,
+	 * `wc/v3/data/countries`, demands `manage_woocommerce`, which the wizard's own capability,
+	 * `edit_shop_orders`, does not imply).
+	 */
+	public function test_enqueue_assets_inlines_the_order_wizard_reference_data(): void {
+		$plugin = \Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$registry = $this->registryOnWcAdminScreen();
+		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
+
+		$countries = \Mockery::mock();
+		$countries->shouldReceive( 'get_countries' )->andReturn( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ] );
+		$countries->shouldReceive( 'get_base_country' )->andReturn( 'RU' );
+		$countries->shouldReceive( 'get_states' )->andReturn(
+			[
+				'RU' => [ 'МОСКВА' => 'Москва', 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ],
+				'KZ' => [],
+			]
+		);
+
+		Functions\when( 'WC' )->justReturn( (object) [ 'countries' => $countries ] );
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
+		Functions\when( 'get_woocommerce_currency_symbol' )->justReturn( '&#8381;' );
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'rest_url' )->returnArg( 1 );
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-processing' => 'Processing' ] );
+		Functions\when( 'wc_get_orders' )->justReturn( (object) [ 'orders' => [], 'total' => 0, 'max_num_pages' => 1 ] );
+		Functions\when( 'wp_enqueue_style' )->justReturn( null );
+		Functions\when( 'wp_enqueue_script' )->justReturn( null );
+
+		$captured = null;
+		Functions\when( 'wp_add_inline_script' )->alias(
+			static function ( $handle, $script ) use ( &$captured ): bool {
+				$captured = $script;
+
+				return true;
+			}
+		);
+
+		$registry->enqueue_assets();
+
+		$this->assertNotNull( $captured );
+		$data = json_decode( rtrim( substr( $captured, strlen( 'window.woodevShippingOrders = ' ) ), ';' ), true );
+
+		$this->assertSame( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ], $data['wizard']['countries'] );
+		$this->assertSame( 'RU', $data['wizard']['defaultCountry'] );
+		// Regions are keyed by the WooCommerce STATE CODE the payload validator checks; a country
+		// without regions is absent, so the client falls back to a free-text field for it.
+		$this->assertSame( [ 'RU' ], array_keys( $data['wizard']['states'] ) );
+		$this->assertSame( [ 'МОСКВА', 'МОСКОВСКАЯ ОБЛАСТЬ' ], array_keys( $data['wizard']['states']['RU'] ) );
+		// The symbol arrives decoded — it is written into React text, never into HTML.
+		$this->assertSame( [ 'code' => 'RUB', 'symbol' => '₽' ], $data['wizard']['currency'] );
+	}
+
 	// -----------------------------------------------------------------------
 	// #834 — the «Заказы доставки» submenu item carries a badge with the number
 	// of NEW orders, and hovering it breaks that number down per carrier.

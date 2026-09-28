@@ -31,6 +31,12 @@ export interface StepperProps {
 	onNavigate?: ( index: number ) => void;
 	/** When true, step buttons are non-clickable (e.g. while a save request is in flight). */
 	disabled?: boolean;
+	/**
+	 * Per-step gate: return `false` for a step the user may not jump to (it renders as a
+	 * plain label, like the current one). Absent = every other step is a button. The order
+	 * wizard uses it for «back to a completed step, forward only through Далее» (#710 D1).
+	 */
+	canNavigate?: ( index: number ) => boolean;
 }
 
 /**
@@ -39,15 +45,15 @@ export interface StepperProps {
  * @param {StepperProps} props component props.
  * @return {JSX.Element} the step list.
  */
-export default function Stepper( { steps, index, onNavigate, disabled }: StepperProps ) {
+export default function Stepper( { steps, index, onNavigate, disabled, canNavigate }: StepperProps ) {
 	return (
 		<ol className="woodev-stepper">
 			{ steps.map( ( step, i ) => {
 				const state = i < index ? 'done' : ( i === index ? 'active' : 'upcoming' );
 
-				// The current step is a plain (non-clickable) label; any other step is a
-				// button that navigates to it.
-				const label = i === index
+				// The current step — and any step `canNavigate` refuses — is a plain
+				// (non-clickable) label; any other step is a button that navigates to it.
+				const label = i === index || ( canNavigate && ! canNavigate( i ) )
 					? <span className="woodev-stepper__label">{ step.label }</span>
 					: (
 						<button

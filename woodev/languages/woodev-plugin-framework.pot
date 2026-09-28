@@ -4212,3 +4212,177 @@ msgid "Отправление уже в конечном статусе «%s» �
 #, php-format
 msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
 msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не удалось выполнить запрос. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Артикул"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Вариативный товар — выберите вариант"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "— выберите страну —"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Куда доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Страна (код, например RU)"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "— выберите регион —"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Город или населённый пункт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти населённый пункт…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Улица, дом"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти адрес…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Квартира, офис"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Результаты поиска"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "← К результатам поиска"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не удалось выполнить поиск. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Кто покупатель"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Покупатель из магазина:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбрать другого или указать нового"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя, email или телефон"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Фамилия"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Телефон"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Электронная почта"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Создать аккаунт покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Без галочки заказ оформляется как гостевой. Покупатель получит письмо со ссылкой для входа."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Что в заказе"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Добавить товар"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Название или артикул"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Цена за шт."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Убрать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Товары:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Этот шаг ещё в разработке — он появится в следующем обновлении."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите город или населённый пункт."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Товары"
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Редактировать заказ №%s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Редактировать заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Создать заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Загружаем заказ…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Закрыть окно? Введённые данные не сохранятся."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Продолжить оформление"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Закрыть без сохранения"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Далее"
+msgstr ""
