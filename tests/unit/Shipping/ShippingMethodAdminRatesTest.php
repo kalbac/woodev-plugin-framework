@@ -216,6 +216,21 @@ namespace Woodev\Tests\Unit\Shipping {
 			// the Store API detection (#949) reads the request URI through it
 			Functions\when( 'wp_unslash' )->returnArg( 1 );
 
+			// The Store API detection fallback (#949) reads the route through these; the test
+			// process defines no `WC()`, so the veto probe reaches it.
+			Functions\when( 'wp_unslash' )->returnArg( 1 );
+			Functions\when( 'trailingslashit' )->alias(
+				static function ( $value ) {
+					return rtrim( (string) $value, '/\\' ) . '/';
+				}
+			);
+			Functions\when( 'rest_get_url_prefix' )->justReturn( 'wp-json' );
+			Functions\when( 'wp_parse_url' )->alias(
+				static function ( $url, $component = -1 ) {
+					return parse_url( $url, $component ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+				}
+			);
+
 			$this->store = Mockery::mock( Customer_Location_Store::class );
 
 			$service = new Location_Service(

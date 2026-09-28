@@ -133,6 +133,34 @@ export function fetchRates( payload: Record<string, unknown> ): Promise<RatesRes
 	} );
 }
 
+/**
+ * Flattens a value into `key=value` query parts, PHP-style: a nested object or array becomes
+ * `key[sub]=value` (`location[settlement][name]=…`), the shape `WP_REST_Request` hands a route's
+ * `object` param back as an associative array. The same flattening as `flattenContext()` in
+ * `woodev/shipping-method/assets/js/frontend/pickup-datasource.js` (the storefront sends the
+ * visitor's location this way). `null`, `undefined`, empty strings and functions are skipped — an
+ * absent value must read as absent server-side, never as an empty one.
+ *
+ * @param {string}  prefix the key so far.
+ * @param {unknown} value  the value at that key.
+ * @return {string[]} the encoded `k=v` parts.
+ */
+export function flattenQuery( prefix: string, value: unknown ): string[] {
+	if ( null === value || undefined === value || 'function' === typeof value ) {
+		return [];
+	}
+
+	if ( 'object' === typeof value ) {
+		return Object.entries( value as Record<string, unknown> ).flatMap( ( [ key, child ] ) => flattenQuery( `${ prefix }[${ key }]`, child ) );
+	}
+
+	if ( '' === String( value ) ) {
+		return [];
+	}
+
+	return [ `${ encodeURIComponent( prefix ).replace( /%5B/g, '[' ).replace( /%5D/g, ']' ) }=${ encodeURIComponent( String( value ) ) }` ];
+}
+
 /** What the points route says about ONE point for a given weight and payment method. */
 export interface PointVerdict {
 	allowed: boolean;
@@ -141,9 +169,11 @@ export interface PointVerdict {
 }
 
 /**
- * `GET {points root}/{id}?weight=…&payment_method=…` — the admin point-detail route
+ * `GET {points root}/{id}?weight=…&payment_method=…&location[…]=…` — the admin point-detail route
  * (`Pickup_Controller::handle_admin_point_request()`, I2b), which re-runs the constraint checker
- * over the full record. Step ⑤ asks it once the payment method is chosen, because the point was
+ * over the full record. The destination `location` travels with it (#959): a carrier whose detail
+ * lookup is keyed by its own settlement id cannot resolve a point without it, and an admin request
+ * has no visitor location chain to fall back on. Step ⑤ asks it once the payment method is chosen, because the point was
  * picked before it (D3). Resolves with `null` when the route gave no verdict (a failure, or a
  * checker that stayed silent) — the constraint data is permissive by omission, so an unknown answer
  * never blocks the order; a 404 means the point is gone and reads as «not allowed».
@@ -152,14 +182,22 @@ export interface PointVerdict {
  * @param {string} pointId        the chosen point.
  * @param {number} weight         the package weight in grams.
  * @param {string} paymentMethod  the gateway id.
+ * @param {Record<string, unknown>|null} location the destination record step ② picked (`data.settlementRecord`), or null when the city was typed by hand.
  * @return {Promise<PointVerdict|null>} the verdict.
  */
-export async function checkPickupPoint( pointsRoot: string, pointId: string, weight: number, paymentMethod: string ): Promise<PointVerdict | null> {
-	const query = new URLSearchParams( { weight: String( Math.max( 0, Math.round( weight ) ) ), payment_method: paymentMethod } );
+export async function checkPickupPoint(
+	pointsRoot: string,
+	pointId: string,
+	weight: number,
+	paymentMethod: string,
+	location: Record<string, unknown> | null = null
+): Promise<PointVerdict | null> {
+	const query = new URLSearchParams( { weight: String( Math.max( 0, Math.round( weight ) ) ), payment_method: paymentMethod } ).toString();
+	const locationQuery = location ? flattenQuery( 'location', location ).join( '&' ) : '';
 
 	try {
 		const point = await apiFetch<{ selectable?: { allowed?: unknown; reason?: unknown } }>( {
-			url: `${ pointsRoot.replace( /\/+$/, '' ) }/${ encodeURIComponent( pointId ) }?${ query.toString() }`,
+			url: `${ pointsRoot.replace( /\/+$/, '' ) }/${ encodeURIComponent( pointId ) }?${ query }${ locationQuery ? `&${ locationQuery }` : '' }`,
 			method: 'GET',
 			headers: headers(),
 		} );

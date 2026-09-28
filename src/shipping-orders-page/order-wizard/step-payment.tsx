@@ -115,7 +115,7 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 
 		let cancelled = false;
 
-		checkPickupPoint( pointsRoot, pointId, check.weight, rest.payment_method ).then( ( answer ) => {
+		checkPickupPoint( pointsRoot, pointId, check.weight, rest.payment_method, data.settlementRecord ).then( ( answer ) => {
 			if ( ! cancelled ) {
 				setVerdict( answer );
 			}
@@ -124,9 +124,9 @@ export default function StepPayment( { data, setData, errors, mode, order, basel
 		return () => {
 			cancelled = true;
 		};
-		// The route and weight are what the check is made of; the object identity is not.
+		// The route, weight and destination are what the check is made of; the object identity is not.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ rest.rate_is_pickup, pointId, rest.payment_method, check?.provider, check?.weight, pointsRoot ] );
+	}, [ rest.rate_is_pickup, pointId, rest.payment_method, check?.provider, check?.weight, pointsRoot, data.settlementRecord ] );
 
 	const pointRefused = null !== verdict && ! verdict.allowed;
 	const line = rest.shipping_line;

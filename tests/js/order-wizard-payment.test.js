@@ -392,6 +392,41 @@ describe( 'the chosen pickup point vs the payment method (D3: ⑤ re-validates)'
 		expect( goToStep ).toHaveBeenCalledWith( 'delivery' );
 	} );
 
+	test( 'the destination record step ② picked travels with the check as PHP-style nested params (#959)', async () => {
+		apiFetch.mockResolvedValue( { id: 'P/1', selectable: { allowed: true } } );
+		const record = { provider_id: 'cdek', country: 'RU', settlement: { id: '44', name: 'Москва', empty: '', gone: null }, flags: [ 'a', 'b' ] };
+		mountStep( { initial: { ...pickupState(), settlementRecord: record } } );
+
+		fireEvent.change( screen.getByLabelText( 'Способ оплаты' ), { target: { value: 'cod' } } );
+
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
+
+		const { url } = pointCalls()[ 0 ];
+		const query = url.slice( url.indexOf( '?' ) + 1 );
+
+		// The flattening of the storefront's `pickup-datasource.js`: brackets kept, empty / null skipped.
+		expect( query ).toBe(
+			'weight=3250&payment_method=cod&location[provider_id]=cdek&location[country]=RU&location[settlement][id]=44' +
+				`&location[settlement][name]=${ encodeURIComponent( 'Москва' ) }&location[flags][0]=a&location[flags][1]=b`
+		);
+	} );
+
+	test( 'a new destination re-asks the route; a hand-typed city sends no location', async () => {
+		apiFetch.mockResolvedValue( { id: 'P/1', selectable: { allowed: true } } );
+		const base = pickupState();
+		const props = { setData: jest.fn(), errors: {}, mode: 'create', order: null, baselineTotal: null, submit: jest.fn(), busy: false, goToStep: jest.fn() };
+		const withRecord = ( settlementRecord ) => createElement( StepPayment, { ...props, data: { ...base, rest: { ...base.rest, payment_method: 'cod' }, settlementRecord } } );
+		const { rerender } = render( withRecord( { provider_id: 'cdek', settlement: { id: '44' } } ) );
+
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 1 ) );
+		expect( pointCalls()[ 0 ].url ).toContain( 'location[settlement][id]=44' );
+
+		rerender( withRecord( null ) );
+
+		await waitFor( () => expect( pointCalls() ).toHaveLength( 2 ) );
+		expect( pointCalls()[ 1 ].url ).toBe( `${ POINTS_ROOT }/P%2F1?weight=3250&payment_method=cod` );
+	} );
+
 	test( 'changing the method to one the point accepts lifts the stop', async () => {
 		apiFetch.mockImplementation( ( request ) =>
 			Promise.resolve( { selectable: request.url.includes( 'payment_method=cod' ) ? { allowed: false, reason: '' } : { allowed: true } } )
