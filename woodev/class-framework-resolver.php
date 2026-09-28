@@ -702,6 +702,82 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 
 				printf( '<div class="error"><p>%s</p></div>', esc_html( $message ) );
 			}
+
+			$this->render_invalid_loader_definition_notices();
+		}
+
+		/**
+		 * Renders one notice per plugin whose loader definition was rejected (#942).
+		 *
+		 * A rejected definition means the plugin never started — no fatal, no explanation.
+		 * The screen gets a plain merchant-facing sentence naming the plugin; the validation
+		 * errors are technical detail for the plugin author and go to the log instead. Shown
+		 * only to users who can act on it (`activate_plugins`), the same audience as the
+		 * plugin list itself.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		protected function render_invalid_loader_definition_notices(): void {
+			if ( empty( $this->invalid_loader_definitions ) || ! current_user_can( 'activate_plugins' ) ) {
+				return;
+			}
+
+			foreach ( $this->invalid_loader_definitions as $invalid ) {
+				$plugin_name = $this->get_invalid_loader_definition_plugin_name( $invalid );
+
+				$this->log_invalid_loader_definition( $plugin_name, $invalid['errors'] ?? [] );
+
+				printf(
+					'<div class="error"><p>%s</p></div>',
+					esc_html(
+						sprintf(
+							/* translators: Placeholder: %s - the name of the plugin that did not start */
+							__( 'Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина.', 'woodev-plugin-framework' ),
+							$plugin_name
+						)
+					)
+				);
+			}
+		}
+
+		/**
+		 * Gets a displayable plugin name for a rejected loader definition.
+		 *
+		 * The entry carries either the raw array (rejected at registration — its name may be
+		 * missing or not a string) or a validated definition object (rejected at invocation).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string,mixed> $invalid Invalid loader definition entry.
+		 * @return string
+		 */
+		protected function get_invalid_loader_definition_plugin_name( array $invalid ): string {
+			$definition = $invalid['definition'] ?? null;
+
+			if ( $definition instanceof Framework_Plugin_Loader_Definition ) {
+				$name = $definition->get_plugin_name();
+			} elseif ( is_array( $definition ) && isset( $definition['plugin_name'] ) && is_string( $definition['plugin_name'] ) ) {
+				$name = trim( $definition['plugin_name'] );
+			} else {
+				$name = '';
+			}
+
+			return '' !== $name ? $name : __( 'Неизвестный плагин', 'woodev-plugin-framework' );
+		}
+
+		/**
+		 * Logs the technical reasons a loader definition was rejected (#942).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string            $plugin_name Displayable plugin name.
+		 * @param array<int,string> $errors      Validation errors.
+		 * @return void
+		 */
+		protected function log_invalid_loader_definition( string $plugin_name, array $errors ): void {
+			error_log( sprintf( '[woodev] Plugin "%s" was not loaded, invalid loader definition: %s', $plugin_name, implode( ' ', array_map( 'strval', $errors ) ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- the resolver runs before WooCommerce and the framework logger exist.
 		}
 
 		/**
@@ -963,7 +1039,7 @@ if ( ! class_exists( Framework_Resolver::class, false ) ) :
 		 * @return bool
 		 */
 		protected function has_update_notices(): bool {
-			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins || $this->quarantined_download_id_plugins;
+			return $this->incompatible_framework_plugins || $this->incompatible_wc_version_plugins || $this->incompatible_wp_version_plugins || $this->incompatible_php_version_plugins || $this->quarantined_download_id_plugins || $this->invalid_loader_definitions;
 		}
 
 		/**

@@ -80,6 +80,26 @@ class Resolver_Testable_Framework_Resolver extends \Woodev\Framework\Framework_R
 }
 
 /**
+ * Test helper capturing the technical log lines instead of writing them to the PHP error log.
+ */
+class Resolver_Logging_Framework_Resolver extends \Woodev\Framework\Framework_Resolver {
+
+	/** @var list<array{0:string,1:array<int,string>}> Captured [plugin name, errors] pairs. */
+	public array $logged = [];
+
+	/**
+	 * Captures the log call.
+	 *
+	 * @param string            $plugin_name Displayable plugin name.
+	 * @param array<int,string> $errors      Validation errors.
+	 * @return void
+	 */
+	protected function log_invalid_loader_definition( string $plugin_name, array $errors ): void {
+		$this->logged[] = [ $plugin_name, $errors ];
+	}
+}
+
+/**
  * Class FrameworkResolverTest
  */
 class FrameworkResolverTest extends TestCase {
@@ -1656,6 +1676,211 @@ class FrameworkResolverTest extends TestCase {
 		$resolver = new \Woodev\Framework\Framework_Resolver();
 
 		$this->assertNull( $resolver->get_loader_definition_for_class_ancestor( 'Some_Never_Registered_Class' ) );
+	}
+
+	/**
+	 * Boots a resolver for a load_plugins() run that needs no WordPress/WooCommerce.
+	 *
+	 * @param bool $is_admin Whether the request is an admin request.
+	 * @return void
+	 */
+	private function stub_load_environment( bool $is_admin = false ): void {
+		Functions\when( 'plugin_dir_path' )->justReturn( dirname( __DIR__, 2 ) . '/' );
+		Functions\when( 'untrailingslashit' )->alias(
+			static function ( string $path ): string {
+				return rtrim( $path, '/\\' );
+			}
+		);
+		Functions\when( 'get_bloginfo' )->justReturn( '6.5' );
+		Functions\when( 'is_admin' )->justReturn( $is_admin );
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\expect( 'do_action' )->once()->with( 'woodev_plugins_loaded' );
+	}
+
+	/**
+	 * #942: a definition rejected at registration must surface as a plain notice naming the
+	 * plugin, while the technical validation errors stay off the screen and go to the log.
+	 */
+	public function test_invalid_definition_renders_a_plain_notice_and_logs_the_technical_detail(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$resolver->register_loader_definition(
+			[
+				'plugin_id'   => 'broken-plugin',
+				'plugin_name' => 'Broken <b>Plugin</b>',
+			]
+		);
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Плагин «Broken &lt;b&gt;Plugin&lt;/b&gt;» не запущен: он собран с ошибкой. Обратитесь к автору плагина.', $output );
+		$this->assertStringNotContainsString( 'Missing required', $output, 'Technical detail must not reach the screen.' );
+		$this->assertStringNotContainsString( 'loader', $output );
+		$this->assertStringNotContainsString( 'фреймворк', mb_strtolower( $output ), 'Rule 10c: no «фреймворк» in merchant-facing copy.' );
+
+		$this->assertCount( 1, $resolver->logged );
+		$this->assertSame( 'Broken <b>Plugin</b>', $resolver->logged[0][0] );
+		$this->assertContains( 'Missing required loader definition field: download_id.', $resolver->logged[0][1] );
+	}
+
+	/**
+	 * #942 / #916: a definition without a download_id is now invalid — the case that made this
+	 * silent failure much more likely — and must be surfaced the same way.
+	 */
+	public function test_definition_without_a_download_id_is_surfaced(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$definition = $this->get_loader_definition( [ 'plugin_name' => 'No Download Id Plugin' ] );
+		unset( $definition['download_id'] );
+
+		$this->assertFalse( $resolver->register_loader_definition( $definition ) );
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '«No Download Id Plugin» не запущен', $output );
+		$this->assertContains( 'Missing required loader definition field: download_id.', $resolver->logged[0][1] );
+	}
+
+	/**
+	 * #942: a definition that validated but whose main_class does not exist is only discovered
+	 * during load_plugins() — its entry carries the definition object, not the raw array.
+	 */
+	public function test_missing_main_class_discovered_during_load_is_surfaced_by_name(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		$this->stub_load_environment();
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$resolver->register_loader_definition(
+			$this->get_loader_definition(
+				[
+					'plugin_name' => 'Missing Class Plugin',
+					'callback'    => null,
+					'main_class'  => 'Resolver_Missing_Main_Class_Plugin',
+				]
+			)
+		);
+
+		$resolver->load_plugins();
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '«Missing Class Plugin» не запущен: он собран с ошибкой', $output );
+		$this->assertStringNotContainsString( 'Resolver_Missing_Main_Class_Plugin', $output, 'The class name is technical detail — log only.' );
+		$this->assertStringContainsString( 'Resolver_Missing_Main_Class_Plugin', implode( ' ', $resolver->logged[0][1] ) );
+	}
+
+	/**
+	 * #942: a duplicate plugin_id is rejected at registration; the second plugin is named.
+	 */
+	public function test_duplicate_plugin_id_rejection_is_surfaced_for_the_rejected_plugin_only(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_name' => 'First Plugin' ] ) );
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_name' => 'Second Plugin' ] ) );
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '«Second Plugin» не запущен', $output );
+		$this->assertStringNotContainsString( 'First Plugin', $output );
+	}
+
+	/**
+	 * #942: an unusable name (missing, not a string) falls back to a neutral label instead of
+	 * a notice with an empty pair of quotes or a PHP notice.
+	 */
+	public function test_invalid_definition_without_a_usable_name_falls_back_to_a_neutral_label(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$resolver->register_loader_definition( [ 'plugin_id' => 'nameless' ] );
+		$resolver->register_loader_definition( [ 'plugin_name' => [ 'not', 'a', 'string' ] ] );
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame( 2, substr_count( $output, '«Неизвестный плагин» не запущен' ) );
+	}
+
+	/**
+	 * #942: the notice is for users who can manage plugins; nobody else sees it, and nothing
+	 * is logged on their behalf.
+	 */
+	public function test_invalid_definition_notice_needs_activate_plugins(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		Functions\expect( 'current_user_can' )->with( 'activate_plugins' )->andReturn( false );
+
+		$resolver->register_loader_definition( [ 'plugin_id' => 'broken-plugin', 'plugin_name' => 'Broken Plugin' ] );
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertSame( '', $output );
+		$this->assertSame( [], $resolver->logged );
+	}
+
+	/**
+	 * #942: the notice has to be WIRED — when the only problem on the site is a rejected
+	 * definition, load_plugins() must still hook the renderer to admin_notices.
+	 */
+	public function test_load_plugins_wires_the_renderer_when_only_an_invalid_definition_exists(): void {
+		$injected_renderer = static function (): void {};
+		$resolver          = new \Woodev\Framework\Framework_Resolver( $injected_renderer );
+		$hooks             = [];
+
+		$this->stub_load_environment( true );
+		Functions\when( 'add_action' )->alias(
+			static function ( string $hook, callable $callback ) use ( &$hooks ): void {
+				$hooks[ $hook ] = $callback;
+			}
+		);
+
+		$resolver->register_loader_definition( [ 'plugin_id' => 'broken-plugin', 'plugin_name' => 'Broken Plugin' ] );
+		$resolver->load_plugins();
+
+		$this->assertSame( $injected_renderer, $hooks['admin_notices'] ?? null );
+		$this->assertSame( $injected_renderer, $hooks['network_admin_notices'] ?? null );
+	}
+
+	/**
+	 * #942 / #916: a download id collision already has its own notice — it must not ALSO be
+	 * reported as a broken build.
+	 */
+	public function test_download_id_collision_is_not_double_reported_as_an_invalid_definition(): void {
+		$resolver = new Resolver_Logging_Framework_Resolver();
+
+		$this->stub_load_environment();
+		Functions\when( 'current_user_can' )->justReturn( true );
+
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_id' => 'plugin-a', 'download_id' => 503, 'plugin_name' => 'Plugin A' ] ) );
+		$resolver->register_loader_definition( $this->get_loader_definition( [ 'plugin_id' => 'plugin-b', 'download_id' => 503, 'plugin_name' => 'Plugin B' ] ) );
+		$resolver->load_plugins();
+
+		ob_start();
+		$resolver->render_update_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'собран с ошибкой', $output );
+		$this->assertSame( [], $resolver->logged );
+		$this->assertSame( 1, substr_count( $output, '<div class="error">' ) );
 	}
 
 	/**
