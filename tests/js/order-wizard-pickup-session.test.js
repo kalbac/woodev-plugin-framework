@@ -59,6 +59,7 @@ class FakePanels extends Emitter {
 		} );
 		this.buildSearchLayout.mockReturnValue( document.createElement( 'div' ) );
 		this.getMapElement = jest.fn( () => this.mapElement );
+		this.getSidebarWidth = jest.fn( () => 336 );
 		panelsInstances.push( this );
 	}
 }
@@ -180,6 +181,10 @@ describe( 'strategy bulk', () => {
 		expect( panelsInstances[ 0 ].render ).toHaveBeenCalled();
 		// The panels' config is the carrier's own with the map language the distance labels follow.
 		expect( panelsInstances[ 0 ].config ).toMatchObject( { strategy: 'bulk', lang: 'ru_RU', accentColor: '#06aedd' } );
+		// Manager mode (#710): the panels are told so, and the three labels the mode reads are the
+		// wizard's own, laid over the carrier's table — which is otherwise passed through intact.
+		expect( panelsInstances[ 0 ].config.mode ).toBe( 'manager' );
+		expect( panelsInstances[ 0 ].config.i18n ).toEqual( { ...CONFIG.i18n, select: 'Выбрать', selected: 'Выбрано', backToList: 'К списку' } );
 
 		const provider = providers[ 0 ];
 		expect( provider.init ).toHaveBeenCalledTimes( 1 );
@@ -190,6 +195,10 @@ describe( 'strategy bulk', () => {
 		expect( providerConfig ).toMatchObject( { lang: 'ru_RU', strategy: 'bulk', locality: 'Москва', accentColor: '#06aedd' } );
 
 		await flush();
+
+		// The permanent sidebar's strip is reserved on the map BEFORE the first camera move, from
+		// the panels' own measurement — there is no `listToggle` for a sidebar that opened at render.
+		expect( provider.setMargin ).toHaveBeenCalledWith( true, 336 );
 
 		// `bulk` addresses points by the settlement RECORD's key, not by the typed city.
 		expect( dataSource.fetchPoints ).toHaveBeenCalledWith( { locality: 'dadata:77', types: [] } );
