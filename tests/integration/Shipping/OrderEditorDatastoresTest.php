@@ -1416,6 +1416,96 @@ class OrderEditorDatastoresTest extends TestCase {
 	}
 
 	/**
+	 * An order with no shipping address of its own delivers to its billing one; the wizard hands that copy back
+	 * in step ②, and an untouched «Сохранить» must not turn it into a stored shipping address (m4). A shipping
+	 * address that really differs is still written.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_untouched_update_of_an_order_without_a_shipping_address_does_not_write_one( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$created = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+
+		// An order made at checkout with «ship to billing»: nothing in its shipping address.
+		$bare = $this->fresh( $created->get_id() );
+		$bare->set_address( array_fill_keys( [ 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'phone' ], '' ), 'shipping' );
+		$bare->save();
+
+		$this->assertSame( '', $this->fresh( $created->get_id() )->get_shipping_city(), 'the fixture order has no shipping address' );
+
+		// What the wizard sends back untouched: the billing place as the delivery place, the names from billing.
+		$copy = $this->payload( [ 'status' => 'pending' ] );
+		$copy['shipping'] = [
+			'first_name' => 'Иван',
+			'last_name'  => 'Иванов',
+			'phone'      => '+79991234567',
+			'country'    => 'RU',
+			'city'       => 'Москва',
+			'address_1'  => 'ул. Тверская, 1',
+			'postcode'   => '125009',
+		];
+
+		$this->assertInstanceOf( \WC_Order::class, ( new Order_Editor() )->update( $created->get_id(), $copy ) );
+
+		$after = $this->fresh( $created->get_id() );
+
+		$this->assertSame( '', $after->get_shipping_city(), 'nothing was written into the shipping address' );
+		$this->assertSame( '', $after->get_shipping_country() );
+		$this->assertSame( 'Москва', $after->get_billing_city(), 'billing is as it was' );
+
+		// A delivery address the manager really changed is stored.
+		$changed             = $copy;
+		$changed['shipping'] = array_replace( $copy['shipping'], [ 'city' => 'Казань', 'address_1' => 'ул. Баумана, 1' ] );
+
+		$this->assertInstanceOf( \WC_Order::class, ( new Order_Editor() )->update( $created->get_id(), $changed ) );
+		$this->assertSame( 'Казань', $this->fresh( $created->get_id() )->get_shipping_city() );
+	}
+
+	/**
+	 * Switching CARRIER on an edit removes the previous carrier's declared field metas (m5): the set to clean
+	 * up after is resolved from the order's CURRENT shipping line, not from the carrier the order moves to.
+	 * The new carrier's own values are stored under its own keys.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_update_to_another_carrier_removes_the_previous_carriers_field_metas( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$created = $this->create( $this->payload( [ 'status' => 'pending', 'carrier_fields' => [ 'declared_value' => 5000 ] ] ) );
+
+		$this->assertEquals( 5000, $this->fresh( $created->get_id() )->get_meta( '_woodev_realistic_declared_value', true ), 'the first carrier stored its declared field' );
+
+		$updated = ( new Order_Editor() )->update(
+			$created->get_id(),
+			$this->payload(
+				[
+					'status'         => 'pending',
+					'shipping_line'  => [
+						'method_id'   => self::TEST_METHOD,
+						'instance_id' => 3,
+						'label'       => 'Тестовая доставка',
+						'cost'        => '100',
+					],
+					'pickup_point'   => [ 'id' => self::TEST_POINT ],
+					'carrier_fields' => [ 'declared_value' => 700 ],
+				]
+			)
+		);
+
+		$this->assertInstanceOf( \WC_Order::class, $updated, $updated instanceof \WP_Error ? $updated->get_error_message() . ' ' . wp_json_encode( $updated->get_error_data() ) : '' );
+
+		$order = $this->fresh( $created->get_id() );
+
+		$this->assertSame( '', (string) $order->get_meta( '_woodev_realistic_declared_value', true ), 'the previous carrier\'s field meta is gone' );
+		$this->assertEquals( 700, $order->get_meta( '_woodev_test_shipping_declared_value', true ), 'the new carrier\'s value is stored under its own key' );
+	}
+
+	/**
 	 * A line the wizard no longer sends is removed and its stock released; an edited line's stock
 	 * follows WooCommerce's own adjustment — never a hand-made one.
 	 *

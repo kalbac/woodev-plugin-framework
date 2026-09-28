@@ -136,6 +136,18 @@ describe( 'prefillToData', () => {
 		expect( data.billingFollowsShipping ).toBe( true );
 	} );
 
+	test( 'm4: for such an order the payload\'s delivery place is the billing place, unchanged — the server stores nothing for it', () => {
+		const payload = buildPayload( prefillToData( prefill( { shipping: {} } ) ) );
+
+		// `Order_Editor::write()` skips the shipping write for an update whose delivery place equals the billing
+		// place of an order that has no shipping address of its own; this pins the client half of that contract.
+		for ( const key of [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ] ) {
+			expect( payload.shipping[ key ] ).toBe( payload.billing[ key ] );
+		}
+
+		expect( payload.billing.city ).toBe( 'Москва' );
+	} );
+
 	test( 'billing stays separate only when it really differed', () => {
 		const data = prefillToData( prefill( { shipping: { city: 'Тверь', country: 'RU', state: '' } } ) );
 

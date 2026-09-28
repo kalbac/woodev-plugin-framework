@@ -561,14 +561,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$was_paid     = $is_update && $order->is_paid();
 
 			$order->set_address( $data['billing'], 'billing' );
-			$order->set_address( $data['shipping'], 'shipping' );
+			// An order with no shipping address of its own delivers to its billing one, and the wizard shows (and
+			// sends back) that copy in step ②. Writing the copy would turn an untouched «Сохранить» into an edit.
+			if ( ! ( $is_update && self::is_billing_copy_of_no_shipping( $order, $data ) ) ) {
+				$order->set_address( $data['shipping'], 'shipping' );
+			}
 
 			$this->apply_payment_method( $order, (string) $data['payment_method'] );
 
 			$touched = $this->apply_items( $order, $data['items'], $is_update );
 
 			// The tariff about to be replaced may have asked for fields the new one does not (D7).
-			$previous_fields = $is_update ? $this->current_field_set( $order, $data['shipping_line']['provider'] ) : null;
+			$previous_fields = $is_update ? $this->current_field_set( $order ) : null;
 
 			$this->apply_shipping_line( $order, $data['shipping_line'] );
 
@@ -614,6 +618,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					]
 				);
 			}
+		}
+
+		/**
+		 * Whether an update's `shipping` block is nothing but the billing address handed back for an order that has
+		 * no shipping address of its own — the case where storing it would change the order (m4, #972).
+		 *
+		 * Only the delivery PLACE counts: names and phone are filled from billing by the wizard at send time, and an
+		 * order that carries none of a place has nothing of its own to keep.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order the order, before the edit.
+		 * @param array<string, mixed> $data  the validated payload.
+		 * @return bool
+		 */
+		private static function is_billing_copy_of_no_shipping( \WC_Order $order, array $data ): bool {
+			$place = [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ];
+			$own   = $order->get_address( 'shipping' );
+
+			foreach ( $place as $key ) {
+				if ( '' !== trim( (string) ( $own[ $key ] ?? '' ) ) ) {
+					return false;
+				}
+
+				if ( trim( (string) ( $data['shipping'][ $key ] ?? '' ) ) !== trim( (string) ( $data['billing'][ $key ] ?? '' ) ) ) {
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		/**
@@ -866,19 +900,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		}
 
 		/**
-		 * The carrier fields the order's CURRENT shipping line of this carrier asks for — what an edit
-		 * that changes the tariff has to clean up after.
+		 * The carrier fields the order's CURRENT shipping line asks for — what an edit that changes the
+		 * tariff has to clean up after. The line's own carrier is resolved from the line, not from the
+		 * carrier the edit moves the order TO: an edit that switches carrier has no line of the new one yet,
+		 * and the old carrier's field metas are exactly what must go.
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order       $order    the order, before the edit replaces its shipping line.
-		 * @param Orders_Provider $provider the carrier.
-		 * @return Carrier_Field_Set|null null when the order has no line of this carrier.
+		 * @param \WC_Order $order the order, before the edit replaces its shipping line.
+		 * @return Carrier_Field_Set|null null when no shipping line of the order belongs to a registered carrier.
 		 */
-		private function current_field_set( \WC_Order $order, Orders_Provider $provider ): ?Carrier_Field_Set {
+		private function current_field_set( \WC_Order $order ): ?Carrier_Field_Set {
 			foreach ( $order->get_shipping_methods() as $line ) {
-				if ( in_array( $line->get_method_id(), $provider->get_method_ids(), true ) ) {
-					return Carrier_Field_Set::for_rate( $provider, (string) $line->get_method_id(), (int) $line->get_instance_id() );
+				foreach ( $this->registry->get_providers() as $provider ) {
+					if ( in_array( $line->get_method_id(), $provider->get_method_ids(), true ) ) {
+						return Carrier_Field_Set::for_rate( $provider, (string) $line->get_method_id(), (int) $line->get_instance_id() );
+					}
 				}
 			}
 
