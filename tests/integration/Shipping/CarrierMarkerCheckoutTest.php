@@ -14,7 +14,7 @@
  *  - the marker meta from a FRESH order object;
  *  - {@see Orders_Registry::resolve_provider_for_order()} — the row owner / metabox, which
  *    treats an empty value as «no marker» (the value rule of the contract);
- *  - a `meta_query` `EXISTS` order query — the list query.
+ *  - the orders page's real list query ({@see Orders_Query}, carrier tab) — the list.
  *
  * The fixtures' provider registrations are re-run after a registry reset (other integration
  * tests reset that process-wide singleton for their own state), so this test exercises the
@@ -29,11 +29,14 @@
 
 namespace Woodev\Tests\Integration\Shipping;
 
+use Woodev\Framework\Shipping\Admin\Orders\Orders_Query;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Tests\Integration\TestCase;
 
 class CarrierMarkerCheckoutTest extends TestCase {
 
+	private const TEST_CARRIER      = 'test_shipping';
+	private const REALISTIC_CARRIER = 'realistic';
 	private const TEST_MARKER      = '_woodev_test_shipping_marker';
 	private const REALISTIC_MARKER = '_woodev_realistic_shipping_marker';
 	private const DEMO_CITY        = 'Москва';
@@ -169,26 +172,30 @@ class CarrierMarkerCheckoutTest extends TestCase {
 	}
 
 	/**
-	 * Ids of the orders the orders page's list query would match for a marker key.
+	 * Ids of the orders the orders page lists for a carrier tab ('' = the aggregate tab).
 	 *
-	 * @param string $key marker meta key.
+	 * Asked through the framework's REAL list query — {@see Orders_Query} → `Orders_Id_Resolver`
+	 * → `wc_get_orders( post__in )` — never a hand-rolled `meta_query`: `wc_get_orders()` DROPS a
+	 * `meta_query` on the legacy CPT datastore (gotcha
+	 * `wc-get-orders-drops-meta-query-on-the-legacy-cpt-datastore`), so such a helper proves
+	 * nothing there and returns every order.
+	 *
+	 * @param string $carrier provider id, or '' for the aggregate.
 	 * @return int[]
 	 */
-	private function listed_ids( string $key ): array {
+	private function listed_ids( string $carrier ): array {
+		$result = ( new Orders_Query() )->get_results(
+			[
+				'carrier'  => $carrier,
+				'per_page' => 200,
+			]
+		);
+
 		return array_map(
-			'intval',
-			wc_get_orders(
-				[
-					'limit'      => -1,
-					'return'     => 'ids',
-					'meta_query' => [
-						[
-							'key'     => $key,
-							'compare' => 'EXISTS',
-						],
-					],
-				]
-			)
+			static function ( \WC_Order $order ): int {
+				return (int) $order->get_id();
+			},
+			$result->orders
 		);
 	}
 
@@ -204,7 +211,7 @@ class CarrierMarkerCheckoutTest extends TestCase {
 		$this->place_through_the_classic_checkout( $order, 'woodev_test_shipping:3' );
 
 		$this->assertSame( '1', $this->marker( $order->get_id(), self::TEST_MARKER ) );
-		$this->assertContains( $order->get_id(), $this->listed_ids( self::TEST_MARKER ) );
+		$this->assertContains( $order->get_id(), $this->listed_ids( self::TEST_CARRIER ) );
 
 		$provider = Orders_Registry::instance()->resolve_provider_for_order( wc_get_order( $order->get_id() ) );
 		$this->assertNotNull( $provider, 'the row owner must resolve — an empty marker value would not' );
@@ -223,7 +230,7 @@ class CarrierMarkerCheckoutTest extends TestCase {
 		$this->place_through_the_block_checkout( $order );
 
 		$this->assertSame( '1', $this->marker( $order->get_id(), self::TEST_MARKER ) );
-		$this->assertContains( $order->get_id(), $this->listed_ids( self::TEST_MARKER ) );
+		$this->assertContains( $order->get_id(), $this->listed_ids( self::TEST_CARRIER ) );
 	}
 
 	/**
@@ -268,8 +275,9 @@ class CarrierMarkerCheckoutTest extends TestCase {
 		foreach ( [ $classic, $block ] as $order ) {
 			$this->assertSame( '', $this->marker( $order->get_id(), self::TEST_MARKER ) );
 			$this->assertSame( '', $this->marker( $order->get_id(), self::REALISTIC_MARKER ) );
-			$this->assertNotContains( $order->get_id(), $this->listed_ids( self::TEST_MARKER ) );
-			$this->assertNotContains( $order->get_id(), $this->listed_ids( self::REALISTIC_MARKER ) );
+			$this->assertNotContains( $order->get_id(), $this->listed_ids( self::TEST_CARRIER ) );
+			$this->assertNotContains( $order->get_id(), $this->listed_ids( self::REALISTIC_CARRIER ) );
+			$this->assertNotContains( $order->get_id(), $this->listed_ids( '' ), 'the aggregate tab must not list it either' );
 		}
 	}
 
