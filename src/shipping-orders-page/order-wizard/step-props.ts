@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { FieldErrors, PrefillOrder, WizardData, WizardStepId } from './types';
+import type { AddressPolicy, FieldErrors, PrefillOrder, WizardData, WizardStepId } from './types';
 
 /** State updater in the `useState` style — a step patches from the latest state, never a stale copy. */
 export type SetWizardData = ( update: ( data: WizardData ) => WizardData ) => void;
@@ -34,6 +34,11 @@ export interface StepProps {
 	busy: boolean;
 	/** Jumps back to a step already passed — the summary's «Изменить» links (⑤). */
 	goToStep: ( step: WizardStepId ) => void;
+	/**
+	 * The checkout's rules for the delivery address (#985) — what step ② marks required and hides. `null` until the
+	 * server has answered (or when it had nothing to say): the step then asks only for a country and a city.
+	 */
+	addressPolicy?: AddressPolicy | null;
 }
 
 /** Renders one step's body — a host may replace any of the five through {@link StepRenderers}. */

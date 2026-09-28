@@ -251,6 +251,31 @@ export interface RatesResponse {
 	providers: RateGroup[];
 }
 
+/** The delivery-address fields the checkout's field policy has an opinion on. */
+export type AddressFieldKey = 'country' | 'state' | 'city' | 'address_1' | 'address_2' | 'postcode';
+
+/**
+ * What the checkout's policy says about one field (`Checkout_Field_Policy::address_rules_for()`, #985):
+ * `removed` — the checkout has no such field, so its value never reaches an order; `hidden` — the row is
+ * not shown (removed, hidden by the country's locale, or hidden for a pickup tariff); `required` — the
+ * customer must fill it, never true for a hidden one.
+ */
+export interface AddressRule {
+	required: boolean;
+	hidden: boolean;
+	removed: boolean;
+}
+
+/** The whole delivery address's rules. */
+export type AddressPolicy = Record<AddressFieldKey, AddressRule>;
+
+/** `GET /shipping/orders/address-policy` success body. An empty `fields` means «no rule» (WooCommerce absent). */
+export interface AddressPolicyResponse {
+	country: string;
+	pickup: boolean;
+	fields: Partial<Record<AddressFieldKey, AddressRule>> | unknown[];
+}
+
 /** The five steps, in order (O6). */
 export const WIZARD_STEPS = [ 'customer', 'address', 'items', 'delivery', 'payment' ] as const;
 

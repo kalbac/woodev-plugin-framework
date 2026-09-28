@@ -16,9 +16,11 @@
  * free text otherwise. A picked settlement fills it only when its region name matches exactly
  * one code ({@see matchState}).
  *
- * Not done here (D1 asks for it, needs a server answer this increment does not have): the
- * checkout's per-carrier required / hidden field policy (`Checkout_Field_Policy`). Step ②
- * asks only for what every carrier needs — a country and a city.
+ * The checkout's own field policy (`Checkout_Field_Policy`, #985) decides which fields are required
+ * (marked with «*», checked on «Далее» by `validateAddress()`) and which are not shown at all — a
+ * field the merchant removed, or one hidden for a pickup tariff. The policy arrives from the server
+ * (`useAddressPolicy()`); before it does, the step asks for what every carrier needs — a country and
+ * a city — and shows every field. The country is always shown: a manager may place an order for any.
  *
  * @package woodev-plugin-framework
  */
@@ -27,16 +29,24 @@ import { __ } from '@wordpress/i18n';
 import LocationPicker from '../../components/location-picker';
 import type { LocationFill, LocationSuggestion } from '../../components/location-picker';
 import { getWizardContext } from '../rest';
+import { ruleOf } from './address-policy';
 import { SelectField, TextField, errorsFor } from './fields';
 import type { StepProps } from './step-props';
 import { matchState } from './wizard-data';
 
-export default function StepAddress( { data, setData, errors }: StepProps ) {
+export default function StepAddress( { data, setData, errors, addressPolicy }: StepProps ) {
 	const { apiRoot, nonce, wizard } = getWizardContext();
 	const countries = wizard.countries || {};
 	const states = wizard.states || {};
 	const { shipping, settlementKey } = data;
 	const regions = states[ shipping.country ];
+	const rules = {
+		state: ruleOf( addressPolicy, 'state' ),
+		city: ruleOf( addressPolicy, 'city' ),
+		address_1: ruleOf( addressPolicy, 'address_1' ),
+		address_2: ruleOf( addressPolicy, 'address_2' ),
+		postcode: ruleOf( addressPolicy, 'postcode' ),
+	};
 
 	const setShipping = ( patch: Partial<typeof shipping> ) =>
 		setData( ( d ) => ( { ...d, shipping: { ...d.shipping, ...patch } } ) );
@@ -99,6 +109,7 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 						label={ __( 'Страна', 'woodev-plugin-framework' ) }
 						value={ shipping.country }
 						options={ countryOptions }
+						required
 						errors={ errorsFor( errors, 'shipping.country', 'billing.country' ) }
 						onChange={ ( country ) =>
 							setData( ( d ) => ( {
@@ -114,36 +125,41 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 					<TextField
 						label={ __( 'Страна (код, например RU)', 'woodev-plugin-framework' ) }
 						value={ shipping.country }
+						required
 						errors={ errorsFor( errors, 'shipping.country', 'billing.country' ) }
 						onChange={ ( country ) => setShipping( { country: country.toUpperCase() } ) }
 					/>
 				) }
 
-				{ regions ? (
-					<SelectField
-						label={ __( 'Регион', 'woodev-plugin-framework' ) }
-						value={ shipping.state }
-						options={ [
-							{ value: '', label: __( '— выберите регион —', 'woodev-plugin-framework' ) },
-							...Object.entries( regions ).map( ( [ value, label ] ) => ( { value, label } ) ),
-						] }
-						errors={ errorsFor( errors, 'shipping.state', 'billing.state' ) }
-						onChange={ ( state ) => setShipping( { state } ) }
-					/>
-				) : (
-					<TextField
-						label={ __( 'Регион', 'woodev-plugin-framework' ) }
-						value={ shipping.state }
-						errors={ errorsFor( errors, 'shipping.state', 'billing.state' ) }
-						onChange={ ( state ) => setShipping( { state } ) }
-					/>
-				) }
+				{ ! rules.state.hidden &&
+					( regions ? (
+						<SelectField
+							label={ __( 'Регион', 'woodev-plugin-framework' ) }
+							value={ shipping.state }
+							options={ [
+								{ value: '', label: __( '— выберите регион —', 'woodev-plugin-framework' ) },
+								...Object.entries( regions ).map( ( [ value, label ] ) => ( { value, label } ) ),
+							] }
+							required={ rules.state.required }
+							errors={ errorsFor( errors, 'shipping.state', 'billing.state' ) }
+							onChange={ ( state ) => setShipping( { state } ) }
+						/>
+					) : (
+						<TextField
+							label={ __( 'Регион', 'woodev-plugin-framework' ) }
+							value={ shipping.state }
+							required={ rules.state.required }
+							errors={ errorsFor( errors, 'shipping.state', 'billing.state' ) }
+							onChange={ ( state ) => setShipping( { state } ) }
+						/>
+					) ) }
 			</div>
 
 			<div className="woodev-order-wizard__with-picker">
 				<TextField
 					label={ __( 'Город или населённый пункт', 'woodev-plugin-framework' ) }
 					value={ shipping.city }
+					required={ rules.city.required }
 					errors={ errorsFor( errors, 'shipping.city', 'billing.city' ) }
 					onChange={ ( city ) =>
 						setData( ( d ) => ( { ...d, shipping: { ...d.shipping, city }, settlementKey: '', settlementRecord: null } ) )
@@ -157,36 +173,47 @@ export default function StepAddress( { data, setData, errors }: StepProps ) {
 				/>
 			</div>
 
-			<div className="woodev-order-wizard__with-picker">
-				<TextField
-					label={ __( 'Улица, дом', 'woodev-plugin-framework' ) }
-					value={ shipping.address_1 }
-					errors={ errorsFor( errors, 'shipping.address_1', 'billing.address_1' ) }
-					onChange={ ( address_1 ) => setShipping( { address_1 } ) }
-				/>
-				<LocationPicker
-					{ ...pickerProps }
-					level="address"
-					within={ settlementKey }
-					disabled={ '' === shipping.country }
-					placeholder={ __( 'Найти адрес…', 'woodev-plugin-framework' ) }
-				/>
-			</div>
+			{ ! rules.address_1.hidden && (
+				<div className="woodev-order-wizard__with-picker">
+					<TextField
+						label={ __( 'Улица, дом', 'woodev-plugin-framework' ) }
+						value={ shipping.address_1 }
+						required={ rules.address_1.required }
+						errors={ errorsFor( errors, 'shipping.address_1', 'billing.address_1' ) }
+						onChange={ ( address_1 ) => setShipping( { address_1 } ) }
+					/>
+					<LocationPicker
+						{ ...pickerProps }
+						level="address"
+						within={ settlementKey }
+						disabled={ '' === shipping.country }
+						placeholder={ __( 'Найти адрес…', 'woodev-plugin-framework' ) }
+					/>
+				</div>
+			) }
 
-			<div className="woodev-order-wizard__grid">
-				<TextField
-					label={ __( 'Квартира, офис', 'woodev-plugin-framework' ) }
-					value={ shipping.address_2 }
-					errors={ errorsFor( errors, 'shipping.address_2', 'billing.address_2' ) }
-					onChange={ ( address_2 ) => setShipping( { address_2 } ) }
-				/>
-				<TextField
-					label={ __( 'Индекс', 'woodev-plugin-framework' ) }
-					value={ shipping.postcode }
-					errors={ errorsFor( errors, 'shipping.postcode', 'billing.postcode' ) }
-					onChange={ ( postcode ) => setShipping( { postcode } ) }
-				/>
-			</div>
+			{ ( ! rules.address_2.hidden || ! rules.postcode.hidden ) && (
+				<div className="woodev-order-wizard__grid">
+					{ ! rules.address_2.hidden && (
+						<TextField
+							label={ __( 'Квартира, офис', 'woodev-plugin-framework' ) }
+							value={ shipping.address_2 }
+							required={ rules.address_2.required }
+							errors={ errorsFor( errors, 'shipping.address_2', 'billing.address_2' ) }
+							onChange={ ( address_2 ) => setShipping( { address_2 } ) }
+						/>
+					) }
+					{ ! rules.postcode.hidden && (
+						<TextField
+							label={ __( 'Индекс', 'woodev-plugin-framework' ) }
+							value={ shipping.postcode }
+							required={ rules.postcode.required }
+							errors={ errorsFor( errors, 'shipping.postcode', 'billing.postcode' ) }
+							onChange={ ( postcode ) => setShipping( { postcode } ) }
+						/>
+					) }
+				</div>
+			) }
 		</div>
 	);
 }

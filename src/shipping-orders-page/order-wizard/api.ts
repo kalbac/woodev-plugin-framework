@@ -13,7 +13,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 import { getWizardContext } from '../rest';
-import type { OrderPrefill, RatesResponse, SaveResult, ServerError } from './types';
+import type { AddressPolicyResponse, OrderPrefill, RatesResponse, SaveResult, ServerError } from './types';
 import type { WcCustomerRecord } from './wizard-data';
 
 /** A save / load that failed, reduced to what the wizard shows. */
@@ -86,6 +86,31 @@ export function loadOrderPrefill( orderId: number ): Promise<OrderPrefill> {
 		method: 'GET',
 		headers: headers(),
 	} ).catch( ( error: unknown ) => {
+		throw toRequestError( error );
+	} );
+}
+
+/**
+ * `GET /shipping/orders/address-policy?country=…&pickup=…` — the checkout's rules for the delivery
+ * address (`Order_Editor_Controller::address_policy()`, #985): which fields are required, hidden or
+ * removed for the country, and for a pickup tariff or a courier one. Rejects with a
+ * {@link WizardRequestError}.
+ *
+ * @param {string}  country ISO code of the delivery country.
+ * @param {boolean} pickup  whether the chosen tariff is a pickup one.
+ * @return {Promise<AddressPolicyResponse>} the rules.
+ */
+export function fetchAddressPolicy( country: string, pickup: boolean ): Promise<AddressPolicyResponse> {
+	const { ordersRoot } = getWizardContext();
+	const query = new URLSearchParams( { country, pickup: pickup ? '1' : '0' } ).toString();
+
+	return Promise.resolve(
+		apiFetch<AddressPolicyResponse>( {
+			url: `${ ordersRoot }/address-policy?${ query }`,
+			method: 'GET',
+			headers: headers(),
+		} )
+	).catch( ( error: unknown ) => {
 		throw toRequestError( error );
 	} );
 }

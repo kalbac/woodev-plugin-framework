@@ -16,7 +16,8 @@
 import { __ } from '@wordpress/i18n';
 import { validateField } from '../../components/validate';
 import { carrierFieldValue, visibleCarrierFields } from './delivery-state';
-import type { FieldErrors, ServerError, WizardData, WizardStepId } from './types';
+import { ruleOf } from './address-policy';
+import type { AddressFieldKey, AddressPolicy, FieldErrors, ServerError, WizardData, WizardStepId } from './types';
 import { WIZARD_STEPS } from './types';
 
 /** `is_email()`'s practical floor — one `@`, a dotted host, no spaces. The server has the last word. */
@@ -106,17 +107,37 @@ export function validateCustomer( data: WizardData ): FieldErrors {
 }
 
 /**
+ * What a required address field reads when left empty — the sentences of
+ * `Order_Payload_Validator::address_field_messages()`, word for word.
+ */
+export function requiredAddressMessages(): Partial<Record<AddressFieldKey, string>> {
+	return {
+		state: __( 'Укажите регион доставки.', 'woodev-plugin-framework' ),
+		city: __( 'Укажите город или населённый пункт.', 'woodev-plugin-framework' ),
+		address_1: __( 'Укажите улицу и дом.', 'woodev-plugin-framework' ),
+		address_2: __( 'Укажите квартиру или офис.', 'woodev-plugin-framework' ),
+		postcode: __( 'Укажите индекс.', 'woodev-plugin-framework' ),
+	};
+}
+
+/**
  * ② Адрес. `states` is the bootstrap's region list for the chosen country — a country that
  * has one takes only a code from it (the validator's `invalid_state`), one that has none takes
  * free text.
+ *
+ * `policy` is the checkout's own rule for the delivery address (#985, `Checkout_Field_Policy`, fetched
+ * by `useAddressPolicy()`): a field it marks required and shows must be filled, a hidden one is never
+ * asked. Without it (not answered yet) only the country and the city are required — the server judges
+ * the whole payload again on save, by the same rule.
  */
 export function validateAddress(
 	data: WizardData,
 	countries: Record<string, string>,
-	states: Record<string, Record<string, string>>
+	states: Record<string, Record<string, string>>,
+	policy?: AddressPolicy | null
 ): FieldErrors {
 	const errors: FieldErrors = {};
-	const { country, state, city } = data.shipping;
+	const { country, state } = data.shipping;
 
 	if ( '' === country.trim() ) {
 		add( errors, 'shipping.country', __( 'Укажите страну доставки.', 'woodev-plugin-framework' ) );
@@ -126,8 +147,14 @@ export function validateAddress(
 		add( errors, 'shipping.state', __( 'Такого региона нет в справочнике магазина для выбранной страны.', 'woodev-plugin-framework' ) );
 	}
 
-	if ( '' === city.trim() ) {
-		add( errors, 'shipping.city', __( 'Укажите город или населённый пункт.', 'woodev-plugin-framework' ) );
+	const messages = requiredAddressMessages();
+
+	for ( const key of Object.keys( messages ) as AddressFieldKey[] ) {
+		const rule = ruleOf( policy, key );
+
+		if ( rule.required && ! rule.hidden && '' === data.shipping[ key as keyof typeof data.shipping ].trim() ) {
+			add( errors, `shipping.${ key }`, messages[ key ] as string );
+		}
 	}
 
 	return errors;
@@ -235,13 +262,14 @@ export function validateStep(
 	data: WizardData,
 	countries: Record<string, string>,
 	states: Record<string, Record<string, string>>,
-	statuses?: Record<string, string>
+	statuses?: Record<string, string>,
+	addressPolicy?: AddressPolicy | null
 ): FieldErrors {
 	switch ( WIZARD_STEPS[ index ] ) {
 		case 'customer':
 			return validateCustomer( data );
 		case 'address':
-			return validateAddress( data, countries, states );
+			return validateAddress( data, countries, states, addressPolicy );
 		case 'items':
 			return validateItems( data );
 		case 'delivery':
@@ -263,12 +291,13 @@ export function validateAll(
 	data: WizardData,
 	countries: Record<string, string>,
 	states: Record<string, Record<string, string>>,
-	statuses?: Record<string, string>
+	statuses?: Record<string, string>,
+	addressPolicy?: AddressPolicy | null
 ): FieldErrors {
 	const all: FieldErrors = {};
 
 	WIZARD_STEPS.forEach( ( _step, index ) => {
-		Object.assign( all, validateStep( index, data, countries, states, statuses ) );
+		Object.assign( all, validateStep( index, data, countries, states, statuses, addressPolicy ) );
 	} );
 
 	return all;

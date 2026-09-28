@@ -32,6 +32,7 @@ import Stepper from '../../components/stepper';
 import { getWizardContext } from '../rest';
 import { checkPickupPoint, loadOrderPrefill, saveOrder, toRequestError } from './api';
 import type { WizardRequestError } from './api';
+import { useAddressPolicy } from './address-policy';
 import StepAddress from './step-address';
 import StepCustomer from './step-customer';
 import StepDelivery from './step-delivery';
@@ -142,6 +143,9 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const stepId = ids[ index ];
 	const labels = stepLabels();
 	const isLast = index === ids.length - 1;
+	// The checkout's rules for the delivery address (#985). Asked while ② is on screen — the country is picked there,
+	// and the tariff kind (pickup or courier) is ④'s answer, so coming back to ② after ④ asks again if it changed.
+	const addressPolicy = useAddressPolicy( data.shipping.country, data.rest.rate_is_pickup, 'address' === stepId );
 
 	// While a step shows problems, fixing a field takes its problem away (the client-checkable
 	// ones; a server-only one clears with the edit and comes back from the next request if real).
@@ -159,7 +163,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			return;
 		}
 
-		const fresh = validateStep( index, data, countries, states, statuses );
+		const fresh = validateStep( index, data, countries, states, statuses, addressPolicy );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...fresh } ) );
 		// Only an edit re-checks; the errors themselves changing must not loop.
@@ -183,7 +187,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	};
 
 	const goNext = async (): Promise<void> => {
-		const found = validateStep( index, data, countries, states, statuses );
+		const found = validateStep( index, data, countries, states, statuses, addressPolicy );
 
 		setErrors( ( current ) => ( { ...withoutStep( current, stepId ), ...found } ) );
 
@@ -236,7 +240,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 		// The last look: every step once more. The manager passed each on the way here, but a step's data
 		// can move behind its back (a tariff dropping out, the tariffs still being asked).
-		const problems = validateAll( data, countries, states, statuses );
+		const problems = validateAll( data, countries, states, statuses, addressPolicy );
 		const first = firstStepWithErrors( problems );
 
 		if ( first >= 0 ) {
@@ -277,7 +281,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	};
 
 	const goToStep = ( step: WizardStepId ) => setIndex( Math.max( 0, ids.indexOf( step ) ) );
-	const props = { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep } as const;
+	const props = { data, setData, errors, mode, order, baselineTotal, submit, busy, goToStep, addressPolicy } as const;
 	const body = ( () => {
 		const custom = renderers[ stepId ];
 

@@ -43,12 +43,14 @@ export function FieldErrorList( { messages }: { messages: string[] } ) {
 interface FieldShellProps {
 	messages: string[];
 	className?: string;
+	/** The field must be filled — the label gets the «*» the styles draw (never part of the label's text). */
+	required?: boolean;
 	children: ReactNode;
 }
 
-function FieldShell( { messages, className = '', children }: FieldShellProps ) {
+function FieldShell( { messages, className = '', required = false, children }: FieldShellProps ) {
 	return (
-		<div className={ `woodev-order-wizard__field${ messages.length ? ' has-error' : '' } ${ className }`.trim() }>
+		<div className={ `woodev-order-wizard__field${ messages.length ? ' has-error' : '' }${ required ? ' is-required' : '' } ${ className }`.trim() }>
 			{ children }
 			<FieldErrorList messages={ messages } />
 		</div>
@@ -68,11 +70,13 @@ interface TextFieldProps {
 	min?: string;
 	step?: string;
 	autoComplete?: string;
+	/** The checkout requires this field (#985): marked, and reported empty by the step's check. */
+	required?: boolean;
 }
 
-export function TextField( { label, value, onChange, errors = [], type = 'text', help, className, disabled, min, step, autoComplete }: TextFieldProps ) {
+export function TextField( { label, value, onChange, errors = [], type = 'text', help, className, disabled, min, step, autoComplete, required }: TextFieldProps ) {
 	return (
-		<FieldShell messages={ errors } className={ className }>
+		<FieldShell messages={ errors } className={ className } required={ required }>
 			<TextControl
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
@@ -84,6 +88,7 @@ export function TextField( { label, value, onChange, errors = [], type = 'text',
 				min={ min }
 				step={ step }
 				autoComplete={ autoComplete }
+				required={ required || undefined }
 				aria-invalid={ errors.length > 0 || undefined }
 				onChange={ onChange }
 			/>
@@ -99,11 +104,13 @@ interface SelectFieldProps {
 	errors?: string[];
 	className?: string;
 	disabled?: boolean;
+	/** The checkout requires this field (#985): marked, and reported empty by the step's check. */
+	required?: boolean;
 }
 
-export function SelectField( { label, value, options, onChange, errors = [], className, disabled }: SelectFieldProps ) {
+export function SelectField( { label, value, options, onChange, errors = [], className, disabled, required }: SelectFieldProps ) {
 	return (
-		<FieldShell messages={ errors } className={ className }>
+		<FieldShell messages={ errors } className={ className } required={ required }>
 			<SelectControl
 				__nextHasNoMarginBottom
 				__next40pxDefaultSize
@@ -111,6 +118,7 @@ export function SelectField( { label, value, options, onChange, errors = [], cla
 				value={ value }
 				options={ options }
 				disabled={ disabled }
+				required={ required || undefined }
 				aria-invalid={ errors.length > 0 || undefined }
 				onChange={ onChange }
 			/>
