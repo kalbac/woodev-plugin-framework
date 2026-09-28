@@ -328,6 +328,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					update_post_meta( (int) $order_id, $meta_key, $meta_value );
+					self::flush_order_meta_cache( (int) $order_id );
 				}
 			}
 		}
@@ -359,6 +360,7 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					add_post_meta( (int) $order_id, $meta_key, $meta_value, $unique );
+					self::flush_order_meta_cache( (int) $order_id );
 				}
 			}
 		}
@@ -389,7 +391,30 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
 					delete_post_meta( (int) $order_id, $meta_key, $meta_value );
+					self::flush_order_meta_cache( (int) $order_id );
 				}
+			}
+		}
+
+
+		/**
+		 * Drops WooCommerce's cached copy of an order's meta after a raw post-meta write.
+		 *
+		 * The legacy (CPT) branches above write through `update_post_meta()` & co., which WooCommerce
+		 * answers by flushing the order's object-meta cache — but only on the hooks it listens to.
+		 * WooCommerce 8.5 and 9.3 listen to `updated_post_meta` alone, so ADDING a key (or deleting
+		 * one) left the cached copy stale: an order already read once in the request came back
+		 * without the value on the next `wc_get_order()` (and, with a persistent object cache,
+		 * until the entry expired). WooCommerce 11 also listens to `added_post_meta` and
+		 * `deleted_post_meta`; this makes every supported version behave like it. Invalidating an
+		 * already-flushed entry is a no-op, so the newer versions pay nothing.
+		 *
+		 * @param int $order_id order ID
+		 */
+		private static function flush_order_meta_cache( int $order_id ): void {
+
+			if ( class_exists( 'WC_Cache_Helper' ) ) {
+				WC_Cache_Helper::invalidate_cache_group( 'object_' . $order_id );
 			}
 		}
 

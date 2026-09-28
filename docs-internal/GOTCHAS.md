@@ -1,6 +1,6 @@
 # Gotchas — Woodev Plugin Framework
 
-> **Topic map.** 340 atomic gotchas across 31 topics. At session start read THIS file, then open
+> **Topic map.** 341 atomic gotchas across 31 topics. At session start read THIS file, then open
 > the topic indexes your task touches — each holds one line per gotcha, linking the detail file.
 > `[tooling/*]`, `[testing/*]` and `[rig/*]` apply to almost every session.
 > **Adding one:** create `gotchas/{slug}.md`, then add ONE line to the right `gotcha-index/{topic}.md`
@@ -15,7 +15,7 @@
 | [`settings-api/*`](gotcha-index/settings-api.md) | 7 | Settings API |
 | [`deprecation/*`](gotcha-index/deprecation.md) | 2 | Deprecation cycle |
 | [`bootstrap/*`](gotcha-index/bootstrap.md) | 5 | Multi-version loading |
-| [`compat/*`](gotcha-index/compat.md) | 2 | Backward compatibility, HPOS |
+| [`compat/*`](gotcha-index/compat.md) | 3 | Backward compatibility, HPOS |
 | [`lifecycle/*`](gotcha-index/lifecycle.md) | 1 | Install/upgrade routines |
 | [`woocommerce/states`](gotcha-index/woocommerce-states.md) | 2 | The `woocommerce_states` table |
 | [`woocommerce/*`](gotcha-index/woocommerce.md) | 20 | WooCommerce-specific · WooCommerce-specific (session) |

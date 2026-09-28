@@ -5,6 +5,7 @@
 
 - [compat/hpos] **A row rebuilt from the same `WC_Order` after an action is stale ONLY on the legacy CPT store: `update_order_meta()` writes through the object under HPOS and AROUND it on CPT. A mocked test and an HPOS rig are both blind.** → [a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store](../gotchas/a-row-rebuilt-after-an-action-is-stale-only-on-the-legacy-cpt-store.md) (s134)
 - [compat/hpos-order-meta-safety] **Never use get_post_meta() on orders.** → [hpos-order-meta-safety](../gotchas/hpos-order-meta-safety.md) (s2)
+- [compat/woocommerce] **CPT order-meta writes left WC's cached order meta stale on WC 8.5 / 9.3 (only `updated_post_meta` flushed).** → [cpt-order-meta-writes-leave-wc-meta-cache-stale-before-wc-10](../gotchas/cpt-order-meta-writes-leave-wc-meta-cache-stale-before-wc-10.md)
 
 ## Related
 
