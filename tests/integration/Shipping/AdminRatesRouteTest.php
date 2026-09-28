@@ -176,7 +176,10 @@ class AdminRatesRouteTest extends TestCase {
 		$this->assertSame( 'woodev_test_shipping:' . $this->instance_id, $group['rates'][0]['id'] );
 		$this->assertSame( 'woodev_test_shipping', $group['rates'][0]['method_id'] );
 		$this->assertSame( $this->instance_id, $group['rates'][0]['instance_id'] );
-		$this->assertFalse( $group['rates'][0]['is_pickup'] );
+		// The fixture method declares itself a pickup method (`get_delivery_type() === 'pickup'`, #709),
+		// so the flag the calculator derives from `is_pickup_shipping()` is true — it is read off the
+		// method, not defaulted.
+		$this->assertTrue( $group['rates'][0]['is_pickup'] );
 	}
 
 	/**
