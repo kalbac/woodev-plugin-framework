@@ -395,8 +395,10 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 			city: 'Мира & Ко',
 			postcode: '140&180',
 		} ) );
-		expect( probe.data.settlementKey ).toBe( '' );
-		expect( probe.data.settlementRecord ).toBeNull();
+		// The confirmed record survives the pick, as on the checkout (#339): the point may stand in a
+		// neighbouring settlement, and the record still addresses the picker and step ⑤'s point check.
+		expect( probe.data.settlementKey ).toBe( 'dadata:77' );
+		expect( probe.data.settlementRecord ).toEqual( { key: 'dadata:77', level: 'settlement' } );
 	} );
 
 	test( 'clears an absent address or postcode but keeps the settled city when the point has no locality', async () => {
@@ -467,7 +469,7 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		expect( probe.data.rest.pickup_point ).toMatchObject( { id: 'P-1' } );
 		// The city really changes the map input, so the session is rebuilt onto the retained point.
 		await waitFor( () => expect( createPickupSession ).toHaveBeenCalledTimes( 2 ) );
-		expect( createPickupSession.mock.calls[ 1 ][ 0 ] ).toMatchObject( { locality: 'Жуковский', localityKey: '', selectedId: 'P-1' } );
+		expect( createPickupSession.mock.calls[ 1 ][ 0 ] ).toMatchObject( { locality: 'Жуковский', localityKey: 'dadata:77', selectedId: 'P-1' } );
 	} );
 
 	test( 'a new point replaces the prior point address, while switching back to courier keeps it', async () => {

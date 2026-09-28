@@ -329,9 +329,10 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 				city: cityChanged ? locality : selected.shipping.city,
 				postcode,
 			},
-			// This mirrors manually typing another city in step ②; a differently-spelled same city
-			// deliberately keeps the record that already addresses the picker.
-			...( cityChanged ? { settlementKey: '', settlementRecord: null } : {} ),
+			// The confirmed settlement record survives the pick, as it does on the checkout
+			// (location-cascade.js handlePickupAddressReplacing, #339 — re-seeding, not
+			// suppressing): a point may stand in a neighbouring settlement, and the record is what
+			// addresses the picker and step ⑤'s point check for a settlement-keyed carrier.
 		};
 	};
 
