@@ -1844,8 +1844,11 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// writing (issue #339), and `handlePickupAddressReplacing()` puts that blank through
 	// `writeSilently()`. Hence the fix sits in `writeSilently()` itself rather than at a fourth
 	// call site.
+	// These three model the announced write LANDING in the settlement field, which since #961
+	// only happens with the server guard off (custom settlements allowed): under the guard the
+	// cascade vetoes that write, so it never reaches writeSilently() at all.
 	it( 'a pickup point with NO locality — an EMPTY silent write — lets the SAME still-rendered entry be re-picked', async () => {
-		const { select, resultItem, instance } = await attachPopulateAndPick();
+		const { select, resultItem, instance } = await attachPopulateAndPick( { allowCustomSettlement: true } );
 
 		// Exactly what applyAddressReplacement() sends for a point whose `locality` is absent:
 		// `'' === point.locality ? ... : ''` reaches the announcement as a real empty string.
@@ -1874,7 +1877,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// than suppresses. `resolveAndSelect()` compares only the provider KEY, so a changed
 	// spelling leaves it just as stale as a blank does.
 	it( 'a pickup point with a DIFFERENT locality spelling — a non-empty silent write — also lets the SAME entry be re-picked', async () => {
-		const { select, resultItem, instance } = await attachPopulateAndPick();
+		const { select, resultItem, instance } = await attachPopulateAndPick( { allowCustomSettlement: true } );
 
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
 			detail: { fields: { billing_city: 'Москва' } },
@@ -1898,7 +1901,7 @@ describe( 'resetWidgetGuard() on the OTHER two clearing routes, against the REAL
 	// delivery the guard exists to eat (issue #461 BLOCKING 2 — one pick must not fire across
 	// both the select2 and the native path).
 	it( 'a silent write of the SAME text leaves the guard alone — the entry is still treated as already handled', async () => {
-		const { resultItem, instance } = await attachPopulateAndPick();
+		const { resultItem, instance } = await attachPopulateAndPick( { allowCustomSettlement: true } );
 
 		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
 			detail: { fields: { billing_city: 'Старое Место' } },
@@ -5589,8 +5592,8 @@ describe( 'a pickup point address replacement must not read as a manual edit (#3
 		} );
 	}
 
-	function bootWithPickedSettlement() {
-		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ] } );
+	function bootWithPickedSettlement( extra ) {
+		boot( Object.assign( { region: true, settlement: true, address: true, countries: [ 'RU' ] }, extra || {} ) );
 
 		selectViaFake( callFor( 'billing_city' ), {
 			key: 'dadata:0c5b2444', label: 'Moscow', level: 'settlement',
@@ -5652,6 +5655,54 @@ describe( 'a pickup point address replacement must not read as a manual edit (#3
 		const store = window.WoodevCheckoutFieldStore.getStoreForField( 'billing_city' );
 
 		expect( store.getValue( 'billing_city' ) ).toBe( 'Москва' );
+	} );
+
+	// Issue #961: under the #531 server guard (`ajax-select2`, custom settlements off) the
+	// posted settlement must equal the record's own name, so the point's spelling («г.Москва»)
+	// written over the picked city gets the order refused at «Place order». The cascade vetoes
+	// that one field on the announcement; pickup-mount.js reads `fields` back and skips it.
+	it( 'issue #961: under the guard the announced settlement write is VETOED — the picked city stays', () => {
+		bootWithPickedSettlement( { mode: { settlement: 'ajax-select2' } } );
+
+		const cityBefore = document.getElementById( 'billing_city' ).value;
+		const fields = { billing_city: 'г.Москва', billing_address_1: 'ул Новокосинская, д 17 к 6' };
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: fields },
+			bubbles: true,
+		} ) );
+
+		expect( fields ).not.toHaveProperty( 'billing_city' );
+		expect( fields.billing_address_1 ).toBe( 'ул Новокосинская, д 17 к 6' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( cityBefore );
+		expect( document.getElementById( 'billing_address_1' ).value ).toBe( 'ул Новокосинская, д 17 к 6' );
+	} );
+
+	it( 'issue #961: with custom settlements allowed the guard is off — the point locality is still announced and written', () => {
+		bootWithPickedSettlement( { mode: { settlement: 'ajax-select2' }, allowCustomSettlement: true } );
+
+		const fields = { billing_city: 'г.Москва' };
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: fields },
+			bubbles: true,
+		} ) );
+
+		expect( fields ).toHaveProperty( 'billing_city', 'г.Москва' );
+		expect( document.getElementById( 'billing_city' ).value ).toBe( 'г.Москва' );
+	} );
+
+	it( 'issue #961: with no confirmed settlement record there is nothing to protect — the write is not vetoed', () => {
+		boot( { region: true, settlement: true, address: true, countries: [ 'RU' ], mode: { settlement: 'ajax-select2' } } );
+
+		const fields = { billing_city: 'г.Москва' };
+
+		document.body.dispatchEvent( new CustomEvent( 'woodev_pickup_address_replacing', {
+			detail: { fields: fields },
+			bubbles: true,
+		} ) );
+
+		expect( fields ).toHaveProperty( 'billing_city', 'г.Москва' );
 	} );
 
 	it( 'announcing does NOT disarm the next genuine manual edit', async () => {

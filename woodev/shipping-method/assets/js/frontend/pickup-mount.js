@@ -1527,7 +1527,9 @@
 
 	/**
 	 * Writes a selected point's address/locality/postal code into the resolved
-	 * fieldset — a no-op when `replaceAddress` is disabled.
+	 * fieldset — a no-op when `replaceAddress` is disabled. A field a
+	 * `woodev_pickup_address_replacing` listener vetoed (deleted from the announced
+	 * `fields`) is left untouched.
 	 *
 	 * @param {Object} config
 	 * @param {Object} point
@@ -1562,9 +1564,24 @@
 		// it has no listener and this is an inert no-op.
 		fireDocumentEvent( 'woodev_pickup_address_replacing', { fields: fields, fieldId: config.fieldId } );
 
-		writeAndFireChange( target + '_address_1', address );
-		writeAndFireChange( target + '_city', locality, locality );
-		writeAndFireChange( target + '_postcode', postalCode );
+		// Issue #961: a listener may VETO a field by deleting it from the announced `fields`
+		// (`location-cascade.js` does, for a settlement the server guard holds to the
+		// customer's own pick). Only what is still announced is written.
+		var has = function( fieldId ) {
+			return Object.prototype.hasOwnProperty.call( fields, fieldId );
+		};
+
+		if ( has( target + '_address_1' ) ) {
+			writeAndFireChange( target + '_address_1', address );
+		}
+
+		if ( has( target + '_city' ) ) {
+			writeAndFireChange( target + '_city', locality, locality );
+		}
+
+		if ( has( target + '_postcode' ) ) {
+			writeAndFireChange( target + '_postcode', postalCode );
+		}
 	}
 
 	/**
