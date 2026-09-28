@@ -102,6 +102,18 @@ alphabetical accident.** `tests/unit/handlers/` sorts last only because it is lo
 it to `Handlers/` (which is what every other nested test directory does) reds 55 tests without
 touching a line of source.
 
+## PHP 7.4 breaks the "green in plain order" assumption too (#710, 28.09.2026)
+
+The plain `depends,defects` order is stable on PHP 8.x only because PHP 8.0 made `sort` stable. On
+PHP 7.4 PHPUnit's suite sorter is unstable and REORDERS the tests inside one class, so a test that
+stubs `WC()` / `wc_tax_enabled()` can run before its siblings. The order-wizard bootstrap test did
+exactly that (97 errors on the 7.4 leg: `"WC" is not defined nor mocked` in 86 `LocationControllerTest`
+tests, 10 `ShippingSettingsTabTest`, one neighbour in its own class), and the `--order-by=reverse`
+gate on the 8.1 leg showed the same defect as 320 errors + 3 failures. Fix: the registry got
+protected seams (`Orders_Registry::woocommerce()` / `taxes_enabled()`) and the test
+overrides them; no `Functions\when( 'WC' )` left. Reproduce a 7.4-only failure with the `php:7.4-cli`
+image and a fresh `composer install`, not by guessing.
+
 ## Related
 
 - [ci-failing-gate-skips-dependent-jobs](ci-failing-gate-skips-dependent-jobs.md) — this was one of the masked Unit failures

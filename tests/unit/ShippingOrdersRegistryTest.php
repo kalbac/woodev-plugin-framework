@@ -872,9 +872,6 @@ class ShippingOrdersRegistryTest extends TestCase {
 		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
 		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
 
-		$registry = $this->registryOnWcAdminScreen();
-		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
-
 		$countries = \Mockery::mock();
 		$countries->shouldReceive( 'get_countries' )->andReturn( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ] );
 		$countries->shouldReceive( 'get_base_country' )->andReturn( 'RU' );
@@ -917,22 +914,47 @@ class ShippingOrdersRegistryTest extends TestCase {
 			}
 		};
 
-		Functions\when( 'WC' )->justReturn(
-			new class( $countries, $gateways ) {
-				public $countries;
-				private $gateways;
+		// `WC()` and `wc_tax_enabled()` are reached through the registry's own seams, never stubbed:
+		// a Brain Monkey `when( 'WC' )` defines the function process-wide and flips every
+		// `function_exists( 'WC' )` guard in the suite for whatever runs next (gotcha
+		// `brain-monkey-function-pollution`; PHP 7.4's unstable `depends` sort made it bite in
+		// the plain order, not only under `--order-by=reverse`).
+		$wc = new class( $countries, $gateways ) {
+			public $countries;
+			private $gateways;
 
-				public function __construct( $countries, $gateways ) {
-					$this->countries = $countries;
-					$this->gateways  = $gateways;
-				}
-
-				public function payment_gateways() {
-					return $this->gateways;
-				}
+			public function __construct( $countries, $gateways ) {
+				$this->countries = $countries;
+				$this->gateways  = $gateways;
 			}
-		);
-		Functions\when( 'wc_tax_enabled' )->justReturn( true );
+
+			public function payment_gateways() {
+				return $this->gateways;
+			}
+		};
+
+		$registry = new class( $wc ) extends Orders_Registry {
+			/** @var object */
+			private $wc;
+
+			public function __construct( $wc ) {
+				$this->wc = $wc;
+			}
+
+			protected function is_wc_admin_screen(): bool {
+				return true;
+			}
+
+			protected function woocommerce() {
+				return $this->wc;
+			}
+
+			protected function taxes_enabled(): bool {
+				return true;
+			}
+		};
+		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
+
 		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
 		Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
 		Functions\when( 'get_woocommerce_currency_symbol' )->justReturn( '&#8381;' );

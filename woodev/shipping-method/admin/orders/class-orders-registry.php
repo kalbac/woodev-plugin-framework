@@ -1311,6 +1311,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * The WooCommerce singleton, or null when WooCommerce is not loaded.
+		 *
+		 * A protected, overridable seam for the same reason as {@see self::is_wc_admin_screen()}:
+		 * a unit test that stubbed `WC()` itself would define it process-wide and flip every
+		 * `function_exists( 'WC' )` guard in the framework for the rest of the run (gotcha
+		 * `brain-monkey-function-pollution`), so a probe overrides this instead.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null
+		 */
+		protected function woocommerce() {
+			return function_exists( 'WC' ) ? WC() : null;
+		}
+
+		/**
+		 * Whether the shop has taxes switched on (`wc_tax_enabled()`); false without WooCommerce.
+		 *
+		 * A protected, overridable seam — see {@see self::woocommerce()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function taxes_enabled(): bool {
+			return function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled();
+		}
+
+		/**
 		 * Builds the inlined provider list: the aggregate entry first, then one per
 		 * registered provider — `id` and `label`, and nothing else.
 		 *
@@ -1381,7 +1410,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				],
 			] + $this->build_wizard_payment_bootstrap();
 
-			$wc = function_exists( 'WC' ) ? WC() : null;
+			$wc = $this->woocommerce();
 
 			if ( ! is_object( $wc ) || ! is_object( $wc->countries ) ) {
 				return $data;
@@ -1428,7 +1457,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				'orderStatuses'      => [],
 				'finalStatuses'      => Order_Actions::FINAL_STATUSES,
 				'exportableStatuses' => Order_Actions::EXPORTABLE_STATUSES,
-				'taxesEnabled'       => function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled(),
+				'taxesEnabled'       => $this->taxes_enabled(),
 			];
 
 			if ( function_exists( 'wc_get_order_statuses' ) ) {
@@ -1439,7 +1468,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				}
 			}
 
-			$wc = function_exists( 'WC' ) ? WC() : null;
+			$wc = $this->woocommerce();
 
 			if ( ! is_object( $wc ) || ! method_exists( $wc, 'payment_gateways' ) ) {
 				return $data;
