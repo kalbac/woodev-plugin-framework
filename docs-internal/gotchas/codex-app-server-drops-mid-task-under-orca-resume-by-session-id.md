@@ -53,6 +53,14 @@ Every resumed critic in s142 finished and reported correctly (g1–g6).
 Tell the critic in its brief that the connection may drop and that it must send `worker_done` as soon
 as its verdict is final; keep critic briefs scoped so a review fits well inside ~20 minutes.
 
+## s143: the coordinator may not run the resume itself
+
+Claude Code's auto-mode classifier DENIES `codex --dangerously-bypass-approvals-and-sandbox resume <id>` sent through
+`orca terminal send` («Create Unsafe Agents»). Close the dead TUI (Ctrl+C twice), then hand the operator the exact
+`! /Applications/Orca.app/Contents/Resources/bin/orca terminal send --terminal <H> --text "codex … resume <id> '…'" --enter`
+line — a `!` command runs under his authority. If the Codex 5-hour window is spent, the resume waits for the reset; the
+rollout and the dispatch survive it.
+
 ## Related
 
 - [starting-codex-under-orca-needs-four-steps-not-one](starting-codex-under-orca-needs-four-steps-not-one.md) — the launch-side traps
