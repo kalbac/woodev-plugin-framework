@@ -19,6 +19,13 @@
  * bar against abuse. The route is intentionally public because normalized pickup-point
  * data is not sensitive; a future SENSITIVE source must add its own authorization.
  *
+ * ADMIN ROUTES (#959, spec `2026-09-27-710-create-edit-order-design.md` D3): the same
+ * list and detail payloads are also served under `shipping/orders/pickup/{plugin}/points`
+ * ({@see self::register_admin_routes()}) for the admin order wizard. Those are NOT public
+ * — `edit_shop_orders` — and take the weight, payment method and destination record as
+ * request params instead of reading the cart/session/visitor chain, which are null in an
+ * admin REST request. The public routes above are unchanged.
+ *
  * STRATEGY GUARANTEE: {@see Point_Source} documents a contract the framework owes its
  * implementers — a source declaring `STRATEGY_BULK` is always handed a query with a
  * non-null locality, a source declaring `STRATEGY_VIEWPORT` is always handed a query
@@ -225,6 +232,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		private $location_context;
 
 		/**
+		 * Resolves the Location Provider layer context for an EXPLICIT record — the admin
+		 * routes' counterpart of {@see self::$location_context}, which reads the visitor's
+		 * own session and so has nothing to answer in an admin request (#959).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var callable|null `fn( Location_Record $record ): ?array{record: Location_Record, resolved_identity: mixed}`.
+		 */
+		private $location_resolver;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
@@ -250,6 +268,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		 *                                        (the default) when the owning plugin has not
 		 *                                        wired the layer — every query then carries no
 		 *                                        record, exactly as before this parameter existed.
+		 * @param callable|null $location_resolver (#959) `fn( Location_Record $record ):
+		 *                                        ?array{record: Location_Record, resolved_identity:
+		 *                                        mixed}` — like `$location_context`, but for a
+		 *                                        record the ADMIN routes were handed explicitly
+		 *                                        instead of one read off the visitor's session.
+		 *                                        `null` (the default) attaches nothing on those
+		 *                                        routes. Never read by the public routes.
 		 *
 		 * SMELL, recorded rather than acted on: `$cart_weight`, `$payment_method` and
 		 * `$shipping_method` are three consecutive `callable`s, so nothing at the type level
@@ -273,7 +298,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			callable $cart_weight,
 			callable $payment_method,
 			callable $shipping_method,
-			?callable $location_context = null
+			?callable $location_context = null,
+			?callable $location_resolver = null
 		) {
 			$this->plugin_id         = $plugin_id;
 			$this->source            = $source;
@@ -281,6 +307,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$this->payment_method    = $payment_method;
 			$this->shipping_method   = $shipping_method;
 			$this->location_context  = $location_context;
+			$this->location_resolver = $location_resolver;
 			$this->checker           = new Constraint_Checker();
 		}
 
@@ -313,11 +340,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			// The plugin id is baked into the route PATH as a literal (not a
 			// `(?P<plugin_id>…)` capture) so that each shipping plugin registers a DISTINCT
 			// route — the same reasoning as Field_Source_Controller::register_routes().
-			$plugin_segment = preg_replace( '/[^\w-]/', '', $this->plugin_id );
-
-			if ( '' === (string) $plugin_segment ) {
-				$plugin_segment = 'shipping';
-			}
+			$plugin_segment = $this->route_plugin_segment();
 
 			register_rest_route(
 				'woodev/v1',
@@ -834,6 +857,298 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 		}
 
 		/**
+		 * The plugin id as a route-safe path segment.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string
+		 */
+		private function route_plugin_segment(): string {
+
+			$plugin_segment = (string) preg_replace( '/[^\w-]/', '', $this->plugin_id );
+
+			return '' === $plugin_segment ? 'shipping' : $plugin_segment;
+		}
+
+		/**
+		 * Registers the ADMIN pickup-points list and point-detail routes (#959, spec D3).
+		 *
+		 * `GET woodev/v1/shipping/orders/pickup/{plugin}/points` and `…/points/{id}`, for the
+		 * admin order wizard (#710). They answer the same payload as the public routes but
+		 * take the request context EXPLICITLY — `weight`, `payment_method` and `location` —
+		 * because the cart, the session and the visitor's location chain the public routes
+		 * read are all null in an admin REST request. The public routes are not touched.
+		 *
+		 * Unlike them, these are NOT public: they require `edit_shop_orders`, the capability
+		 * of the shipping-orders write routes ({@see Orders_Controller}). A missing or
+		 * insufficient login is answered by WordPress itself (401 / 403), and a cookie
+		 * request without the `wp_rest` nonce never reaches this callback.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return void
+		 */
+		public function register_admin_routes(): void {
+
+			$base = '/shipping/orders/pickup/' . $this->route_plugin_segment() . '/points';
+
+			$context_args = [
+				// Order weight in GRAMS (the checker's unit); 0 = unknown, which passes every limit.
+				'weight'         => [
+					'type'              => 'integer',
+					'minimum'           => 0,
+					'default'           => 0,
+					'validate_callback' => 'rest_validate_request_arg',
+				],
+				// Chosen gateway id; empty = not chosen yet, so nothing is refused on COD.
+				'payment_method' => [
+					'type'              => 'string',
+					'default'           => '',
+					'validate_callback' => 'rest_validate_request_arg',
+				],
+			];
+
+			register_rest_route(
+				'woodev/v1',
+				$base,
+				[
+					[
+						'methods'             => 'GET',
+						'callback'            => [ $this, 'handle_admin_points_request' ],
+						'permission_callback' => [ $this, 'check_admin_permission' ],
+						'args'                => array_merge(
+							$context_args,
+							[
+								'locality' => [
+									'type'              => 'string',
+									'validate_callback' => 'rest_validate_request_arg',
+								],
+								'bbox'     => [
+									'type'              => 'string',
+									'validate_callback' => 'rest_validate_request_arg',
+								],
+								'q'        => [
+									'type'              => 'string',
+									'validate_callback' => 'rest_validate_request_arg',
+								],
+								'types'    => [
+									'type'              => 'string',
+									'validate_callback' => 'rest_validate_request_arg',
+									'sanitize_callback' => 'sanitize_text_field',
+								],
+
+								/*
+								 * The destination record, a `Location_Record::to_array()` shape. No
+								 * nested schema, for the reason `/location/select` gives: the
+								 * contract lives in Location_Record::from_array(), and a second copy
+								 * here would only drift. Optional — a carrier that addresses by
+								 * bbox needs none.
+								 */
+								'location' => [
+									'type'              => 'object',
+									'validate_callback' => 'rest_validate_request_arg',
+								],
+							]
+						),
+					],
+				]
+			);
+
+			register_rest_route(
+				'woodev/v1',
+				$base . '/(?P<id>[^/]+)',
+				[
+					[
+						'methods'             => 'GET',
+						'callback'            => [ $this, 'handle_admin_point_request' ],
+						'permission_callback' => [ $this, 'check_admin_permission' ],
+						'args'                => array_merge(
+							$context_args,
+							[
+								'id' => [
+									'type'              => 'string',
+									'required'          => true,
+									'validate_callback' => 'rest_validate_request_arg',
+								],
+							]
+						),
+					],
+				]
+			);
+		}
+
+		/**
+		 * Permission gate for the admin pickup routes: `edit_shop_orders`, the same
+		 * capability {@see Orders_Controller::perform_action_permissions_check()} requires.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function check_admin_permission(): bool {
+			return current_user_can( 'edit_shop_orders' );
+		}
+
+		/**
+		 * Handles an admin pickup-points collection request (#959).
+		 *
+		 * No rate limit, unlike {@see self::handle_points_request()}: that one guards a
+		 * public guest endpoint against a scripted client, and this route is behind a
+		 * capability check. A carrier failure is still a `502`, never an empty list.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function handle_admin_points_request( \WP_REST_Request $request ) {
+
+			$record = $this->parse_location_param( $request->get_param( 'location' ) );
+
+			if ( $record instanceof \WP_Error ) {
+				return $record;
+			}
+
+			$params = $this->normalize_points_params(
+				[
+					'locality' => $request->get_param( 'locality' ),
+					'bbox'     => $request->get_param( 'bbox' ),
+					'q'        => $request->get_param( 'q' ),
+					'types'    => $request->get_param( 'types' ),
+				]
+			);
+
+			try {
+				$data = $this->get_points_data_for(
+					$params,
+					$this->explicit_weight( $request ),
+					$this->explicit_payment_method( $request ),
+					$record
+				);
+			} catch ( \Woodev_API_Exception $e ) {
+				$this->log_carrier_failure( $e, 'admin points fetch' );
+				return $this->upstream_error();
+			}
+
+			return rest_ensure_response( $data );
+		}
+
+		/**
+		 * Handles an admin single-point detail request (#959).
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return \WP_REST_Response|\WP_Error
+		 */
+		public function handle_admin_point_request( \WP_REST_Request $request ) {
+
+			$id = $this->cap_length(
+				(string) wc_clean( wp_unslash( $request->get_param( 'id' ) ) ),
+				self::MAX_PARAM_LENGTH
+			);
+
+			try {
+				$point = $this->get_point_data_for(
+					$id,
+					$this->explicit_weight( $request ),
+					$this->explicit_payment_method( $request )
+				);
+			} catch ( \Woodev_API_Exception $e ) {
+				$this->log_carrier_failure( $e, 'admin point details fetch' );
+				return $this->upstream_error();
+			}
+
+			if ( null === $point ) {
+				return new \WP_Error(
+					'woodev_pickup_point_not_found',
+					__( 'Пункт выдачи не найден.', 'woodev-plugin-framework' ),
+					[ 'status' => 404 ]
+				);
+			}
+
+			return rest_ensure_response( $point );
+		}
+
+		/**
+		 * Reads the explicit order weight (grams) off an admin request; never negative.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return int
+		 */
+		private function explicit_weight( \WP_REST_Request $request ): int {
+
+			$weight = $request->get_param( 'weight' );
+
+			return is_numeric( $weight ) ? max( 0, (int) $weight ) : 0;
+		}
+
+		/**
+		 * Reads the explicit payment method id off an admin request, `''` when absent or
+		 * not a string — an unknown method is permissive in the verdict, never an error.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request object.
+		 *
+		 * @return string
+		 */
+		private function explicit_payment_method( \WP_REST_Request $request ): string {
+
+			$method = $request->get_param( 'payment_method' );
+
+			if ( ! is_string( $method ) ) {
+				return '';
+			}
+
+			return $this->cap_length( (string) wc_clean( wp_unslash( $method ) ), self::MAX_PARAM_LENGTH );
+		}
+
+		/**
+		 * Turns the admin `location` param into a {@see Location_Record}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param mixed $raw the request's `location` value.
+		 *
+		 * @return Location_Record|\WP_Error|null `null` when the param is absent; a `400`
+		 *                                        `WP_Error` when present but not a valid record.
+		 */
+		private function parse_location_param( $raw ) {
+
+			if ( null === $raw || [] === $raw ) {
+				return null;
+			}
+
+			try {
+				if ( ! is_array( $raw ) ) {
+					throw new \InvalidArgumentException( 'location must be an object' );
+				}
+
+				return Location_Record::from_array( $raw );
+			} catch ( \InvalidArgumentException $exception ) {
+				return new \WP_Error(
+					'woodev_location_invalid_record',
+					__( 'Некорректные данные о местоположении.', 'woodev-plugin-framework' ),
+					[ 'status' => 400 ]
+				);
+			}
+		}
+
+		/**
 		 * Dispatches a pickup-points query (pure, WC-free core).
 		 *
 		 * Builds a {@see Point_Query} from `$params` and returns an empty point list —
@@ -868,6 +1183,26 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			$cart_weight    = ( $this->cart_weight )();
 			$payment_method = ( $this->payment_method )();
 
+			return $this->collect_points( $query, $cart_weight, $payment_method );
+		}
+
+		/**
+		 * Fetches a query's points and shapes the response — the loop
+		 * {@see self::get_points_data()} and {@see self::get_points_data_for()} share, so
+		 * the public and the admin list can never diverge in shape or verdict.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Point_Query $query          the built, strategy-validated query.
+		 * @param int         $cart_weight    order weight in grams.
+		 * @param string      $payment_method chosen gateway id; `''` when unknown.
+		 *
+		 * @return array{points: array<int, array<string, mixed>>}
+		 *
+		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
+		 */
+		private function collect_points( Point_Query $query, int $cart_weight, string $payment_method ): array {
+
 			$points = [];
 
 			foreach ( $this->source->fetch_points( $query ) as $point ) {
@@ -882,6 +1217,70 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 			// array_values(): a dropped/sparse-keyed entry above must not leave gaps — a
 			// keyed array serializes as a JSON object, not an array, and breaks the map JS.
 			return [ 'points' => array_values( $points ) ];
+		}
+
+		/**
+		 * Dispatches a pickup-points query for an EXPLICIT context (#959, spec D3) — the
+		 * admin routes' twin of {@see self::get_points_data()}.
+		 *
+		 * Same query building, same strategy guarantee, same response shape and same
+		 * verdict as the public core; the only difference is where the three inputs come
+		 * from. The public core reads them through callables (the cart, the session, the
+		 * visitor's location chain), all of which are null in an admin REST request, so
+		 * this one takes them as arguments and never touches a callable.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $params         raw query params (`locality`, `bbox`, `q`, `types`).
+		 * @param int                  $cart_weight    order weight in grams; `0` passes every limit.
+		 * @param string               $payment_method chosen gateway id, `''` when not chosen yet —
+		 *                                             then no point is refused on cash-on-delivery.
+		 * @param Location_Record|null $record         destination record, or `null` when there is none.
+		 *
+		 * @return array{points: array<int, array<string, mixed>>}
+		 *
+		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
+		 */
+		public function get_points_data_for( array $params, int $cart_weight, string $payment_method, ?Location_Record $record ): array {
+
+			$query = Point_Query::from_request( $params );
+
+			if ( null === $query || ! $this->query_matches_strategy( $query ) ) {
+				return [ 'points' => [] ];
+			}
+
+			$query = $this->attach_explicit_location( $query, $record );
+
+			return $this->collect_points( $query, $cart_weight, $payment_method );
+		}
+
+		/**
+		 * Dispatches a single-point detail lookup for an EXPLICIT context (#959) — the admin
+		 * routes' twin of {@see self::get_point_data()}.
+		 *
+		 * The verdict is computed from the SAME weight and payment method the list route was
+		 * given, so a point the list showed as selectable cannot come back refused (or the
+		 * other way round) from its own detail.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $id             carrier point id.
+		 * @param int    $cart_weight    order weight in grams.
+		 * @param string $payment_method chosen gateway id, `''` when not chosen yet.
+		 *
+		 * @return array<string, mixed>|null the escaped point payload, or null when unknown.
+		 *
+		 * @throws \Woodev_API_Exception on a carrier transport, auth, or API failure.
+		 */
+		public function get_point_data_for( string $id, int $cart_weight, string $payment_method ): ?array {
+
+			$point = $this->source->fetch_details( $id );
+
+			if ( null === $point ) {
+				return null;
+			}
+
+			return $this->to_response_point( $point, $cart_weight, $payment_method );
 		}
 
 		/**
@@ -908,7 +1307,45 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Pickup_Controller
 				return $query;
 			}
 
-			$context = ( $this->location_context )();
+			return $this->apply_location_context( $query, ( $this->location_context )() );
+		}
+
+		/**
+		 * Attaches the layer context for an EXPLICIT record to `$query` (#959) — the admin
+		 * routes' counterpart of {@see self::attach_location_context()}.
+		 *
+		 * A no-op when no record was given, when the plugin wired no
+		 * {@see self::$location_resolver}, or when the resolver answers something unusable
+		 * — the same fail-open the public path has, for the same reason.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Point_Query          $query  the built, strategy-validated query.
+		 * @param Location_Record|null $record the destination record the caller named.
+		 *
+		 * @return Point_Query
+		 */
+		private function attach_explicit_location( Point_Query $query, ?Location_Record $record ): Point_Query {
+
+			if ( null === $record || null === $this->location_resolver ) {
+				return $query;
+			}
+
+			return $this->apply_location_context( $query, ( $this->location_resolver )( $record ) );
+		}
+
+		/**
+		 * Applies a location-layer answer to `$query`, or returns it unchanged when the
+		 * answer is not the documented `{ record, resolved_identity }` shape.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Point_Query $query   the query.
+		 * @param mixed       $context what a location callable answered.
+		 *
+		 * @return Point_Query
+		 */
+		private function apply_location_context( Point_Query $query, $context ): Point_Query {
 
 			if ( ! is_array( $context ) || ! ( $context['record'] ?? null ) instanceof Location_Record ) {
 				return $query;

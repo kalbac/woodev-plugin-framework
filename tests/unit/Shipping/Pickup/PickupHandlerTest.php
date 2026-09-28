@@ -1876,6 +1876,58 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 		}
 
 		// -------------------------------------------------------------------------
+		// location_context_for() (#959) — the same resolution for an EXPLICIT record,
+		// which the admin pickup routes hand the controller as its `$location_resolver`.
+		// -------------------------------------------------------------------------
+
+		public function test_location_context_for_is_null_when_no_plugin_was_wired(): void {
+			$this->assertNull( $this->make_handler()->location_context_for( $this->location_record() ) );
+		}
+
+		public function test_location_context_for_resolves_the_given_record_not_the_visitors(): void {
+			// The plugin's current (visitor) record differs from the one handed in: the
+			// answer must carry the one handed in, and the adapter must be asked about it.
+			$visitor = $this->location_record( 'dadata:visitor-1' );
+			$given   = $this->location_record( 'dadata:given-2' );
+			$asked   = [];
+
+			$adapter = new class( $asked ) implements Location_Adapter {
+				/** @var array<int, string> */
+				private array $asked;
+
+				public function __construct( array &$asked ) {
+					$this->asked = &$asked;
+				}
+
+				public function resolve( Location_Record $record ) {
+					$this->asked[] = $record->key();
+					return 'carrier-city-' . $record->key();
+				}
+			};
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $visitor, $adapter ) ] );
+			$context = $handler->location_context_for( $given );
+
+			$this->assertNotNull( $context );
+			$this->assertSame( 'dadata:given-2', $context['record']->key() );
+			$this->assertSame( 'carrier-city-dadata:given-2', $context['resolved_identity'] );
+			$this->assertSame( [ 'dadata:given-2' ], $asked );
+		}
+
+		public function test_location_context_for_is_null_when_the_adapter_throws(): void {
+			$record  = $this->location_record();
+			$adapter = new class implements Location_Adapter {
+				public function resolve( Location_Record $record ) {
+					throw new \RuntimeException( 'carrier API timeout' );
+				}
+			};
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $record, $adapter ) ] );
+
+			$this->assertNull( $handler->location_context_for( $record ) );
+		}
+
+		// -------------------------------------------------------------------------
 		// current_location_record() settlement-preferred / current-fallback rule
 		// (issue #336), exercised through location_context() — current_location_record()
 		// is `protected` and has exactly one caller.
@@ -5286,6 +5338,57 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$controller = $captured_args[0]['callback'][0];
 
 			$property = new \ReflectionProperty( $controller, 'location_context' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+
+			$this->assertNull( $property->getValue( $controller ) );
+		}
+
+		/**
+		 * #959: register_rest() also registers the admin list + detail routes, and hands the
+		 * controller `location_context_for` as the resolver those routes use.
+		 */
+		public function test_register_rest_registers_the_admin_routes_and_wires_the_location_resolver(): void {
+			$registered = [];
+			Functions\when( 'register_rest_route' )->alias(
+				static function ( $namespace, $route, $args ) use ( &$registered ) {
+					$registered[ $route ] = $args;
+				}
+			);
+
+			$handler = $this->make_handler( [ 'plugin' => $this->location_plugin( $this->location_record() ) ] );
+			$handler->register_rest();
+
+			$this->assertArrayHasKey( '/shipping/orders/pickup/p/points', $registered );
+			$this->assertArrayHasKey( '/shipping/orders/pickup/p/points/(?P<id>[^/]+)', $registered );
+
+			$controller = $registered['/shipping/orders/pickup/p/points'][0]['callback'][0];
+
+			$property = new \ReflectionProperty( $controller, 'location_resolver' );
+			if ( PHP_VERSION_ID < 80100 ) {
+				$property->setAccessible( true );
+			}
+			$bound_callable = $property->getValue( $controller );
+
+			$this->assertIsCallable( $bound_callable );
+			$this->assertSame( $handler, $bound_callable[0] );
+			$this->assertSame( 'location_context_for', $bound_callable[1] );
+		}
+
+		public function test_register_rest_wires_no_location_resolver_without_a_plugin(): void {
+			$registered = [];
+			Functions\when( 'register_rest_route' )->alias(
+				static function ( $namespace, $route, $args ) use ( &$registered ) {
+					$registered[ $route ] = $args;
+				}
+			);
+
+			$this->make_handler()->register_rest();
+
+			$controller = $registered['/shipping/orders/pickup/p/points'][0]['callback'][0];
+
+			$property = new \ReflectionProperty( $controller, 'location_resolver' );
 			if ( PHP_VERSION_ID < 80100 ) {
 				$property->setAccessible( true );
 			}
