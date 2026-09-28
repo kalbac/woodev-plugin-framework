@@ -119,6 +119,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping\Admin {
 
+	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Admin\Orders\Admin_Rate_Calculator;
 	use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
@@ -131,6 +132,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/location/class-location-record.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/class-shipping-method.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-orders-provider.php';
+	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/pickup/class-constraint-checker.php';
 	require_once dirname( __DIR__, 4 ) . '/woodev/shipping-method/admin/orders/class-admin-rate-calculator.php';
 
 	/**
@@ -190,6 +192,13 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		/** @return void */
 		protected function setUp(): void {
 			parent::setUp();
+
+			// The Settings API handler behind a carrier's order fields (D7) merges its arguments with this.
+			Functions\when( 'wp_parse_args' )->alias(
+				static function ( $args, $defaults = [] ) {
+					return array_merge( (array) $defaults, (array) $args );
+				}
+			);
 
 			$this->states = [
 				'RU' => [
@@ -273,14 +282,16 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		 * @param bool  $shippable   whether it needs shipping.
 		 * @param int   $id          product id.
 		 * @param int   $parent_id   parent id (variations).
+		 * @param string $weight     the product's weight in the store's unit ('' = none set).
 		 * @return \WC_Product&\Mockery\MockInterface
 		 */
-		private function product( float $price = 100.0, bool $shippable = true, int $id = 12, int $parent_id = 0 ) {
+		private function product( float $price = 100.0, bool $shippable = true, int $id = 12, int $parent_id = 0, string $weight = '' ) {
 			$product = Mockery::mock( $parent_id > 0 ? '\WC_Product_Variation' : '\WC_Product' );
 			$product->shouldReceive( 'needs_shipping' )->andReturn( $shippable );
 			$product->shouldReceive( 'get_price' )->andReturn( (string) $price );
 			$product->shouldReceive( 'get_id' )->andReturn( $id );
 			$product->shouldReceive( 'get_parent_id' )->andReturn( $parent_id );
+			$product->shouldReceive( 'get_weight' )->andReturn( $weight );
 			$product->shouldReceive( 'get_variation_attributes' )->andReturn( [ 'attribute_pa_color' => 'red' ] );
 
 			return $product;
@@ -563,6 +574,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 						'description'   => '',
 						'is_pickup'     => false,
 						'meta'          => [],
+						'order_fields'  => [],
 					],
 				],
 				$result['providers'][0]['rates']
@@ -580,10 +592,76 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 						'description'   => 'Пункт выдачи',
 						'is_pickup'     => true,
 						'meta'          => [ 'tariff_code' => 137 ],
+						'order_fields'  => [],
 					],
 				],
 				$result['providers'][1]['rates'],
 				'rate meta survives to the response'
+			);
+		}
+
+		/**
+		 * D7 (#973): a carrier's own order fields ride on each of its rates, declared per tariff — the
+		 * declaration is asked once per method instance with that method's context.
+		 *
+		 * @covers ::calculate
+		 *
+		 * @return void
+		 */
+		public function test_a_rate_carries_the_carriers_order_fields_declared_for_its_tariff(): void {
+			$asked    = [];
+			$provider = Orders_Provider::create(
+				'test',
+				'TEST label',
+				'_test_marker',
+				[ 'test_shipping', 'test_pickup_shipping' ],
+				[
+					'order_fields' => static function ( array $context ) use ( &$asked ): array {
+						$asked[] = [ $context['method_id'], $context['instance_id'], $context['rate_id'], $context['is_pickup'] ];
+
+						$fields = [
+							'declared_value' => [
+								'meta_key' => '_test_declared_value',
+								'control'  => 'number',
+								'name'     => 'Объявленная ценность',
+							],
+						];
+
+						if ( ! $context['is_pickup'] ) {
+							$fields['call_before'] = [
+								'meta_key' => '_test_call_before',
+								'control'  => 'toggle',
+								'name'     => 'Позвонить',
+							];
+						}
+
+						return $fields;
+					},
+				]
+			);
+
+			$courier              = $this->method( 'test_shipping', false, [ $this->rate(), $this->rate( [ 'id' => 'test_shipping:3:express', 'label' => 'Экспресс' ] ) ] );
+			$courier->instance_id = 3;
+			$pickup               = $this->method( 'test_pickup_shipping', true, [ $this->rate( [ 'id' => 'test_pickup_shipping:5', 'method_id' => 'test_pickup_shipping', 'instance_id' => 5 ] ) ] );
+			$pickup->instance_id  = 5;
+
+			$calculator               = $this->calculator( $provider );
+			$calculator->zone_methods = [ $courier, $pickup ];
+
+			$rates = $calculator->calculate(
+				[ [ 'product' => $this->product(), 'quantity' => 1, 'price' => null ] ],
+				[ 'country' => 'RU' ]
+			)['providers'][0]['rates'];
+
+			$this->assertCount( 3, $rates );
+			$this->assertSame( [ 'declared_value', 'call_before' ], array_column( $rates[0]['order_fields'], 'id' ) );
+			$this->assertSame( $rates[0]['order_fields'], $rates[1]['order_fields'], 'every rate of one method carries the same declaration' );
+			$this->assertSame( [ 'declared_value' ], array_column( $rates[2]['order_fields'], 'id' ), 'a pickup tariff asks for less' );
+			$this->assertSame( 'number', $rates[0]['order_fields'][0]['controlType'] );
+			$this->assertSame(
+				[ [ 'test_shipping', 3, 'test_shipping:3', false ], [ 'test_pickup_shipping', 5, 'test_pickup_shipping:5', true ] ],
+				$asked,
+				'asked once per method instance, not once per rate'
 			);
 		}
 
@@ -610,6 +688,76 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			);
 
 			$this->assertSame( [ [ 'id' => 'test', 'label' => 'TEST label', 'rates' => [] ] ], $result['providers'] );
+		}
+
+		/**
+		 * The wizard hands the pickup routes an explicit weight in GRAMS, so the calculator reports
+		 * the package's: line weights times quantities, converted from the store's unit by the same
+		 * authority the storefront's cart weight uses.
+		 *
+		 * @covers ::calculate
+		 * @covers ::package_weight_grams
+		 *
+		 * @return void
+		 */
+		public function test_it_reports_the_package_weight_in_grams(): void {
+			// The store keeps kilograms; the conversion authority answers grams.
+			Functions\when( 'wc_get_weight' )->alias(
+				static function ( $weight, $unit ) {
+					return 'g' === $unit ? (float) $weight * 1000 : $weight;
+				}
+			);
+
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [];
+
+			$result = $calculator->calculate(
+				[
+					[
+						'product'  => $this->product( 100.0, true, 12, 0, '1.5' ),
+						'quantity' => 2,
+						'price'    => null,
+					],
+					[
+						'product'  => $this->product( 50.0, true, 13, 0, '0.25' ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+					// Needs no shipping, so it is not in the package and weighs nothing here.
+					[
+						'product'  => $this->product( 10.0, false, 14, 0, '9' ),
+						'quantity' => 1,
+						'price'    => null,
+					],
+				],
+				[ 'country' => 'RU' ]
+			);
+
+			$this->assertSame( 3250, $result['weight'] );
+		}
+
+		/**
+		 * @covers ::calculate
+		 * @covers ::package_weight_grams
+		 *
+		 * @return void
+		 */
+		public function test_a_package_with_no_weights_reports_zero_which_the_pickup_routes_read_as_unknown(): void {
+			$calculator               = $this->calculator( $this->provider( 'test', [ 'test_shipping' ] ) );
+			$calculator->zone_methods = [];
+
+			$result = $calculator->calculate(
+				[
+					[
+						'product'  => $this->product(),
+						'quantity' => 3,
+						'price'    => null,
+					],
+				],
+				[ 'country' => 'RU' ]
+			);
+
+			$this->assertSame( 0, $result['weight'] );
 		}
 
 		/**

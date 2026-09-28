@@ -11,10 +11,12 @@
 // Shared UI-kit: tokens + recolor + neutral field anatomy. control-field renders
 // neutral `woodev-field__*` classes styled by `_field.scss` — the wizard carries
 // no field-rendering CSS of its own (UK-3/UK-4). This file keeps only the
-// full-screen page chrome (brand header, stepper, card, actions, finish).
+// full-screen page chrome (brand header, card, actions, finish) plus the shared
+// stepper (`components/_stepper.scss`, lifted from here in #960).
 @use '../components/tokens' as wd;
 @use '../components/wp-recolor';
 @use '../components/field';
+@use '../components/stepper';
 
 // Wizard-only locals — no kit-token equivalent. Brand accents, surface, ink,
 // border, radius, divider and line now come from `wd.$*` (tokens.scss).
@@ -37,6 +39,9 @@ body.woodev-setup-wizard {
 	max-width: 600px;
 	margin: 0 auto;
 	text-align: center;
+
+	// The stepper's dots are hollow rings on the page background.
+	--woodev-stepper-dot-bg: #{$wd-bg};
 
 	*,
 	*::before,
@@ -89,85 +94,6 @@ body.woodev-setup-wizard {
 			margin-top: 5px;
 			letter-spacing: 0.3px;
 		}
-	}
-
-	// ---- Stepper (progress-line + dot) -------------------------------------
-	&__steps {
-		padding: 0 0 32px;
-		margin: 0;
-		list-style: none;
-		width: 100%;
-		display: inline-flex;
-
-		li {
-			flex: 1 1 0;
-			padding: 0 0 0.85em;
-			margin: 0;
-			text-align: center;
-			position: relative;
-			border-bottom: 4px solid #d8dadd;
-			line-height: 1.4;
-			font-size: 14px;
-			color: #9a9a9a;
-
-			&::before {
-				content: "";
-				border: 3px solid #d8dadd;
-				border-radius: 100%;
-				width: 8px;
-				height: 8px;
-				position: absolute;
-				left: 50%;
-				bottom: 0;
-				margin: 0;
-				// Center the ring ON the 4px progress line (shift down by half the
-				// ring's own height + half the line width). Hollow center (page bg).
-				transform: translate( -50%, calc( 50% + 2px ) );
-				background: $wd-bg;
-			}
-
-			&.is-done {
-				border-color: wd.$accent;
-				color: wd.$accent;
-
-				&::before {
-					border-color: wd.$accent;
-					background: wd.$accent;
-				}
-			}
-
-			&.is-active {
-				border-color: wd.$accent;
-				color: wd.$accent-ink;
-				font-weight: 700;
-
-				&::before {
-					border-color: wd.$accent;
-				}
-			}
-		}
-	}
-
-	// Step label rendered as a clickable button for non-current steps; reset all
-	// button chrome so it visually matches the plain <span> of the current step.
-	&__step-label {
-		background: none;
-		border: 0;
-		padding: 0;
-		font: inherit;
-		cursor: pointer;
-		color: inherit;
-	}
-
-	// The active step's label is a non-clickable <span> — keep the default cursor.
-	&__steps li.is-active &__step-label {
-		cursor: default;
-	}
-
-	// Hover affordance only on the clickable (non-active) labels.
-	&__steps li:not( .is-active ) &__step-label:hover {
-		color: wd.$accent-strong;
-		text-decoration: underline;
 	}
 
 	// ---- Card --------------------------------------------------------------
@@ -583,10 +509,6 @@ body.woodev-setup-wizard {
 @media ( max-width: 600px ) {
 	body.woodev-setup-wizard {
 		padding: 28px 12px 40px;
-	}
-
-	.woodev-setup__steps li {
-		font-size: 12px;
 	}
 
 	.woodev-setup__card {

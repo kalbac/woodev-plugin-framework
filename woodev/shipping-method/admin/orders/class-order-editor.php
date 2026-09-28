@@ -154,20 +154,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		private $lock_timeout;
 
 		/**
+		 * The action gate and performer of the orders page — the immediate export (D6) goes
+		 * through the very object the row action does.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var Order_Actions
+		 */
+		private $actions;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #981 round 4: `$lock_timeout`.
+		 * @since 2.0.2 Card #974: added `$actions`.
 		 *
 		 * @param Orders_Registry|null         $registry     carrier registry; defaults to the shared singleton.
 		 * @param Order_Payload_Validator|null $validator    payload validator; defaults to one over `$registry`.
 		 * @param int                          $lock_timeout seconds an update waits for the order's edit lock;
 		 *                                                   defaults to {@see self::UPDATE_LOCK_TIMEOUT}.
+		 * @param Order_Actions|null           $actions      action gate and performer; defaults to one over `$registry`.
 		 */
-		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null, int $lock_timeout = self::UPDATE_LOCK_TIMEOUT ) {
+		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null, int $lock_timeout = self::UPDATE_LOCK_TIMEOUT, ?Order_Actions $actions = null ) {
 			$this->registry     = $registry ?? Orders_Registry::instance();
 			$this->validator    = $validator ?? new Order_Payload_Validator( $this->registry );
 			$this->lock_timeout = max( 0, $lock_timeout );
+			$this->actions      = $actions ?? new Order_Actions( $this->registry );
 		}
 
 		/**
@@ -385,6 +398,74 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		}
 
 		/**
+		 * «Сразу выгрузить перевозчику» — exports an order this service has just created (#710 D6,
+		 * card #974; create only — an edit never exports, O4).
+		 *
+		 * Goes through {@see Order_Actions} exactly as the row action does: the SAME gate
+		 * ({@see Order_Actions::is_offered()}, so a status the export is not offered in is refused
+		 * with the framework's own reason) and the SAME performer ({@see Order_Actions::perform()}).
+		 * The order is never touched on failure — **an export failure does not roll the order
+		 * back**; it was created and stays, and the manager can export it from the list later.
+		 *
+		 * ⚠ The text is the CARRIER's, for the MERCHANT only (the action result's own rule, #608/#610): it
+		 * is returned to the caller for the response and is not written to the order, a note or an
+		 * e-mail. Nothing here throws — a carrier call that throws is logged and answered with a
+		 * generic sentence (the handler has already queued the retry).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order {@see self::create()} just returned.
+		 * @return array{success: bool, message: string} the outcome, and one merchant-readable
+		 *         sentence: the carrier's own text prefixed with its name («СДЭК: …»), or the
+		 *         framework's own words when the carrier gave none.
+		 */
+		public function export_created( \WC_Order $order ): array {
+			$order->read_meta_data( true );
+
+			$provider = $this->registry->resolve_provider_for_order( $order );
+
+			if ( ! $this->actions->is_offered( $order, $provider, Order_Actions::EXPORT ) ) {
+				return [
+					'success' => false,
+					'message' => $this->actions->unavailable_reason( $order, $provider, Order_Actions::EXPORT ),
+				];
+			}
+
+			$handler = null !== $provider ? $this->registry->get_shipment_handler( $provider->get_id() ) : null;
+
+			if ( null === $provider || null === $handler ) {
+				// `is_offered()` answers true only when both resolved; guarded anyway, not trusted.
+				return [
+					'success' => false,
+					'message' => $this->actions->unavailable_reason( $order, $provider, Order_Actions::EXPORT ),
+				];
+			}
+
+			try {
+				$result = $this->actions->perform( $handler, $order, Order_Actions::EXPORT, $provider );
+			} catch ( \Throwable $exception ) {
+				self::log( sprintf( 'exporting the created order %1$d failed: %2$s', $order->get_id(), \Woodev_API_Base::redact_secret_log_text( $exception->getMessage() ) ) );
+
+				return [
+					'success' => false,
+					'message' => __( 'Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов.', 'woodev-plugin-framework' ),
+				];
+			}
+
+			if ( $result->is_success() ) {
+				return [
+					'success' => true,
+					'message' => $result->merchant_message( $provider->get_label(), __( 'Заказ выгружен перевозчику.', 'woodev-plugin-framework' ) ),
+				];
+			}
+
+			return [
+				'success' => false,
+				'message' => $result->merchant_message( $provider->get_label(), __( 'Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов.', 'woodev-plugin-framework' ) ),
+			];
+		}
+
+		/**
 		 * Finds an order of the orders page and applies the editable-state policy (spec D5).
 		 *
 		 * Reads through {@see \WC_Order::read_meta_data()} with `$force_read`, so a marker or an
@@ -480,11 +561,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			$was_paid     = $is_update && $order->is_paid();
 
 			$order->set_address( $data['billing'], 'billing' );
-			$order->set_address( $data['shipping'], 'shipping' );
+			// An order with no shipping address of its own delivers to its billing one, and the wizard shows (and
+			// sends back) that copy in step ②. Writing the copy would turn an untouched «Сохранить» into an edit.
+			if ( ! ( $is_update && self::is_billing_copy_of_no_shipping( $order, $data ) ) ) {
+				$order->set_address( $data['shipping'], 'shipping' );
+			}
 
 			$this->apply_payment_method( $order, (string) $data['payment_method'] );
 
 			$touched = $this->apply_items( $order, $data['items'], $is_update );
+
+			// The tariff about to be replaced may have asked for fields the new one does not (D7).
+			$previous_fields = $is_update ? $this->current_field_set( $order ) : null;
 
 			$this->apply_shipping_line( $order, $data['shipping_line'] );
 
@@ -498,7 +586,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				}
 			}
 
-			$written = $this->persist( $order, $data, $is_update );
+			$written = $this->persist( $order, $data, $is_update, $previous_fields );
 
 			$order->calculate_totals( true );
 
@@ -530,6 +618,36 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					]
 				);
 			}
+		}
+
+		/**
+		 * Whether an update's `shipping` block is nothing but the billing address handed back for an order that has
+		 * no shipping address of its own — the case where storing it would change the order (m4, #972).
+		 *
+		 * Only the delivery PLACE counts: names and phone are filled from billing by the wizard at send time, and an
+		 * order that carries none of a place has nothing of its own to keep.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order            $order the order, before the edit.
+		 * @param array<string, mixed> $data  the validated payload.
+		 * @return bool
+		 */
+		private static function is_billing_copy_of_no_shipping( \WC_Order $order, array $data ): bool {
+			$place = [ 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ];
+			$own   = $order->get_address( 'shipping' );
+
+			foreach ( $place as $key ) {
+				if ( '' !== trim( (string) ( $own[ $key ] ?? '' ) ) ) {
+					return false;
+				}
+
+				if ( trim( (string) ( $data['shipping'][ $key ] ?? '' ) ) !== trim( (string) ( $data['billing'][ $key ] ?? '' ) ) ) {
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		/**
@@ -683,12 +801,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 *
 		 * @since 2.0.2
 		 *
-		 * @param \WC_Order            $order     the saved order, already carrying its shipping line.
-		 * @param array<string, mixed> $data      the validated payload.
-		 * @param bool                 $is_update whether the order already existed.
+		 * @param \WC_Order              $order     the saved order, already carrying its shipping line.
+		 * @param array<string, mixed>   $data      the validated payload.
+		 * @param bool                   $is_update whether the order already existed.
+		 * @param Carrier_Field_Set|null $previous_fields the carrier fields of the tariff an edit replaced, so the ones the new
+		 *                                              tariff does not ask for are removed.
 		 * @return array<string, mixed> the field values that were written (after the stale-pickup drop).
 		 */
-		private function persist( \WC_Order $order, array $data, bool $is_update ): array {
+		private function persist( \WC_Order $order, array $data, bool $is_update, ?Carrier_Field_Set $previous_fields = null ): array {
 			$line     = $data['shipping_line'];
 			$provider = $line['provider'];
 			$point    = $data['pickup_point'];
@@ -745,6 +865,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				$pickup_handler->persist_full_point( $order, $point['id'] );
 			}
 
+			// The carrier's own export fields (D7): one meta key per declared field, after the marker
+			// (a writer may read them) and through the same order-meta compatibility layer.
+			$carrier_fields = Carrier_Field_Set::for_rate( $provider, $line['method_id'], $line['instance_id'] );
+			$carrier_fields->persist( $order, $data['carrier_fields'] );
+
+			if ( null !== $previous_fields ) {
+				$previous_fields->forget_except( $order, $carrier_fields->meta_keys() );
+			}
+
 			return $written;
 		}
 
@@ -768,6 +897,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 					\Woodev_Order_Compatibility::delete_order_meta( $order, $other->get_marker_meta_key() );
 				}
 			}
+		}
+
+		/**
+		 * The carrier fields the order's CURRENT shipping line asks for — what an edit that changes the
+		 * tariff has to clean up after. The line's own carrier is resolved from the line, not from the
+		 * carrier the edit moves the order TO: an edit that switches carrier has no line of the new one yet,
+		 * and the old carrier's field metas are exactly what must go.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order, before the edit replaces its shipping line.
+		 * @return Carrier_Field_Set|null null when no shipping line of the order belongs to a registered carrier.
+		 */
+		private function current_field_set( \WC_Order $order ): ?Carrier_Field_Set {
+			foreach ( $order->get_shipping_methods() as $line ) {
+				foreach ( $this->registry->get_providers() as $provider ) {
+					if ( in_array( $line->get_method_id(), $provider->get_method_ids(), true ) ) {
+						return Carrier_Field_Set::for_rate( $provider, (string) $line->get_method_id(), (int) $line->get_instance_id() );
+					}
+				}
+			}
+
+			return null;
 		}
 
 		/**
@@ -1087,8 +1239,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				'shipping_line'  => $shipping_line,
 				'pickup_point'   => $this->read_pickup_point( $order, $provider, $handler, $fields ),
 				'fields'         => $fields,
-				// The carrier's own export fields are declared by the carrier (spec D7); the framework stores none of its own.
-				'carrier_fields' => [],
+				// The carrier's own export fields (spec D7), read back from the meta keys the carrier declared.
+				'carrier_fields' => null === $shipping_line
+					? []
+					: Carrier_Field_Set::for_rate( $provider, $shipping_line['method_id'], $shipping_line['instance_id'] )->read( $order ),
 				'payment_method' => (string) $order->get_payment_method(),
 				'status'         => (string) $order->get_status(),
 			];

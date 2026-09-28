@@ -14,6 +14,7 @@ namespace Woodev\Tests\Unit\Shipping\Admin;
 
 use Brain\Monkey\Functions;
 use Mockery;
+use Woodev\Framework\Shipping\Admin\Orders\Carrier_Field_Set;
 use Woodev\Framework\Shipping\Admin\Orders\Order_Editor;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
@@ -50,9 +51,22 @@ final class OrderEditorPersistTest extends TestCase {
 				return $this->meta[ $post_id ][ $key ] ?? '';
 			}
 		);
+		Functions\when( 'update_post_meta' )->alias(
+			function ( int $post_id, string $key, $value ) {
+				$this->meta[ $post_id ][ $key ] = $value;
+
+				return true;
+			}
+		);
+		Functions\when( 'wp_parse_args' )->alias(
+			static function ( $args, $defaults = [] ) {
+				return array_merge( (array) $defaults, (array) $args );
+			}
+		);
 		Functions\when( 'delete_post_meta' )->alias(
 			function ( int $post_id, string $key ) {
 				$this->deleted[] = $post_id . ':' . $key;
+				unset( $this->meta[ $post_id ][ $key ] );
 
 				return true;
 			}
@@ -82,9 +96,10 @@ final class OrderEditorPersistTest extends TestCase {
 	 * @param string[]              $method_ids the carrier's methods.
 	 * @param string                $id        carrier id.
 	 * @param string                $marker    marker meta key.
+	 * @param array<string,mixed>   $extra_args more `Orders_Provider::create()` arguments.
 	 * @return Orders_Provider
 	 */
-	private function register( $checkout, $pickup, array $method_ids = [ 'cdek_courier', 'cdek_pickup' ], string $id = 'cdek', string $marker = '_cdek_marker' ): Orders_Provider {
+	private function register( $checkout, $pickup, array $method_ids = [ 'cdek_courier', 'cdek_pickup' ], string $id = 'cdek', string $marker = '_cdek_marker', array $extra_args = [] ): Orders_Provider {
 		$provider = Orders_Provider::create(
 			$id,
 			'СДЭК',
@@ -94,7 +109,7 @@ final class OrderEditorPersistTest extends TestCase {
 				'pickup_point_meta_key' => '_cdek_pickup_point',
 				'marker_writer'         => static function ( \WC_Order $order, array $context ): void {
 				},
-			]
+			] + $extra_args
 		);
 
 		$plugin = Mockery::mock( Shipping_Plugin::class );
@@ -167,15 +182,16 @@ final class OrderEditorPersistTest extends TestCase {
 	 *
 	 * @param array<string,mixed> $data      validated payload.
 	 * @param bool                $is_update whether the order already existed.
+	 * @param Carrier_Field_Set|null $previous_fields the fields of the tariff an edit replaced.
 	 * @return array<string,mixed>
 	 */
-	private function persist( array $data, bool $is_update ): array {
+	private function persist( array $data, bool $is_update, ?Carrier_Field_Set $previous_fields = null ): array {
 		$method = new \ReflectionMethod( Order_Editor::class, 'persist' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$method->setAccessible( true ); // A no-op (and deprecated) from 8.1, needed on 7.4 / 8.0.
 		}
 
-		return $method->invoke( new Order_Editor( Orders_Registry::instance() ), $this->order(), $data, $is_update );
+		return $method->invoke( new Order_Editor( Orders_Registry::instance() ), $this->order(), $data, $is_update, $previous_fields );
 	}
 
 	public function test_the_point_is_put_under_every_pickup_slot_and_handed_to_the_persistence_core(): void {
@@ -257,6 +273,80 @@ final class OrderEditorPersistTest extends TestCase {
 
 		$this->assertContains( '42:carrier_pickup_point', $this->deleted, 'the slot the stale-pickup drop skipped' );
 		$this->assertContains( '42:_cdek_pickup_point', $this->deleted, "the carrier's full-point meta" );
+	}
+
+	/**
+	 * A carrier declaring two fields for a courier tariff and one for a pickup one.
+	 *
+	 * @return array<string,mixed> `Orders_Provider::create()` arguments.
+	 */
+	private function declaring(): array {
+		return [
+			'order_fields' => static function ( array $context ): array {
+				$fields = [
+					'declared_value' => [
+						'meta_key' => '_cdek_declared_value',
+						'control'  => 'number',
+						'type'     => 'float',
+						'name'     => 'Объявленная ценность',
+					],
+				];
+
+				// Keyed by the method id: a unit test has no zone to resolve the method instance from.
+				if ( 'cdek_pickup' !== $context['method_id'] ) {
+					$fields['call_before'] = [
+						'meta_key' => '_cdek_call_before',
+						'control'  => 'toggle',
+						'name'     => 'Позвонить',
+					];
+				}
+
+				return $fields;
+			},
+		];
+	}
+
+	public function test_the_carrier_fields_are_stored_under_their_declared_meta_keys(): void {
+		$calls    = [];
+		$provider = $this->register( $this->checkout_handler( $calls ), null, [ 'cdek_courier', 'cdek_pickup' ], 'cdek', '_cdek_marker', $this->declaring() );
+
+		$data                   = $this->data( $provider, null, 'cdek_courier' );
+		$data['carrier_fields'] = [ 'declared_value' => 1500.5, 'call_before' => true ];
+
+		$this->persist( $data, false );
+
+		$this->assertSame( 1500.5, $this->meta[42]['_cdek_declared_value'] );
+		$this->assertSame( 'yes', $this->meta[42]['_cdek_call_before'], 'a boolean is stored yes / no' );
+		$this->assertSame( [ 'declared_value' => 1500.5, 'call_before' => true ], $calls[0]['context']['carrier_fields'], 'the marker writer sees the same values' );
+	}
+
+	public function test_a_carrier_that_declares_no_fields_stores_none(): void {
+		$calls    = [];
+		$provider = $this->register( $this->checkout_handler( $calls ), null );
+
+		$this->persist( $this->data( $provider, null, 'cdek_courier' ), false );
+
+		$this->assertArrayNotHasKey( '_cdek_declared_value', $this->meta[42] ?? [] );
+	}
+
+	public function test_an_edit_that_changes_the_tariff_removes_the_fields_the_new_one_does_not_ask_for(): void {
+		$calls    = [];
+		$provider = $this->register( $this->checkout_handler( $calls, [] ), null, [ 'cdek_courier', 'cdek_pickup' ], 'cdek', '_cdek_marker', $this->declaring() );
+
+		// The order was a courier one and stored both fields; it is now moved to the pickup tariff.
+		$previous       = Carrier_Field_Set::for_rate( $provider, 'cdek_courier', 0 );
+		$this->meta[42] = [
+			'_cdek_declared_value' => '1500.5',
+			'_cdek_call_before'    => 'yes',
+		];
+
+		$data                   = $this->data( $provider, [ 'id' => 'PVZ-1' ], 'cdek_pickup' );
+		$data['carrier_fields'] = [ 'declared_value' => 1500.5 ];
+
+		$this->persist( $data, true, $previous );
+
+		$this->assertSame( 1500.5, $this->meta[42]['_cdek_declared_value'], 'a field both tariffs ask for is kept' );
+		$this->assertArrayNotHasKey( '_cdek_call_before', $this->meta[42], 'the courier-only field is gone' );
 	}
 
 	public function test_a_create_deletes_nothing(): void {

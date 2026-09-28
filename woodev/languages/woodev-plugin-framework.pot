@@ -3037,6 +3037,26 @@ msgstr ""
 msgid "Заказ №%s создан."
 msgstr ""
 
+#. translators: 1: order number, 2: the carrier's note or the framework's own «Заказ выгружен перевозчику.».
+#: shipping-method/rest-api/class-order-editor-controller.php:186
+#, php-format
+msgid "Заказ №%1$s создан. %2$s"
+msgstr ""
+
+#. translators: 1: order number, 2: why the export did not happen — the carrier's own text, prefixed with its name.
+#: shipping-method/rest-api/class-order-editor-controller.php:192
+#, php-format
+msgid "Заказ №%1$s создан, но не выгружен. %2$s"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:272
+msgid "Сервис перевозчика временно недоступен. Выгрузите заказ позже кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-editor.php:285
+msgid "Перевозчик не принял заказ и не назвал причину. Повторите выгрузку кнопкой «Экспорт» в списке заказов."
+msgstr ""
+
 #. translators: %s: order number.
 #: shipping-method/rest-api/class-order-editor-controller.php:209
 #, php-format
@@ -4211,4 +4231,384 @@ msgid "Отправление уже в конечном статусе «%s» �
 #: class-framework-resolver.php:770
 #, php-format
 msgid "Плагин «%s» не запущен: он собран с ошибкой. Обратитесь к автору плагина."
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:238
+msgid "Редактировать"
+msgstr ""
+
+#: shipping-method/admin/orders/class-order-actions.php:239
+msgid "Изменить заказ, пока он не выгружен перевозчику"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не удалось выполнить запрос. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Артикул"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Вариативный товар — выберите вариант"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "— выберите страну —"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Куда доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Страна (код, например RU)"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "— выберите регион —"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Город или населённый пункт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти населённый пункт…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Улица, дом"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти адрес…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Квартира, офис"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Результаты поиска"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "← К результатам поиска"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не удалось выполнить поиск. Попробуйте ещё раз."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Кто покупатель"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Покупатель из магазина:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбрать другого или указать нового"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Найти покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя или email"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Фамилия"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Телефон"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Электронная почта"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Создать аккаунт покупателя"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Без галочки заказ оформляется как гостевой. Покупатель получит письмо со ссылкой для входа."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Что в заказе"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Добавить товар"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Название или артикул"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Цена за шт."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Убрать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Товары:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:4
+msgid "Заказ создастся в любом случае. Если перевозчик его не примет, вы увидите причину, а выгрузить заказ можно будет позже из списка."
+msgstr ""
+
+#. translators: %s: comma-separated names of the order statuses the export works in.
+#: assets/build/shipping-orders-page/index.js:5
+#, php-format
+msgid "Выгрузить можно заказ в статусах: %s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:7
+msgid "Сразу выгрузить перевозчику"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:8
+msgid "Создать и выгрузить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Укажите город или населённый пункт."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Товары"
+msgstr ""
+
+#. translators: %s: order number, e.g. "301".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Редактировать заказ №%s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Редактировать заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Создать заказ"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Загружаем заказ…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Закрыть окно? Введённые данные не сохранятся."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Продолжить оформление"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Закрыть без сохранения"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Далее"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Как доставить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Данные для перевозчика"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Считаем тарифы…"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Повторить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Для этого адреса и товаров тарифов нет."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Чтобы посчитать доставку, укажите на предыдущих шагах страну и товары."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбранный тариф больше не подходит для этого адреса и товаров — выберите другой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "В заказе нет товаров, которым нужна доставка."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Перевозчики не предложили тарифов. Проверьте адрес и товары на предыдущих шагах."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Стоимость доставки"
+msgstr ""
+
+#. translators: %s: the carrier's own price, e.g. "250,00 ₽".
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Тариф перевозчика: %s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Цена изменена."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Вернуть цену тарифа"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбран:"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Пункт ещё не выбран — выберите его в списке или на карте."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Карта пунктов выдачи для этого перевозчика недоступна — укажите код пункта вручную."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Код пункта выдачи"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Дождитесь расчёта тарифов."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Оплата и итоги"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Изменить"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Имя не указано"
+msgstr ""
+
+#. translators: %s: the registered customer's name / email.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Зарегистрированный покупатель: %s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Гость; при создании заказа заведём аккаунт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Гость"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не указан"
+msgstr ""
+
+#. translators: 1: product name, 2: quantity, 3: unit price.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "%1$s — %2$s шт. × %3$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Не выбрана"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Способ оплаты"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Деньги не списываются. От статуса зависит, какие письма получит покупатель и спишутся ли остатки — это делает сам WooCommerce."
+msgstr ""
+
+#. translators: 1: the payment method's name, 2: the carrier's own reason (may be empty).
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Выбранный пункт выдачи не подходит для способа оплаты «%1$s». %2$s"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Выбрать другой пункт"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Налоги WooCommerce добавит сам при сохранении заказа — итог в заказе может быть больше."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Пункт выдачи не найден — выберите другой."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Этот пункт выдачи не подходит для заказа — проверьте код."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Проверьте отмеченные поля — заказ ещё не создан."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Проверьте отмеченные поля — заказ не сохранён."
+msgstr ""
+
+#. translators: 1: the order total now, 2: the approximate total after the edit.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, станет примерно %2$s."
+msgstr ""
+
+#. translators: 1: the order total now, 2: the total after the edit.
+#: assets/build/shipping-orders-page/index.js:2
+#, js-format
+msgid "Заказ уже оплачен, а его сумма меняется: было %1$s, стало %2$s."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:2
+msgid "Возврат или доплату сделайте средствами WooCommerce; в заказ добавится заметка об изменении."
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрать"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Выбрано"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "К списку"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "Найти адрес"
 msgstr ""

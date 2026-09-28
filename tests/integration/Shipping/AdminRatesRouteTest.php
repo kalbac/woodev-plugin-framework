@@ -170,6 +170,9 @@ class AdminRatesRouteTest extends TestCase {
 		$group = $this->group( $response );
 
 		$this->assertTrue( $data['needs_shipping'] );
+		// Two units of a 1.5-weight product, in grams whatever unit the store keeps (#970): what the
+		// wizard hands the admin pickup routes as their explicit `weight`.
+		$this->assertSame( (int) wc_get_weight( 3, 'g' ), $data['weight'] );
 		$this->assertSame( $this->zone->get_id(), $data['zone']['id'] );
 		$this->assertSame( 'Rates test carrier', $group['label'] );
 		$this->assertCount( 1, $group['rates'] );
@@ -180,6 +183,55 @@ class AdminRatesRouteTest extends TestCase {
 		// so the flag the calculator derives from `is_pickup_shipping()` is true — it is read off the
 		// method, not defaulted.
 		$this->assertTrue( $group['rates'][0]['is_pickup'] );
+	}
+
+	/**
+	 * D7 (#973): a carrier's own order fields ride on its rate, declared for the tariff — the pickup
+	 * fixture method is asked with `is_pickup` true and the zone-instance method in the context.
+	 *
+	 * @return void
+	 */
+	public function test_a_rate_carries_the_order_fields_the_carrier_declared_for_its_tariff(): void {
+		$asked    = [];
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create(
+				'rates_test',
+				'Rates test carrier',
+				'_rates_test_marker',
+				[ 'woodev_test_shipping' ],
+				[
+					'order_fields' => static function ( array $context ) use ( &$asked ): array {
+						$asked[] = $context;
+
+						return [
+							'declared_value' => [
+								'meta_key' => '_rates_test_declared_value',
+								'control'  => 'number',
+								'type'     => 'float',
+								'name'     => 'Объявленная ценность',
+								'min'      => 0,
+							],
+						];
+					},
+				]
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$rate = $this->group( $this->post( $this->body() ) )['rates'][0];
+
+		$this->assertSame( [ 'declared_value' ], array_column( $rate['order_fields'], 'id' ) );
+		$this->assertSame( 'number', $rate['order_fields'][0]['controlType'] );
+		$this->assertSame( 'Объявленная ценность', $rate['order_fields'][0]['name'] );
+
+		$this->assertCount( 1, $asked );
+		$this->assertSame( 'woodev_test_shipping', $asked[0]['method_id'] );
+		$this->assertSame( $this->instance_id, $asked[0]['instance_id'] );
+		$this->assertTrue( $asked[0]['is_pickup'] );
+		$this->assertInstanceOf( \WC_Shipping_Method::class, $asked[0]['method'] );
 	}
 
 	/**

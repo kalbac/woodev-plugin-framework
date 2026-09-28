@@ -35,7 +35,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 	 *    no longer be edited (exported, or in a final status — {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::is_editable()});
 	 *    **422** the payload is invalid — `data.errors` is a list of `{ field, code, message }`,
 	 *    `field` being the dotted path of the offending request field.
-	 *  - **Bodies** — create → `201 { id, number, message }`; update → `200 { id, number, message }`;
+	 *  - **Bodies** — create → `201 { id, number, message }`, plus `export: { success, message }` when the
+	 *    request carried `export_now` (D6: the export runs after the order is saved, the order stays
+	 *    whatever the carrier answers, and `message` then reads «Заказ №N создан, но не выгружен. СДЭК: …»
+	 *    — the carrier's text is for the merchant only); update → `200 { id, number, message }`
+	 *    (`export_now` is ignored — an edit never exports, O4);
 	 *    load → `200` the prefill in the same shape the create / update body takes, plus an `order`
 	 *    block (`id`, `number`, `status`, `is_paid`, `total`, `currency`) the O14 warning reads.
 	 *
@@ -153,14 +157,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 			return current_user_can( 'edit_shop_orders' );
 		}
 
-		/**
-		 * `POST /shipping/orders` — creates an order.
-		 *
-		 * @since 2.0.2
-		 *
-		 * @param \WP_REST_Request $request request.
-		 * @return \WP_REST_Response|\WP_Error
-		 */
 		public function create_order( $request ) {
 			$order = $this->editor->create( self::payload( $request ) );
 
@@ -168,17 +164,38 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 				return $order;
 			}
 
-			$response = rest_ensure_response(
-				[
-					'id'      => (int) $order->get_id(),
-					'number'  => (string) $order->get_order_number(),
-					'message' => sprintf(
-						/* translators: %s: order number. */
-						__( 'Заказ №%s создан.', 'woodev-plugin-framework' ),
-						$order->get_order_number()
-					),
-				]
-			);
+			$body = [
+				'id'      => (int) $order->get_id(),
+				'number'  => (string) $order->get_order_number(),
+				'message' => sprintf(
+					/* translators: %s: order number. */
+					__( 'Заказ №%s создан.', 'woodev-plugin-framework' ),
+					$order->get_order_number()
+				),
+			];
+
+			if ( self::wants_export( $request ) ) {
+				// D6: the order is saved and stays whatever the carrier answers — the outcome
+				// rides beside it, it never turns the response into an error.
+				$export = $this->editor->export_created( $order );
+
+				$body['export']  = $export;
+				$body['message'] = $export['success']
+					? sprintf(
+						/* translators: 1: order number, 2: the carrier's note or the framework's own «Заказ выгружен перевозчику.». */
+						__( 'Заказ №%1$s создан. %2$s', 'woodev-plugin-framework' ),
+						$order->get_order_number(),
+						$export['message']
+					)
+					: sprintf(
+						/* translators: 1: order number, 2: why the export did not happen — the carrier's own text, prefixed with its name. */
+						__( 'Заказ №%1$s создан, но не выгружен. %2$s', 'woodev-plugin-framework' ),
+						$order->get_order_number(),
+						$export['message']
+					);
+			}
+
+			$response = rest_ensure_response( $body );
 
 			$response->set_status( 201 );
 
@@ -248,6 +265,28 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Rest_Api\\Order_Editor_Cont
 			}
 
 			return array_intersect_key( is_array( $body ) ? $body : [], array_flip( self::PAYLOAD_KEYS ) );
+		}
+
+		/**
+		 * Whether the create request asks for the immediate export (`export_now`, #710 D6).
+		 *
+		 * Read on its own, not through {@see self::PAYLOAD_KEYS}: it is not part of the order, and
+		 * the payload validator must not see it. The update route never reads it — an edit does
+		 * not export (O4).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WP_REST_Request $request request.
+		 * @return bool
+		 */
+		private static function wants_export( $request ): bool {
+			$body = $request->get_json_params();
+
+			if ( ! is_array( $body ) ) {
+				$body = $request->get_body_params();
+			}
+
+			return is_array( $body ) && isset( $body['export_now'] ) && rest_sanitize_boolean( $body['export_now'] );
 		}
 	}
 

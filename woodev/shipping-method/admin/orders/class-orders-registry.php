@@ -1229,6 +1229,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ]
 			);
 
+			// The wizard's delivery step draws the pickup list and map INSIDE itself (#970, O10):
+			// each carrier plugin that has a pickup handler registers the picker's scripts, and the
+			// bundle depends on them so they are on the page before it runs.
+			$wizard_pickup = $this->collect_wizard_pickup();
+			$dependencies  = array_values( array_unique( array_merge( $dependencies, $wizard_pickup['handles'] ) ) );
+
 			$build_url     = $plugin->get_framework_assets_url() . '/build/shipping-orders-page';
 			$style_path    = $plugin->get_framework_path() . '/assets/build/shipping-orders-page/style-index.css';
 			$style_version = file_exists( $style_path ) ? (string) filemtime( $style_path ) : $asset['version'];
@@ -1247,6 +1253,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// defect 4) — see build_reachable_delivery_statuses() for why the
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
+						// What the order wizard's address step needs before its first request (#969).
+						'wizard'           => $this->build_wizard_bootstrap() + [ 'pickup' => (object) $wizard_pickup['configs'] ],
 					]
 				) . ';',
 				'before'
@@ -1303,6 +1311,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 		}
 
 		/**
+		 * The WooCommerce singleton, or null when WooCommerce is not loaded.
+		 *
+		 * A protected, overridable seam for the same reason as {@see self::is_wc_admin_screen()}:
+		 * a unit test that stubbed `WC()` itself would define it process-wide and flip every
+		 * `function_exists( 'WC' )` guard in the framework for the rest of the run (gotcha
+		 * `brain-monkey-function-pollution`), so a probe overrides this instead.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null
+		 */
+		protected function woocommerce() {
+			return function_exists( 'WC' ) ? WC() : null;
+		}
+
+		/**
+		 * Whether the shop has taxes switched on (`wc_tax_enabled()`); false without WooCommerce.
+		 *
+		 * A protected, overridable seam — see {@see self::woocommerce()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		protected function taxes_enabled(): bool {
+			return function_exists( 'wc_tax_enabled' ) && (bool) wc_tax_enabled();
+		}
+
+		/**
 		 * Builds the inlined provider list: the aggregate entry first, then one per
 		 * registered provider — `id` and `label`, and nothing else.
 		 *
@@ -1338,6 +1375,157 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			}
 
 			return $entries;
+		}
+
+
+		/**
+		 * The order wizard's reference data (#969): the shop's countries, their regions keyed by
+		 * WooCommerce STATE CODE, the default country and the shop currency.
+		 *
+		 * Inlined rather than fetched because the address step needs it on its first paint and
+		 * the only REST source for it (`wc/v3/data/countries`) demands `manage_woocommerce`,
+		 * which a manager holding just `edit_shop_orders` does not have — the very capability the
+		 * wizard's own routes require. The lists are the ones the payload validator checks
+		 * against (`Order_Payload_Validator`), so a value the wizard offers is never one it
+		 * then rejects. Countries without regions are left out of `states`.
+		 *
+		 * Empty lists when WooCommerce is not loaded — the wizard then shows plain text fields.
+		 *
+		 * Step ⑤ (#971) reads the payment methods and the order statuses the same way — inlined,
+		 * because `wc/v3/payment_gateways` demands `manage_woocommerce` too — see
+		 * {@see self::build_wizard_payment_bootstrap()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{countries: array<string,string>, states: array<string,array<string,string>>, defaultCountry: string, currency: array{code: string, symbol: string}, paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, exportableStatuses: array<int,string>, taxesEnabled: bool}
+		 */
+		private function build_wizard_bootstrap(): array {
+			$data = [
+				'countries'      => [],
+				'states'         => [],
+				'defaultCountry' => '',
+				'currency'       => [
+					'code'   => '',
+					'symbol' => '',
+				],
+			] + $this->build_wizard_payment_bootstrap();
+
+			$wc = $this->woocommerce();
+
+			if ( ! is_object( $wc ) || ! is_object( $wc->countries ) ) {
+				return $data;
+			}
+
+			$countries = $wc->countries;
+
+			$data['countries']      = array_map( 'wp_strip_all_tags', (array) $countries->get_countries() );
+			$data['defaultCountry'] = (string) $countries->get_base_country();
+
+			foreach ( (array) $countries->get_states() as $code => $states ) {
+				if ( is_array( $states ) && [] !== $states ) {
+					$data['states'][ (string) $code ] = $states;
+				}
+			}
+
+			if ( function_exists( 'get_woocommerce_currency' ) && function_exists( 'get_woocommerce_currency_symbol' ) ) {
+				$data['currency'] = [
+					'code'   => (string) get_woocommerce_currency(),
+					'symbol' => html_entity_decode( (string) get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+				];
+			}
+
+			return $data;
+		}
+
+		/**
+		 * What step ⑤ «Оплата» offers (#971): the shop's payment methods, its order statuses, the
+		 * statuses an edit may not move an order into, the statuses «сразу выгрузить перевозчику»
+		 * is offered in (#974), and whether taxes are on.
+		 *
+		 * Payment methods are the ENABLED gateways, keyed by gateway id — the validator accepts any
+		 * registered one, and a method the shop switched off is not something to offer a manager
+		 * (an order that already carries one is added to the list by the client). Statuses are
+		 * WooCommerce's, without the `wc-` prefix the payload does not use.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{paymentMethods: array<string,string>, orderStatuses: array<string,string>, finalStatuses: array<int,string>, exportableStatuses: array<int,string>, taxesEnabled: bool}
+		 */
+		private function build_wizard_payment_bootstrap(): array {
+			$data = [
+				'paymentMethods'     => [],
+				'orderStatuses'      => [],
+				'finalStatuses'      => Order_Actions::FINAL_STATUSES,
+				'exportableStatuses' => Order_Actions::EXPORTABLE_STATUSES,
+				'taxesEnabled'       => $this->taxes_enabled(),
+			];
+
+			if ( function_exists( 'wc_get_order_statuses' ) ) {
+				foreach ( (array) wc_get_order_statuses() as $slug => $name ) {
+					$slug = (string) $slug;
+
+					$data['orderStatuses'][ 0 === strpos( $slug, 'wc-' ) ? substr( $slug, 3 ) : $slug ] = (string) $name;
+				}
+			}
+
+			$wc = $this->woocommerce();
+
+			if ( ! is_object( $wc ) || ! method_exists( $wc, 'payment_gateways' ) ) {
+				return $data;
+			}
+
+			foreach ( (array) $wc->payment_gateways()->payment_gateways() as $id => $gateway ) {
+				if ( ! is_object( $gateway ) || 'yes' !== ( $gateway->enabled ?? '' ) ) {
+					continue;
+				}
+
+				$title = method_exists( $gateway, 'get_title' ) ? (string) $gateway->get_title() : '';
+
+				if ( '' === $title && method_exists( $gateway, 'get_method_title' ) ) {
+					$title = (string) $gateway->get_method_title();
+				}
+
+				$data['paymentMethods'][ (string) $id ] = wp_strip_all_tags( '' !== $title ? $title : (string) $id );
+			}
+
+			return $data;
+		}
+
+		/**
+		 * What the order wizard's delivery step needs to show a carrier's pickup points inside
+		 * itself (#970, spec D3 / O10): the picker's script handles and the picker's JS config,
+		 * per registered carrier that has a pickup handler.
+		 *
+		 * Keyed by PROVIDER id — the id the rates response groups its rates under — because the
+		 * step reads it with the carrier of the tariff the manager picked. A carrier registered
+		 * without a plugin, or whose plugin wired no pickup handler, is absent: its tariffs are
+		 * then never pickup ones, and the step never asks.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{handles: string[], configs: array<string, array<string, mixed>>}
+		 */
+		private function collect_wizard_pickup(): array {
+			$handles = [];
+			$configs = [];
+
+			foreach ( $this->get_providers() as $provider ) {
+				$plugin  = $this->get_provider_plugin( $provider->get_id() );
+				$handler = null !== $plugin ? $plugin->get_pickup_handler() : null;
+
+				if ( null === $handler ) {
+					continue;
+				}
+
+				$handles = array_merge( $handles, $handler->register_admin_wizard_assets() );
+
+				$configs[ $provider->get_id() ] = $handler->get_admin_wizard_js_config();
+			}
+
+			return [
+				'handles' => array_values( array_unique( $handles ) ),
+				'configs' => $configs,
+			];
 		}
 
 		/**

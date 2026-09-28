@@ -131,7 +131,10 @@ export interface OrdersScopeCounts {
  * action that does not exist for this row, never one the merchant cannot currently use.
  */
 export interface OrderRowAction {
-	/** `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter. */
+	/**
+	 * `'export' | 'update' | 'cancel'`, or a carrier extra from the server-side filter — or `'edit'`
+	 * (#972), which opens the order wizard on the client and is never sent to the action routes.
+	 */
 	action: string;
 	/** Button text, already translated server-side. */
 	label: string;
@@ -184,6 +187,41 @@ export interface OrdersProvider {
 	label: string;
 }
 
+/**
+ * `window.woodevShippingOrders.wizard` — the order wizard's reference data
+ * (`Orders_Registry::build_wizard_bootstrap()`, #969). Every key is optional: an older
+ * server sends none of it, and the wizard then falls back to plain text inputs.
+ */
+export interface WizardBootstrap {
+	/** Country code → name, the shop's whole list. */
+	countries?: Record<string, string>;
+	/** Country code → { WooCommerce STATE CODE → name }; countries without regions are absent. */
+	states?: Record<string, Record<string, string>>;
+	defaultCountry?: string;
+	currency?: { code?: string; symbol?: string };
+	/**
+	 * The pickup picker's JS config per carrier that has a pickup handler, keyed by PROVIDER id
+	 * (`Orders_Registry::collect_wizard_pickup()`, #970). A carrier absent here has no picker; its
+	 * pickup tariffs, if any, fall back to a typed point code. Typed loosely on purpose: the shape
+	 * is the storefront's own picker config, read by `order-wizard/pickup-session.ts`.
+	 */
+	pickup?: Record<string, Record<string, unknown>>;
+	/**
+	 * The shop's ENABLED payment methods, gateway id → title (`Orders_Registry::build_wizard_payment_bootstrap()`,
+	 * #971). Inlined because `wc/v3/payment_gateways` demands `manage_woocommerce`. An empty PHP array
+	 * arrives as `[]`, so read it through `Object.entries`, never assume an object.
+	 */
+	paymentMethods?: Record<string, string>;
+	/** WooCommerce order statuses, slug WITHOUT the `wc-` prefix → name. */
+	orderStatuses?: Record<string, string>;
+	/** Statuses an edit may not move an order into (`Order_Actions::FINAL_STATUSES`). */
+	finalStatuses?: string[];
+	/** Statuses «сразу выгрузить перевозчику» is offered in (`Order_Actions::EXPORTABLE_STATUSES`, #974). */
+	exportableStatuses?: string[];
+	/** Whether WooCommerce taxes are on — the totals the manager sees are then before tax. */
+	taxesEnabled?: boolean;
+}
+
 /** `window.woodevShippingOrders`, inlined by `Orders_Registry::enqueue_assets()`. */
 export interface ShippingOrdersBootstrap {
 	restRoot: string;
@@ -196,6 +234,8 @@ export interface ShippingOrdersBootstrap {
 	 * offering every canonical state rather than offering none.
 	 */
 	deliveryStatuses?: string[];
+	/** The order wizard's reference data (#969). */
+	wizard?: WizardBootstrap;
 }
 
 declare global {
@@ -206,6 +246,25 @@ declare global {
 
 function bootstrap(): Partial<ShippingOrdersBootstrap> {
 	return window.woodevShippingOrders || {};
+}
+
+/**
+ * The REST root (`…/woodev/v1`) and nonce the order wizard talks to, plus its reference data.
+ *
+ * `restRoot` is the ORDERS route (`…/woodev/v1/shipping/orders`), which is what every other
+ * call on this page appends its query to; the wizard needs the namespace root above it (the
+ * location picker's `/location/suggest`, the editor's `/shipping/orders/{id}/edit`).
+ */
+export function getWizardContext(): { apiRoot: string; ordersRoot: string; nonce: string; wizard: WizardBootstrap } {
+	const { restRoot = '', nonce = '', wizard = {} } = bootstrap();
+	const ordersRoot = restRoot.replace( /\/+$/, '' );
+
+	return {
+		apiRoot: ordersRoot.replace( /\/shipping\/orders$/, '' ),
+		ordersRoot,
+		nonce,
+		wizard,
+	};
 }
 
 /**

@@ -239,6 +239,24 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertStringNotContainsString( '&ndash;', $html, 'KISS: an absent field is omitted, never rendered as a dash' );
 		}
 
+		public function test_render_metabox_never_draws_a_button_for_the_edit_row_action(): void {
+			$provider = $this->provider();
+			$order    = $this->make_order();
+
+			$this->meta = [];
+			$this->register_handler();
+
+			ob_start();
+			( new Shipping_Admin_Order( Orders_Registry::instance() ) )->render_metabox( $order, $provider );
+			$html = ob_get_clean();
+
+			// The orders page's row carries «Редактировать» (#972); the order screen has no wizard to open,
+			// and a form posting `edit` would only be refused.
+			$this->assertStringContainsString( 'value="export"', $html, 'the carrier actions still render' );
+			$this->assertStringNotContainsString( 'value="edit"', $html );
+			$this->assertStringNotContainsString( 'Редактировать', $html );
+		}
+
 		public function test_render_metabox_renders_the_orders_page_status_badge_with_its_canonical_tone(): void {
 			$provider = $this->provider(
 				[

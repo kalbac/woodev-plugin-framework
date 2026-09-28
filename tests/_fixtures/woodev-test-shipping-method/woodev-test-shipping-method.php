@@ -889,6 +889,44 @@ function woodev_test_shipping_method_plugin_init(): void {
 						'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
 							$order->update_meta_data( '_woodev_test_shipping_marker', '1' );
 						},
+						// #973 (spec D7): the carrier's OWN order fields, asked per tariff by the admin
+						// order wizard. Declared in the Settings API's vocabulary — the framework renders
+						// them with the settings page's controls, validates them and stores each under its
+						// `meta_key` (which the export reads). The courier tariff asks one more than a pickup.
+						'order_fields'              => static function ( array $context ): array {
+							$fields = [
+								'declared_value' => [
+									'meta_key'    => '_woodev_test_shipping_declared_value',
+									'type'        => 'float',
+									'control'     => 'number',
+									'name'        => 'Объявленная ценность',
+									'tooltip'     => 'Сумма, на которую отправление застраховано.',
+									'min'         => 0,
+									'step'        => 0.01,
+								],
+								'package_type'   => [
+									'meta_key' => '_woodev_test_shipping_package_type',
+									'name'     => 'Упаковка',
+									'options'  => [
+										'box'      => 'Коробка',
+										'envelope' => 'Конверт',
+									],
+									'default'  => 'box',
+									'required' => true,
+								],
+							];
+
+							if ( empty( $context['is_pickup'] ) ) {
+								$fields['call_before'] = [
+									'meta_key' => '_woodev_test_shipping_call_before',
+									'control'  => 'toggle',
+									'name'     => 'Позвонить перед доставкой',
+									'default'  => true,
+								];
+							}
+
+							return $fields;
+						},
 					]
 				);
 

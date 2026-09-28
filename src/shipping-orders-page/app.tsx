@@ -112,6 +112,8 @@ import {
 } from './filters';
 import type { UrlFilters } from './filters';
 import PeriodPicker from './period-picker';
+import OrderWizard from './order-wizard/order-wizard';
+import type { SaveResult } from './order-wizard/types';
 import type { WcFilterPickerConfig, WcTableHeader, WcTableRowCell } from './wc-globals';
 
 /** Rows per page — increment 1's REST default. */
@@ -366,6 +368,8 @@ type DashiconName = ComponentProps< typeof Dashicon >[ 'icon' ];
  * back to a neutral glyph — it renders rather than vanishing.
  */
 const ACTION_ICONS: Record< string, DashiconName > = {
+	// #972 — «Редактировать» has no counterpart in the reference plugins: the WordPress pencil.
+	edit: 'edit',
 	export: 'upload',
 	update: 'update',
 	cancel: 'remove',
@@ -391,6 +395,7 @@ const FALLBACK_ACTION_ICON: DashiconName = 'admin-generic';
 type ActionTone = 'go' | 'stop' | 'warn' | 'neutral';
 
 const ACTION_TONES: Record< string, ActionTone > = {
+	edit: 'neutral',
 	export: 'go',
 	cancel: 'stop',
 	update: 'warn',
@@ -544,6 +549,18 @@ function confirmQuestion( action: OrderRowAction, row: ActionableOrder ): string
 		  );
 }
 
+/** The server-side id of the one row action that opens the wizard instead of calling the carrier (#972). */
+const EDIT_ACTION = 'edit';
+
+/**
+ * Whether the server can EXECUTE any of a row's actions — what makes it worth a bulk checkbox.
+ * «Редактировать» only opens the wizard on the client, so a row that offers nothing else is not
+ * selectable: the bulk routes would refuse it (#972).
+ */
+function hasBulkableActions( row: Pick<OrderRow, 'actions'> ): boolean {
+	return Boolean( row.actions && row.actions.some( ( action ) => EDIT_ACTION !== action.action ) );
+}
+
 /**
  * The `cb` column's per-row cell (#874). A row whose `actions` is absent or empty renders
  * NO checkbox at all — the operator's own rule, so a merchant never selects an order the
@@ -563,7 +580,7 @@ function CheckboxCell( {
 	rowState?: RowActionState;
 	onToggle: ( orderId: number, checked: boolean ) => void;
 } ) {
-	if ( ! row.actions || 0 === row.actions.length ) {
+	if ( ! hasBulkableActions( row ) ) {
 		return null;
 	}
 
@@ -1432,6 +1449,17 @@ export default function OrdersPage() {
 	const [ bulkAction, setBulkAction ] = useState( '' );
 	/** #874 — a destructive bulk pick awaiting «Да / Нет», page-level (not keyed by row). */
 	const [ bulkConfirming, setBulkConfirming ] = useState<BulkAction | null>( null );
+	/**
+	 * #969 — the order wizard (#710): `null` closed, `{ orderId: null }` creating a new order,
+	 * `{ orderId }` editing that one — the «Редактировать» row action (#972) opens it so.
+	 */
+	const [ wizard, setWizard ] = useState<{ orderId: number | null } | null>( null );
+	/**
+	 * #969 — bumped when the wizard saves an order, so the fetch effect below runs again and the
+	 * new order appears in the table (O9). A counter rather than a flag: two saves in a row
+	 * must each refetch.
+	 */
+	const [ reloadKey, setReloadKey ] = useState( 0 );
 	/** #875 — which order's preview `Modal` is open, or `null` for closed. */
 	const [ previewOrderId, setPreviewOrderId ] = useState<number | null>( null );
 	/**
@@ -1642,7 +1670,28 @@ export default function OrdersPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [ urlFilters, page, perPage, orderby, order, search ] );
+	}, [ urlFilters, page, perPage, orderby, order, search, reloadKey ] );
+
+	/**
+	 * #969 — the wizard saved an order: report it in the same `Notice` slot and toast every
+	 * other action uses, and refetch the table so the order shows up (O9).
+	 */
+	const onWizardSaved = ( result: SaveResult ) => {
+		// #974 (D6): the order exists either way; when the immediate export was asked for and the carrier
+		// refused it, the same sentence — it carries the carrier's own text — is shown as an error, so the
+		// merchant notices the order did not reach the carrier.
+		const exportFailed = !! result.export && ! result.export.success;
+
+		setActionNotice( { status: exportFailed ? 'error' : 'success', text: result.message } );
+		dispatch( noticesStore )[ exportFailed ? 'createErrorNotice' : 'createSuccessNotice' ]( result.message, { type: 'snackbar' } );
+		// An edited order's cached preview describes it BEFORE the edit (#972) — same reason as after a row action.
+		setPreviewCache( ( current ) => {
+			const next = { ...current };
+			delete next[ result.id ];
+			return next;
+		} );
+		setReloadKey( ( key ) => key + 1 );
+	};
 
 	/**
 	 * `Table` (inside `TableCard`) computes the NEXT sort direction itself from
@@ -1839,6 +1888,15 @@ export default function OrdersPage() {
 	 * both end up calling {@link performAction} the same way.
 	 */
 	const onActionClick = ( row: ActionableOrder, action: OrderRowAction ) => {
+		// #972 — «Редактировать» opens the wizard on this order; nothing goes to the carrier, so it
+		// skips the pending/confirm bookkeeping below. A preview it was clicked in closes first —
+		// two modals stacked would leave the stale preview under the wizard.
+		if ( EDIT_ACTION === action.action ) {
+			setPreviewOrderId( null );
+			setWizard( { orderId: row.id } );
+			return;
+		}
+
 		if ( action.destructive && actionRowStates[ row.id ]?.confirmingAction !== action.action ) {
 			setActionRowStates( ( current ) => ( {
 				...current,
@@ -1876,7 +1934,7 @@ export default function OrdersPage() {
 	// `CheckboxCell` renders nothing for, never another page's ids, since `rows` only ever
 	// holds this page's data.
 	const checkableIds = ( rows || [] )
-		.filter( ( r ) => r.actions && r.actions.length > 0 )
+		.filter( hasBulkableActions )
 		.map( ( r ) => r.id );
 	const selectAllChecked =
 		checkableIds.length > 0 && checkableIds.every( ( id ) => selectedIds.has( id ) );
@@ -2070,6 +2128,24 @@ export default function OrdersPage() {
 
 	return (
 		<>
+			{ /*
+			 * #969 — the one «Создать заказ» button, shared by every carrier (the page is
+			 * shared, #694; O2). Left-aligned, right under the page's own title, the way
+			 * WooCommerce's «Orders → Add order» sits beside its `<h1>` (operator rig
+			 * acceptance round 2, #710, finding 1) — NOT a `WooHeaderItem` fill into
+			 * `woocommerce-layout__header`: measured against the shipped WooCommerce 11.1.0
+			 * admin bundle, `woocommerce_header_item` is defined by `@woocommerce/admin-layout`
+			 * but no `<Slot>` in this build's `Header` consumes it, so a Fill there renders
+			 * into nothing. `TableCard`'s own `title` also cannot host it: that string is
+			 * reused verbatim as the inner `<Table>`'s `caption`, so a `Button` element there
+			 * would land inside a `<caption>` — invalid content for the element and a broken
+			 * announcement for screen readers. This is the fallback the brief authorized.
+			 */ }
+			<div className="woodev-orders__create-row">
+				<Button variant="primary" onClick={ () => setWizard( { orderId: null } ) }>
+					{ __( 'Создать заказ', 'woodev-plugin-framework' ) }
+				</Button>
+			</div>
 			{ /*
 			 * #837 defect 5: a rejected query parameter used to return this
 			 * `Notice` INSTEAD OF the whole page, leaving bare text on an
@@ -2282,6 +2358,13 @@ export default function OrdersPage() {
 					onActionClick={ onActionClick }
 					onCancelConfirm={ onCancelConfirm }
 					onClose={ () => setPreviewOrderId( null ) }
+				/>
+			) }
+			{ null !== wizard && (
+				<OrderWizard
+					orderId={ wizard.orderId }
+					onClose={ () => setWizard( null ) }
+					onSaved={ onWizardSaved }
 				/>
 			) }
 			{ /* #824 round 2 — native WP toasts, the same queue the settings page uses. Rendered

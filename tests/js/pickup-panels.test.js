@@ -4240,3 +4240,150 @@ describe( 'showMessage()/hideMessage() (spec V-5)', () => {
 		expect( () => panels.hideMessage() ).not.toThrow();
 	} );
 } );
+
+describe( 'manager mode (#710 D3 — the same panels inside the admin order wizard)', () => {
+	const managerConfig = Object.assign( {}, config, {
+		mode: 'manager',
+		i18n: Object.assign( {}, config.i18n, {
+			select: 'Выбрать', selected: 'Выбрано', backToList: 'К списку',
+			continueCheckout: 'Продолжить оформление заказа', close: 'Закрыть',
+		} ),
+	} );
+
+	function mount( cfg = managerConfig ) {
+		const container = document.createElement( 'div' );
+		const panels = new Panels( container, cfg );
+		panels.render();
+
+		return { container, panels, stage: container.querySelector( '.woodev-pickup-stage' ) };
+	}
+
+	it( 'starts with the sidebar OPEN, flagged is-manager, and never builds the toggle', () => {
+		const { stage } = mount();
+
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		expect( stage.classList.contains( 'is-manager' ) ).toBe( true );
+		expect( stage.querySelector( '.woodev-pickup-list__toggle' ) ).toBeNull();
+	} );
+
+	it( 'the sidebar cannot be collapsed: toggleList() is a no-op and emits no listToggle', () => {
+		const { panels, stage } = mount();
+		const onToggle = jest.fn();
+		panels.on( 'listToggle', onToggle );
+
+		panels.setVisible( [ group( 'a', 55.75, 37.61, 'A' ) ] );
+		panels.openCard( panels._groups[ 0 ], 'a', 'list' );
+		panels.toggleList();
+
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+		// A collapse attempt must not dismiss the open card as a side effect either.
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+		expect( onToggle ).not.toHaveBeenCalled();
+	} );
+
+	it( 'a list row opens the details with «К списку» in place of ✕, and «К списку» returns to the list, sidebar still open', () => {
+		const { container, panels, stage } = mount();
+
+		panels.setVisible( [ group( 'a', 55.75, 37.61, 'A' ) ] );
+		container.querySelector( '.woodev-pickup-list__item' ).click();
+
+		expect( stage.classList.contains( 'is-card' ) ).toBe( true );
+		expect( container.querySelector( '.woodev-pickup-card__close' ) ).toBeNull();
+
+		const back = container.querySelector( '.woodev-pickup-card__back' );
+
+		expect( back.textContent ).toBe( '←К списку' );
+		expect( back.querySelector( '.woodev-pickup-card__back-label' ).textContent ).toBe( 'К списку' );
+
+		back.click();
+
+		expect( stage.classList.contains( 'is-card' ) ).toBe( false );
+		expect( stage.classList.contains( 'is-open' ) ).toBe( true );
+	} );
+
+	it( 'the card says «Выбрать»; once chosen it says «Выбрано», disabled and marked, and never re-emits', () => {
+		const { container, panels } = mount();
+		const onSelect = jest.fn();
+		panels.on( 'select', onSelect );
+
+		panels.setVisible( [ group( 'a', 55.75, 37.61, 'A' ) ] );
+		container.querySelector( '.woodev-pickup-list__item' ).click();
+
+		const cta = container.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.textContent ).toBe( 'Выбрать' );
+		expect( cta.disabled ).toBe( false );
+
+		cta.click();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+		expect( onSelect.mock.calls[ 0 ][ 0 ].id ).toBe( 'a' );
+
+		// The caller (the wizard) reports the choice back; the card then MARKS it instead of prompting again.
+		panels.setSelectedId( 'a' );
+
+		const chosen = container.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( chosen.textContent ).toBe( 'Выбрано' );
+		expect( chosen.disabled ).toBe( true );
+		expect( chosen.classList.contains( 'is-selected' ) ).toBe( true );
+		expect( container.querySelector( '.woodev-pickup-list__item' ).classList.contains( 'is-selected' ) ).toBe( true );
+
+		chosen.click();
+
+		expect( onSelect ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'a missing manager label renders blank, never a hardcoded default (rule I1)', () => {
+		const { container, panels } = mount( withoutI18nKey( withoutI18nKey( managerConfig, 'backToList' ), 'selected' ) );
+
+		panels.setVisible( [ group( 'a', 55.75, 37.61, 'A' ) ] );
+		panels.setSelectedId( 'a' );
+		container.querySelector( '.woodev-pickup-list__item' ).click();
+
+		expect( container.querySelector( '.woodev-pickup-card__back-label' ).textContent ).toBe( '' );
+		expect( container.querySelector( '.woodev-pickup-card__cta' ).textContent ).toBe( '' );
+	} );
+
+	it( 'getSidebarWidth() reports the open sidebar\'s strip (width + the 16px gutter), 0 before render()', () => {
+		const panels = new Panels( document.createElement( 'div' ), managerConfig );
+
+		expect( panels.getSidebarWidth() ).toBe( 0 );
+
+		panels.render();
+
+		// jsdom lays nothing out, so `offsetWidth` is 0 and only the gutter remains.
+		expect( panels.getSidebarWidth() ).toBe( 16 );
+	} );
+
+	it( 'CHECKOUT MODE IS UNTOUCHED: no mode flag → closed start, the toggle, ✕, «continueCheckout», getSidebarWidth() 0', () => {
+		const container = document.createElement( 'div' );
+		const cfg = Object.assign( {}, config, { i18n: Object.assign( {}, config.i18n, { select: 'Выбрать этот пункт', continueCheckout: 'Продолжить', close: 'Закрыть' } ) } );
+		const panels = new Panels( container, cfg );
+		panels.render();
+
+		const stage = container.querySelector( '.woodev-pickup-stage' );
+
+		expect( stage.classList.contains( 'is-open' ) ).toBe( false );
+		expect( stage.classList.contains( 'is-manager' ) ).toBe( false );
+		expect( stage.querySelector( '.woodev-pickup-list__toggle' ) ).not.toBeNull();
+		expect( panels.getSidebarWidth() ).toBe( 0 );
+
+		panels.setVisible( [ group( 'a', 55.75, 37.61, 'A' ) ] );
+		panels.setSelectedId( 'a' );
+		container.querySelector( '.woodev-pickup-list__item' ).click();
+
+		expect( container.querySelector( '.woodev-pickup-card__back' ) ).toBeNull();
+		expect( container.querySelector( '.woodev-pickup-card__close' ) ).not.toBeNull();
+
+		const cta = container.querySelector( '.woodev-pickup-card__cta' );
+
+		expect( cta.textContent ).toBe( 'Продолжить' );
+		expect( cta.disabled ).toBe( false );
+		expect( cta.classList.contains( 'is-selected' ) ).toBe( false );
+
+		panels.toggleList();
+
+		expect( stage.classList.contains( 'is-open' ) ).toBe( false );
+	} );
+} );

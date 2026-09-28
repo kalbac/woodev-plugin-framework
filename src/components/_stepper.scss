@@ -1,0 +1,107 @@
+/**
+ * Woodev UI-kit — progress-line step indicator (`stepper.tsx`).
+ *
+ * Lifted verbatim from the setup wizard's `.woodev-setup__steps` block (#960), so the
+ * wizard renders as before; the only new seam is the dot's hollow centre, which used
+ * to be the wizard's page background and is now the `--woodev-stepper-dot-bg` custom
+ * property (default: the kit surface). A host whose stepper sits on another colour sets
+ * it on itself or an ancestor.
+ *
+ * @package woodev-plugin-framework
+ */
+
+@use './tokens' as wd;
+
+// Track / dot colours of a step that has not been reached — no kit-token equivalent.
+$track: #d8dadd;
+$upcoming-ink: #9a9a9a;
+
+.woodev-stepper {
+	padding: 0 0 32px;
+	margin: 0;
+	list-style: none;
+	width: 100%;
+	display: inline-flex;
+
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	li {
+		flex: 1 1 0;
+		padding: 0 0 0.85em;
+		margin: 0;
+		text-align: center;
+		position: relative;
+		border-bottom: 4px solid $track;
+		line-height: 1.4;
+		font-size: 14px;
+		color: $upcoming-ink;
+
+		&::before {
+			content: "";
+			border: 3px solid $track;
+			border-radius: 100%;
+			width: 8px;
+			height: 8px;
+			position: absolute;
+			left: 50%;
+			bottom: 0;
+			margin: 0;
+			// Center the ring ON the 4px progress line (shift down by half the
+			// ring's own height + half the line width). Hollow center (host surface).
+			transform: translate( -50%, calc( 50% + 2px ) );
+			background: var( --woodev-stepper-dot-bg, #{wd.$surface} );
+		}
+
+		&.is-done {
+			border-color: wd.$accent;
+			color: wd.$accent;
+
+			&::before {
+				border-color: wd.$accent;
+				background: wd.$accent;
+			}
+		}
+
+		&.is-active {
+			border-color: wd.$accent;
+			color: wd.$accent-ink;
+			font-weight: 700;
+
+			&::before {
+				border-color: wd.$accent;
+			}
+		}
+	}
+
+	// Step label rendered as a clickable button for non-current steps; reset all
+	// button chrome so it visually matches the plain <span> of the current step.
+	&__label {
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		cursor: pointer;
+		color: inherit;
+	}
+
+	// The active step's label is a non-clickable <span> — keep the default cursor.
+	li.is-active .woodev-stepper__label {
+		cursor: default;
+	}
+
+	// Hover affordance only on the clickable (non-active) labels.
+	li:not( .is-active ) .woodev-stepper__label:hover {
+		color: wd.$accent-strong;
+		text-decoration: underline;
+	}
+}
+
+@media ( max-width: 600px ) {
+	.woodev-stepper li {
+		font-size: 12px;
+	}
+}

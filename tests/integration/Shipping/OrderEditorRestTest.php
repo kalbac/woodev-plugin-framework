@@ -319,6 +319,70 @@ class OrderEditorRestTest extends TestCase {
 		$this->assertSame( 4, (int) array_values( wc_get_order( $id )->get_items( 'line_item' ) )[0]->get_quantity() );
 	}
 
+	// -------------------------------------------------------------------------
+	// the carrier's own fields (#973, spec D7)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The realistic fixture declares one order field — `declared_value`, a number with a floor of
+	 * zero, stored under `_woodev_realistic_declared_value`.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_create_stores_the_declared_carrier_fields_and_drops_what_was_not_declared( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$id    = $this->create_through_the_route( [ 'carrier_fields' => [ 'declared_value' => '1500.5', 'not_declared' => 'x' ] ] );
+		$order = wc_get_order( $id );
+
+		$this->assertEquals( 1500.5, $order->get_meta( '_woodev_realistic_declared_value', true ) );
+		$this->assertSame( '', (string) $order->get_meta( 'not_declared', true ), 'an id the carrier did not declare never reaches the order' );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_create_answers_422_on_a_carrier_field_the_declaration_refuses( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$response = $this->send( 'POST', self::NAMESPACE_ROOT, $this->payload( [ 'carrier_fields' => [ 'declared_value' => '-1' ] ] ) );
+
+		$this->assertSame( 422, $response->get_status() );
+		$this->assertContains( 'carrier_fields.declared_value', array_column( $response->get_data()['data']['errors'], 'field' ) );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_load_returns_the_stored_carrier_fields_and_an_update_changes_or_clears_them( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$id = $this->create_through_the_route( [ 'carrier_fields' => [ 'declared_value' => '1500.5' ] ] );
+
+		$body = $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_data();
+
+		$this->assertEquals( [ 'declared_value' => 1500.5 ], $body['carrier_fields'] );
+
+		$body['carrier_fields']['declared_value'] = '99';
+
+		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $body )->get_status() );
+		$this->assertEquals( 99, wc_get_order( $id )->get_meta( '_woodev_realistic_declared_value', true ) );
+
+		$body['carrier_fields']['declared_value'] = '';
+
+		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $body )->get_status() );
+		$this->assertSame( '', (string) wc_get_order( $id )->get_meta( '_woodev_realistic_declared_value', true ), 'a cleared field is removed, not stored empty' );
+	}
+
 	/**
 	 * @dataProvider datastore_provider
 	 * @param bool $hpos datastore under test.
@@ -404,5 +468,52 @@ class OrderEditorRestTest extends TestCase {
 
 		$this->assertSame( 409, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() )->get_status() );
 		$this->assertSame( 409, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
+	// row action (#710 bug 6, operator rig acceptance 28.09.2026)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A fresh REALISTIC order — on-hold, not exported, created through the wizard exactly as the
+	 * operator's order 642 was on the rig — must show «Редактировать» in its row, exactly like a
+	 * `test_shipping` order in the same state does
+	 * ({@see \Woodev\Tests\Integration\Shipping\OrdersRestTest::test_the_row_offers_edit_while_the_order_is_editable_and_the_action_route_never_executes_it()}).
+	 *
+	 * Before the fix this failed: the realistic fixture registered a provider and a tracking
+	 * handler but no `Abstract_Shipment_Handler`, and `Order_Actions::for_row()` withholds every
+	 * action — including the client-side «Редактировать», which calls no handler at all — from a
+	 * provider with none registered (spec D5 names no such condition; only the load/update routes'
+	 * own {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::not_editable_reason()} does).
+	 *
+	 * @return void
+	 */
+	public function test_a_realistic_order_shows_the_edit_row_action_while_editable(): void {
+		$this->login_as_manager();
+
+		$id = $this->create_through_the_route();
+
+		$order = wc_get_order( $id );
+		$order->set_status( 'on-hold' );
+		$order->save();
+
+		$response = $this->send( 'GET', self::NAMESPACE_ROOT );
+		$this->assertSame( 200, $response->get_status() );
+
+		$row = null;
+
+		foreach ( $response->get_data()['rows'] as $candidate ) {
+			if ( $id === $candidate['id'] ) {
+				$row = $candidate;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $row, 'the created order must be a row of the page' );
+		$this->assertContains(
+			'edit',
+			array_column( $row['actions'], 'action' ),
+			'a realistic-carrier order must offer «Редактировать» exactly like a test_shipping one does'
+		);
 	}
 }

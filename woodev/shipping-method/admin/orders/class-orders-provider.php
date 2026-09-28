@@ -193,6 +193,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		private $marker_writer;
 
 		/**
+		 * The carrier's declaration of its own order fields — `fn( array $context ): array` — or
+		 * null when this carrier asks for none (#973, spec D7). See {@see self::get_order_fields()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var callable|null
+		 */
+		private $order_fields;
+
+		/**
 		 * Use {@see self::create()} instead.
 		 *
 		 * @since 2.0.2
@@ -211,6 +221,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 * @param string|null          $legacy_page_slug           legacy v1 orders-page slug.
 		 * @param string|null          $cron_hook                  carrier cron hook that refreshes delivery statuses.
 		 * @param callable|null        $marker_writer              carrier marker writer (#967).
+		 * @param callable|null        $order_fields               carrier order-fields declaration (#973).
 		 */
 		private function __construct(
 			string $id,
@@ -226,7 +237,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			?string $carrier_order_id_meta_key,
 			?string $legacy_page_slug,
 			?string $cron_hook,
-			?callable $marker_writer = null
+			?callable $marker_writer = null,
+			?callable $order_fields = null
 		) {
 			$this->id                        = $id;
 			$this->label                     = $label;
@@ -242,6 +254,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			$this->legacy_page_slug          = $legacy_page_slug;
 			$this->cron_hook                 = $cron_hook;
 			$this->marker_writer             = $marker_writer;
+			$this->order_fields              = $order_fields;
 		}
 
 		/**
@@ -271,10 +284,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *                                                           carrier's marker onto an order it owns (#967). Optional: a carrier
 		 *                                                           without one still gets its orders LISTED, but the framework will
 		 *                                                           never create or edit an order for it (see {@see self::mark_order()}).
+		 *     @type callable             $order_fields              `fn( array $context ): array` — the carrier's OWN order fields for one
+		 *                                                           tariff, asked for by the admin order wizard (#973, spec D7). Optional: a
+		 *                                                           carrier without it asks the manager for nothing extra
+		 *                                                           (see {@see self::get_order_fields()}).
 		 * }
 		 * @return self
 		 *
-		 * @throws Shipping_Exception when a required field is empty, or `marker_writer` is present but not callable.
+		 * @throws Shipping_Exception when a required field is empty, or `marker_writer` / `order_fields` is present but not callable.
 		 */
 		public static function create( string $id, string $label, string $marker_meta_key, array $method_ids, array $args = [] ): self {
 			foreach ( [
@@ -313,6 +330,12 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				);
 			}
 
+			if ( isset( $args['order_fields'] ) && ! is_callable( $args['order_fields'] ) ) {
+				throw new Shipping_Exception(
+					sprintf( 'Orders_Provider "%s": "order_fields" must be callable.', $id )
+				);
+			}
+
 			return new self(
 				$id,
 				$label,
@@ -327,7 +350,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 				$nullable_string( $args, 'carrier_order_id_meta_key' ),
 				$nullable_string( $args, 'legacy_page_slug' ),
 				$nullable_string( $args, 'cron_hook' ),
-				$args['marker_writer'] ?? null
+				$args['marker_writer'] ?? null,
+				$args['order_fields'] ?? null
 			);
 		}
 
@@ -548,7 +572,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 		 *  - `pickup_point`   mixed    a {@see \Woodev\Framework\Shipping\Pickup\Pickup_Point}, its `to_array()`,
 		 *                              or null — supplied by callers that hold the full point (the admin editor);
 		 *                              a checkout caller carries the point id inside `fields` instead;
-		 *  - `carrier_fields` array    the carrier's own export fields (spec D7) — empty until I7.
+		 *  - `carrier_fields` array    the carrier's own export fields (spec D7, #973), keyed by field id — the
+		 *                              values the wizard collected and the framework already validated against
+		 *                              {@see self::get_order_fields()}; empty when the carrier declares none.
+		 *                              The framework stores them under their declared `meta_key`s itself;
+		 *                              the writer only needs them to derive a marker from them.
 		 *
 		 * @since 2.0.2
 		 *
@@ -566,6 +594,65 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Provi
 			}
 
 			call_user_func( $this->marker_writer, $order, $context );
+		}
+
+		/**
+		 * Whether this carrier declared order fields of its own (#973).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		public function has_order_fields(): bool {
+			return null !== $this->order_fields;
+		}
+
+		/**
+		 * The fields this carrier asks the manager for when its tariff is put on an order by hand —
+		 * declared value, package dimensions, extra services (#710 spec D7, O13).
+		 *
+		 * The carrier's callable is asked once per tariff and returns `field id => definition`, in the
+		 * order the manager should see them. A definition is written in the Settings API's own
+		 * vocabulary ({@see \Woodev\Framework\Shipping\Admin\Orders\Carrier_Field_Set} lists the keys):
+		 * `name`, `description`, `type`, `control`, `options`, `default`, `required`, `validate`,
+		 * `show_if`, `min` / `max` / `step`, `tooltip`, `placeholder` — and `meta_key`, the order-meta
+		 * key the value is stored under, which is the carrier's contract with its own export. The
+		 * framework renders the fields with the settings page's React controls (the plugin ships no JS),
+		 * validates the values with the settings page's validation and stores them through the same
+		 * persistence core as a checkout.
+		 *
+		 * `$context` — every key is always present:
+		 *
+		 *  - `provider_id` string                   this provider's id;
+		 *  - `method_id`   string                   the tariff's bare shipping method id;
+		 *  - `instance_id` int                      its zone-instance id (0 when unknown);
+		 *  - `rate_id`     string                   `method_id:instance_id`;
+		 *  - `is_pickup`   bool                     whether the tariff delivers to a pickup point;
+		 *  - `method`      \WC_Shipping_Method|null the zone-instance method — read its options for defaults.
+		 *
+		 * A carrier that declares nothing, a callable that throws or returns something that is not an
+		 * array all read as «no fields»: the order is still placed, and the failure is logged.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, mixed> $context see above.
+		 * @return array<string, array<string, mixed>> field id => definition.
+		 */
+		public function get_order_fields( array $context ): array {
+			if ( null === $this->order_fields ) {
+				return [];
+			}
+
+			try {
+				$declared = call_user_func( $this->order_fields, $context );
+			} catch ( \Throwable $e ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic for a carrier plugin's order-field declaration.
+				error_log( sprintf( '[woodev] carrier "%1$s": order_fields declaration failed: %2$s', $this->id, $e->getMessage() ) );
+
+				return [];
+			}
+
+			return is_array( $declared ) ? $declared : [];
 		}
 	}
 

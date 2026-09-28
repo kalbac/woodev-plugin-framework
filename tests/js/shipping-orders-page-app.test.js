@@ -52,6 +52,25 @@ jest.mock( '../../src/shipping-orders-page/rest', () => ( {
 } ) );
 
 /**
+ * The order wizard (#969) has its own suite (`order-wizard.test.js`); here it is a stand-in that
+ * records the props the PAGE hands it — the page's contract with it is «open», «close» and
+ * «saved», nothing more.
+ */
+let mockWizardProps = null;
+
+jest.mock( '../../src/shipping-orders-page/order-wizard/order-wizard', () => ( {
+	__esModule: true,
+	default: ( props ) => {
+		mockWizardProps = props;
+
+		return require( '@wordpress/element' ).createElement( 'div', {
+			'data-testid': 'order-wizard',
+			'data-order-id': String( props.orderId ),
+		} );
+	},
+} ) );
+
+/**
  * The headers `FakeTableCard` was last handed.
  *
  * ⚠ Test-only, and deliberately the ONE thing here asserted as a prop rather than as
@@ -474,6 +493,7 @@ beforeEach( () => {
 	// data-status panel — default it to "no carriers registered", which is the
 	// one case the panel is required to render as nothing at all (#828).
 	fetchSyncStatus.mockResolvedValue( { last_updated: null, carriers: [] } );
+	mockWizardProps = null;
 } );
 
 describe( 'carrier filter', () => {
@@ -3125,6 +3145,48 @@ describe( 'the preview modal (#875)', () => {
 		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
 	} );
 
+	test( '«Редактировать» in the modal closes the preview and opens the wizard on that order (#972)', async () => {
+		const edit = { action: 'edit', label: 'Редактировать', title: '', destructive: false };
+
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow( { actions: [ edit ] } ) ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf( { actions: [ edit ] } ) );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		const dialog = await screen.findByRole( 'dialog' );
+		fireEvent.click( await within( dialog ).findByRole( 'button', { name: 'Редактировать' } ) );
+
+		// One modal at a time — a stale preview under the wizard would show the order as it WAS.
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
+		expect( screen.getByTestId( 'order-wizard' ) ).toHaveAttribute( 'data-order-id', '42' );
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'an order the wizard just saved is fetched again, not served from the preview cache (#972)', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
+		fetchOrderPreview.mockResolvedValue( previewOf() );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+		expect( await screen.findByRole( 'dialog' ) ).toBeInTheDocument();
+		fireEvent.click( screen.getByRole( 'button', { name: 'Close' } ) );
+		await waitFor( () => expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument() );
+		expect( fetchOrderPreview ).toHaveBeenCalledTimes( 1 );
+
+		// The manager edits the order through the wizard; the cached preview describes it BEFORE that.
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+		act( () => mockWizardProps.onSaved( { id: 42, number: '42', message: 'Заказ №42 сохранён.' }, 'edit' ) );
+		act( () => mockWizardProps.onClose() );
+
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Просмотреть заказ 42' } ) ).toBeInTheDocument() );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Просмотреть заказ 42' } ) );
+
+		await waitFor( () => expect( fetchOrderPreview ).toHaveBeenCalledTimes( 2 ) );
+	} );
+
 	test( 'a failed action closes the modal too, not just a successful one', async () => {
 		fetchOrders.mockResolvedValue( resultOf( [ previewRow() ] ) );
 		fetchOrderPreview.mockResolvedValue( previewOf() );
@@ -3159,5 +3221,131 @@ describe( 'the preview modal (#875)', () => {
 			expect( screen.getAllByText( 'Заказ не найден.' ).length ).toBeGreaterThan( 0 )
 		);
 		expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'the «Создать заказ» button and the order wizard (#969, #710 O2)', () => {
+	beforeEach( () => {
+		getProviders.mockReturnValue( twoProviders() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+	} );
+
+	test( 'one button at the top of the page, shared by every carrier; the wizard is closed until it is pressed', async () => {
+		render( <App /> );
+
+		await screen.findByText( 'Иван Петров' );
+
+		expect( screen.getAllByRole( 'button', { name: 'Создать заказ' } ) ).toHaveLength( 1 );
+		expect( screen.queryByTestId( 'order-wizard' ) ).toBeNull();
+	} );
+
+	test( 'the button opens the wizard in create mode, and the wizard closing removes it', async () => {
+		render( <App /> );
+		await screen.findByText( 'Иван Петров' );
+
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+
+		expect( screen.getByTestId( 'order-wizard' ) ).toHaveAttribute( 'data-order-id', 'null' );
+
+		act( () => mockWizardProps.onClose() );
+
+		expect( screen.queryByTestId( 'order-wizard' ) ).toBeNull();
+	} );
+
+	test( 'a saved order is reported in the page notice and the table is fetched again (O9)', async () => {
+		render( <App /> );
+		await screen.findByText( 'Иван Петров' );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+
+		const before = fetchOrders.mock.calls.length;
+
+		act( () => mockWizardProps.onSaved( { id: 91, number: '91', message: 'Заказ №91 создан.' }, 'create' ) );
+
+		expect( await screen.findAllByText( 'Заказ №91 создан.' ) ).not.toHaveLength( 0 );
+		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( before + 1 ) );
+	} );
+
+	test( 'two saves in a row each refetch', async () => {
+		render( <App /> );
+		await screen.findByText( 'Иван Петров' );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Создать заказ' } ) );
+
+		const before = fetchOrders.mock.calls.length;
+
+		act( () => mockWizardProps.onSaved( { id: 91, number: '91', message: 'Заказ №91 создан.' }, 'create' ) );
+		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( before + 1 ) );
+		act( () => mockWizardProps.onSaved( { id: 92, number: '92', message: 'Заказ №92 создан.' }, 'create' ) );
+		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( before + 2 ) );
+	} );
+} );
+
+describe( 'the «Редактировать» row action (#972, #710 O2 / O4)', () => {
+	const EDIT = { action: 'edit', label: 'Редактировать', title: 'Изменить заказ', destructive: false };
+	const EXPORT = { action: 'export', label: 'Выгрузить', title: '', destructive: false };
+
+	beforeEach( () => {
+		getProviders.mockReturnValue( oneProvider() );
+	} );
+
+	test( 'the button opens the wizard in EDIT mode on that row\'s order — and never calls the carrier', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ EDIT, EXPORT ] } ) ] ) );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Редактировать' } ) );
+
+		expect( screen.getByTestId( 'order-wizard' ) ).toHaveAttribute( 'data-order-id', '42' );
+		expect( performOrderAction ).not.toHaveBeenCalled();
+	} );
+
+	test( 'it is only where the server offered it: a row without the action has no such button', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ EXPORT ] } ) ] ) );
+
+		render( <App /> );
+
+		expect( await screen.findByRole( 'button', { name: 'Выгрузить' } ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Редактировать' } ) ).toBeNull();
+	} );
+
+	test( 'it needs no «Да / Нет» and leaves the row idle', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ EDIT, EXPORT ] } ) ] ) );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Редактировать' } ) );
+
+		expect( screen.queryByText( /Вы уверены/ ) ).toBeNull();
+		expect( screen.getByRole( 'button', { name: 'Выгрузить' } ) ).not.toBeDisabled();
+	} );
+
+	test( 'a row whose ONLY action is «Редактировать» has no bulk checkbox — the bulk routes would refuse it', async () => {
+		fetchOrders.mockResolvedValue(
+			resultOf( [
+				makeRow( { id: 42, order_number: '42', actions: [ EDIT ] } ),
+				makeRow( { id: 43, order_number: '43', actions: [ EDIT, EXPORT ] } ),
+			] )
+		);
+
+		render( <App /> );
+
+		await screen.findAllByRole( 'button', { name: 'Редактировать' } );
+
+		expect( screen.queryByRole( 'checkbox', { name: 'Выбрать заказ 42' } ) ).toBeNull();
+		expect( screen.getByRole( 'checkbox', { name: 'Выбрать заказ 43' } ) ).toBeInTheDocument();
+	} );
+
+	test( 'a saved edit refetches the table, so the changed order shows its new data', async () => {
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow( { actions: [ EDIT ] } ) ] ) );
+
+		render( <App /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'Редактировать' } ) );
+
+		const before = fetchOrders.mock.calls.length;
+
+		act( () => mockWizardProps.onSaved( { id: 42, number: '42', message: 'Заказ №42 сохранён.' }, 'edit' ) );
+
+		expect( await screen.findAllByText( 'Заказ №42 сохранён.' ) ).not.toHaveLength( 0 );
+		await waitFor( () => expect( fetchOrders.mock.calls.length ).toBe( before + 1 ) );
 	} );
 } );

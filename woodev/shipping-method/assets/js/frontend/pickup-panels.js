@@ -266,6 +266,13 @@
  * titles the MENU once it opens (Task 16's original, unchanged key/string). Neither is a fallback
  * for the other; a missing key still renders blank per rule I1.
  *
+ * MANAGER MODE (#710 D3, operator decision 28.09.2026): `config.mode === 'manager'` is the ONE
+ * switch for the admin order wizard's copy of these panels — permanent sidebar, «← К списку»
+ * instead of ✕, «Выбрать»/«Выбрано» instead of the checkout prompt. The full list of what it
+ * changes, and why nothing else, is on the constructor's `_managerMode` field; the storefront
+ * never sets the flag and every branch on it is additive to the checkout's behaviour, never a
+ * change to it.
+ *
  * UMD-ish dual export (matches every sibling SP-5 frontend file):
  *   - Browser global: window.WoodevPickupPanels = Panels
  *   - CommonJS:       module.exports = Panels  (for jest)
@@ -1263,6 +1270,33 @@
 		var headerRow = document.createElement( 'div' );
 		headerRow.className = 'woodev-pickup-card__header-row';
 
+		// Manager mode (#710): the way back is a LABELLED control, first in the row — «← К списку»
+		// — rather than the ✕ below, which is not built at all here. The ✕ says «dismiss», and in a
+		// permanent sidebar there is nothing to dismiss to, only the list this card sits over; a
+		// manager wants the destination named. The glyph is decorative; `backToList` is both the
+		// visible text and the accessible name. Same `closeCard()` as the ✕: the list stays open.
+		if ( self._managerMode ) {
+			var back = document.createElement( 'button' );
+			back.type = 'button';
+			back.className = 'woodev-pickup-card__back';
+
+			var backGlyph = document.createElement( 'span' );
+			backGlyph.className = 'woodev-pickup-card__back-glyph';
+			backGlyph.setAttribute( 'aria-hidden', 'true' );
+			backGlyph.textContent = '←'; // U+2190 LEFTWARDS ARROW.
+			back.appendChild( backGlyph );
+
+			var backLabel = document.createElement( 'span' );
+			backLabel.className = 'woodev-pickup-card__back-label';
+			backLabel.textContent = text( self._config, 'backToList' );
+			back.appendChild( backLabel );
+
+			back.addEventListener( 'click', function() {
+				self.closeCard();
+			} );
+			headerRow.appendChild( back );
+		}
+
 		// The chip (spec V-12, issue #195: ALWAYS renders now). It shares {@see pointGlyphMarkup}
 		// with the sidebar row builder rather than a second lookup, so both surfaces agree on
 		// exactly which glyph a point's type gets.
@@ -1277,15 +1311,17 @@
 
 		headerRow.appendChild( chip );
 
-		var close = document.createElement( 'button' );
-		close.type = 'button';
-		close.className = 'woodev-pickup-card__close';
-		close.setAttribute( 'aria-label', text( self._config, 'close' ) );
-		close.textContent = '✕'; // decorative; aria-label carries the meaning (matches woodev-modal.js's close button).
-		close.addEventListener( 'click', function() {
-			self.closeCard();
-		} );
-		headerRow.appendChild( close );
+		if ( ! self._managerMode ) {
+			var close = document.createElement( 'button' );
+			close.type = 'button';
+			close.className = 'woodev-pickup-card__close';
+			close.setAttribute( 'aria-label', text( self._config, 'close' ) );
+			close.textContent = '✕'; // decorative; aria-label carries the meaning (matches woodev-modal.js's close button).
+			close.addEventListener( 'click', function() {
+				self.closeCard();
+			} );
+			headerRow.appendChild( close );
+		}
 
 		header.appendChild( headerRow );
 
@@ -1436,15 +1472,26 @@
 		var isSelected = null !== self._selectedId && String( point.id ) === self._selectedId;
 		var locked = self._selectionBusy || self._verdictPending;
 
+		// Manager mode (#710): the chosen point's CTA is a MARK, not a prompt — `selected`, disabled,
+		// `is-selected` for the stylesheet's tick. The storefront's `continueCheckout` state is a
+		// checkout prompt and never renders here; `select` is the same key both modes share, worded
+		// for a manager by the wizard («Выбрать»). Busy/pending labels are untouched: a verdict
+		// check runs in both modes and its wording is about the point, not the person — and while
+		// one runs, the button is busy, not marked (`is-busy` and `is-selected` both draw a
+		// `::before`; the tick waits for the check to settle).
+		var chosenHere = self._managerMode && isSelected;
+
 		var cta = document.createElement( 'button' );
 		cta.type = 'button';
-		cta.className = 'woodev-pickup-card__cta' + ( locked ? ' is-busy' : '' );
+		cta.className = 'woodev-pickup-card__cta' + ( locked ? ' is-busy' : '' ) + ( chosenHere && ! locked ? ' is-selected' : '' );
 		cta.textContent = self._selectionBusy
 			? text( self._config, 'confirming' )
 			: ( self._verdictPending
 				? text( self._config, 'checkingAvailability' )
-				: ( isSelected ? text( self._config, 'continueCheckout' ) : text( self._config, 'select' ) ) );
-		cta.disabled = ! selectable.allowed || locked;
+				: ( isSelected
+					? text( self._config, self._managerMode ? 'selected' : 'continueCheckout' )
+					: text( self._config, 'select' ) ) );
+		cta.disabled = ! selectable.allowed || locked || chosenHere;
 		cta.addEventListener( 'click', function() {
 			/*
 			 * Two guards, not one, exactly as the pre-existing `selectable.allowed` guard is
@@ -1455,6 +1502,12 @@
 			 * `self._selectionBusy` fresh rather than a captured local.
 			 */
 			if ( ! selectable.allowed || self._selectionBusy || self._verdictPending ) {
+				return;
+			}
+
+			// Manager mode: the point is already the wizard's; re-emitting would only re-run the
+			// caller's `onSelect` for a choice that did not change. Read fresh, like the guards above.
+			if ( self._managerMode && null !== self._selectedId && String( point.id ) === self._selectedId ) {
 				return;
 			}
 
@@ -2014,6 +2067,31 @@
 	function Panels( container, config ) {
 		this._container = container;
 		this._config = config || {};
+
+		/**
+		 * @type {boolean} MANAGER MODE (#710 D3, operator decision 28.09.2026) — the same panels
+		 * inside the admin order wizard, where the person choosing is a manager, not the buyer.
+		 * `config.mode === 'manager'` and nothing else; absent, the panels are the storefront's,
+		 * byte for byte. What the flag changes, and only this:
+		 *
+		 * - the sidebar is PERMANENT: `is-open` from `render()` on, {@see setStageOpen} never
+		 *   lets it close, {@see Panels.prototype.toggleList} is a no-op and the toggle button
+		 *   (with it the mobile «Показать карту» bar) is never built — a manager never needs the
+		 *   map alone, and a drawer that can vanish is one more thing to find on a screen the
+		 *   manager sees a hundred times a day;
+		 * - the card's way back is a labelled «← К списку» control in place of the storefront's
+		 *   ✕ ({@see buildCardHeader}) — the ✕ reads as «dismiss», and there is nothing to dismiss
+		 *   to here, only the list underneath;
+		 * - the CTA says `select` for any point and `selected` (disabled, marked) for the chosen
+		 *   one ({@see buildCardFooter}) — the storefront's `continueCheckout` state is a checkout
+		 *   prompt, and there is no checkout to continue in an admin wizard.
+		 *
+		 * Everything else — clustering, viewport loading, search, the type filter, the lazy
+		 * verdict check, the message card — is a manager's tool as much as a buyer's and is left
+		 * alone. The i18n keys the mode reads (`select`, `selected`, `backToList`) come from the
+		 * wizard, which words them for a manager; rule I1 still holds — a missing key renders blank.
+		 */
+		this._managerMode = 'manager' === this._config.mode;
 		this._groups = [];
 		this._anchor = null;
 		this._anchorLabel = null;
@@ -2160,6 +2238,14 @@
 		var stage = document.createElement( 'div' );
 		stage.className = 'woodev-pickup-stage';
 
+		// Manager mode (#710): the sidebar is showing from the first paint and `is-manager` is the
+		// stylesheet's hook for everything that differs (no toggle, the back control, the marked
+		// CTA). `is-open` is set HERE, before any listener exists, so no `listToggle` fires for it —
+		// the caller reads {@see Panels.prototype.getSidebarWidth} once its map is up instead.
+		if ( this._managerMode ) {
+			stage.classList.add( 'is-manager', 'is-open' );
+		}
+
 		// The accent host is the STAGE, not the panels element — the map (and so ymaps' own
 		// controls pane, which carries the search/filter bar), the sidebar toggle, the zoom
 		// control, the overlay and the message strip are all siblings of `panels`, and a
@@ -2259,7 +2345,12 @@
 		//    it could only survive `visibility: hidden` (a descendant can restore its own
 		//    visibility; nothing survives `display: none`), which forced the panels to be hidden
 		//    the weaker way and left their full-height boxes swallowing clicks meant for the map.
-		stage.appendChild( toggle );
+		//
+		// Never built in manager mode (#710): a permanent sidebar has nothing to toggle, and the
+		// button's mobile «Показать карту» bar is the checkout's affordance, not a manager's.
+		if ( ! this._managerMode ) {
+			stage.appendChild( toggle );
+		}
 
 		// Task 14 (spec V-13): our own zoom control — two square 36×36 buttons, «+» over «−», at
 		// `left: 12px; bottom: 70px`. A stage sibling for the SAME two reasons the toggle above
@@ -2402,7 +2493,7 @@
 		this._progressEl = progress;
 		this._listLoadingEl = listLoading;
 		this._loadingStatusEl = status;
-		this._toggleEl = toggle;
+		this._toggleEl = this._managerMode ? null : toggle;
 		this._zoomInEl = zoomIn;
 		this._zoomOutEl = zoomOut;
 
@@ -3170,6 +3261,14 @@
 	 * whether `buildSearchLayout()` ever ran, which this method has no control over and must not
 	 * assume either way.
 	 *
+	 * MANAGER MODE (#710 rig round 2, finding 4b, coordinator's decision): the toggle/menu never
+	 * builds there — the tariff the order is placed under already fixes the point type, so a
+	 * second control for the same thing is redundant chrome the admin wizard does not need. The
+	 * bookkeeping above (`_filterLabels`/`_filterOrder`/`_filterSelected`) still runs unconditionally
+	 * so {@see pointPassesFilter} keeps working off it — every code it records defaults to
+	 * selected, and manager mode has no UI to ever flip one off, so nothing is actually filtered
+	 * out; only the ADDRESS SEARCH stays, per the same finding.
+	 *
 	 * @param {Array} types `{ code, label }` pairs.
 	 * @returns {void}
 	 */
@@ -3188,6 +3287,10 @@
 
 			self._filterLabels[ type.code ] = type.label;
 		} );
+
+		if ( self._managerMode ) {
+			return;
+		}
 
 		if ( ! self._filterShown && self._filterOrder.length >= 2 ) {
 			self._filterShown = true;
@@ -3243,6 +3346,13 @@
 	function setStageOpen( self, open ) {
 		var wasOpen = self._stage.classList.contains( 'is-open' );
 
+		// Manager mode (#710): the sidebar is permanent. Forced here, at the ONE place the open
+		// state changes, so every route that would close it — `toggleList()`, a future caller —
+		// lands on «still open» and, `wasOpen` being true since `render()`, emits nothing.
+		if ( self._managerMode ) {
+			open = true;
+		}
+
 		self._stage.classList.toggle( 'is-open', open );
 
 		// The toggle's accessible name follows the state, because pressing it does the opposite
@@ -3288,6 +3398,12 @@
 	 * @returns {void}
 	 */
 	Panels.prototype.toggleList = function() {
+		// Manager mode (#710): nothing to flip — the sidebar is permanent, and a collapse attempt
+		// must not dismiss an open card as a side effect (the `is-card` removal below).
+		if ( this._managerMode ) {
+			return;
+		}
+
 		var wasOpen = this._stage.classList.contains( 'is-open' );
 		var nextOpen = ! wasOpen;
 
@@ -3296,6 +3412,25 @@
 		}
 
 		setStageOpen( this, nextOpen );
+	};
+
+	/**
+	 * The strip the sidebar occupies measured from the STAGE's right edge — the same number
+	 * {@see setStageOpen} reports in `listToggle`, for a caller that never gets that event:
+	 * manager mode (#710) opens the sidebar in `render()`, before any listener exists, so the
+	 * map's margin for it is reserved by asking here once the map is up, never by an emit. `0`
+	 * before `render()` and in the closed state (nothing to reserve); a permanent sidebar is
+	 * never closed, so a manager-mode caller always gets the real strip.
+	 *
+	 * @since 2.0.2
+	 * @returns {number} pixels, `offsetWidth + PANEL_GUTTER_PX`, or `0`.
+	 */
+	Panels.prototype.getSidebarWidth = function() {
+		if ( ! this._listEl || ! this._stage || ! this._stage.classList.contains( 'is-open' ) ) {
+			return 0;
+		}
+
+		return this._listEl.offsetWidth + PANEL_GUTTER_PX;
 	};
 
 	/**

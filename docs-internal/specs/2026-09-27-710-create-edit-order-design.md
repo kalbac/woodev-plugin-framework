@@ -219,6 +219,19 @@ Create only. After the order is saved, call the same export path the row action 
 with the carrier's message) — so a failed export reports «Заказ №N создан, но не выгружен: <текст
 перевозчика>» and the order stays (never rolled back). Build D6 after #872.
 
+**As built (#974, I8).** Step ⑤ draws the box in create mode only (never on an edit, O4), offered only in the
+statuses the row action offers export in (`exportableStatuses` in the page bootstrap = `Order_Actions::EXPORTABLE_STATUSES`;
+under any other the box is disabled and cleared). A ticked box sends the top-level `export_now` beside the order —
+NOT part of the payload the validator reads. `POST /shipping/orders` saves the order first, then
+`Order_Editor::export_created()` runs the export through `Order_Actions` — the same gate (`is_offered()`) and the
+same performer (`Order_Actions::perform()`, moved out of `Orders_Controller::dispatch_action()` unchanged) as the row
+action — and the `201` body gains `export: { success, message }`. The `message` is the whole sentence the page shows:
+«Заказ №N создан. …» or «Заказ №N создан, но не выгружен. СДЭК: <carrier text>»; a failure is data beside the
+order, never an error response, and the order is neither rolled back nor moved. The carrier text is composed by
+`Action_Result::merchant_message()` and is for the merchant only — it goes into the response and nowhere else. A
+carrier call that throws is logged and answered with a generic sentence; a status the export is not offered in is
+refused with `Order_Actions::unavailable_reason()`. The page reports a refused export as an error notice.
+
 ## D7. Carrier fields (O13)
 
 A carrier declares its export fields in PHP through the framework's existing typed-field vocabulary
@@ -228,6 +241,24 @@ renders them under the chosen tariff with the same React field renderers the set
 (Rule 9: PHP-driven, no plugin JS); values are validated server-side by the carrier's declaration
 and stored as order meta through the writer (D4). Fixture carriers get one or two example fields so
 the path is exercised end to end.
+
+**As built (#973, I7).** The declaration is an optional `order_fields` argument of
+`Orders_Provider::create()` — `fn( array $context ): array` returning `field id => definition`, asked once
+per tariff (`context`: `provider_id`, `method_id`, `instance_id`, `rate_id`, `is_pickup`, and the
+zone-instance `method` for defaults from its settings). A definition is the Settings API's own vocabulary
+(`register_setting()` + `register_control()` arguments: `type`, `control`, `name`, `description`,
+`options`, `default`, `required`, `validate`, `show_if`, `min` / `max` / `step`, `tooltip`, `placeholder`)
+plus one framework key, `meta_key` — the order-meta key the value is stored under, which is the carrier's
+contract with its own export. `Carrier_Field_Set` turns it into a real `Woodev_Abstract_Settings` handler that
+stores nothing, so the definitions (`Field_Schema`), the check (`Woodev_Setting::update_value()`, `show_if`)
+and the persistence (`Woodev_Order_Compatibility`, one meta per field, a boolean as `yes` / `no`) are the
+settings page's own code. The rates response carries `order_fields` (a LIST, in declaration order) on every
+rate of the method; step ④ draws them with `ControlField` under the chosen tariff; an untouched field is its
+declared default on both sides (the state holds only what the manager set); the payload validator reads ONLY
+declared ids and reports problems on `carrier_fields.{id}`; `Order_Editor::persist()` stores them after the
+marker and cleans up the fields of a tariff an edit replaced; the load route reads them back. Not done, on
+purpose: carrier fields on the CLASSIC / Store API checkout (D7 is the wizard's) and any new hook — the
+existing `…_admin_order_saved` already carries `carrier_fields`.
 
 ## Increments (each a card, each ends green; UI ones end with «готово, смотри риг»)
 

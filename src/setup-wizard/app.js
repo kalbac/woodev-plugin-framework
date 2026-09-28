@@ -23,7 +23,7 @@
 import { createElement, Fragment, useState, useEffect } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
-import Stepper from './stepper';
+import Stepper from '../components/stepper';
 import StepView from './step-view';
 import { CheckFilledIcon, GearIcon, StarIcon } from '../components/icons';
 import { saveStep, complete } from './rest';

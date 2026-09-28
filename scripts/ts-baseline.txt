@@ -8,7 +8,6 @@ src/components/control-field.js
 src/components/field-row.js
 src/components/field-tip.js
 src/components/icons.js
-src/components/location-picker-field.js
 src/components/richtext.js
 src/components/select-field.js
 src/components/tabs-nav.js
@@ -32,7 +31,6 @@ src/settings-page/tools-block.js
 src/setup-wizard/app.js
 src/setup-wizard/index.js
 src/setup-wizard/rest.js
-src/setup-wizard/stepper.js
 src/setup-wizard/step-view.js
 src/ui-kit-gallery/app.js
 src/ui-kit-gallery/index.js

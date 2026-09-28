@@ -61,7 +61,8 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 	private function init_realistic_orders_page(): void {
 
 		if ( ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Provider' )
-			|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' ) ) {
+			|| ! class_exists( '\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry' )
+			|| ! class_exists( '\Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler' ) ) {
 			return;
 		}
 
@@ -104,6 +105,18 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 				'marker_writer'             => static function ( \WC_Order $order, array $context ): void {
 					$order->update_meta_data( '_woodev_realistic_shipping_marker', '1' );
 				},
+				// #973 (spec D7): the carrier's own order field — declared value, the same for every tariff.
+				'order_fields'              => static function ( array $context ): array {
+					return [
+						'declared_value' => [
+							'meta_key' => '_woodev_realistic_declared_value',
+							'control'  => 'number',
+							'type'     => 'float',
+							'name'     => 'Объявленная ценность',
+							'min'      => 0,
+						],
+					];
+				},
 			]
 		);
 
@@ -111,6 +124,26 @@ final class Woodev_Realistic_Shipping_Plugin extends \Woodev\Framework\Shipping\
 		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_tracking_handler(
 			'realistic',
 			new Woodev_Realistic_Tracking_Handler()
+		);
+
+		// #710 bug 6: without a registered shipment handler `Order_Actions::for_row()` offers
+		// no actions at all for this carrier — not only «Выгрузить»/«Отменить», which this
+		// fixture never wired, but also the client-side «Редактировать» the order wizard
+		// depends on, even though editing needs no handler at all (spec D5). See
+		// `class-realistic-shipment-handler.php`'s own header for the measured symptom.
+		\Woodev\Framework\Shipping\Admin\Orders\Orders_Registry::instance()->register_shipment_handler(
+			'realistic',
+			new Woodev_Realistic_Shipment_Handler(
+				new Woodev_Realistic_Shipping_Api(),
+				new \Woodev\Framework\Shipping\Order\Shipping_Order_Handler(
+					[
+						'carrier_order_id' => '_woodev_realistic_carrier_order_id',
+						'status'            => '_woodev_realistic_status',
+					]
+				),
+				new Woodev_Realistic_Shipment_Retry_Job_Handler(),
+				'realistic'
+			)
 		);
 	}
 

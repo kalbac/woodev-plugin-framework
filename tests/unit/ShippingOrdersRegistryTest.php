@@ -860,6 +860,213 @@ class ShippingOrdersRegistryTest extends TestCase {
 		}
 	}
 
+	/**
+	 * #969 — the order wizard's reference data rides in the same bootstrap, so its address step
+	 * has countries and WooCommerce STATE CODES before its first request (the only REST source,
+	 * `wc/v3/data/countries`, demands `manage_woocommerce`, which the wizard's own capability,
+	 * `edit_shop_orders`, does not imply).
+	 */
+	public function test_enqueue_assets_inlines_the_order_wizard_reference_data(): void {
+		$plugin = \Mockery::mock( '\Woodev_Plugin' );
+		$plugin->shouldReceive( 'get_framework_path' )->andReturn( '/nonexistent/framework' );
+		$plugin->shouldReceive( 'get_framework_assets_url' )->andReturn( 'https://example.test/vendor/woodev/framework/assets' );
+		$plugin->shouldReceive( 'get_version' )->andReturn( '1.2.3' );
+
+		$countries = \Mockery::mock();
+		$countries->shouldReceive( 'get_countries' )->andReturn( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ] );
+		$countries->shouldReceive( 'get_base_country' )->andReturn( 'RU' );
+		$countries->shouldReceive( 'get_states' )->andReturn(
+			[
+				'RU' => [ 'МОСКВА' => 'Москва', 'МОСКОВСКАЯ ОБЛАСТЬ' => 'Московская область' ],
+				'KZ' => [],
+			]
+		);
+
+		$gateways = new class() {
+			public function payment_gateways(): array {
+				return [
+					'cod'      => new class() {
+						public $enabled = 'yes';
+
+						public function get_title(): string {
+							return 'Наложенный <b>платёж</b>';
+						}
+					},
+					'bacs'     => new class() {
+						public $enabled = 'no';
+
+						public function get_title(): string {
+							return 'Банковский перевод';
+						}
+					},
+					'yookassa' => new class() {
+						public $enabled = 'yes';
+
+						public function get_title(): string {
+							return '';
+						}
+
+						public function get_method_title(): string {
+							return 'ЮKassa';
+						}
+					},
+				];
+			}
+		};
+
+		// `WC()` and `wc_tax_enabled()` are reached through the registry's own seams, never stubbed:
+		// a Brain Monkey `when( 'WC' )` defines the function process-wide and flips every
+		// `function_exists( 'WC' )` guard in the suite for whatever runs next (gotcha
+		// `brain-monkey-function-pollution`; PHP 7.4's unstable `depends` sort made it bite in
+		// the plain order, not only under `--order-by=reverse`).
+		$wc = new class( $countries, $gateways ) {
+			public $countries;
+			private $gateways;
+
+			public function __construct( $countries, $gateways ) {
+				$this->countries = $countries;
+				$this->gateways  = $gateways;
+			}
+
+			public function payment_gateways() {
+				return $this->gateways;
+			}
+		};
+
+		$registry = new class( $wc ) extends Orders_Registry {
+			/** @var object */
+			private $wc;
+
+			public function __construct( $wc ) {
+				$this->wc = $wc;
+			}
+
+			protected function is_wc_admin_screen(): bool {
+				return true;
+			}
+
+			protected function woocommerce() {
+				return $this->wc;
+			}
+
+			protected function taxes_enabled(): bool {
+				return true;
+			}
+		};
+		$registry->register_provider( $this->provider( 'cdek', 'СДЭК' ), $plugin );
+
+		Functions\when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+		Functions\when( 'get_woocommerce_currency' )->justReturn( 'RUB' );
+		Functions\when( 'get_woocommerce_currency_symbol' )->justReturn( '&#8381;' );
+		Functions\when( 'esc_url_raw' )->returnArg( 1 );
+		Functions\when( 'rest_url' )->returnArg( 1 );
+		Functions\when( 'wp_create_nonce' )->justReturn( 'nonce-value' );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+		Functions\when( 'wc_get_order_types' )->justReturn( [ 'shop_order' ] );
+		Functions\when( 'wc_get_order_statuses' )->justReturn( [ 'wc-pending' => 'Ожидает оплаты', 'wc-processing' => 'В обработке' ] );
+		Functions\when( 'wc_get_orders' )->justReturn( (object) [ 'orders' => [], 'total' => 0, 'max_num_pages' => 1 ] );
+		Functions\when( 'wp_enqueue_style' )->justReturn( null );
+		Functions\when( 'wp_enqueue_script' )->justReturn( null );
+
+		$captured = null;
+		Functions\when( 'wp_add_inline_script' )->alias(
+			static function ( $handle, $script ) use ( &$captured ): bool {
+				$captured = $script;
+
+				return true;
+			}
+		);
+
+		$registry->enqueue_assets();
+
+		$this->assertNotNull( $captured );
+		$data = json_decode( rtrim( substr( $captured, strlen( 'window.woodevShippingOrders = ' ) ), ';' ), true );
+
+		$this->assertSame( [ 'RU' => 'Россия', 'KZ' => 'Казахстан' ], $data['wizard']['countries'] );
+		$this->assertSame( 'RU', $data['wizard']['defaultCountry'] );
+		// Regions are keyed by the WooCommerce STATE CODE the payload validator checks; a country
+		// without regions is absent, so the client falls back to a free-text field for it.
+		$this->assertSame( [ 'RU' ], array_keys( $data['wizard']['states'] ) );
+		$this->assertSame( [ 'МОСКВА', 'МОСКОВСКАЯ ОБЛАСТЬ' ], array_keys( $data['wizard']['states']['RU'] ) );
+		// The symbol arrives decoded — it is written into React text, never into HTML.
+		$this->assertSame( [ 'code' => 'RUB', 'symbol' => '₽' ], $data['wizard']['currency'] );
+		// Step ⑤ (#971): only ENABLED gateways, keyed by id, titled by what the shop calls them
+		// (the method title when the customer-facing one is empty); statuses lose the `wc-` prefix
+		// the payload does not use; the terminal ones an edit may not target ride along.
+		$this->assertSame( [ 'cod' => 'Наложенный платёж', 'yookassa' => 'ЮKassa' ], $data['wizard']['paymentMethods'] );
+		$this->assertSame( [ 'pending' => 'Ожидает оплаты', 'processing' => 'В обработке' ], $data['wizard']['orderStatuses'] );
+		$this->assertSame( [ 'completed', 'cancelled', 'refunded', 'failed' ], $data['wizard']['finalStatuses'] );
+		// #974 (D6): the statuses «сразу выгрузить перевозчику» is offered in — the row action's own gate.
+		$this->assertSame( [ 'pending', 'on-hold', 'processing' ], $data['wizard']['exportableStatuses'] );
+		$this->assertTrue( $data['wizard']['taxesEnabled'] );
+		// No carrier here has a pickup handler, so the map is empty — and stays a JSON OBJECT
+		// (`{}`, keyed by carrier id), never `[]`, which a client keyed by string would misread.
+		$this->assertStringContainsString( '"pickup":{}', $captured );
+	}
+
+	/**
+	 * #970 — the delivery step draws the pickup list and map inside itself, so each carrier that
+	 * has a pickup handler contributes the picker's script handles and its JS config, keyed by
+	 * PROVIDER id (the id the rates response groups under). A carrier with no plugin, or a plugin
+	 * with no pickup handler, contributes nothing.
+	 */
+	public function test_collect_wizard_pickup_gathers_handles_and_configs_per_carrier_with_a_pickup_handler(): void {
+		$handler = \Mockery::mock( '\Woodev\Framework\Shipping\Pickup\Pickup_Handler' );
+		$handler->shouldReceive( 'register_admin_wizard_assets' )->once()->andReturn( [ 'woodev-pickup-geo', 'woodev-pickup-map-provider-yandex' ] );
+		$handler->shouldReceive( 'get_admin_wizard_js_config' )->once()->andReturn( [ 'restRoot' => 'https://example.test/points' ] );
+
+		$with_handler = \Mockery::mock( '\Woodev\Framework\Shipping\Shipping_Plugin' );
+		$with_handler->shouldReceive( 'get_pickup_handler' )->andReturn( $handler );
+
+		$without_handler = \Mockery::mock( '\Woodev\Framework\Shipping\Shipping_Plugin' );
+		$without_handler->shouldReceive( 'get_pickup_handler' )->andReturn( null );
+
+		$providers = [
+			'cdek'   => $this->provider( 'cdek', 'СДЭК' ),
+			'yandex' => $this->provider( 'yandex', 'Яндекс' ),
+			'post'   => $this->provider( 'post', 'Почта' ), // no plugin at all
+		];
+
+		$registry = new class( $providers, [ 'cdek' => $with_handler, 'yandex' => $without_handler ] ) extends Orders_Registry {
+			/** @var array<string, mixed> */
+			private array $fixed_providers;
+
+			/** @var array<string, mixed> */
+			private array $fixed_plugins;
+
+			/**
+			 * @param array<string, mixed> $providers providers by id.
+			 * @param array<string, mixed> $plugins   plugin doubles by provider id.
+			 */
+			public function __construct( array $providers, array $plugins ) {
+				$this->fixed_providers = $providers;
+				$this->fixed_plugins   = $plugins;
+			}
+
+			public function get_providers(): array {
+				return $this->fixed_providers;
+			}
+
+			public function get_provider_plugin( string $id ): ?\Woodev\Framework\Shipping\Shipping_Plugin {
+				return $this->fixed_plugins[ $id ] ?? null;
+			}
+		};
+
+		$method = new \ReflectionMethod( Orders_Registry::class, 'collect_wizard_pickup' );
+
+		if ( PHP_VERSION_ID < 80100 ) {
+			$method->setAccessible( true );
+		}
+
+		$this->assertSame(
+			[
+				'handles' => [ 'woodev-pickup-geo', 'woodev-pickup-map-provider-yandex' ],
+				'configs' => [ 'cdek' => [ 'restRoot' => 'https://example.test/points' ] ],
+			],
+			$method->invoke( $registry )
+		);
+	}
+
 	// -----------------------------------------------------------------------
 	// #834 — the «Заказы доставки» submenu item carries a badge with the number
 	// of NEW orders, and hovering it breaks that number down per carrier.

@@ -23,6 +23,7 @@ namespace Woodev\Tests\Integration\Shipping;
 
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Provider;
 use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
+use Woodev\Framework\Shipping\Order\Abstract_Shipment_Handler;
 use Woodev\Framework\Shipping\Order\Delivery_Status;
 use Woodev\Tests\Integration\TestCase;
 use WP_REST_Request;
@@ -1113,6 +1114,66 @@ class OrdersRestTest extends TestCase {
 	}
 
 	// SP-10 #841 — is_exported ("new orders" — never exported to the carrier).
+
+	/**
+	 * «Редактировать» (#972): the row carries it, first, exactly while `Order_Actions::is_editable()`
+	 * holds — an exported order and a final-status order lose it — and the ACTION route, which only
+	 * ever executes what `for_order()` offers, refuses it like any unknown id.
+	 */
+	public function test_the_row_offers_edit_while_the_order_is_editable_and_the_action_route_never_executes_it(): void {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+
+		$marker         = '_woodev_test_edit_row_marker';
+		$carrier_id_key = '_woodev_test_edit_row_carrier_order_id';
+
+		$handler = $this->createMock( Abstract_Shipment_Handler::class );
+		$handler->method( 'supports_update' )->willReturn( false );
+
+		$registry = Orders_Registry::instance();
+		$registry->reset_for_tests();
+		$registry->register_provider(
+			Orders_Provider::create( 'edit_row', 'Edit Row', $marker, [ 'edit_row' ], [ 'carrier_order_id_meta_key' => $carrier_id_key ] )
+		);
+		$registry->register_shipment_handler( 'edit_row', $handler );
+
+		$GLOBALS['wp_rest_server'] = null;
+		rest_get_server();
+
+		$fresh = wc_create_order();
+		$fresh->set_status( 'processing' );
+		$fresh->update_meta_data( $marker, '1' );
+		$fresh->save();
+
+		$exported = wc_create_order();
+		$exported->set_status( 'processing' );
+		$exported->update_meta_data( $marker, '1' );
+		$exported->update_meta_data( $carrier_id_key, 'CARRIER-1' );
+		$exported->save();
+
+		$completed = wc_create_order();
+		$completed->set_status( 'completed' );
+		$completed->update_meta_data( $marker, '1' );
+		$completed->save();
+
+		$response = rest_get_server()->dispatch( new WP_REST_Request( 'GET', '/woodev/v1/shipping/orders' ) );
+		$this->assertSame( 200, $response->get_status() );
+
+		$actions_by_id = [];
+
+		foreach ( $response->get_data()['rows'] as $row ) {
+			$actions_by_id[ $row['id'] ] = array_column( $row['actions'], 'action' );
+		}
+
+		$this->assertSame( [ 'edit', 'export' ], $actions_by_id[ $fresh->get_id() ], 'editable: the edit action leads' );
+		$this->assertNotContains( 'edit', $actions_by_id[ $exported->get_id() ], 'exported: cancel the export first (O4)' );
+		$this->assertNotContains( 'edit', $actions_by_id[ $completed->get_id() ], 'a final status is closed (D5)' );
+
+		$post = rest_get_server()->dispatch(
+			new WP_REST_Request( 'POST', '/woodev/v1/shipping/orders/' . $fresh->get_id() . '/actions/edit' )
+		);
+
+		$this->assertSame( 400, $post->get_status(), 'edit opens the wizard on the client; the action route executes only carrier calls' );
+	}
 
 	/**
 	 * `is_exported=true` on the aggregate, across two carriers each with their own

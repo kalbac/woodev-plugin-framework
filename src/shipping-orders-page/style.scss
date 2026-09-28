@@ -8,6 +8,8 @@
 
 @use '../components/tokens' as wd;
 @use '../components/wp-recolor';
+@use '../components/field';
+@use '../components/stepper';
 
 .woodev-orders {
 	// The carrier `FilterPicker` sits ABOVE the card, the way «Аналитика → Заказы»
@@ -1039,4 +1041,425 @@
 .woodev-orders__scope-count {
 	color: wd.$muted;
 	font-weight: 400;
+}
+
+/**
+ * The «Создать заказ» button row (#969, moved left in #710 rig round 2, finding 1) —
+ * left-aligned, the FIRST thing this page renders, right under WooCommerce's own
+ * `<h1>Заказы доставки</h1>` in `woocommerce-layout__header` — the way a classic
+ * WordPress list page puts its «Add» action beside the page title, not stranded at the
+ * end of an unrelated row.
+ */
+.woodev-orders__create-row {
+	display: flex;
+	justify-content: flex-start;
+	margin-bottom: wd.$gap-sm;
+}
+
+/**
+ * The order wizard's modal (#969, #710 D1). Steps are plain stacked blocks; a field never
+ * leaves the modal's own width, so nothing here scrolls sideways at phone width.
+ */
+.woodev-order-wizard {
+	width: min(880px, 100%);
+
+	&__loading {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-lg 0;
+	}
+
+	&__body {
+		min-height: 260px;
+	}
+
+	&__step-title {
+		margin: 0 0 wd.$gap;
+		font-size: 15px;
+	}
+
+	&__grid {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin-top: wd.$gap;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	&__field {
+		min-width: 0;
+
+		&.has-error input,
+		&.has-error select {
+			border-color: wd.$error;
+		}
+	}
+
+	&__errors {
+		margin-top: wd.$gap-xs;
+	}
+
+	// A checkbox that follows a field grid or a hint paragraph — neither leaves a bottom margin
+	// of its own (operator rig acceptance, #710: the box sat flush against the control above it).
+	&__checkbox {
+		margin-top: wd.$gap-lg;
+	}
+
+	&__error {
+		margin: 0;
+		color: wd.$error-text;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	&__picked {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		background: wd.$accent-soft;
+		border-radius: wd.$radius-sm;
+	}
+
+	// A typed field with the provider's search button beside it — each half the row
+	// (operator rig acceptance round 2, #710: "«Город…» (half) + «Найти…» (half)").
+	&__with-picker {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		align-items: end;
+		margin-top: wd.$gap;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	&__search {
+		position: relative;
+	}
+
+	&__search-hint {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__results {
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		margin-top: wd.$gap-xs;
+		max-height: 240px;
+		overflow-y: auto;
+		background: wd.$surface;
+	}
+
+	&__results-parent {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap;
+		padding: wd.$gap-sm wd.$gap;
+		border-bottom: 1px solid wd.$divider;
+	}
+
+	&__results-status {
+		display: flex;
+		align-items: center;
+		gap: wd.$gap-sm;
+		padding: wd.$gap-sm wd.$gap;
+		color: wd.$muted;
+
+		&.is-error {
+			color: wd.$error-text;
+		}
+	}
+
+	&__result {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: wd.$gap-sm wd.$gap;
+		border: 0;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover,
+		&:focus {
+			background: wd.$accent-soft;
+		}
+	}
+
+	&__result-hint {
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__lines {
+		list-style: none;
+		margin: wd.$gap 0 0;
+		padding: 0;
+	}
+
+	&__line {
+		display: grid;
+		gap: wd.$gap;
+		grid-template-columns: minmax(0, 3fr) 90px 130px 110px auto;
+		align-items: start;
+		padding: wd.$gap-sm 0;
+		border-bottom: 1px solid wd.$divider;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		}
+	}
+
+	&__line-name {
+		grid-column: 1 / -1;
+		font-weight: 600;
+
+		@media (min-width: 601px) {
+			grid-column: auto;
+			padding-top: wd.$gap-lg;
+		}
+	}
+
+	&__line-total {
+		padding-top: wd.$gap-lg;
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	&__line-remove {
+		margin-top: wd.$gap-lg;
+	}
+
+	&__subtotal {
+		margin: wd.$gap 0 0;
+		text-align: right;
+	}
+
+	&__muted,
+	&__hint {
+		margin: wd.$gap-xs 0 0;
+		color: wd.$muted;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	// Step ④ (#970): tariffs grouped by carrier, one radio row per tariff.
+	&__rates {
+		display: grid;
+		gap: wd.$gap;
+	}
+
+	&__rate-group {
+		margin: 0;
+		padding: 0;
+		border: 0;
+		min-width: 0;
+	}
+
+	&__rate-group-title {
+		padding: 0;
+		margin-bottom: wd.$gap-xs;
+		font-weight: 600;
+	}
+
+	&__rate {
+		display: flex;
+		align-items: flex-start;
+		gap: wd.$gap;
+		margin-top: wd.$gap-xs;
+		padding: wd.$gap-sm wd.$gap;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+		background: wd.$surface;
+		cursor: pointer;
+
+		&:hover {
+			border-color: wd.$line;
+		}
+
+		&.is-chosen {
+			border-color: wd.$accent;
+			background: wd.$accent-soft-2;
+		}
+
+		input[type='radio'] {
+			flex: none;
+			margin-top: 3px;
+		}
+	}
+
+	&__rate-body {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	&__rate-name {
+		font-weight: 600;
+	}
+
+	&__rate-badge {
+		margin-left: wd.$gap-sm;
+		padding: 1px wd.$gap-sm;
+		border-radius: 999px;
+		background: wd.$accent-soft;
+		color: wd.$accent-ink;
+		font-size: 11px;
+		font-weight: 500;
+	}
+
+	&__rate-hint {
+		color: wd.$muted;
+		font-size: 12px;
+	}
+
+	&__rate-cost {
+		flex: none;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	&__delivery-price {
+		margin-top: wd.$gap-lg;
+		max-width: 260px;
+	}
+
+	&__pickup {
+		margin-top: wd.$gap-lg;
+	}
+
+	&__pickup-title {
+		margin: 0 0 wd.$gap-xs;
+		font-size: 14px;
+	}
+
+	&__pickup-chosen {
+		margin: 0 0 wd.$gap;
+	}
+
+	// The carrier's own fields (D7) — the settings page's `woodev-field` rows, stacked under the tariff.
+	&__carrier-fields {
+		margin-top: wd.$gap-lg;
+		max-width: 560px;
+	}
+
+	// The storefront picker's stage is `position: absolute; inset: 0`, so the host it fills has to
+	// be positioned and sized; the picker draws its own list, card and map into it (O10).
+	//
+	// Height derives from the VIEWPORT, not a flat cap (operator rig acceptance round 2, #710,
+	// finding 3): the WP `Modal` frame itself is capped at `70vh` (`@wordpress/components`'
+	// `.components-modal__frame { max-height: 70% }` past 960px) and its header eats a further
+	// fixed 72px, so a flat `560px` map routinely ran past the frame's own bottom edge — measured
+	// on the rig at 1440×900: the map's box reached ~250px below the modal's visible content
+	// area before this fix. `460px` approximates the chrome around the map that is NOT the map
+	// itself (modal header, the step's own heading/tariff block, the footer) so the map shrinks
+	// on a laptop-height screen and keeps the existing 560px cap on a large monitor, where 100vh
+	// leaves it plenty of room. The manager-mode sidebar (`pickup.css`) fills this same box, so it
+	// fits wherever the map does — no separate rule needed.
+	&__pickup-map {
+		position: relative;
+		height: min(560px, calc(100vh - 460px));
+		min-height: 360px;
+		overflow: hidden;
+		border: 1px solid wd.$border;
+		border-radius: wd.$radius-sm;
+	}
+
+	// Step ⑤ (#971): the read-only summary with a «change» link per row, then the totals and the send button.
+	&__summary {
+		margin: 0 0 wd.$gap;
+	}
+
+	&__summary-row {
+		display: grid;
+		gap: wd.$gap-sm;
+		grid-template-columns: 110px minmax(0, 1fr) auto;
+		align-items: start;
+		padding: wd.$gap-sm 0;
+		border-bottom: 1px solid wd.$divider;
+
+		dt {
+			color: wd.$muted;
+		}
+
+		dd {
+			margin: 0;
+			min-width: 0;
+			overflow-wrap: anywhere;
+		}
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr) auto;
+
+			dt {
+				grid-column: 1 / -1;
+			}
+		}
+	}
+
+	&__summary-row &__muted {
+		display: block;
+	}
+
+	&__summary-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__totals {
+		display: grid;
+		gap: wd.$gap-xs;
+		margin: wd.$gap 0 0;
+		max-width: 320px;
+		margin-inline-start: auto;
+
+		div {
+			display: flex;
+			justify-content: space-between;
+			gap: wd.$gap;
+		}
+
+		dt,
+		dd {
+			margin: 0;
+		}
+	}
+
+	&__totals-sum {
+		padding-top: wd.$gap-xs;
+		border-top: 1px solid wd.$divider;
+		font-weight: 600;
+	}
+
+	&__actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: wd.$gap-lg;
+	}
+
+	&__footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: wd.$gap-sm;
+		margin-top: wd.$gap-lg;
+		padding-top: wd.$gap;
+		border-top: 1px solid wd.$divider;
+	}
+
+	&__footer-spacer {
+		flex: 1 1 auto;
+	}
 }
