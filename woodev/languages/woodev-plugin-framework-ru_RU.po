@@ -2959,6 +2959,19 @@ msgstr ""
 msgid "Сервис пунктов выдачи временно недоступен. Попробуйте обновить страницу позже."
 msgstr ""
 
+#: shipping-method/rest-api/class-rates-controller.php:172
+msgid "Покупатель не найден."
+msgstr ""
+
+#: shipping-method/rest-api/class-rates-controller.php:191
+msgid "Укажите страну доставки."
+msgstr ""
+
+#. translators: %d: product id.
+#: shipping-method/rest-api/class-rates-controller.php:224
+msgid "Товар №%d не найден."
+msgstr ""
+
 #: shipping-method/settings/class-shipping-integration.php:100
 msgid "Enable debug mode/logging"
 msgstr "Отладка и журналирование"
