@@ -46,6 +46,9 @@ if ( 'integration' === $test_suite ) {
 			/** @var array<string, mixed> */
 			public $data;
 
+			/** @var string[] Every message, in the order it was added (see add()). */
+			public $messages = array();
+
 			/**
 			 * @param string               $code    Error code.
 			 * @param string               $message Error message.
@@ -55,6 +58,38 @@ if ( 'integration' === $test_suite ) {
 				$this->code    = $code;
 				$this->message = $message;
 				$this->data    = $data;
+
+				if ( '' !== $message ) {
+					$this->messages[] = $message;
+				}
+			}
+
+			/**
+			 * Adds a message. The first code/message stay the ones the single accessors report.
+			 *
+			 * @param string $code    Error code.
+			 * @param string $message Error message.
+			 * @param mixed  $data    Error data.
+			 *
+			 * @return void
+			 */
+			public function add( $code, $message, $data = '' ) {
+				if ( '' === $this->code ) {
+					$this->code    = $code;
+					$this->message = $message;
+				}
+
+				$this->messages[] = $message;
+			}
+
+			/** @return string[] */
+			public function get_error_messages() {
+				return $this->messages;
+			}
+
+			/** @return bool */
+			public function has_errors() {
+				return array() !== $this->messages;
 			}
 
 			/** @return string */

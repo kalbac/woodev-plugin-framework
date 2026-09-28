@@ -367,9 +367,17 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Final calculate_shipping method - delegates to abstract calculate_rate()
 		 *
+		 * When the carrier API fails during rate calculation (any `Woodev_Plugin_Exception`,
+		 * which covers `Woodev_API_Exception` and `Woodev_Packer_Exception`), the method is
+		 * hidden — no rate is added, the exception never reaches the cart — the failure is
+		 * logged, and the `woodev_shipping_method_rate_calculation_failed` action fires so a
+		 * plugin can implement its own fallback. The framework builds no tariff fallback itself.
+		 *
 		 * @param array $package Package data
 		 *
 		 * @since 1.4.0
+		 * @since 2.0.2 A carrier exception hides the method instead of reaching the cart, and fires
+		 *              {@see 'woodev_shipping_method_rate_calculation_failed'}.
 		 */
 		final public function calculate_shipping( $package = [] ): void {
 
@@ -421,7 +429,13 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 			$rate = $pre_calculated_rate instanceof Shipping_Rate ? $pre_calculated_rate : null;
 
 			if ( null === $rate ) {
-				$rate = $this->calculate_rate( $package );
+				try {
+					$rate = $this->calculate_rate( $package );
+				} catch ( \Woodev_Plugin_Exception $exception ) {
+					$rate = null;
+
+					$this->handle_rate_calculation_failure( $exception, $package );
+				}
 			}
 
 			/**
@@ -832,16 +846,116 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		/**
 		 * Determines whether a cart API request should be sent based on the current context.
 		 *
-		 * This method evaluates the execution environment and checks specific conditions such as
-		 * whether the request is made in an admin context, during a REST API call, or via XML-RPC.
+		 * This method evaluates the execution environment and vetoes the carrier call in an admin
+		 * context, during a REST API call, or via XML-RPC — with one exception: a Store API request
+		 * (`/wc/store/…`, what the block cart and checkout use to price shipping) is the customer's
+		 * own cart calculation and must get rates, exactly like a classic checkout.
+		 *
+		 * @since 2.0.2 A Store API request is no longer vetoed by the REST guard.
 		 *
 		 * @return bool True if a cart API request should be sent, false otherwise.
 		 */
 		private function should_send_cart_api_request(): bool {
-			return ! (
-				( is_admin() && did_action( 'woocommerce_cart_loaded_from_session' ) ) ||
-				( defined( 'REST_REQUEST' ) || defined( 'REST_API_REQUEST' ) || defined( 'XMLRPC_REQUEST' ) )
+
+			if ( defined( 'XMLRPC_REQUEST' ) || ( is_admin() && did_action( 'woocommerce_cart_loaded_from_session' ) ) ) {
+				return false;
+			}
+
+			if ( defined( 'REST_REQUEST' ) || defined( 'REST_API_REQUEST' ) ) {
+				return $this->is_store_api_request();
+			}
+
+			return true;
+		}
+
+		/**
+		 * Whether the current request is a WooCommerce Store API request.
+		 *
+		 * Prefers WooCommerce's own detection. `WC()->is_store_api_request()` only exists from
+		 * WooCommerce 9.0, so on the older versions this framework still supports (7.0+) the fallback
+		 * mirrors what WooCommerce itself does, for both permalink structures: the request path
+		 * against `rest_get_url_prefix()` + `/wc/store/` (pretty permalinks, `/wp-json/wc/store/v1/…`)
+		 * and the `rest_route` parameter (plain permalinks, `?rest_route=/wc/store/v1/…`, or the
+		 * route WordPress itself dispatched).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return bool
+		 */
+		private function is_store_api_request(): bool {
+
+			$woocommerce = function_exists( 'WC' ) ? WC() : null;
+
+			if ( is_object( $woocommerce ) && method_exists( $woocommerce, 'is_store_api_request' ) ) {
+				return (bool) $woocommerce->is_store_api_request();
+			}
+
+			// Pretty permalinks: match the path only (the leading slash anchors the prefix), so a query
+			// argument that merely looks like a Store API URL is not mistaken for one.
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$request_uri = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+			$path        = '' !== $request_uri ? wp_parse_url( '/' . ltrim( $request_uri, '/' ), PHP_URL_PATH ) : null;
+
+			if ( is_string( $path ) && false !== strpos( $path, '/' . trailingslashit( rest_get_url_prefix() ) . 'wc/store/' ) ) {
+				return true;
+			}
+
+			// Plain permalinks: the route travels as a parameter. WordPress copies it into query_vars for
+			// both structures, so that is checked too.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the route only, no state change.
+			$routes = [ $GLOBALS['wp']->query_vars['rest_route'] ?? '', $_GET['rest_route'] ?? '' ];
+
+			foreach ( $routes as $route ) {
+				if ( is_string( $route ) && 0 === strpos( '/' . ltrim( rawurldecode( wp_unslash( $route ) ), '/' ), '/wc/store/' ) ) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Hides the method after the carrier failed during rate calculation: logs the failure and fires
+		 * the failure action. No rate is added and nothing reaches the cart.
+		 *
+		 * The exception text is foreign (the carrier's own wording, possibly with a request URL or a
+		 * credential) — it goes to the log only, redacted, and is never rendered on any screen.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \Woodev_Plugin_Exception $exception The failure thrown by the carrier API or the packer.
+		 * @param array                    $package   Package data.
+		 * @return void
+		 */
+		private function handle_rate_calculation_failure( \Woodev_Plugin_Exception $exception, array $package ): void {
+
+			$this->get_plugin()->log(
+				sprintf(
+					'Rate calculation failed for the "%s" method, the method is hidden (%s): %s',
+					$this->get_title(),
+					get_class( $exception ),
+					\Woodev_API_Base::redact_secret_log_text( $exception->getMessage() )
+				),
+				sprintf( '%s_%s', $this->get_plugin()->get_id(), $this->get_id() )
 			);
+
+			/**
+			 * Shipping Method Rate Calculation Failed Action.
+			 *
+			 * Fires when the carrier API (or the packer) throws while a rate is being calculated. The
+			 * method has already been hidden for this package — no rate is added and the exception is
+			 * not rethrown — so a plugin or site owner can hook this to implement its own fallback
+			 * (for example, adding a flat rate). The framework builds no tariff fallback of its own.
+			 *
+			 * Do not render `$exception->getMessage()` on a screen: it is the carrier's own text.
+			 *
+			 * @since 2.0.2
+			 *
+			 * @param \Woodev_Plugin_Exception $exception The thrown exception.
+			 * @param array                    $package   Package data.
+			 * @param Shipping_Method          $method    Method instance.
+			 */
+			do_action( 'woodev_shipping_method_rate_calculation_failed', $exception, $package, $this );
 		}
 
 		protected function get_shipping_classes_options(): array {

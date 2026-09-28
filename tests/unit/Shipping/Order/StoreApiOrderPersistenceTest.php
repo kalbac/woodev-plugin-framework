@@ -147,6 +147,38 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 	}
 
 	/**
+	 * {@see Checkout_Handler} whose "does this WooCommerce have the validate-before-payment
+	 * hook" answer is set by the test (the real one asks the Store API's `OrderController`, which
+	 * a unit run does not load).
+	 */
+	class Store_Api_Checkout_Handler extends Checkout_Handler {
+
+		public bool $has_validate_hook = false;
+
+		protected function store_api_has_validate_hook(): bool {
+			return $this->has_validate_hook;
+		}
+	}
+
+	/**
+	 * A Store API request with a settable HTTP method — the shared `WP_REST_Request` stub has none.
+	 */
+	final class Store_Api_Request extends \WP_REST_Request {
+
+		private string $method;
+
+		public function __construct( string $method ) {
+			parent::__construct();
+
+			$this->method = $method;
+		}
+
+		public function get_method() {
+			return $this->method;
+		}
+	}
+
+	/**
 	 * A shipping line, as far as the handlers read it.
 	 */
 	final class Store_Api_Shipping_Line {
@@ -172,13 +204,26 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 		private string $city;
 
+		private string $status;
+
 		/**
 		 * @param string[] $method_ids the shipping lines' bare method ids.
 		 * @param string   $city       the billing city.
+		 * @param string   $status     the order status; a Store API draft until payment is attempted.
 		 */
-		public function __construct( array $method_ids, string $city = 'Москва' ) {
-			$this->lines = array_map( static fn( string $id ) => new Store_Api_Shipping_Line( $id ), $method_ids );
-			$this->city  = $city;
+		public function __construct( array $method_ids, string $city = 'Москва', string $status = 'checkout-draft' ) {
+			$this->lines  = array_map( static fn( string $id ) => new Store_Api_Shipping_Line( $id ), $method_ids );
+			$this->city   = $city;
+			$this->status = $status;
+		}
+
+		/**
+		 * @param string|string[] $status status(es) to compare with.
+		 *
+		 * @return bool
+		 */
+		public function has_status( $status ) {
+			return in_array( $this->status, (array) $status, true );
 		}
 
 		/**
@@ -197,6 +242,9 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 
 	/**
 	 * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_store_api_order_processed
+	 * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_store_api_validate_order
+	 * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::handle_store_api_update_order_from_request
+	 * @covers \Woodev\Framework\Shipping\Checkout\Checkout_Handler::pickup_point_errors
 	 * @covers \Woodev\Framework\Shipping\Pickup\Pickup_Handler::handle_store_api_order_processed
 	 * @covers \Woodev\Framework\Shipping\Pickup\Pickup_Handler::contribute_store_api_posted_data
 	 * @covers \Woodev\Framework\Shipping\Pickup\Pickup_Handler::persist_full_point
@@ -522,9 +570,10 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 		}
 
 		/**
-		 * The pickup point was never confirmed: the pickup slot is written blank (a classic
-		 * checkout would have refused the order; the block form cannot supply the field, so
-		 * the order keeps what it has) and no carrier lookup or full point happens.
+		 * The pickup point was never confirmed: the pickup slot is written blank and no
+		 * carrier lookup or full point happens. (Such an order is refused before it exists —
+		 * see the `handle_store_api_validate_order()` tests below — so this pins the
+		 * persistence tail on its own.)
 		 */
 		public function test_a_pickup_order_without_a_remembered_point_stores_no_full_point(): void {
 			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ] );
@@ -560,6 +609,252 @@ namespace Woodev\Tests\Unit\Shipping\Order {
 				[ 'x' => 1, 'carrier_pickup_point' => 'P1' ],
 				$pickup->contribute_store_api_posted_data( [ 'x' => 1 ], $order )
 			);
+		}
+
+		/**
+		 * Runs the block checkout's validate-before-payment hook the way the Store API does:
+		 * every plugin's callback, in order, on ONE shared `WP_Error`.
+		 *
+		 * @param array<int, array{0: Checkout_Handler, 1: Store_Api_Pickup_Handler}> $plugins the plugins.
+		 * @param \WC_Order                                                           $order   the order.
+		 *
+		 * @return \WP_Error the collection the Store API would turn into a refusal.
+		 */
+		private function fire_store_api_validate_order( array $plugins, \WC_Order $order ): \WP_Error {
+			$errors = new \WP_Error();
+
+			foreach ( $plugins as [ $checkout ] ) {
+				$checkout->handle_store_api_validate_order( $order, $errors );
+			}
+
+			return $errors;
+		}
+
+		/**
+		 * #966: a pickup method with no point confirmed is refused BEFORE the order is placed,
+		 * with the same sentence the classic checkout shows for a blank pickup slot.
+		 */
+		public function test_a_block_checkout_pickup_order_without_a_point_is_refused(): void {
+			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ] );
+			$plugin = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+
+			$errors = $this->fire_store_api_validate_order( [ $plugin ], $order );
+
+			$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
+			$this->assertSame( 'woodev_shipping_pickup_point_required', $errors->get_error_code() );
+			$this->assertSame( [], $this->events, 'validation writes nothing and fires no persistence hook' );
+		}
+
+		/**
+		 * The point the customer confirmed through the REST `select` route lives only in the
+		 * session; validation must see it exactly as persistence does, or every valid pickup
+		 * order would be refused.
+		 */
+		public function test_a_block_checkout_pickup_order_with_a_confirmed_point_passes(): void {
+			$this->customer_confirmed_a_point();
+
+			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ] );
+			$plugin = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+
+			$errors = $this->fire_store_api_validate_order( [ $plugin ], $order );
+
+			$this->assertFalse( $errors->has_errors() );
+		}
+
+		/**
+		 * A method that is not a pickup method never needs a point — even when a point is
+		 * absent (the common case), so a courier or free-shipping order is left alone.
+		 */
+		public function test_a_non_pickup_block_order_is_not_refused(): void {
+			$order  = new Store_Api_Fake_Order( [ 'free_shipping' ] );
+			$plugin = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+
+			$this->assertFalse( $this->fire_store_api_validate_order( [ $plugin ], $order )->has_errors() );
+		}
+
+		/**
+		 * `woocommerce_checkout_validate_order_before_payment` also fires for a pay-for-order
+		 * request against an EXISTING order: its point was persisted when it was placed and is
+		 * no longer in the session, so only a Store API draft is checked.
+		 */
+		public function test_an_existing_order_being_paid_for_is_not_refused(): void {
+			$order  = new Store_Api_Fake_Order( [ 'carrier_pickup' ], 'Москва', 'pending' );
+			$plugin = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+
+			$this->assertFalse( $this->fire_store_api_validate_order( [ $plugin ], $order )->has_errors() );
+		}
+
+		/**
+		 * Two carrier plugins are active and both handlers see the same pickup order: the
+		 * buyer gets the sentence once, not once per plugin.
+		 */
+		public function test_two_plugins_refuse_a_pickup_order_with_one_message(): void {
+			$a = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+			$b = $this->plugin( 'other', 'other_pickup_point', 'other_full_point' );
+
+			$errors = $this->fire_store_api_validate_order( [ $a, $b ], new Store_Api_Fake_Order( [ 'carrier_pickup' ] ) );
+
+			$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
+		}
+
+		/**
+		 * A plugin-supplied whole-sentence override wins on the block checkout too — it is a
+		 * statement about the field, not about which checkout path caught it (#327).
+		 */
+		public function test_a_plugin_supplied_required_message_is_used(): void {
+			$handler = new Checkout_Handler(
+				Checkout_Fields::from_array(
+					[
+						Field::create( 'post_office' )->mark_pickup_slot()->set_required_message( 'Выберите отделение.' )->to_array(),
+					]
+				),
+				'post'
+			);
+			$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+
+			$errors = $this->fire_store_api_validate_order( [ [ $handler ] ], new Store_Api_Fake_Order( [ 'carrier_pickup' ] ) );
+
+			$this->assertSame( [ 'Выберите отделение.' ], $errors->get_error_messages() );
+		}
+
+		/**
+		 * An explicit `set_requires_pickup_methods( [] )` turns the backstop off on both
+		 * paths (the classic `validate()` honours it the same way).
+		 */
+		public function test_an_explicitly_empty_pickup_method_list_disables_the_refusal(): void {
+			[ $checkout ] = $this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' );
+			$checkout->set_requires_pickup_methods( [] );
+
+			$errors = $this->fire_store_api_validate_order( [ [ $checkout ] ], new Store_Api_Fake_Order( [ 'carrier_pickup' ] ) );
+
+			$this->assertFalse( $errors->has_errors() );
+		}
+
+		/**
+		 * A handler for the WooCommerce 7.0–9.8 path: the validate-before-payment hook does NOT
+		 * exist, so the update-order-from-request fallback is the one that must act.
+		 *
+		 * @param bool $has_validate_hook whether this WooCommerce has the 9.9.0+ hook.
+		 *
+		 * @return Store_Api_Checkout_Handler
+		 */
+		private function legacy_wc_handler( bool $has_validate_hook = false ): Store_Api_Checkout_Handler {
+			$handler = new Store_Api_Checkout_Handler(
+				Checkout_Fields::from_array(
+					[
+						Field::create( 'carrier_pickup_point' )->mark_pickup_slot()->to_array(),
+						Field::create( 'billing_city' )->to_array(),
+					]
+				),
+				'carrier'
+			);
+			$handler->set_requires_pickup_methods( [ 'carrier_pickup' ] );
+			$handler->has_validate_hook = $has_validate_hook;
+
+			Functions\when( 'esc_html' )->returnArg();
+
+			return $handler;
+		}
+
+		/**
+		 * #966 (WooCommerce 7.0–9.8): with no validate-before-payment hook, `POST /checkout` is
+		 * refused from `woocommerce_store_api_checkout_update_order_from_request` — the route's
+		 * own `RouteException` (a 400) with the classic per-field sentence.
+		 */
+		public function test_a_legacy_wc_post_without_a_point_is_refused_with_a_route_exception(): void {
+			$handler = $this->legacy_wc_handler();
+
+			try {
+				$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ] ), new Store_Api_Request( 'POST' ) );
+				$this->fail( 'the order must be refused' );
+			} catch ( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException $e ) {
+				$this->assertSame( 'woodev_shipping_pickup_point_required', $e->error_code );
+				$this->assertSame( 'You have not chosen a pickup point.', $e->getMessage() );
+				$this->assertSame( 400, $e->getCode() );
+			}
+		}
+
+		/**
+		 * WooCommerce 9.8.x fires the same hook from the draft `PUT`/`PATCH /checkout` while the
+		 * customer is still filling the form — refusing there would break the block before a
+		 * point could be chosen, so only `POST` is checked.
+		 */
+		public function test_a_draft_update_request_is_never_refused(): void {
+			$handler = $this->legacy_wc_handler();
+
+			foreach ( [ 'PUT', 'PATCH', 'GET' ] as $method ) {
+				$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ] ), new Store_Api_Request( $method ) );
+			}
+
+			$this->addToAssertionCount( 1 ); // reaching here means no RouteException was thrown.
+		}
+
+		/**
+		 * The point confirmed through the REST `select` route lives only in the session; the
+		 * legacy path must see it exactly as persistence does, or every valid order is refused.
+		 */
+		public function test_a_legacy_wc_post_with_a_confirmed_point_passes(): void {
+			$this->customer_confirmed_a_point();
+			$this->plugin( 'carrier', 'carrier_pickup_point', 'cdek_full_point' ); // its Pickup_Handler contributes the point to the posted-data filter.
+
+			$this->legacy_wc_handler()->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ] ), new Store_Api_Request( 'POST' ) );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		/**
+		 * A non-pickup method, or an existing order being paid for, is left alone on the legacy
+		 * path exactly as on the 9.9+ one.
+		 */
+		public function test_a_legacy_wc_post_for_a_non_pickup_or_existing_order_passes(): void {
+			$handler = $this->legacy_wc_handler();
+
+			$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'free_shipping' ] ), new Store_Api_Request( 'POST' ) );
+			$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ], 'Москва', 'pending' ), new Store_Api_Request( 'POST' ) );
+
+			$this->addToAssertionCount( 1 );
+		}
+
+		/**
+		 * On WooCommerce 9.9+ the validate-before-payment hook does the job (with the other
+		 * validation errors gathered into one message), so the fallback stays silent and the
+		 * two paths never both act on one request.
+		 */
+		public function test_the_fallback_is_silent_when_the_validate_hook_exists(): void {
+			$handler = $this->legacy_wc_handler( true );
+
+			$handler->handle_store_api_update_order_from_request( new Store_Api_Fake_Order( [ 'carrier_pickup' ] ), new Store_Api_Request( 'POST' ) );
+
+			$errors = new \WP_Error();
+			$handler->handle_store_api_validate_order( new Store_Api_Fake_Order( [ 'carrier_pickup' ] ), $errors );
+
+			$this->assertSame( [ 'You have not chosen a pickup point.' ], $errors->get_error_messages() );
+		}
+	}
+}
+
+namespace Automattic\WooCommerce\StoreApi\Exceptions {
+
+	if ( ! class_exists( RouteException::class, false ) ) {
+		/**
+		 * The Store API's `RouteException` (same namespace and constructor in every WooCommerce
+		 * from 7.0 to current) — a unit run does not load WooCommerce.
+		 */
+		class RouteException extends \Exception {
+
+			/** @var string */
+			public $error_code;
+
+			/**
+			 * @param string $error_code       machine-readable error code.
+			 * @param string $message          the message the customer sees.
+			 * @param int    $http_status_code HTTP status.
+			 */
+			public function __construct( $error_code, $message, $http_status_code = 400 ) {
+				$this->error_code = $error_code;
+
+				parent::__construct( $message, $http_status_code );
+			}
 		}
 	}
 }
