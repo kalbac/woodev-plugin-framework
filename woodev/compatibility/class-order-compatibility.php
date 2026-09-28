@@ -327,8 +327,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
+					$fired = self::count_post_meta_actions();
+
 					update_post_meta( (int) $order_id, $meta_key, $meta_value );
-					self::flush_order_meta_cache( (int) $order_id );
+					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}
 		}
@@ -359,8 +361,10 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
+					$fired = self::count_post_meta_actions();
+
 					add_post_meta( (int) $order_id, $meta_key, $meta_value, $unique );
-					self::flush_order_meta_cache( (int) $order_id );
+					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}
 		}
@@ -390,32 +394,70 @@ if ( ! class_exists( 'Woodev_Order_Compatibility' ) ) :
 				$order_id = $order instanceof WC_Order ? $order->get_id() : $order;
 
 				if ( is_numeric( $order_id ) && $order_id > 0 ) {
+					$fired = self::count_post_meta_actions();
+
 					delete_post_meta( (int) $order_id, $meta_key, $meta_value );
-					self::flush_order_meta_cache( (int) $order_id );
+					self::flush_order_meta_cache( (int) $order_id, $fired );
 				}
 			}
 		}
 
 
 		/**
-		 * Drops WooCommerce's cached copy of an order's meta after a raw post-meta write.
+		 * Drops WooCommerce's cached copy of an order's meta after a raw post-meta write — only where
+		 * WooCommerce does not do it itself.
 		 *
-		 * The legacy (CPT) branches above write through `update_post_meta()` & co., which WooCommerce
-		 * answers by flushing the order's object-meta cache — but only on the hooks it listens to.
-		 * WooCommerce 8.5 and 9.3 listen to `updated_post_meta` alone, so ADDING a key (or deleting
-		 * one) left the cached copy stale: an order already read once in the request came back
-		 * without the value on the next `wc_get_order()` (and, with a persistent object cache,
-		 * until the entry expired). WooCommerce 11 also listens to `added_post_meta` and
-		 * `deleted_post_meta`; this makes every supported version behave like it. Invalidating an
-		 * already-flushed entry is a no-op, so the newer versions pay nothing.
+		 * The legacy (CPT) branches write through `add_post_meta()` & co., and WooCommerce answers a
+		 * post-meta write by flushing the order's object-meta cache from
+		 * `WC_Post_Data::flush_object_meta_cache()`. WooCommerce 8.5 and 9.3 hook that to
+		 * `updated_post_meta` alone, so ADDING a key (or deleting one) left the cached copy stale: an
+		 * order already read once in the request came back without the change on the next
+		 * `wc_get_order()` (and, with a persistent object cache, until the entry expired). Newer
+		 * WooCommerce (11.1 verified) also hooks `added_post_meta` and `deleted_post_meta`.
 		 *
-		 * @param int $order_id order ID
+		 * Two things are decided from what actually happened, not from a version or the method called:
+		 * WordPress fires the action that matches the write — `update_post_meta()` on a key that does
+		 * not exist yet fires `added_post_meta`, not `updated_post_meta` — so the counters taken before
+		 * the write say which one fired; and WooCommerce's listener is DETECTED for that action, because
+		 * flushing after it has already run is a second invalidation, not a no-op
+		 * (`invalidate_cache_group()` writes a fresh cache prefix).
+		 *
+		 * @param int   $order_id order ID
+		 * @param array $before {@see Woodev_Order_Compatibility::count_post_meta_actions()} taken before the write
 		 */
-		private static function flush_order_meta_cache( int $order_id ): void {
+		private static function flush_order_meta_cache( int $order_id, array $before ): void {
 
-			if ( class_exists( 'WC_Cache_Helper' ) ) {
-				WC_Cache_Helper::invalidate_cache_group( 'object_' . $order_id );
+			if ( ! class_exists( 'WC_Cache_Helper' ) ) {
+				return;
 			}
+
+			foreach ( self::count_post_meta_actions() as $action => $count ) {
+
+				if ( $count <= $before[ $action ] ) {
+					continue;
+				}
+
+				if ( ! has_action( $action, [ 'WC_Post_Data', 'flush_object_meta_cache' ] ) ) {
+					WC_Cache_Helper::invalidate_cache_group( 'object_' . $order_id );
+				}
+
+				return;
+			}
+		}
+
+
+		/**
+		 * Counts how many times each post-meta action has fired so far.
+		 *
+		 * @return int[] fire count, keyed by action name
+		 */
+		private static function count_post_meta_actions(): array {
+
+			return [
+				'added_post_meta'   => did_action( 'added_post_meta' ),
+				'updated_post_meta' => did_action( 'updated_post_meta' ),
+				'deleted_post_meta' => did_action( 'deleted_post_meta' ),
+			];
 		}
 
 
