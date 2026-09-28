@@ -1936,6 +1936,10 @@ msgstr ""
 msgid "Не удалось сохранить заказ. Проверьте его в списке — часть изменений могла примениться."
 msgstr ""
 
+#: shipping-method/admin/orders/class-order-editor.php:249
+msgid "Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу."
+msgstr ""
+
 #. translators: 1: the order total before the edit, 2: the total after it.
 #: shipping-method/admin/orders/class-order-editor.php:332
 #, php-format

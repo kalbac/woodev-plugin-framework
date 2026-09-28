@@ -47,7 +47,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 	 *
 	 * **Errors are returned, not thrown**: every public method answers with its result or a
 	 * `\WP_Error` whose `data['status']` is the HTTP status of the transport contract — 404 unknown
-	 * order or not a row of the orders page, 409 not editable (D5), 422 validation errors as data
+	 * order or not a row of the orders page, 409 not editable (D5) or being saved by another
+	 * request at this moment ({@see self::update()}, #981 round 4), 422 validation errors as data
 	 * (`data['errors']`, see {@see Order_Payload_Validator}), 500 anything the service did not foresee.
 	 *
 	 * @since 2.0.2
@@ -101,6 +102,31 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		public const NEW_ORDER_EMAIL_MUTE_TTL = DAY_IN_SECONDS;
 
 		/**
+		 * How long {@see self::update()} waits for the order's edit lock, in seconds.
+		 *
+		 * Two admin saves of ONE order are serialised through a MySQL named lock (`GET_LOCK`,
+		 * {@see self::update_lock_name()}): the second waits for the first, then reads the order
+		 * afresh and acts on the first save's result — a pending→processing edit already made is
+		 * not made again, so the «New order» mute {@see self::apply_status()} writes cannot be lost
+		 * to a last-write-wins race on the order's meta (#981 round 4: a double submit, two tabs).
+		 *
+		 * The holder is one admin save: a handful of datastore writes, the carrier's writer and
+		 * WooCommerce's own status transition — which, when the store sends its e-mails
+		 * synchronously, includes up to two SMTP deliveries, each usually well under a second and
+		 * seldom more than a few. Ten seconds covers the slowest realistic holder with margin. It
+		 * also stays well under PHP's default `max_execution_time` (30 s) and the usual proxy
+		 * timeouts (60 s), so a waiting request that times out answers a clean 409 the wizard can
+		 * show instead of dying as a gateway error — and a manager who double-clicked has the first
+		 * click's answer long before. A lock held by a request that crashed is freed by MySQL the
+		 * moment that connection closes: no wait outlives its holder.
+		 *
+		 * @since 2.0.2 #981 round 4.
+		 *
+		 * @var int
+		 */
+		public const UPDATE_LOCK_TIMEOUT = 10;
+
+		/**
 		 * Carrier registry.
 		 *
 		 * @since 2.0.2
@@ -119,16 +145,29 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		private $validator;
 
 		/**
+		 * Seconds an update waits for the order's edit lock ({@see self::UPDATE_LOCK_TIMEOUT}).
+		 *
+		 * @since 2.0.2 #981 round 4.
+		 *
+		 * @var int
+		 */
+		private $lock_timeout;
+
+		/**
 		 * Constructor.
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #981 round 4: `$lock_timeout`.
 		 *
-		 * @param Orders_Registry|null         $registry  carrier registry; defaults to the shared singleton.
-		 * @param Order_Payload_Validator|null $validator payload validator; defaults to one over `$registry`.
+		 * @param Orders_Registry|null         $registry     carrier registry; defaults to the shared singleton.
+		 * @param Order_Payload_Validator|null $validator    payload validator; defaults to one over `$registry`.
+		 * @param int                          $lock_timeout seconds an update waits for the order's edit lock;
+		 *                                                   defaults to {@see self::UPDATE_LOCK_TIMEOUT}.
 		 */
-		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null ) {
-			$this->registry  = $registry ?? Orders_Registry::instance();
-			$this->validator = $validator ?? new Order_Payload_Validator( $this->registry );
+		public function __construct( ?Orders_Registry $registry = null, ?Order_Payload_Validator $validator = null, int $lock_timeout = self::UPDATE_LOCK_TIMEOUT ) {
+			$this->registry     = $registry ?? Orders_Registry::instance();
+			$this->validator    = $validator ?? new Order_Payload_Validator( $this->registry );
+			$this->lock_timeout = max( 0, $lock_timeout );
 		}
 
 		/**
@@ -180,20 +219,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		}
 
 		/**
-		 * Updates an order, in place.
+		 * Updates an order, in place — one save of an order at a time.
+		 *
+		 * The whole update runs under the order's edit lock ({@see self::lock_order()}): a second
+		 * request saving the SAME order waits for the first to finish, then reads the order afresh
+		 * — nothing here reads the order before the lock is held, and the REST controller reads
+		 * nothing either — so it acts on the first save's result rather than on the state both
+		 * requests started from. Without it two simultaneous pending→processing saves (a double
+		 * submit, two tabs) each armed and ran the transition, the later meta write dropped the
+		 * first save's «New order» mute, and WooCommerce's deferred queue sent one «New order»
+		 * (#981 round 4). A lock not granted within {@see self::UPDATE_LOCK_TIMEOUT} — or refused
+		 * by the database — is answered 409, the transport contract's «try again» (spec D5), and
+		 * nothing is read or written. The lock is released whatever the outcome.
 		 *
 		 * Refuses unless {@see Order_Actions::is_editable()} holds — checked TWICE: first for the
 		 * 404 / 409 answers ahead of the 422 ones, then again on a fresh read right before the
 		 * writes, because the row can have been exported while the manager typed (spec D5, the
-		 * stale-row race).
+		 * stale-row race; an export does not take this lock).
 		 *
 		 * @since 2.0.2
+		 * @since 2.0.2 #981 round 4: serialised per order through a MySQL named lock.
 		 *
 		 * @param int                  $order_id the order.
 		 * @param array<string, mixed> $payload  the request body.
 		 * @return \WC_Order|\WP_Error the saved order, or the transport-contract error.
 		 */
 		public function update( int $order_id, array $payload ) {
+			if ( ! $this->lock_order( $order_id ) ) {
+				return self::error( 'woodev_shipping_order_busy', __( 'Заказ сейчас сохраняется в другом окне или вкладке. Дождитесь окончания и обновите страницу.', 'woodev-plugin-framework' ), 409 );
+			}
+
+			try {
+				return $this->update_locked( $order_id, $payload );
+			} finally {
+				$this->unlock_order( $order_id );
+			}
+		}
+
+		/**
+		 * The update itself, under the order's edit lock ({@see self::update()}).
+		 *
+		 * @since 2.0.2 #981 round 4 (the body of `update()` up to then).
+		 *
+		 * @param int                  $order_id the order.
+		 * @param array<string, mixed> $payload  the request body.
+		 * @return \WC_Order|\WP_Error the saved order, or the transport-contract error.
+		 */
+		private function update_locked( int $order_id, array $payload ) {
 			$row = $this->find_editable_row( $order_id );
 
 			if ( $row instanceof \WP_Error ) {
@@ -232,6 +304,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 			}
 
 			return self::fresh( $order );
+		}
+
+		/**
+		 * The name of the MySQL named lock that serialises admin saves of one order.
+		 *
+		 * `woodev_order_edit_{id}_{site}` — `site` being the first 16 hex digits of the MD5 of the
+		 * database name and the table prefix, so two sites sharing one MySQL server (two databases,
+		 * two prefixes in one database, the blogs of a multisite) never share a lock. Named locks
+		 * are server-wide and their names at most 64 characters (MySQL 5.7+, MariaDB 10.0.2+);
+		 * this shape is at most 55 for any order id, whatever the prefix.
+		 *
+		 * @since 2.0.2 #981 round 4.
+		 *
+		 * @param int $order_id the order.
+		 * @return string
+		 */
+		public static function update_lock_name( int $order_id ): string {
+			global $wpdb;
+
+			return 'woodev_order_edit_' . $order_id . '_' . substr( md5( (string) $wpdb->dbname . '|' . (string) $wpdb->prefix ), 0, 16 );
+		}
+
+		/**
+		 * Takes the order's edit lock, waiting up to the constructor's `$lock_timeout` seconds.
+		 *
+		 * One `SELECT GET_LOCK()` on the request's own database connection: MySQL grants the name
+		 * to one connection at a time and frees it when that connection closes, so a request that
+		 * died mid-save blocks nobody. Protected as the seam the integration tests use to run a
+		 * concurrent save right before the lock is taken.
+		 *
+		 * @since 2.0.2 #981 round 4.
+		 *
+		 * @param int $order_id the order.
+		 * @return bool whether the lock is held; false on a timeout or a database error.
+		 */
+		protected function lock_order( int $order_id ): bool {
+			global $wpdb;
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a server-side lock, not data: nothing to cache.
+			$granted = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', self::update_lock_name( $order_id ), $this->lock_timeout ) );
+
+			return '1' === (string) $granted;
+		}
+
+		/**
+		 * Releases the order's edit lock taken by {@see self::lock_order()}.
+		 *
+		 * @since 2.0.2 #981 round 4.
+		 *
+		 * @param int $order_id the order.
+		 * @return void
+		 */
+		private function unlock_order( int $order_id ): void {
+			global $wpdb;
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- releases a server-side lock: nothing to cache.
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::update_lock_name( $order_id ) ) );
 		}
 
 		/**
@@ -662,9 +791,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 		 * plugin's hooks, other orders and the customer's own e-mails (which follow WooCommerce's
 		 * status transitions, C4) are untouched.
 		 *
-		 * Write races are considered only as far as one admin save path goes: two requests editing
-		 * the same order at the same instant may each read the list before the other writes it, and
-		 * the last `save()` wins — the wizard's own contract (D5) serialises edits of one order.
+		 * Write races between two admin saves of one order are closed upstream: {@see self::update()}
+		 * holds the order's edit lock for the whole save, so the second save reads the list — and
+		 * the status — only after the first has written them (#981 round 4). What can still race
+		 * with the list is the deferred dispatch's own consumption in another request
+		 * ({@see self::mute_new_order_email()}), which re-reads the meta before it writes.
 		 *
 		 * @since 2.0.2
 		 * @since 2.0.2 #981 round 2: a persisted, self-consuming marker instead of a filter scoped to

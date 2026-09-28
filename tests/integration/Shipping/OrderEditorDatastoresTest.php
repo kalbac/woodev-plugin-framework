@@ -62,6 +62,9 @@ class OrderEditorDatastoresTest extends TestCase {
 	/** @var array<string,array{0:string,1:callable}> hooks the test added, to remove. */
 	private $listeners = [];
 
+	/** @var \mysqli[] the «other request's» database connections the test opened, to close. */
+	private $connections = [];
+
 	/**
 	 * Re-registers the fixtures' own providers on a clean registry, and gives the tests a product
 	 * whose stock WooCommerce manages.
@@ -101,6 +104,12 @@ class OrderEditorDatastoresTest extends TestCase {
 		}
 
 		$this->listeners = [];
+
+		foreach ( $this->connections as $connection ) {
+			$connection->close(); // Releases every named lock it still holds.
+		}
+
+		$this->connections = [];
 
 		Orders_Registry::instance()->reset_for_tests();
 
@@ -608,6 +617,75 @@ class OrderEditorDatastoresTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// The other request — a second database connection, for the edit lock (#981 round 4)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A second connection to the test database: «the other request», as far as MySQL's named locks
+	 * go — a name held by one connection is refused to every other until the holder releases it or
+	 * disconnects. It sees none of this test's uncommitted rows and writes none; it only holds and
+	 * releases the lock. Closed by {@see tearDown()}.
+	 *
+	 * @return \mysqli
+	 */
+	private function other_request(): \mysqli {
+		if ( ! class_exists( '\mysqli' ) ) {
+			$this->markTestSkipped( 'mysqli is not available in this PHP' );
+		}
+
+		$host = (string) DB_HOST;
+		$port = null;
+
+		if ( false !== strpos( $host, ':' ) ) {
+			[ $host, $port ] = explode( ':', $host, 2 );
+			$port            = is_numeric( $port ) ? (int) $port : null;
+		}
+
+		$connection = null === $port
+			? new \mysqli( $host, DB_USER, DB_PASSWORD, DB_NAME )
+			: new \mysqli( $host, DB_USER, DB_PASSWORD, DB_NAME, $port );
+
+		$this->assertSame( 0, $connection->connect_errno, 'the other request connected to the test database' );
+
+		$this->connections[] = $connection;
+
+		return $connection;
+	}
+
+	/**
+	 * Runs one lock function on the other request's connection and answers what MySQL answered.
+	 *
+	 * @param \mysqli $other    the other request.
+	 * @param string  $call     the function call, `%s` standing for the order's quoted lock name —
+	 *                          e.g. `GET_LOCK(%s, 0)`.
+	 * @param int     $order_id the order.
+	 * @return string MySQL's answer: '1' done, '0' not, '' NULL.
+	 */
+	private function lock_call( \mysqli $other, string $call, int $order_id ): string {
+		$result = $other->query( 'SELECT ' . sprintf( $call, "'" . $other->real_escape_string( Order_Editor::update_lock_name( $order_id ) ) . "'" ) );
+
+		$this->assertInstanceOf( \mysqli_result::class, $result );
+
+		$row = $result->fetch_row();
+
+		return (string) ( $row[0] ?? '' );
+	}
+
+	/**
+	 * Makes the other request hold the order's edit lock, and proves it does.
+	 *
+	 * @param int $order_id the order.
+	 * @return \mysqli the holder.
+	 */
+	private function hold_edit_lock_elsewhere( int $order_id ): \mysqli {
+		$other = $this->other_request();
+
+		$this->assertSame( '1', $this->lock_call( $other, 'GET_LOCK(%s, 0)', $order_id ), 'the other request holds the order\'s edit lock' );
+
+		return $other;
+	}
+
+	// -------------------------------------------------------------------------
 	// create
 	// -------------------------------------------------------------------------
 
@@ -928,6 +1006,179 @@ class OrderEditorDatastoresTest extends TestCase {
 		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail' );
 		$this->assertSame( 1, $new_order['count'], 'a day-old entry of a lost queue mutes nothing: the legitimate «New order» goes out' );
 		$this->assert_not_armed( $pending->get_id(), 'the stale entry was pruned and the key deleted' );
+	}
+
+	// -------------------------------------------------------------------------
+	// #981 round 4 — one save of an order at a time
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A save of an order that another request is saving is refused — 409, nothing written — and
+	 * goes through once that request is done (#981 round 4, the critic's blocker on round 3).
+	 *
+	 * A double submit, or two tabs, used to run two pending→processing saves of one order at once:
+	 * each read no mute entry, each armed its own and ran the transition, the later meta write
+	 * dropped the first entry, and under deferral WooCommerce's queue sent one «New order». Now an
+	 * update holds the order's edit lock — a MySQL named lock, one holder per name server-wide —
+	 * for its whole duration. Here «the other request» is a second connection holding that name:
+	 * a save that cannot get it within its timeout answers 409 and changes nothing; the same save
+	 * proceeds the moment the holder lets go; and the editor releases its own lock when it is done,
+	 * so the next request can take it at once.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_save_of_an_order_another_request_is_saving_is_refused_with_409_and_changes_nothing( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$sent        = $this->count_sent_email( 'new_order' );
+		$transitions = $this->count_hook( 'woocommerce_order_status_pending_to_processing' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$other   = $this->hold_edit_lock_elsewhere( $pending->get_id() );
+
+		$editor  = new Order_Editor( null, null, 1 ); // One second: the test's timeout, not production's ten.
+		$started = microtime( true );
+		$result  = $editor->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) );
+		$waited  = microtime( true ) - $started;
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 409, $result->get_error_data()['status'], 'the transport contract\'s «try again»' );
+		$this->assertSame( 'woodev_shipping_order_busy', $result->get_error_code() );
+		$this->assertGreaterThanOrEqual( 0.9, $waited, 'the save waited its whole timeout for the lock before giving up' );
+
+		$this->assertSame( 'pending', $this->fresh( $pending->get_id() )->get_status(), 'a refused save writes nothing' );
+		$this->assertSame( 0, $transitions['count'], 'a refused save runs no transition' );
+		$this->assertSame( 0, $sent['count'] );
+		$this->assert_not_armed( $pending->get_id(), 'a refused save arms nothing' );
+
+		$this->assertSame( '1', $this->lock_call( $other, 'RELEASE_LOCK(%s)', $pending->get_id() ), 'the other request is done' );
+
+		$updated = $editor->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) );
+
+		$this->assertInstanceOf( \WC_Order::class, $updated, $updated instanceof \WP_Error ? $updated->get_error_message() : '' );
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status(), 'the same save goes through once the lock is free' );
+		$this->assertSame( 1, $transitions['count'] );
+		$this->assertSame( 0, $sent['count'], 'an edit sends no «New order»' );
+		$this->assert_not_armed( $pending->get_id(), 'the synchronous dispatch consumed the entry' );
+
+		$this->assertSame( '1', $this->lock_call( $other, 'GET_LOCK(%s, 0)', $pending->get_id() ), 'the editor released its lock when it was done: the next request takes it at once' );
+	}
+
+	/**
+	 * A save does not give up on a busy order: it WAITS for the save in flight and proceeds the
+	 * moment that one releases the lock — within the ten seconds of the default timeout, not
+	 * after them (#981 round 4).
+	 *
+	 * The other request holds the lock and lets go after one second, from a query it runs
+	 * asynchronously so this process is free to make the save that has to wait.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_save_waits_for_the_save_in_flight_and_proceeds_once_it_is_released( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+
+		$sent = $this->count_sent_email( 'new_order' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$other   = $this->hold_edit_lock_elsewhere( $pending->get_id() );
+
+		$name = "'" . $other->real_escape_string( Order_Editor::update_lock_name( $pending->get_id() ) ) . "'";
+
+		$this->assertTrue( $other->query( 'SELECT IF(SLEEP(1) = 0, RELEASE_LOCK(' . $name . '), NULL)', MYSQLI_ASYNC ), 'the other request will let go in a second' );
+
+		$started = microtime( true );
+		$result  = ( new Order_Editor() )->update( $pending->get_id(), $this->payload( [ 'status' => 'processing' ] ) );
+		$waited  = microtime( true ) - $started;
+
+		$this->assertInstanceOf( \WC_Order::class, $result, $result instanceof \WP_Error ? $result->get_error_message() : '' );
+		$this->assertGreaterThanOrEqual( 0.9, $waited, 'the save waited for the release' );
+		$this->assertLessThan( Order_Editor::UPDATE_LOCK_TIMEOUT, $waited, 'and went through as soon as it came, not when the timeout ran out' );
+
+		$released = $other->reap_async_query();
+
+		$this->assertInstanceOf( \mysqli_result::class, $released );
+		$this->assertSame( '1', (string) $released->fetch_row()[0], 'it was the other request\'s release that let the save through' );
+
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status() );
+		$this->assertSame( 0, $sent['count'], 'an edit sends no «New order»' );
+		$this->assert_not_armed( $pending->get_id(), 'the synchronous dispatch consumed the entry' );
+	}
+
+	/**
+	 * The save that waited acts on the RESULT of the save it waited for, not on the state both
+	 * started from (#981 round 4): the order is read only once the lock is held.
+	 *
+	 * The critic's race, end to end, under deferral: the same pending→processing save twice — a
+	 * double submit. The first save completes (lock taken and released) right before the second's
+	 * lock is granted, through the editor's lock seam; the second then reads an order that is
+	 * already processing, runs no transition, arms nothing. When WooCommerce's queue runs, ONE
+	 * notification is dispatched and the first save's entry mutes it. Before the lock the second
+	 * save read `pending` too, armed a second entry, ran the transition again and overwrote the
+	 * first save's list with its own — and the queue then sent one «New order».
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_save_that_waited_acts_on_the_result_of_the_save_it_waited_for( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->defer_transactional_emails();
+
+		$new_order   = $this->count_sent_email( 'new_order' );
+		$customer    = $this->count_sent_email( 'customer_processing_order' );
+		$transitions = $this->count_hook( 'woocommerce_order_status_pending_to_processing' );
+
+		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
+		$payload = $this->payload( [ 'status' => 'processing' ] );
+		$first   = null;
+
+		$first_save = function ( int $order_id ) use ( $payload, &$first ): void {
+			$first = ( new Order_Editor() )->update( $order_id, $payload );
+		};
+
+		$waiting = new class( $first_save ) extends Order_Editor {
+			/** @var \Closure what the other request does before this one's lock is granted. */
+			private $first_save;
+
+			/**
+			 * @param \Closure $first_save the other request's save.
+			 */
+			public function __construct( \Closure $first_save ) {
+				parent::__construct();
+
+				$this->first_save = $first_save;
+			}
+
+			/**
+			 * The seam: the other request's save completes — lock taken and released — right
+			 * before this request's lock is granted.
+			 *
+			 * @param int $order_id the order.
+			 * @return bool
+			 */
+			protected function lock_order( int $order_id ): bool {
+				( $this->first_save )( $order_id );
+
+				return parent::lock_order( $order_id );
+			}
+		};
+
+		$second = $waiting->update( $pending->get_id(), $payload );
+
+		$this->assertInstanceOf( \WC_Order::class, $first, 'the first save ran, and went through' );
+		$this->assertInstanceOf( \WC_Order::class, $second, $second instanceof \WP_Error ? $second->get_error_message() : '' );
+		$this->assertSame( 'processing', $this->fresh( $pending->get_id() )->get_status() );
+		$this->assertSame( 1, $transitions['count'], 'the transition ran once, in the first save: the second read an order already processing' );
+		$this->assertCount( 1, $this->armed_entries( $pending->get_id() ), 'one entry, the first save\'s, waits for the deferred dispatch; the second save armed nothing' );
+
+		$this->assertSame( 1, $this->drain_deferred_emails(), 'one notification was queued, and the drain ran it' );
+		$this->assertSame( 1, $customer['count'], 'the drain delivered the customer\'s e-mail' );
+		$this->assertSame( 0, $new_order['count'], 'a double submit sends no «New order»' );
+		$this->assert_not_armed( $pending->get_id(), 'the dispatch consumed the first save\'s entry; nothing is left' );
 	}
 
 	/**

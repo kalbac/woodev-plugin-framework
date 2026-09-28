@@ -279,6 +279,89 @@ now pins the list semantics: oldest matching entry consumed, a different transit
 pruned instead of muting, an expired one pruned alongside the consumed one, a stale object deferring to the
 datastore, round 2's string shape dropped.
 
+## Round 4: per-order lock (the critic's blocker on round 3, operator-licensed)
+
+> Same rig; WooCommerce 11.1.0 in place, 8.5.1 and 9.3.0 downloaded from wordpress.org, copied into the
+> tests container as `woocommerce-probe-{version}/` and selected by a temporary `WOODEV_WC_PROBE` override in
+> `tests/bootstrap.php` — copies and override removed afterwards. Fable 5.1 worker, 28.09.2026. Baseline `34dbf97`.
+
+**The blocker was real.** Round 3 left two admin saves of ONE order free to run at once (`apply_status()` said
+so: last `save()` wins). A double submit or two tabs, both pending→processing, with deferred e-mails on: each
+read no mute entry, each armed its own and ran the transition — two notifications queued — and the later meta
+write dropped the first save's entry, so the drain found one entry for two notifications and the second sent
+«New order».
+
+### The design
+
+`Order_Editor::update()` now runs **entirely under a MySQL named lock** — `SELECT GET_LOCK(name, timeout)`
+on the request's own `$wpdb` connection, taken as the FIRST thing the method does and released with
+`RELEASE_LOCK` in `finally`, whatever the answer (`lock_order()` / `unlock_order()`; the old body is
+`update_locked()`). A lock not granted — timeout, or `NULL` from the server — answers **409
+`woodev_shipping_order_busy`** with an admin-facing Russian message (new msgid, in `.pot` and `.po`; untranslated
+entries do not enter the `.mo`), same `WP_Error` shape as the existing 409s, before anything is read or written.
+
+- **Name:** `woodev_order_edit_{id}_{16 hex of md5(dbname|prefix)}` (`update_lock_name()`) — unique per order
+  AND per site sharing one MySQL server (two databases, two prefixes in one database, a multisite's blog
+  prefixes); at most 55 characters for any id, under MySQL's 64.
+- **Where the read happens relative to the lock:** AFTER it, necessarily — nothing in `update()` touches the
+  order before `lock_order()` returns, and the REST controller reads nothing before calling the service
+  (`permissions_check()` is `current_user_can()` only). So the second save's `find_editable_row()` — both of
+  them: the 404/409 gate and the pre-write re-read — is a first read in its request, made once the first save
+  has committed. There is no earlier read whose runtime-cached copy (`get_post()` on CPT, `OrderCache` on HPOS)
+  could go stale under the lock; that is why the lock sits at the top of `update()` and not after validation.
+- **Timeout = 10 s** (`UPDATE_LOCK_TIMEOUT`, constructor-injectable for tests). The holder is one admin save: a
+  handful of datastore writes, the carrier's writer and WooCommerce's transition — which, with synchronous
+  e-mail, is up to two SMTP deliveries, usually well under a second each and seldom more than a few. Ten seconds
+  covers the slowest realistic holder with margin, stays well under PHP's default `max_execution_time` (30 s)
+  and the usual proxy timeouts (60 s) — so the waiter answers a clean 409 the wizard can show instead of dying
+  as a gateway error — and a manager who double-clicked has the first click's answer long before. A holder
+  that crashed is released by MySQL when its connection closes; no wait outlives its holder.
+- **CREATE takes no lock.** A new order has no id until `wc_create_order()` returns and no concurrent editor
+  before that; a double-submitted create is two orders, an idempotency question outside this card.
+- The mute design is untouched. The residual write race is the deferred dispatch's own consumption in another
+  request, which re-reads the meta before writing (round 3) and never runs inside an admin save.
+
+### Evidence
+
+**Red first, against `34dbf97`** (production file swapped to the baseline, the new tests kept):
+
+| new test (`OrderEditorDatastoresTest`, both datastores) | on `34dbf97` |
+|---|---|
+| `test_a_save_of_an_order_another_request_is_saving_is_refused_with_409_and_changes_nothing` | `update_lock_name()` undefined (error); with the name inlined in a throw-away probe copy: the save went straight through the lock a second connection held — «`Order` object is not an instance of `WP_Error`» |
+| `test_a_save_waits_for_the_save_in_flight_and_proceeds_once_it_is_released` | same error; probe copy: «the save waited for the release — `0.039` is not ≥ `0.9`» |
+| `test_a_save_that_waited_acts_on_the_result_of_the_save_it_waited_for` | «the first save ran, and went through — `null` is not a `WC_Order`»: the lock seam the concurrent save runs through does not exist |
+| unit `OrderEditorUpdateLockTest` (5) | 4 errors (no `update_lock_name()` / `UPDATE_LOCK_TIMEOUT`), 1 failure (a timed-out lock answered `unknown_order`, not `busy`) |
+
+The «other request» in the integration tests is a real second `mysqli` connection to the test database
+(`DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`): it holds the order's lock with `GET_LOCK(name, 0)`, sees none of
+the test's uncommitted rows and writes none. Test 1: an editor with a 1-second timeout answers 409 after waiting
+its whole second, the order stays `pending`, no transition, nothing armed; after `RELEASE_LOCK` the same save
+goes through; then `GET_LOCK(name, 0)` from the other connection succeeds at once — the editor's `finally` let
+go. Test 2: the other connection runs `SELECT IF(SLEEP(1) = 0, RELEASE_LOCK(name), NULL)` **asynchronously**
+(`MYSQLI_ASYNC`, mysqlnd), the default-timeout editor blocks ≈1 s and proceeds well inside its 10 s;
+`reap_async_query()` confirms the release is what let it through. Test 3 — the critic's race end to end, under
+deferral: an anonymous subclass overrides the protected `lock_order()` seam to run a complete first save
+(lock taken and released) right before the waiting save's lock is granted; the waiting save then reads
+`processing`, runs no transition and arms nothing (1 transition, 1 entry); the drain runs ONE notification,
+delivers the customer's e-mail and sends **0 «New order»**; nothing is left armed. A true two-process race is
+not buildable inside `WP_UnitTestCase` (its transaction hides the order from any other connection, so a second
+process could not even load it); the seam is the honest substitute, and the argument for the read position is
+the code order stated above.
+
+**Green with the fix:**
+
+| WooCommerce | `--filter OrderEditorDatastoresTest` | full Integration suite |
+|---|---|---|
+| 11.1.0 | OK, 58 tests, 810 assertions | OK, 315 tests, 4057 assertions |
+| 9.3.0 | OK, 58 tests, 812 assertions | — (not required this round) |
+| 8.5.1 | OK, 58 tests, 812 assertions (2nd and 3rd run; the 1st attempt, made seconds after `docker cp`, aborted with a PHP fatal during bootstrap whose head my output filter cut — not reproduced in two identical reruns) | — |
+
+`composer check` green: phpcs, phpstan, 4431 unit tests (`OrderEditorUpdateLockTest` pins the name's uniqueness
+and 64-char bound, the constructor's timeout in the `GET_LOCK` statement, the 409 for `'0'` and for `NULL` with
+no `wc_get_order()` call, and the `RELEASE_LOCK` after a granted lock's 404). `OrderEditorGateTest` now installs
+a `$wpdb` stand-in that grants the lock, since `update()` takes it before the gate it tests.
+`npm run lint:i18n-sources`, `lint:i18n`, `lint:mo` green.
+
 ## Related
 
 - [../../specs/2026-09-27-710-create-edit-order-design.md](../../specs/2026-09-27-710-create-edit-order-design.md) — C4, the rule under test

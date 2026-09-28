@@ -21,6 +21,7 @@ use Woodev\Framework\Shipping\Admin\Orders\Orders_Registry;
 use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';
+require_once __DIR__ . '/order-editor-lock-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Editor::create
@@ -36,6 +37,9 @@ final class OrderEditorGateTest extends TestCase {
 		parent::setUp();
 
 		$this->meta = [];
+
+		// `update()` takes the order's edit lock first (#981 round 4); here it is always granted.
+		$GLOBALS['wpdb'] = new Order_Editor_Fake_Wpdb();
 
 		Functions\when( 'wc_clean' )->alias(
 			static function ( $value ) {
@@ -72,6 +76,8 @@ final class OrderEditorGateTest extends TestCase {
 
 	protected function tearDown(): void {
 		Orders_Registry::instance()->reset_for_tests();
+
+		unset( $GLOBALS['wpdb'] );
 
 		parent::tearDown();
 	}
