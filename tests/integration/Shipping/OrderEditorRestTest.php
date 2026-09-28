@@ -516,4 +516,60 @@ class OrderEditorRestTest extends TestCase {
 			'a realistic-carrier order must offer «Редактировать» exactly like a test_shipping one does'
 		);
 	}
+
+	/**
+	 * #988: «Редактировать» depends ONLY on the D5 policy, never on a registered shipment handler —
+	 * a carrier with tariffs but no export through its API keeps the wizard's edit route.
+	 *
+	 * Re-registering a provider under its own id drops its shipment handler
+	 * ({@see Orders_Registry::register_provider()}), which leaves the realistic carrier exactly as
+	 * such a carrier is: a row of the page, no handler.
+	 *
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_a_carrier_without_a_shipment_handler_still_edits( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+
+		$registry = Orders_Registry::instance();
+		$registry->register_provider( $registry->get_provider( 'realistic' ), \Woodev_Realistic_Shipping_Plugin::instance() );
+
+		$this->assertNull( $registry->get_shipment_handler( 'realistic' ), 'the carrier under test has no shipment handler' );
+
+		$id = $this->create_through_the_route();
+
+		$order = wc_get_order( $id );
+		$order->set_status( 'on-hold' );
+		$order->save();
+
+		$response = $this->send( 'GET', self::NAMESPACE_ROOT );
+		$this->assertSame( 200, $response->get_status() );
+
+		$row = null;
+
+		foreach ( $response->get_data()['rows'] as $candidate ) {
+			if ( $id === $candidate['id'] ) {
+				$row = $candidate;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $row, 'the created order must be a row of the page' );
+		$this->assertSame( [ 'edit' ], array_column( $row['actions'], 'action' ), 'edit, and none of the carrier actions that need a handler' );
+
+		$loaded = $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' );
+
+		$this->assertSame( 200, $loaded->get_status(), wp_json_encode( $loaded->get_data() ) );
+
+		$body = $loaded->get_data();
+
+		$body['items'][0]['quantity'] = 3;
+
+		$updated = $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $body );
+
+		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
+		$this->assertSame( 3, (int) array_values( wc_get_order( $id )->get_items( 'line_item' ) )[0]->get_quantity() );
+	}
 }

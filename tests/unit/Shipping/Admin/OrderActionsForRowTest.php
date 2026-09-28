@@ -4,8 +4,8 @@
  *
  * `Order_Actions::for_row()` is `for_order()` plus one client-side action, offered by the SAME
  * `is_editable()` policy the load / update routes re-check. Pinned here: when it appears, where it
- * sits, that it never leaks into the executable set (`for_order()` / `is_offered()`), and that a
- * carrier without a shipment handler still shows no actions at all.
+ * sits, that it never leaks into the executable set (`for_order()` / `is_offered()`), and that it
+ * does not need a shipment handler (#988) — a carrier without one shows «Редактировать» and nothing else.
  *
  * @package Woodev\Tests\Unit\Shipping\Admin
  */
@@ -159,9 +159,21 @@ final class OrderActionsForRowTest extends TestCase {
 		}
 	}
 
-	public function test_no_actions_at_all_without_a_provider_or_a_handler(): void {
+	public function test_no_actions_at_all_without_a_provider(): void {
 		$this->assertSame( [], $this->actions()->for_row( $this->order(), null ) );
-		$this->assertSame( [], $this->actions()->for_row( $this->order(), $this->provider() ) );
+	}
+
+	public function test_a_carrier_without_a_handler_still_gets_the_edit_action_and_nothing_else(): void {
+		// No register_handler() call — that is the case under test (#988).
+		$this->assertSame( [ Order_Actions::EDIT ], $this->ids( $this->order() ) );
+	}
+
+	public function test_a_carrier_without_a_handler_loses_the_edit_action_by_the_same_policy(): void {
+		$this->meta['_cdek_carrier_order_id'] = 'CARRIER-1';
+		$this->assertSame( [], $this->ids( $this->order() ), 'exported' );
+
+		$this->meta = [];
+		$this->assertSame( [], $this->ids( $this->order( 'completed' ) ), 'final status' );
 	}
 
 	public function test_the_executable_set_never_carries_the_edit_action(): void {

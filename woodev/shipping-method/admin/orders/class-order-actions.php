@@ -216,8 +216,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 * routes; they keep refusing it, as they refuse any unknown id.
 		 *
 		 * The button is offered by {@see self::is_editable()} — the one policy the load / update routes
-		 * re-check — so it cannot outlive what the server would accept. Like every action here it needs
-		 * a registered shipment handler; a carrier without one shows no actions at all.
+		 * re-check — so it cannot outlive what the server would accept. Unlike the carrier actions it
+		 * does NOT need a registered shipment handler (#988): editing never calls the carrier, so a
+		 * carrier with rates but no export still gets it; only the carrier actions of
+		 * {@see self::for_order()} stay behind the handler.
 		 *
 		 * @since 2.0.2
 		 *
@@ -228,10 +230,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public function for_row( \WC_Order $order, ?Orders_Provider $provider ): array {
 			$actions = $this->for_order( $order, $provider );
-
-			if ( null === $provider || null === $this->registry->get_shipment_handler( $provider->get_id() ) ) {
-				return $actions;
-			}
 
 			if ( ! self::is_editable( $order, $provider ) ) {
 				return $actions;
