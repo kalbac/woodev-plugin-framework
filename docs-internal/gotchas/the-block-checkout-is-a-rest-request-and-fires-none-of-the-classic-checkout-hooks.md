@@ -115,4 +115,4 @@ function handle_store_api_order_processed( $order ) {
 - [block-checkout-reads-country-locale-not-checkout-fields](block-checkout-reads-country-locale-not-checkout-fields.md) — the other "the block checkout is not the classic checkout" gap: it ignores `woocommerce_checkout_fields`
 - [the-integration-suite-has-a-wc-session-a-rest-request-does-not](the-integration-suite-has-a-wc-session-a-rest-request-does-not.md) — the same REST-context split on the test side: a REST request and the PHPUnit suite disagree about which context is live
 - [the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other](the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other.md) — the general shape: a checkout rule lives in two halves, and fixing one silently leaves the other
-- The I-0 per-request measurement is recorded at `docs-internal/research/2026-09-28-710-i0-measurement/README.md` on branch `research/962-i0-measurement` (not on `main`) — the evidence behind this gotcha
+- [research/2026-09-28-710-i0-measurement](../research/2026-09-28-710-i0-measurement/README.md) — the I0 per-request measurement, the evidence behind this gotcha

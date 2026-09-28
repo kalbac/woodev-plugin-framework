@@ -20,7 +20,7 @@
 - [shipping/checkout] **`disabled` drops a checkout field from `form.checkout.serialize()`; `readonly` is inert on a `<select>`.** → [disabled-drops-a-checkout-field-from-the-form-readonly-is-inert-on-select](../gotchas/disabled-drops-a-checkout-field-from-the-form-readonly-is-inert-on-select.md) (s90)
 - [shipping/checkout] **`.woocommerce-input-wrapper` is `display: inline`, so an absolutely-positioned child centres on the line box, not the control.** → [the-woocommerce-input-wrapper-is-display-inline-so-absolute-children-miscentre](../gotchas/the-woocommerce-input-wrapper-is-display-inline-so-absolute-children-miscentre.md) (s90)
 - [shipping/checkout] **A `private static` "once per request" gate in a class each plugin builds its own copy of checks only the FIRST plugin — silently, with no failure to see.** → [a-process-static-once-per-request-gate-checks-only-the-first-plugin](../gotchas/a-process-static-once-per-request-gate-checks-only-the-first-plugin.md) (s113)
-- [shipping/checkout] **The block checkout is a REST request: the shipping guard blocks its rates, and a block-checkout order fires none of the classic checkout hooks.** → [the-block-checkout-is-a-rest-request-and-fires-none-ofthe-classic-checkout-hooks](../gotchas/the-block-checkout-is-a-rest-request-and-fires-none-ofthe-classic-checkout-hooks.md) (s142)
+- [shipping/checkout] **The block checkout is a REST request: the shipping guard blocks its rates, and a block-checkout order fires none of the classic checkout hooks.** → [the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks](../gotchas/the-block-checkout-is-a-rest-request-and-fires-none-of-the-classic-checkout-hooks.md) (s142)
 
 ## Related
 
