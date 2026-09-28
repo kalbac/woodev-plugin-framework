@@ -1228,7 +1228,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 			// for that. So: consume it opportunistically, never require it.
 			$dependencies = array_merge(
 				(array) $asset['dependencies'],
-				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ]
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency', 'heartbeat' ]
 			);
 
 			// The wizard's delivery step draws the pickup list and map INSIDE itself (#970, O10):

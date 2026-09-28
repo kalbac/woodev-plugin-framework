@@ -285,6 +285,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				return $row;
 			}
 
+			$lock_owner = Order_Actions::edit_lock_owner( $row['order'] );
+
+			if ( null !== $lock_owner ) {
+				return self::edit_locked_error( $lock_owner['display_name'] );
+			}
+
+			Order_Actions::refresh_edit_lock( $row['order'] );
+
 			$checked = $this->validator->validate( $payload, true );
 
 			if ( [] !== $checked['errors'] ) {
@@ -394,7 +402,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Editor
 				return $row;
 			}
 
+			$lock_owner = Order_Actions::edit_lock_owner( $row['order'] );
+
+			if ( null !== $lock_owner ) {
+				return self::edit_locked_error( $lock_owner['display_name'] );
+			}
+
+			Order_Actions::refresh_edit_lock( $row['order'] );
+
 			return $this->build_prefill( $row['order'], $row['provider'] );
+		}
+
+		/**
+		 * The transport error for an order held by another manager's live WooCommerce lock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $display_name current lock holder's display name.
+		 * @return \WP_Error the REST 409 response.
+		 */
+		private static function edit_locked_error( string $display_name ): \WP_Error {
+			return self::error(
+				'woodev_shipping_order_locked',
+				sprintf(
+					/* translators: %s: display name of the manager currently editing the order. */
+					__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
+					$display_name
+				),
+				409
+			);
 		}
 
 		/**

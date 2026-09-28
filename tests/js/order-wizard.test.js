@@ -706,6 +706,23 @@ describe( 'sending the order and server-side validation (422, shown per field)',
 		expect( onClose ).not.toHaveBeenCalled();
 	} );
 
+	test( 'a double click sends one save while the first request is in flight (#982)', async () => {
+		let resolve;
+		routeApi( {
+			'/shipping/orders': () => new Promise( ( done ) => ( resolve = done ) ),
+		} );
+		const { onSaved } = await toPayment();
+		const submit = screen.getByRole( 'button', { name: 'Создать' } );
+
+		fireEvent.click( submit );
+		fireEvent.click( submit );
+
+		expect( apiFetch.mock.calls.map( ( call ) => call[ 0 ] ).filter( ( request ) => 'POST' === request.method && request.url === ORDERS_ROOT ) ).toHaveLength( 1 );
+
+		resolve( { id: 91, number: '91', message: 'Заказ №91 создан.' } );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalledTimes( 1 ) );
+	} );
+
 	test( 'a network failure without a body says something human, not nothing', async () => {
 		routeApi( { '/shipping/orders': () => Promise.reject( new Error( 'Failed to fetch' ) ) } );
 		await toPayment();

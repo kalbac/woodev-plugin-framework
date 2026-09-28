@@ -235,14 +235,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 				return $actions;
 			}
 
+			$edit_action = self::build_action(
+				self::EDIT,
+				__( 'Редактировать', 'woodev-plugin-framework' ),
+				__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
+				false
+			);
+			$lock_owner  = self::edit_lock_owner( $order );
+
+			if ( null !== $lock_owner ) {
+				$edit_action['disabled']   = true;
+				$edit_action['lock_owner'] = $lock_owner['display_name'];
+				$edit_action['title']      = sprintf(
+					/* translators: %s: display name of the manager currently editing the order. */
+					__( 'This order is already being edited by %s', 'woodev-plugin-framework' ),
+					$lock_owner['display_name']
+				);
+			}
+
 			array_unshift(
 				$actions,
-				self::build_action(
-					self::EDIT,
-					__( 'Редактировать', 'woodev-plugin-framework' ),
-					__( 'Изменить заказ, пока он не выгружен перевозчику', 'woodev-plugin-framework' ),
-					false
-				)
+				$edit_action
 			);
 
 			return $actions;
@@ -391,6 +404,52 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		 */
 		public static function is_editable( \WC_Order $order, ?Orders_Provider $provider ): bool {
 			return '' === self::not_editable_reason( $order, $provider );
+		}
+
+		/**
+		 * Returns the user holding a live WooCommerce edit lock for another manager.
+		 *
+		 * WooCommerce has provided this API since 7.8.0 (the framework's oldest supported
+		 * WooCommerce is 8.5.1). The class owns the `_edit_lock` format, expiry window and
+		 * user validation, so a native order editor and this wizard always share one lock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to inspect.
+		 * @return array{user_id:int,display_name:string}|null the other lock owner, or null.
+		 */
+		public static function edit_lock_owner( \WC_Order $order ): ?array {
+			$edit_lock = self::edit_lock();
+
+			if ( null === $edit_lock || ! $edit_lock->is_locked_by_another_user( $order ) ) {
+				return null;
+			}
+
+			$lock = $edit_lock->get_lock( $order );
+			$user = is_array( $lock ) ? get_user_by( 'id', (int) $lock['user_id'] ) : false;
+
+			if ( ! $user ) {
+				return null;
+			}
+
+			return [
+				'user_id'      => (int) $user->ID,
+				'display_name' => (string) $user->display_name,
+			];
+		}
+
+		/**
+		 * Refreshes the current manager's native WooCommerce edit lock.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order the order to lock.
+		 * @return bool whether WooCommerce accepted the lock.
+		 */
+		public static function refresh_edit_lock( \WC_Order $order ): bool {
+			$edit_lock = self::edit_lock();
+
+			return null !== $edit_lock && false !== $edit_lock->lock( $order );
 		}
 
 		/**
@@ -598,6 +657,22 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 		}
 
 		/**
+		 * Gets WooCommerce's shared edit-lock service when WooCommerce has loaded it.
+		 *
+		 * The `class_exists()` guard keeps isolated unit tests independent of WooCommerce's
+		 * internal source tree; production's supported WooCommerce range always provides it.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return object|null WooCommerce's EditLock service, or null outside WooCommerce.
+		 */
+		private static function edit_lock(): ?object {
+			$class = '\\Automattic\\WooCommerce\\Internal\\Admin\\Orders\\EditLock';
+
+			return class_exists( $class ) ? new $class() : null;
+		}
+
+		/**
 		 * Re-validates a filtered actions array's shape, dropping malformed entries
 		 * rather than shipping them to the client.
 		 *
@@ -628,6 +703,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Action
 					'title'       => isset( $action['title'] ) && is_string( $action['title'] ) ? $action['title'] : '',
 					'destructive' => (bool) ( $action['destructive'] ?? false ),
 				];
+
+				if ( isset( $action['disabled'] ) ) {
+					$sanitized[ count( $sanitized ) - 1 ]['disabled'] = (bool) $action['disabled'];
+				}
+
+				if ( isset( $action['lock_owner'] ) && is_string( $action['lock_owner'] ) ) {
+					$sanitized[ count( $sanitized ) - 1 ]['lock_owner'] = $action['lock_owner'];
+				}
 			}
 
 			return $sanitized;

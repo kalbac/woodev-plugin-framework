@@ -799,7 +799,9 @@ class ShippingOrdersRegistryTest extends TestCase {
 		// URL-driven, `wc-admin-app` so our script runs after the app shell and
 		// `woocommerce_admin_pages_list` is read with our page already on it, then
 		// `wc-date` for `DateRangeFilterPicker`'s period resolution and
-		// `wc-currency` because `AdvancedFilters` consumes a `CurrencyFactory`.
+		// `wc-currency` because `AdvancedFilters` consumes a `CurrencyFactory`, and
+		// WordPress's `heartbeat` because the order wizard refreshes WooCommerce's
+		// shared `_edit_lock` while an edit modal is open (#982).
 		//
 		// `wc-settings` is deliberately NOT in this list and must not be added: it
 		// is only conditionally registered, and naming an unregistered handle makes
@@ -812,7 +814,7 @@ class ShippingOrdersRegistryTest extends TestCase {
 			->with(
 				'woodev-shipping-orders-page',
 				\Mockery::type( 'string' ),
-				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency' ],
+				[ 'wc-components', 'wc-navigation', 'wc-admin-app', 'wc-date', 'wc-currency', 'heartbeat' ],
 				'1.2.3',
 				true
 			);

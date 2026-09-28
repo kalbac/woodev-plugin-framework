@@ -22,6 +22,7 @@ use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__ ) . '/Order/order-persistence-fixtures.php';
 require_once __DIR__ . '/order-editor-lock-fixtures.php';
+require_once __DIR__ . '/order-edit-lock-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Editor::create
@@ -37,6 +38,7 @@ final class OrderEditorGateTest extends TestCase {
 		parent::setUp();
 
 		$this->meta = [];
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 
 		// `update()` takes the order's edit lock first (#981 round 4); here it is always granted.
 		$GLOBALS['wpdb'] = new Order_Editor_Fake_Wpdb();
@@ -157,6 +159,21 @@ final class OrderEditorGateTest extends TestCase {
 
 		$this->assertSame( 409, $this->status_of( $this->editor()->update( 123, [] ) ) );
 		$this->assertSame( 409, $this->status_of( $this->editor()->load( 123 ) ) );
+	}
+
+	public function test_another_managers_live_woocommerce_lock_answers_409_before_the_payload_is_checked(): void {
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 7 ];
+		$user               = new \stdClass();
+		$user->ID           = 7;
+		$user->display_name = 'Мария';
+		Functions\expect( 'get_user_by' )->once()->with( 'id', 7 )->andReturn( $user );
+		Functions\when( 'wc_get_order' )->justReturn( $this->order() );
+
+		$result = $this->editor()->update( 123, [] );
+
+		$this->assertSame( 409, $this->status_of( $result ) );
+		$this->assertSame( 'woodev_shipping_order_locked', $result->get_error_code() );
+		$this->assertSame( 'This order is already being edited by Мария', $result->get_error_message() );
 	}
 
 	public function test_the_gate_answers_before_the_payload_is_looked_at(): void {

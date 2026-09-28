@@ -111,8 +111,27 @@ class OrderEditorRestTest extends TestCase {
 	/**
 	 * @return void
 	 */
-	private function login_as_manager(): void {
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'shop_manager' ] ) );
+	private function login_as_manager(): int {
+		$user_id = self::factory()->user->create( [ 'role' => 'shop_manager' ] );
+		wp_set_current_user( $user_id );
+
+		return $user_id;
+	}
+
+	/**
+	 * Writes the same native WooCommerce lock that its normal order editor writes.
+	 *
+	 * @param int $order_id order to lock.
+	 * @param int $user_id  manager who owns the lock.
+	 * @param int $time     lock timestamp.
+	 * @return void
+	 */
+	private function set_edit_lock( int $order_id, int $user_id, int $time ): void {
+		$order = wc_get_order( $order_id );
+
+		$this->assertInstanceOf( \WC_Order::class, $order );
+		$order->update_meta_data( '_edit_lock', $time . ':' . $user_id );
+		$order->save_meta_data();
 	}
 
 	/**
@@ -319,6 +338,72 @@ class OrderEditorRestTest extends TestCase {
 		$this->assertSame( 200, $updated->get_status(), wp_json_encode( $updated->get_data() ) );
 		$this->assertSame( $id, $updated->get_data()['id'] );
 		$this->assertSame( 4, (int) array_values( wc_get_order( $id )->get_items( 'line_item' ) )[0]->get_quantity() );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_load_takes_woocommerces_shared_edit_lock( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$manager_id = $this->login_as_manager();
+		$id         = $this->create_through_the_route();
+
+		$this->assertSame( 200, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
+		$lock = explode( ':', (string) wc_get_order( $id )->get_meta( '_edit_lock', true ) );
+
+		$this->assertGreaterThanOrEqual( time() - 2, (int) $lock[0] );
+		$this->assertSame( (string) $manager_id, $lock[1] );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_another_managers_live_edit_lock_refuses_update_with_409( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$this->login_as_manager();
+		$id       = $this->create_through_the_route();
+		$other_id = self::factory()->user->create( [ 'role' => 'shop_manager', 'display_name' => 'Мария' ] );
+		$this->set_edit_lock( $id, $other_id, time() );
+
+		$response = $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'woodev_shipping_order_locked', $response->get_data()['code'] );
+		$this->assertSame( 'This order is already being edited by Мария', $response->get_data()['message'] );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_an_expired_edit_lock_is_ignored_and_replaced_by_the_loading_manager( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$manager_id = $this->login_as_manager();
+		$id         = $this->create_through_the_route();
+		$other_id   = self::factory()->user->create( [ 'role' => 'shop_manager' ] );
+		$this->set_edit_lock( $id, $other_id, time() - 151 );
+
+		$this->assertSame( 200, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
+		$this->assertSame( (string) $manager_id, explode( ':', (string) wc_get_order( $id )->get_meta( '_edit_lock', true ) )[1] );
+	}
+
+	/**
+	 * @dataProvider datastore_provider
+	 * @param bool $hpos datastore under test.
+	 * @return void
+	 */
+	public function test_the_lock_owner_can_update_its_own_live_lock( bool $hpos ): void {
+		$this->use_datastore( $hpos );
+		$manager_id = $this->login_as_manager();
+		$id         = $this->create_through_the_route();
+		$this->set_edit_lock( $id, $manager_id, time() );
+
+		$this->assertSame( 200, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() )->get_status() );
 	}
 
 	// -------------------------------------------------------------------------

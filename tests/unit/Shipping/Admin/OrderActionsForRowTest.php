@@ -22,6 +22,7 @@ use Woodev\Tests\Unit\TestCase;
 
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-plugin-compatibility.php';
 require_once dirname( __DIR__, 4 ) . '/woodev/compatibility/class-order-compatibility.php';
+require_once __DIR__ . '/order-edit-lock-fixtures.php';
 
 /**
  * @covers \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::for_row
@@ -35,6 +36,7 @@ final class OrderActionsForRowTest extends TestCase {
 		parent::setUp();
 
 		$this->meta = [];
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks = [];
 
 		Functions\when( 'apply_filters' )->returnArg( 2 );
 		Functions\when( 'get_post_meta' )->alias(
@@ -113,6 +115,22 @@ final class OrderActionsForRowTest extends TestCase {
 		$this->assertSame( 'Редактировать', $edit['label'] );
 		$this->assertNotSame( '', $edit['title'] );
 		$this->assertFalse( $edit['destructive'], 'opening a form needs no «Да / Нет»' );
+	}
+
+	public function test_another_managers_live_woocommerce_lock_disables_edit_and_carries_its_owner(): void {
+		$this->register_handler();
+		\Automattic\WooCommerce\Internal\Admin\Orders\EditLock::$locks[123] = [ 'time' => time(), 'user_id' => 7 ];
+
+		$user               = new \stdClass();
+		$user->ID           = 7;
+		$user->display_name = 'Мария';
+		Functions\expect( 'get_user_by' )->once()->with( 'id', 7 )->andReturn( $user );
+
+		$edit = $this->actions()->for_row( $this->order(), $this->provider() )[0];
+
+		$this->assertTrue( $edit['disabled'] );
+		$this->assertSame( 'Мария', $edit['lock_owner'] );
+		$this->assertSame( 'This order is already being edited by Мария', $edit['title'] );
 	}
 
 	public function test_a_status_export_is_not_offered_for_still_gets_the_edit_action(): void {
