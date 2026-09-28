@@ -13,7 +13,7 @@ import { createElement } from '@wordpress/element';
 /**
  * Checkmark icon (inherits currentColor).
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function CheckIcon() {
 	return createElement(
@@ -40,7 +40,7 @@ export function CheckIcon() {
 /**
  * Filled checkmark icon (uses fill:currentColor) — finish hero / dropdown tick.
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function CheckFilledIcon() {
 	return createElement(
@@ -61,7 +61,7 @@ export function CheckFilledIcon() {
 /**
  * Info "i" circle icon (inherits currentColor).
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function InfoIcon() {
 	return createElement(
@@ -84,7 +84,7 @@ export function InfoIcon() {
 /**
  * Chevron-down caret icon (inherits currentColor) — dropdown trigger.
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function ChevronIcon() {
 	return createElement(
@@ -109,7 +109,7 @@ export function ChevronIcon() {
 /**
  * Gear / settings icon (uses fill:currentColor).
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function GearIcon() {
 	return createElement(
@@ -132,7 +132,7 @@ export function GearIcon() {
 /**
  * Star / review icon (uses fill:currentColor).
  *
- * @return {Object} React element.
+ * @return {JSX.Element} React element.
  */
 export function StarIcon() {
 	return createElement(
