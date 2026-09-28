@@ -128,6 +128,7 @@ const managerI18n = (): Record<string, string> => ( {
 	select: __( 'Выбрать', 'woodev-plugin-framework' ),
 	selected: __( 'Выбрано', 'woodev-plugin-framework' ),
 	backToList: __( 'К списку', 'woodev-plugin-framework' ),
+	yourAddress: __( 'Найти адрес', 'woodev-plugin-framework' ),
 } );
 
 /**

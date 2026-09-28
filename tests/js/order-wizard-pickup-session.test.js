@@ -184,7 +184,7 @@ describe( 'strategy bulk', () => {
 		// Manager mode (#710): the panels are told so, and the three labels the mode reads are the
 		// wizard's own, laid over the carrier's table — which is otherwise passed through intact.
 		expect( panelsInstances[ 0 ].config.mode ).toBe( 'manager' );
-		expect( panelsInstances[ 0 ].config.i18n ).toEqual( { ...CONFIG.i18n, select: 'Выбрать', selected: 'Выбрано', backToList: 'К списку' } );
+		expect( panelsInstances[ 0 ].config.i18n ).toEqual( { ...CONFIG.i18n, select: 'Выбрать', selected: 'Выбрано', backToList: 'К списку', yourAddress: 'Найти адрес' } );
 
 		const provider = providers[ 0 ];
 		expect( provider.init ).toHaveBeenCalledTimes( 1 );
