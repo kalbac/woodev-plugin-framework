@@ -138,12 +138,13 @@ export function validateAddress(
 ): FieldErrors {
 	const errors: FieldErrors = {};
 	const { country, state } = data.shipping;
+	const stateRule = ruleOf( policy, 'state' );
 
 	if ( '' === country.trim() ) {
 		add( errors, 'shipping.country', __( 'Укажите страну доставки.', 'woodev-plugin-framework' ) );
 	} else if ( Object.keys( countries ).length > 0 && ! ( country in countries ) ) {
 		add( errors, 'shipping.country', __( 'Такой страны нет в справочнике магазина.', 'woodev-plugin-framework' ) );
-	} else if ( state && states[ country ] && ! ( state in states[ country ] ) ) {
+	} else if ( state && ! stateRule.hidden && ! stateRule.removed && states[ country ] && ! ( state in states[ country ] ) ) {
 		add( errors, 'shipping.state', __( 'Такого региона нет в справочнике магазина для выбранной страны.', 'woodev-plugin-framework' ) );
 	}
 

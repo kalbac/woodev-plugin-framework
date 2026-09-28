@@ -342,6 +342,23 @@ class OrderAddressPolicyRestTest extends TestCase {
 	}
 
 	/**
+	 * A saved order can hold a legacy region that is not a WooCommerce state code. Once the merchant
+	 * removes the region, the wizard neither draws nor keeps that field, so its stale value cannot
+	 * block the save.
+	 *
+	 * @return void
+	 */
+	public function test_a_removed_region_with_a_stored_non_woocommerce_code_is_accepted_and_not_stored(): void {
+		$this->policy_says( [ 'region_field' => 'remove' ] );
+
+		$response = $this->send( 'POST', self::ORDERS, $this->payload( [ 'state' => 'not-a-woocommerce-code' ] ) );
+
+		$this->assertSame( 201, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '', wc_get_order( $response->get_data()['id'] )->get_billing_state() );
+		$this->assertSame( '', wc_get_order( $response->get_data()['id'] )->get_shipping_state() );
+	}
+
+	/**
 	 * `hide_for_pickup` relaxes the address only for a pickup tariff — a courier tariff still asks.
 	 *
 	 * @return void

@@ -674,6 +674,23 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$this->assertSame( 'ул. Тверская, 1', $result['data']['shipping']['address_1'] );
 		}
 
+		public function test_a_hidden_or_removed_region_with_a_stored_invalid_code_is_not_checked(): void {
+			foreach ( [
+				'hidden'  => $this->rule( [ 'hidden' => true ] ),
+				'removed' => $this->rule( [ 'hidden' => true, 'removed' => true ] ),
+			] as $mode => $rule ) {
+				$this->address_rules = [ 'state' => $rule ];
+				$payload              = $this->payload();
+				$payload['billing']['state'] = 'MOW';
+				$payload['shipping']         = [ 'country' => 'RU', 'state' => 'MOW', 'city' => 'Казань' ];
+				$result                = $this->validator()->validate( $payload, false );
+
+				$this->assertSame( [], $result['errors'], $mode );
+				$this->assertSame( 'removed' === $mode ? '' : 'MOW', $result['data']['billing']['state'], $mode );
+				$this->assertSame( 'removed' === $mode ? '' : 'MOW', $result['data']['shipping']['state'], $mode );
+			}
+		}
+
 		public function test_the_policy_is_asked_for_the_delivery_country_and_whether_the_tariff_is_pickup(): void {
 			$this->validator()->validate( $this->payload( [ 'shipping' => [ 'country' => 'KZ', 'city' => 'Алматы' ] ] ), false );
 

@@ -167,7 +167,14 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			$pickup_point  = $this->check_pickup_point( $payload['pickup_point'] ?? null, $shipping_line, $errors );
 			$carrier_data  = $this->check_carrier_fields( $payload['carrier_fields'] ?? [], $shipping_line, $errors );
 
-			$this->apply_address_policy( $billing, $shipping, $shipping_filled ? 'shipping' : 'billing', $this->is_pickup_line( $shipping_line ), $errors );
+			$address_rules = $this->apply_address_policy( $billing, $shipping, $shipping_filled ? 'shipping' : 'billing', $this->is_pickup_line( $shipping_line ), $errors );
+			$state_hidden  = ! empty( $address_rules['state']['hidden'] ) || ! empty( $address_rules['state']['removed'] );
+
+			$this->check_state( $billing, 'billing', $state_hidden, $errors );
+
+			if ( $shipping_filled ) {
+				$this->check_state( $shipping, 'shipping', $state_hidden, $errors );
+			}
 
 			$data = [
 				'customer'       => $customer,
@@ -263,12 +270,6 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 
 				if ( ! array_key_exists( $address['country'], $countries ) ) {
 					self::add_error( $errors, $section . '.country', 'invalid_country', __( 'Такой страны нет в справочнике магазина.', 'woodev-plugin-framework' ) );
-				} elseif ( '' !== $address['state'] ) {
-					$states = (array) call_user_func( $this->lookups['states'], $address['country'] );
-
-					if ( [] !== $states && ! array_key_exists( $address['state'], $states ) ) {
-						self::add_error( $errors, $section . '.state', 'invalid_state', __( 'Такого региона нет в справочнике магазина для выбранной страны.', 'woodev-plugin-framework' ) );
-					}
 				}
 			}
 
@@ -284,6 +285,35 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 			}
 
 			return $address;
+		}
+
+		/**
+		 * Checks a state code after the delivery address policy has removed or hidden any fields it owns.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, string>            $address      the checked address.
+		 * @param string                           $section      `billing` or `shipping` — the error path prefix.
+		 * @param bool                             $state_hidden whether the policy hides or removes the state control.
+		 * @param array<int, array<string,string>> $errors       collected problems.
+		 * @return void
+		 */
+		private function check_state( array $address, string $section, bool $state_hidden, array &$errors ): void {
+			if ( $state_hidden || '' === $address['country'] || '' === $address['state'] ) {
+				return;
+			}
+
+			$countries = (array) call_user_func( $this->lookups['countries'] );
+
+			if ( ! array_key_exists( $address['country'], $countries ) ) {
+				return;
+			}
+
+			$states = (array) call_user_func( $this->lookups['states'], $address['country'] );
+
+			if ( [] !== $states && ! array_key_exists( $address['state'], $states ) ) {
+				self::add_error( $errors, $section . '.state', 'invalid_state', __( 'Такого региона нет в справочнике магазина для выбранной страны.', 'woodev-plugin-framework' ) );
+			}
 		}
 
 		/**
@@ -537,11 +567,11 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 		 * @param string                           $section  `shipping`, or `billing` when the delivery address follows billing — the error path prefix.
 		 * @param bool                             $pickup   whether the chosen tariff is a pickup one.
 		 * @param array<int, array<string,string>> $errors   collected problems.
-		 * @return void
+		 * @return array<string, array{required: bool, hidden: bool, removed: bool}> the delivery address rules.
 		 */
-		private function apply_address_policy( array &$billing, array &$shipping, string $section, bool $pickup, array &$errors ): void {
+		private function apply_address_policy( array &$billing, array &$shipping, string $section, bool $pickup, array &$errors ): array {
 			if ( '' === $shipping['country'] ) {
-				return;
+				return [];
 			}
 
 			$rules = (array) call_user_func( $this->lookups['address_rules'], $shipping['country'], $pickup );
@@ -564,6 +594,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Order_Payloa
 					self::add_error( $errors, $section . '.' . $key, 'field_required', $message );
 				}
 			}
+
+			return $rules;
 		}
 
 		/**
