@@ -156,6 +156,27 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		private ?Location_Record $unpersisted_default = null;
 
 		/**
+		 * Whether {@see self::with_explicit_record()} is running, i.e. whether the customer
+		 * accessors answer {@see self::$explicit_record} instead of the customer store (#965).
+		 *
+		 * A separate flag rather than `null !== $explicit_record`: an admin request with no
+		 * destination record must answer «no record», never fall through to the ADMIN's own store.
+		 *
+		 * @since 2.0.2
+		 * @var bool
+		 */
+		private bool $has_explicit_record = false;
+
+		/**
+		 * The destination record {@see self::with_explicit_record()} put in force, or `null`
+		 * for «this call has no record».
+		 *
+		 * @since 2.0.2
+		 * @var Location_Record|null
+		 */
+		private ?Location_Record $explicit_record = null;
+
+		/**
 		 * Constructor.
 		 *
 		 * Every collaborator is optional and defaults to the production
@@ -301,6 +322,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null
 		 */
 		public function get_customer_record( ?string $for_country = null ): ?array {
+			if ( $this->has_explicit_record ) {
+				return $this->explicit_entry();
+			}
+
 			$current = $this->gated_current_entry( $for_country );
 
 			if ( null !== $current ) {
@@ -351,6 +376,63 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 			$this->unpersisted_default = $default;
 
 			return self::implicit_entry( $default );
+		}
+
+		/**
+		 * Runs `$callback` with the customer accessors answering an EXPLICIT record instead of the
+		 * customer store (#965, spec `2026-09-27-710-create-edit-order-design.md` D2 «Mine 3»).
+		 *
+		 * The admin rate calculator prices a package for a destination the manager typed in — not
+		 * for anybody's session. Carrier rate code reads its destination through
+		 * {@see self::get_customer_record()}, {@see self::get_customer_chain()},
+		 * {@see self::get_customer_record_at()} or `resolve_for( $plugin )` with no record, and
+		 * every one of those would otherwise read the ADMIN's own stored location (or lazily seed a
+		 * default into it). For the duration of the call they all answer `$record` — a non-implicit,
+		 * ungated entry — and the store is neither read nor written. `null` means «no destination
+		 * record»: the accessors then answer `null` rather than falling back to the store.
+		 *
+		 * Scoped to this call: the previous state is restored in a `finally`, so a throwing
+		 * callback cannot leave the override in force, and nested calls unwind correctly.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record|null $record   The destination record, or `null` for none.
+		 * @param callable             $callback Called with no arguments.
+		 *
+		 * @return mixed Whatever `$callback` returns.
+		 */
+		public function with_explicit_record( ?Location_Record $record, callable $callback ) {
+			$previous_has_record = $this->has_explicit_record;
+			$previous_record     = $this->explicit_record;
+
+			$this->has_explicit_record = true;
+			$this->explicit_record     = $record;
+
+			try {
+				return $callback();
+			} finally {
+				$this->has_explicit_record = $previous_has_record;
+				$this->explicit_record     = $previous_record;
+			}
+		}
+
+		/**
+		 * The {@see self::get_customer_record()} entry for the explicit record in force, or `null`.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return array{record: Location_Record, implicit: bool, saved_at: int}|null
+		 */
+		private function explicit_entry(): ?array {
+			if ( null === $this->explicit_record ) {
+				return null;
+			}
+
+			return [
+				'record'   => $this->explicit_record,
+				'implicit' => false,
+				'saved_at' => time(),
+			];
 		}
 
 		/**
@@ -446,6 +528,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Location\\Location_Service'
 
 			if ( null === $current ) {
 				return null;
+			}
+
+			if ( $this->has_explicit_record ) {
+				// #965: a one-entry chain built from the explicit record, never the store's.
+				return $this->with_derived_region_ancestor(
+					[
+						'records'  => [ $current['record']->level() => $current['record'] ],
+						'current'  => $current['record']->level(),
+						'implicit' => false,
+						'saved_at' => $current['saved_at'],
+					]
+				);
 			}
 
 			$raw   = $this->customer_store->get_chain();
