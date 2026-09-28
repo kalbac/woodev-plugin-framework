@@ -75,11 +75,20 @@ class OrderEditorDatastoresTest extends TestCase {
 			$this->markTestSkipped( 'The shipping fixture plugins are not loaded.' );
 		}
 
-		// Build WooCommerce's mailer INSIDE this test's scope, so its email classes and the
-		// `pending_to_*_notification` hooks they register exist for the test — CI on WC 8.5.1 / 9.3.0
-		// saw no «New order» where the mailer singleton had been built in an earlier test's scope
-		// whose hooks WP_UnitTestCase then restored (#968 r3 experiment; nothing is unhooked by hand).
-		\WC()->mailer();
+		// WooCommerce's transactional e-mails are listeners its e-mail objects register when the
+		// mailer is FIRST built. WP_UnitTestCase restores the hook table after every test, so once
+		// the mailer singleton has been built inside some earlier test's scope its listeners are
+		// gone for good while `WC()->mailer()` stays a no-op — every «New order» after that is a
+		// `_notification` action nobody hears (0 e-mails on WC 8.5.1 / 9.3.0 in CI; WC 11 builds
+		// the mailer during bootstrap, so its listeners sit in the backup and survive). Re-building
+		// the e-mail objects when this mailer's own «New order» listener is missing gives THIS test
+		// the hooks; WP_UnitTestCase drops them again afterwards (#981, traced in
+		// docs-internal/research/2026-09-28-981-new-order-email-trace/).
+		$mailer = \WC()->mailer();
+
+		if ( ! isset( $mailer->emails['WC_Email_New_Order'] ) || false === has_action( 'woocommerce_order_status_pending_to_processing_notification', [ $mailer->emails['WC_Email_New_Order'], 'trigger' ] ) ) {
+			$mailer->init();
+		}
 
 		Orders_Registry::instance()->reset_for_tests();
 
@@ -298,6 +307,32 @@ class OrderEditorDatastoresTest extends TestCase {
 		return $counter;
 	}
 
+	/**
+	 * Counts the e-mails of one WooCommerce e-mail type that WooCommerce actually SENT — on
+	 * `woocommerce_email_sent`, which every supported WooCommerce fires once per `wp_mail()` of a
+	 * transactional e-mail and never for a disabled or muted one.
+	 *
+	 * @param string $email_id WooCommerce e-mail id, e.g. `new_order`.
+	 * @return \ArrayObject live counter; read `['count']`.
+	 */
+	private function count_sent_email( string $email_id ): \ArrayObject {
+		$counter = new \ArrayObject( [ 'count' => 0 ] );
+
+		$listener = static function ( $sent = null, $id = null ) use ( $counter, $email_id ) {
+			if ( $sent && (string) $id === $email_id ) {
+				$counter['count'] = $counter['count'] + 1;
+			}
+
+			return $sent;
+		};
+
+		add_action( 'woocommerce_email_sent', $listener, 10, 3 );
+
+		$this->listeners[] = [ 'woocommerce_email_sent', $listener ];
+
+		return $counter;
+	}
+
 	// -------------------------------------------------------------------------
 	// create
 	// -------------------------------------------------------------------------
@@ -430,7 +465,7 @@ class OrderEditorDatastoresTest extends TestCase {
 	public function test_the_new_order_email_is_sent_once_for_processing_and_not_for_pending( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
-		$emails = $this->count_hook( 'woocommerce_email_enabled_new_order' );
+		$emails = $this->count_sent_email( 'new_order' );
 
 		$this->create( $this->payload( [ 'status' => 'pending' ] ) );
 		$this->assertSame( 0, $emails['count'], 'a pending order sends nothing, like a checkout order awaiting payment' );
@@ -444,8 +479,10 @@ class OrderEditorDatastoresTest extends TestCase {
 	 * WooCommerce transition that announces a created order, so the editor mutes that one e-mail for
 	 * that order while it runs — and nothing else: a later create still sends it.
 	 *
-	 * Counted on `woocommerce_email_recipient_new_order`, which WooCommerce reads only for an e-mail
-	 * that is enabled and about to go out (unlike `…_enabled_…`, which fires for a muted one too).
+	 * Counted on the e-mail actually going out ({@see count_sent_email()}). Neither of the two
+	 * filters is a send: `woocommerce_email_enabled_new_order` fires for a muted e-mail too, and
+	 * `woocommerce_email_recipient_new_order` is read by WooCommerce 10.9+'s EmailLogger for the
+	 * e-mail it did NOT send (traced for #981), and twice per real send on WooCommerce 8.5.1.
 	 *
 	 * @dataProvider datastore_provider
 	 * @param bool $hpos datastore under test.
@@ -454,7 +491,7 @@ class OrderEditorDatastoresTest extends TestCase {
 	public function test_an_update_from_pending_to_processing_sends_no_new_order_email( bool $hpos ): void {
 		$this->use_datastore( $hpos );
 
-		$sent = $this->count_hook( 'woocommerce_email_recipient_new_order' );
+		$sent = $this->count_sent_email( 'new_order' );
 
 		$pending = $this->create( $this->payload( [ 'status' => 'pending' ] ) );
 		$this->assertSame( 0, $sent['count'], 'a pending order sends nothing' );
