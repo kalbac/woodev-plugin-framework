@@ -6,7 +6,7 @@
 > file if it is about how the work went. **Never a third copy here.**
 > Program map → `specs/2026-06-25-shipping-module-decisions.md`.
 
-**As of 2026-09-27 (s141).** ✅ **#843 «Все / Любое» + #936 merged** (PR #937, accepted on the rig 27.09.2026). ✅ **#916 merged (PR #944):** a second plugin with an already-claimed download id cannot be activated — `download_id` is a required loader-definition field, the resolver never invokes a duplicate, the activation guard keeps the already-active plugin (operator's decision 27.09.2026). Follow-ups #942, #943. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
+**As of 2026-09-28 (s142).** ✅ Merged: #942/#943 (PR #975), #872 `Action_Result` (PR #976), #950/#953/#961 (PR #977), #868 (PR #979), #959 (PR #980). ⚠ **Block checkout gets NO framework rates on `main`** (#949 on its branch, PASS) — merge only with #963 (in PR #978) and #966 (branch, PASS). ⚠ **PR #978** (#964/#963, #967, #968) is RED → **#981** («New order» email). **#710 is built I0–I8** on branches (head `feat/974-wizard-export`); the UI stack has had no critic yet. Details: `sessions/s142.md`. ✅ **SP-10 is COMPLETE** (#820, s137): a carrier's legacy v1
 orders-page slug redirects to the framework page with that carrier preselected, accepted on the rig.
 ✅ **Both machines are live**; routine sync is git ONLY (`wiki/two-machine-setup.md`). The order
 metabox (#856) and the orders table (#870) stay accepted.
@@ -43,7 +43,7 @@ selector matches nothing. One line each under the `[rig/*]` and `[build/*]` topi
 
 ⛔ **The operator reordered the work, 12.09.2026, reconfirmed 13.09** — *«пока у нас не будет готов
 базовый минимум самого фреймворка, мы плагин не пилим»*. **#786 is OUT of the queue** («Заморожено»).
-Next: the tails (#872 → #868 → #942 → #652 → #943 → #941), then **«Создать заказ» / «Редактировать»** (#710) — the brainstorm is DONE (s141, 27.09.2026) and the spec is `specs/2026-09-27-710-create-edit-order-design.md`, increments I0–I8.
+Next: **#981** (unblocks PR #978) → merge #978, then #949+#966 together, then #965 (rebase on #949) → critic on the #710 UI stack (`feat/960`, `feat/969…974`) + #941 → operator's rig acceptance (I5b, I6, #941). Spec `specs/2026-09-27-710-create-edit-order-design.md`; I0 measurement `research/2026-09-28-710-i0-measurement/`.
 
 ✅ **CI first-try reliability is ENFORCED** (#871): `.githooks/pre-push` rebuilds the bundles and
 runs the catalogue gates by exit code in ~22 s — a worker may not build bundles while
@@ -79,7 +79,7 @@ FIXTURES**; the shipping plugin is written later, from scratch, own repo, versio
 these are not platform-dependent): unit **4132 / 14586**, 1 skipped, sodium ON; jest **1975** in
 **33** suites; **integration 200 / 730**; e2e **7** in 13 s; `npm run build` zero git diff; phpcs
 clean **with the warning level ON**; phpstan level 3 no errors. ⚠ A number copied from a handoff is an INFERENCE — re-measure.
-PR #937 (merged 27.09.2026) moved `main` to unit **4154**, jest **1983**, integration **202 / 2908** (measured on its branch).
+**`main` after s142's merges (28.09.2026, measured on `main`):** unit **4291 / 20409**, 1 skipped; jest **1987**; integration **219 / 3043**.
 
 ⚠ **A `.ts` msgid fails `lint:i18n-sources`** — it extracts from the BUILT bundle (s129).
 
@@ -109,7 +109,7 @@ region whose `key()` is not in the settlement's own `ancestors()` is refused. �
 `Location_Record::is_within()`, never `ancestors()` raw** — it is reflexive, and a settlement that IS
 its own region publishes NO ancestors (#707, gotcha `dadata-collapses-region-and-settlement-into-one-key`).
 
-**Open cards — 57, measured 27.09.2026 (s141):** Инбокс holds **#922** (Supermemory, parked by his word) .
+**Open cards — 77, measured 28.09.2026 (s142):** Инбокс holds **#922** (Supermemory, parked by his word) .
 ⚠ Count with
 `gh issue list --limit 300` and `project item-list --limit 1000` — s127's 53 was an undercount from
 exactly that trap, and a naive reader reports a milestone-carrying card as empty. **PRIORITY LIVES ON

@@ -86,6 +86,7 @@ return [
 	'Woodev\\Framework\\Shipping\\Pickup\\Abstract_Bulk_Point_Source' => 'woodev/shipping-method/pickup/abstract-bulk-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Address_Target' => 'woodev/shipping-method/pickup/class-address-target.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Constraint_Checker' => 'woodev/shipping-method/pickup/class-constraint-checker.php',
+	'Woodev\\Framework\\Shipping\\Pickup\\Location_Aware_Point_Source' => 'woodev/shipping-method/pickup/interface-location-aware-point-source.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' => 'woodev/shipping-method/pickup/class-pickup-handler.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Map_Settings' => 'woodev/shipping-method/pickup/class-pickup-map-settings.php',
 	'Woodev\\Framework\\Shipping\\Pickup\\Pickup_Point' => 'woodev/shipping-method/pickup/class-pickup-point.php',

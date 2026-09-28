@@ -2020,7 +2020,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 		 * @return void
 		 */
 		public function register_rest(): void {
-			( new Pickup_Controller(
+			$controller = new Pickup_Controller(
 				$this->plugin_id,
 				$this->source,
 				[ $this, 'current_cart_weight_grams' ],
@@ -2029,8 +2029,15 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 				// Task 15 (issue #159): `null` when `$this->plugin` was never wired, which
 				// keeps every Point_Query location-context-free — Pickup_Controller's own
 				// default — exactly as before this parameter existed.
-				null !== $this->plugin ? [ $this, 'location_context' ] : null
-			) )->register_routes();
+				null !== $this->plugin ? [ $this, 'location_context' ] : null,
+				// #959: the admin routes' explicit-record twin of the callable above.
+				null !== $this->plugin ? [ $this, 'location_context_for' ] : null
+			);
+
+			$controller->register_routes();
+
+			// #959: the admin order wizard's list + detail routes (capability-gated).
+			$controller->register_admin_routes();
 		}
 
 		/**
@@ -2592,6 +2599,33 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Pickup\\Pickup_Handler' ) )
 			$record = $this->current_location_record();
 
 			if ( null === $record ) {
+				return null;
+			}
+
+			return $this->location_context_for( $record );
+		}
+
+		/**
+		 * Builds the `location` context for an EXPLICIT record — {@see self::location_context()}
+		 * minus the part that reads the visitor's own session (#959).
+		 *
+		 * The admin pickup routes hand {@see \Woodev\Framework\Shipping\Rest_Api\Pickup_Controller}
+		 * this as its `$location_resolver`: an admin request has no visitor chain, so the record
+		 * comes from the request and only the carrier-identity resolution is shared. Same
+		 * contract as {@see self::location_context()}: `null` — never a throw — when no plugin
+		 * is wired or the adapter throws; a carrier that does not serve the locality is a
+		 * legitimate `resolved_identity` of `null`, passed through.
+		 *
+		 * `public` for the same callable-scope reason as {@see self::location_context()}.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param Location_Record $record the destination record.
+		 *
+		 * @return array{record: Location_Record, resolved_identity: mixed}|null
+		 */
+		public function location_context_for( Location_Record $record ): ?array {
+			if ( null === $this->plugin ) {
 				return null;
 			}
 
