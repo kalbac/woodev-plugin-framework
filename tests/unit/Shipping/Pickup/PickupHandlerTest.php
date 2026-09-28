@@ -3844,6 +3844,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			);
 
 			$this->assertFalse( $handler->get_js_config()['replaceAddress']['enabled'] );
+			$this->assertFalse( $handler->get_admin_wizard_js_config()['replaceAddress']['enabled'] );
 		}
 
 		/**
@@ -6816,7 +6817,7 @@ namespace Woodev\Tests\Unit\Shipping\Pickup {
 			$this->assertSame( '', $config['nonce'], 'the orders page carries its own nonce' );
 			$this->assertSame( '', $config['chosenAddress'] );
 			$this->assertSame( [], $config['selections'] );
-			$this->assertSame( [ 'enabled' => false, 'billingOnly' => false ], $config['replaceAddress'] );
+			$this->assertSame( [ 'enabled' => true, 'billingOnly' => false ], $config['replaceAddress'] );
 			$this->assertSame( [ 'close' => false, 'refreshCheckout' => false ], $config['selection'] );
 			$this->assertArrayNotHasKey( 'location', $config );
 

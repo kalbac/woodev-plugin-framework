@@ -290,13 +290,30 @@ export default function StepDelivery( { data, setData, errors }: StepProps ) {
 	);
 
 	const onPickPoint = ( point: PickupPoint ) =>
-		setData( ( d ) =>
-			setPickupPoint( d, {
+		setData( ( d ) => {
+			const selected = setPickupPoint( d, {
 				id: String( point.id ),
 				name: 'string' === typeof point.name ? point.name : '',
 				address: 'string' === typeof point.address ? point.address : 'string' === typeof point.short_address ? point.short_address : '',
-			} )
-		);
+			} );
+
+			// Mirror pickup-mount.js: all three values come straight from the selected point and
+			// absent values deliberately clear their fields. The wizard has one delivery address,
+			// unlike checkout's live billing/shipping target.
+			if ( ! pickupConfig?.replaceAddress?.enabled ) {
+				return selected;
+			}
+
+			return {
+				...selected,
+				shipping: {
+					...selected.shipping,
+					address_1: 'string' === typeof point.address ? point.address : '',
+					city: 'string' === typeof point.locality ? point.locality : '',
+					postcode: 'string' === typeof point.postal_code ? point.postal_code : '',
+				},
+			};
+		} );
 
 	return (
 		<div className="woodev-order-wizard__step">

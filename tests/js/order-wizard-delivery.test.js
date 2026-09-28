@@ -364,6 +364,46 @@ describe( 'the pickup point inside the step (D3, O10)', () => {
 		expect( createPickupSession ).toHaveBeenCalledTimes( 1 );
 	} );
 
+	test( 'an enabled store setting replaces the delivery address from the selected point, as checkout does', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'ул. Пушкина, 1', locality: 'Жуковский', postal_code: '140180' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'ул. Пушкина, 1',
+			city: 'Жуковский',
+			postcode: '140180',
+		} ) );
+	} );
+
+	test( 'a new point replaces the prior point address, while switching back to courier keeps it', async () => {
+		window.woodevShippingOrders.wizard.pickup.cdek = { ...PICKER_CONFIG, replaceAddress: { enabled: true, billingOnly: false } };
+		mount();
+		await choosePvz();
+		await waitFor( () => expect( createPickupSession ).toHaveBeenCalled() );
+
+		await pick( { id: 'P-1', address: 'Арбат, 1', locality: 'Москва', postal_code: '119019' } );
+		await pick( { id: 'P-2', address: 'Ленина, 2', locality: 'Жуковский', postal_code: '140181' } );
+
+		await waitFor( () => expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'Ленина, 2',
+			city: 'Жуковский',
+			postcode: '140181',
+		} ) );
+
+		fireEvent.click( screen.getByRole( 'radio', { name: /Курьер/ } ) );
+
+		expect( probe.data.rest.pickup_point ).toBeNull();
+		expect( probe.data.shipping ).toMatchObject( {
+			address_1: 'Ленина, 2',
+			city: 'Жуковский',
+			postcode: '140181',
+		} );
+	} );
+
 	test( 'falls back to a short address when the point has no full one', async () => {
 		mount();
 		await choosePvz();
