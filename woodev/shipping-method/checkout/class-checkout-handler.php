@@ -251,6 +251,9 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 		 * @since 2.0.2 Also wires {@see self::handle_store_api_order_processed()} onto the block
 		 *              checkout's `woocommerce_store_api_checkout_order_processed` — which
 		 *              fires none of the classic checkout hooks above (issue #963).
+		 * @since 2.0.2 Also wires {@see self::handle_store_api_validate_order()} onto
+		 *              `woocommerce_checkout_validate_order_before_payment`, so the block
+		 *              checkout refuses a pickup method without a point (issue #966).
 		 *
 		 * @return void
 		 */
@@ -260,6 +263,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 			add_action( 'woocommerce_checkout_process', [ $this, 'handle_checkout_process' ] );
 			add_action( 'woocommerce_checkout_order_processed', [ $this, 'handle_checkout_order_processed' ], 10, 3 );
 			add_action( 'woocommerce_store_api_checkout_order_processed', [ $this, 'handle_store_api_order_processed' ] );
+			add_action( 'woocommerce_checkout_validate_order_before_payment', [ $this, 'handle_store_api_validate_order' ], 10, 2 );
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
 			add_action( 'rest_api_init', [ $this, 'register_rest' ] );
 			add_action( 'init', [ $this, 'maybe_suppress_wc_address_providers' ], 21 );
@@ -1328,6 +1332,67 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Handler'
 				$this->sanitize_posted_data( $this->store_api_posted_data( $order ) ),
 				self::store_api_chosen_method( $order )
 			);
+		}
+
+		/**
+		 * Refuses a block checkout (Store API) order placed with a pickup method but no
+		 * pickup point — the counterpart of the classic backstop in {@see self::validate()}
+		 * (issue #966).
+		 *
+		 * Hooked to `woocommerce_checkout_validate_order_before_payment` (WooCommerce 9.9+):
+		 * the Store API runs it on `POST /checkout` after the draft order is built and before
+		 * payment is attempted, and turns every message added to `$errors` into a `400`
+		 * `RouteException`, so the order is never placed. The other candidate,
+		 * `woocommerce_store_api_checkout_update_order_from_request`, was rejected on
+		 * purpose: it also fires on every draft `PUT` while the customer is still filling the
+		 * form, so throwing there would break the block before a point could be chosen. On an
+		 * older WooCommerce the hook does not exist and this guard stays silent.
+		 *
+		 * The chosen method comes from the order's shipping line and the point from the
+		 * `woodev_shipping_store_api_posted_data` filter (the session's selection map) — the
+		 * same two inputs {@see self::handle_store_api_order_processed()} persists from, so
+		 * "refused here" and "would have been saved there" cannot disagree. Wording is the
+		 * classic per-field message ({@see self::required_message()}), so a plugin-supplied
+		 * override applies on both paths.
+		 *
+		 * Only a draft order is checked: the same hook also fires for a pay-for-order request
+		 * against an EXISTING order, whose point was persisted when it was placed and is no
+		 * longer in the session.
+		 *
+		 * @internal
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order  the draft order about to be paid for
+		 * @param \WP_Error $errors the error collection the Store API turns into a refusal
+		 *
+		 * @return void
+		 */
+		public function handle_store_api_validate_order( \WC_Order $order, \WP_Error $errors ): void {
+			if ( ! $order->has_status( 'checkout-draft' ) ) {
+				return;
+			}
+
+			$requires_pickup_methods = $this->requires_pickup_methods ?? Checkout_Config::pickup_method_ids();
+
+			if ( [] === $requires_pickup_methods || ! self::chosen_method_matches( self::store_api_chosen_method( $order ), $requires_pickup_methods ) ) {
+				return;
+			}
+
+			$values = $this->sanitize_posted_data( $this->store_api_posted_data( $order ) );
+
+			foreach ( $this->pickup_slot_fields() as $pickup_field ) {
+				if ( ! self::is_blank( $values[ $pickup_field['id'] ] ?? '' ) ) {
+					continue;
+				}
+
+				$message = self::required_message( $pickup_field );
+
+				// Every carrier plugin registers its own handler; do not repeat one sentence.
+				if ( ! in_array( $message, $errors->get_error_messages(), true ) ) {
+					$errors->add( 'woodev_shipping_pickup_point_required', $message );
+				}
+			}
 		}
 
 		/**

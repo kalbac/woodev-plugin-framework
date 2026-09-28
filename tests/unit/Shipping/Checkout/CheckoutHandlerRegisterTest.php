@@ -44,11 +44,12 @@ class CheckoutHandlerRegisterTest extends TestCase {
 
 	/**
 	 * register() must wire all hooks: 2 filters (woocommerce_checkout_fields +
-	 * woocommerce_states) + 6 actions (checkout_process, order_processed,
-	 * wp_enqueue_scripts, rest_api_init, the Task 12 `init` suppression check,
-	 * and issue #518's `woodev_shipping_pickup_point_selected` listener).
+	 * woocommerce_states) + 8 actions (checkout_process, order_processed, the Store API
+	 * order_processed and validate-before-payment callbacks, wp_enqueue_scripts,
+	 * rest_api_init, the Task 12 `init` suppression check, and issue #518's
+	 * `woodev_shipping_pickup_point_selected` listener).
 	 */
-	public function test_register_wires_all_seven_hooks(): void {
+	public function test_register_wires_all_eight_hooks(): void {
 
 		Functions\expect( 'add_filter' )
 			->once()
@@ -58,10 +59,11 @@ class CheckoutHandlerRegisterTest extends TestCase {
 			->once()
 			->with( 'woocommerce_states', \Mockery::type( 'array' ) );
 
-		// Seven since #964 added the Store API order-processed callback (six before, since
-		// issue #518 added `woodev_shipping_pickup_point_selected`).
+		// Eight since #966 added the Store API pickup-required validation (seven since #964
+		// added the Store API order-processed callback, six before, since issue #518 added
+		// `woodev_shipping_pickup_point_selected`).
 		Functions\expect( 'add_action' )
-			->times( 7 )
+			->times( 8 )
 			->withAnyArgs();
 
 		$fields  = Checkout_Fields::from_array( [] );
@@ -94,6 +96,22 @@ class CheckoutHandlerRegisterTest extends TestCase {
 		Functions\expect( 'add_action' )
 			->atLeast()->once()
 			->with( 'woocommerce_checkout_process', \Mockery::type( 'array' ) );
+
+		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
+	}
+
+	/**
+	 * Issue #966: the block checkout's pickup-required refusal rides
+	 * `woocommerce_checkout_validate_order_before_payment` (the Store API's own "final
+	 * validation before payment" hook, `$order` + `$errors`), NOT a hook that also fires on
+	 * draft updates — and it must ask for both arguments.
+	 */
+	public function test_register_hooks_the_store_api_pickup_required_validation(): void {
+
+		Functions\expect( 'add_filter' )->times( 4 )->withAnyArgs();
+		Functions\expect( 'add_action' )
+			->atLeast()->once()
+			->with( 'woocommerce_checkout_validate_order_before_payment', \Mockery::type( 'array' ), 10, 2 );
 
 		( new Checkout_Handler( Checkout_Fields::from_array( [] ), 'carrier' ) )->register();
 	}
@@ -311,7 +329,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_fires_doing_it_wrong_on_native_field_conflict(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 14 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 16 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )
 			->once()
 			->with(
@@ -334,7 +352,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_does_not_fire_for_same_plugin_id(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 14 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 16 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field   = Field::create( 'billing_city' )->set_type( 'text' )->set_section( 'billing' )->to_array();
@@ -352,7 +370,7 @@ class CheckoutHandlerRegisterTest extends TestCase {
 	public function test_guard_ignores_non_native_fields(): void {
 
 		Functions\expect( 'add_filter' )->times( 8 )->withAnyArgs();
-		Functions\expect( 'add_action' )->times( 14 )->withAnyArgs();
+		Functions\expect( 'add_action' )->times( 16 )->withAnyArgs();
 		Functions\expect( '_doing_it_wrong' )->never();
 
 		$field = Field::create( 'carrier_pvz' )->set_type( 'hidden' )->set_section( 'order' )->to_array();
