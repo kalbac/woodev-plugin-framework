@@ -40,10 +40,18 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 		/** @var array<int,\WC_Product|null> products the fake `wc_get_product()` knows, by id. */
 		private $products = [];
 
+		/** @var array<string, array{required: bool, hidden: bool, removed: bool}> what the fake address policy answers. */
+		private $address_rules = [];
+
+		/** @var array<int, array{string, bool}> every (country, pickup) the validator asked the policy about. */
+		private $address_rule_calls = [];
+
 		protected function setUp(): void {
 			parent::setUp();
 
-			$this->products = [];
+			$this->products           = [];
+			$this->address_rules      = [];
+			$this->address_rule_calls = [];
 
 			Functions\when( 'wc_clean' )->alias(
 				static function ( $value ) {
@@ -156,6 +164,11 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 					},
 					'states'            => static function ( string $country ): array {
 						return 'RU' === $country ? [ 'МОСКВА' => 'Москва', 'САНКТ-ПЕТЕРБУРГ' => 'Санкт-Петербург' ] : [];
+					},
+					'address_rules'     => function ( string $country, bool $pickup ): array {
+						$this->address_rule_calls[] = [ $country, $pickup ];
+
+						return $this->address_rules;
 					},
 				]
 			);
@@ -595,6 +608,92 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			)->validate( $this->payload(), false );
 
 			$this->assertSame( [ [ 'cdek_courier', false ] ], $asked );
+		}
+
+		/**
+		 * @param array<string, bool> $overrides rule flags to set on top of «visible, optional».
+		 * @return array{required: bool, hidden: bool, removed: bool}
+		 */
+		private function rule( array $overrides = [] ): array {
+			return array_merge( [ 'required' => false, 'hidden' => false, 'removed' => false ], $overrides );
+		}
+
+		public function test_a_field_the_checkout_requires_is_refused_when_the_address_leaves_it_empty(): void {
+			$this->address_rules = [
+				'city'     => $this->rule( [ 'required' => true ] ),
+				'postcode' => $this->rule( [ 'required' => true ] ),
+			];
+
+			// The payload's billing block carries no postcode and no shipping block: the delivery address IS billing's.
+			$result = $this->validator()->validate( $this->payload(), false );
+
+			$this->assertSame( [ 'billing.postcode:field_required' ], $this->codes( $result ) );
+			$this->assertSame( 'Укажите индекс.', $result['errors'][0]['message'] );
+		}
+
+		public function test_the_refusal_is_on_the_shipping_path_when_the_manager_filled_a_delivery_address(): void {
+			$this->address_rules = [ 'address_1' => $this->rule( [ 'required' => true ] ) ];
+
+			$result = $this->validator()->validate( $this->payload( [ 'shipping' => [ 'country' => 'RU', 'city' => 'Казань' ] ] ), false );
+
+			$this->assertSame( [ 'shipping.address_1:field_required' ], $this->codes( $result ) );
+		}
+
+		public function test_a_required_field_that_is_filled_passes(): void {
+			$this->address_rules = [ 'address_1' => $this->rule( [ 'required' => true ] ) ];
+
+			$this->assertSame( [], $this->validator()->validate( $this->payload(), false )['errors'] );
+		}
+
+		public function test_an_optional_or_unknown_field_is_never_refused(): void {
+			$this->address_rules = [
+				'postcode' => $this->rule(),
+				'nonsense' => $this->rule( [ 'required' => true ] ),
+			];
+
+			$this->assertSame( [], $this->validator()->validate( $this->payload(), false )['errors'] );
+		}
+
+		public function test_a_field_the_checkout_removes_is_emptied_on_both_address_blocks_and_never_refused(): void {
+			$this->address_rules = [ 'state' => $this->rule( [ 'hidden' => true, 'removed' => true ] ) ];
+
+			$result = $this->validator()->validate( $this->payload(), false );
+
+			$this->assertSame( [], $result['errors'] );
+			$this->assertSame( '', $result['data']['billing']['state'] );
+			$this->assertSame( '', $result['data']['shipping']['state'] );
+			$this->assertSame( 'Москва', $result['data']['shipping']['city'], 'the neighbours are untouched' );
+		}
+
+		public function test_a_field_that_is_only_hidden_keeps_its_value_as_the_checkout_does(): void {
+			$this->address_rules = [ 'address_1' => $this->rule( [ 'hidden' => true ] ) ];
+
+			$result = $this->validator()->validate( $this->payload(), false );
+
+			$this->assertSame( [], $result['errors'] );
+			$this->assertSame( 'ул. Тверская, 1', $result['data']['shipping']['address_1'] );
+		}
+
+		public function test_the_policy_is_asked_for_the_delivery_country_and_whether_the_tariff_is_pickup(): void {
+			$this->validator()->validate( $this->payload( [ 'shipping' => [ 'country' => 'KZ', 'city' => 'Алматы' ] ] ), false );
+
+			$payload = $this->payload();
+			$payload['shipping_line']['method_id'] = 'cdek_pickup';
+			$payload['pickup_point']               = [ 'id' => 'PVZ-1' ];
+			$this->validator()->validate( $payload, false );
+
+			$this->assertSame( [ [ 'KZ', false ], [ 'RU', true ] ], $this->address_rule_calls );
+		}
+
+		public function test_no_country_means_the_policy_is_not_asked(): void {
+			$this->address_rules = [ 'postcode' => $this->rule( [ 'required' => true ] ) ];
+
+			$payload = $this->payload();
+			unset( $payload['billing']['country'], $payload['billing']['state'] );
+			$result = $this->validator()->validate( $payload, false );
+
+			$this->assertSame( [], $this->address_rule_calls );
+			$this->assertSame( [ 'billing.country:country_required' ], $this->codes( $result ) );
 		}
 
 		public function test_every_problem_is_reported_at_once(): void {

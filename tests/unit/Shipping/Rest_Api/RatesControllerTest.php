@@ -15,11 +15,12 @@ namespace {
 
 	if ( ! class_exists( 'WP_REST_Server', false ) ) {
 		/**
-		 * The one constant the controller reads.
+		 * The constants the controllers read.
 		 */
 		class WP_REST_Server {
 
 			const CREATABLE = 'POST';
+			const READABLE  = 'GET';
 		}
 	}
 }

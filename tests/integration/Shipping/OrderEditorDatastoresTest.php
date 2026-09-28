@@ -170,6 +170,7 @@ class OrderEditorDatastoresTest extends TestCase {
 					'first_name' => 'Иван',
 					'last_name'  => 'Иванов',
 					'country'    => 'RU',
+					'state'      => 'Москва',
 					'city'       => 'Москва',
 					'address_1'  => 'ул. Тверская, 1',
 					'postcode'   => '125009',
@@ -1322,9 +1323,12 @@ class OrderEditorDatastoresTest extends TestCase {
 						],
 					],
 					'billing' => [
-						'country' => 'RU',
-						'city'    => 'Санкт-Петербург',
-						'phone'   => '+79990000000',
+						'country'   => 'RU',
+						'state'     => 'Санкт-Петербург',
+						'city'      => 'Санкт-Петербург',
+						'address_1' => 'Невский пр., 1',
+						'postcode'  => '190000',
+						'phone'     => '+79990000000',
 					],
 				]
 			)
@@ -1443,6 +1447,7 @@ class OrderEditorDatastoresTest extends TestCase {
 			'last_name'  => 'Иванов',
 			'phone'      => '+79991234567',
 			'country'    => 'RU',
+			'state'      => 'Москва',
 			'city'       => 'Москва',
 			'address_1'  => 'ул. Тверская, 1',
 			'postcode'   => '125009',
@@ -1910,8 +1915,10 @@ class OrderEditorDatastoresTest extends TestCase {
 				[
 					'shipping' => [
 						'country'   => 'RU',
+						'state'     => 'Волгоградская область',
 						'city'      => 'Урюпинск',
 						'address_1' => 'ул. Ленина, 1',
+						'postcode'  => '403110',
 					],
 				]
 			)

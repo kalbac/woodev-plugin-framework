@@ -304,4 +304,41 @@ final class OrderEditorControllerTest extends TestCase {
 
 		$this->assertArrayNotHasKey( 'export', $response->data );
 	}
+
+	public function test_the_address_policy_route_answers_the_checkouts_rules_for_the_asked_country(): void {
+		$response = $this->controller( Mockery::mock( Order_Editor::class ) )->address_policy(
+			$this->request( null, [ 'country' => 'ru', 'pickup' => '1' ] )
+		);
+
+		$this->assertSame( 200, $response->status );
+		$this->assertSame( 'RU', $response->data['country'] );
+		$this->assertTrue( $response->data['pickup'] );
+		// No WooCommerce in a unit run: «no rule» is an empty OBJECT (JSON `{}`), never an empty list.
+		$this->assertEquals( (object) [], $response->data['fields'] );
+		$this->assertIsObject( $response->data['fields'] );
+	}
+
+	public function test_the_address_policy_route_is_gated_like_the_others_and_takes_a_two_letter_country(): void {
+		$registered = [];
+
+		Functions\when( 'register_rest_route' )->alias(
+			static function ( string $namespace, string $route, array $args ) use ( &$registered ): bool {
+				$registered[ $route ] = $args;
+
+				return true;
+			}
+		);
+
+		$this->controller( Mockery::mock( Order_Editor::class ) )->register_routes();
+
+		$route = $registered['/shipping/orders/address-policy'];
+
+		$this->assertSame( 'permissions_check', $route['permission_callback'][1] );
+		$this->assertTrue( $route['args']['country']['required'] );
+		$this->assertTrue( $route['args']['country']['validate_callback']( 'RU' ) );
+		$this->assertTrue( $route['args']['country']['validate_callback']( 'kz' ) );
+		$this->assertFalse( $route['args']['country']['validate_callback']( 'RUS' ) );
+		$this->assertFalse( $route['args']['country']['validate_callback']( '' ) );
+		$this->assertSame( 'RU', $route['args']['country']['sanitize_callback']( ' ru ' ) );
+	}
 }

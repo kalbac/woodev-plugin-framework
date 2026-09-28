@@ -660,4 +660,77 @@ final class CheckoutFieldPolicyTest extends TestCase {
 
 		$this->assertTrue( $deleted, 'once nothing needs restoring, the stale report must be cleared' );
 	}
+
+	// -------------------------------------------------------------------------
+	// address_rules_for() — the admin order wizard's reading of the same policy (#985)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * WooCommerce's `shipping_`-prefixed address fields the way `get_address_fields()` hands them over
+	 * for a plain country: everything required but the flat.
+	 *
+	 * @param array<string, array<string, mixed>> $override per-field overrides, unprefixed key => props.
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function wc_shipping_fields( array $override = [] ): array {
+		$fields = [];
+
+		foreach ( [ 'country', 'state', 'city', 'address_1', 'address_2', 'postcode' ] as $key ) {
+			$fields[ 'shipping_' . $key ] = [ 'required' => 'address_2' !== $key ];
+		}
+
+		foreach ( $override as $key => $props ) {
+			$fields[ 'shipping_' . $key ] = array_merge( $fields[ 'shipping_' . $key ] ?? [], $props );
+		}
+
+		return $fields;
+	}
+
+	public function test_address_rules_follow_the_wc_field_set_when_the_policy_has_no_opinion(): void {
+		$rules = Checkout_Field_Policy::address_rules_for( [], $this->wc_shipping_fields(), 'RU', false );
+
+		$this->assertSame( [ 'country', 'state', 'city', 'address_1', 'address_2', 'postcode' ], array_keys( $rules ) );
+		$this->assertSame( [ 'required' => true, 'hidden' => false, 'removed' => false ], $rules['postcode'] );
+		$this->assertSame( [ 'required' => false, 'hidden' => false, 'removed' => false ], $rules['address_2'] );
+	}
+
+	public function test_address_rules_mark_a_field_the_merchant_removes_as_removed_and_not_required(): void {
+		$rules = Checkout_Field_Policy::address_rules_for( [ 'region_field' => 'remove', 'postcode_field' => 'remove' ], $this->wc_shipping_fields(), 'RU', false );
+
+		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => true ], $rules['state'] );
+		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => true ], $rules['postcode'] );
+		$this->assertTrue( $rules['city']['required'], 'the settlement stays' );
+	}
+
+	public function test_address_rules_read_the_pickup_hiding_off_the_same_condition_the_checkout_does(): void {
+		$settings = [ 'address_field' => 'hide_for_pickup', 'postcode_field' => 'hide_for_pickup' ];
+
+		$pickup  = Checkout_Field_Policy::address_rules_for( $settings, $this->wc_shipping_fields(), 'RU', true );
+		$courier = Checkout_Field_Policy::address_rules_for( $settings, $this->wc_shipping_fields(), 'RU', false );
+
+		// Hidden, not required, NOT removed: the checkout keeps posting the value.
+		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['address_1'] );
+		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['postcode'] );
+		// Control: a courier tariff leaves both as WooCommerce has them.
+		$this->assertSame( [ 'required' => true, 'hidden' => false, 'removed' => false ], $courier['address_1'] );
+		$this->assertSame( [ 'required' => true, 'hidden' => false, 'removed' => false ], $courier['postcode'] );
+		$this->assertTrue( $pickup['city']['required'] && $courier['city']['required'] );
+	}
+
+	public function test_address_rules_never_demand_a_field_the_locale_hides(): void {
+		$rules = Checkout_Field_Policy::address_rules_for( [], $this->wc_shipping_fields( [ 'state' => [ 'required' => true, 'hidden' => true ] ] ), 'RU', false );
+
+		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $rules['state'] );
+	}
+
+	public function test_address_rules_keep_the_settlement_required_even_when_wc_says_otherwise(): void {
+		$rules = Checkout_Field_Policy::address_rules_for( [], $this->wc_shipping_fields( [ 'city' => [ 'required' => false ] ] ), 'ZZ', false );
+
+		$this->assertTrue( $rules['city']['required'], 'the settlement invariant applies to a country outside the shipping list too' );
+	}
+
+	public function test_address_rules_of_a_country_without_woocommerce_are_empty_never_all_removed(): void {
+		$this->assertSame( [], Checkout_Field_Policy::instance()->address_rules( 'RU', false ) );
+		$this->assertSame( [], Checkout_Field_Policy::instance()->address_rules( '', false ) );
+	}
 }

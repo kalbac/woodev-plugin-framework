@@ -556,8 +556,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			$region_removed   = 'remove' === ( $settings['region_field'] ?? 'show' );
 			$postcode_removed = 'remove' === ( $settings['postcode_field'] ?? 'show' );
 
-			$address_hidden_for_pickup  = $pickup_chosen && 'hide_for_pickup' === ( $settings['address_field'] ?? 'show' );
-			$postcode_hidden_for_pickup = $pickup_chosen && 'hide_for_pickup' === ( $settings['postcode_field'] ?? 'show' );
+			$address_hidden_for_pickup  = self::hidden_for_pickup( $settings, 'address_field', $pickup_chosen );
+			$postcode_hidden_for_pickup = self::hidden_for_pickup( $settings, 'postcode_field', $pickup_chosen );
 
 			foreach ( [ 'billing', 'shipping' ] as $section ) {
 				if ( ! isset( $fields[ $section ] ) || ! is_array( $fields[ $section ] ) ) {
@@ -582,6 +582,121 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Checkout\\Checkout_Field_Po
 			}
 
 			return $fields;
+		}
+
+		/**
+		 * Whether a setting's `hide_for_pickup` value is in force right now: the merchant chose it AND a
+		 * pickup method is chosen. The one place that reads the condition — the checkout instrument
+		 * ({@see self::checkout_fields_contribution()}) and the admin order wizard
+		 * ({@see self::address_rules_for()}) both ask it, so the two can never disagree on when a row
+		 * is hidden.
+		 *
+		 * Pure — touches no WordPress function.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, bool|string> $settings      `effective()` values, keyed by setting id.
+		 * @param string                     $setting_id    `address_field` or `postcode_field`.
+		 * @param bool                       $pickup_chosen whether a pickup shipping method is chosen.
+		 *
+		 * @return bool
+		 */
+		private static function hidden_for_pickup( array $settings, string $setting_id, bool $pickup_chosen ): bool {
+			return $pickup_chosen && 'hide_for_pickup' === ( $settings[ $setting_id ] ?? 'show' );
+		}
+
+		/**
+		 * The delivery-address field rules for one country, as the checkout applies them — what the admin
+		 * order wizard's «Адрес» step shows and what the save-time check enforces (#985).
+		 *
+		 * The SAME policy object, no second copy of the rule: the store-level settings come from
+		 * {@see self::effective()}, the base is WooCommerce's own field set for the country
+		 * ({@see \WC_Countries::get_address_fields()}), and the two instruments' pure contributions do the
+		 * rest ({@see self::address_rules_for()}). Third-party field managers are NOT replayed — they hook
+		 * `woocommerce_checkout_fields`, which needs a customer session this admin request does not have.
+		 *
+		 * Returns `[]` when there is nothing to say — WooCommerce is absent, or no country is given — which
+		 * callers must read as «no rule», never as «every field removed».
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param string $country       ISO country code of the delivery address.
+		 * @param bool   $pickup_chosen whether the chosen tariff is a pickup one.
+		 *
+		 * @return array<string, array{required: bool, hidden: bool, removed: bool}>
+		 */
+		public function address_rules( string $country, bool $pickup_chosen ): array {
+			$country = strtoupper( trim( $country ) );
+
+			if ( '' === $country || ! function_exists( 'WC' ) || ! WC()->countries ) {
+				return [];
+			}
+
+			return self::address_rules_for(
+				$this->effective(),
+				(array) WC()->countries->get_address_fields( $country, 'shipping_' ),
+				$country,
+				$pickup_chosen
+			);
+		}
+
+		/**
+		 * Pure core of {@see self::address_rules()}: folds the policy's own contributions into WooCommerce's
+		 * address fields for one country and reads the verdict per field.
+		 *
+		 * Per field (`country`, `state`, `city`, `address_1`, `address_2`, `postcode`):
+		 *  - `removed`  — the checkout does not have the field at all (the merchant's «Удалять»): its value
+		 *                 never reaches an order.
+		 *  - `hidden`   — the row is not shown: removed, hidden by the country's locale, or hidden while a
+		 *                 pickup method is chosen (`hide_for_pickup`; the value may still be stored).
+		 *  - `required` — the customer must fill it. Never true for a hidden field: a rule that demands what
+		 *                 nobody can act on is the defect gotcha
+		 *                 `the-checkout-required-rule-has-two-halves-and-fixing-one-leaves-the-other` records.
+		 *
+		 * The locale contribution is applied for THIS country explicitly rather than trusted to the
+		 * `woocommerce_get_country_locale` filter: that filter reaches only the store's shipping countries,
+		 * and a manager may place an order for any country.
+		 *
+		 * Pure — touches no WordPress function, so unit tests call it directly.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array<string, bool|string>         $settings       `effective()` values, keyed by setting id.
+		 * @param array<string, array<string,mixed>> $address_fields WooCommerce's `shipping_`-prefixed address fields for the country.
+		 * @param string                             $country        ISO country code.
+		 * @param bool                               $pickup_chosen  whether the chosen tariff is a pickup one.
+		 *
+		 * @return array<string, array{required: bool, hidden: bool, removed: bool}>
+		 */
+		public static function address_rules_for( array $settings, array $address_fields, string $country, bool $pickup_chosen ): array {
+			$keys         = [ 'country', 'state', 'city', 'address_1', 'address_2', 'postcode' ];
+			$contribution = self::locale_contribution( $settings, [], [ $country ] )[ $country ] ?? [];
+
+			foreach ( $contribution as $key => $props ) {
+				if ( isset( $address_fields[ 'shipping_' . $key ] ) && is_array( $address_fields[ 'shipping_' . $key ] ) ) {
+					$address_fields[ 'shipping_' . $key ] = array_merge( $address_fields[ 'shipping_' . $key ], array_intersect_key( $props, array_flip( [ 'hidden', 'required' ] ) ) );
+				}
+			}
+
+			$fields = self::checkout_fields_contribution( $settings, [ 'shipping' => $address_fields ], $pickup_chosen )['shipping'];
+			$rules  = [];
+
+			foreach ( $keys as $key ) {
+				$field   = $fields[ 'shipping_' . $key ] ?? null;
+				$removed = ! is_array( $field );
+				$hidden  = $removed
+					|| ! empty( $field['hidden'] )
+					|| ( 'address_1' === $key && self::hidden_for_pickup( $settings, 'address_field', $pickup_chosen ) )
+					|| ( 'postcode' === $key && self::hidden_for_pickup( $settings, 'postcode_field', $pickup_chosen ) );
+
+				$rules[ $key ] = [
+					'required' => ! $hidden && ! empty( $field['required'] ),
+					'hidden'   => $hidden,
+					'removed'  => $removed,
+				];
+			}
+
+			return $rules;
 		}
 
 		/**
