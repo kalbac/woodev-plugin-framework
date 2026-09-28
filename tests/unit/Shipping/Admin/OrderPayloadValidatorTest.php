@@ -306,6 +306,14 @@ namespace Woodev\Tests\Unit\Shipping\Admin {
 			$bad_state['billing']['state'] = 'MOW';
 
 			$this->assertContains( 'billing.state:invalid_state', $this->codes( $this->validator()->validate( $bad_state, false ) ) );
+
+			$bad_state['shipping'] = [
+				'country' => 'RU',
+				'state'   => 'MOW',
+				'city'    => 'Москва',
+			];
+
+			$this->assertContains( 'shipping.state:invalid_state', $this->codes( $this->validator()->validate( $bad_state, false ) ) );
 		}
 
 		public function test_a_state_is_not_checked_for_a_country_that_has_no_states(): void {
