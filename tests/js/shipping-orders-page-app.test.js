@@ -211,6 +211,13 @@ function FakeAdvancedFilters( { config, path, query } ) {
 					<li key={ key }>{ config.filters[ key ].labels.add }</li>
 				) ) }
 			</ul>
+			{ /* The «All / Any» control `AdvancedFilters.getTitle()` renders for `{{select /}}`, nominative labels. */ }
+			<div className="woocommerce-filters-advanced__title-select">
+				<select aria-label="match" defaultValue="all">
+					<option value="all">Все</option>
+					<option value="any">Любое</option>
+				</select>
+			</div>
 		</div>
 	);
 }
@@ -1583,6 +1590,23 @@ describe( 'AdvancedFilters (SP-10 #827, increment 7)', () => {
 		navigate( { filter: 'advanced' } );
 
 		await waitFor( () => expect( screen.getByTestId( 'advanced-filters' ) ).toBeInTheDocument() );
+	} );
+
+	/** #941 — the header reads «Заказы соответствуют {{select /}} условиям», which needs the dative. */
+	test( 'reads the «All / Any» match select in the dative: «всем» / «любым»', async () => {
+		getProviders.mockReturnValue( oneProvider() );
+		fetchOrders.mockResolvedValue( resultOf( [ makeRow() ] ) );
+
+		render( <App /> );
+		navigate( { filter: 'advanced' } );
+
+		const matchSelect = await screen.findByRole( 'combobox', { name: 'match' } );
+
+		expect(
+			within( matchSelect )
+				.getAllByRole( 'option' )
+				.map( ( option ) => option.textContent )
+		).toEqual( [ 'всем', 'любым' ] );
 	} );
 
 	test( 'offers delivery status, WC order status and tracking presence — never delivery type', async () => {

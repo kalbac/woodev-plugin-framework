@@ -3872,6 +3872,14 @@ msgid "Заказы соответствуют {{select /}} условиям"
 msgstr ""
 
 #: assets/build/shipping-orders-page/index.js:1
+msgid "всем"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
+msgid "любым"
+msgstr ""
+
+#: assets/build/shipping-orders-page/index.js:1
 msgid "Расширенные фильтры"
 msgstr ""
 
