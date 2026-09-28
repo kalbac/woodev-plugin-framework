@@ -98,6 +98,7 @@ namespace {
 
 namespace Woodev\Tests\Unit\Shipping {
 
+	use Brain\Monkey\Actions;
 	use Brain\Monkey\Functions;
 	use Mockery;
 	use Woodev\Framework\Shipping\Map\Map_Provider;
@@ -117,7 +118,19 @@ namespace Woodev\Tests\Unit\Shipping {
 	 */
 	class Woodev_Test_Shipping_Plugin_For_Guards extends Shipping_Plugin {
 
+		/** @var array<int, array{0: string, 1: string|null}> every message handed to log(). */
+		public array $logged = [];
+
 		public function __construct() {}
+
+		/**
+		 * @param string      $message log line.
+		 * @param string|null $log_id  log id.
+		 * @return void
+		 */
+		public function log( $message, $log_id = null ) {
+			$this->logged[] = [ $message, $log_id ];
+		}
 
 		/** @return array */
 		protected function get_shipping_method_classes(): array {
@@ -189,6 +202,9 @@ namespace Woodev\Tests\Unit\Shipping {
 		/** @var Shipping_Rate|null what rate_package() returns when calculate_rate() runs. */
 		public ?Shipping_Rate $rate_package_return = null;
 
+		/** @var \Throwable|null thrown by rate_package() when set. */
+		public ?\Throwable $rate_package_throws = null;
+
 		public function __construct() {
 			$this->test_plugin = new Woodev_Test_Shipping_Plugin_For_Guards();
 		}
@@ -199,6 +215,16 @@ namespace Woodev\Tests\Unit\Shipping {
 		 */
 		public function add_rate( $args = [] ) {
 			$this->added_rates[] = $args;
+		}
+
+		/**
+		 * Redeclared for the same load-order reason as `add_rate()`: another file's
+		 * `WC_Shipping_Method` stub may win and has no `get_title()`.
+		 *
+		 * @return string
+		 */
+		public function get_title() {
+			return 'Guards Method';
 		}
 
 		/** @return string */
@@ -227,6 +253,10 @@ namespace Woodev\Tests\Unit\Shipping {
 		 * @return Shipping_Rate|null
 		 */
 		protected function rate_package( array $package, ?\Woodev_Packer_Result $packed ): ?Shipping_Rate {
+			if ( null !== $this->rate_package_throws ) {
+				throw $this->rate_package_throws;
+			}
+
 			return $this->rate_package_return;
 		}
 
@@ -239,6 +269,11 @@ namespace Woodev\Tests\Unit\Shipping {
 		 */
 		public function expose_is_available_for_package( array $package ): bool {
 			return $this->is_available_for_package( $package );
+		}
+
+		/** @return Shipping_Plugin the plugin double, to read back what it logged. */
+		public function expose_plugin(): Shipping_Plugin {
+			return $this->test_plugin;
 		}
 	}
 
@@ -421,6 +456,246 @@ namespace Woodev\Tests\Unit\Shipping {
 			$method->calculate_shipping( [] );
 
 			$this->assertSame( [ $replacement->to_array() ], $method->added_rates );
+		}
+
+		/* ------------------------------------------------------------------ *
+		 * #949 — which requests may price a rate; #951 — a carrier failure hides
+		 * the method instead of reaching the cart
+		 * ------------------------------------------------------------------ */
+
+		/**
+		 * The bug (#949): a Store API request defines REST_REQUEST, and the old guard vetoed
+		 * every REST request, so the block cart and checkout never got a framework rate.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_store_api_request_computes_rates(): void {
+			define( 'REST_REQUEST', true );
+
+			Functions\when( 'WC' )->justReturn( $this->woocommerce_double( true ) );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-store', 'Store Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * The fallback for a WooCommerce without `WC()->is_store_api_request()`: WordPress's own
+		 * dispatched route.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_store_api_request_is_recognised_by_the_dispatched_route_without_the_wc_helper(): void {
+			define( 'REST_REQUEST', true );
+
+			$GLOBALS['wp'] = (object) [ 'query_vars' => [ 'rest_route' => '/wc/store/v1/cart/update-customer' ] ];
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-route', 'Route Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * Any other REST request keeps the guard: the carrier API is not hit from it.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_non_store_rest_request_is_still_guarded(): void {
+			define( 'REST_REQUEST', true );
+
+			Functions\when( 'WC' )->justReturn( $this->woocommerce_double( false ) );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-rest', 'Rest Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+		}
+
+		/**
+		 * The same guard through the route fallback: a `wc/v3` route is not the Store API.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_a_non_store_rest_route_is_still_guarded_without_the_wc_helper(): void {
+			define( 'REST_REQUEST', true );
+
+			$GLOBALS['wp'] = (object) [ 'query_vars' => [ 'rest_route' => '/wc/v3/orders' ] ];
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-v3', 'V3 Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+		}
+
+		/**
+		 * XML-RPC stays guarded even when WooCommerce would call the request a Store API one.
+		 *
+		 * @runInSeparateProcess
+		 * @preserveGlobalState disabled
+		 *
+		 * @return void
+		 */
+		public function test_an_xmlrpc_request_is_still_guarded(): void {
+			define( 'XMLRPC_REQUEST', true );
+
+			Functions\when( 'WC' )->justReturn( $this->woocommerce_double( true ) );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-xml', 'Xml Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+		}
+
+		/**
+		 * Control for the guards above: a plain request (no REST, no XML-RPC) prices as before.
+		 *
+		 * @return void
+		 */
+		public function test_a_plain_request_computes_rates(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-plain', 'Plain Rate', '100' );
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+		}
+
+		/**
+		 * #951: a carrier API failure hides the method — no rate, no exception out of
+		 * calculate_shipping(), one log line without the secret, and the failure action.
+		 *
+		 * @return void
+		 */
+		public function test_a_carrier_api_exception_hides_the_method_logs_and_fires_the_action(): void {
+			$exception = new \Woodev_API_Exception( 'carrier is down' );
+
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = $exception;
+
+			Actions\expectDone( 'woodev_shipping_method_rate_calculation_failed' )
+				->once()
+				->with( $exception, [ 'contents' => [] ], $method );
+
+			$method->calculate_shipping( [ 'contents' => [] ] );
+
+			$this->assertSame( [], $method->added_rates );
+
+			$logged = $method->expose_plugin()->logged;
+
+			$this->assertCount( 1, $logged );
+			$this->assertStringContainsString( 'Woodev_API_Exception', $logged[0][0] );
+			$this->assertStringContainsString( 'carrier is down', $logged[0][0] );
+			$this->assertSame( 'guards-shipping_guards-method', $logged[0][1] );
+		}
+
+		/**
+		 * A packer failure is a `Woodev_Plugin_Exception` too and hides the method the same way.
+		 *
+		 * @return void
+		 */
+		public function test_a_packer_exception_hides_the_method_too(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = new \Woodev_Packer_Exception( 'no box fits' );
+
+			Actions\expectDone( 'woodev_shipping_method_rate_calculation_failed' )->once();
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [], $method->added_rates );
+		}
+
+		/**
+		 * The log line goes through the secret redaction: a token in the carrier's message
+		 * must not survive into the log.
+		 *
+		 * @return void
+		 */
+		public function test_the_logged_exception_text_is_redacted(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = new \Woodev_API_Exception( 'GET https://api.example.test/rate?api_key=SECRET123&city=Moscow failed' );
+
+			$method->calculate_shipping( [] );
+
+			$logged = $method->expose_plugin()->logged;
+
+			$this->assertCount( 1, $logged );
+			$this->assertStringNotContainsString( 'SECRET123', $logged[0][0] );
+		}
+
+		/**
+		 * The action does not fire on a successful calculation.
+		 *
+		 * @return void
+		 */
+		public function test_no_failure_action_fires_when_the_rate_calculates(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_return = new Shipping_Rate( 'guards-method', 'rate-ok', 'Ok Rate', '100' );
+
+			Actions\expectDone( 'woodev_shipping_method_rate_calculation_failed' )->never();
+
+			$method->calculate_shipping( [] );
+
+			$this->assertSame( [ $method->rate_package_return->to_array() ], $method->added_rates );
+			$this->assertSame( [], $method->expose_plugin()->logged );
+		}
+
+		/**
+		 * A non-plugin exception is a programming error, not a carrier outage: it still surfaces.
+		 *
+		 * @return void
+		 */
+		public function test_a_programming_error_is_not_swallowed(): void {
+			$method                      = new Woodev_Test_Shipping_Method_For_Guards();
+			$method->rate_package_throws = new \LogicException( 'bug' );
+
+			$this->expectException( \LogicException::class );
+
+			$method->calculate_shipping( [] );
+		}
+
+		/**
+		 * @param bool $is_store_api what `WC()->is_store_api_request()` reports.
+		 * @return object
+		 */
+		private function woocommerce_double( bool $is_store_api ): object {
+			return new class( $is_store_api ) {
+				/** @var bool */
+				private bool $is_store_api;
+
+				/** @param bool $is_store_api reported value. */
+				public function __construct( bool $is_store_api ) {
+					$this->is_store_api = $is_store_api;
+				}
+
+				/** @return bool */
+				public function is_store_api_request(): bool {
+					return $this->is_store_api;
+				}
+			};
 		}
 
 		/* ------------------------------------------------------------------ *
