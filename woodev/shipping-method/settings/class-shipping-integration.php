@@ -180,14 +180,87 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Settings\\Shipping_Integrat
 		/**
 		 * Checks if the integration is configured.
 		 *
-		 * Override this method to implement custom configuration checks.
+		 * The default is derived from the credentials this integration declares
+		 * ({@see self::get_required_credential_keys()}): configured means every
+		 * declared required secret holds a non-empty value. An integration that
+		 * declares none — a carrier that needs no keys — reports `true`.
+		 *
+		 * Override this for a check the declared fields cannot express (a token
+		 * exchange, a paired-field rule).
 		 *
 		 * @return bool
 		 * @since 1.4.0
+		 * @since 2.0.2 The default is derived from the declared credential fields
+		 *              instead of an unconditional `true`.
 		 */
 		public function is_configured(): bool {
-			// override this to check for subclass required settings (user names, passwords, secret keys, etc)
+
+			foreach ( $this->get_required_credential_keys() as $key ) {
+
+				$value = $this->get_option( $key );
+
+				if ( ! is_scalar( $value ) || '' === trim( (string) $value ) ) {
+					return false;
+				}
+			}
+
 			return true;
+		}
+
+		/**
+		 * Lists the option keys of the credentials this integration declares as required.
+		 *
+		 * A declared form field counts when it is a `password` field (the framework's
+		 * marker for a secret) or carries an explicit `'required' => true`; an
+		 * explicit `'required' => false` opts a `password` field out (an optional
+		 * webhook secret, say). Fields scoped to another environment through the
+		 * `environment-field {env}-field` class convention
+		 * ({@see self::get_method_form_fields()}) are skipped, so a test-only key
+		 * does not block a production store.
+		 *
+		 * Read off `$this->form_fields` — the list already final after
+		 * {@see self::init_form_fields()} and its filter.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return string[] option keys
+		 */
+		private function get_required_credential_keys(): array {
+
+			$keys        = [];
+			$environment = null;
+
+			foreach ( $this->form_fields as $key => $field ) {
+
+				if ( ! is_array( $field ) ) {
+					continue;
+				}
+
+				if ( array_key_exists( 'required', $field ) ) {
+					$required = (bool) $field['required'];
+				} else {
+					$required = 'password' === ( $field['type'] ?? '' );
+				}
+
+				if ( ! $required ) {
+					continue;
+				}
+
+				$classes = preg_split( '/\s+/', trim( (string) ( $field['class'] ?? '' ) ) );
+
+				if ( in_array( 'environment-field', $classes, true ) ) {
+
+					$environment ??= $this->get_environment();
+
+					if ( ! in_array( $environment . '-field', $classes, true ) ) {
+						continue;
+					}
+				}
+
+				$keys[] = (string) $key;
+			}
+
+			return $keys;
 		}
 
 		/**
