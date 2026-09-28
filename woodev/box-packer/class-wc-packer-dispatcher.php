@@ -26,7 +26,8 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * Converts WooCommerce cart items into Woodev_Packer_Input_Item instances.
 		 *
 		 * Skips virtual products (no physical dimensions). Returns an empty array
-		 * if the cart contains only virtual items.
+		 * if the cart contains only virtual items. Dimensions and weight are converted
+		 * from the store's units to the packer's cm / kg.
 		 *
 		 * @since  1.4.1
 		 *
@@ -46,13 +47,7 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 
 				$qty = isset( $cart_item['quantity'] ) ? max( 1, (int) $cart_item['quantity'] ) : 1;
 
-				$items[] = new Woodev_Packer_Input_Item(
-					(float) $product->get_length(),
-					(float) $product->get_width(),
-					(float) $product->get_height(),
-					(float) $product->get_weight(),
-					$qty
-				);
+				$items[] = self::to_input_item( $product, $qty );
 			}
 
 			return $items;
@@ -62,6 +57,7 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 		 * Converts WooCommerce order items into Woodev_Packer_Input_Item instances.
 		 *
 		 * Skips virtual/downloadable products and items whose product no longer exists.
+		 * Dimensions and weight are converted from the store's units to the packer's cm / kg.
 		 *
 		 * @since  1.4.1
 		 *
@@ -84,16 +80,35 @@ if ( ! class_exists( 'Woodev_WC_Packer_Dispatcher' ) ) :
 
 				$qty = max( 1, (int) $order_item->get_quantity() );
 
-				$items[] = new Woodev_Packer_Input_Item(
-					(float) $product->get_length(),
-					(float) $product->get_width(),
-					(float) $product->get_height(),
-					(float) $product->get_weight(),
-					$qty
-				);
+				$items[] = self::to_input_item( $product, $qty );
 			}
 
 			return $items;
+		}
+
+		/**
+		 * Builds a packer input item from a product, converting the store's units to the packer's.
+		 *
+		 * The packer works in centimetres and kilograms, while WooCommerce stores product
+		 * dimensions and weight in the store's own units (`woocommerce_dimension_unit`,
+		 * `woocommerce_weight_unit` — mm, m, in, yd / g, lbs, oz). `wc_get_dimension()` and
+		 * `wc_get_weight()` are WooCommerce's own conversion authority. A missing dimension
+		 * or weight is an empty string, which converts to 0.0.
+		 *
+		 * @since  2.0.2
+		 *
+		 * @param  \WC_Product $product
+		 * @param  int         $quantity
+		 * @return Woodev_Packer_Input_Item
+		 */
+		private static function to_input_item( \WC_Product $product, int $quantity ): Woodev_Packer_Input_Item {
+			return new Woodev_Packer_Input_Item(
+				(float) wc_get_dimension( (float) $product->get_length(), 'cm' ),
+				(float) wc_get_dimension( (float) $product->get_width(), 'cm' ),
+				(float) wc_get_dimension( (float) $product->get_height(), 'cm' ),
+				(float) wc_get_weight( (float) $product->get_weight(), 'kg' ),
+				$quantity
+			);
 		}
 	}
 
