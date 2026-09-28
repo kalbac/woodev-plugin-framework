@@ -270,6 +270,8 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			// admin order wizard (#710): the create / update / load service and its payload check (#968)
 			require_once $path . '/admin/orders/class-order-payload-validator.php';
 			require_once $path . '/admin/orders/class-order-editor.php';
+			// admin order wizard (#710): rates for a hand-built package, and its route (#965)
+			require_once $path . '/admin/orders/class-admin-rate-calculator.php';
 
 			// REST API (§8 checkout classes' server-side counterparts)
 			require_once $path . '/rest-api/class-shipping-rest-api.php';
@@ -278,6 +280,7 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Plugin' ) ) :
 			require_once $path . '/rest-api/class-pickup-controller.php';
 			require_once $path . '/rest-api/class-orders-controller.php';
 			require_once $path . '/rest-api/class-order-editor-controller.php';
+			require_once $path . '/rest-api/class-rates-controller.php';
 		}
 
 		/**

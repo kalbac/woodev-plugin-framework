@@ -10,6 +10,7 @@
 
 namespace Woodev\Framework\Shipping;
 
+use Woodev\Framework\Shipping\Location\Location_Record;
 use Woodev\Framework\Shipping\Pickup\Point_Source;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -87,6 +88,18 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * @var bool
 		 */
 		private bool $pending_form_rebuild = false;
+
+		/**
+		 * Whether {@see self::get_admin_rates_for_package()} is running on this instance right now.
+		 *
+		 * The narrow context flag the REST/admin veto in {@see self::should_send_cart_api_request()}
+		 * yields to (#965, spec D2 «Mine 1»): per instance and per call, never a global relaxation.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @var bool
+		 */
+		private bool $admin_rate_calculation = false;
 
 		/**
 		 * Gets the unique method identifier.
@@ -509,6 +522,53 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		}
 
 		/**
+		 * Prices `$package` on behalf of the admin order wizard and returns the rates this method
+		 * offers for it (#965, spec `2026-09-27-710-create-edit-order-design.md` D2).
+		 *
+		 * The wizard's route runs in an admin REST request, where `WC()->session`, `WC()->cart` and
+		 * `WC()->customer` are all null and {@see self::should_send_cart_api_request()} vetoes every
+		 * carrier call — `calculate_shipping()` is `final` and that veto is private, so this is the
+		 * one seam that lifts it. The lift is narrow: this instance, this call, restored in a
+		 * `finally`. The method still goes through its own `calculate_shipping()` — availability,
+		 * `woodev_shipping_method_*` hooks, the rate filters, label guard, rate attributes and the
+		 * carrier-failure handling all run — so the rates, and their meta, are exactly the ones a
+		 * checkout would get.
+		 *
+		 * `$record` is the destination location record. It is put in force on the plugin's
+		 * {@see Location\Location_Service} for the call ({@see Location\Location_Service::with_explicit_record()}),
+		 * so carrier rate code that reads the customer's location gets the destination instead of
+		 * the ADMIN's own stored one (spec D2 «Mine 3»). `null` means «no destination record».
+		 *
+		 * Does not touch WooCommerce's per-package session rate cache: that lives in
+		 * `WC_Shipping::calculate_shipping_for_package()`, which this never calls (it fatals without
+		 * a session; spec D2 «Mine 2»).
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array                $package WooCommerce shipping package (`contents`, `destination`, …).
+		 * @param Location_Record|null $record  Destination location record, or `null` for none.
+		 *
+		 * @return array<string, \WC_Shipping_Rate> Rates keyed by rate id; empty when the method is
+		 *                                          unavailable for the package or the carrier failed.
+		 */
+		public function get_admin_rates_for_package( array $package, ?Location_Record $record = null ): array {
+
+			$previous                     = $this->admin_rate_calculation;
+			$this->admin_rate_calculation = true;
+
+			try {
+				return (array) $this->get_plugin()->get_location_service()->with_explicit_record(
+					$record,
+					function () use ( $package ): array {
+						return (array) $this->get_rates_for_package( $package );
+					}
+				);
+			} finally {
+				$this->admin_rate_calculation = $previous;
+			}
+		}
+
+		/**
 		 * Substitutes the method's own title for an empty rate label.
 		 *
 		 * `WC_Shipping_Method::add_rate()` returns early — silently — when the label is
@@ -852,10 +912,16 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Shipping_Method' ) ) :
 		 * own cart calculation and must get rates, exactly like a classic checkout.
 		 *
 		 * @since 2.0.2 A Store API request is no longer vetoed by the REST guard.
+		 * @since 2.0.2 The admin order wizard's rate calculator ({@see self::get_admin_rates_for_package()})
+		 *              is not vetoed either — for the duration of its own call on this instance only (#965).
 		 *
 		 * @return bool True if a cart API request should be sent, false otherwise.
 		 */
 		private function should_send_cart_api_request(): bool {
+
+			if ( $this->admin_rate_calculation ) {
+				return true;
+			}
 
 			if ( defined( 'XMLRPC_REQUEST' ) || ( is_admin() && did_action( 'woocommerce_cart_loaded_from_session' ) ) ) {
 				return false;
