@@ -81,7 +81,7 @@ type Phase = 'loading' | 'ready' | 'failed';
 
 type HeartbeatData = Record<string, unknown>;
 
-const ORDER_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
+const FALLBACK_ORDER_LOCK_HEARTBEAT_KEY = 'woodev-refresh-order-lock';
 
 type HeartbeatJquery = {
 	on: ( event: string, handler: ( event: unknown, data: HeartbeatData ) => void ) => void;
@@ -97,6 +97,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 	const countries = wizard.countries || {};
 	const states = wizard.states || {};
 	const statuses = wizard.orderStatuses;
+	const orderLockHeartbeatKey = wizard.editLockHeartbeatKey || FALLBACK_ORDER_LOCK_HEARTBEAT_KEY;
 
 	const [ phase, setPhase ] = useState<Phase>( editing ? 'loading' : 'ready' );
 	const [ loadError, setLoadError ] = useState( '' );
@@ -167,10 +168,10 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 
 		const documentHeartbeat = jquery( document );
 		const send = ( event: unknown, data: HeartbeatData ) => {
-			data[ ORDER_LOCK_HEARTBEAT_KEY ] = orderId as number;
+			data[ orderLockHeartbeatKey ] = orderId as number;
 		};
 		const tick = ( event: unknown, data: HeartbeatData ) => {
-			const response = data[ ORDER_LOCK_HEARTBEAT_KEY ] as { error?: { message?: unknown } } | undefined;
+			const response = data[ orderLockHeartbeatKey ] as { error?: { message?: unknown } } | undefined;
 			const message = response?.error?.message;
 
 			if ( 'string' === typeof message && message ) {
@@ -185,7 +186,7 @@ export default function OrderWizard( { orderId = null, onClose, onSaved, rendere
 			documentHeartbeat.off( 'heartbeat-send.woodevOrderWizard' );
 			documentHeartbeat.off( 'heartbeat-tick.woodevOrderWizard' );
 		};
-	}, [ editing, orderId, phase ] );
+	}, [ editing, orderId, orderLockHeartbeatKey, phase ] );
 
 	const setData: SetWizardData = ( update ) => setDataState( ( current ) => update( current ) );
 

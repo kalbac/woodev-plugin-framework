@@ -196,6 +196,8 @@ export interface OrdersProvider {
  * server sends none of it, and the wizard then falls back to plain text inputs.
  */
 export interface WizardBootstrap {
+	/** The framework-owned heartbeat payload key for an order wizard edit lock. */
+	editLockHeartbeatKey?: string;
 	/** Country code → name, the shop's whole list. */
 	countries?: Record<string, string>;
 	/** Country code → { WooCommerce STATE CODE → name }; countries without regions are absent. */

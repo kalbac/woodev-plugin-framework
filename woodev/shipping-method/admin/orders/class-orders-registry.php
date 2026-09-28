@@ -1310,7 +1310,10 @@ if ( ! class_exists( '\\Woodev\\Framework\\Shipping\\Admin\\Orders\\Orders_Regis
 						// full canonical list was wrong to offer.
 						'deliveryStatuses' => $this->build_reachable_delivery_statuses(),
 						// What the order wizard's address step needs before its first request (#969).
-						'wizard'           => $this->build_wizard_bootstrap() + [ 'pickup' => (object) $wizard_pickup['configs'] ],
+						'wizard'           => $this->build_wizard_bootstrap() + [
+							'pickup'                => (object) $wizard_pickup['configs'],
+							'editLockHeartbeatKey' => self::EDIT_LOCK_HEARTBEAT_KEY,
+						],
 					]
 				) . ';',
 				'before'
