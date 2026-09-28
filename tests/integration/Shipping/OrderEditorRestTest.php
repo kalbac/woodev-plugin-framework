@@ -469,4 +469,51 @@ class OrderEditorRestTest extends TestCase {
 		$this->assertSame( 409, $this->send( 'PUT', self::NAMESPACE_ROOT . '/' . $id, $this->payload() )->get_status() );
 		$this->assertSame( 409, $this->send( 'GET', self::NAMESPACE_ROOT . '/' . $id . '/edit' )->get_status() );
 	}
+
+	// -------------------------------------------------------------------------
+	// row action (#710 bug 6, operator rig acceptance 28.09.2026)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A fresh REALISTIC order — on-hold, not exported, created through the wizard exactly as the
+	 * operator's order 642 was on the rig — must show «Редактировать» in its row, exactly like a
+	 * `test_shipping` order in the same state does
+	 * ({@see \Woodev\Tests\Integration\Shipping\OrdersRestTest::test_the_row_offers_edit_while_the_order_is_editable_and_the_action_route_never_executes_it()}).
+	 *
+	 * Before the fix this failed: the realistic fixture registered a provider and a tracking
+	 * handler but no `Abstract_Shipment_Handler`, and `Order_Actions::for_row()` withholds every
+	 * action — including the client-side «Редактировать», which calls no handler at all — from a
+	 * provider with none registered (spec D5 names no such condition; only the load/update routes'
+	 * own {@see \Woodev\Framework\Shipping\Admin\Orders\Order_Actions::not_editable_reason()} does).
+	 *
+	 * @return void
+	 */
+	public function test_a_realistic_order_shows_the_edit_row_action_while_editable(): void {
+		$this->login_as_manager();
+
+		$id = $this->create_through_the_route();
+
+		$order = wc_get_order( $id );
+		$order->set_status( 'on-hold' );
+		$order->save();
+
+		$response = $this->send( 'GET', self::NAMESPACE_ROOT );
+		$this->assertSame( 200, $response->get_status() );
+
+		$row = null;
+
+		foreach ( $response->get_data()['rows'] as $candidate ) {
+			if ( $id === $candidate['id'] ) {
+				$row = $candidate;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $row, 'the created order must be a row of the page' );
+		$this->assertContains(
+			'edit',
+			array_column( $row['actions'], 'action' ),
+			'a realistic-carrier order must offer «Редактировать» exactly like a test_shipping one does'
+		);
+	}
 }
