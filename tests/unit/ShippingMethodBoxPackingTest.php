@@ -162,6 +162,18 @@ namespace Woodev\Tests\Unit {
 	class ShippingMethodBoxPackingTest extends TestCase {
 
 		/**
+		 * The cart converter turns store units into cm / kg through wc_get_dimension() /
+		 * wc_get_weight() (#950). These tests are about packing, not units, so a kg / cm
+		 * store — the identity conversion — is assumed.
+		 */
+		protected function setUp(): void {
+			parent::setUp();
+
+			\Brain\Monkey\Functions\when( 'wc_get_dimension' )->returnArg( 1 );
+			\Brain\Monkey\Functions\when( 'wc_get_weight' )->returnArg( 1 );
+		}
+
+		/**
 		 * Builds a method instance without running the WC-dependent constructor.
 		 *
 		 * @param array<string,mixed> $options stored option values.
