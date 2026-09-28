@@ -250,7 +250,7 @@ class OrderAddressPolicyRestTest extends TestCase {
 		$this->policy_says( [ 'region_field' => 'remove' ] );
 
 		$response = $this->send( 'GET', self::ROUTE, [ 'country' => 'ru' ] );
-		$data     = $response->get_data();
+		$data     = $this->wire( $response );
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'RU', $data['country'] );
@@ -270,14 +270,25 @@ class OrderAddressPolicyRestTest extends TestCase {
 	public function test_the_route_reads_the_pickup_hiding_from_the_pickup_flag(): void {
 		$this->policy_says( [ 'address_field' => 'hide_for_pickup', 'postcode_field' => 'hide_for_pickup' ] );
 
-		$pickup  = $this->send( 'GET', self::ROUTE, [ 'country' => 'RU', 'pickup' => 'true' ] )->get_data();
-		$courier = $this->send( 'GET', self::ROUTE, [ 'country' => 'RU', 'pickup' => 'false' ] )->get_data();
+		$pickup  = $this->wire( $this->send( 'GET', self::ROUTE, [ 'country' => 'RU', 'pickup' => 'true' ] ) );
+		$courier = $this->wire( $this->send( 'GET', self::ROUTE, [ 'country' => 'RU', 'pickup' => 'false' ] ) );
 
 		$this->assertTrue( $pickup['pickup'] );
 		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['fields']['address_1'] );
 		$this->assertSame( [ 'required' => false, 'hidden' => true, 'removed' => false ], $pickup['fields']['postcode'] );
 		$this->assertTrue( $courier['fields']['address_1']['required'] );
 		$this->assertTrue( $courier['fields']['postcode']['required'] );
+	}
+
+	/**
+	 * The response as the browser receives it — the route casts `fields` to an object so an empty
+	 * set still serialises as `{}`, so read it back through JSON rather than as the PHP value.
+	 *
+	 * @param \WP_REST_Response $response The route's response.
+	 * @return array<string, mixed>
+	 */
+	private function wire( $response ): array {
+		return json_decode( wp_json_encode( $response->get_data() ), true );
 	}
 
 	// -------------------------------------------------------------------------
