@@ -56,7 +56,7 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 *
 		 * @var string
 		 */
-		public const SEED_VERSION = '5';
+		public const SEED_VERSION = '6';
 
 		/**
 		 * Must match the marker key {@see \Woodev_Test_Shipping_Method_Plugin::init_test_shipping_orders_page()}
@@ -422,6 +422,11 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		 * Seeds {@see self::demo_orders()} as real `WC_Order`s, applying
 		 * {@see self::should_seed()}'s rule, then marks seeding done.
 		 *
+		 * A version bump also backfills the seeder's OWN older orders first
+		 * ({@see self::backfill_existing_orders()}, #868) — creating a fresh batch
+		 * alone would leave every order an earlier version made without whatever
+		 * field the newer version learned to set.
+		 *
 		 * Hooked on `admin_init` — see this file's own class docblock for why not
 		 * during plugin construction.
 		 *
@@ -439,6 +444,8 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 			if ( ! function_exists( 'wc_create_order' ) || ! class_exists( '\WC_Order_Item_Shipping' ) || ! class_exists( '\WC_Product_Simple' ) ) {
 				return;
 			}
+
+			self::backfill_existing_orders();
 
 			foreach ( self::demo_orders() as $definition ) {
 				self::seed_one( $definition );
@@ -504,6 +511,209 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 		}
 
 		/**
+		 * Backfills every order THIS seeder made earlier (#868), filling EMPTY fields only.
+		 *
+		 * Raising {@see self::SEED_VERSION} only ever created a NEW batch; the orders an older
+		 * version made kept whatever that version knew how to set — customer and address (#861),
+		 * payment method (#876) were each found missing on the rig one card at a time. This walks
+		 * the orders carrying {@see self::MARKER_META_KEY} (never a foreign order), and per order
+		 * writes only the fields still empty: it never deletes and never overwrites a non-empty
+		 * value, so a manual rig edit survives. Idempotent — a second run finds nothing empty.
+		 *
+		 * Goes through the WooCommerce CRUD (`wc_get_orders()` + `WC_Order`), not raw meta, so it
+		 * behaves the same on HPOS and on the legacy CPT datastore.
+		 *
+		 * `customer_id` is deliberately NOT backfilled: `0` is the legitimate "guest" value, so an
+		 * empty one cannot be told from a deliberate one.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @return int how many orders were changed.
+		 */
+		public static function backfill_existing_orders(): int {
+			$order_ids = wc_get_orders(
+				[
+					'limit'      => -1,
+					'return'     => 'ids',
+					'meta_query' => [
+						[
+							'key'     => self::MARKER_META_KEY,
+							'compare' => 'EXISTS',
+						],
+					],
+				]
+			);
+
+			$changed = 0;
+
+			foreach ( (array) $order_ids as $order_id ) {
+				$order = wc_get_order( (int) $order_id );
+
+				if ( $order instanceof \WC_Order && self::backfill_one( $order ) ) {
+					++$changed;
+				}
+			}
+
+			return $changed;
+		}
+
+		/**
+		 * Which of an order's fields the backfill should write — pure, so the fill-empty /
+		 * keep-non-empty / idempotent contract is unit-testable without WordPress.
+		 *
+		 * The values are derived from the order id alone (persona and payment method by modulus,
+		 * same pools fresh seeding cycles through), so a re-run derives the same values.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int                  $order_id the order's id.
+		 * @param array<string,string> $current  the order's current values, keyed like the result
+		 *                                       (`billing_city`, `payment_method`, …); a missing key counts as empty.
+		 *
+		 * @return array<string,string> only the fields that are empty in `$current`, with their derived value.
+		 */
+		public static function backfill_plan( int $order_id, array $current ): array {
+			$pool    = self::customer_pool();
+			$persona = $pool[ $order_id % count( $pool ) ];
+			$payment = self::payment_method_pool()[ $order_id % count( self::payment_method_pool() ) ];
+
+			$desired = [
+				'billing_first_name'   => $persona['first_name'],
+				'billing_last_name'    => $persona['last_name'],
+				'billing_email'        => $persona['email'],
+				'billing_phone'        => $persona['phone'],
+				'billing_city'         => $persona['city'],
+				'billing_address_1'    => $persona['address_1'],
+				'billing_postcode'     => $persona['postcode'],
+				'billing_country'      => 'RU',
+				'shipping_first_name'  => $persona['first_name'],
+				'shipping_last_name'   => $persona['last_name'],
+				'shipping_city'        => $persona['city'],
+				'shipping_address_1'   => $persona['address_1'],
+				'shipping_postcode'    => $persona['postcode'],
+				'shipping_country'     => 'RU',
+				'payment_method'       => $payment['method'],
+				'payment_method_title' => $payment['title'],
+			];
+
+			// A method kept from a manual edit must not get another method's title.
+			$kept_method = (string) ( $current['payment_method'] ?? '' );
+
+			if ( '' !== $kept_method ) {
+				$desired['payment_method_title'] = '';
+
+				foreach ( self::payment_method_pool() as $entry ) {
+					if ( $entry['method'] === $kept_method ) {
+						$desired['payment_method_title'] = $entry['title'];
+					}
+				}
+			}
+
+			$plan = [];
+
+			foreach ( $desired as $field => $value ) {
+				if ( '' !== $value && '' === (string) ( $current[ $field ] ?? '' ) ) {
+					$plan[ $field ] = $value;
+				}
+			}
+
+			return $plan;
+		}
+
+		/**
+		 * The quantity a backfilled line item gets — pure, id-derived, same 1..3 spread fresh seeding uses.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $order_id the order's id.
+		 *
+		 * @return int
+		 */
+		public static function backfill_qty( int $order_id ): int {
+			return 1 + ( $order_id % 3 );
+		}
+
+		/**
+		 * Whether a backfilled order should show a pickup point — pure, id-derived, every fifth like fresh seeding.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param int $order_id the order's id.
+		 *
+		 * @return bool
+		 */
+		public static function backfill_has_pickup( int $order_id ): bool {
+			return 0 === $order_id % 5;
+		}
+
+		/**
+		 * Applies {@see self::backfill_plan()} and the missing line items / pickup point to one order.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param \WC_Order $order one of this seeder's own orders.
+		 *
+		 * @return bool whether anything was written (and the order saved).
+		 */
+		private static function backfill_one( \WC_Order $order ): bool {
+			$order_id = $order->get_id();
+			$current  = [];
+
+			foreach ( array_keys( self::backfill_plan( $order_id, [] ) ) as $field ) {
+				$current[ $field ] = (string) $order->{ 'get_' . $field }( 'edit' );
+			}
+
+			$changed = false;
+
+			foreach ( self::backfill_plan( $order_id, $current ) as $field => $value ) {
+				$order->{ 'set_' . $field }( $value );
+				$changed = true;
+			}
+
+			$items_added = false;
+
+			if ( [] === $order->get_items( 'shipping' ) ) {
+				$shipping_item = new \WC_Order_Item_Shipping();
+				$shipping_item->set_method_title( 'Тестовая доставка' );
+				$shipping_item->set_method_id( self::METHOD_ID );
+				$shipping_item->set_total( '0' );
+				$order->add_item( $shipping_item );
+				$items_added = true;
+			}
+
+			if ( [] === $order->get_items( 'line_item' ) ) {
+				$product = self::demo_product();
+
+				if ( null !== $product ) {
+					$order->add_product( $product, self::backfill_qty( $order_id ) );
+					$items_added = true;
+				}
+			}
+
+			// Only when items were added: an order that already had its lines keeps its totals.
+			if ( $items_added ) {
+				$order->calculate_totals();
+				$changed = true;
+			}
+
+			if ( self::backfill_has_pickup( $order_id ) && '' === $order->get_meta( self::PICKUP_POINT_META_KEY, true ) ) {
+				$pool = self::customer_pool();
+
+				$order->update_meta_data(
+					self::PICKUP_POINT_META_KEY,
+					self::pickup_point( $pool[ $order_id % count( $pool ) ], $order_id )
+				);
+				$changed = true;
+			}
+
+			if ( $changed ) {
+				$order->save();
+			}
+
+			return $changed;
+		}
+
+		/**
 		 * Applies one {@see self::customer_pool()} persona to an order: billing +
 		 * shipping fields always, a registered `WP_User` when the definition asks
 		 * for one, and a pickup-point destination when it asks for that too (#861).
@@ -540,21 +750,33 @@ if ( ! class_exists( 'Woodev_Test_Orders_Seeder' ) ) {
 			}
 
 			if ( $definition['has_pickup'] ) {
-				$order->update_meta_data(
-					self::PICKUP_POINT_META_KEY,
-					[
-						'id'      => sprintf( 'TEST-PVZ-%d', $order->get_id() ),
-						'name'    => 'Пункт выдачи «Тестовый» на ' . $persona['city'],
-						'address' => $persona['city'] . ', ' . $persona['address_1'],
-						'lat'     => 55.7558,
-						'lng'     => 37.6173,
-						'type'    => [
-							'code'  => 'pvz',
-							'label' => 'Пункт выдачи',
-						],
-					]
-				);
+				$order->update_meta_data( self::PICKUP_POINT_META_KEY, self::pickup_point( $persona, $order->get_id() ) );
 			}
+		}
+
+		/**
+		 * The pickup-point destination stored under {@see self::PICKUP_POINT_META_KEY} — shared
+		 * by fresh seeding and the #868 backfill so the two cannot drift. Pure.
+		 *
+		 * @since 2.0.2
+		 *
+		 * @param array{city:string, address_1:string} $persona  a {@see self::customer_pool()} entry.
+		 * @param int                                  $order_id the order the point belongs to.
+		 *
+		 * @return array<string, mixed>
+		 */
+		private static function pickup_point( array $persona, int $order_id ): array {
+			return [
+				'id'      => sprintf( 'TEST-PVZ-%d', $order_id ),
+				'name'    => 'Пункт выдачи «Тестовый» на ' . $persona['city'],
+				'address' => $persona['city'] . ', ' . $persona['address_1'],
+				'lat'     => 55.7558,
+				'lng'     => 37.6173,
+				'type'    => [
+					'code'  => 'pvz',
+					'label' => 'Пункт выдачи',
+				],
+			];
 		}
 
 		/**
